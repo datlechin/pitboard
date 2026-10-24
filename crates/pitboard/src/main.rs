@@ -163,7 +163,7 @@ enum Command {
     Statusline,
     /// Renew every parked login that is due, and nothing else
     Renew {
-        // Given by `--scheduled`, which only the parser knows (`with_the_jobs_markers`).
+        // Given by `--scheduled`, which only the parser knows (`parser`).
         #[arg(skip)]
         scheduled: bool,
     },
@@ -201,8 +201,8 @@ enum Command {
     Adopt,
     /// Print a shell completion script
     Completions { shell: clap_complete::Shell },
-    /// Print the man page
-    #[command(hide = true)]
+    // Only the parser knows `manpage` (`parser`).
+    #[command(skip)]
     Manpage,
 }
 
@@ -251,21 +251,14 @@ impl Command {
     }
 }
 
-/// A label is typed on the command line from then on, so it cannot be empty or hold spaces.
-/// A name somebody is choosing for a new account, optionally saying which tool it is for.
-///
-/// `pitboard enroll codex/personal --sign-in` names both. A bare `personal` means the
-/// default tool, so every command written before there was more than one still means what
-/// it meant.
-/// What `enroll` takes: a new name, or an account's existing one, which a label written by
-/// 0.1.x may hold a slash in. Which of the two it is, the core decides against the state
-/// file, which this parser cannot see; what can be refused here is only what no label ever
-/// was.
+// A new name or an existing one, which a label written by 0.1.x may hold a slash in: the core
+// tells which against the state file.
 fn label_to_enroll(text: &str) -> Result<String, String> {
-    if text.is_empty() || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err("a label must be one word, such as `personal` or `work`".into());
+    use pitboard_core::label::{self, Unusable};
+    match label::check(text) {
+        Ok(()) | Err(Unusable::Separator) => Ok(text.to_string()),
+        Err(Unusable::Empty | Unusable::NotOneWord) => Err(label::ONE_WORD.into()),
     }
-    Ok(text.to_string())
 }
 
 fn new_label(text: &str) -> Result<String, String> {
@@ -656,47 +649,33 @@ fn switched_report(switched: Changing<Outcome>) -> Report {
     })
 }
 
-/// What becomes of sessions already running after a switch: within how many seconds they
-/// follow, where they do, said as a sentence and for `--json`.
-///
-/// The tool's own answer, not a constant. A number of seconds is only ever shown for a tool
-/// that really does follow on its own within them, and one whose sessions follow at their
-/// login's next renewal, or that needs restarting, has no number at all rather than a zero
-/// that reads as "at once".
+// A number of seconds only for a tool whose sessions follow by themselves, never a zero that
+// reads as "at once".
 fn followed(
     provider: pitboard_core::provider::ProviderId,
     adoption: &Adoption,
 ) -> (Option<u32>, String, Value) {
+    let said =
+        pitboard_core::words::after_a_switch(adoption, &format!("{} sessions", provider.name()));
     match adoption {
         Adoption::PollingWithin(seconds) => (
             Some(*seconds),
-            format!(
-                "{} sessions already running follow within {seconds} seconds.\n",
-                provider.name()
-            ),
+            format!("{said}.\n"),
             json!({ "follows": "polling", "within_seconds": seconds }),
         ),
         Adoption::AtRenewal { file } => (
             None,
-            format!(
-                "{} sessions already running {}: {} is there. `pitboard stow` puts it away.\n",
-                provider.name(),
-                pitboard_core::words::kept_until_renewed(),
-                file.display()
-            ),
+            format!("{said}. `pitboard stow` puts it away.\n"),
             json!({ "follows": "renewal", "path": file }),
         ),
         Adoption::RestartRequired { program, .. } => (
             None,
-            format!(
-                "Restart any running `{program}` for this to take effect. \
-                 It will not pick the switch up on its own.\n"
-            ),
+            format!("{said}. It will not pick the switch up on its own.\n"),
             json!({ "follows": "restart", "program": program }),
         ),
         Adoption::NextOpen { app } => (
             None,
-            format!("{app} opens signed in to it.\n"),
+            format!("{said}.\n"),
             json!({ "follows": "open", "app": app }),
         ),
     }
@@ -1259,15 +1238,24 @@ fn agreed(question: &str) -> bool {
     matches!(answer.trim(), "y" | "Y" | "yes")
 }
 
-// `--scheduled`, the marker each job runs `renew` or `watch` with. Only the parser is given it:
-// clap_complete writes even a hidden argument into every shell's completions.
-fn with_the_jobs_markers(cli: clap::Command) -> clap::Command {
+// The command line with what completions leave out, since clap_complete writes even a hidden
+// argument or command into them: `--scheduled`, each job's marker, and `manpage`.
+fn parser() -> clap::Command {
     let marker = clap::Arg::new("scheduled")
         .long("scheduled")
         .action(clap::ArgAction::SetTrue)
         .hide(true);
-    cli.mut_subcommand("renew", |renew| renew.arg(marker.clone()))
-        .mut_subcommand("watch", |watch| watch.arg(marker.conflicts_with("once")))
+    Cli::command()
+        .mut_subcommands(|sub| match sub.get_name() {
+            "renew" => sub.arg(marker.clone()),
+            "watch" => sub.arg(marker.clone().conflicts_with("once")),
+            _ => sub,
+        })
+        .subcommand(
+            clap::Command::new("manpage")
+                .about("Print the man page")
+                .hide(true),
+        )
 }
 
 fn command_line<I, T>(args: I) -> Result<Cli, clap::Error>
@@ -1275,7 +1263,7 @@ where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
 {
-    let mut matches = with_the_jobs_markers(Cli::command()).try_get_matches_from(args)?;
+    let mut matches = parser().try_get_matches_from(args)?;
     // A run's own options beside `watch`'s subcommand, which clap's conflict rule would refuse
     // the global `--json` beside too.
     if let Some(("watch", watch)) = matches.subcommand()
@@ -1284,7 +1272,7 @@ where
             .into_iter()
             .find(|id| watch.value_source(id) == Some(clap::parser::ValueSource::CommandLine))
     {
-        let mut cli = with_the_jobs_markers(Cli::command());
+        let mut cli = parser();
         cli.build();
         let message = format!("the subcommand '{what}' cannot be used with '--{given}'");
         let kind = clap::error::ErrorKind::ArgumentConflict;
@@ -1296,11 +1284,15 @@ where
     let marked = matches
         .subcommand()
         .is_some_and(|(_, given)| matches!(given.try_get_one::<bool>("scheduled"), Ok(Some(true))));
+    let manpage = matches.subcommand_name() == Some("manpage");
     let mut cli =
         Cli::from_arg_matches_mut(&mut matches).map_err(|e| e.format(&mut Cli::command()))?;
     if let Some(Command::Renew { scheduled } | Command::Watch { scheduled, .. }) = &mut cli.command
     {
         *scheduled = marked;
+    }
+    if manpage {
+        cli.command = Some(Command::Manpage);
     }
     Ok(cli)
 }
@@ -1946,7 +1938,7 @@ mod tests {
     }
 
     #[test]
-    fn the_jobs_markers_are_in_no_help_or_completions() {
+    fn the_jobs_markers_are_in_no_help_and_manpage_in_no_completions() {
         use clap_complete::Shell;
         for shell in [
             Shell::Bash,
@@ -1959,13 +1951,20 @@ mod tests {
             clap_complete::generate(shell, &mut Cli::command(), "pitboard", &mut out);
             let file = String::from_utf8(out).expect("text");
             assert!(!file.contains("scheduled"), "{shell}: {file}");
-            assert!(
-                file.contains("manpage"),
-                "{shell}: as the hidden command is"
-            );
+            assert!(!file.contains("manpage"), "{shell}: {file}");
+        }
+        for args in [
+            &["manpage"][..],
+            &["manpage", "--json"],
+            &["--json", "manpage"],
+        ] {
+            let cli = command_line(std::iter::once("pitboard").chain(args.iter().copied()))
+                .unwrap_or_else(|e| panic!("{args:?}: {e}"));
+            assert!(matches!(cli.command, Some(Command::Manpage)), "{args:?}");
+            assert_eq!(cli.json, args.contains(&"--json"), "{args:?}");
         }
         for job in ["renew", "watch"] {
-            let mut cli = with_the_jobs_markers(Cli::command());
+            let mut cli = parser();
             let help = cli
                 .find_subcommand_mut(job)
                 .expect(job)
@@ -2151,7 +2150,7 @@ mod tests {
                 each(sub, &format!("{typed} {name}"), said);
             }
         }
-        let mut cli = Cli::command().term_width(columns);
+        let mut cli = parser().term_width(columns);
         cli.build();
         let mut said = String::new();
         each(&mut cli, "pitboard", &mut said);

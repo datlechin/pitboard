@@ -15,9 +15,9 @@ use crate::assumptions::{Assumption, PerSystem};
 /// The build every entry below was read from on macOS and Linux, unless it names its own.
 pub(crate) const VERIFIED_AGAINST: &str = "0.164.0";
 
-// Both Windows builds of 0.163.0, read as bytes on 2026-10-20 with the source at `rust-v0.163.0`
-// against the `rust-v0.160.0` and `rust-v0.162.1` sources each reading named before.
-pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "0.163.0";
+// Both Windows builds of 0.164.0, read as bytes on 2026-10-24 with the source at `rust-v0.164.0`
+// against the `rust-v0.162.1` and `rust-v0.163.0` sources each reading named before.
+pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "0.164.0";
 
 /// A fact read on macOS and Linux from the build its entry names, and on Windows from
 /// [`WINDOWS_VERIFIED_AGAINST`]: the code each is about has no part that differs on
@@ -240,7 +240,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         macos: NotRead(
             "ChatGPT for macOS is a bundle, which codex_runs_inside_the_chatgpt_app reads",
         ),
-        linux: Read("26.1016.61520"),
+        linux: Read("26.1021.22027"),
         windows: NotRead(
             "ChatGPT for Windows is a Store package, which codex_windows_app_identity reads",
         ),
@@ -271,17 +271,18 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                secret store by default there (codex_windows_store_layers), and `ephemeral` in \
                memory. Codex writes `auth.json` in place: it opens it with std's default \
                sharing, read, write and delete, truncates it, writes the JSON and flushes, \
-               with no temporary file, no rename, no lock and no access list of its own, so \
-               the file takes its folder's. A read can catch it empty or half written, and \
+               with no temporary file, no rename, no lock on the file and no access list of its \
+               own, so the file takes its folder's. A read can catch it empty or half written, and \
                Codex's own read does not try again",
         read_from: "get_auth_file and FileAuthStorage's load, try_read_auth_json and save, \
                     whose 0o600 is under `cfg(unix)` alone, in \
                     codex-rs/login/src/auth/storage.rs, AuthCredentialsStoreMode in \
                     codex-rs/config/src/types.rs and codex-rs/config/defaults.toml, at tag \
-                    rust-v0.163.0, read on 2026-10-16; std's OpenOptions on Windows shares \
-                    read, write and delete unless told otherwise. Both win32 builds hold the \
-                    file's name and the store's setting",
-        verified_against: "0.163.0",
+                    rust-v0.163.0, read on 2026-10-16, and again at tag rust-v0.164.0 on \
+                    2026-10-24, whose lock around a store's commit is within one process; \
+                    std's OpenOptions on Windows shares read, write and delete unless told \
+                    otherwise. Both win32 builds hold the file's name and the store's setting",
+        verified_against: "0.164.0",
         depends: "provider::codex::paths and engine on Windows, every read and write of the \
                   live login there, and the read that tries again where it catches Codex \
                   writing",
@@ -310,10 +311,12 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     codex-rs/secrets/src/local.rs, at tag rust-v0.163.0, and the target, \
                     Comment and UTF-16 blob with its CRED_MAX_CREDENTIAL_BLOB_SIZE check in \
                     src/windows.rs of keyring 3.6.3, the version Codex's Cargo.lock pins; read \
-                    on 2026-10-16. Both win32 builds hold every name and both prefixes. `cli|` \
+                    on 2026-10-16, and again at tag rust-v0.164.0, whose Cargo.lock pins the \
+                    same keyring, on 2026-10-24. Both win32 builds hold every name and both \
+                    prefixes. `cli|` \
                     stands alone there, shorter than a string the checker reads, so the direct \
                     store is read by its message",
-        verified_against: "0.163.0",
+        verified_against: "0.164.0",
         depends: "provider::codex::engine's refusal of `keyring`, `auto` and the secret store \
                   on Windows, and doctor's `codex_credential_manager`, which counts `cli|` and \
                   `secrets|` items by name while Codex keeps the file",
@@ -474,42 +477,52 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "codex_app_server_daemon",
         fact: "codex can run on its own as a background app server, a child of launchd that \
                terminal sessions can share, and `codex app-server daemon restart` starts it \
-               again. It runs from `$CODEX_HOME/packages/app-server-daemon`, \
-               `releases/<version>/bin/codex` through the link `current`. Where that has no \
-               `current` and an older Codex left a daemon's pid file or log in \
-               `$CODEX_HOME/app-server-daemon`, it runs from `packages/standalone/current` \
-               instead, the package a standalone install's terminal sessions run from. The \
-               daemon its updater starts in place of one runs from the release `current` \
-               resolves to, `packages/standalone/releases/<version>/bin/codex` there, a \
-               terminal session's path",
+               again. Its package is `$CODEX_HOME/packages/app-server-daemon`, or, where that \
+               has no `current` and an older Codex left a daemon's pid file or log in \
+               `$CODEX_HOME/app-server-daemon`, `packages/standalone`, the package a \
+               standalone install's terminal sessions run from. Codex starts it from the \
+               release the package's `current` resolves to, `releases/<version>/bin/codex`, so \
+               in the standalone package it runs where a terminal session does. It records \
+               itself and its updater as `{\"pid\": ...}` in `$CODEX_HOME/app-server-daemon`: \
+               `daemon.pid` and `daemon-updater.pid` for its own package, `app-server.pid` and \
+               `app-server-updater.pid` for the standalone one",
         read_from: "the process list of 0.159.3 on 2026-10-01 and the daemon subcommands of the \
                     codex it ran; package_root, managed_codex_bin and \
                     resolved_managed_codex_bin in \
                     codex-rs/app-server-daemon/src/managed_install.rs, the update loop's \
                     restart in update_loop.rs and try_restart_if_running in lib.rs, at tag \
-                    rust-v0.164.0, read on 2026-10-23",
+                    rust-v0.164.0, read on 2026-10-23; the start in backend/pid_start.rs, which \
+                    starts the path canonicalised, the pid files' names in lib.rs and their \
+                    record in backend/pid.rs, at the same tag, read on 2026-10-24",
         verified_against: "0.164.0",
-        depends: "provider::codex::holders's two app_server_daemon kinds. A daemon in the \
-                  standalone package that its updater started again reads as a session on \
-                  every system, and on Linux every such daemon does",
-        probe: &["app-server daemon restart"],
+        depends: "provider::codex::holders's two app_server_daemon kinds, one by its package's \
+                  folder and one by the pid Codex records, so one in the standalone package is \
+                  not taken for a session",
+        probe: &[
+            "app-server daemon restart",
+            "app-server-updater.pid",
+            "daemon-updater.pid",
+        ],
         absent: &[],
     },
     Assumption {
         name: "codex_windows_app_server",
-        fact: "on Windows the background app server runs \
-               `<CODEX_HOME>\\packages\\app-server-daemon\\current\\bin\\codex.exe`, where \
-               `current` is a junction Codex itself points at one of its \
-               `releases\\<version>-<target>`. Codex starts it with `DETACHED_PROCESS | \
+        fact: "on Windows the background app server runs the `bin\\codex.exe` of the release \
+               `<CODEX_HOME>\\packages\\app-server-daemon\\current` resolves to, \
+               `releases\\<version>-<target>`, where `current` is a junction Codex itself \
+               points. Codex starts it with `CREATE_NO_WINDOW | DETACHED_PROCESS | \
                CREATE_BREAKAWAY_FROM_JOB`, out of the starting terminal's job, refuses to from \
-               an elevated terminal, and `codex app-server daemon restart` starts it again",
+               an elevated terminal, and `codex app-server daemon restart` starts it again. It \
+               records its pid as codex_app_server_daemon says",
         read_from: "package_root and managed_codex_bin in \
                     codex-rs/app-server-daemon/src/managed_install.rs, select_release in \
-                    prepare_install_windows.rs, the Windows start in backend/pid_start.rs and \
-                    ensure_not_elevated in backend/windows.rs, at tag rust-v0.162.1, read on \
-                    2026-10-16; the win32-x64 and win32-arm64 builds hold their messages",
-        verified_against: "0.162.1",
-        depends: "provider::codex::holders's app_server_daemon on Windows",
+                    prepare_install_windows.rs, the Windows start in backend/pid_start.rs, which \
+                    starts the path canonicalised, and ensure_not_elevated in \
+                    backend/windows.rs, at tag rust-v0.162.1, read on 2026-10-16, and again at \
+                    tag rust-v0.164.0 on 2026-10-24, which adds `CREATE_NO_WINDOW`; the \
+                    win32-x64 and win32-arm64 builds hold their messages",
+        verified_against: "0.164.0",
+        depends: "provider::codex::holders's two app_server_daemon kinds on Windows",
         probe: &[
             "app-server daemon restart",
             "failed to create managed daemon junction after native creation was denied",
@@ -527,9 +540,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "installed_windows_app and process_package_family in \
                     codex-rs/cli/src/doctor/desktop/platform.rs, and codex_app_is_installed in \
                     codex-rs/cli/src/desktop_app/windows.rs, at tags rust-v0.162.1 and \
-                    rust-v0.163.0, read on 2026-10-16; the win32-x64 and win32-arm64 builds of \
-                    both hold both",
-        verified_against: "0.163.0",
+                    rust-v0.163.0, read on 2026-10-16, and at rust-v0.164.0, unchanged, on \
+                    2026-10-24; the win32-x64 and win32-arm64 builds of each hold both",
+        verified_against: "0.164.0",
         depends: "provider::codex::holders's chatgpt_app on Windows, the app id it hands an \
                   app to quit ChatGPT with, and the Windows app's WindowsApps, which finds \
                   ChatGPT's running process by that family",
@@ -568,9 +581,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         read_from: "find_codex_home_from_env in codex-rs/utils/home-dir/src/lib.rs, \
                     AbsolutePathBuf::from_absolute_path in codex-rs/utils/absolute-path, and \
                     scripts/install/install.ps1, at tag rust-v0.162.1; dirs 6.0.0's home_dir \
-                    and dirs-sys 0.5.0's known_folder_profile; read on 2026-10-15, with the \
-                    messages in the win32-x64 and win32-arm64 builds",
-        verified_against: "0.162.1",
+                    and dirs-sys 0.5.0's known_folder_profile; read on 2026-10-15, and at tag \
+                    rust-v0.164.0, unchanged, on 2026-10-24, with the messages in the \
+                    win32-x64 and win32-arm64 builds",
+        verified_against: "0.164.0",
         depends: "provider::codex::paths::home and missing_home, and Context::read's lookup of \
                   the profile",
         probe: &[
@@ -659,9 +673,11 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     `@openai/codex@0.162.1`, and its win32-x64 and win32-arm64 packages; the \
                     installer manifest of `OpenAI.Codex` 0.161.0, the newest in \
                     microsoft/winget-pkgs; read on 2026-10-15, and `bin/codex.js` again on \
-                    2026-10-16. `Programs\\OpenAI\\Codex` is in install.ps1 alone, so the build \
+                    2026-10-16; install.ps1 at tag rust-v0.164.0 and `bin/codex.js` of \
+                    `@openai/codex@0.164.0` again on 2026-10-24, when winget's newest was still \
+                    0.161.0. `Programs\\OpenAI\\Codex` is in install.ps1 alone, so the build \
                     is probed for the package's own file and the variable the launcher sets",
-        verified_against: "0.162.1",
+        verified_against: "0.164.0",
         depends: "codex::paths::install_places and host::Os::package_bins, where an app looks \
                   for `codex.exe` after the registry's `Path`, and codex::paths::npm_native, \
                   which a sign-in starts in place of npm's `codex.cmd`",
@@ -673,11 +689,13 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "on Windows `codex.exe` carries no version resource at all. The package it runs \
                from, npm's vendored one or a standalone release, holds `codex-package.json` \
                beside its `bin`, `{layoutVersion, version, target, variant: \"codex\", \
-               entrypoint: \"bin/codex.exe\"}`, whose `version` is the release",
+               entrypoint: \"bin/codex.exe\", ...}`, whose `version` is the release; 0.164.0's \
+               adds `resourcesDir` and `pathDir`",
         read_from: "the win32-x64 and win32-arm64 builds of 0.162.1, which have no resource \
                     directory, their packages' `codex-package.json`, and the build's own check \
-                    of a local package, read on 2026-10-15",
-        verified_against: "0.162.1",
+                    of a local package, read on 2026-10-15, and the same of 0.164.0 on \
+                    2026-10-24",
+        verified_against: "0.164.0",
         depends: "doctor's codex_version, which reads the release there on Windows",
         probe: &["codex-package.json"],
         absent: &[],
@@ -813,7 +831,12 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                enterprise's cloud config, `%CODEX_HOME%\\config.toml`, a profile's file, a \
                trusted project's `.codex\\config.toml`, and `-c`. `requirements.toml` in the \
                same folder pins it over every layer, and cloud requirements may not set it. \
-               There are no managed preferences and no registry layer, and Codex skips a \
+               Where the policy value `RequirementsPath` of \
+               `HKLM\\SOFTWARE\\Policies\\OpenAI\\Codex`, 64-bit view, can be read, Codex reads \
+               its requirements from the file it names instead, a leading `~` its profile \
+               folder, and does not start where that is no full path as Rust's \
+               `Path::is_absolute` reads one there, `/` taken for `\\`. There are no managed \
+               preferences and no registry layer of configuration, and Codex skips a \
                `managed_config.toml` in its home with a warning at startup. \
                `secret_auth_storage` is read from the same layers and is on by default, so \
                `keyring` and `auto` keep the login in the secret store unless a layer turns it \
@@ -827,15 +850,23 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     LOCAL_ONLY_AUTH_REQUIREMENTS and strip_cloud_auth_requirements in \
                     codex-rs/config/src/requirements_layers/layer.rs, and the \
                     SecretAuthStorage feature's `cfg!(windows)` default in \
-                    codex-rs/features/src/lib.rs, at tag rust-v0.163.0, read on 2026-10-16. \
-                    probe_windows_system_config_namespace only counts who owns the folder for \
+                    codex-rs/features/src/lib.rs, at tag rust-v0.163.0, read on 2026-10-16, and \
+                    again at tag rust-v0.164.0 on 2026-10-24 with \
+                    windows_system_requirements_toml_file, new there, and \
+                    AbsolutePathBuf::from_absolute_path_checked in \
+                    codex-rs/utils/absolute-path. probe_windows_system_config_namespace only \
+                    counts who owns the folder for \
                     telemetry. The win32-x64 and win32-arm64 builds hold the folder, the \
-                    warning and the fallback's message, and neither holds `/etc/codex`",
-        verified_against: "0.163.0",
-        depends: "provider::codex::layers on Windows, and so every read and write of the \
-                  live Codex login there and every refusal of a store",
+                    policy's key and value, the warning and the fallback's message, and neither \
+                    holds `/etc/codex`",
+        verified_against: "0.164.0",
+        depends: "provider::codex::layers on Windows, which reads the requirements from the \
+                  file the policy names where host::windows_absolute takes it for a full path, \
+                  and so every read and write of the live Codex login there and every refusal \
+                  of a store",
         probe: &[
             "OpenAI\\Codex",
+            r"SOFTWARE\Policies\OpenAI\Codex",
             "managed_config.toml is no longer supported on Windows",
             "Failed to resolve ProgramData known folder",
             "cli_auth_credentials_store",
@@ -978,9 +1009,12 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     0.1.20's src/client/proxy/matcher.rs, the http crate's authority parser, \
                     which refuses a second colon, `Matcher::system` in reqwest 0.12.28's \
                     src/proxy.rs, and codex-rs/http-client/src/outbound_proxy.rs and \
-                    codex-rs/features/src/lib.rs at tag rust-v0.163.0, read on 2026-10-16. Both \
-                    win32 builds of 0.163.0 hold the key and its three values",
-        verified_against: "0.163.0",
+                    codex-rs/features/src/lib.rs at tag rust-v0.163.0, read on 2026-10-16, and \
+                    at rust-v0.164.0 on 2026-10-24, whose Cargo.lock pins the same hyper-util \
+                    and reqwest and whose Windows proxy sign-in answers only on the route \
+                    `respect_system_proxy` resolves. Both win32 builds of each hold the key and \
+                    its three values",
+        verified_against: "0.164.0",
         depends: "doctor's system_proxy note on Windows, which says where Codex's requests go \
                   while HTTPS_PROXY is unset, and where Claude Code's and Pitboard's go",
         probe: &[
@@ -1018,18 +1052,24 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "codex_linux_app",
-        fact: "OpenAI's ChatGPT app for Linux, the package `chatgpt`, installs to \
-               `/usr/lib/chatgpt`, and `/usr/bin/chatgpt` links to its launcher. It runs a codex \
-               of its own, `/usr/lib/chatgpt/resources/codex`, as `codex app-server` over stdio \
-               with the app's own environment, so it reads `$CODEX_HOME/auth.json` as any codex \
-               does. Whether it stays open after its last window closes turns on something of \
-               its own, not traced",
+        fact: "OpenAI's ChatGPT app for Linux, the package `chatgpt` in its `.deb` and `.rpm` \
+               and `chatgpt-bin` for Arch, installs to `/usr/lib/chatgpt`, and \
+               `/usr/bin/chatgpt` links to its launcher; each of the three holds the same app \
+               and codex. It runs a codex of its own, `/usr/lib/chatgpt/resources/codex`, as \
+               `codex app-server` over stdio with the app's own environment, so it reads \
+               `$CODEX_HOME/auth.json` as any codex does, unless \
+               `CODEX_APP_SERVER_USE_LOCAL_DAEMON=1` sends it to the background app server. It \
+               puts up a notification-area icon as it starts, and stays open after its last \
+               window closes while that icon is up",
         read_from: "the amd64 `.deb` of 26.1016.61520 from persistent.oaistatic.com, read as \
                     bytes on 2026-10-23 and never run: its file list, launcher and desktop file, \
                     and in `app.asar` the code that finds the bundled codex and starts it, and its \
-                    `window-all-closed` handler. Its codex is 0.163.0-alpha.11. The `.rpm` and \
-                    the Arch package were not read",
-        verified_against: "26.1016.61520",
+                    `window-all-closed` handler. Its codex is 0.163.0-alpha.11. The x86_64 \
+                    `.rpm`, the x86_64 Arch package and the amd64 `.deb` of 26.1021.22027, read \
+                    the same way on 2026-10-24: one file layout, one `app.asar` and one codex, \
+                    0.164.0-alpha.11, in all three, the transport's choice of the background \
+                    app server, and the tray the handler waits on, which Linux always sets up",
+        verified_against: "26.1021.22027",
         depends: "provider::codex::holders's chatgpt_app on Linux",
         probe: &[],
         absent: &[],

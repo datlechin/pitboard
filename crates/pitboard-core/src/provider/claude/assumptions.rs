@@ -484,6 +484,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.309"),
     },
     read_from_2_1_309("organisation_pin"),
+    read_from_2_1_309("login_method_pin"),
     PerSystem {
         name: "macos_managed_preferences",
         macos: Read("2.1.309"),
@@ -1107,8 +1108,11 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "2.1.309",
         depends: "in_use::known, which takes the config naming another account than when \
                   Anthropic last named the login stored as a sign that something signed in, \
-                  never as whose the login is; and every reader of the account in use, which \
-                  takes it from that record and not from the config",
+                  never as whose the login is; in_use::Known::unconfirmed, which doctor's \
+                  in_use check and status's in_use_unconfirmed go by, and which keeps a record \
+                  never checked against the store unconfirmed whatever the config names; and \
+                  every reader of the account in use, which takes it from that record and not \
+                  from the config",
         probe: &["profileFetchedAt:Date.now()", "organization_uuid!=null)"],
         absent: &[],
     },
@@ -2059,18 +2063,30 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `ANTHROPIC_ORGANIZATION_ID` both set are a federation of their own. Without \
                those, it takes the profile `active_config` names, or `default`, where its mode is \
                `oidc_federation`; a `user_oauth` one comes after a claude.ai login. Each variable \
-               is trimmed, and read from the process's environment",
+               and `ANTHROPIC_CONFIG_DIR` is trimmed, and read from the process's environment, \
+               which a session sets as it starts from the `env` of its config file, then of each \
+               settings source over it, the managed ones highest: the person's, a project's, a \
+               local one, a `--settings` file's and the managed sources'. A number or a boolean \
+               is taken as its text and any other value dropped, and a project's or a local \
+               one's `ANTHROPIC_CONFIG_DIR` is dropped",
         read_from: "the profile precedence, the profile's mode and credentials file readers, the \
                     active profile reader, and the token source check that takes a profile after \
                     `apiKeyHelper`, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
-                    builds of 2.1.309, read as bytes on 2026-10-23",
+                    builds of 2.1.309, read as bytes on 2026-10-23; the config file's and the \
+                    settings' `env` a session applies to its environment at start, before it \
+                    looks for a profile, and the filters that drop a name from it, read in the \
+                    same builds on 2026-10-24",
         verified_against: "2.1.309",
-        depends: "settings::Profiles and settings::overrides, so doctor's auth_source check, a \
-                  switch's auth_overridden warning and the automatic switch name the profile. \
-                  They take a credentials file that is there and not empty for one that holds a \
-                  login, and never read it",
+        depends: "settings::Profiles and settings::overrides, which read each variable from the \
+                  managed sources' `env`, the person's settings' and the config file's before the \
+                  environment, and from every managed source they can read where one cannot be, \
+                  so doctor's auth_source check, a switch's auth_overridden warning and the \
+                  automatic switch name the profile. They read no project's, local or \
+                  `--settings` file. They take a credentials file that is there and not empty \
+                  for one that holds a login, and never read it",
         probe: &[
             r#"["ANTHROPIC_FEDERATION_RULE_ID","ANTHROPIC_ORGANIZATION_ID"]"#,
+            r#"this.filterSettingsEnv(this.getLegacyEnvMap(),"globalConfig")"#,
             "An Anthropic profile (~/.config/anthropic) is configured, but a claude.ai login \
              exists",
             r#"{source:"profile",hasToken:!0}"#,
@@ -2120,11 +2136,42 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                   takes, the profile's plist on macOS (macos_managed_preferences) among them, and \
                   Claude's Provider::refuses, so a switch and a \
                   sign-in that would replace the login in use refuse with `login_restricted` an \
-                  account of an organisation no managed source names",
+                  account of an organisation no managed source names, and doctor's \
+                  login_restrictions names the setting and those accounts",
         probe: &[
             "Organization UUID to require for OAuth login. Accepts a single UUID string or an \
              array of UUIDs (any one is permitted).",
             "forceLoginOrgUUID in managed settings is set to an empty array.",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "login_method_pin",
+        fact: "`forceLoginMethod` `claudeai` or `console`, from the highest settings source \
+               that sets it, a managed one, the person's own, a project's or the command line's, \
+               pins only how Claude Code signs in: `/login` and `claude auth login` sign in that \
+               way, and under `console` a claude.ai sign-in from the SDK, `setup-token`, Claude \
+               Desktop or a cloud session is refused. A session that starts with a claude.ai \
+               login stored takes it whatever the setting says, and renews it unchecked",
+        read_from: "the method pin's reader, which takes the merged settings, and its check; \
+                    `/login`'s and `claude auth login`'s choice of sign-in, and the SDK's \
+                    `claude_authenticate`, `setup-token`, the desktop app's sign-in and a cloud \
+                    session's sign-in, which refuse under it; and the session's start, its token \
+                    source and its renewal, none of which reads it, in the darwin-arm64, \
+                    linux-x64, win32-x64 and win32-arm64 builds of 2.1.309, read as bytes on \
+                    2026-10-24",
+        verified_against: "2.1.309",
+        depends: "settings::overrides, which leaves `forceLoginMethod` out where it is not \
+                  `gateway`, so a switch under `console` warns of nothing and the automatic \
+                  switch goes on: a session takes the login a switch puts in place. \
+                  provider::claude::engine's sign_in runs `claude auth login`, which under \
+                  `console` signs in to Console whatever its flags say, and Pitboard does not \
+                  look for the setting first",
+        probe: &[
+            "forceLoginMethod is 'console' in ",
+            "; log in with an Anthropic Console account instead.",
+            "Signing in isn't available here: a cloud session needs a claude.ai sign-in, and the \
+             forceLoginMethod setting on this machine requires a different sign-in method.",
         ],
         absent: &[],
     },
@@ -2228,6 +2275,7 @@ mod tests {
                 "anthropic_profiles",
                 "windows_profile_folder",
                 "organisation_pin",
+                "login_method_pin",
             ]
         );
         for name in [

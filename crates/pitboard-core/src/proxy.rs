@@ -143,6 +143,11 @@ impl Proxies {
             })
     }
 
+    // Whether [`Proxies::refusal`] refuses a request to one of the hosts Pitboard calls.
+    pub(crate) fn refuses_some(&self) -> bool {
+        self.refusal().is_some() && self.exempt_hosts().len() < called().len()
+    }
+
     /// The variable that names the proxy, where one does.
     pub(crate) fn variable(&self) -> Option<&'static str> {
         self.named.as_ref().map(|(name, _)| *name)
@@ -787,6 +792,7 @@ mod tests {
             let socks = read(&[("ALL_PROXY", address), ("NO_PROXY", ".anthropic.com")]);
             assert!(socks.for_ureq().is_none(), "{address} is given");
             assert!(socks.socks() && socks.refusal().is_some(), "{address}");
+            assert!(socks.refuses_some(), "{address}");
             assert_eq!(socks.variable(), Some("ALL_PROXY"), "{address}");
             assert!(socks.exempts(&api) && !socks.exempts(&auth), "{address}");
             let ctx = read_from(&[("ALL_PROXY", address)]);
@@ -794,8 +800,12 @@ mod tests {
             assert!(agent.config().proxy().is_none(), "{address}");
             assert_eq!(agent.config().max_redirects(), 0, "{address}");
         }
+        let every = read(&[("ALL_PROXY", "socks5://p"), ("NO_PROXY", "*")]);
+        assert!(every.refusal().is_some() && !every.refuses_some());
+        assert!(!http.refuses_some());
         let none = read(&[]);
         assert!(none.for_ureq().is_none() && !none.socks() && none.refusal().is_none());
+        assert!(!none.refuses_some());
     }
 
     /// A context's debug form, which a panic or a log may print, says which variable names

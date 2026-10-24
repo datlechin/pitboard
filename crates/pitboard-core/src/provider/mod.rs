@@ -663,6 +663,12 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// switch writes. A fact about the tool, not a setting.
     fn adoption(&self, behind: Option<&Behind>) -> Adoption;
 
+    // The processes this tool recorded by id as ones it started in the background, which its
+    // holders can name wherever they run from.
+    fn recorded(&self, _ctx: &Context) -> Vec<u32> {
+        Vec::new()
+    }
+
     /// Whether a park may coexist with the same account still live.
     fn park_semantics(&self) -> ParkSemantics;
 

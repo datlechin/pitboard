@@ -10,6 +10,12 @@
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
+// Seconds in each, as every front end counts a span.
+pub const MINUTE: i64 = 60;
+pub const HOUR: i64 = 60 * MINUTE;
+pub const DAY: i64 = 24 * HOUR;
+pub const WEEK: i64 = 7 * DAY;
+
 /// What Pitboard reads the time from.
 #[doc(hidden)]
 pub trait Clock: Send + Sync + std::fmt::Debug {
@@ -94,6 +100,17 @@ impl Clock for FixedClock {
     fn pause(&self, seconds: u64) {
         self.advance(i64::try_from(seconds).unwrap_or(i64::MAX));
     }
+}
+
+// Milliseconds: a second change within one second would otherwise go unseen.
+pub(crate) fn changed_at(path: &std::path::Path) -> i64 {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| {
+            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 /// An RFC 3339 instant such as `2026-09-20T22:20:00.095287+00:00`, as epoch seconds. `None`

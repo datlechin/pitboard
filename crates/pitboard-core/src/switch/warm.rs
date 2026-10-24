@@ -23,6 +23,7 @@ use crate::service::Warning;
 use crate::state::Key;
 use crate::{park, status};
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 /// How long ahead of its expiry an access token is renewed before it is handed on: well past
 /// what a run takes.
@@ -317,6 +318,44 @@ fn mended_by_waiting(error: &Error) -> bool {
     }
 }
 
+// A warm-up that came to nothing, by its account and code where it is of an account: Claude
+// Code's words differ on every run.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Apart {
+    pub account: Option<String>,
+    pub key: String,
+}
+
+pub fn told_apart(error: &Error) -> Apart {
+    match error {
+        Error::WarmUpFailed { label, .. } | Error::WarmUpNotDue { label, .. } => Apart {
+            account: Some(label.clone()),
+            key: format!("{label}/{}", error.code()),
+        },
+        error => Apart {
+            account: None,
+            key: format!("{}/{error}", error.code()),
+        },
+    }
+}
+
+// What a front end has said of warm-ups that came to nothing: each once, until its account
+// warms up.
+#[derive(Debug, Default)]
+pub struct Told(BTreeSet<Apart>);
+
+impl Told {
+    // Whether `apart` has not been said yet; it has from now on.
+    pub fn untold(&mut self, apart: &Apart) -> bool {
+        self.0.insert(apart.clone())
+    }
+
+    pub fn warmed(&mut self, account: &str) {
+        self.0
+            .retain(|apart| apart.account.as_deref() != Some(account));
+    }
+}
+
 /// Why `label` is not warmed up when somebody asked for it now.
 fn not_due(label: String, hold: &warm::Hold, now: i64) -> Error {
     Error::WarmUpNotDue {
@@ -415,6 +454,45 @@ mod tests {
     use crate::error::Error;
     use crate::service::{Permit, Pitboard};
     use crate::state;
+
+    #[test]
+    fn a_failure_is_told_apart_by_its_account_and_code_and_not_its_words() {
+        let failed = |label: &str, why| Error::WarmUpFailed {
+            label: label.into(),
+            why,
+        };
+        let said = |words: &str| warm::Failure::Failed(words.into());
+        assert_eq!(
+            super::told_apart(&failed("work", said("request 7f3a timed out"))),
+            super::told_apart(&failed("work", said("request 91c0 timed out")))
+        );
+        assert_ne!(
+            super::told_apart(&failed("work", said("a"))),
+            super::told_apart(&failed("home", said("a")))
+        );
+        assert_ne!(
+            super::told_apart(&failed("work", said("a"))),
+            super::told_apart(&failed("work", warm::Failure::TimedOut))
+        );
+    }
+
+    #[test]
+    fn a_failure_is_said_again_once_its_own_account_warms_up() {
+        let work = super::told_apart(&Error::WarmUpFailed {
+            label: "work".into(),
+            why: warm::Failure::TimedOut,
+        });
+        let busy = super::told_apart(&Error::WarmUpInProgress);
+        let mut told = super::Told::default();
+        assert!(told.untold(&work));
+        assert!(told.untold(&busy));
+        assert!(!told.untold(&work));
+        told.warmed("home");
+        assert!(!told.untold(&work), "another account warmed up");
+        told.warmed("work");
+        assert!(told.untold(&work));
+        assert!(!told.untold(&busy), "of no account");
+    }
 
     #[test]
     fn a_claude_code_account_is_turned_on_and_off_and_each_is_recorded() {

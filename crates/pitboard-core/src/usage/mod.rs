@@ -89,6 +89,15 @@ impl Window {
         }
     }
 
+    // At the service's 100 as read, not the 100% a share just under it is drawn at.
+    pub fn used_up(&self, now: i64) -> bool {
+        self.used(now) >= 100.0
+    }
+
+    pub fn reached(&self, share: u8, now: i64) -> bool {
+        reached(self.used(now), share)
+    }
+
     /// Whether `other` measures the same limit, whichever name its source gave it.
     pub(crate) fn same_limit(&self, other: &Window) -> bool {
         limit_name(&self.kind) == limit_name(&other.kind) && self.scope == other.scope
@@ -502,6 +511,25 @@ mod tests {
 
     const NOW: i64 = 1_789_935_000;
     const HOUR: i64 = 3_600;
+
+    #[test]
+    fn a_limit_is_used_up_at_the_services_100_until_it_resets() {
+        assert!(measured("session", 100.0, Some(NOW + HOUR)).used_up(NOW));
+        assert!(measured("session", 104.0, None).used_up(NOW));
+        assert!(
+            !measured("session", 99.6, Some(NOW + HOUR)).used_up(NOW),
+            "drawn at 100%, and still answered"
+        );
+        assert!(!measured("session", 100.0, Some(NOW)).used_up(NOW));
+        assert!(!measured("session", 100.0, Some(NOW - 60)).used_up(NOW));
+    }
+
+    #[test]
+    fn a_limit_reaches_a_share_as_drawn_until_it_resets() {
+        assert!(measured("session", 94.5, Some(NOW + HOUR)).reached(95, NOW));
+        assert!(!measured("session", 94.4, Some(NOW + HOUR)).reached(95, NOW));
+        assert!(!measured("session", 97.0, Some(NOW - 60)).reached(95, NOW));
+    }
 
     fn measured(kind: &str, percent: f64, resets_at: Option<i64>) -> Window {
         Window {

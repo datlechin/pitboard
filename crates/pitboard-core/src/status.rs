@@ -246,9 +246,11 @@ impl Row {
         }
     }
 
-    /// Whether `pitboard use` would switch to it now.
+    // A parked login its service refused would fail a switch: it needs signing in again.
     pub fn switchable(&self, now: i64) -> bool {
-        !self.signed_in && self.parked.as_ref().is_some_and(|p| p.restorable_at(now))
+        !self.signed_in
+            && self.stale != Some(Stale::LoginRefused)
+            && self.parked.as_ref().is_some_and(|p| p.restorable_at(now))
     }
 
     /// The account, the way Pitboard tells accounts apart. `None` for a row nothing has
@@ -1080,7 +1082,7 @@ fn assemble(
                 .plans
                 .get(id)
                 .cloned()
-                .unwrap_or_else(|| account.plan.as_deref().map(crate::holder::capitalised));
+                .unwrap_or_else(|| account.plan.as_deref().map(crate::words::capitalised));
             Row {
                 provider: which,
                 label: Some(account.label.clone()),
@@ -1134,15 +1136,10 @@ fn assemble(
             });
             continue;
         }
-        // A login that could not be read, was read and is not one account's, or whose account
-        // could not be told, and that nothing pins on any account. Said, rather than left
-        // out, because leaving it out reads as nobody being signed in; but only for the tool a
-        // bare label means and for a tool somebody uses through Pitboard, so a machine that
-        // has never enrolled a Codex account sees nothing about Codex at all.
-        let used =
-            which == crate::label::DEFAULT || state.accounts.iter().any(|a| a.provider() == which);
+        // A login nothing pins on an account is said, since leaving it out reads as nobody
+        // signed in.
         let untold = matches!(live.signed_in, Some(Err(_)));
-        if (live.out_of_reach || untold) && used {
+        if (live.out_of_reach || untold) && shown(state, which) {
             rows.push(Row {
                 provider: which,
                 label: None,
@@ -1519,6 +1516,32 @@ mod tests {
             .unwrap();
         assert_eq!(personal.usage.as_ref().unwrap().windows[0].percent, 12.0);
         assert!(personal.switchable(NOW));
+    }
+
+    #[test]
+    fn a_parked_login_its_service_refused_cannot_be_switched_to() {
+        let s = state(&["work", "personal"]);
+        let f = facts(
+            "work-uuid",
+            Ok(reading(30.0, Source::Live)),
+            &[(
+                "personal-uuid",
+                Err(Stale::of(
+                    &ProviderError::InvalidGrant {
+                        service: "Anthropic",
+                    },
+                    false,
+                )),
+            )],
+        );
+        let rows = assemble(&s, &f, nothing_remembered, NOW);
+        let personal = rows
+            .iter()
+            .find(|r| r.label.as_deref() == Some("personal"))
+            .unwrap();
+        assert_eq!(personal.stale, Some(Stale::LoginRefused));
+        assert!(personal.parked.is_some(), "kept, as the service refused it");
+        assert!(!personal.switchable(NOW));
     }
 
     /// What a read saw wins over the record, even a login that says no plan.

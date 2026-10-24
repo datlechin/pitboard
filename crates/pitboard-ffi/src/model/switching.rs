@@ -175,6 +175,20 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
     );
 }
 
+// The core types the account with its tool where another tool has one of that name.
+#[test]
+fn a_switch_to_a_name_two_tools_share_outlives_the_read_after_it() {
+    let mut model = Hand::new();
+    let mut machine = Machine::reading(Ok(status(vec![
+        claude("work", true, 0.0),
+        claude("personal", false, 0.0),
+        codex_account("work", true),
+    ])));
+    machine.switched = switched("claude", "personal", "claude/work", Vec::new());
+    switch(&mut model, &mut machine, "claude/work");
+    assert_eq!(tos(&model), ["claude/work"]);
+}
+
 /// Whatever else writes the account index leaves the sessions a switch described as they
 /// were: a read that renews a lapsed parked login, a scheduled renewal, an enrolment. Only a
 /// switch made somewhere else, which leaves another account signed in, puts it away.
@@ -1452,9 +1466,7 @@ fn putting_the_parked_account_back_stops_the_wait_only_once_claude_has_quit() {
         outcome: crate::Switch::Installed {
             provider: "desktop".into(),
             to: "desktop/work".into(),
-            adoption: crate::Adoption::NextOpen {
-                name: "Claude".into(),
-            },
+            adoption: crate::Adoption::NextOpen { app: "Claude" },
         },
         warnings: Vec::new(),
     });
@@ -1871,7 +1883,7 @@ fn giving_up_gives_up_a_waiting_move_too() {
     machine.switched = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
     switch(&mut model, &mut machine, "desktop/home");
-    let given = "Pitboard gave up the move of work’s login and kept every folder: 1 parked, 1 set \
+    let given = "Pitboard gave up the move of work's login and kept every folder: 1 parked, 1 set \
                  aside.";
     machine.abandoned = Ok(GaveUp {
         switch: None,
@@ -2014,8 +2026,8 @@ fn a_claude_desktop_warning_starts_no_read_that_asks() {
     assert_eq!(model.count(any_read), reads, "no service is asked about it");
 }
 
-const REFUSED_FOR_GOOD: &str = "Anthropic no longer accepts the login Claude Code is using (its login has expired and \
-     cannot be renewed). Putting work’s login in its place loses nothing.";
+const REFUSED_FOR_GOOD: &str = "Anthropic no longer accepts Claude Code's login in use (its login has expired and \
+     cannot be renewed), so putting work's login in its place loses nothing.";
 
 /// A switch from a login Anthropic refuses for good asks, instead of failing, and moves
 /// nothing until the answer comes.

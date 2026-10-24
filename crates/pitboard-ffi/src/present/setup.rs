@@ -256,7 +256,7 @@ fn not_now(seen: &Seen, tip: Tip) -> Choice {
 /// known at all or what is known is empty. A machine without Claude Code says that instead.
 pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
     let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name.as_str()).collect();
-    let names = words::listed(&names);
+    let names = pitboard_core::words::listed(&names);
     match footing {
         Footing::NoClaudeCode => AccountsShown::NoTool {
             title: words::titled(

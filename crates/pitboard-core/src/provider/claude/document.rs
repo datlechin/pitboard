@@ -20,6 +20,11 @@ pub(crate) const ACCOUNT_SCOPED: [&str; 6] = [
     "cloudSessionsOauth",
 ];
 
+// What `/logout` leaves: the account's keys deleted and the machine's, such as MCP tokens, kept.
+pub(crate) fn signed_out(document: &Value) -> bool {
+    document.is_object() && document.get("claudeAiOauth").is_none()
+}
+
 /// The account's whole slice of a credential document: `claudeAiOauth` and whatever else of
 /// [`ACCOUNT_SCOPED`] is there.
 ///
@@ -130,7 +135,7 @@ pub(crate) fn plan(document: &Value) -> Option<String> {
     let oauth = oauth_in(document);
     let named = Some(oauth.get("subscriptionType")?.as_str()?.trim())
         .filter(|kind| !kind.is_empty())
-        .map(crate::holder::capitalised)?;
+        .map(crate::words::capitalised)?;
     let multiple = oauth
         .get("rateLimitTier")
         .and_then(Value::as_str)

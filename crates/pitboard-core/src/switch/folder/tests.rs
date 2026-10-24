@@ -3522,7 +3522,7 @@ fn giving_up_a_move_elsewhere_reads_no_claude_folder() {
     assert!(
         gave.moves[0]
             .to_string()
-            .contains("which this run did not read")
+            .contains("which Pitboard did not read")
     );
     let state = state_of(&m);
     assert!(state.moving.is_empty());

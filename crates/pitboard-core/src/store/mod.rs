@@ -138,6 +138,17 @@ pub enum Error {
     /// read until a whole login is written over them. Never "no credential" either.
     #[error("the credential store could not be read: {0}")]
     Unfinished(String),
+    // Fields, not a sentence: each front end names the account its own way.
+    #[error(
+        "the credential store could not be read: `{label}`'s parked login at {} could not be \
+         looked at ({why})",
+        path.display()
+    )]
+    ParkUnread {
+        label: String,
+        path: PathBuf,
+        why: String,
+    },
     /// A park sealed to this account is there but does not open in this logon: an
     /// administrator's password reset, a profile restored on another PC, or a logon without
     /// the user's key, as over SSH. `code` is `CryptUnprotectData`'s, where there was one.
@@ -154,9 +165,10 @@ pub enum Error {
 impl Error {
     pub fn code(&self) -> &'static str {
         match self {
-            Error::Unreadable(_) | Error::Unfinished(_) | Error::Broken { .. } => {
-                "credential_store_unreadable"
-            }
+            Error::Unreadable(_)
+            | Error::Unfinished(_)
+            | Error::Broken { .. }
+            | Error::ParkUnread { .. } => "credential_store_unreadable",
             Error::Locked => "credential_store_locked",
             Error::Sealed { .. } => "credential_sealed",
             Error::Malformed(_) => "credential_not_json",

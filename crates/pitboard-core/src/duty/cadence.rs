@@ -1,5 +1,5 @@
-//! How often a front end that acts by itself decides, and how long something that came to
-//! nothing waits before it is tried again. One set of numbers for every duty and every front
+//! How often a front end looks, reads and decides by itself, and how long something that came
+//! to nothing waits before it is tried again. One set of numbers for every duty and every front
 //! end, so the app and `pitboard watch` running side by side never ask more often than either
 //! would alone.
 
@@ -18,6 +18,12 @@ pub(crate) const RETRY_MOST_SECONDS: i64 = 900;
 /// trying again will not mend: something refused this often for such a reason is not going
 /// to be done.
 pub(crate) const ATTEMPTS: u32 = 3;
+
+// When the index and the readings were last written: no network and no keychain.
+pub const LOOK_EVERY_SECONDS: i64 = 2;
+
+// Each account is still asked only as often as its budget allows.
+pub const READ_EVERY_SECONDS: i64 = 300;
 
 /// How often a front end that acts by itself decides though nothing was written: an account
 /// put in use stops settling, and the wait after a failed attempt ends, with nobody writing

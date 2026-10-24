@@ -253,13 +253,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     (`switch::folder::read`). `Provider::own_record` reads Claude Code's config for that
     doubt and for the words that say it, never for whose a login is.
   - `duty/`: what every front end that acts by itself shares, whatever it does. `cadence.rs`
-    is how often it decides with nothing written (`DECIDE_EVERY_SECONDS`, 30), how long
-    something that came to nothing waits before it is tried again (`retry_after`, 60 seconds
-    doubling to 15 minutes), how many attempts are made at one thing (`ATTEMPTS`), and
-    `Refusals`, a front end's refusals in a row and their wait, on its own clock. `ledger.rs`
-    is `Tries`, the attempts and the reasons said about one thing, and how a duty's record
-    is read and written, only under `state.lock`. `mod.rs` holds `Look`, what a duty's look
-    at its files came to. The automatic switch and the warm-up are its duties.
+    is how often it looks at its files (`LOOK_EVERY_SECONDS`, 2), reads every account
+    (`READ_EVERY_SECONDS`, 300) and decides with nothing written (`DECIDE_EVERY_SECONDS`,
+    30), how long something that came to nothing waits before it is tried again
+    (`retry_after`, 60 seconds doubling to 15 minutes), how many attempts are made at one
+    thing (`ATTEMPTS`), and `Refusals`, a front end's refusals in a row and their wait, on
+    its own clock. `ledger.rs` is `Tries`, the attempts and the reasons said about one
+    thing, and how a duty's record is read and written, only under `state.lock`. `mod.rs`
+    holds `Look`, what a duty's look at its files came to. The automatic switch and the
+    warm-up are its duties.
   - `duty/warm/`: warming up an account, starting its five-hour period as soon as the last one
     resets, for the Claude Code accounts somebody turned it on for. `mod.rs` holds the
     setting, `warm.json`: the accounts turned on, by id, and `Range`, the span of each day,
@@ -415,13 +417,17 @@ window loads its site, and whatever the site's pages load, as a browser would.
     row has no numbers, since no usage of it is read, and says when a change last read its
     login in use (`read_at`). A read asks first (`ask`), and makes its rows (`report`) once
     whose each login is has been recorded, so an account whose only login a sign-in outside
-    Pitboard replaced reads `login_replaced` from that read on. The usage of a login nobody
+    Pitboard replaced reads `login_replaced` from that read on. A row whose parked login its
+    service refused (`login_refused`) is not switchable (`Row::switchable`), which
+    `pitboard status` and the app go by. The usage of a login nobody
     could name is not asked, and the account the record names stands in for it. Offline rows
     (`gather_offline`) take the account in use from `in_use::known`, an account nobody
     enrolled included, which gets its row as it does online. `Pitboard::standing` says what
-    stands on every read: `login_replaced`, `in_use_unconfirmed` where Claude Code's config
-    has moved since the record was checked and the read could not ask, and
-    `config_names_another` where it names another account than the one in use.
+    stands on every read: `login_replaced`, `in_use_unconfirmed` where the read could not
+    ask and Claude Code's config has moved since the record was checked, or the record was
+    never checked, whatever the config names (`Known::unconfirmed`, which doctor's `in_use`
+    check follows too), and `config_names_another` where it names another account than the
+    one in use.
     `statusline.rs` files what a Claude Code session passed under the account its windows
     prove: the one account whose reading, as Anthropic last answered for it, holds a window
     the session passed and does not rule the session out. A reading rules it out with
@@ -442,8 +448,13 @@ window loads its site, and whatever the site's pages load, as a browser would.
     when it runs out, a parked login's life, a renewal run, doctor's summary, and what is
     left in a file behind the keychain, or Credential Manager on Windows, and what putting it
     away does and did (`left_lines`, `stowed_lines`, `nothing_left`, each in the words of the
-    system it is given), which `pitboard stow` and the app's sheet both say. It
-    also holds `usage_level`, the steps at which a limit's colour changes. A thing said both
+    system it is given), which `pitboard stow` and the app's sheet both say, what becomes
+    of running sessions after a switch (`after_a_switch`), why replacing a login refused for
+    good loses nothing (`replacing`) and that Claude's settings name another account
+    (`desktop_named`), each taking the account as the front end names it. It also holds
+    `usage_level`, the steps at which a limit's colour changes, and the helpers every front
+    end writes with, `capitalised`, `listed` and `figure`; `time.rs` holds the units of a
+    span, and `state::Key::parse` reads back the name `Key::typed` writes. A thing said both
     in a column and in a sentence has a function for each form. The command line calls these
     functions directly, and so does `pitboard-ffi`'s `present/` as it makes the snapshot,
     which carries what an app shows of them. The bindings export none of them. Clock times
@@ -484,8 +495,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   At each decision it also asks the core to warm up whichever account turned on is due
   (`Pitboard::warm_up`, which looks at the files first), with a refusal row of its own, and
   says each warm-up, each reason an account is held back once until it warms up, and why
-  nothing is warmed up here once until that ends. No warm-up error ends it. `warm.rs` is
-  `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
+  nothing is warmed up here once until that ends. A warm-up that came to nothing is said once
+  until that account warms up, by the rule the app keeps too (`switch::warm::Told`): told
+  apart by the account and the code, never by Claude Code's words. No warm-up error ends it.
+  `warm.rs` is `pitboard warm`. `build/versioninfo.rs` is the Windows version resource SignPath asks of
   what it signs: ProductName `Pitboard`, CompanyName `Pitboard` and the crate's version, and
   `pitboard.exe`'s manifest. The build scripts of `pitboard-ffi` and `pitboard-share-ffi`
   include it by `#[path]` and link the resource into their DLLs, compiled by the Windows
@@ -573,8 +586,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     is chosen, asking the core's look after every read and every 30 seconds and saying under
     the setting what it came to, warms up the accounts turned on on a lane of its own,
     asking after every read and every 30 seconds, with every read's `Overview` of them, or
-    why it cannot be read, and a notification once for the words of a warm-up by itself
-    that came to nothing, keeps the app's own preferences, and keeps the daily renewal
+    why it cannot be read, and a notification of a warm-up by itself that came to nothing,
+    once until that account warms up (`switch::warm::Told`), keeps the app's own preferences, and keeps the daily renewal
     schedule, makes doctor's checks, reads the activity log and finds the `pitboard` a
     terminal runs. It keeps the
     account windows' books too: which store is whose and each window's last page, which
@@ -1255,8 +1268,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   run not yet made or under way is a warning that names `pitboard renew`. A changed setting
   is a warning whose fix is turning daily renewal off and on again, which writes the task as
   Pitboard writes it; nothing rewrites it unasked, since the change may be the person's. The
-  app's start-up repair (`schedule::repair`) points a task at the command line inside the app
-  only where the Pitboard it runs is gone and its settings are as Pitboard wrote them. The
+  app's start-up repair (`schedule::repair`) points a schedule at the command line inside the
+  app where doctor fails it (`schedule::fault`): the Pitboard it runs is gone, on every
+  system, or it runs an app's own program. A task whose settings changed in Task Scheduler is
+  left as it is. The
   MSI's full uninstall, through `Pitboard.exe --unregister`, takes each task away, renewal's
   and the watch service's (`schedule::uninstall_for_app`), only where it runs the
   `bin\pitboard.exe` beside that `Pitboard.exe`, whatever its settings, since the removal
@@ -1836,6 +1851,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   reading that folder. Where a move cannot be given up and `abandon` has done nothing yet,
   it refuses. Where it has already given up or settled something, it says the move as
   `move_not_given_up` instead, since the refusal's "nothing has changed" would be false.
+  Why it was not given up is the core's clause in both front ends
+  (`words::not_given_up_because`), each naming the account its own way and adding its own way
+  out but for a park Pitboard could not look at (`words::readable_first`), and the summary of
+  a move given up is `words::given_up` in both, each with its own way on.
 - `adopt` drops each waiting move and awaited sign-in, since they were about the other
   computer's Claude. Each folder a dropped move names that no account holds is kept aside
   as `another_machine`.
@@ -1908,7 +1927,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   late as an answer may give it, so an answer a second later neither forgets a limit
   already left nor says a reason again. What tells one reason, or one wait, from another
   is the core's one rule, `Auto::told_apart`, and every front end says by it, building no
-  key of its own, so the app and `pitboard watch` never tell them apart differently.
+  key of its own, so the app and `pitboard watch` never tell them apart differently. What
+  each says is the core's sentence too (`words::auto_waiting`, `auto_switched`,
+  `auto_skipped`, `auto_not_watching`), given clock times as each writes them.
 - Additive writes become durable before destructive ones. A run that dies midway through a
   Claude Code or Codex switch leaves a spare copy of a login, never a missing one.
 - A Claude Desktop login is never copied, so its move has no spare. Before the first
@@ -2880,6 +2901,18 @@ Tasks:
   0x80070091 while the second's task is in it, and succeeds once it is gone (RF-E1 and
   RF-E1c, run 38922866517).
 - The job user's task in either folder runs, with last result 0.
+- A fresh standard user's `pitboard watch install` registers `\Pitboard\Watch <SID>`. Task
+  Scheduler reads its trigger's and principal's user back as that user's name, the logon type
+  as an interactive token at least privilege, and the time limit as `PT0S`. With no signed-in
+  session its `Run` succeeds and starts nothing: the last result stays 0x00041303 and no
+  `pitboard.exe` runs. Installing again at 90% and `watch uninstall` succeed, and the
+  uninstall takes `\Pitboard\` with the task. The home keeps `audit.log` and `state.lock`
+  (RF-E6, run 40030964166).
+- The job user's tasks shaped as the watch service's start their program within 0.4 s of
+  `Run`. At 150 s the run with a `PT0S` limit is under way, and Task Scheduler has ended the
+  one with `PT1M` and its program, last result 0x00041306. `Stop` ends the `PT0S` run and its
+  program within 1.2 s, with the same result, and succeeds again with no run under way
+  (RF-E6, run 40030964166).
 
 Processes and jobs:
 
@@ -3165,6 +3198,7 @@ Daily renewal:
 Windows facts Pitboard stands on that Microsoft documents and nothing has measured yet, read
 on 15 and 16 October 2026. W27 took out the rows [The session machine](#the-session-machine)
 measured on 18 October 2026, and those CI and the runner facts measured by 20 October 2026.
+RF-E6 took out two of the watch service's on 23 October 2026 (run 40030964166).
 
 | Fact | Source | Why not measured |
 |---|---|---|
@@ -3173,9 +3207,7 @@ measured on 18 October 2026, and those CI and the runner facts measured by 20 Oc
 | WTS lists another session's processes to Administrators only | [WTSEnumerateProcessesExW](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsenumerateprocessesexw) | No row looked at another user's process in another session. A standard user's listing held session 0's processes. |
 | `longPathAware` in a manifest lifts nothing where `LongPathsEnabled` is 0 or absent, as on a PC no policy or installer changed | [Maximum path length limitation](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation) | Both images set it to 1, where the manifest lifts the limit (RF-T8, runs 39310064516 and 39320680285), and AGENTS.md does not let runner-facts.ps1 change it. |
 | `StartWhenAvailable` runs, about 10 minutes later, a start missed while the PC slept or was off | [StartWhenAvailable](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-startwhenavailable) | A runner never sleeps through a trigger. Task Scheduler took no missed start of the renewal's daily trigger begun before the task was registered, or passed while it was disabled: none of four tasks, two with the setting, ran within 21 to 29 minutes, each `0x00041303` with no missed run counted (RF-T8, runs 39310064516 and 39320680285). |
-| A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No run of `windows-facts.yml` has registered the watch service's task yet. |
-| `ExecutionTimeLimit` of `PT0S` lets the watch service's task run with no limit | [TaskSettings.ExecutionTimeLimit](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit) | As above. |
-| `IRegisteredTask::Run` starts the task at once, and `Stop` ends its run under way | [IRegisteredTask](https://learn.microsoft.com/en-us/windows/win32/api/taskschd/nn-taskschd-iregisteredtask) | As above. |
+| A `LogonTrigger` whose `UserId` is the person's SID starts the task at their sign-in, for the watch service | [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid) | No runner signs in. RF-E6 registered the watch service's task, and it never started (run 40030964166). |
 | Restart Manager asks a console program, such as the `bin\pitboard.exe` the watch service runs, to end by `CTRL_C_EVENT`, and an MSI replaces a file it cannot free at the next restart. `/passive` then restarts Windows unasked; `/norestart`, which the update feed passes, never does | [Guidelines for Applications](https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-applications), [Standard Installer command-line options](https://learn.microsoft.com/en-us/windows/win32/msi/standard-installer-command-line-options) (updated 29 April 2025, read on 23 October 2026) | No runner updates Pitboard while the watch service runs. The next session's update should run with the service installed. |
 | WSL 2's processes run in a utility VM | [Comparing WSL versions](https://learn.microsoft.com/en-us/windows/wsl/compare-versions) | No runner has WSL. |
 | Each subkey of `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss` is a distribution WSL holds for the account, named by its `DistributionName` | [How to manage WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space) | No runner has WSL. |
@@ -3584,12 +3616,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   `anthropic_profiles`, `profile_folder`, `windows_profile_folder`, `organisation_pin`): a
   session also signs in another way under `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile, or
   managed settings that require the Cloud gateway's sign-in. `settings::overrides` names
-  each, as it names a variable. `settings::Profiles` reads the profile variables from the
-  environment only: Claude Code reads them from `process.env`, and Pitboard does not follow
-  which settings `env` blocks reach it. A managed `forceLoginOrgUUID` makes Claude Code refuse
-  a login of another organisation as a session starts, so `Provider::refuses` asks it of the
-  account going in, by the organisation Pitboard recorded for it. Where several managed
-  sources set it, a login none of them names is refused.
+  each, as it names a variable. Claude Code reads the profile variables from `process.env`,
+  which it sets at start from the `env` of its config file and of each settings source. Read
+  again on 24 October 2026, `settings::profile` takes each variable and `ANTHROPIC_CONFIG_DIR`
+  from the highest managed source, the person's `settings.json` or the config file that sets
+  it, and from what `settings::Profiles` kept of the environment Pitboard started with where
+  none does. A project's, a local and a `--settings` file are not read. A managed
+  `forceLoginOrgUUID` makes Claude Code refuse a login of another organisation as a session
+  starts, so `Provider::refuses` asks it of the account going in, by the organisation Pitboard
+  recorded for it. Where several managed sources set it, a login none of them names is
+  refused.
 - Read on 23 October 2026 from the darwin-arm64 build of 2.1.309
   (`macos_managed_preferences`): on macOS a configuration profile's plist, the person's in
   `/Library/Managed Preferences/<user>` before the device's, is a managed source too. Claude
@@ -3831,25 +3867,28 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   - No editor with the Codex extension was running there. Its place, a folder named
     `openai.chatgpt-<version>`, is the extension's packaged layout, not measured.
 - Read again in the source at tag `rust-v0.164.0` on 23 October 2026, whose four builds pass
-  pitboard-conformance: every fact of the CLI's but the Windows ones, which keep their 0.162.1
-  and 0.163.0 readings. `codex_app_server_daemon` moved: where `packages/app-server-daemon`
-  has no `current` and an older Codex left a daemon's pid file or log, the daemon runs from
-  `packages/standalone/current`. A second `app_server_daemon` holder takes those directories,
-  `holder::Location::WithinEach`. On Linux the path resolves to a release, as a standalone
-  install's sessions do, so such a daemon reads as a session there. One the daemon's updater
-  starts again runs from the release itself (`resolved_managed_codex_bin`), and reads as a
-  session on macOS too.
+  pitboard-conformance: every fact of the CLI's, and the Windows ones on 24 October 2026.
+  `codex_app_server_daemon` moved: where `packages/app-server-daemon` has no `current` and an
+  older Codex left a daemon's pid file or log, the daemon's package is `packages/standalone`.
+  Codex starts it from the release that package's `current` resolves to (`pid_start.rs`
+  canonicalises the path), where a standalone install's sessions run. So a second
+  `app_server_daemon` holder, `holder::Location::Recorded`, takes the pids Codex records for
+  the daemon and its updater in `$CODEX_HOME/app-server-daemon`.
 - Read on 23 October 2026 from the amd64 `.deb` of ChatGPT for Linux 26.1016.61520, as bytes
   and never run (`codex_linux_app`): it installs to `/usr/lib/chatgpt` and runs its own
   `resources/codex` as `codex app-server` with the app's environment. So a folder named
-  `chatgpt` holds a `chatgpt_app`, whose remedy says to quit ChatGPT and open it again: whether
-  closing its windows quits it turns on something of its own, not traced.
+  `chatgpt` holds a `chatgpt_app`, whose remedy says to quit ChatGPT and open it again. Read on
+  24 October 2026 from the `.rpm`, the Arch package and the `.deb` of 26.1021.22027: one layout,
+  one `app.asar` and one codex in all three, and the app stays open after its last window
+  closes while the notification-area icon it always puts up on Linux is there.
 - Read on 16 October 2026 from Codex's source at tag `rust-v0.162.1` and its win32 builds:
-  - (`codex_windows_app_server`) the background app server runs
-    `<CODEX_HOME>\packages\app-server-daemon\current\bin\codex.exe`, `current` a
-    junction Codex points at one of its releases. It is started with `DETACHED_PROCESS |
-    CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its remedy there says to
-    run `codex app-server daemon restart` from a terminal that is not elevated.
+  - (`codex_windows_app_server`) the background app server runs the `bin\codex.exe` of the
+    release `<CODEX_HOME>\packages\app-server-daemon\current` resolves to, `current` a
+    junction Codex points at one of its releases: `pid_start.rs` starts the path
+    canonicalised, already at 0.162.1, which this note first missed. It is started with
+    `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB`, never from an elevated terminal, so its
+    remedy there says to run `codex app-server daemon restart` from a terminal that is not
+    elevated.
   - (`codex_windows_app_identity`) the desktop app for Windows, ChatGPT- or Codex-branded,
     is the package of family `OpenAI.Codex_2p2nqsd0c76g0`, its app
     `OpenAI.Codex_2p2nqsd0c76g0!App`, and Codex tells its process by that family. So
@@ -4902,8 +4941,8 @@ Microsoft's documentation.
   before the app ends, so a later click starts it again, and says the manager needs the
   Singleton package; the self-contained deployment guide (updated 2 October 2026) says app
   notifications do not, and has an API that may be missing checked with `IsSupported`.
-  `ToastNotification.Tag` (updated 23 August 2026) holds 64 characters, and a warm-up's
-  notice id carries its message, so the tag is the id's SHA-256 in hex. The app notification
+  `ToastNotification.Tag` (updated 23 August 2026) holds 64 characters, and the notice id of
+  a warm-up failure of no account carries its message, so the tag is the id's SHA-256 in hex. The app notification
   content guidance (updated 17 July 2026) gives a notification three text elements at most,
   the first its title, and keeps attribution text for a source; the UX guidance (updated 21
   April 2026) has a click on a notification open its context. So a notification says its

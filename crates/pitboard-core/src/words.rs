@@ -12,14 +12,10 @@
 use crate::doctor::{Level, renewal_due};
 use crate::host::{Os, WINDOWS_FLOOR, token};
 use crate::schedule::Job;
+use crate::time::{DAY, HOUR, MINUTE, WEEK};
 use crate::usage::pace::{Pace, Standing};
 use crate::usage::whole;
 use std::fmt::Write as _;
-
-const MINUTE: i64 = 60;
-const HOUR: i64 = 60 * MINUTE;
-const DAY: i64 = 24 * HOUR;
-const WEEK: i64 = 7 * DAY;
 
 /// A length of time to the precision a person reads: "6d 4h", "2h 05m", "47m", "<1m".
 ///
@@ -86,11 +82,52 @@ pub fn limit_name(kind: &str, length_seconds: Option<i64>) -> String {
     }
 }
 
+pub fn figure(percent: f64) -> String {
+    format!("{}%", whole(percent))
+}
+
 /// How much of a limit an account has used, in a sentence about an automatic switch:
 /// "96% of its 5-hour limit", or "97% of its weekly Opus limit" for one limit of a model.
 pub fn share_of_limit(limit: &crate::usage::Window) -> String {
     let name = scoped_limit_name(&limit.kind, limit.length_seconds, limit.scope.as_deref());
-    format!("{}% of its {name} limit", whole(limit.percent))
+    format!("{} of its {name} limit", figure(limit.percent))
+}
+
+pub fn has_used(account: &str, used: &str) -> String {
+    format!("{account} has used {used}")
+}
+
+// Clock times come as each front end writes them.
+pub fn auto_waiting(from: &str, used: &str, until: &str) -> String {
+    format!("{}. Pitboard tries again at {until}.", has_used(from, used))
+}
+
+pub fn auto_switched(from: &str, to: &str, used: &str) -> String {
+    format!(
+        "Switched Claude Code from {from} to {to}: {}.",
+        has_used(from, used)
+    )
+}
+
+// `why` is a clause from `not_switching`.
+pub fn auto_skipped(from: &str, used: &str, why: &str, until: Option<&str>) -> String {
+    let mut said = format!(
+        "{}. Pitboard is not switching: {why}.",
+        has_used(from, used)
+    );
+    if let Some(until) = until {
+        let _ = write!(said, " It decides again at {until}.");
+    }
+    said
+}
+
+// `why` is a clause from `not_watching`.
+pub fn auto_not_watching(why: &str, until: Option<&str>) -> String {
+    let mut said = format!("Pitboard is not switching Claude Code: {why}.");
+    if let Some(until) = until {
+        let _ = write!(said, " It asks again at {until}.");
+    }
+    said
 }
 
 /// What the automatic switch watches where it has nothing to do: "Watching work: 62% of its
@@ -203,6 +240,10 @@ pub fn not_warming(why: &crate::duty::warm::Halt) -> String {
     }
 }
 
+pub fn warming_halted(why: &crate::duty::warm::Halt) -> String {
+    format!("Pitboard is not warming up accounts: {}.", not_warming(why))
+}
+
 /// Why a warm-up started nothing, as a clause.
 pub(crate) fn warm_failed(why: &crate::duty::warm::Failure) -> String {
     use crate::duty::warm::Failure;
@@ -279,6 +320,25 @@ pub fn warm_standing(
 pub fn kept_until_renewed() -> &'static str {
     "keep the account they are on until their login is next renewed, or until they are \
      started again"
+}
+
+// No full stop: "Claude Code sessions already running follow within 33 seconds".
+pub fn after_a_switch(adoption: &crate::provider::Adoption, sessions: &str) -> String {
+    use crate::provider::Adoption;
+    match adoption {
+        Adoption::PollingWithin(seconds) => {
+            format!("{sessions} already running follow within {seconds} seconds")
+        }
+        Adoption::AtRenewal { file } => format!(
+            "{sessions} already running {}: {} is there",
+            kept_until_renewed(),
+            file.display()
+        ),
+        Adoption::RestartRequired { program, .. } => {
+            format!("Restart any running `{program}` for this to take effect")
+        }
+        Adoption::NextOpen { app } => format!("{app} opens signed in to it"),
+    }
 }
 
 /// What is said where nothing is left behind the store Claude Code keeps its login in, as
@@ -430,7 +490,7 @@ fn dropped_keys(os: Os, keys: &[String], gone: bool) -> Option<String> {
         0 => return None,
         n => n == 1,
     };
-    let names = listed(keys.iter().map(|key| format!("`{key}`")).collect());
+    let names = listed(keys.iter().map(|key| format!("`{key}`")));
     let (holds, goes) = match (gone, one) {
         (false, true) => ("holds", "goes"),
         (false, false) => ("holds", "go"),
@@ -539,17 +599,17 @@ pub fn scoped_limit_name(kind: &str, length_seconds: Option<i64>, scope: Option<
     }
 }
 
+// Nothing under a minute: "about to run out" reads more plainly than "<1m".
+pub fn time_to_run_out(in_seconds: i64) -> Option<String> {
+    (in_seconds >= MINUTE).then(|| span(in_seconds))
+}
+
 /// The limit of an account that runs out first at its pace, named as a sentence names it:
-/// "weekly limit runs out in 19h 05m at this pace". Under a minute it is "about to run
-/// out", which reads more plainly than "<1m".
+/// "weekly limit runs out in 19h 05m at this pace".
 pub fn runs_out(limit: &str, in_seconds: i64) -> String {
-    if in_seconds < MINUTE {
-        format!("{limit} limit is about to run out")
-    } else {
-        format!(
-            "{limit} limit runs out in {} at this pace",
-            span(in_seconds)
-        )
+    match time_to_run_out(in_seconds) {
+        Some(left) => format!("{limit} limit runs out in {left} at this pace"),
+        None => format!("{limit} limit is about to run out"),
     }
 }
 
@@ -817,70 +877,79 @@ pub(crate) fn move_waiting(label: &str) -> String {
     )
 }
 
-// Why a waiting move was left as it was, and what to do, for a refusal `abandon` and `repair`
-// both meet. `command` is the one to run again.
-fn move_left(why: &crate::error::Error, command: &str) -> Option<(String, String)> {
+// A clause after "because", where there is one. `name` is the account as the front end says it.
+pub fn not_given_up_because(why: &crate::error::Error, name: &str) -> Option<String> {
+    match why {
+        crate::error::Error::MoveMixed { places, .. } => Some(format!(
+            "giving it up would leave parts of it beside another login in Claude's folder: {}",
+            places.join(", ")
+        )),
+        other => left_because(other, name),
+    }
+}
+
+// Why a waiting move was left as it was, for a refusal `abandon` and `repair` both meet.
+fn left_because(why: &crate::error::Error, name: &str) -> Option<String> {
     use crate::error::Error;
-    let again = format!("run `{command}` again");
     Some(match why {
-        Error::AppOpen { app, still } if still.is_empty() => (
-            format!("{app} is open"),
-            format!("Quit {app} with Command-Q, then {again}."),
+        Error::AppOpen { app, still } if still.is_empty() => format!("{app} is open"),
+        Error::AppOpen { app, still } => {
+            format!("{} from {app} is still running", listed(still.clone()))
+        }
+        Error::AppStateUnknown { app, why } => {
+            format!("it could not tell whether {app} is open ({why})")
+        }
+        Error::LoginFolderBusy { app } => format!("another Pitboard is changing {app}'s login"),
+        Error::LoginFolderUnreadable { tool, detail } => format!(
+            "it could not read {}'s cookie store ({detail})",
+            tool.program()
         ),
-        Error::AppOpen { app, still } => (
-            format!("{} from {app} is still running", listed(still.clone())),
-            wait_for_still(crate::host::OS, &again),
-        ),
-        Error::AppStateUnknown { app, why } => (
-            format!("it could not tell whether {app} is open ({why})"),
-            format!("Run `{command}` again."),
-        ),
-        Error::LoginFolderBusy { app } => (
-            format!("another Pitboard is changing {app}'s login"),
-            format!("Run `{command}` again once it has finished."),
-        ),
-        Error::LoginFolderUnreadable { tool, detail } => (
-            format!(
-                "it could not read {}'s cookie store ({detail})",
-                tool.program()
-            ),
-            format!(
-                "Open {program}, quit it with Command-Q, then {again}.",
-                program = tool.program()
-            ),
-        ),
-        Error::AppOpenedMidway { app, .. } => (
-            format!("{app} was opened meanwhile"),
-            format!("Nothing is lost. Quit {app} with Command-Q, then {again}."),
-        ),
-        // A park Pitboard could not look at, as `store::folder::unread` says it.
-        Error::Store(crate::store::Error::Unreadable(detail)) => (
-            detail.clone(),
-            format!("Make that path, and each folder it is in, readable to you, then {again}."),
+        Error::AppOpenedMidway { app, .. } => format!("{app} was opened meanwhile"),
+        Error::Store(crate::store::Error::ParkUnread { path, why, .. }) => format!(
+            "{name}'s parked login at {} could not be looked at ({why})",
+            path.display()
         ),
         _ => return None,
     })
 }
 
+// What to do about a refusal `left_because` says why of. `command` is the one to run again.
+fn left_way_out(why: &crate::error::Error, command: &str) -> String {
+    use crate::error::Error;
+    let again = format!("run `{command}` again");
+    match why {
+        Error::AppOpen { app, still } if still.is_empty() => {
+            format!("Quit {app} with Command-Q, then {again}.")
+        }
+        Error::AppOpen { .. } => wait_for_still(crate::host::OS, &again),
+        Error::LoginFolderBusy { .. } => format!("Run `{command}` again once it has finished."),
+        Error::LoginFolderUnreadable { tool, .. } => format!(
+            "Open {program}, quit it with Command-Q, then {again}.",
+            program = tool.program()
+        ),
+        Error::AppOpenedMidway { app, .. } => {
+            format!("Nothing is lost. Quit {app} with Command-Q, then {again}.")
+        }
+        Error::Store(_) => readable_first(&again),
+        _ => format!("Run `{command}` again."),
+    }
+}
+
+// The way out of a park Pitboard could not look at, before `then`.
+pub fn readable_first(then: &str) -> String {
+    format!("Make that path, and each folder it is in, readable to you, then {then}.")
+}
+
 // After `abandon` gave up a switch, so never that nothing has changed.
 pub(crate) fn move_not_given_up(label: &str, why: &crate::error::Error) -> String {
     use crate::error::Error;
-    let (because, then) = match (move_left(why, "pitboard abandon"), why) {
-        (Some((because, then)), _) => (Some(because), then),
-        (None, Error::MoveMixed { places, .. }) => (
-            Some(format!(
-                "giving it up would leave parts of it beside another login in Claude's folder: \
-                 {}",
-                places.join(", ")
-            )),
-            mixed_way_out(label),
-        ),
-        (None, other) => (
-            None,
-            format!(
-                "It stopped at `{}`: run `pitboard abandon` again to see why.",
-                other.code()
-            ),
+    let because = not_given_up_because(why, &format!("`{label}`"));
+    let then = match (why, &because) {
+        (Error::MoveMixed { .. }, _) => mixed_way_out(label),
+        (why, Some(_)) => left_way_out(why, "pitboard abandon"),
+        (why, None) => format!(
+            "It stopped at `{}`: run `pitboard abandon` again to see why.",
+            why.code()
         ),
     };
     match because {
@@ -897,8 +966,8 @@ pub(crate) fn move_not_given_up(label: &str, why: &crate::error::Error) -> Strin
 // For `repair`, which goes on past the move, so never that nothing has changed.
 pub(crate) fn move_not_settled(label: &str, why: &crate::error::Error) -> String {
     use crate::error::Error;
-    let (because, then) = match (move_left(why, "pitboard repair"), why) {
-        (Some(left), _) => left,
+    let (because, then) = match (left_because(why, &format!("`{label}`")), why) {
+        (Some(because), _) => (because, left_way_out(why, "pitboard repair")),
         (None, Error::RecoveryUndetermined { detail, .. }) => (
             format!("it cannot tell where it stopped ({detail})"),
             undetermined_way_out(),
@@ -1006,65 +1075,70 @@ pub(crate) fn item_gone(label: &str, item: &str) -> String {
     )
 }
 
-pub(crate) fn given_up(given_up: &crate::switch::GivenUp) -> String {
-    let label = crate::state::Key::new(given_up.tool, &given_up.label).typed();
-    let enroll = crate::state::Key::new(given_up.tool, "<label>").typed();
+// `name` as the front end names the account; `way_on` its way to the account Claude shows.
+pub fn given_up(given_up: &crate::switch::GivenUp, name: &str, way_on: &str) -> String {
+    let app = given_up.tool.program();
     let mut said = format!(
-        "Pitboard gave up the move of `{label}`'s login and kept every folder: {} parked, {} \
-         set aside.",
+        "Pitboard gave up the move of {name}'s login and kept every folder: {} parked, {} set \
+         aside.",
         given_up.parked, given_up.set_aside
     );
     if let Some(slot) = &given_up.slot {
-        said.push_str(&format!(
-            " The move was in {slot}, which this run did not read."
-        ));
-    }
-    let way_on = format!(
-        "`pitboard enroll {enroll}` for the account Claude shows, or `pitboard use {enroll}` \
-         where Claude is signed out."
-    );
-    if given_up.left.is_empty() {
-        said.push_str(&format!(" Run {way_on}"));
-    } else {
-        let left = listed(
-            given_up
-                .left
-                .iter()
-                .map(|item| format!("`{item}`"))
-                .collect(),
+        let _ = write!(
+            said,
+            " The move was in {slot}, which Pitboard did not read."
         );
+    }
+    if given_up.left.is_empty() {
+        let _ = write!(said, " {}", capitalised(way_on));
+    } else {
+        let left = listed(given_up.left.iter().map(|item| format!("`{item}`")));
         let stay = if given_up.left.len() == 1 {
             "stays"
         } else {
             "stay"
         };
-        said.push_str(&format!(
-            " {left} {stay} in Claude's folder. Open Claude once and quit it with Command-Q, \
-             then run {way_on}"
-        ));
+        let _ = write!(
+            said,
+            " {left} {stay} in {app}'s folder. Open {app} once and quit it with Command-Q, then \
+             {way_on}"
+        );
     }
     said
 }
 
+pub(crate) fn given_up_on_the_command_line(given_up: &crate::switch::GivenUp) -> String {
+    use crate::state::Key;
+    let enroll = Key::new(given_up.tool, "<label>").typed();
+    self::given_up(
+        given_up,
+        &format!("`{}`", Key::new(given_up.tool, &given_up.label).typed()),
+        &format!(
+            "run `pitboard enroll {enroll}` for the account {app} shows, or `pitboard use \
+             {enroll}` where {app} is signed out.",
+            app = given_up.tool.program()
+        ),
+    )
+}
+
 // Claude's settings name `named` since Pitboard last read `last` in use: no service is asked.
-pub(crate) fn desktop_named(
+// `said` names an account as the front end does.
+pub fn desktop_named(
     named: &crate::service::Stored,
     last: &crate::service::Stored,
+    said: impl Fn(&crate::service::Stored) -> String,
 ) -> String {
     use crate::service::Stored;
     let since = match last {
         Stored::Account(_) | Stored::Unenrolled(_) => format!(
             "since Pitboard last read {} in use, so Claude may hold another login",
-            last.said("nobody")
+            said(last)
         ),
         Stored::Nothing | Stored::Unknown => {
             "since Pitboard last read Claude signed out, so somebody may have signed in".into()
         }
     };
-    format!(
-        "Claude's settings have named {} {since}",
-        named.said("nobody")
-    )
+    format!("Claude's settings have named {} {since}", said(named))
 }
 
 // By the date the session cookie carries, hedged: claude.ai may end it sooner or keep it.
@@ -1166,28 +1240,35 @@ pub fn forget_question(tool: Option<crate::provider::ProviderId>, label: &str) -
     }
 }
 
-/// Why putting another login in place of `tool`'s login in use loses nothing, where its
-/// service refuses that login's refresh token for good.
-pub fn replacing(tool: crate::provider::ProviderId, detail: &str) -> String {
+// Claude Code's config names `email` as signed in and no store Pitboard reads on `os` holds a
+// login: Pitboard is looking in the wrong place.
+pub(crate) fn named_but_not_found(os: Os, email: &str) -> String {
+    let places = match os {
+        Os::MacOs | Os::Linux => "in the keychain or in the file it also reads",
+        Os::Windows => "in .credentials.json or in Credential Manager",
+    };
     format!(
-        "{} no longer accepts {}'s login in use ({detail}), so putting another login in its \
+        "Claude Code's config says {email} is signed in, but Pitboard cannot find that login {places}"
+    )
+}
+
+// `name` is the account as the front end says it.
+pub fn replacing(tool: crate::provider::ProviderId, name: &str, detail: &str) -> String {
+    format!(
+        "{} no longer accepts {}'s login in use ({detail}), so putting {name}'s login in its \
          place loses nothing.",
         tool.service(),
         tool.name()
     )
 }
 
-/// What `pitboard use` asks before it puts `label`'s login in place of that one.
 pub fn replace_question(tool: crate::provider::ProviderId, label: &str, detail: &str) -> String {
-    format!(
-        "{}\nPut {label}'s login in its place? [y/N] ",
-        replacing(tool, detail)
-    )
+    format!("{}\nReplace it? [y/N] ", replacing(tool, label, detail))
 }
 
 // What `adopt` says of the Claude Desktop logins it set aside, each account as typed.
 pub fn adopted_folders(labels: &[String]) -> String {
-    let named = listed(labels.iter().map(|label| format!("`{label}`")).collect());
+    let named = listed(labels.iter().map(|label| format!("`{label}`")));
     format!(
         "Pitboard set aside the parked Claude Desktop logins of {named}. They were parked on \
          another Mac, and Claude cannot read them here where its key differs. `pitboard \
@@ -1338,22 +1419,26 @@ pub(crate) fn listed_values<T: AsRef<str>>(values: &[T]) -> String {
     if values.is_empty() {
         return "an empty list".into();
     }
-    listed(
-        values
-            .iter()
-            .map(|value| format!("`{}`", value.as_ref()))
-            .collect(),
-    )
+    listed(values.iter().map(|value| format!("`{}`", value.as_ref())))
+}
+
+// "5-hour" stays "5-hour" and "weekly" becomes "Weekly".
+pub fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 /// Things one after another, as a sentence lists them: "a", "a and b", "a, b and c".
-pub fn listed(mut items: Vec<String>) -> String {
-    match items.len() {
-        0 => String::new(),
-        1 => items.remove(0),
-        _ => {
-            let last = items.pop().unwrap_or_default();
-            format!("{} and {last}", items.join(", "))
+pub fn listed<T: AsRef<str>>(items: impl IntoIterator<Item = T>) -> String {
+    let items: Vec<T> = items.into_iter().collect();
+    match items.as_slice() {
+        [] => String::new(),
+        [one] => one.as_ref().to_owned(),
+        [rest @ .., last] => {
+            let rest: Vec<&str> = rest.iter().map(AsRef::as_ref).collect();
+            format!("{} and {}", rest.join(", "), last.as_ref())
         }
     }
 }
@@ -1361,6 +1446,15 @@ pub fn listed(mut items: Vec<String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_figure_is_rounded_to_the_nearest_whole_percent() {
+        assert_eq!(figure(64.4), "64%");
+        assert_eq!(figure(64.5), "65%");
+        assert_eq!(figure(0.4), "0%");
+        assert_eq!(figure(100.0), "100%");
+        assert_eq!(figure(130.2), "130%");
+    }
 
     // The file sits behind the keychain on macOS and behind Credential Manager on Windows, which
     // a sign-in over SSH with a key cannot reach.
@@ -2168,6 +2262,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_login_refused_for_good_is_replaced_by_the_account_named() {
+        use crate::provider::ProviderId;
+        let refused = crate::error::Error::LiveLoginRefused {
+            tool: ProviderId::Claude,
+            label: "work".into(),
+            detail: "it was revoked".into(),
+        };
+        assert_eq!(
+            refused.to_string(),
+            "Anthropic no longer accepts Claude Code's login in use (it was revoked), so putting \
+             `work`'s login in its place loses nothing. Run `pitboard use work --yes` to \
+             replace it."
+        );
+        assert_eq!(
+            replace_question(ProviderId::Claude, "work", "it was revoked"),
+            "Anthropic no longer accepts Claude Code's login in use (it was revoked), so putting \
+             work's login in its place loses nothing.\nReplace it? [y/N] "
+        );
+    }
+
     // Said by `repair`, which goes on past the move, so never that nothing has changed.
     #[test]
     fn a_move_not_settled_says_why_and_never_that_nothing_changed() {
@@ -2218,7 +2333,7 @@ mod tests {
                 what: "does not exist yet".into(),
                 then: Then::OpenAndQuit,
             },
-            Error::Store(crate::store::Error::Unreadable("denied".into())),
+            crate::store::folder::unread("desktop/work", std::path::Path::new("/p"), "denied"),
         ] {
             let sentence = said(why);
             assert!(sentence.contains(", because "), "{sentence}");

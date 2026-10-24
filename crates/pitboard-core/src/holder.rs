@@ -7,13 +7,15 @@
 //! advice meant for one is wrong for another: quitting a terminal session does nothing for
 //! an app that stays open in the menu bar after its windows close.
 //!
-//! The kinds are told apart by where the program runs from, which the process list says.
+//! The kinds are told apart by where the program runs from, which the process list says, or by
+//! the id the tool recorded for a process it started.
 //! Nothing here names a tool; a tool's own list does, most particular kind first and ending
 //! with one that is anywhere, so every process is one kind and none is guessed to be an app.
 
 use crate::context::Context;
 use crate::host::{OS, Process};
 use crate::provider::ProviderId;
+use crate::words::capitalised;
 use std::path::Path;
 
 /// One kind of process that holds a tool's login.
@@ -46,8 +48,8 @@ pub enum Noun {
 pub enum Location {
     // A directory of exactly this name, such as an app bundle.
     Within(&'static str),
-    // Directories of exactly these names, each inside the one before.
-    WithinEach(&'static [&'static str]),
+    // A process the tool recorded by its id as one it started, wherever it runs from.
+    Recorded,
     // An editor extension's folder is named for its version.
     WithinPrefixed(&'static str),
     // A Windows package's family, wherever the package is installed.
@@ -118,26 +120,17 @@ pub struct Holding {
 
 impl Location {
     // Never by the program's own name. A prefix is compared as that many first characters.
-    fn holds(self, process: &Process) -> bool {
+    fn holds(self, process: &Process, recorded: &[u32]) -> bool {
         let mut directories = process.path.ancestors().skip(1).filter_map(Path::file_name);
         match self {
             Location::Anywhere => true,
+            Location::Recorded => recorded.contains(&process.pid),
             Location::Package(family) => process
                 .package
                 .as_deref()
                 .is_some_and(|its| its.eq_ignore_ascii_case(family)),
             Location::Within(name) => {
                 directories.any(|dir| OS.same_path(Path::new(dir), Path::new(name)))
-            }
-            Location::WithinEach(names) => {
-                let directories: Vec<_> = directories.collect();
-                directories.windows(names.len()).any(|inner_first| {
-                    inner_first
-                        .iter()
-                        .rev()
-                        .zip(names.iter())
-                        .all(|(dir, name)| OS.same_path(Path::new(dir), Path::new(name)))
-                })
             }
             Location::WithinPrefixed(prefix) => directories.any(|dir| {
                 let head: String = dir
@@ -151,11 +144,13 @@ impl Location {
     }
 }
 
-// Each to the first holder whose location holds it. A kind with nothing running is left out.
+// Each to the first holder whose location holds it, `recorded` the processes the tool recorded as
+// its own. A kind with nothing running is left out.
 pub(crate) fn classify(
     processes: &[Process],
     holders: &[Holder],
     program: &'static str,
+    recorded: &[u32],
 ) -> Vec<Holding> {
     let mut holding: Vec<Holding> = holders
         .iter()
@@ -168,7 +163,7 @@ pub(crate) fn classify(
     for process in processes {
         if let Some(found) = holding
             .iter_mut()
-            .find(|h| h.holder.location.holds(process))
+            .find(|h| h.holder.location.holds(process, recorded))
         {
             found.pids.push(process.pid);
         }
@@ -192,7 +187,11 @@ pub(crate) fn find(
     } else {
         crate::words::spelled(ctx, tool).of(tool)
     };
-    Some(classify(&processes, holders, spelled))
+    let recorded = match crate::provider::of(tool) {
+        crate::provider::LoginKind::Document(driver) => driver.recorded(ctx),
+        crate::provider::LoginKind::Folder(_) => Vec::new(),
+    };
+    Some(classify(&processes, holders, spelled, &recorded))
 }
 
 impl Holding {
@@ -249,7 +248,7 @@ impl Holding {
 
 /// Everything running, as one noun phrase: "2 `codex` sessions and the ChatGPT app".
 pub(crate) fn described(holding: &[Holding]) -> String {
-    crate::words::listed(holding.iter().map(Holding::phrase).collect())
+    crate::words::listed(holding.iter().map(Holding::phrase))
 }
 
 /// The same, with the pids of each: "2 `codex` sessions (pid 41, 42)".
@@ -257,8 +256,7 @@ pub(crate) fn described_with_pids(holding: &[Holding]) -> String {
     crate::words::listed(
         holding
             .iter()
-            .map(|h| format!("{} (pid {})", h.phrase(), some_of(&h.pids)))
-            .collect(),
+            .map(|h| format!("{} (pid {})", h.phrase(), some_of(&h.pids))),
     )
 }
 
@@ -284,14 +282,6 @@ pub(crate) fn remedies(holding: &[Holding], purpose: &str) -> String {
                 .join("; ")
         ),
     }
-}
-
-/// `text` with its first letter a capital, to begin a sentence with.
-pub(crate) fn capitalised(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
 }
 
 /// A few pids and how many more, because somebody with twenty sessions open needs to know
@@ -365,6 +355,7 @@ mod tests {
             ],
             HOLDERS,
             "tool",
+            &[],
         );
         assert_eq!(
             kinds(&holding),
@@ -378,9 +369,9 @@ mod tests {
 
     #[test]
     fn only_the_directories_a_program_is_in_say_where_it_runs() {
-        let holding = classify(&[at(1, "/usr/bin/App.app")], HOLDERS, "tool");
+        let holding = classify(&[at(1, "/usr/bin/App.app")], HOLDERS, "tool", &[]);
         assert_eq!(kinds(&holding), [("session", vec![1])]);
-        assert!(!Location::WithinPrefixed("vendor.tool-").holds(&at(1, "vendor.tool-9")));
+        assert!(!Location::WithinPrefixed("vendor.tool-").holds(&at(1, "vendor.tool-9"), &[]));
     }
 
     #[test]
@@ -392,6 +383,7 @@ mod tests {
             ],
             HOLDERS,
             "tool",
+            &[],
         );
         match OS {
             crate::host::Os::MacOs | crate::host::Os::Linux => {
@@ -401,9 +393,9 @@ mod tests {
                 assert_eq!(kinds(&holding), [("app", vec![1]), ("extension", vec![2])]);
             }
         }
-        assert!(Location::WithinPrefixed("vendor.tool-").holds(&at(1, "/e/vendor.tool-1/t")));
+        assert!(Location::WithinPrefixed("vendor.tool-").holds(&at(1, "/e/vendor.tool-1/t"), &[]));
         assert!(
-            !Location::WithinPrefixed("vendor.tool-").holds(&at(1, "/e/vendor.tool/t")),
+            !Location::WithinPrefixed("vendor.tool-").holds(&at(1, "/e/vendor.tool/t"), &[]),
             "a name shorter than the prefix does not start with it"
         );
     }
@@ -418,7 +410,12 @@ mod tests {
             mac.reopen("App"),
             "quit App with Command-Q and open it again"
         );
-        let app = classify(&[at(1, "/Applications/App.app/x/tool")], HOLDERS, "tool");
+        let app = classify(
+            &[at(1, "/Applications/App.app/x/tool")],
+            HOLDERS,
+            "tool",
+            &[],
+        );
         assert_eq!(
             app.first().map(|h| h.holder.remedy),
             Some(Remedy::ReopenApp {
@@ -455,6 +452,7 @@ mod tests {
             ],
             &[STORE, SESSION],
             "tool",
+            &[],
         );
         assert_eq!(kinds(&holding), [("app", vec![1]), ("session", vec![2, 3])]);
         assert_eq!(
@@ -468,10 +466,23 @@ mod tests {
     }
 
     #[test]
+    fn a_process_the_tool_recorded_is_its_kind_wherever_it_runs() {
+        const DAEMON: Holder = Holder {
+            kind: "daemon",
+            noun: Noun::One("the daemon"),
+            location: Location::Recorded,
+            remedy: Remedy::Restart,
+        };
+        let both = [at(1, "/x/releases/1/tool"), at(2, "/x/releases/1/tool")];
+        let holding = classify(&both, &[DAEMON, SESSION], "tool", &[2, 9]);
+        assert_eq!(kinds(&holding), [("daemon", vec![2]), ("session", vec![1])]);
+    }
+
+    #[test]
     fn nothing_running_is_nothing_held() {
-        assert!(classify(&[], HOLDERS, "tool").is_empty());
+        assert!(classify(&[], HOLDERS, "tool", &[]).is_empty());
         assert!(
-            classify(&[at(1, "tool")], &[APP], "tool").is_empty(),
+            classify(&[at(1, "tool")], &[APP], "tool", &[]).is_empty(),
             "and a process no kind claims is left out"
         );
     }
@@ -485,6 +496,7 @@ mod tests {
             ],
             HOLDERS,
             "tool",
+            &[],
         );
         assert_eq!(described(&holding), "the App");
         assert!(!plural(&holding));
@@ -495,7 +507,7 @@ mod tests {
     /// about, and the purpose leads.
     #[test]
     fn what_to_do_is_said_once_for_each_kind() {
-        let sessions = classify(&[at(1, "tool"), at(2, "tool")], HOLDERS, "tool");
+        let sessions = classify(&[at(1, "tool"), at(2, "tool")], HOLDERS, "tool", &[]);
         assert_eq!(described(&sessions), "2 `tool` sessions");
         assert!(plural(&sessions));
         assert_eq!(
@@ -503,7 +515,7 @@ mod tests {
             "Quit them and start again to use the new account."
         );
 
-        let one = classify(&[at(1, "tool")], HOLDERS, "tool");
+        let one = classify(&[at(1, "tool")], HOLDERS, "tool", &[]);
         assert_eq!(described(&one), "1 `tool` session");
         assert_eq!(
             remedies(&one, "to go on"),
@@ -518,6 +530,7 @@ mod tests {
             ],
             HOLDERS,
             "tool",
+            &[],
         );
         assert_eq!(
             described(&all),
@@ -543,7 +556,7 @@ mod tests {
                 },
             };
             remedies(
-                &classify(&[at(1, "/x/daemon/tool")], &[daemon], program),
+                &classify(&[at(1, "/x/daemon/tool")], &[daemon], program, &[]),
                 "to take a switch",
             )
         };

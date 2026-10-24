@@ -17,6 +17,7 @@ use crate::provider::claude::paths as claude;
 use crate::provider::claude::slot;
 use crate::provider::codex::paths as codex;
 use crate::provider::{LoginKind, ProviderId};
+use crate::schedule::Fault;
 use crate::service::Stored;
 use crate::state::{Key, Park, State};
 use crate::{home, park, store, switch, words};
@@ -85,6 +86,10 @@ pub(crate) struct Facts {
     /// Every reason a session here would authenticate as something other than the stored
     /// login, read from settings files as well as from this process's environment.
     pub(crate) auth_overrides: Vec<crate::settings::Override>,
+    // Each managed `forceLoginOrgUUID` a session takes, and where, and the enrolled accounts none
+    // of them lets Claude Code keep.
+    pub(crate) organisation_pins: Vec<String>,
+    pub(crate) pinned_out: Vec<String>,
     /// Accounts Pitboard is not asking Anthropic about yet, and for how long: (uuid, seconds).
     pub(crate) asking_held: Vec<(String, i64)>,
     pub(crate) state: Result<State, Error>,
@@ -181,6 +186,8 @@ pub(crate) struct ProxyFact {
     /// does not exempt fails before anything is sent, and one to a host it exempts goes out
     /// directly.
     pub(crate) socks: bool,
+    // Whether a request to a host Pitboard calls fails, as `Proxies::refuses_some` says.
+    pub(crate) fails: bool,
     /// `NO_PROXY` or `no_proxy`, whichever is read, where either is set.
     pub(crate) exempting: Option<&'static str>,
     /// The hosts Pitboard calls that it exempts, which Pitboard reaches directly.
@@ -488,6 +495,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     let service = claude::live_service(ctx);
     let home = home::dir(ctx);
     let config_account = config.as_ref().ok().and_then(claude::config_account);
+    let (organisation_pins, pinned_out) = login_pins(ctx, state.as_ref().ok());
     Facts {
         os: crate::host::OS,
         sid: ctx.sid.clone(),
@@ -533,6 +541,8 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         claude_version: claude::installed_version(ctx),
         claude_program: claude::program(ctx),
         auth_overrides: crate::settings::overrides(ctx),
+        organisation_pins,
+        pinned_out,
         asking_held: crate::usage::budget::holds(ctx),
         in_use: state
             .as_ref()
@@ -584,6 +594,30 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     }
 }
 
+fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, Vec<String>) {
+    let said = crate::settings::organisation_pins(ctx)
+        .into_iter()
+        .map(|(layer, ids)| {
+            format!(
+                "`forceLoginOrgUUID` set to {} in {layer}",
+                words::listed_values(&ids)
+            )
+        })
+        .collect();
+    let LoginKind::Document(claude) = crate::provider::of(ProviderId::Claude) else {
+        return (said, Vec::new());
+    };
+    let ruled_out = state.map_or_else(Vec::new, |s| {
+        s.accounts
+            .iter()
+            .filter(|a| a.provider() == ProviderId::Claude)
+            .filter(|a| claude.refuses(ctx, &Value::Null, &a.owner()).is_some())
+            .map(|a| format!("`{}`", s.typed(&a.key())))
+            .collect()
+    });
+    (said, ruled_out)
+}
+
 // As Codex 0.163.0's Linux build tells WSL (`codex_wsl`).
 fn wsl_fact(ctx: &Context) -> Option<WslFact> {
     let inside = ctx.os == Os::Linux && (ctx.wsl_distro.is_some() || ctx.host().kernel_is_wsl());
@@ -617,17 +651,14 @@ fn pitboards(ctx: &Context) -> Vec<PathBuf> {
     copies
 }
 
-/// Claude Code's fallback file, where it is behind the keychain, and the login it holds.
-/// Where whether it is there cannot be told, nothing is said of it: a keychain that cannot
-/// be read is the `credential_store` check's to say, and a file that cannot even be looked
-/// at is one Claude Code's own look takes for not there.
+// Nothing where whether it is there cannot be told: an unreadable keychain is the
+// `credential_store` check's to say.
 fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
-    let held = claude_live::behind(ctx)?;
+    let login = claude_live::login_behind(ctx)?;
     Some(FallbackLogin {
         path: claude_live::credential_file(ctx),
-        fingerprint: held.map(|held| {
-            claude_live::login_in(&held)
-                .map(|document| crate::provider::claude::document::fingerprint_of(&document))
+        fingerprint: login.map(|login| {
+            login.map(|document| crate::provider::claude::document::fingerprint_of(&document))
         }),
     })
 }
@@ -644,6 +675,7 @@ fn network_fact(proxies: &crate::proxy::Proxies) -> NetworkFact {
                 server: proxies.server().unwrap_or_default(),
                 on_loopback: proxies.on_loopback(),
                 socks: proxies.socks(),
+                fails: proxies.refuses_some(),
                 exempting: proxies.exempting(),
                 exempt: proxies.exempt_hosts(),
             }),
@@ -791,7 +823,7 @@ fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
                 .filter(|a| a.provider() == ProviderId::Codex)
                 .count()
         }),
-        backend: backend_name(backend),
+        backend: backend.word(),
         backend_setting: match backend {
             codex::Backend::Unknown => store.why_unknown().unwrap_or_default(),
             _ => store.setting(),
@@ -842,26 +874,6 @@ fn stored_elsewhere(ctx: &Context) -> (usize, usize) {
         count("cli|", Family::CodexCli),
         count("secrets|", Family::CodexSecrets),
     )
-}
-
-/// Codex's own word for where it keeps its login, as `cli_auth_credentials_store` spells
-/// it in `config.toml`.
-///
-/// Every store by name, with no catch-all: a store this build does not know is a compile
-/// error here, rather than a report calling it something the configuration does not say.
-fn backend_name(backend: codex::Backend) -> &'static str {
-    match backend {
-        codex::Backend::File => "file",
-        codex::Backend::Keyring => "keyring",
-        codex::Backend::Either => "auto",
-        codex::Backend::Ephemeral => "ephemeral",
-        // A keychain store with `[features] secret_auth_storage`: an encrypted file whose key
-        // is in the keychain. Codex has no one word for it, so it gets the name of the
-        // directory it keeps the file in.
-        codex::Backend::Secrets => "secrets",
-        // Not Codex's word: nobody can tell, Codex included.
-        codex::Backend::Unknown => "unknown",
-    }
 }
 
 /// What the file store's line adds: the one layer Pitboard leaves unread, and what it does.
@@ -1061,7 +1073,7 @@ fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
     if let [first, rest @ ..] = facts.pitboards.as_slice()
         && !rest.is_empty()
     {
-        let rest = rest.iter().map(|copy| copy.display().to_string()).collect();
+        let rest = rest.iter().map(|copy| copy.display().to_string());
         checks.push(Check {
             advice: "A shell runs the first, so updating another changes nothing there. Uninstall \
                      the copies you do not use."
@@ -1523,31 +1535,23 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
             "a store Pitboard does not read yet",
             "Treat this as unknown, never as empty.",
         ),
-        // The one wrong diagnosis in this file. If Claude Code's config names somebody as
-        // signed in, "nothing is signed in" is not an observation, it is Pitboard looking
-        // in the wrong place, and it is the failure that would follow Claude Code moving
-        // where it keeps a login.
-        Ok(store::Backend::Absent) if facts.config_account.is_some() => fail(
-            "credential_store",
-            "credential store",
-            format!(
-                "Claude Code's config says {} is signed in, and no store Pitboard reads \
-                 holds that login",
-                facts
-                    .config_account
-                    .as_ref()
-                    .map(|i| i.email.as_str())
-                    .unwrap_or("somebody")
+        // As a switch refuses with `live_credential_elsewhere`: what would follow Claude Code
+        // moving where it keeps a login.
+        Ok(store::Backend::Absent) => match &facts.config_account {
+            Some(named) => fail(
+                "credential_store",
+                "credential store",
+                words::named_but_not_found(facts.os, &named.email),
+                "Pitboard will not write a login where nobody reads it. Check for a Pitboard \
+                 update; if there is none, this is worth reporting.",
             ),
-            "Pitboard will not write a login where nobody reads it. Check for a Pitboard \
-             update; if there is none, this is worth reporting.",
-        ),
-        Ok(store::Backend::Absent) => warn(
-            "credential_store",
-            "credential store",
-            "no credential in any backend",
-            "Nothing is signed in for this slot.",
-        ),
+            None => warn(
+                "credential_store",
+                "credential store",
+                "no credential in any backend",
+                "Nothing is signed in for this slot.",
+            ),
+        },
         Err(e) => fail(
             "credential_store",
             "credential store",
@@ -1766,6 +1770,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
     checks.push(judge_claude_version(facts));
     checks.extend(judge_status_line(facts.status_line.as_ref()));
     checks.push(judge_auth(facts));
+    checks.extend(judge_login_restrictions(facts));
     checks.push(judge_asking(facts));
     checks.push(judge_network(&facts.network));
     checks.extend(
@@ -1816,6 +1821,7 @@ const CLAUDE_CODES_OWN: &[&str] = &[
     "claude_version",
     "status_line",
     "auth_source",
+    "login_restrictions",
 ];
 
 // The tool whose section a check is in; None for Claude Code's and Pitboard's own.
@@ -1924,7 +1930,7 @@ fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -> Option<Ch
         Some(_) => format!("Anthropic named {in_use} {when}"),
         None => format!("Pitboard found no login stored {when}"),
     };
-    match known.doubt {
+    match known.unconfirmed() {
         Some(crate::in_use::Doubt::NeverEstablished) => {
             return Some(warn(
                 code,
@@ -1961,12 +1967,15 @@ fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -> Option<Ch
         ));
     }
     // The login stored now by its fingerprint, empty for a login with no refresh token:
-    // `Some(None)` where none is stored, and `None` where the store cannot be read.
+    // `Some(None)` where none is stored, and `None` where the store or its shape cannot be read.
+    let claude_code = crate::provider::claude_code();
     let stored = match &facts.credential {
-        Ok(Some(document)) if document.get("claudeAiOauth").is_some() => {
-            Some(Some(crate::provider::claude_code().fingerprint(document)))
-        }
-        Ok(_) => Some(None),
+        Ok(Some(document)) if crate::provider::claude::document::signed_out(document) => Some(None),
+        Ok(Some(document)) => claude_code
+            .slice(document)
+            .ok()
+            .map(|slice| Some(claude_code.fingerprint(&slice))),
+        Ok(None) => Some(None),
         Err(_) => None,
     };
     let renewed = "the next `pitboard status` asks whose it is";
@@ -1997,9 +2006,7 @@ fn judge_credential(facts: &Facts) -> Check {
                 .as_object()
                 .map(|o| o.keys().map(String::as_str).collect())
                 .unwrap_or_default();
-            // What `/logout` leaves: the account's keys gone, the machine's still there. That
-            // is nobody signed in, which the switch and enrolment already read it as.
-            if doc.get("claudeAiOauth").is_none() {
+            if crate::provider::claude::document::signed_out(doc) {
                 return warn(
                     "credential",
                     "credential",
@@ -2007,25 +2014,47 @@ fn judge_credential(facts: &Facts) -> Check {
                     "Nothing is signed in for this slot.",
                 );
             }
-            let Some(oauth) = doc.get("claudeAiOauth").and_then(Value::as_object) else {
-                return fail(
+            let changed = |detail: String| {
+                fail(
                     "credential",
                     "credential",
-                    format!("claudeAiOauth is not an object; the keys are {keys:?}"),
+                    detail,
                     "The credential's shape changed. Do not switch accounts until this is understood.",
-                );
+                )
+            };
+            if !doc.is_object() {
+                return changed("the stored login is not a JSON object".into());
+            }
+            let Some(oauth) = doc.get("claudeAiOauth").and_then(Value::as_object) else {
+                return changed(format!(
+                    "claudeAiOauth is not an object; the keys are {keys:?}"
+                ));
             };
             let fingerprint = oauth
                 .get("refreshToken")
                 .and_then(Value::as_str)
                 .map(store::fingerprint)
                 .unwrap_or_else(|| "none".into());
-            let days = oauth
-                .get("refreshTokenExpiresAt")
-                .and_then(Value::as_i64)
-                .map_or(-1, |ms| (ms / 1000 - facts.now) / 86_400);
-            let detail = format!("refresh {fingerprint}  ·  {days} days left  ·  keys {keys:?}");
-            if days < 3 {
+            let Some(at) = crate::provider::claude_code()
+                .expiry(doc)
+                .refresh_expires_at
+            else {
+                return ok(
+                    "credential",
+                    "credential",
+                    format!("refresh {fingerprint}  ·  keys {keys:?}"),
+                );
+            };
+            let life = words::parked_life_column(at, facts.now);
+            let detail = format!("refresh {fingerprint}  ·  {life}  ·  keys {keys:?}");
+            if at <= facts.now {
+                warn(
+                    "credential",
+                    "credential",
+                    detail,
+                    "This login has expired: sign in to Claude Code again.",
+                )
+            } else if renewal_due(at, facts.now) {
                 warn(
                     "credential",
                     "credential",
@@ -2490,7 +2519,7 @@ fn judge_network(network: &NetworkFact) -> Check {
         many => (
             Some(format!(
                 "{} hold no proxy's address Pitboard can read, so they are passed over",
-                words::listed(many.iter().map(|n| (*n).to_string()).collect())
+                words::listed(many.iter())
             )),
             "Set each to a proxy's address, such as http://proxy.example.com:8080, or unset them.",
         ),
@@ -2501,7 +2530,7 @@ fn judge_network(network: &NetworkFact) -> Check {
             Some(passed) => warn("network", NAME, format!("direct: {passed}"), set_right),
         };
     };
-    let fails = requests_fail(proxy);
+    let fails = proxy.fails;
     let mut detail = if !proxy.socks {
         format!("through {}, from {}", proxy.address, proxy.variable)
     } else {
@@ -2544,13 +2573,6 @@ fn judge_network(network: &NetworkFact) -> Check {
     }
 }
 
-/// Whether each request through `proxy` to a host Pitboard calls that the variable exempting
-/// hosts does not name fails: whether it is a SOCKS proxy, which Pitboard does not use yet,
-/// and any host Pitboard calls is not exempt from it.
-fn requests_fail(proxy: &ProxyFact) -> bool {
-    proxy.socks && proxy.exempt.len() < crate::proxy::called().len()
-}
-
 /// What the variable exempting hosts does with the hosts Pitboard calls, where one is set:
 /// "NO_PROXY exempts api.anthropic.com, which Pitboard reaches directly".
 fn exempting(proxy: &ProxyFact) -> Option<String> {
@@ -2565,6 +2587,28 @@ fn exempting(proxy: &ProxyFact) -> Option<String> {
                 words::listed(proxy.exempt.clone())
             )
         }
+    })
+}
+
+fn judge_login_restrictions(facts: &Facts) -> Option<Check> {
+    if facts.organisation_pins.is_empty() {
+        return None;
+    }
+    let name = "login restrictions";
+    let said = facts.organisation_pins.join("; ");
+    Some(if facts.pinned_out.is_empty() {
+        ok("login_restrictions", name, said)
+    } else {
+        warn(
+            "login_restrictions",
+            name,
+            said,
+            format!(
+                "Claude Code refuses the logins of {} as a session starts, so Pitboard does not \
+                 put them in use.",
+                words::listed(facts.pinned_out.clone())
+            ),
+        )
     })
 }
 
@@ -2716,31 +2760,34 @@ fn judge_schedule(facts: &Facts) -> Option<Check> {
             again,
         ));
     };
-    if !schedule.program_found {
-        return Some(fail(
-            "schedule",
-            "renewal schedule",
-            format!("runs {}, which is not there any more", program.display()),
-            again,
-        ));
-    }
-    if crate::schedule::an_apps_own_program(program) {
-        return Some(fail(
-            "schedule",
-            "renewal schedule",
-            format!(
-                "runs {}, which is the app itself and not a command line",
-                program.display()
-            ),
-            again,
-        ));
+    match crate::schedule::fault(program, schedule.program_found) {
+        Some(Fault::Gone) => {
+            return Some(fail(
+                "schedule",
+                "renewal schedule",
+                format!("runs {}, which is not there any more", program.display()),
+                again,
+            ));
+        }
+        Some(Fault::TheApp) => {
+            return Some(fail(
+                "schedule",
+                "renewal schedule",
+                format!(
+                    "runs {}, which is the app itself and not a command line",
+                    program.display()
+                ),
+                again,
+            ));
+        }
+        None => {}
     }
     let runs = format!("daily  ·  runs {}", program.display());
     let Some(task) = &schedule.task else {
         return Some(ok("schedule", "renewal schedule", runs));
     };
     if !task.drifted.is_empty() {
-        let drifted = task.drifted.iter().map(drift).collect();
+        let drifted = task.drifted.iter().map(drift);
         return Some(warn(
             "schedule",
             "renewal schedule",
@@ -2901,7 +2948,7 @@ fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
     // Installed again from here, the schedule would be given a SOCKS proxy that fails its
     // requests, so the variable is to be changed first.
     let advice = match &facts.network.proxy {
-        Some(proxy) if requests_fail(proxy) => format!(
+        Some(proxy) if proxy.fails => format!(
             "The schedule's runs are given the proxy variables it was installed with. \
              Installed again from here, they would be given this run's SOCKS proxy, which \
              Pitboard does not use yet, and their requests would fail. Set {} to an HTTP \
@@ -3054,16 +3101,8 @@ fn judge_codex(
                     facts.backend_remedy
                 ),
                 _ => format!(
-                    "Pitboard reads only Codex's file store, auth.json, and {}, so no enrolled \
-                     Codex account can be switched to. {}.",
-                    match os {
-                        Os::MacOs | Os::Linux => {
-                            "will not touch the keychain item Codex created for itself, because \
-                             every read of it would ask you for permission"
-                        }
-                        Os::Windows =>
-                            "does not follow Codex into a store it uses only when told to",
-                    },
+                    "{}, so no enrolled Codex account can be switched to. {}.",
+                    crate::provider::codex::layers::file_store_only(os),
                     facts.backend_remedy
                 ),
             },
@@ -3211,8 +3250,7 @@ fn judge_codex(
             .map(|(count, prefix)| match count {
                 1 => format!("1 {prefix} item"),
                 many => format!("{many} {prefix} items"),
-            })
-            .collect();
+            });
         checks.push(Check {
             advice: "Codex keeps its login there where a setting Pitboard does not read, such as \
                      an enterprise's cloud configuration in a session of `codex`, chooses \
@@ -3408,7 +3446,7 @@ fn judge_desktop(
                     name,
                     format!(
                         "holds {}, parts of the account's data this Pitboard has not read",
-                        words::listed(parts.iter().map(|part| format!("`{part}`")).collect())
+                        words::listed(parts.iter().map(|part| format!("`{part}`")))
                     ),
                     "Pitboard starts no move of a Claude Desktop login while they are there. \
                      Update Pitboard, or report them at \
@@ -3572,7 +3610,7 @@ fn judge_desktop(
             held => format!(
                 "{n} in {parks_dir}, {} holding a login: {}",
                 held.len(),
-                words::listed(held.iter().map(|aside| said(aside)).collect())
+                words::listed(held.iter().map(|aside| said(aside)))
             ),
         };
         if !rest.is_empty() {
@@ -3633,7 +3671,11 @@ fn judge_desktop_login(
         Some(crate::in_use::Doubt::NamedMoved) => warn(
             "desktop_login",
             name,
-            words::desktop_named(&Stored::of(state, tool, known.own_record.as_ref()), &who),
+            words::desktop_named(
+                &Stored::of(state, tool, known.own_record.as_ref()),
+                &who,
+                |stored| stored.said("nobody"),
+            ),
             enroll,
         ),
         _ if facts.signed_out => warn(
@@ -4782,6 +4824,8 @@ mod tests {
             claude_version: Some(crate::provider::claude::assumptions::VERIFIED_AGAINST.into()),
             claude_program: Some(PathBuf::from("/opt/homebrew/bin/claude")),
             auth_overrides: Vec::new(),
+            organisation_pins: Vec::new(),
+            pinned_out: Vec::new(),
             asking_held: Vec::new(),
             state: Ok(State::default()),
             in_use: Some(in_use_as_named()),
@@ -5483,14 +5527,41 @@ mod tests {
         );
     }
 
+    // One that gives no date is no warning.
     #[test]
-    fn a_login_about_to_expire_is_flagged() {
+    fn the_login_in_use_is_judged_by_when_its_refresh_token_expires_as_a_park_is() {
+        let credential = |f: &mut Facts, expires: Option<i64>| {
+            let mut oauth = json!({"refreshToken": "r"});
+            if let Some(at) = expires {
+                oauth["refreshTokenExpiresAt"] = json!(at * 1000);
+            }
+            f.credential = Ok(Some(json!({ "claudeAiOauth": oauth })));
+            let checks = evaluate(f);
+            let said = check(&checks, "credential");
+            (said.level, said.detail.clone(), said.advice.clone())
+        };
         let mut f = facts();
-        f.credential = Ok(Some(json!({"claudeAiOauth": {
-            "refreshToken": "r",
-            "refreshTokenExpiresAt": (f.now + 86_400) * 1000
-        }})));
-        assert_eq!(check(&evaluate(&f), "credential").level, Level::Warn);
+        let now = f.now;
+        let (level, detail, _) = credential(&mut f, Some(now + RENEW_WITHIN));
+        assert_eq!(level, Level::Ok);
+        assert!(detail.contains("  ·  good for 3d 0h  ·  "), "{detail}");
+        let (level, detail, advice) = credential(&mut f, Some(now + RENEW_WITHIN - 1));
+        assert_eq!(level, Level::Warn);
+        assert!(detail.contains("  ·  expires in 2d 23h  ·  "), "{detail}");
+        assert_eq!(
+            advice,
+            "This login expires soon and will need signing in again."
+        );
+        let (level, detail, advice) = credential(&mut f, Some(now - 60));
+        assert_eq!(level, Level::Warn);
+        assert!(detail.contains("  ·  expired  ·  "), "{detail}");
+        assert_eq!(
+            advice,
+            "This login has expired: sign in to Claude Code again."
+        );
+        let (level, detail, _) = credential(&mut f, None);
+        assert_eq!(level, Level::Ok);
+        assert!(!detail.contains("days"), "{detail}");
     }
 
     #[test]
@@ -6231,6 +6302,7 @@ mod tests {
             address: "socks5h://127.0.0.1:1080".into(),
             server: "127.0.0.1:1080".into(),
             socks: true,
+            fails: true,
             ..on_loopback()
         };
         f.network = by(socks());
@@ -6259,6 +6331,7 @@ mod tests {
             ]
             .map(String::from)
             .to_vec(),
+            fails: false,
             ..socks()
         });
         let checks = evaluate(&f);
@@ -6416,6 +6489,7 @@ mod tests {
             server: "proxy.example.com:3128".into(),
             on_loopback: false,
             socks: false,
+            fails: false,
             exempting,
             exempt: exempt.iter().map(|host| (*host).to_string()).collect(),
         }
@@ -7392,7 +7466,7 @@ mod tests {
             assert!(found.detail.contains("file store"), "{}", found.detail);
         }
         let leaves = match crate::host::OS {
-            Os::MacOs | Os::Linux => "will not touch",
+            Os::MacOs | Os::Linux => "does not read an item",
             Os::Windows => "does not follow Codex",
         };
         for store in ["keyring", "auto", "secrets"] {
@@ -7449,6 +7523,46 @@ mod tests {
             );
             assert!(checks.iter().all(|c| c.code != "codex_login"));
         }
+    }
+
+    // Claude Code 2.1.309 refuses, as a session starts, a login of an organisation a managed
+    // `forceLoginOrgUUID` leaves out (organisation_pin), so the setting is named as Codex's are.
+    #[test]
+    fn a_managed_organisation_pin_is_named_with_the_accounts_it_rules_out() {
+        use crate::switch::harness::account;
+        let host = crate::host::memory::MemoryHost::new();
+        let ctx = Context::for_unit_test().with_memory_stores(host.clone());
+        let mut state = State::default();
+        state.accounts.push(account("here", "here", None));
+        state.accounts.push(account("there", "there", None));
+        let judged = |f: &Facts| evaluate(f);
+        let mut f = facts();
+        (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+        assert!(judged(&f).iter().all(|c| c.code != "login_restrictions"));
+
+        let file = crate::settings::managed_dir(ctx.os).join("managed-settings.json");
+        host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here"]}"#);
+        (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+        let checks = judged(&f);
+        let found = check(&checks, "login_restrictions");
+        assert_eq!(found.level, Level::Warn);
+        assert_eq!(found.name, "login restrictions");
+        assert_eq!(
+            found.detail,
+            format!(
+                "`forceLoginOrgUUID` set to `org-here` in {}",
+                file.display()
+            )
+        );
+        assert_eq!(
+            found.advice,
+            "Claude Code refuses the logins of `there` as a session starts, so Pitboard does \
+             not put them in use."
+        );
+
+        host.administers(&file, r#"{"forceLoginOrgUUID": ["org-here", "org-there"]}"#);
+        (f.organisation_pins, f.pinned_out) = login_pins(&ctx, Some(&state));
+        assert_eq!(check(&judged(&f), "login_restrictions").level, Level::Ok);
     }
 
     // Codex 0.164.0 signs out of a login from a workspace its configuration leaves out
@@ -7579,17 +7693,16 @@ mod tests {
         for os in [Os::MacOs, Os::Linux] {
             assert_eq!(
                 advice(os),
-                "Pitboard reads only Codex's file store, auth.json, and will not touch the \
-                 keychain item Codex created for itself, because every read of it would ask \
-                 you for permission, so no enrolled Codex account can be switched to. To use \
-                 the file store, set it."
+                "Pitboard handles Codex's file store, auth.json, and does not read an item \
+                 Codex created for itself, because every read would ask you for permission, so \
+                 no enrolled Codex account can be switched to. To use the file store, set it."
             );
         }
         assert_eq!(
             advice(Os::Windows),
-            "Pitboard reads only Codex's file store, auth.json, and does not follow Codex into \
-             a store it uses only when told to, so no enrolled Codex account can be switched \
-             to. To use the file store, set it."
+            "Pitboard handles Codex's file store, auth.json, and does not follow Codex into a \
+             store it uses only when told to, so no enrolled Codex account can be switched to. \
+             To use the file store, set it."
         );
     }
 
@@ -7971,6 +8084,7 @@ mod tests {
             &[at(4321, "codex"), at(99, "codex")],
             holders,
             "codex",
+            &[],
         ));
         let checks = codex_checks(&codex);
         let running = check(&checks, "codex_running");
@@ -7993,7 +8107,7 @@ mod tests {
         );
 
         let many: Vec<Process> = (1..=23).map(|pid| at(pid, "codex")).collect();
-        codex.running = Some(classify(&many, holders, "codex"));
+        codex.running = Some(classify(&many, holders, "codex", &[]));
         let detail = check(&codex_checks(&codex), "codex_running").detail.clone();
         assert!(detail.starts_with("23 `codex` sessions"), "{detail}");
         assert!(detail.contains("1, 2, 3 and 20 more"), "{detail}");
@@ -8006,6 +8120,7 @@ mod tests {
             )],
             holders,
             "codex",
+            &[],
         ));
         let checks = codex_checks(&codex);
         let app = check(&checks, "codex_running");
@@ -8985,6 +9100,7 @@ mod tests {
             pitboard: None,
             runs_pitboard: false,
         });
+        windows.organisation_pins = vec!["`forceLoginOrgUUID` set to `org` there".into()];
         let made: Vec<&str> = evaluate(&windows).iter().map(|c| c.code).collect();
         // A name no check makes hides nothing, and the loop under it would pass over it.
         for own in CLAUDE_CODES_OWN {
@@ -9275,5 +9391,34 @@ mod tests {
         let check = judge_credential(&facts);
         assert!(matches!(check.level, Level::Warn), "{}", check.detail);
         assert!(check.detail.contains("signed out"), "{}", check.detail);
+    }
+
+    // A switch refuses it as a shape it does not know, so it is no signed-out document.
+    #[test]
+    fn a_credential_that_is_not_an_object_is_a_failure() {
+        use crate::provider::ProviderError;
+        let document = serde_json::json!(["claudeAiOauth"]);
+        assert!(matches!(
+            crate::provider::claude_code().slice(&document),
+            Err(ProviderError::ShapeUnexpected { .. })
+        ));
+        let mut facts = facts();
+        facts.credential = Ok(Some(document));
+        let judged = judge_credential(&facts);
+        assert_eq!(judged.level, Level::Fail);
+        assert_eq!(judged.detail, "the stored login is not a JSON object");
+    }
+
+    // Which login it is cannot be told, which is not that none is stored.
+    #[test]
+    fn a_stored_login_that_is_not_an_object_leaves_the_account_in_use_as_named() {
+        use crate::switch::harness::{NOW, machine};
+        let m = machine("doctor-not-an-object");
+        m.sign_in(&serde_json::json!(["claudeAiOauth"]));
+        let checks = evaluate(&gather(&m.ctx));
+        assert_eq!(
+            check(&checks, "in_use").detail,
+            format!("`here`, as Anthropic said {}", time::moment(NOW, NOW))
+        );
     }
 }

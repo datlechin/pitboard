@@ -14,26 +14,20 @@
 use crate::{Report, emit, followed, located, ui};
 use clap::Subcommand;
 use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
-use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
+use pitboard_core::duty::cadence::{
+    DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
+};
 use pitboard_core::duty::warm::{Overview, Standing};
 use pitboard_core::error::{self, Error};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard};
-use pitboard_core::switch::warm::WarmUp;
+use pitboard_core::switch::warm::{WarmUp, told_apart};
 use pitboard_core::usage::Window;
 use pitboard_core::words;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::process::ExitCode;
 use std::time::Duration;
-
-/// How often it looks at when the accounts and their readings were last written: as often as
-/// the app looks. A look reads two files' times and nothing else.
-const LOOK_EVERY: Duration = Duration::from_secs(2);
-
-/// How often it asks the services about every account: as often as the app reads them. Each
-/// account is asked only as often as its budget allows whichever front end asks.
-const READ_EVERY: i64 = 300;
 
 /// The share `watch` and its service switch at.
 #[derive(clap::Args)]
@@ -226,7 +220,7 @@ pub(crate) fn run(
     let (mut read_at, mut decided_at, mut seen) = (None::<i64>, 0, None);
     loop {
         let now = epoch();
-        if read_at.is_none_or(|at| now - at >= READ_EVERY || now < at) {
+        if read_at.is_none_or(|at| now - at >= READ_EVERY_SECONDS || now < at) {
             // What a read could not learn stays as it was measured, which the next decision
             // reads: nothing to say about it here.
             let _ = pitboard.status(false);
@@ -271,7 +265,7 @@ pub(crate) fn run(
                 }
             }
         }
-        std::thread::sleep(LOOK_EVERY);
+        std::thread::sleep(Duration::from_secs(LOOK_EVERY_SECONDS.unsigned_abs()));
     }
 }
 
@@ -409,7 +403,7 @@ fn warms_any(overview: &Overview) -> bool {
 struct WarmTold {
     by_account: HashMap<String, HashSet<String>>,
     halted: Option<String>,
-    errors: HashSet<String>,
+    errors: pitboard_core::switch::warm::Told,
 }
 
 impl WarmTold {
@@ -419,14 +413,7 @@ impl WarmTold {
         let done = match outcome {
             Ok(done) => done,
             Err(failed) => {
-                let key = match &failed.error {
-                    Error::WarmUpFailed { label, .. } | Error::WarmUpNotDue { label, .. } => {
-                        format!("{label}/{}", failed.error.code())
-                    }
-                    // Its words name the account, where it is of one.
-                    error => format!("{}/{error}", error.code()),
-                };
-                return if self.errors.insert(key) {
+                return if self.errors.untold(&told_apart(&failed.error)) {
                     vec![Report::refused("watch", failed)]
                 } else {
                     Vec::new()
@@ -436,8 +423,7 @@ impl WarmTold {
         match done.value {
             WarmUp::Started { account, until } => {
                 self.by_account.remove(&account);
-                self.errors
-                    .retain(|key| !key.starts_with(&format!("{account}/")));
+                self.errors.warmed(&account);
                 let line = crate::warm::warmed_line(&account, until);
                 vec![Report::done(
                     "watch",
@@ -462,7 +448,7 @@ impl WarmTold {
                     reports.push(Report::done(
                         "watch",
                         json!({ "event": "warm_up_halted", "reason": halt.code() }),
-                        stamp(&format!("{}\n", crate::warm::halted_line(halt))),
+                        stamp(&format!("{}\n", words::warming_halted(halt))),
                     ));
                 }
                 return reports;
@@ -558,10 +544,12 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                 "until": until,
             }),
             format!(
-                "{} has used {}. Pitboard tries again at {}.\n",
-                ui::paint(ui::BOLD, &from),
-                words::share_of_limit(&limit),
-                moment(until),
+                "{}\n",
+                words::auto_waiting(
+                    &ui::paint(ui::BOLD, &from),
+                    &words::share_of_limit(&limit),
+                    &moment(until)
+                )
             ),
         ),
         Auto::Switched {
@@ -581,57 +569,52 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                     "adoption": adoption_json,
                 }),
                 format!(
-                    "Switched Claude Code from {} to {}: {from} has used {}. {follows}",
-                    ui::paint(ui::BOLD, &from),
-                    ui::paint(ui::BOLD, &to),
-                    words::share_of_limit(&limit),
+                    "{} {follows}",
+                    words::auto_switched(
+                        &ui::paint(ui::BOLD, &from),
+                        &ui::paint(ui::BOLD, &to),
+                        &words::share_of_limit(&limit)
+                    )
                 ),
             )
         }
         Auto::Skipped { from, limit, why } => {
-            let used = format!(
-                "{} has used {}",
-                ui::paint(ui::BOLD, &from),
-                words::share_of_limit(&limit)
+            let until = match &why {
+                Skip::Settling { until } => Some(*until),
+                _ => None,
+            };
+            let line = words::auto_skipped(
+                &ui::paint(ui::BOLD, &from),
+                &words::share_of_limit(&limit),
+                &words::not_switching(&why, threshold),
+                until.map(moment).as_deref(),
             );
-            let reason = words::not_switching(&why, threshold);
-            match &why {
+            let data = match &why {
                 // No room has an event of its own, as it always had.
-                Skip::NoRoom { unread } => (
-                    json!({
-                        "event": "no_room",
-                        "threshold": percent,
-                        "from": from,
-                        "limit": limit_json(&limit),
-                        "unread": unread,
-                    }),
-                    format!("{used}, and {reason}.\n"),
-                ),
-                Skip::Settling { until } => (
-                    json!({
-                        "event": "skipped",
-                        "threshold": percent,
-                        "from": from,
-                        "limit": limit_json(&limit),
-                        "reason": why.code(),
-                        "until": until,
-                    }),
-                    format!(
-                        "{used}. Pitboard is not switching: {reason}. It decides again at {}.\n",
-                        moment(*until)
-                    ),
-                ),
-                _ => (
-                    json!({
-                        "event": "skipped",
-                        "threshold": percent,
-                        "from": from,
-                        "limit": limit_json(&limit),
-                        "reason": why.code(),
-                    }),
-                    format!("{used}. Pitboard is not switching: {reason}.\n"),
-                ),
-            }
+                Skip::NoRoom { unread } => json!({
+                    "event": "no_room",
+                    "threshold": percent,
+                    "from": from,
+                    "limit": limit_json(&limit),
+                    "unread": unread,
+                }),
+                Skip::Settling { until } => json!({
+                    "event": "skipped",
+                    "threshold": percent,
+                    "from": from,
+                    "limit": limit_json(&limit),
+                    "reason": why.code(),
+                    "until": until,
+                }),
+                _ => json!({
+                    "event": "skipped",
+                    "threshold": percent,
+                    "from": from,
+                    "limit": limit_json(&limit),
+                    "reason": why.code(),
+                }),
+            };
+            (data, format!("{line}\n"))
         }
         Auto::NotWatching { why } => {
             let mut data = json!({
@@ -640,6 +623,7 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                 "reason": why.code(),
             });
             let mut line = words::not_watching(&why);
+            let mut until = None;
             match &why {
                 // The command line has a command for giving up on it, which the app has a
                 // button for in its place.
@@ -648,16 +632,16 @@ fn event(value: Auto, threshold: Threshold) -> (Value, String) {
                 }
                 Blind::NotEnrolled { email } => data["email"] = json!(email),
                 Blind::NoReading { account } => data["account"] = json!(account),
-                Blind::Unidentified { detail, until } => {
+                Blind::Unidentified { detail, until: at } => {
                     data["detail"] = json!(detail);
-                    data["until"] = json!(until);
-                    line = format!("{line}. It asks again at {}", moment(*until));
+                    data["until"] = json!(at);
+                    until = Some(moment(*at));
                 }
                 _ => {}
             }
             (
                 data,
-                format!("Pitboard is not switching Claude Code: {line}.\n"),
+                format!("{}\n", words::auto_not_watching(&line, until.as_deref())),
             )
         }
     }
@@ -935,8 +919,9 @@ mod tests {
         );
         assert_eq!(
             plain(&no_room),
-            "work has used 97% of its 5-hour limit, and no other Claude Code account has room \
-             below 95% in every limit, and there is no reading of spare from Anthropic yet.\n"
+            "work has used 97% of its 5-hour limit. Pitboard is not switching: no other Claude \
+             Code account has room below 95% in every limit, and there is no reading of spare \
+             from Anthropic yet.\n"
         );
         for (why, code) in [
             (Skip::AlreadyLeft, "already_switched"),

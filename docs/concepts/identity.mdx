@@ -18,7 +18,7 @@ Pitboard asks which account and organisation the login is. Claude Code asks the 
 
 Pitboard records each answer with the login's fingerprint, and asks again only once that changes, as after a renewal or a sign-in. A switch and `pitboard forget` also ask once it has changed. Reads that send no request, such as `pitboard status --offline`, use the record.
 
-When the config has named another account since Anthropic last answered, something may have signed in. Reads that send no request then warn with `in_use_unconfirmed`. `pitboard status` settles it, and the app starts such a read once by itself.
+When the config has named another account since Anthropic last answered, something may have signed in. Reads that send no request then warn with `in_use_unconfirmed`. They also warn until Anthropic is first asked after an update from 0.9.0 or earlier, whatever the config names. `pitboard status` settles it, and the app starts such a read once by itself.
 
 ## Claude Desktop
 

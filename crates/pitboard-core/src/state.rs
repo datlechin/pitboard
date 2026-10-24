@@ -270,6 +270,14 @@ impl Key {
             self.label
         )
     }
+
+    // A label 0.1.x wrote with a slash, such as `team/a`, where `team` names no tool, is whole.
+    pub fn parse(typed: &str) -> Key {
+        match crate::label::parse(typed) {
+            Ok(crate::label::Spec::Qualified(provider, label)) => Key::new(provider, label),
+            _ => Key::new(crate::label::DEFAULT, typed),
+        }
+    }
 }
 
 impl std::fmt::Display for Key {
@@ -911,28 +919,10 @@ fn file(ctx: &Context) -> PathBuf {
     home::dir(ctx).join("state.json")
 }
 
-/// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
-/// none.
-///
-/// Three front ends run on one machine and none of them could tell when another had
-/// changed anything. A switch typed in a terminal left the menu bar naming the account the
-/// person had just stopped using, for as long as five minutes, with a button offering a
-/// switch that had already happened.
-///
-/// This is the cheapest true answer there is: one stat of one file. It is deliberately the
-/// account index alone and not the whole directory. The status line writes usage readings
-/// after a message in any open session, and those say nothing about who is signed in: a
-/// front end follows them with `readings::changed_at`, and takes only the numbers.
-/// Milliseconds rather than seconds, as there: a switch made in the second of the last write
-/// a front end saw would otherwise go unseen.
+// One stat of the account index alone: the readings the status line writes after every
+// message say nothing of who is signed in, and a front end follows them apart.
 pub(crate) fn changed_at(ctx: &Context) -> i64 {
-    std::fs::metadata(file(ctx))
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |since| {
-            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
-        })
+    crate::time::changed_at(&file(ctx))
 }
 
 pub(crate) fn load(ctx: &Context) -> Result<State> {
@@ -1177,6 +1167,19 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
     reason = "a test sets up its scratch files as a person or a tool would"
 )]
 mod tests {
+    #[test]
+    fn a_key_reads_back_as_it_was_written() {
+        for key in [
+            Key::new(ProviderId::Claude, "work"),
+            Key::new(ProviderId::Codex, "work"),
+            Key::new(ProviderId::Desktop, "work"),
+            Key::new(ProviderId::Claude, "team/a"),
+        ] {
+            assert_eq!(Key::parse(&key.typed()), key);
+            assert_eq!(Key::parse(&key.qualified()), key);
+        }
+    }
+
     /// CLAUDE_CONFIG_DIR picks which keychain item is the live one, and one state file
     /// serves every slot on a machine. A record of whose login one slot holds says nothing
     /// about another, so it is not carried over, and says nothing about Codex's at all. It is
