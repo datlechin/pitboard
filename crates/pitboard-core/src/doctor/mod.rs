@@ -517,9 +517,9 @@ pub(crate) fn run(ctx: &Context, moment: &dyn Fn(i64, i64) -> String) -> Diagnos
             "codex": {
                 "home": facts.codex.home,
                 "present": facts.codex.present,
-                "backend": facts.codex.backend,
+                "backend": facts.codex.backend.word(),
                 // Unknown for a store Pitboard does not read, rather than a guess.
-                "login_present": (facts.codex.backend == "file")
+                "login_present": (facts.codex.backend == crate::provider::codex::paths::Backend::File)
                     .then_some(facts.codex.auth_access.is_some()),
                 "version": facts.codex.version,
             },

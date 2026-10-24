@@ -195,7 +195,7 @@ pub(super) fn no_codex() -> CodexFacts {
         home: PathBuf::from("/home/x/.codex"),
         present: false,
         enrolled: 0,
-        backend: "file",
+        backend: crate::provider::codex::paths::Backend::File,
         backend_setting: "Codex's default".into(),
         backend_remedy: String::new(),
         auth_file: PathBuf::from("/home/x/.codex/auth.json"),

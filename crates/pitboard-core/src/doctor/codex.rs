@@ -21,12 +21,7 @@ pub(crate) struct CodexFacts {
     pub(crate) present: bool,
     /// How many Codex accounts Pitboard has enrolled.
     pub(crate) enrolled: usize,
-    /// Where Codex is configured to keep its login, in Codex's own words:
-    /// `cli_auth_credentials_store`'s `file`, `keyring`, `auto` or `ephemeral`, or `secrets`
-    /// for a keychain store with `[features] secret_auth_storage`, which Codex has no one
-    /// word for. `unknown` where a layer Codex reads it from is there and cannot be read as
-    /// Codex reads it, which stops Codex from starting.
-    pub(crate) backend: &'static str,
+    pub(crate) backend: codex::Backend,
     /// The setting that chose it, in words that follow it in brackets: `Codex's default`,
     /// `` `cli_auth_credentials_store = "keyring"` in /etc/codex/config.toml ``, or `pinned to
     /// `keyring` by /etc/codex/requirements.toml`. For `unknown`, what cannot be read.
@@ -122,7 +117,7 @@ pub(super) fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
                 .filter(|a| a.provider() == ProviderId::Codex)
                 .count()
         }),
-        backend: backend.word(),
+        backend,
         backend_setting: match backend {
             codex::Backend::Unknown => store.why_unknown().unwrap_or_default(),
             _ => store.setting(),
@@ -312,15 +307,15 @@ pub(super) fn judge_codex(
             warn(code, name, detail, advice)
         }
     };
-    let file = facts.backend == "file";
+    let file = facts.backend == codex::Backend::File;
     let setting = &facts.backend_setting;
     let described = match facts.backend {
-        "ephemeral" => format!("in memory only ({setting})"),
-        "unknown" => format!("cannot tell: {setting}"),
-        other => format!("{other} ({setting})"),
+        codex::Backend::Ephemeral => format!("in memory only ({setting})"),
+        codex::Backend::Unknown => format!("cannot tell: {setting}"),
+        other => format!("{} ({setting})", other.word()),
     };
     checks.push(match facts.backend {
-        "file" => Check {
+        codex::Backend::File => Check {
             advice: PROJECTS_NOT_READ.into(),
             ..ok(
                 "codex_backend",
@@ -329,7 +324,7 @@ pub(super) fn judge_codex(
             )
         },
         // Not a choice: a layer Codex reads stops it from starting.
-        "unknown" => broken(
+        codex::Backend::Unknown => broken(
             "codex_backend",
             "Codex login store",
             described,
@@ -345,7 +340,7 @@ pub(super) fn judge_codex(
             "Codex login store",
             described,
             match other {
-                "ephemeral" => format!(
+                codex::Backend::Ephemeral => format!(
                     "Codex keeps nothing at rest, so there is no login Pitboard can park or \
                      switch. {}.",
                     facts.backend_remedy

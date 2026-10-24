@@ -1,4 +1,5 @@
 use super::*;
+use crate::provider::codex::paths::Backend;
 
 // A machine without Codex reads exactly as it did before Pitboard knew Codex existed; one
 // with it gets a section of its own, and nothing of Claude Code's moves.
@@ -85,12 +86,13 @@ fn codex_installed_and_never_run_has_its_section() {
 /// to look at about a setting they chose.
 #[test]
 fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
-    let judged = |backend: &'static str, enrolled: usize| {
+    let judged = |backend: Backend, enrolled: usize| {
         let codex = CodexFacts {
             backend,
             enrolled,
             backend_setting: format!(
-                "`cli_auth_credentials_store = \"{backend}\"` in /home/x/.codex/config.toml"
+                "`cli_auth_credentials_store = \"{}\"` in /home/x/.codex/config.toml",
+                backend.word()
             ),
             backend_remedy: "To use the file store, set `cli_auth_credentials_store = \
                              \"file\"` in /home/x/.codex/config.toml, then sign in again \
@@ -101,8 +103,14 @@ fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
         codex_checks(&codex)
     };
 
-    for store in ["keyring", "auto", "secrets", "ephemeral"] {
-        let checks = judged(store, 1);
+    for backend in [
+        Backend::Keyring,
+        Backend::Either,
+        Backend::Secrets,
+        Backend::Ephemeral,
+    ] {
+        let store = backend.word();
+        let checks = judged(backend, 1);
         let found = check(&checks, "codex_backend");
         assert_eq!(found.level, Level::Fail, "{store}");
         assert!(found.detail.contains(store), "{}", found.detail);
@@ -125,7 +133,7 @@ fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
              its login"
         );
 
-        let checks = judged(store, 0);
+        let checks = judged(backend, 0);
         let found = check(&checks, "codex_backend");
         assert_eq!(
             found.level,
@@ -139,8 +147,8 @@ fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
         Os::MacOs | Os::Linux => "does not read an item",
         Os::Windows => "does not follow Codex",
     };
-    for store in ["keyring", "auto", "secrets"] {
-        let found = judged(store, 1);
+    for backend in [Backend::Keyring, Backend::Either, Backend::Secrets] {
+        let found = judged(backend, 1);
         let advice = &check(&found, "codex_backend").advice;
         assert!(advice.contains(leaves), "{advice}");
     }
@@ -172,7 +180,7 @@ fn the_file_store_says_what_chose_it_and_what_is_not_read() {
 #[test]
 fn a_codex_store_nobody_can_tell_is_broken() {
     let unknown = |enrolled| CodexFacts {
-        backend: "unknown",
+        backend: Backend::Unknown,
         backend_setting: "/etc/codex/config.toml is not TOML Codex can read, at line 3".into(),
         backend_remedy: "Codex 0.160.0 does not start until that is put right".into(),
         enrolled,
@@ -268,9 +276,9 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
         ..codex_facts(&ctx, None)
     };
     let (backend, setting) = match crate::host::OS {
-        Os::MacOs | Os::Linux => ("keyring", format!("pinned to `keyring` by {named}")),
+        Os::MacOs | Os::Linux => (Backend::Keyring, format!("pinned to `keyring` by {named}")),
         Os::Windows => (
-            "secrets",
+            Backend::Secrets,
             format!("pinned to `keyring` by {named}, with `secret_auth_storage` on by default"),
         ),
     };
@@ -279,7 +287,7 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
     let checks = codex_checks(&codex);
     let found = check(&checks, "codex_backend");
     assert_eq!(found.level, Level::Fail);
-    assert_eq!(found.detail, format!("{backend} ({setting})"));
+    assert_eq!(found.detail, format!("{} ({setting})", backend.word()));
     assert!(
         found.advice.ends_with(&format!(
             "No line in your own config.toml can change it: {named} pins it, and only an \
@@ -291,7 +299,7 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
 
     host.administers(required, "x = \n");
     let unknown = codex_facts(&ctx, None);
-    assert_eq!(unknown.backend, "unknown");
+    assert_eq!(unknown.backend, Backend::Unknown);
     assert_eq!(
         unknown.backend_setting,
         format!("{named} is not TOML Codex can read, at line 1")
@@ -306,7 +314,7 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
 #[test]
 fn a_store_codex_uses_only_when_told_to_is_said_in_each_systems_words() {
     let keyring = CodexFacts {
-        backend: "keyring",
+        backend: Backend::Keyring,
         backend_setting: "`cli_auth_credentials_store = \"keyring\"` in config.toml".into(),
         backend_remedy: "To use the file store, set it".into(),
         enrolled: 1,
@@ -764,7 +772,14 @@ fn doctor_and_a_switch_see_the_same_codex_running() {
 
 #[test]
 fn every_codex_failure_and_warning_tells_the_user_something() {
-    for backend in ["file", "keyring", "auto", "ephemeral", "secrets", "unknown"] {
+    for backend in [
+        Backend::File,
+        Backend::Keyring,
+        Backend::Either,
+        Backend::Ephemeral,
+        Backend::Secrets,
+        Backend::Unknown,
+    ] {
         let codex = CodexFacts {
             backend,
             enrolled: 1,
@@ -801,7 +816,7 @@ fn codex_facts_are_read_off_the_disk() {
 
     let absent = codex_facts(&ctx, None);
     assert!(!absent.present);
-    assert_eq!(absent.backend, "file");
+    assert_eq!(absent.backend, Backend::File);
     assert_eq!(absent.auth_access, None);
     match crate::host::OS {
         Os::MacOs | Os::Linux => assert!(matches!(absent.login, Ok(None))),
@@ -897,7 +912,7 @@ fn codex_facts_are_read_off_the_disk() {
     )
     .expect("a config");
     let ephemeral = codex_facts(&ctx, None);
-    assert_eq!(ephemeral.backend, "ephemeral");
+    assert_eq!(ephemeral.backend, Backend::Ephemeral);
     assert!(
         matches!(ephemeral.login, Ok(None)),
         "a store Pitboard does not handle is not read"
@@ -911,7 +926,7 @@ fn codex_facts_are_read_off_the_disk() {
     )
     .expect("a config");
     let secrets = codex_facts(&ctx, None);
-    assert_eq!(secrets.backend, "secrets");
+    assert_eq!(secrets.backend, Backend::Secrets);
     let config = crate::provider::codex::paths::config_file(&ctx);
     assert_eq!(
         secrets.backend_setting,
