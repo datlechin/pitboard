@@ -416,9 +416,10 @@ Credential Manager:
   (`credman_chunking`) fails there, so the runner tests write at most 100 pieces, and a round
   trip over items in memory holds the 256-piece edge.
 - Beside other readers, the read after a write in pieces has found the `#p` the write deleted
-  (runs 39137503718 and 39909919492). Where the pieces hold the login, Pitboard's write
-  deletes `#p` again, five times at most, 20 ms apart, and one that still finds it says what
-  the delete said.
+  (runs 39137503718 and 39909919492), and the read after a discard an item it deleted (run
+  40125652554). Where the pieces hold the login, Pitboard's write deletes `#p` again, five
+  times at most, 20 ms apart, and one that still finds it says what the delete said. The
+  harmless-write test reads a deleted item as often before it calls it left.
 
 A network logon, by key through sshd as the standard user: windows-2025's own OpenSSH 9.5p2,
 and on windows-11-arm the Win32-OpenSSH 10.0p2 RF-M installs (runs 38821312770, 38922866517,
