@@ -480,7 +480,6 @@ fn read(
             "last_run_time_ole_date": task.LastRunTime().ok(),
             "next_run_time_ole_date": task.NextRunTime().ok(),
             "number_of_missed_runs": task.NumberOfMissedRuns().ok(),
-            "principal_is_this_account": principal_user.map(|u| u.starts_with("self_")),
             "principal_user": principal_user,
             "principal_logon_type": principal
                 .as_ref()
