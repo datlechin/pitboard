@@ -3,8 +3,8 @@
 use crate::context::Context;
 use crate::duty::autoswitch::Threshold;
 use crate::error::{Error, Result};
+use crate::permit::Permit;
 use crate::schedule::{self, Job, Location};
-use crate::service::Permit;
 use std::path::PathBuf;
 
 /// Whether the watch service is installed, and what it is.

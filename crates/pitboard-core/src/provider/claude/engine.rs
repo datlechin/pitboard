@@ -9,11 +9,11 @@ use super::api;
 use super::{configfile, document, live, paths as claude};
 use crate::context::Context;
 use crate::host::{OS, Os};
+use crate::permit::Permit;
 use crate::provider::{
     Adoption, Behind, Credential, Expiry, Held, Identity, Isolation, LiveStore, Owner,
     ParkSemantics, Provider, ProviderError, ProviderId, SignInView,
 };
-use crate::service::Permit;
 use crate::switch;
 use crate::usage;
 use serde_json::Value;

@@ -10,7 +10,7 @@
 //! nothing removes or makes a file without having asked whether this process may.
 
 use crate::host::{Access, Private};
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};

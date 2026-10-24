@@ -5,9 +5,9 @@ use super::{
 use super::{data, rested, snapshot, unchanged};
 use crate::desktop_testing::EMPTIED;
 use crate::error::{Error, Then};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::folder::Unfit;
-use crate::service::Permit;
 use crate::state;
 use crate::switch::harness::{Rig, STRANGER, desktop_machine, desktop_pair, hold, recover};
 use crate::switch::{Outcome, settle};

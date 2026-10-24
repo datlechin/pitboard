@@ -75,7 +75,7 @@ fn spawn_into(mut command: Command, job: &Job) -> io::Result<Child> {
 
 // All of it ends past the ceiling or with Pitboard.
 pub(crate) fn run_within(
-    _: crate::service::Permit,
+    _: crate::permit::Permit,
     mut command: Command,
     handed: Option<&[u8]>,
     ceiling: Duration,
@@ -619,7 +619,7 @@ mod tests {
             })
         };
         let ran = run_within(
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             command,
             None,
             Duration::from_secs(60),
@@ -643,7 +643,7 @@ mod tests {
             std::thread::spawn(move || (pid_in(&started), pid_in(&opened)))
         };
         let ran = run_within(
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             command,
             None,
             Duration::from_secs(10),
@@ -662,7 +662,7 @@ mod tests {
         let _held = (helper::hold(&started), helper::hold(&opened));
         let command = helper::starting(&tool, true, &started, (&child, Job::Waits, &opened));
         let ran = run_within(
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             command,
             None,
             Duration::from_secs(60),
@@ -685,7 +685,7 @@ mod tests {
             &said,
         ));
         let refused = run_within(
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             command,
             Some(b"access".as_slice()),
             Duration::from_secs(60),

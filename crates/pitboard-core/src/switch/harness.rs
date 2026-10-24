@@ -14,11 +14,11 @@
 use super::*;
 use crate::api::scripted::ScriptedApi;
 use crate::context::ScratchMachine;
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::ProviderId;
 use crate::provider::claude::api::Renewed;
 use crate::provider::claude::paths as claude;
-use crate::service::Permit;
 
 use crate::host::memory::MemoryHost;
 use crate::state::Account;

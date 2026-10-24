@@ -26,8 +26,8 @@ pub use decide::{Hold, Standing};
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use crate::state::State;
 use crate::{atomic, home};
 use jiff::Timestamp;

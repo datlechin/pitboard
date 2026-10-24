@@ -5,8 +5,8 @@
 
 use crate::api::{Refusal, agent, retry_after, server_time, test_base};
 use crate::context::Context;
+use crate::permit::Permit;
 use crate::provider::{ProviderError, ProviderId};
-use crate::service::Permit;
 use crate::usage::{Snapshot, Source, Window};
 use serde_json::Value;
 

@@ -8,7 +8,7 @@
 //! released yet, and changes nothing. macOS and Linux are never refused here.
 //!
 //! Every change asks it before anything else, in the one gate every change passes
-//! ([`crate::service::Permit`]), so no file is written, no store of logins changed and no
+//! ([`crate::permit::Permit`]), so no file is written, no store of logins changed and no
 //! token renewed by a caller that forgot to ask. Every read of Pitboard's account list asks
 //! it too, so an app on a refused build is refused at its first read. The command line asks
 //! it before every command but those four.

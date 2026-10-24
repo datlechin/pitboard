@@ -15,9 +15,9 @@ use super::{Result, journal};
 use crate::context::Context;
 use crate::error::Error;
 use crate::in_use::{self, InUse};
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::{self, LoginKind, Provider, ProviderError, ProviderId};
-use crate::service::Permit;
 use crate::state::{self, Account, Key, State};
 use crate::status::{Plan, Seen};
 use crate::{audit, fault, store};
@@ -336,9 +336,9 @@ pub(crate) struct Login {
 
 impl Login {
     /// What a change that told whose this login is says of a lock lost while renewing it.
-    pub(crate) fn lock_warning(&self, which: ProviderId) -> Option<crate::service::Warning> {
+    pub(crate) fn lock_warning(&self, which: ProviderId) -> Option<crate::warning::Warning> {
         self.lock_lost
-            .then_some(crate::service::Warning::LockCompromised { tool: which })
+            .then_some(crate::warning::Warning::LockCompromised { tool: which })
     }
 }
 
@@ -723,7 +723,7 @@ mod tests {
         let codes: Vec<&str> = read
             .warnings
             .iter()
-            .map(crate::service::Warning::code)
+            .map(crate::warning::Warning::code)
             .collect();
         assert!(codes.is_empty(), "{codes:?}");
     }
@@ -1533,7 +1533,7 @@ mod tests {
         let codes: Vec<&str> = done
             .warnings
             .iter()
-            .map(crate::service::Warning::code)
+            .map(crate::warning::Warning::code)
             .collect();
         assert_eq!(codes, ["lock_compromised"]);
     }

@@ -4,7 +4,7 @@
 //! choose. It takes the [`Permit`] only the one gate every change passes makes.
 
 use crate::host::fs;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::Path;

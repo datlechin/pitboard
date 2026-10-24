@@ -13,7 +13,7 @@
 //! any of them has seen of that account. Nothing here is secret.
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::usage::{Snapshot, Source, Window};
 use crate::{atomic, home};
 use std::collections::HashMap;

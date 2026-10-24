@@ -21,7 +21,7 @@
 //! Nothing here is secret. It is names, times and counts.
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::usage::Snapshot;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};

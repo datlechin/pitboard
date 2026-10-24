@@ -50,7 +50,7 @@ pub(super) fn read(root: &Path, naming_key: &str) -> Result<AppSettings, Unread>
 // Only `config.json` is written, whole and by a rename. The sidecar stays: it no longer names
 // the file, so the app drops it at its next start.
 pub(super) fn write(
-    permit: crate::service::Permit,
+    permit: crate::permit::Permit,
     root: &Path,
     read: &AppSettings,
     body: &[u8],
@@ -233,7 +233,7 @@ mod tests {
         use crate::provider::folder::Folder;
         let app = super::super::Desktop;
         app.write_settings(
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             root,
             &read_again(root),
             keys,
@@ -278,7 +278,7 @@ mod tests {
         std::fs::write(&file, "{\"locale\": \"fr-FR\"}").unwrap();
         use crate::provider::folder::Folder;
         let refused = super::super::Desktop.write_settings(
-            crate::service::Permit::for_a_test(),
+            crate::permit::Permit::for_a_test(),
             s.path(),
             &stale,
             &Keys::none(),

@@ -212,7 +212,7 @@ pub(crate) trait Folder: Send + Sync + std::fmt::Debug {
     // `read` is the settings as just read: a file changed since is refused, not written over.
     fn write_settings(
         &self,
-        permit: crate::service::Permit,
+        permit: crate::permit::Permit,
         root: &Path,
         read: &AppSettings,
         keys: &Keys,

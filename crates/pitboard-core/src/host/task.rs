@@ -4,8 +4,8 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::Scheduler;
+use crate::permit::Permit;
 use crate::schedule::{EVERY_SECONDS, Job, Location};
-use crate::service::Permit;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

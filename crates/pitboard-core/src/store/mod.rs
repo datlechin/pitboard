@@ -15,7 +15,7 @@ pub(crate) mod vault;
 pub(crate) use file::PlainFile;
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 
 use serde_json::Value;
 use std::path::PathBuf;

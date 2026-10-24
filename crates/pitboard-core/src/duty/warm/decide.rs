@@ -5,7 +5,7 @@
 use super::Range;
 use crate::duty::ledger::{self, Tries};
 use crate::home;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::state::{Account, Key};
 use crate::usage::{self, Snapshot, Window};
 use jiff::Timestamp;

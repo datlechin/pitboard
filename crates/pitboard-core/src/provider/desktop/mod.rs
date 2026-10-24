@@ -8,9 +8,9 @@ mod settings;
 use crate::context::Context;
 use crate::holder::{AppId, Holder, Location, Noun, Remedy};
 use crate::host::Listed;
+use crate::permit::Permit;
 use crate::provider::folder::{AppSettings, Folder, Keys, SignedIn, Unfit, Unread};
 use crate::provider::{ProviderError, ProviderId};
-use crate::service::Permit;
 use serde_json::value::RawValue;
 use std::path::{Path, PathBuf};
 

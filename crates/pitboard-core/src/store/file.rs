@@ -3,7 +3,7 @@
 
 use super::{Backend, Error, RawStore};
 use crate::atomic;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::path::PathBuf;
 
 /// A tool that keeps its login in a file keeps exactly one per directory, so the service

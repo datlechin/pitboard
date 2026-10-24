@@ -11,9 +11,9 @@ use super::harness::{
 };
 use super::*;
 use crate::api::scripted::Trouble;
+use crate::permit::Permit;
 use crate::provider::codex::api::Fresh;
 use crate::provider::{Adoption, Credential};
-use crate::service::Permit;
 
 fn whose(m: &harness::Rig) -> Option<String> {
     let live = m.live()?;

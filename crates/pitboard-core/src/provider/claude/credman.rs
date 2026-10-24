@@ -5,7 +5,7 @@ use super::pieces::{self, Items};
 use super::{paths as claude, slot};
 use crate::context::Context;
 use crate::host::Administered;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::store::{Backend, Cost, Error, RawStore};
 use serde_json::Value;
 

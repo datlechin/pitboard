@@ -8,9 +8,9 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::in_use::{Identified, InUse, Replaced};
+use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::{Identity, Owner};
-use crate::service::Permit;
 use crate::{atomic, home};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

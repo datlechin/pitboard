@@ -9,7 +9,7 @@
 
 use crate::context::Context;
 use crate::host::SECURITY;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::store::{Backend, Cost, Error, RawStore};
 use std::process::{Command, Output};
 use std::time::Duration;

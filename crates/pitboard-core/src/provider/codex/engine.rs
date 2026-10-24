@@ -6,11 +6,11 @@
 use super::{api, layers, paths};
 use crate::context::Context;
 use crate::host::Os;
+use crate::permit::Permit;
 use crate::provider::{
     Adoption, Behind, Credential, Expiry, Identity, Isolation, LiveStore, Owner, ParkSemantics,
     Provider, ProviderError, ProviderId, SignInView, jwt,
 };
-use crate::service::Permit;
 use crate::store::{self, Live, RawStore};
 use crate::usage::Snapshot;
 use serde_json::Value;

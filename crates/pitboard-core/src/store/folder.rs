@@ -2,8 +2,8 @@
 
 use crate::context::Context;
 use crate::host::{Private, fs};
+use crate::permit::Permit;
 use crate::provider::folder::Keys;
-use crate::service::Permit;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io;

@@ -541,7 +541,7 @@ fn claude_desktop_named_since_signed_out_reads_as_the_warning_does() {
     });
     let checks = judge_desktop(Os::MacOs, &facts, &state, &[], NOW, &time::moment);
     let login = said(&checks, "desktop_login");
-    let warned = crate::service::Warning::InUseUnconfirmed {
+    let warned = crate::warning::Warning::InUseUnconfirmed {
         tool: ProviderId::Desktop,
         last: Stored::Nothing,
         named: Stored::Account("desktop/work".into()),

@@ -40,9 +40,9 @@
 use crate::context::Context;
 use crate::duty::cadence::retry_after;
 use crate::duty::ledger::{self, Tries};
+use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use crate::state::{Account, Key, State};
 use crate::status::Row;
 use crate::switch::Holder;

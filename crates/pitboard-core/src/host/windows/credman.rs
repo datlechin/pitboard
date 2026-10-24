@@ -3,8 +3,8 @@
 // its blob, enterprise persistence, no comment and no attributes. Names alone for the rest.
 
 use crate::context::Context;
+use crate::permit::Permit;
 use crate::provider::claude::pieces::BLOB;
-use crate::service::Permit;
 use crate::store::{Backend, Cost, Error, RawStore};
 use std::io;
 use windows_sys::Win32::Foundation::{ERROR_NO_SUCH_LOGON_SESSION, ERROR_NOT_FOUND};

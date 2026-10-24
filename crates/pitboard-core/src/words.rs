@@ -1125,11 +1125,11 @@ pub(crate) fn given_up_on_the_command_line(given_up: &crate::switch::GivenUp) ->
 // Claude's settings name `named` since Pitboard last read `last` in use: no service is asked.
 // `said` names an account as the front end does.
 pub fn desktop_named(
-    named: &crate::service::Stored,
-    last: &crate::service::Stored,
-    said: impl Fn(&crate::service::Stored) -> String,
+    named: &crate::in_use::Stored,
+    last: &crate::in_use::Stored,
+    said: impl Fn(&crate::in_use::Stored) -> String,
 ) -> String {
-    use crate::service::Stored;
+    use crate::in_use::Stored;
     let since = match last {
         Stored::Account(_) | Stored::Unenrolled(_) => format!(
             "since Pitboard last read {} in use, so Claude may hold another login",
@@ -1939,7 +1939,7 @@ mod tests {
             past_credential_manager(460_801, 460_800),
             "460801 bytes, past the 460800 Claude Code keeps in Credential Manager"
         );
-        use crate::service::Stored;
+        use crate::in_use::Stored;
         assert_eq!(
             desktop_named(
                 &Stored::Account("desktop/work".into()),

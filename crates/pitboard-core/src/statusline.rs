@@ -357,7 +357,7 @@ fn moved_since(run: &Run, before: Option<&Run>) -> Vec<Window> {
 /// is drawn the same way from the files as they are.
 pub(crate) fn read(
     ctx: &Context,
-    permit: Option<crate::service::Permit>,
+    permit: Option<crate::permit::Permit>,
     input: &str,
 ) -> StatusLine {
     let input: Value = serde_json::from_str(input).unwrap_or(Value::Null);
@@ -395,8 +395,8 @@ pub(crate) fn read(
 mod tests {
     use super::*;
     use crate::in_use::InUse;
+    use crate::permit::Permit;
     use crate::provider::Owner;
-    use crate::service::Permit;
     use crate::time::{Clock, FixedClock};
     use crate::usage::{Source, Window};
     use serde_json::json;

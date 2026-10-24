@@ -52,7 +52,7 @@ pub mod names;
 mod printed;
 
 use crate::context::Context;
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::usage;
 use serde_json::Value;
 

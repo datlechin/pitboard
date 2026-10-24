@@ -1,7 +1,7 @@
 //! Processes, the POSIX way.
 
 use crate::host::Ran;
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::ffi::CString;
 use std::io::{self, Write};
 use std::os::fd::AsRawFd;

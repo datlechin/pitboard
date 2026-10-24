@@ -9,7 +9,7 @@
 use super::harness::{audit_lines, machine, owner, recover, state_file};
 use super::*;
 use crate::api::scripted::Trouble;
-use crate::service::Permit;
+use crate::permit::Permit;
 
 /// The account is kept, the label is kept, and the copy that cannot work is dropped, so the
 /// way back is one sign-in rather than an enrolment.

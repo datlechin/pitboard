@@ -8,8 +8,8 @@
 use super::{Error, Result, identity_of_document};
 use crate::context::Context;
 use crate::in_use::{self, InUse};
+use crate::permit::Permit;
 use crate::provider::{self, LoginKind, Provider, ProviderId};
-use crate::service::Permit;
 use crate::state::{Account, Key, Park, ParkKind, State};
 use crate::{atomic, home, park, state, store};
 use serde_json::Value;

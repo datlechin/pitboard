@@ -8,10 +8,11 @@ use crate::context::Context;
 use crate::error::Then;
 use crate::fault;
 use crate::in_use::InUse;
+use crate::permit::Permit;
 use crate::provider::folder::{AppSettings, Folder, Keys, SignedIn, Unread};
-use crate::service::{Permit, Warning};
 use crate::state::{self, Aside, Awaited, Half, Key, Moving, Park, ParkKind, SetAside, State};
 use crate::store::folder::{self as parks, Manifest};
+use crate::warning::Warning;
 use std::collections::BTreeMap;
 use std::path::Path;
 

@@ -75,6 +75,7 @@ pub mod statusline;
 pub mod switch;
 pub mod time;
 pub mod usage;
+pub(crate) mod warning;
 pub mod watch_service;
 pub mod words;
 
@@ -88,6 +89,7 @@ pub mod host;
 pub(crate) mod lock;
 pub(crate) mod park;
 pub(crate) mod pending;
+pub(crate) mod permit;
 pub(crate) mod proxy;
 pub(crate) mod sessions;
 /// The program the tests start in place of a tool, reached as `testing::stand_in`. Its own
@@ -161,7 +163,7 @@ pub mod testing {
         service: &str,
         contents: &str,
     ) -> crate::error::Result<()> {
-        let permit = crate::service::gate(ctx)?;
+        let permit = crate::permit::gate(ctx)?;
         Ok(crate::store::vault_write(ctx, permit, service, contents)?)
     }
 
@@ -241,7 +243,7 @@ pub mod testing {
         }
 
         pub fn write(ctx: &Context, service: &str, contents: &str) -> crate::error::Result<()> {
-            let permit = crate::service::gate(ctx)?;
+            let permit = crate::permit::gate(ctx)?;
             Ok(store(ctx).write(permit, service, contents)?)
         }
 
@@ -251,7 +253,7 @@ pub mod testing {
 
         // Every piece too, as Claude Code deletes its login.
         pub fn discard(ctx: &Context, service: &str) -> crate::error::Result<()> {
-            let permit = crate::service::gate(ctx)?;
+            let permit = crate::permit::gate(ctx)?;
             Ok(store(ctx).delete(permit, service)?)
         }
 
@@ -263,7 +265,7 @@ pub mod testing {
 
     /// Deletes what is parked under `service`, once the gate has let it.
     pub fn vault_delete(ctx: &crate::context::Context, service: &str) -> crate::error::Result<()> {
-        let permit = crate::service::gate(ctx)?;
+        let permit = crate::permit::gate(ctx)?;
         Ok(crate::store::vault_delete(ctx, permit, service)?)
     }
 
@@ -280,7 +282,7 @@ pub mod testing {
         let document = serde_json::from_str(document).expect("a login a test wrote as JSON");
         match crate::provider::of(which) {
             LoginKind::Document(tool) => {
-                crate::switch::planted(ctx, crate::service::gate(ctx)?, tool, document)
+                crate::switch::planted(ctx, crate::permit::gate(ctx)?, tool, document)
             }
             LoginKind::Folder(_) => Err(crate::error::Error::Usage(
                 "a Claude Desktop sign-in is played by testing::desktop".into(),

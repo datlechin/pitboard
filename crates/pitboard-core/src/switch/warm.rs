@@ -16,11 +16,11 @@ use crate::duty::warm::decide::{self, Ledger, Standing};
 use crate::duty::warm::run;
 use crate::duty::warm::{self, Failure, Range};
 use crate::error::Error;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::{self, claude};
-use crate::service::Permit;
-use crate::service::Warning;
 use crate::state::Key;
+use crate::warning::Warning;
 use crate::{park, status};
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -452,7 +452,8 @@ mod tests {
     use super::super::harness::{audit_lines, codex_account, machine};
     use crate::duty::warm::{self, Range};
     use crate::error::Error;
-    use crate::service::{Permit, Pitboard};
+    use crate::permit::Permit;
+    use crate::service::Pitboard;
     use crate::state;
 
     #[test]
@@ -649,7 +650,8 @@ mod tests {
         use crate::duty::Look;
         use crate::duty::warm::run::{Ran, Started, WarmScript};
         use crate::duty::warm::{Range, Standing};
-        use crate::service::{Permit, Pitboard};
+        use crate::permit::Permit;
+        use crate::service::Pitboard;
         use crate::time::{Clock, FixedClock};
         use crate::usage::{Snapshot, Source, Window};
         use jiff::tz::TimeZone;

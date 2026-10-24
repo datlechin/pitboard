@@ -18,9 +18,9 @@
 use super::{shape, to_body, write_lock};
 use crate::context::Context;
 use crate::error::Error;
+use crate::permit::Permit;
 use crate::provider::claude::live;
 use crate::provider::{self, LoginKind, Provider, ProviderError, ProviderId};
-use crate::service::Permit;
 use crate::state::{self, ParkKind, Renewing, State};
 use crate::store::{self, RawStore};
 use crate::{fault, lock, park};

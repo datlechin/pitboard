@@ -10,7 +10,7 @@
 //! does exactly what it is told.
 
 use super::{Backend, Error, RawStore};
-use crate::service::Permit;
+use crate::permit::Permit;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 

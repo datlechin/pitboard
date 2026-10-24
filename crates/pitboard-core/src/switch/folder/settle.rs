@@ -8,11 +8,12 @@ use super::{midway, there};
 use crate::context::Context;
 use crate::error::Then;
 use crate::fault;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::provider::folder::{Folder, Keys, Unfit, Unread};
-use crate::service::{Permit, Warning};
 use crate::state::{self, Half, Key, Moving, ParkKind, SetAside, State};
 use crate::store::folder as parks;
+use crate::warning::Warning;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -216,6 +216,51 @@ pub(crate) fn naming(which: ProviderId, owner: &Owner) -> Option<String> {
     }
 }
 
+/// An account as a warning or a doctor check names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stored {
+    /// An enrolled account's, by the name to type for it.
+    Account(String),
+    /// An account nobody enrolled, by its email.
+    Unenrolled(String),
+    Nothing,
+    /// Nothing is recorded of the tool's store here.
+    Unknown,
+}
+
+impl Stored {
+    pub(crate) fn of(state: &State, tool: ProviderId, owner: Option<&Owner>) -> Stored {
+        match owner {
+            None => Stored::Nothing,
+            Some(owner) => state.account_of(tool, owner).map_or_else(
+                || Stored::Unenrolled(owner.email.clone()),
+                |account| Stored::Account(state.typed(&account.key())),
+            ),
+        }
+    }
+
+    pub(crate) fn said(&self, nobody: &str) -> String {
+        match self {
+            Stored::Account(name) => format!("`{name}`"),
+            Stored::Unenrolled(email) if email.is_empty() => {
+                "an account Pitboard has not enrolled".into()
+            }
+            Stored::Unenrolled(email) => email.clone(),
+            Stored::Nothing | Stored::Unknown => nobody.to_string(),
+        }
+    }
+
+    // What writes this account into the tool's own record again.
+    pub(crate) fn how_to_name(&self) -> String {
+        match self {
+            Stored::Account(name) => {
+                format!("`pitboard use {name}` writes `{name}` into the config.")
+            }
+            _ => "A switch writes the account it puts in use into the config.".into(),
+        }
+    }
+}
+
 #[cfg(test)]
 impl InUse {
     /// `account`'s login, fingerprinted `login`, as its service said at `at`.

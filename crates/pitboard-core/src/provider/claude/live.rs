@@ -9,7 +9,7 @@
 use super::{credman, paths as claude, slot};
 use crate::context::Context;
 use crate::host::{OS, Os};
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::store::{self, Backend, Error, Live, RawStore, Refused};
 use serde_json::Value;
 use std::path::{Path, PathBuf};

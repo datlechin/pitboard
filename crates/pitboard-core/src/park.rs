@@ -3,8 +3,8 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::permit::Permit;
 use crate::provider::{LoginKind, Provider, ProviderId};
-use crate::service::Permit;
 use crate::state::{Aside, Dropped, Key, Park, ParkKind, SetAside, State};
 use crate::store;
 use serde_json::Value;
@@ -346,7 +346,7 @@ pub(crate) fn price(
     label: &str,
     service: &str,
     document: &Value,
-) -> Result<Option<crate::service::Warning>> {
+) -> Result<Option<crate::warning::Warning>> {
     let body = serde_json::to_string(document).expect("a credential slice is always serialisable");
     let Some(price) = store::vault_cost(ctx, service, &body) else {
         return Ok(None);
@@ -361,7 +361,7 @@ pub(crate) fn price(
     }
     Ok(price
         .on_the_second_route()
-        .then_some(crate::service::Warning::WrittenOnTheCommandLine {
+        .then_some(crate::warning::Warning::WrittenOnTheCommandLine {
             tool: provider,
             bytes: price.needs,
             limit: price.limit,
@@ -378,7 +378,7 @@ pub(crate) fn keep(
     label: &str,
     id: &str,
     document: &Value,
-) -> Result<(Park, Option<crate::service::Warning>)> {
+) -> Result<(Park, Option<crate::warning::Warning>)> {
     let parking = price(
         ctx,
         tool.id(),

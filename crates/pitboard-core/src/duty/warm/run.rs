@@ -10,8 +10,8 @@
 
 use crate::context::Context;
 use crate::host::Os;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::Permit;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;

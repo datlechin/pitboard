@@ -7,7 +7,7 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::service::Permit;
+use crate::permit::Permit;
 use crate::{atomic, home};
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};

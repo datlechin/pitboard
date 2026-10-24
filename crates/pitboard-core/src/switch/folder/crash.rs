@@ -9,8 +9,10 @@ use super::tests::{
 use crate::desktop_testing::{EMPTIED, Person};
 use crate::error::Error;
 use crate::fault;
+use crate::permit::Permit;
 use crate::provider::ProviderId;
-use crate::service::{Permit, Pitboard, Warning};
+use crate::service::Pitboard;
+use crate::warning::Warning;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 

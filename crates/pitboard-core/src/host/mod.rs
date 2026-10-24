@@ -22,8 +22,8 @@
 
 use crate::context::{Context, Environment};
 use crate::error::Result;
+use crate::permit::Permit;
 use crate::schedule::Job;
-use crate::service::Permit;
 use crate::store::RawStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -857,7 +857,7 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     fn scheduler(&self) -> Option<&dyn Scheduler>;
 
     /// Whether this process runs as the person themselves, which is what the one gate every
-    /// change passes asks ([`crate::service::Permit`]). Takes the context because part of
+    /// change passes asks ([`crate::permit::Permit`]). Takes the context because part of
     /// the answer can be in the environment this process was started with, such as the
     /// `SUDO_UID` sudo sets.
     fn elevation(&self, ctx: &Context) -> Elevation;

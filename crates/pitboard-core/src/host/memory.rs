@@ -10,8 +10,8 @@ use super::{
     WindowsSettings,
 };
 use crate::context::Context;
+use crate::permit::Permit;
 use crate::provider::claude::credman::FORCE;
-use crate::service::Permit;
 use crate::store::memory::{Fault, MemoryStore, Touch};
 use crate::store::{Backend, Cost, Error, RawStore};
 use std::collections::HashMap;
