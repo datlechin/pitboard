@@ -7,7 +7,9 @@ public sealed class BindingsTests
     [TestMethod]
     public void TheBindingsLoadTheCoreAndAgreeWithIt()
     {
-        Assert.AreEqual("claude.ai and chatgpt.com", PitboardFfiMethods.SiteNames(Conjunction.And));
+        Assert.AreEqual(
+            new Intent.Rename("claude", "home", "work"),
+            PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "home"), "claude", "work").Intent);
     }
 
     [TestMethod]
@@ -25,7 +27,7 @@ public sealed class BindingsTests
             "Adoption", "Enrolled", "EnrolledAs", "Changed", "Holding", "Remedy", "Diagnosis", "Change",
             "SignInView", "Check", "Renewed", "LinkRefusal", "Status", "Account", "Usage", "Limit", "Parked",
             "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Tool", "Failure", "Warning", "Held",
-            "Schedule",
+            "Schedule", "QuitQuestion", "ReplaceQuestion", "Conjunction",
         ];
         var stillOffered = exported.Select(type => type.Name).Intersect(older).Order(StringComparer.Ordinal);
         string[] olderCalls =
@@ -34,7 +36,7 @@ public sealed class BindingsTests
             "HomeDirectory", "LimitColumn", "LimitName", "UsageLevel", "Resets", "Runway", "ParkedLife",
             "RenewalNote", "DoctorSummary", "SameReset", "PitboardLink", "LinkRefusalReason", "Sites",
             "SiteLink", "ReadPitboardLink", "WindowOfStore", "IsSitePage", "WindowAddress", "StoreId",
-            "SitesFor", "WindowAccounts", "SiteMenus",
+            "SitesFor", "WindowAccounts", "SiteMenus", "SiteNames",
         ];
         var stillCalled = typeof(PitboardFfiMethods).GetMethods()
             .Select(method => method.Name)

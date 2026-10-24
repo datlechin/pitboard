@@ -5,7 +5,7 @@
 //! stores to delete, the Open Link window's link and accounts, each window's downloads, and
 //! the question asked before quitting stops a download.
 
-use super::{Choice, Question, Seen, words};
+use super::{Choice, EmptyList, Question, Seen, words};
 use crate::SiteLink;
 use crate::account_windows::records::store_key;
 use crate::account_windows::{
@@ -42,6 +42,8 @@ pub struct AccountWindowsShown {
     /// Every download the windows started, the newest first, for each window to list its own.
     /// What to ask before quitting while some are under way is `downloads_quit_question`'s.
     pub downloads: Vec<DownloadShown>,
+    /// What the Open Link window shows while no link waits for an account.
+    pub no_link: EmptyList,
     // On Windows, stores held by their deletion: no window of one opens, and its menu item
     // says why with `WindowNoteKind::StoreHeld`.
     #[uniffi(default)]
@@ -244,6 +246,10 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
         deleting: windows.deleting.clone(),
         picker: picker(seen),
         downloads: windows.downloads.iter().rev().map(download).collect(),
+        no_link: {
+            let (title, detail) = words::no_link(seen.os);
+            EmptyList { title, detail }
+        },
         held: windows.held(),
     }
 }

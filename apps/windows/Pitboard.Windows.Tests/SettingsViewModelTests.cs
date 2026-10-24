@@ -100,14 +100,17 @@ public sealed class SettingsViewModelTests
     }
 
     [TestMethod]
-    public void OnlyACommandLineFoundNowhereSaysWhoPutsItOnThePath()
+    public void TheCommandLineSaysWhoPutsItOnThePathWhereTheModelDoes()
     {
-        static CommandLineShown Found(FoundCommandLine found) =>
-            new(Found: found, InTerminal: "", UpdateNote: null, OffersLink: false, CannotLink: null);
+        const string note = "Pitboard’s installer puts pitboard on your PATH.";
+        var (shown, _, _) = Over(With(1, machine => machine with
+        {
+            CommandLine = machine.CommandLine with { Found = new FoundCommandLine.Nowhere(), TerminalNote = note },
+        }));
 
-        Assert.AreEqual(SettingsViewModel.NewTerminals, SettingsViewModel.TerminalNoteFor(Found(new FoundCommandLine.Nowhere())));
-        Assert.IsNull(SettingsViewModel.TerminalNoteFor(Found(new FoundCommandLine.Bundled(@"C:\Pitboard\bin\pitboard.exe"))));
-        Assert.IsNull(SettingsViewModel.TerminalNoteFor(new CommandLineShown(null, null, null, false, null)), "not looked for yet");
+        Assert.IsTrue(shown.HasTerminalNote);
+        Assert.AreEqual(note, shown.TerminalNote);
+        Assert.IsFalse(Over(Snapshots.Read(1)).Shown.HasTerminalNote, "not looked for yet");
     }
 
     // A control set to what the model says raises its change event as a person's change would; the page's echo guard

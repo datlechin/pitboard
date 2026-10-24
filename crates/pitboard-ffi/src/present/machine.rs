@@ -14,6 +14,7 @@ use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
 use crate::{AutoSwitched, Check, FoundCommandLine, Level, Schedule};
 use pitboard_core::duty::autoswitch::Threshold;
+use pitboard_core::host::Os;
 
 /// What the app shows of this machine rather than its accounts. Not called `Machine`, the
 /// name the model's tests give the core they script.
@@ -90,6 +91,8 @@ pub struct AtLimitShown {
     pub at_label: String,
     // the control that sets the share
     pub share_label: String,
+    // beside that control, where a system says its range
+    pub share_range: String,
     pub note: Option<String>,
     // under Switch, what switching came to last
     pub standing: Option<String>,
@@ -218,6 +221,9 @@ pub struct CommandLineShown {
     pub offers_link: bool,
     /// Why it is not offered, where none was found and this copy runs from a temporary place.
     pub cannot_link: Option<String>,
+    /// Where none was found on Windows, whose installer puts the command line on the `PATH`:
+    /// which terminals see it.
+    pub terminal_note: Option<String>,
 }
 
 /// What the app shows of this machine.
@@ -378,6 +384,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
         heading: AT_LIMIT.into(),
         at_label: format!("{AT_LIMIT} {at}%"),
         share_label: "Share of a limit".into(),
+        share_range: words::share_range(Threshold::LOWEST, Threshold::HIGHEST),
         note,
         standing: state
             .auto_standing
@@ -572,6 +579,7 @@ fn command_line(seen: &Seen) -> CommandLineShown {
         },
         offers_link: nowhere && own.lasting(),
         cannot_link: (nowhere && own.temporary).then(|| words::cannot_link(seen.os)),
+        terminal_note: (nowhere && seen.os == Os::Windows).then(|| words::NEW_TERMINALS.into()),
     }
 }
 

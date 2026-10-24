@@ -30,7 +30,11 @@ package func windowsShown(
         accounts: accounts, menus: menus, open: [],
         waiting: WindowWaiting(
             windowTitle: "Account", shown: .reading(title: "Reading accounts…")),
-        closing: closing, deleting: deleting, picker: nil, downloads: [])
+        closing: closing, deleting: deleting, picker: nil, downloads: [],
+        noLink: EmptyList(
+            title: "No Link to Open",
+            detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s "
+                + "Share menu to open it as one of your accounts."))
 }
 
 // What a model that has read nothing yet would make, apart from what a test says.
@@ -62,7 +66,7 @@ package func snapshot(
             activity: ActivityShown(lines: [], empty: nil),
             commandLine: CommandLineShown(
                 found: nil, inTerminal: nil, updateNote: nil, offersLink: false,
-                cannotLink: nil),
+                cannotLink: nil, terminalNote: nil),
             atLimit: AtLimitShown(
                 title: "Before an account runs out", choice: .notify,
                 choices: [
@@ -71,7 +75,7 @@ package func snapshot(
                     AtLimitChoice(choice: .switch, title: "Switch Automatically"),
                 ], at: 95, lowest: 50, highest: 99, enabled: true, shareEnabled: true,
                 heading: "When a limit reaches", atLabel: "When a limit reaches 95%",
-                shareLabel: "Share of a limit", note: nil,
+                shareLabel: "Share of a limit", shareRange: "From 50% to 99%", note: nil,
                 standing: nil, terms: nil),
             warm: WarmShown(
                 title: "Warm up limits", from: 360, to: 1320, rangeLabel: "06:00 to 22:00",

@@ -881,6 +881,17 @@ fn readable(code: &str) -> String {
 }
 
 /// What stands in for the activity list while it has nothing in it: its title, and why.
+pub(crate) fn no_link(os: Os) -> (String, String) {
+    (
+        titled(os, "No Link to Open", "No link to open"),
+        format!(
+            "Share a {} page with Pitboard from your browser’s Share menu to open it as one of \
+             your accounts.",
+            pitboard_sites::Site::names(pitboard_sites::Conjunction::Or)
+        ),
+    )
+}
+
 pub(crate) fn no_activity(os: Os) -> (String, &'static str) {
     (
         titled(os, "No Activity", "No activity"),
@@ -971,6 +982,17 @@ pub(crate) fn part_still_running(os: Os, app: &str, again: &str) -> String {
         typeset(&pitboard_core::words::wait_for_still(os, again))
     )
 }
+
+/// Said beside the field that sets the share, where a system says a field's range: "From 50%
+/// to 99%".
+pub(crate) fn share_range(lowest: u8, highest: u8) -> String {
+    format!("From {lowest}% to {highest}%")
+}
+
+/// Where no `pitboard` was found on Windows: the installer puts the one inside the app on the
+/// `PATH`, and only a terminal opened after that sees it.
+pub(crate) const NEW_TERMINALS: &str =
+    "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
 
 // What daily renewal does, under its switch, and that a parked app login never is renewed.
 pub(crate) fn renewal_about(os: Os, in_its_app: bool) -> String {
@@ -2877,6 +2899,21 @@ mod tests {
                 "Replace Claude Code’s login?"
             )
         );
+    }
+
+    #[test]
+    fn the_settings_and_the_open_link_window_say_these() {
+        assert_eq!(share_range(50, 99), "From 50% to 99%");
+        assert_eq!(
+            no_link(Os::MacOs),
+            (
+                "No Link to Open".into(),
+                "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share \
+                 menu to open it as one of your accounts."
+                    .into()
+            )
+        );
+        assert_eq!(no_link(Os::Windows).0, "No link to open");
     }
 
     #[test]

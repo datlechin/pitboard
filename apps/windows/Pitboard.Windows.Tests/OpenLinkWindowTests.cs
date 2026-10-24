@@ -13,6 +13,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class OpenLinkWindowTests
 {
+    private static readonly EmptyList NoLink = Snapshots.Read(1).AccountWindows.NoLink;
     private static readonly WindowAccount Main = Items.Window("codex", "main", inUse: true);
     private static readonly WindowAccount Spare = Items.Window("codex", "spare");
     private static readonly SiteLink Shared = new(Main.Site, "https://chatgpt.com/c/shared");
@@ -41,7 +42,7 @@ public sealed class OpenLinkWindowTests
     {
         var sent = new List<Intent>();
         var opened = new List<WindowAccount>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, opened.Add, _ => Assert.Fail("a browser opened")));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, opened.Add, _ => Assert.Fail("a browser opened")));
         try
         {
             window.Follow(Choose(3, armed: false));
@@ -71,7 +72,7 @@ public sealed class OpenLinkWindowTests
     [UITestMethod]
     public async Task ALinkThatArrivesAgainIsChosenAfresh()
     {
-        var window = await Views.Activated(new OpenLinkWindow(_ => { }, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, _ => { }, _ => { }, _ => { }));
         try
         {
             window.Follow(Choose(3, armed: true));
@@ -91,7 +92,7 @@ public sealed class OpenLinkWindowTests
     [UITestMethod]
     public async Task EscShowsAsNoTooltip()
     {
-        var window = await Views.Activated(new OpenLinkWindow(_ => { }, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, _ => { }, _ => { }, _ => { }));
         try
         {
             window.Follow(Choose(3, armed: true));
@@ -108,7 +109,7 @@ public sealed class OpenLinkWindowTests
     public async Task CancellingOrClosingDismissesTheLink()
     {
         var sent = new List<Intent>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, _ => Assert.Fail("a window opened"), _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => Assert.Fail("a window opened"), _ => { }));
         window.Follow(Choose(5, armed: true));
 
         Views.Press(Views.Button(window.Content, "Cancel"));
@@ -122,7 +123,7 @@ public sealed class OpenLinkWindowTests
     public async Task AWithdrawnWindowDismissesNothing()
     {
         var sent = new List<Intent>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => { }, _ => { }));
         window.Follow(Choose(6, armed: true));
 
         window.Withdraw();
@@ -134,7 +135,7 @@ public sealed class OpenLinkWindowTests
     public async Task ARefusedLinkSaysWhy()
     {
         var sent = new List<Intent>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => { }, _ => { }));
         try
         {
             window.Follow(new LinkPicker(7, false, new PickerShown.Refused("Can’t open this link", "This link is on example.com.")));
@@ -155,7 +156,7 @@ public sealed class OpenLinkWindowTests
     [UITestMethod]
     public async Task ItsSecondaryTextFollowsTheTheme()
     {
-        var window = await Views.Activated(new OpenLinkWindow(_ => { }, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, _ => { }, _ => { }, _ => { }));
         try
         {
             window.Follow(new LinkPicker(7, false, new PickerShown.Refused("Can’t open this link", "This link is on example.com.")));
@@ -181,7 +182,7 @@ public sealed class OpenLinkWindowTests
     {
         var sent = new List<Intent>();
         var browsed = new List<string>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, _ => { }, browsed.Add));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => { }, browsed.Add));
         try
         {
             var add = new Choice("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: "codex")), Enabled: true);
@@ -205,7 +206,7 @@ public sealed class OpenLinkWindowTests
     public async Task UntilTheAccountsAreReadItSaysSoAndOffersToTryAgain()
     {
         var sent = new List<Intent>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => { }, _ => { }));
         try
         {
             window.Follow(new LinkPicker(9, false, new PickerShown.Reading("Reading accounts…")));
@@ -230,17 +231,15 @@ public sealed class OpenLinkWindowTests
     public async Task WithNoLinkItSaysHowToShareOne()
     {
         var sent = new List<Intent>();
-        var window = await Views.Activated(new OpenLinkWindow(sent.Add, _ => { }, _ => { }));
+        var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => { }, _ => { }));
         var closed = false;
         window.Closed += (_, _) => closed = true;
 
         window.Follow(null);
 
         var texts = Views.Texts(window.Content);
-        Assert.Contains("No link to open", texts);
-        Assert.IsTrue(
-            texts.Any(text => text.StartsWith($"Share a {PitboardFfiMethods.SiteNames(Conjunction.Or)} page", StringComparison.Ordinal)),
-            string.Join(" | ", texts));
+        Assert.Contains(NoLink.Title, texts);
+        Assert.Contains(NoLink.Detail, texts);
         Views.Press(Views.Button(window.Content, "Close"));
         Assert.IsTrue(closed);
         Assert.IsEmpty(sent);

@@ -98,24 +98,6 @@ impl From<pitboard_sites::SiteLink> for SiteLink {
     }
 }
 
-/// How a list of names is joined in a sentence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Conjunction {
-    /// "claude.ai and chatgpt.com".
-    And,
-    /// "claude.ai or chatgpt.com".
-    Or,
-}
-
-/// The sites' names as a sentence lists them: "claude.ai and chatgpt.com".
-#[uniffi::export]
-pub fn site_names(conjunction: Conjunction) -> String {
-    pitboard_sites::Site::names(match conjunction {
-        Conjunction::And => pitboard_sites::Conjunction::And,
-        Conjunction::Or => pitboard_sites::Conjunction::Or,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,7 +121,6 @@ mod tests {
                 "chat.com"
             ]
         );
-        assert_eq!(site_names(Conjunction::Or), "claude.ai or chatgpt.com");
     }
 
     /// The steps chatgpt.com's window gives, as `Site.swift` said them before they were Rust:

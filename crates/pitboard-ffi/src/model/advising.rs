@@ -793,6 +793,10 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         )
     );
     assert!(shown.at_limit.share_enabled);
+    assert_eq!(
+        shown.at_limit.share_range,
+        words::share_range(shown.at_limit.lowest, shown.at_limit.highest)
+    );
     assert_eq!(shown.at_limit.terms, None);
     assert_eq!(
         shown.warm.terms.link,

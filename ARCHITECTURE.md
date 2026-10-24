@@ -1305,8 +1305,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   to stop, and the core, a tool's sign-in and the app's `AppControl`, `Notifications` and
   `LocalTime` are called on the model's own threads. The free functions block on nothing,
   and an app may make them where it likes: `check_name` and `downloads_quit_question`,
-  which read only what they are given; `site_names`, which is `pitboard-sites`' and reads
-  only what it is given too;
+  which read only what they are given;
   the account windows' rules, such as `decide_navigation`, `decide_response` and
   `window_note`, which read only what they are given as well, so a web view's delegate asks
   them as it is asked; `download_destination`, which asks the file system whether each name
@@ -2234,8 +2233,8 @@ rests on are under [WebKit and SwiftUI](#webkit-and-swiftui) and
 
 - `crates/pitboard-sites`: what a site is, and what a link from outside may be, in the
   [code map](#code-map). The app reaches it through `pitboard-ffi`'s `Site` and `SiteLink`
-  records and `site_names`, and the model reads each Pitboard link with `pitboard-sites`'
-  `read_pitboard_link` and says a refusal in its words. The app tests build a site record by
+  records, and the model reads each Pitboard link with `pitboard-sites`' `read_pitboard_link`
+  and says a refusal, and what the Open Link window says with no link, in its words. The app tests build a site record by
   hand. The Share extension reaches it through `pitboard-share-ffi`.
 - `apps/macos/Sources/PitboardLinkTarget`: where a Pitboard link goes, which the app and the
   Share extension both link. `LinkTarget.swift` names the Info.plist key `PitboardURLScheme`

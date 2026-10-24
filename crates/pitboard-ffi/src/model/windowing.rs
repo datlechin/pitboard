@@ -321,6 +321,12 @@ fn the_inbox_takes_pitboard_links_of_its_own_scheme() {
     let mut machine = machine();
     let mut model = started_on_stand_ins(&mut machine);
     assert_eq!(model.shown().account_windows.picker, None);
+    let (title, detail) = crate::present::words::no_link(pitboard_core::host::OS);
+    assert_eq!(
+        model.shown().account_windows.no_link,
+        crate::present::EmptyList { title, detail },
+        "what the Open Link window says meanwhile"
+    );
 
     model.send(shared("https://claude.ai/new", "pitboard-debug"));
     let first = picker(&model);

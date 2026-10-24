@@ -27,7 +27,7 @@ public sealed partial class WindowChromeTests
             MainWindowTests.Made(Snapshots.Read(1)),
             account,
             new SignInWindow(new SignInWindowSize(480, 640), account, "Sign in"),
-            new OpenLinkWindow(_ => { }, _ => { }, _ => { }),
+            new OpenLinkWindow(Snapshots.Read(1).AccountWindows.NoLink, _ => { }, _ => { }, _ => { }),
         ];
         try
         {

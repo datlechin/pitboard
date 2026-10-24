@@ -907,6 +907,19 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
     assert_eq!(command_line.update_note, None);
     assert!(command_line.offers_link);
     assert_eq!(command_line.cannot_link, None);
+    assert_eq!(
+        command_line.terminal_note, None,
+        "a Mac offers to link it instead"
+    );
+    assert_eq!(
+        present_on(Os::Windows, &model.state, model.now.epoch(), &Utc)
+            .machine
+            .command_line
+            .terminal_note
+            .as_deref(),
+        Some(words::NEW_TERMINALS),
+        "Windows' installer puts it on the PATH"
+    );
 
     for (found, note) in [
         (
@@ -933,6 +946,7 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
         assert_eq!(command_line.in_terminal.as_ref(), Some(path));
         assert_eq!(command_line.update_note.as_deref(), Some(note));
         assert!(!command_line.offers_link, "one is there already");
+        assert_eq!(command_line.terminal_note, None);
     }
     assert_eq!(machine.command_line_asks, 3);
 }

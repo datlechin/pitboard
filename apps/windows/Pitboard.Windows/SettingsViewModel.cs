@@ -19,8 +19,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public const string BetaNote = "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.";
 
-    public const string NewTerminals = "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
-
     public const string Copyright = "Copyright 2026 the Pitboard authors";
 
     private const int MinutesInADay = 24 * 60;
@@ -119,7 +117,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public string ShareTitle => AtLimit.ShareLabel;
 
-    public string ShareRange => $"From {AtLimit.Lowest}% to {AtLimit.Highest}%";
+    public string ShareRange => AtLimit.ShareRange;
 
     public bool CanSetShare => AtLimit.ShareEnabled;
 
@@ -165,9 +163,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasUpdateNote => CommandLine.UpdateNote is not null;
 
-    public string TerminalNote => TerminalNoteFor(CommandLine) ?? "";
+    public string TerminalNote => CommandLine.TerminalNote ?? "";
 
-    public bool HasTerminalNote => TerminalNoteFor(CommandLine) is not null;
+    public bool HasTerminalNote => CommandLine.TerminalNote is not null;
 
     public bool UpdatesAvailable => _updates.Available;
 
@@ -181,8 +179,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public static string[] UpdatesNotes(IUpdates updates, string version) =>
         [.. updates.Refusal is { } refusal ? new[] { refusal } : [], .. Versions.IsBeta(version) ? new[] { BetaNote } : []];
-
-    public static string? TerminalNoteFor(CommandLineShown shown) => shown.Found is FoundCommandLine.Nowhere ? NewTerminals : null;
 
     // 24:00, the end of a day, shows as midnight, as the macOS pickers show it.
     public static TimeSpan TimeOfDay(ushort minutes) => TimeSpan.FromMinutes(minutes % MinutesInADay);

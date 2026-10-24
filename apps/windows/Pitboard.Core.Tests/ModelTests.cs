@@ -110,7 +110,10 @@ public sealed class ModelTests
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],
         Waiting: new WindowWaiting(WindowTitle: "Account", Shown: new WaitingShown.Reading(Title: "Reading accounts…")),
-        Closing: [], Deleting: [], Picker: null, Downloads: []);
+        Closing: [], Deleting: [], Picker: null, Downloads: [],
+        NoLink: new EmptyList(
+            Title: "No Link to Open",
+            Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."));
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
@@ -120,14 +123,14 @@ public sealed class ModelTests
         Activity: new ActivityShown(
             Lines: [], Empty: new EmptyList(Title: "No Activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
-            Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
+            Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null, TerminalNote: null),
         AtLimit: new AtLimitShown(
             Title: "Before an account runs out",
             Choice: AtLimit.Notify,
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
             AtLabel: "When a limit reaches 95%",
-            ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
+            ShareLabel: "Share of a limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
             Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
             NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false, Terms: Terms));
@@ -610,7 +613,7 @@ public sealed class ModelTests
                 Found: new FoundCommandLine.Bundled(Path: "/usr/local/bin/pitboard"),
                 InTerminal: "/usr/local/bin/pitboard",
                 UpdateNote: "The one inside this app, so it updates with the app.", OffersLink: false,
-                CannotLink: null),
+                CannotLink: null, TerminalNote: null),
         };
         var snapshot = Read(7) with { Machine = machine };
 

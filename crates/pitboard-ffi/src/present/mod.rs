@@ -16,11 +16,13 @@
 //! called from here.
 //!
 //! A button the snapshot offers comes with its words and what it sends, and with whether it
-//! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`
-//! or a `NoticeAction`, so a view never words an intent or decides whether to offer one, and
-//! both apps label and hold back one offer alike: a row's "Use", "Sign In Again…" or "Name…",
-//! what an account's own menu offers, the setup step's "Add Account…" and "Not Now", an empty
-//! pane's "Try Again", a window's "Clear" and a sheet's default button. A control an app always
+//! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`,
+//! a `NoticeAction` or a `WindowQuestion`'s answers, so a view never words an intent or
+//! decides whether to offer one, and both apps label and hold back one offer alike: a row's
+//! "Use", "Sign In Again…" or "Name…", what an account's own menu offers, the setup step's
+//! "Add Account…" and "Not Now", an empty pane's "Try Again", a window's "Clear", the quit
+//! question's "Quit Claude and Switch" and a sheet's default button, whose intent
+//! `check_name` gives. A control an app always
 //! has, such as its toolbar's and its menu's "Add Account…", "Refresh", "Settings…" or "Quit
 //! Pitboard", is the app's own, in its own catalog, held back where the snapshot says what it
 //! waits for is under way, and so is what is about the app's own system or done by the app

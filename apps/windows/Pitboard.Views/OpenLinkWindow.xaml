@@ -27,7 +27,7 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
     <StackPanel Spacing="12">
-      <local:EmptyState x:Name="Unavailable" Glyph="&#xE774;" Title="No link to open" />
+      <local:EmptyState x:Name="Unavailable" Glyph="&#xE774;" />
       <StackPanel x:Name="Waiting" Orientation="Horizontal" Spacing="12">
         <ProgressRing x:Name="WaitingRing" Width="20" Height="20" />
         <TextBlock x:Name="WaitingText" VerticalAlignment="Center" />
