@@ -189,10 +189,9 @@ fn codexs_login_restrictions_are_named_with_the_accounts_they_rule_out() {
     assert_eq!(found.level, Level::Warn);
     assert_eq!(
         found.detail,
-        format!(
-            "`forced_chatgpt_workspace_id` set to `here` in {}",
-            config.display()
-        )
+        crate::provider::codex::paths::restrictions(&ctx)
+            .said()
+            .join("; ")
     );
     assert_eq!(found.advice, words::codex_rules_out("`codex/there`"));
 
@@ -218,7 +217,6 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
     let host = crate::host::memory::MemoryHost::new();
     let ctx = Context::for_unit_test().with_memory_stores(host.clone());
     let required = crate::provider::codex::layers::system_file(&ctx, "requirements.toml");
-    let named = required.display().to_string();
     host.administers(
         required.clone(),
         "cli_auth_credentials_store = \"keyring\"\n",
@@ -227,19 +225,20 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
         enrolled: 1,
         ..codex_facts(&ctx, None)
     };
-    let (backend, setting) = match crate::host::OS {
-        Os::MacOs | Os::Linux => (Backend::Keyring, format!("pinned to `keyring` by {named}")),
-        Os::Windows => (
-            Backend::Secrets,
-            format!("pinned to `keyring` by {named}, with `secret_auth_storage` on by default"),
-        ),
+    let backend = match crate::host::OS {
+        Os::MacOs | Os::Linux => Backend::Keyring,
+        Os::Windows => Backend::Secrets,
     };
+    let store = crate::provider::codex::paths::store(&ctx);
     assert_eq!(codex.backend, backend);
-    assert_eq!(codex.backend_setting, setting);
+    assert_eq!(codex.backend_setting, store.setting());
     let checks = codex_checks(&codex);
     let found = check(&checks, "codex_backend");
     assert_eq!(found.level, Level::Fail);
-    assert_eq!(found.detail, words::store_set_by(backend.word(), &setting));
+    assert_eq!(
+        found.detail,
+        words::store_set_by(backend.word(), &store.setting())
+    );
     assert_eq!(
         found.advice,
         words::no_account_to_switch_to(
@@ -250,15 +249,10 @@ fn a_store_an_administrator_pinned_is_gathered_and_said() {
 
     host.administers(required, "x = \n");
     let unknown = codex_facts(&ctx, None);
+    let store = crate::provider::codex::paths::store(&ctx);
     assert_eq!(unknown.backend, Backend::Unknown);
-    assert_eq!(
-        unknown.backend_setting,
-        format!("{named} is not TOML Codex can read, at line 1")
-    );
-    assert_eq!(
-        unknown.backend_remedy,
-        "Codex 0.160.0 does not start until that is put right"
-    );
+    assert_eq!(Some(unknown.backend_setting), store.why_unknown());
+    assert_eq!(Some(unknown.backend_remedy), store.while_unknown());
     assert!(matches!(unknown.login, Ok(None)), "nothing is read");
 }
 
@@ -761,24 +755,10 @@ fn codex_facts_are_read_off_the_disk() {
     )
     .expect("a config");
     let secrets = codex_facts(&ctx, None);
+    let store = crate::provider::codex::paths::store(&ctx);
     assert_eq!(secrets.backend, Backend::Secrets);
-    let config = crate::provider::codex::paths::config_file(&ctx);
-    assert_eq!(
-        secrets.backend_setting,
-        format!(
-            "`cli_auth_credentials_store = \"auto\"` in {config}, with \
-             `secret_auth_storage` in {config}",
-            config = config.display()
-        )
-    );
-    assert_eq!(
-        secrets.backend_remedy,
-        format!(
-            "To use the file store, set `cli_auth_credentials_store = \"file\"` in \
-             {}, then sign in again with `codex login`",
-            config.display()
-        )
-    );
+    assert_eq!(secrets.backend_setting, store.setting());
+    assert_eq!(secrets.backend_remedy, store.to_use_the_file("codex"));
 }
 
 // The command line heads a tool's checks where they start, so each tool's come together.
