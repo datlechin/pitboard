@@ -405,23 +405,19 @@ mod tests {
         Key::new(ProviderId::Claude, "work")
     }
 
-    fn machine(name: &str) -> (Context, Arc<MemoryHost>, PathBuf) {
-        machine_on(MemoryHost::new(), name)
+    fn machine() -> (Context, Arc<MemoryHost>, tempfile::TempDir) {
+        machine_on(MemoryHost::new())
     }
 
-    fn machine_on(mem: Arc<MemoryHost>, name: &str) -> (Context, Arc<MemoryHost>, PathBuf) {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-pending-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
+    fn machine_on(mem: Arc<MemoryHost>) -> (Context, Arc<MemoryHost>, tempfile::TempDir) {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let ctx = Context::new(root.clone())
-            .with_pitboard_home(root.clone())
+            .with_pitboard_home(root)
             .with_memory_stores(Arc::clone(&mem))
             .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>);
         home::ensure(&ctx, Permit::for_a_test()).expect("a home");
-        (ctx, mem, root)
+        (ctx, mem, scratch)
     }
 
     fn oauth(refresh: &str) -> serde_json::Value {
@@ -452,7 +448,7 @@ mod tests {
 
     #[test]
     fn a_name_claimed_but_never_written_to_is_simply_dropped() {
-        let (ctx, _mem, root) = machine("never-written");
+        let (ctx, _mem, _root) = machine();
         reserve(
             &ctx,
             Permit::for_a_test(),
@@ -468,12 +464,11 @@ mod tests {
             0
         );
         assert!(outstanding(&ctx, None).is_empty());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn a_name_the_state_records_is_not_outstanding() {
-        let (ctx, _mem, root) = machine("recorded");
+        let (ctx, _mem, _root) = machine();
         let service = "pitboard-park-acc-1760000000000";
         reserve(&ctx, Permit::for_a_test(), service).expect("reserved");
         let mut state = State::default();
@@ -491,7 +486,6 @@ mod tests {
         assert!(outstanding(&ctx, Some(&state)).is_empty());
         assert_eq!(outstanding(&ctx, None), [service]);
         assert_eq!(outstanding(&ctx, Some(&State::default())), [service]);
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -500,7 +494,7 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes and removes no folder"
     )]
     fn a_folder_name_in_pending_is_never_asked_of_the_vault() {
-        let (ctx, mem, root) = machine("folder-line");
+        let (ctx, mem, _root) = machine();
         let (gone, unread) = ("pitboard-park-desktop_a-1", "pitboard-aside-2");
         let folder = store::folder::at(&ctx, unread);
         std::fs::create_dir_all(folder.join("items")).unwrap();
@@ -531,7 +525,6 @@ mod tests {
             "a folder's line is written back as a folder's"
         );
         assert!(folder.join("items/Cookies").exists());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -540,7 +533,7 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes and removes no folder"
     )]
     fn an_orphan_folder_is_set_aside_and_a_vault_orphan_is_deleted_as_before() {
-        let (ctx, mem, root) = machine("orphans");
+        let (ctx, mem, _root) = machine();
         let (vault, folder) = (
             "pitboard-park-acc-1760000000000",
             "pitboard-park-desktop_a-1",
@@ -578,7 +571,6 @@ mod tests {
         assert!(!path(&ctx).exists(), "both lines resolved");
         let saved = crate::state::load(&ctx).expect("saved");
         assert_eq!(saved.aside, state.aside);
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -587,7 +579,7 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes and removes no folder"
     )]
     fn a_sweep_killed_between_its_two_writes_leaves_no_login_unnamed() {
-        let (ctx, mem, root) = machine("killed");
+        let (ctx, mem, _root) = machine();
         let (vault, folder) = (
             "pitboard-park-acc-1760000000000",
             "pitboard-park-desktop_a-1",
@@ -621,12 +613,11 @@ mod tests {
         assert!(!path(&ctx).exists(), "both lines dropped");
         assert_eq!(state.aside.len(), 1);
         assert!(kept.join("items/Cookies").exists());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn an_orphan_goes_back_to_the_account_whose_name_it_carries() {
-        let (ctx, mem, root) = machine("adopt");
+        let (ctx, mem, _root) = machine();
         let service = "pitboard-park-acc-1760000000000";
         reserve(&ctx, Permit::for_a_test(), service).expect("reserved");
         mem.vault().plant(service, &oauth("r").to_string());
@@ -653,17 +644,15 @@ mod tests {
         );
         assert!(state.foreign.is_empty(), "this Pitboard wrote it");
         assert!(outstanding(&ctx, None).is_empty());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// The account a name was written for, holding `held`, with `orphan` in the vault under
     /// a name this Pitboard wrote down and nothing recorded.
     fn holding(
-        name: &str,
         held: (&str, &str, i64),
         orphan: (&str, &str),
-    ) -> (Context, State, PathBuf) {
-        let (ctx, mem, root) = machine(name);
+    ) -> (Context, State, tempfile::TempDir) {
+        let (ctx, mem, root) = machine();
         mem.vault().plant(held.0, &oauth(held.1).to_string());
         mem.vault().plant(orphan.0, &oauth(orphan.1).to_string());
         reserve(&ctx, Permit::for_a_test(), orphan.0).expect("reserved");
@@ -694,7 +683,7 @@ mod tests {
     fn a_second_copy_of_the_chain_an_account_holds_is_deleted() {
         let held = "pitboard-park-acc-1750000000000";
         let orphan = "pitboard-park-acc-1760000000000";
-        let (ctx, mut state, root) = holding("same-chain", (held, "r", NOW), (orphan, "r"));
+        let (ctx, mut state, _root) = holding((held, "r", NOW), (orphan, "r"));
 
         assert_eq!(
             sweep(&ctx, Permit::for_a_test(), &mut state)
@@ -705,7 +694,6 @@ mod tests {
         assert_eq!(parked(&state).as_deref(), Some(held));
         assert!(state.discarded.iter().any(|d| d.service == orphan));
         assert!(outstanding(&ctx, None).is_empty());
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// An orphan older than what the account holds is left over from before it, and the
@@ -714,7 +702,7 @@ mod tests {
     fn an_older_copy_than_the_one_an_account_holds_is_deleted() {
         let held = "pitboard-park-acc-1760000000000";
         let orphan = "pitboard-park-acc-1750000000000";
-        let (ctx, mut state, root) = holding("older", (held, "held", NOW), (orphan, "orphan"));
+        let (ctx, mut state, _root) = holding((held, "held", NOW), (orphan, "orphan"));
 
         assert_eq!(
             sweep(&ctx, Permit::for_a_test(), &mut state)
@@ -724,7 +712,6 @@ mod tests {
         );
         assert_eq!(parked(&state).as_deref(), Some(held));
         assert!(state.discarded.iter().any(|d| d.service == orphan));
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// A newer copy this Pitboard wrote and never recorded is what a renewal killed between
@@ -734,8 +721,7 @@ mod tests {
     fn a_newer_copy_written_here_replaces_the_one_an_account_holds() {
         let held = "pitboard-park-acc-1750000000000";
         let orphan = "pitboard-park-acc-1760000000000";
-        let (ctx, mut state, root) =
-            holding("newer", (held, "spent", 1_750_000_000), (orphan, "fresh"));
+        let (ctx, mut state, _root) = holding((held, "spent", 1_750_000_000), (orphan, "fresh"));
 
         let reclaimed = sweep(&ctx, Permit::for_a_test(), &mut state).expect("swept");
         assert_eq!(reclaimed.given_back.len(), 1);
@@ -744,13 +730,12 @@ mod tests {
             state.discarded.iter().any(|d| d.service == held),
             "the spent copy goes"
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// A store that could not answer says nothing about what is in it.
     #[test]
     fn an_item_that_cannot_be_read_stays_listed_rather_than_being_guessed_at() {
-        let (ctx, mem, root) = machine("unreadable");
+        let (ctx, mem, _root) = machine();
         let service = "pitboard-park-acc-1760000000000";
         reserve(&ctx, Permit::for_a_test(), service).expect("reserved");
         mem.vault().plant(service, &oauth("r").to_string());
@@ -768,13 +753,12 @@ mod tests {
         );
         assert_eq!(outstanding(&ctx, None), vec![service.to_string()]);
         assert!(state.discarded.is_empty(), "nothing is deleted on a guess");
-        let _ = std::fs::remove_dir_all(root);
     }
 
     // Windows' vault is this home's alone, and a park there that will not open is still kept.
     #[test]
     fn a_sealed_park_that_will_not_open_is_never_deleted() {
-        let (ctx, mem, root) = machine_on(MemoryHost::sealed(), "sealed-unopened");
+        let (ctx, mem, _root) = machine_on(MemoryHost::sealed());
         assert_eq!(ctx.host().vault(&ctx).kind(), store::Backend::SealedFile);
         assert!(!store::vault_is_shared(&ctx));
         let ours = "pitboard-park-acc-1760000000000";
@@ -821,7 +805,6 @@ mod tests {
                 "{service} is still there"
             );
         }
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// The case the list alone cannot answer: a login in the vault that Pitboard never
@@ -829,7 +812,7 @@ mod tests {
     /// version that kept no list. Only asking the store finds it.
     #[test]
     fn asking_the_store_finds_a_login_the_list_never_knew_about() {
-        let (ctx, mem, root) = machine("reclaim");
+        let (ctx, mem, _root) = machine();
         let service = "pitboard-park-acc-1760000000000";
         mem.vault().plant(service, &oauth("r").to_string());
         assert!(
@@ -866,7 +849,6 @@ mod tests {
             vec![service.to_string()],
             "nothing says this Pitboard wrote it, so it may be another's"
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// A login for an account this machine has never heard of. Keeping it would be keeping
@@ -877,7 +859,7 @@ mod tests {
     /// it would end that account's session for somebody who never ran this command.
     #[test]
     fn a_login_this_pitboard_never_wrote_down_is_reported_and_not_touched() {
-        let (ctx, mem, root) = machine("stranger");
+        let (ctx, mem, _root) = machine();
         let service = "pitboard-park-stranger-1760000000000";
         mem.vault().plant(service, &oauth("r").to_string());
 
@@ -896,14 +878,13 @@ mod tests {
             Some(oauth("r").to_string().as_str()),
             "it is still there"
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     /// The one case where being sure is possible: this Pitboard wrote the name down, wrote
     /// a login into it, and nothing here recorded it.
     #[test]
     fn a_login_this_pitboard_wrote_down_and_nothing_wants_is_deleted() {
-        let (ctx, mem, root) = machine("our-orphan");
+        let (ctx, mem, _root) = machine();
         let service = "pitboard-park-stranger-1760000000000";
         mem.vault().plant(service, &oauth("r").to_string());
         reserve(&ctx, Permit::for_a_test(), service).expect("written down first");
@@ -914,12 +895,11 @@ mod tests {
         assert_eq!(reclaimed.deleted, vec![service.to_string()]);
         assert!(reclaimed.strangers.is_empty());
         assert!(state.discarded.iter().any(|d| d.service == service));
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
     fn a_name_the_state_already_carries_is_not_swept_at_all() {
-        let (ctx, mem, root) = machine("already-named");
+        let (ctx, mem, _root) = machine();
         let service = "pitboard-park-acc-1760000000000";
         reserve(&ctx, Permit::for_a_test(), service).expect("reserved");
         mem.vault().plant(service, &oauth("r").to_string());
@@ -944,6 +924,5 @@ mod tests {
         );
         assert!(outstanding(&ctx, None).is_empty());
         assert!(state.discarded.is_empty());
-        let _ = std::fs::remove_dir_all(root);
     }
 }

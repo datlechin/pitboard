@@ -8,7 +8,8 @@ use pitboard_core::testing::lies_in;
 
 #[test]
 fn a_folder_that_is_holds_or_lies_in_a_login_place_clashes() {
-    let root = std::env::temp_dir().join(format!("pitboard-clash-{}", std::process::id()));
+    let scratch = tempfile::tempdir().unwrap();
+    let root = scratch.path();
     let place = root.join("home").join(".claude");
     std::fs::create_dir_all(&place).unwrap();
     for scratch in [
@@ -22,17 +23,16 @@ fn a_folder_that_is_holds_or_lies_in_a_login_place_clashes() {
     for scratch in [root.join("home").join(".claudex"), root.join("elsewhere")] {
         assert!(!lies_in(&scratch, &place), "{}", scratch.display());
     }
-    std::fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
 fn a_link_into_a_login_place_clashes() {
-    let root = std::env::temp_dir().join(format!("pitboard-clash-link-{}", std::process::id()));
+    let scratch = tempfile::tempdir().unwrap();
+    let root = scratch.path();
     let place = root.join(".codex");
     std::fs::create_dir_all(&place).unwrap();
     files::link_dir(&place, &root.join("through")).unwrap();
     assert!(lies_in(&root.join("through").join("inside"), &place));
-    std::fs::remove_dir_all(&root).unwrap();
 }
 
 // /System/Volumes/Data/Users is /Users, and `canonicalize` keeps either name as it is.
@@ -42,14 +42,14 @@ fn a_link_into_a_login_place_clashes() {
     ignore = "a firmlink to the Data volume is macOS's own"
 )]
 fn a_folder_named_through_the_data_volume_clashes() {
-    let root = std::env::temp_dir().join(format!("pitboard-clash-data-{}", std::process::id()));
+    let scratch = tempfile::tempdir().unwrap();
+    let root = scratch.path();
     let place = root.join(".claude");
     std::fs::create_dir_all(&place).unwrap();
     let real = std::fs::canonicalize(&place).unwrap();
     let through =
         std::path::Path::new("/System/Volumes/Data").join(real.strip_prefix("/").unwrap());
     let caught = lies_in(&through.join("inside"), &place);
-    std::fs::remove_dir_all(&root).unwrap();
     assert!(caught, "{}", through.display());
 }
 

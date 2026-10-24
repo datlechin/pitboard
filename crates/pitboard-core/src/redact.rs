@@ -321,9 +321,12 @@ mod tests {
     #[test]
     fn a_report_from_windows_hides_its_profile_local_app_data_and_user() {
         use crate::context::Environment;
-        let profile = std::env::temp_dir().join(format!("pitboard redact {}", std::process::id()));
-        let local = std::env::temp_dir().join("pitboard-redact-local");
-        std::fs::create_dir_all(&profile).expect("a scratch profile");
+        let scratch = tempfile::Builder::new()
+            .prefix("pitboard redact ")
+            .tempdir()
+            .expect("a scratch profile");
+        let profile = scratch.path().to_path_buf();
+        let local = profile.join("local");
         let named = |path: &std::path::Path| path.to_string_lossy().into_owned();
         let env = Environment::on(
             Os::Windows,
@@ -345,15 +348,14 @@ mod tests {
             assert_eq!(sheet.over(&named(&short)), "~", "{}", short.display());
         }
         assert!(sheet.over("dana test").starts_with("<user "));
-        let _ = std::fs::remove_dir_all(&profile);
     }
 
     // The SID as `icacls` advice names it, and as Windows compares one.
     #[test]
     fn a_report_from_windows_hides_the_persons_sid_in_every_form() {
         use crate::context::Environment;
-        let profile =
-            std::env::temp_dir().join(format!("pitboard-redact-sid-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let profile = scratch.path().join("profile");
         let env = Environment::on(
             Os::Windows,
             [("USERPROFILE", profile.to_string_lossy().into_owned())],

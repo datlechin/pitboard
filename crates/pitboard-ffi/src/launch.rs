@@ -1330,11 +1330,8 @@ mod tests {
     #[test]
     fn the_app_is_refused_at_launch_where_every_change_is() {
         use pitboard_core::host::{Elevation, Floor};
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-launch-refusal-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let refused = |set: &dyn Fn(&pitboard_core::testing::MemoryHost), pitboard: PathBuf| {
             let host = pitboard_core::testing::MemoryHost::new();
             set(&host);
@@ -1415,12 +1412,8 @@ mod tests {
     /// installed. The same app with its default home installs it.
     #[test]
     fn the_app_schedules_nothing_where_pitboard_home_is_another_directory() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-app-schedule-home-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let helper = home.join("Applications/Pitboard.app/Contents/Helpers/pitboard");
         std::fs::create_dir_all(helper.parent().expect("its folder")).expect("made");
         std::fs::write(&helper, "").expect("a command line");
@@ -1457,7 +1450,6 @@ mod tests {
             Some(Schedule::Installed { .. })
         ));
         assert_eq!(elsewhere.schedule_uninstall().ok(), Some(true));
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// Where a home the environment names is empty or relative, the app's core reads nothing
@@ -1469,11 +1461,8 @@ mod tests {
     #[test]
     fn the_apps_core_reads_nothing_under_a_home_that_is_not_a_full_path() {
         // `/Users/x` is no full path on Windows; this one is everywhere, and is never made.
-        let full = std::env::temp_dir().join(format!(
-            "pitboard-app-no-full-home-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let full = scratch.path().join("home");
         assert!(!full.exists(), "{} is there already", full.display());
         for (home, pitboard, variable) in [
             (
@@ -1696,9 +1685,8 @@ mod tests {
     #[test]
     fn the_apps_core_is_made_from_the_environment_it_was_started_with() {
         // A home of its own, so Claude Code's slot is hashed from it and nothing real is read.
-        let home = std::env::temp_dir().join(format!("pitboard-ffi-app-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).expect("a scratch home");
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let home = scratch.path();
         let at = |name: &str| home.join(name).to_string_lossy().into_owned();
         let (pitboard, claude, codex) = (at("pitboard"), at("claude"), at("codex"));
         let core = AppCore::for_app(
@@ -1722,6 +1710,5 @@ mod tests {
             panic!("an app outside a bundle scheduled itself");
         };
         assert_eq!(code, "schedule_program_unnamed");
-        let _ = std::fs::remove_dir_all(&home);
     }
 }

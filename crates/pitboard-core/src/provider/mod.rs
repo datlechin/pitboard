@@ -1062,7 +1062,7 @@ mod tests {
     }
 
     // Nothing here is ever run.
-    struct Prefix(std::path::PathBuf);
+    struct Prefix(tempfile::TempDir);
 
     fn file_of(program: &str) -> String {
         format!("{program}{}", std::env::consts::EXE_SUFFIX)
@@ -1073,14 +1073,9 @@ mod tests {
     }
 
     impl Prefix {
-        fn new(name: &str) -> Prefix {
-            let root = std::env::temp_dir().join(format!(
-                "pitboard-search-path-{name}-{}-{:?}",
-                std::process::id(),
-                std::thread::current().id()
-            ));
-            let _ = std::fs::remove_dir_all(&root);
-            let bin = root.join("npm").join("bin");
+        fn new() -> Prefix {
+            let root = tempfile::tempdir().expect("a scratch prefix");
+            let bin = root.path().join("npm").join("bin");
             std::fs::create_dir_all(&bin).expect("a scratch prefix");
             for tool in documents().map(|tool| tool.id()) {
                 let program = bin.join(file_of(tool.program()));
@@ -1091,7 +1086,7 @@ mod tests {
         }
 
         fn bin(&self) -> std::path::PathBuf {
-            self.0.join("npm").join("bin")
+            self.0.path().join("npm").join("bin")
         }
 
         fn program(&self, tool: ProviderId) -> std::path::PathBuf {
@@ -1100,12 +1095,12 @@ mod tests {
 
         // Where no folder is.
         fn nowhere(&self) -> std::path::PathBuf {
-            self.0.join("nowhere")
+            self.0.path().join("nowhere")
         }
 
         // A folder of each program's name, and a file of it nobody may run.
         fn decoys(&self) -> (std::path::PathBuf, std::path::PathBuf) {
-            let (dirs, files) = (self.0.join("dirs"), self.0.join("files"));
+            let (dirs, files) = (self.0.path().join("dirs"), self.0.path().join("files"));
             for tool in documents().map(|tool| tool.id()) {
                 std::fs::create_dir_all(dirs.join(file_of(tool.program()))).expect("a directory");
                 std::fs::create_dir_all(&files).expect("a directory");
@@ -1114,12 +1109,6 @@ mod tests {
                 crate::host::fs::testing::deny_running(&file).expect("nobody may run it");
             }
             (dirs, files)
-        }
-    }
-
-    impl Drop for Prefix {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -1133,7 +1122,7 @@ mod tests {
     // An app opened from Finder has only the system's folders on its own `PATH`.
     #[test]
     fn a_program_is_looked_for_on_the_search_path_it_is_given() {
-        let prefix = Prefix::new("find");
+        let prefix = Prefix::new();
         let search = joined(&[&prefix.nowhere(), &prefix.bin()]);
         let lookup = crate::host::program::Lookup::here();
         let found = crate::host::program::find(std::path::Path::new("codex"), &search, &lookup);
@@ -1151,7 +1140,7 @@ mod tests {
 
     #[test]
     fn what_cannot_be_run_is_passed_over() {
-        let prefix = Prefix::new("decoys");
+        let prefix = Prefix::new();
         let (dirs, files) = prefix.decoys();
         let search = joined(&[&dirs, &files, &prefix.bin()]);
         let lookup = crate::host::program::Lookup::here();
@@ -1172,7 +1161,7 @@ mod tests {
     // Its folder first would change which `node` an npm script finds from the terminal's.
     #[test]
     fn a_sign_in_runs_the_program_found_with_the_search_path_as_it_is() {
-        let prefix = Prefix::new("sign-in");
+        let prefix = Prefix::new();
         let search = joined(&[&prefix.nowhere(), &prefix.bin()]);
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
             .with_search_path(search.to_string_lossy().into_owned());
@@ -1191,8 +1180,11 @@ mod tests {
     // An npm script names `node` through `env`, and `node` is beside it.
     #[test]
     fn a_program_named_outright_is_run_with_its_own_directory_on_path() {
-        let prefix = Prefix::new("named");
-        let (system, other) = (prefix.0.join("system"), prefix.0.join("other"));
+        let prefix = Prefix::new();
+        let (system, other) = (
+            prefix.0.path().join("system"),
+            prefix.0.path().join("other"),
+        );
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
             .with_claude_program(prefix.program(ProviderId::Claude))
             .with_codex_program(prefix.program(ProviderId::Codex))
@@ -1228,7 +1220,7 @@ mod tests {
     // std's `Command` looks for a bare name beside Pitboard first on Windows (RF-F3).
     #[test]
     fn a_program_found_nowhere_is_started_by_its_bare_name_only_off_windows() {
-        let prefix = Prefix::new("nowhere");
+        let prefix = Prefix::new();
         let nowhere = prefix.nowhere();
         let dir = std::path::Path::new("/tmp/pitboard-signin-scratch");
         for os in [
@@ -1239,8 +1231,8 @@ mod tests {
             let env = crate::context::Environment::on(
                 os,
                 [
-                    ("HOME", prefix.0.as_os_str()),
-                    ("USERPROFILE", prefix.0.as_os_str()),
+                    ("HOME", prefix.0.path().as_os_str()),
+                    ("USERPROFILE", prefix.0.path().as_os_str()),
                     ("PATH", nowhere.as_os_str()),
                 ],
             );
@@ -1306,8 +1298,8 @@ mod tests {
     // npm's own `codex.cmd` and `claude.cmd`, as `npm install -g` leaves them on Windows.
     #[test]
     fn behind_npms_shim_a_sign_in_starts_the_program_the_shim_would() {
-        let prefix = Prefix::new("npm-shim");
-        let npm = prefix.0.join("npm");
+        let prefix = Prefix::new();
+        let npm = prefix.0.path().join("npm");
         let claude = a_program_at(&under(
             &npm,
             &[
@@ -1383,8 +1375,8 @@ mod tests {
     // Where the platform's package sits beside Codex's, or is missing, or the shim is not npm's.
     #[test]
     fn behind_any_other_cmd_a_sign_in_starts_the_cmd() {
-        let prefix = Prefix::new("npm-hoisted");
-        let npm = prefix.0.join("npm");
+        let prefix = Prefix::new();
+        let npm = prefix.0.path().join("npm");
         let package = under(&npm, &["node_modules", "@openai", "codex"]);
         a_program_at(&package.join("bin").join("codex.js"));
         npm_shim(

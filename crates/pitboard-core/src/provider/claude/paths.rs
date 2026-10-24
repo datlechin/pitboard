@@ -388,8 +388,8 @@ mod tests {
     // Bun 1.4.3's realpath is libuv's, which takes `\\?\` off what Windows gives.
     #[test]
     fn the_legacy_lock_is_named_as_bun_spells_its_folder() {
-        let root =
-            std::env::temp_dir().join(format!("pitboard-legacy-lock-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().to_path_buf();
         std::fs::create_dir_all(root.join("claude")).expect("a scratch config dir");
         let ctx = Context::new(root.clone())
             .with_claude_config_dir(root.join(".").join("claude").to_string_lossy().into());
@@ -608,7 +608,8 @@ mod tests {
     #[test]
     fn git_bash_is_found_where_claude_code_finds_it() {
         let windows = Lookup::new(Os::Windows, None);
-        let git = std::env::temp_dir().join("Git");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let git = scratch.path().join("Git");
         let search = std::env::join_paths([git.join("cmd")]).expect("a search path");
         let beside_git = git.join("bin").join("bash.exe");
         let named = |path: &str| Some(PathBuf::from(path));
@@ -658,7 +659,8 @@ mod tests {
     #[test]
     fn powershell_is_found_where_claude_code_finds_it() {
         let windows = Lookup::new(Os::Windows, None);
-        let bin = std::env::temp_dir().join("bin");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let bin = scratch.path().join("bin");
         let search = std::env::join_paths([bin.clone()]).expect("a search path");
         let (program_files, local, profile) = (
             PathBuf::from(r"C:\Program Files"),

@@ -232,7 +232,8 @@ mod tests {
 
     #[test]
     fn a_build_for_tests_counts_its_scratch_app_alone() {
-        let scratch = std::env::temp_dir().join(format!("pitboard-running-{}", std::process::id()));
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("claude");
         let ctx = Context::for_unit_test().with_scratch_claude(scratch.clone());
         let root = scratch.join("data");
         let own = scratch.join("Claude.app/Contents/MacOS/Claude");

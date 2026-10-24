@@ -1986,7 +1986,7 @@ mod tests {
 
     /// `ctx` with each tool's program named where there is none.
     fn nowhere(ctx: &Context) -> Context {
-        let missing = std::env::temp_dir().join("pitboard-no-such-directory");
+        let missing = ctx.home().join("no-such-directory");
         ctx.clone()
             .with_claude_program(missing.join("claude"))
             .with_codex_program(missing.join("codex"))

@@ -341,23 +341,14 @@ pub mod testing {
 mod tests {
     use super::*;
 
-    fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-host-fs-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
-    }
-
     fn mode(p: &Path) -> u32 {
         std::fs::metadata(p).unwrap().permissions().mode() & 0o777
     }
 
     #[test]
     fn a_folder_is_private_only_where_it_is_this_users_own_directory_closed_to_others() {
-        let dir = scratch("private");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         assert_eq!(private_dir(&dir).unwrap(), Private::Missing);
         create_private_dir(Permit::for_a_test(), &dir).unwrap();
         assert_eq!(private_dir(&dir).unwrap(), Private::Yes);
@@ -379,13 +370,13 @@ mod tests {
             assert_eq!(private_dir(Path::new("/")).unwrap(), Private::NotOwn);
         }
         std::fs::remove_file(&link).unwrap();
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_rename_never_lands_on_something_already_there() {
         use std::os::unix::fs::MetadataExt;
-        let dir = scratch("move-new");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let permit = Permit::for_a_test();
         create_private_dir(permit, &dir).unwrap();
         let (from, to) = (dir.join("from"), dir.join("to"));
@@ -428,7 +419,6 @@ mod tests {
             "a move keeps the inode"
         );
         assert!(!from.exists());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -449,19 +439,20 @@ mod tests {
 
     #[test]
     fn one_scratch_folder_is_one_volume_and_a_missing_path_asks_its_parent() {
-        let dir = scratch("volume");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         create_private_dir(Permit::for_a_test(), &dir).unwrap();
         assert!(same_volume(&dir, &dir.join("not/made/yet")).unwrap());
         // devfs on macOS, devtmpfs on Linux: never the volume a scratch folder is on
         assert!(!same_volume(&dir, Path::new("/dev")).unwrap());
         assert!(flush_dir(&dir).is_ok());
         assert!(flush_dir(&dir.join("missing")).is_err());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_locked_folder_refuses_a_second_lock() {
-        let dir = scratch("lock");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         create_private_dir(Permit::for_a_test(), &dir).unwrap();
         let before: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().collect();
         let held = lock_dir(&dir).unwrap();
@@ -478,12 +469,12 @@ mod tests {
             0,
             "nothing written"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn created_directories_are_private_and_existing_ones_keep_their_mode() {
-        let scratch = scratch("dirs");
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("dir");
         let permit = Permit::for_a_test();
         create_private_dir(permit, &scratch.join("nested")).unwrap();
         assert_eq!(
@@ -500,7 +491,6 @@ mod tests {
             0o755,
             "a directory the user named is theirs to set"
         );
-        std::fs::remove_dir_all(&scratch).unwrap();
     }
 
     /// Each way the face makes a file makes it private. One to add to or to lock that is
@@ -509,7 +499,8 @@ mod tests {
     #[test]
     fn a_file_created_private_is_private_however_the_umask_is_set() {
         use std::io::Write;
-        let dir = scratch("file");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let permit = Permit::for_a_test();
         create_private_dir(permit, &dir).unwrap();
         let (fresh, history, lock) = (
@@ -557,14 +548,14 @@ mod tests {
             !dir.join("elsewhere").exists(),
             "and nothing is written through it"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// What a test or a fixture sets up through `testing` is what each says, and a link leads
     /// where it was asked to.
     #[test]
     fn each_way_a_test_sets_a_file_up_does_what_it_says() {
-        let dir = scratch("testing");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("file");
         std::fs::write(&file, "").unwrap();
@@ -604,6 +595,5 @@ mod tests {
             "read from the link's own directory"
         );
         assert!(dir.join("to-folder").is_dir());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

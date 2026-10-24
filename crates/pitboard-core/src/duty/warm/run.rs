@@ -174,8 +174,8 @@ mod tests {
 
     #[test]
     fn a_home_is_made_afresh_for_each_run() {
-        let dir = std::env::temp_dir().join(format!("pitboard-warm-home-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let home = dir.join("warm").join("claude");
         prepare(Permit::for_a_test(), &home).expect("made");
         std::fs::write(home.join("home").join("left.json"), "{}").expect("written");
@@ -190,6 +190,5 @@ mod tests {
         }
         clear(Permit::for_a_test(), &home);
         assert!(!home.exists());
-        std::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

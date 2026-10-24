@@ -145,12 +145,11 @@ mod tests {
 
     #[test]
     fn a_record_that_cannot_be_read_is_nothing_kept() {
-        let dir = std::env::temp_dir().join(format!("pitboard-ledger-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("dir");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         let path = dir.join("kept.json");
         std::fs::write(&path, "not json").expect("write");
         let kept: BTreeMap<String, Tries> = load(&path);
         assert!(kept.is_empty());
-        std::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

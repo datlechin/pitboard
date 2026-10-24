@@ -98,6 +98,8 @@ const SECURITY: &str = "/usr/bin/security";
 
 pub(crate) struct Env {
     pub root: PathBuf,
+    // `root`'s, taken away once the drop below has deleted what outlives it.
+    scratch: tempfile::TempDir,
     pub service: String,
     name: String,
     /// Stands in for Anthropic. It answers who a token belongs to exactly the way the real
@@ -145,11 +147,12 @@ impl Env {
     pub(crate) fn new(name: &str) -> Env {
         let fresh = TAKEN.lock().unwrap().insert(name.to_owned());
         assert!(fresh, "another Env in this process is named {name:?}");
-        let root = std::env::temp_dir().join(format!("pitboard-e2e-{}-{name}", std::process::id()));
-        // Before anything there is emptied.
+        let scratch = tempfile::Builder::new()
+            .prefix(&format!("pitboard-e2e-{name}-"))
+            .tempdir()
+            .unwrap();
+        let root = scratch.path().to_path_buf();
         refuse_a_real_login_place(&root);
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
         os::make_account_folders(&root);
 
         let service = pitboard_core::testing::service_for_dir(&root.to_string_lossy());
@@ -174,6 +177,7 @@ impl Env {
             .create();
         Env {
             root,
+            scratch,
             service,
             name: name.to_string(),
             server,
@@ -1280,8 +1284,7 @@ const SEALS_NOTHING: &str = "Claude Code keeps no login sealed: only Pitboard's 
 
 impl Drop for Env {
     fn drop(&mut self) {
-        // A login kept in a file lives under `root`, which the final line removes. One kept
-        // in the keychain outlives it, and is deleted by name.
+        // A login in the keychain outlives `scratch`, so it is deleted by name.
         // Refused names are left with a warning: a panic while unwinding aborts the test binary.
         let ours = |service: &&String| {
             let why = pitboard_core::provider::names::refusal(
@@ -1312,7 +1315,6 @@ impl Drop for Env {
         if let Err(why) = pitboard_core::testing::credman::sweep(&self.context(), &self.service) {
             eprintln!("{} could not be deleted: {why}", self.service);
         }
-        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 

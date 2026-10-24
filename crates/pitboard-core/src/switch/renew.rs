@@ -339,30 +339,20 @@ mod tests {
         ctx: Context,
         mem: Arc<MemoryHost>,
         api: Arc<ScriptedApi>,
-        home: std::path::PathBuf,
+        home: tempfile::TempDir,
     }
 
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.home);
-        }
-    }
-
-    // A clock that stands still.
     fn machine(name: &str) -> Scratch {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-renew-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).expect("a scratch home");
+        let home = tempfile::Builder::new()
+            .prefix(&format!("pitboard-renew-{name}-"))
+            .tempdir()
+            .expect("a scratch home");
         let ScratchMachine {
             ctx,
             host: mem,
             api,
-        } = ScratchMachine::at(&home, |ctx| {
-            ctx.with_pitboard_home(home.clone())
+        } = ScratchMachine::at(home.path(), |ctx| {
+            ctx.with_pitboard_home(home.path().to_path_buf())
                 .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn crate::time::Clock>)
         });
         Scratch {
@@ -678,7 +668,10 @@ mod tests {
                 .ctx
                 .clone()
                 .with_pitboard_home(m.ctx.default_pitboard_home());
-            let elsewhere = m.ctx.clone().with_pitboard_home(m.home.join("elsewhere"));
+            let elsewhere = m
+                .ctx
+                .clone()
+                .with_pitboard_home(m.home.path().join("elsewhere"));
             park_in(&default, "work", "default-old", NOW - 1);
             park_in(&elsewhere, "other", "elsewhere-old", NOW - 1);
             m.api.renews("default-old", fresh("default-new"));

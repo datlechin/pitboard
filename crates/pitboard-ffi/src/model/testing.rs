@@ -1341,7 +1341,7 @@ pub(super) fn holding_ask(job: &Job) -> bool {
 /// keychain, the vault and the scheduler in memory, and Anthropic scripted. Nothing of the
 /// machine running the tests is read: no environment, no `PATH`, no login shell.
 pub(super) struct World {
-    root: PathBuf,
+    root: tempfile::TempDir,
     pitboard: PathBuf,
     pub host: Arc<MemoryHost>,
     pub api: Arc<ScriptedApi>,
@@ -1369,13 +1369,12 @@ pub(super) fn program_name(name: &str) -> String {
 
 impl World {
     pub(super) fn new(name: &str) -> World {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-model-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).expect("a scratch home");
+        // Named after the test, so a path in a failure says whose it is.
+        let scratch = tempfile::Builder::new()
+            .prefix(&format!("pitboard-model-{name}-"))
+            .tempdir()
+            .expect("a scratch home");
+        let root = scratch.path();
         let claude = root.join("bin").join(program_name("claude"));
         std::fs::create_dir_all(root.join("bin")).expect("a scratch bin");
         stand_in::install(
@@ -1383,7 +1382,7 @@ impl World {
             &stand_in::Script::refusing("a test's Claude Code, never meant to run\n"),
         )
         .expect("a Claude Code to find");
-        let ScratchMachine { ctx, host, api } = ScratchMachine::at(&root, |ctx| {
+        let ScratchMachine { ctx, host, api } = ScratchMachine::at(root, |ctx| {
             ctx.with_pitboard_home(root.join(".pitboard"))
                 .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
                 .with_user("tester".into())
@@ -1397,7 +1396,7 @@ impl World {
         let (cores, cores_gone) = channel();
         World {
             pitboard: root.join(".pitboard"),
-            root,
+            root: scratch,
             host,
             api,
             ctx,
@@ -1438,7 +1437,7 @@ impl World {
 
     // Claude Code's program taken away, as on a machine where it was never installed.
     pub(super) fn without_claude_code(&self) {
-        std::fs::remove_file(self.root.join("bin").join(program_name("claude")))
+        std::fs::remove_file(self.root.path().join("bin").join(program_name("claude")))
             .expect("the world's Claude Code");
     }
 
@@ -1479,10 +1478,12 @@ impl World {
         let helper = match OS {
             Os::MacOs | Os::Linux => self
                 .root
+                .path()
                 .join(dir)
                 .join("Pitboard.app/Contents/Helpers/pitboard"),
             Os::Windows => self
                 .root
+                .path()
                 .join(dir)
                 .join("Pitboard")
                 .join("bin")
@@ -1506,7 +1507,7 @@ impl World {
 
     /// A directory of the scratch home.
     pub(super) fn dir(&self, name: &str) -> PathBuf {
-        self.root.join(name)
+        self.root.path().join(name)
     }
 
     /// Another front end on the same machine, as the command line in a terminal is.
@@ -1560,7 +1561,7 @@ impl World {
         let login = self.claude_login(who, percent);
         self.host.live().plant(&live_service(&self.ctx), &login);
         std::fs::write(
-            self.root.join(".claude.json"),
+            self.root.path().join(".claude.json"),
             format!(
                 r#"{{"oauthAccount":{{"accountUuid":"{who}","emailAddress":"{who}@example.com","organizationUuid":"org-{who}"}}}}"#
             ),
@@ -1594,7 +1595,7 @@ impl World {
     /// The file behind the keychain, `.credentials.json` in Claude Code's own directory.
     pub(super) fn left_file(&self) -> Arc<pitboard_core::testing::MemoryStore> {
         self.host
-            .file_at(self.root.join(".claude").join(".credentials.json"))
+            .file_at(self.root.path().join(".claude").join(".credentials.json"))
     }
 
     /// A switch to Claude Code's `label` that nothing can finish, as the core leaves one.
@@ -1651,13 +1652,13 @@ impl World {
 
     fn a_claude_stand_in(&mut self, holding: bool) -> StandIn {
         use pitboard_core::testing::stand_in::{self, Script, Step};
-        let bin = self.root.join("bin");
+        let bin = self.root.path().join("bin");
         std::fs::create_dir_all(&bin).expect("a scratch bin");
         let stand_in = StandIn {
-            pid: self.root.join("claude.pid"),
-            typed: self.root.join("claude.typed"),
-            holder: self.root.join("holder.pid"),
-            holding: self.root.join("holding"),
+            pid: self.root.path().join("claude.pid"),
+            typed: self.root.path().join("claude.typed"),
+            holder: self.root.path().join("holder.pid"),
+            holding: self.root.path().join("holding"),
         };
         let mut steps = vec![Step::WritesItsPid(stand_in.pid.clone())];
         // Another of itself, which holds the output it was started with for as long as
@@ -1763,7 +1764,7 @@ impl World {
     /// `lock::acquire` put it. A switch here waits on it until it is dropped, for as long as
     /// a test waits for anything, then refuses.
     pub(super) fn claude_code_writing(&self) -> Writing {
-        let held = self.root.join(".claude").join(".storage-write.lock");
+        let held = self.root.path().join(".claude").join(".storage-write.lock");
         std::fs::create_dir_all(&held).expect("Claude Code's lock");
         Writing(held)
     }
@@ -1771,7 +1772,7 @@ impl World {
     /// Codex signed in as `who` and enrolled as `label`, as `codex login` and then
     /// `pitboard enroll codex/<label>` in a terminal leave it.
     pub(super) fn codex_enrolled(&self, label: &str, who: &str) {
-        let home = self.root.join(".codex");
+        let home = self.root.path().join(".codex");
         std::fs::create_dir_all(&home).expect("a scratch Codex home");
         self.host
             .file_at(home.join("auth.json"))
@@ -2004,7 +2005,6 @@ impl Drop for World {
         // each has ended and let go of the core it was given.
         drop(self.cores.take());
         let _ = self.cores_gone.recv_timeout(Duration::from_secs(20));
-        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 
@@ -2015,10 +2015,10 @@ impl Drop for World {
 fn whether_the_stand_in_runs_is_answered_once_it_has_written_its_process_id() {
     let world = World::new("stand-in-pid");
     let stand_in = StandIn {
-        pid: world.root.join("claude.pid"),
-        typed: world.root.join("claude.typed"),
-        holder: world.root.join("holder.pid"),
-        holding: world.root.join("holding"),
+        pid: world.root.path().join("claude.pid"),
+        typed: world.root.path().join("claude.typed"),
+        holder: world.root.path().join("holder.pid"),
+        holding: world.root.path().join("holding"),
     };
     let pid = stand_in.pid.clone();
     let writing = std::thread::spawn(move || {

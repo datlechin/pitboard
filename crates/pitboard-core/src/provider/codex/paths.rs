@@ -185,23 +185,14 @@ mod tests {
         Context::for_unit_test().with_codex_home(dir.to_string_lossy().into())
     }
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-codex-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
-    }
-
     // Codex 0.162.1's find_codex_home_from_env: a set `CODEX_HOME` must be a folder and is
     // canonicalised, and unset it is `.codex` in `FOLDERID_Profile`, which dirs 6.0.0 reads.
     #[test]
     fn codex_finds_its_home_on_windows_as_codex_does() {
         use crate::context::Environment;
         use crate::host::Os;
-        let profile = scratch("profile");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let profile = scratch.path().join("profile");
         std::fs::create_dir_all(profile.join("codex")).expect("a scratch codex home");
         std::fs::write(profile.join("file"), "").expect("a file");
         let named = |path: PathBuf| path.to_string_lossy().into_owned();
@@ -247,14 +238,14 @@ mod tests {
             let ctx = read(os, Some(missing.clone()));
             assert_eq!((home(&ctx), missing_home(&ctx)), (missing, None), "{os:?}");
         }
-        let _ = std::fs::remove_dir_all(&profile);
     }
 
     /// The shipped default is a packaged one rather than a line anybody wrote, so an absent
     /// setting means the file and not "cannot tell".
     #[test]
     fn no_setting_means_the_file() {
-        let dir = scratch("default");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let ctx = at(&dir, "model = \"gpt-5\"\n");
         assert_eq!(backend(&ctx), Backend::File);
         assert_eq!(auth_file(&ctx), home(&ctx).join("auth.json"));
@@ -262,14 +253,14 @@ mod tests {
             std::fs::canonicalize(home(&ctx)).ok(),
             std::fs::canonicalize(&dir).ok()
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Each store is read from the person's own `config.toml` as TOML. A value that is not a
     /// store Codex has stops Codex from starting, so it is no longer taken for the file.
     #[test]
     fn each_store_is_recognised() {
-        let dir = scratch("stores");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         for (written, expected) in [
             (
                 "cli_auth_credentials_store = \"keyring\"",
@@ -293,26 +284,26 @@ mod tests {
             let ctx = at(&dir, written);
             assert_eq!(backend(&ctx), expected, "{written}");
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A trailing comment is not part of the value. Read as part of it, a keyring store
     /// looked like the default file, and Pitboard would read a file Codex had deleted.
     #[test]
     fn a_comment_after_the_value_is_not_the_value() {
-        let dir = scratch("comment");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let ctx = at(
             &dir,
             "cli_auth_credentials_store = \"keyring\"  # on this mac\n",
         );
         assert_eq!(backend(&ctx), keyring_or(Backend::Keyring));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A key of the same name inside another table is not the setting.
     #[test]
     fn only_the_top_level_key_is_the_setting() {
-        let dir = scratch("tables");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         for (config, expected, why) in [
             (
                 "[profiles.work]\ncli_auth_credentials_store = \"keyring\"\n",
@@ -333,14 +324,14 @@ mod tests {
         ] {
             assert_eq!(backend(&at(&dir, config)), expected, "{why}");
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// What this machine's folder of Codex's configuration says is read as well as the
     /// person's own file, where Pitboard read only the person's.
     #[test]
     fn the_system_layers_are_read_as_well_as_the_persons_own() {
-        let dir = scratch("system");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let host = crate::host::memory::MemoryHost::new();
         let ctx = at(&dir, "model = \"gpt-5\"\n").with_memory_stores(host.clone());
         let system = |name| layers::system_file(&ctx, name);
@@ -365,6 +356,5 @@ mod tests {
             keyring_or(Backend::Keyring),
             "a requirement pins a sign-in's store too"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

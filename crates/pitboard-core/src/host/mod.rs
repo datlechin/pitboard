@@ -1267,7 +1267,8 @@ mod tests {
     // written, which a folder made where none is yet would do too.
     #[test]
     fn a_path_lies_in_a_place_in_any_case_and_past_a_folder_not_made_yet() {
-        let root = std::env::temp_dir().join(format!("pitboard-lies-in-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let place = root.join("Library/Application Support");
         let lies = |path: &str| lies_in(&root.join(path), &place);
         assert!(lies("Library/Application Support/x"));

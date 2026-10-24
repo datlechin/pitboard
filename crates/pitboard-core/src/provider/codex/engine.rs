@@ -708,12 +708,8 @@ mod tests {
     /// `CODEX_HOME` this process has.
     #[test]
     fn a_sign_in_is_read_back_from_the_private_directory() {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-codex-readback-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).expect("a scratch home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         std::fs::write(dir.join("auth.json"), login().to_string()).expect("a login");
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
             .with_codex_home("/somewhere/else".into());
@@ -722,7 +718,6 @@ mod tests {
             read.map(|raw| serde_json::from_str::<Value>(&raw).unwrap()),
             Some(login())
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // A file caught empty `torn` times, then whole.
@@ -857,7 +852,8 @@ mod tests {
     #[test]
     fn a_codex_home_that_names_no_folder_is_refused_on_windows() {
         use crate::context::{Context as Read, Environment};
-        let missing = std::env::temp_dir().join("pitboard-codex-never-made");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let missing = scratch.path().join("never-made");
         let named = missing.to_string_lossy().into_owned();
         let env = Environment::on(
             Os::Windows,
@@ -883,12 +879,8 @@ mod tests {
     /// it is a store Codex keeps its login in only when told to, which Pitboard does not follow.
     #[test]
     fn a_keychain_store_is_refused_with_a_reason_and_never_read() {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-codex-keyring-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).expect("a scratch home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
             .with_codex_home(dir.to_string_lossy().into_owned());
         let config = paths::config_file(&ctx);
@@ -949,7 +941,6 @@ mod tests {
                 );
             }
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A store pinned by this machine's `requirements.toml` is refused naming that file, since
@@ -1039,12 +1030,8 @@ mod tests {
     /// `managed_config.toml`.
     #[test]
     fn a_file_store_an_administrator_set_is_over_the_persons_own() {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-codex-over-own-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).expect("a scratch home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         let ctx_for = |host: &std::sync::Arc<crate::host::memory::MemoryHost>| {
             Context::for_unit_test()
                 .with_codex_home(dir.to_string_lossy().into_owned())
@@ -1073,19 +1060,14 @@ mod tests {
                 assert_eq!(Codex.private_signin_isolation(&ctx), Isolation::Isolated);
             }
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A store of the person's own does not reach a sign-in, whose `-c` names the file over
     /// it, so the sign-in is isolated where the live login is refused.
     #[test]
     fn a_store_of_the_persons_own_does_not_reach_a_sign_in() {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-codex-own-ephemeral-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).expect("a scratch home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         std::fs::write(
             dir.join("config.toml"),
             "cli_auth_credentials_store = \"ephemeral\"\n",
@@ -1094,7 +1076,6 @@ mod tests {
         let ctx = Context::for_unit_test().with_codex_home(dir.to_string_lossy().into_owned());
         assert!(Codex.live(&ctx).is_err());
         assert_eq!(Codex.private_signin_isolation(&ctx), Isolation::Isolated);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The two facts that make Codex different from Claude Code, asserted so a change to

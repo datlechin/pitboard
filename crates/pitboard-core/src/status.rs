@@ -1752,8 +1752,9 @@ mod tests {
     fn a_refused_token_is_an_expired_session_when_it_is_the_one_signed_in() {
         let api = ScriptedApi::new();
         api.token_trouble("t", Trouble::Unauthorized);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
-            .with_pitboard_home(std::env::temp_dir().join("pitboard-status-refused"))
+            .with_pitboard_home(scratch.path().to_path_buf())
             .with_scripted_api(api);
         let login = serde_json::json!({"claudeAiOauth": {"accessToken": "t"}});
         let ask = |signed_in| {

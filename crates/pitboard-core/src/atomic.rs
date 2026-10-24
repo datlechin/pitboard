@@ -138,14 +138,6 @@ pub(crate) fn sweep(permit: Permit, dir: &Path) {
 mod tests {
     use super::*;
 
-    fn scratch(name: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("pitboard-atomic-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     use crate::host::fs::testing;
 
     fn private(path: &Path) -> bool {
@@ -154,27 +146,28 @@ mod tests {
 
     #[test]
     fn a_secret_is_private_however_the_umask_is_set() {
-        let dir = scratch("secret");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let path = dir.join("state.json");
         write(Permit::for_a_test(), &path, b"{}", Perms::Secret).unwrap();
         assert!(private(&path));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn replacing_leaves_no_temp_file_behind() {
-        let dir = scratch("replace");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let path = dir.join("f.json");
         write(Permit::for_a_test(), &path, b"one", Perms::Secret).unwrap();
         write(Permit::for_a_test(), &path, b"two", Perms::Secret).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"two");
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 1);
     }
 
     #[test]
     fn match_existing_keeps_a_file_as_open_as_it_already_was() {
-        let dir = scratch("match");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let path = dir.join("claude.json");
         std::fs::write(&path, b"old").unwrap();
         testing::open_to_others(&path).expect("opened to others");
@@ -185,12 +178,12 @@ mod tests {
             before,
             "tightening another tool's file would surprise it"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn match_existing_keeps_a_file_as_closed_as_it_already_was() {
-        let dir = scratch("tighter");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let path = dir.join("claude.json");
         std::fs::write(&path, b"old").unwrap();
         testing::read_only_for_owner(&path).expect("read only");
@@ -201,16 +194,15 @@ mod tests {
             before,
             "loosening another tool's file is as wrong as tightening it"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn match_existing_defaults_to_private_when_nothing_is_there() {
-        let dir = scratch("fresh");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let path = dir.join("new.json");
         write(Permit::for_a_test(), &path, b"{}", Perms::MatchExisting).unwrap();
         assert!(private(&path));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -242,7 +234,8 @@ mod tests {
 
     #[test]
     fn temporaries_left_by_runs_that_are_gone_are_removed() {
-        let dir = scratch("orphans");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let exited = {
             // This test's own program, which lists its tests and exits.
             let mut child = std::process::Command::new(std::env::current_exe().unwrap())
@@ -287,12 +280,12 @@ mod tests {
             unrelated.exists(),
             "only Pitboard's own temporaries are touched"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_name_left_by_an_earlier_process_with_the_same_pid_is_reclaimed() {
-        let dir = scratch("reused-pid");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let temp = dir.join(".state.json.1.0.pitboard");
         std::fs::write(&temp, b"stale token").unwrap();
         let mut file = create_fresh(Permit::for_a_test(), &temp).unwrap();
@@ -305,17 +298,17 @@ mod tests {
             create_fresh(Permit::for_a_test(), &link).is_err(),
             "a planted link is never removed"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A library shares one process between callers: a status refresh writing usage.json
     /// must never disturb a switch writing state.json beside it.
     #[test]
     fn writers_in_one_process_never_disturb_each_other() {
-        let dir = scratch("threads");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let writers: Vec<_> = (0..8)
             .map(|n| {
-                let dir = dir.clone();
+                let dir = dir.to_path_buf();
                 std::thread::spawn(move || {
                     for round in 0..50 {
                         let file = if (n + round) % 2 == 0 {
@@ -337,17 +330,17 @@ mod tests {
         for writer in writers {
             writer.join().unwrap();
         }
-        let left: Vec<_> = std::fs::read_dir(&dir)
+        let left: Vec<_> = std::fs::read_dir(dir)
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
         assert_eq!(left.len(), 2, "no temporary may be left behind: {left:?}");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_symlinked_destination_does_not_lend_its_permissions() {
-        let dir = scratch("symlink");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let target = dir.join("elsewhere");
         std::fs::write(&target, b"x").unwrap();
         testing::open_to_others(&target).expect("opened to others");
@@ -371,6 +364,5 @@ mod tests {
             b"x",
             "the link target must be untouched"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -8159,7 +8159,8 @@ mod tests {
                  MacOS/codex",
             ],
         );
-        let ctx = Context::new(std::env::temp_dir()).with_memory_stores(Arc::clone(&host));
+        let home = tempfile::tempdir().expect("a scratch folder");
+        let ctx = Context::new(home.path().to_path_buf()).with_memory_stores(Arc::clone(&host));
         let seen = running_codex(&ctx).expect("readable");
         assert_eq!(
             seen.iter().map(|h| h.holder.kind).collect::<Vec<_>>(),
@@ -9316,7 +9317,8 @@ mod tests {
     fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
         use crate::context::Environment;
         let variable = crate::host::OS.home_variable();
-        let full = std::env::temp_dir().to_string_lossy().into_owned();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let full = scratch.path().to_string_lossy().into_owned();
         let empty = format!("{variable} is empty");
         for (pairs, said) in [
             (&[(variable, "")][..], empty.as_str()),

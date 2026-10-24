@@ -449,9 +449,8 @@ mod tests {
     // A program installed after the app started is found the next time it is looked for.
     #[test]
     fn a_program_installed_since_the_app_started_is_found() {
-        let scratch =
-            std::env::temp_dir().join(format!("pitboard-app-installed-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&scratch);
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("scratch");
         let home = scratch.to_string_lossy().into_owned();
         let given = env(&[
             ("HOME", &home),
@@ -467,7 +466,6 @@ mod tests {
         std::fs::write(&codex, "#!/bin/sh\n").unwrap();
         testing::make_runnable(&codex).expect("runnable");
         assert!(pitboard.installed().contains(&ProviderId::Codex));
-        std::fs::remove_dir_all(&scratch).unwrap();
     }
 
     // On a volume that ignores case `Claude` would find Claude Code's `claude`.
@@ -497,9 +495,8 @@ mod tests {
 
     #[test]
     fn its_data_folder_makes_it_found() {
-        let scratch =
-            std::env::temp_dir().join(format!("pitboard-app-desktop-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&scratch);
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("scratch");
         let named = scratch.to_string_lossy().into_owned();
         let read = AppContext::read(
             &env(&[
@@ -518,7 +515,6 @@ mod tests {
             installed_among(&read.context, |_| false),
             [ProviderId::Desktop]
         );
-        std::fs::remove_dir_all(&scratch).unwrap();
     }
 
     #[test]
@@ -970,8 +966,8 @@ mod tests {
     /// in its place what was written last. Nothing kept reads as nothing.
     #[test]
     fn an_apps_file_is_kept_private_in_pitboards_directory() {
-        let root = std::env::temp_dir().join(format!("pitboard-app-file-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let ctx = Context::new(root.clone()).with_pitboard_home(root.join(".pitboard"));
         let read = |file| read_app_file(&ctx, file).expect("read");
         assert_eq!(read(AppFile::Told), None);
@@ -1002,7 +998,6 @@ mod tests {
                 kept.display()
             );
         }
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// A file that is there and cannot be read is an error, not nothing kept: here a
@@ -1010,16 +1005,14 @@ mod tests {
     /// not text. An app that took either as nothing would write over what it never read.
     #[test]
     fn an_apps_file_that_cannot_be_read_is_not_nothing() {
-        let root =
-            std::env::temp_dir().join(format!("pitboard-app-unreadable-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let dir = root.join(".pitboard");
         let ctx = Context::new(root.clone()).with_pitboard_home(dir.clone());
         std::fs::create_dir_all(dir.join(AppFile::Preferences.name())).expect("a directory");
         std::fs::write(dir.join(AppFile::Told.name()), [0xff, 0xfe, 0x00]).expect("a file");
         assert!(read_app_file(&ctx, AppFile::Preferences).is_err());
         assert!(read_app_file(&ctx, AppFile::Told).is_err());
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// A file an app keeps outside Pitboard's directory is kept as one inside it: its
@@ -1027,9 +1020,8 @@ mod tests {
     /// nothing kept read as nothing, while a file that cannot be read is an error.
     #[test]
     fn a_file_kept_elsewhere_is_kept_as_pitboards_own() {
-        let root =
-            std::env::temp_dir().join(format!("pitboard-app-elsewhere-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let file = root
             .join("Application Support")
             .join("app")
@@ -1050,7 +1042,6 @@ mod tests {
         }
         std::fs::write(&file, [0xff, 0xfe, 0x00]).expect("a file that is not text");
         assert!(read_file(&file).is_err());
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// Each file has a name of its own, apart from the core's.

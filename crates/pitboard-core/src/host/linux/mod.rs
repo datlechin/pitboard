@@ -220,12 +220,8 @@ mod tests {
     /// path Pitboard was started by instead, wherever that leads to this same program.
     #[test]
     fn the_command_line_is_known_by_the_path_it_was_started_by() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-started-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let runnable = |path: &Path| {
             std::fs::create_dir_all(path.parent().unwrap()).expect("its directory");
             std::fs::write(path, "").expect("a program");
@@ -262,6 +258,5 @@ mod tests {
             "a name found nowhere"
         );
         assert_eq!(started(None, &bin), running, "no name at all");
-        let _ = std::fs::remove_dir_all(&home);
     }
 }

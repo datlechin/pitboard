@@ -95,7 +95,7 @@ pub(crate) struct Rig {
     pub(crate) ctx: Context,
     pub(crate) mem: Arc<MemoryHost>,
     pub(crate) api: Arc<ScriptedApi>,
-    root: PathBuf,
+    root: tempfile::TempDir,
     /// The keychain item Claude Code's login is in, on a Claude Code machine.
     pub(crate) service: String,
     /// Which tool's accounts this machine holds.
@@ -105,7 +105,7 @@ pub(crate) struct Rig {
 impl Rig {
     /// Where the tool's own files are, for a test that needs to change one.
     pub(crate) fn ctx_home(&self) -> PathBuf {
-        self.root.clone()
+        self.root.path().to_path_buf()
     }
 
     // Pitboard's directory moved to the one the schedule renews, which on Windows is not
@@ -170,12 +170,6 @@ impl Rig {
     }
 }
 
-impl Drop for Rig {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
 pub(crate) fn oauth(refresh: &str, expires_in_days: i64) -> Value {
     json!({
         "accessToken": format!("access-{refresh}"),
@@ -209,21 +203,24 @@ pub(crate) fn owner(uuid: &str) -> Owner {
     }
 }
 
+// Named after the test, so a path in a failure says whose it is.
+fn scratch_home(name: &str) -> tempfile::TempDir {
+    tempfile::Builder::new()
+        .prefix(&format!("pitboard-{name}-"))
+        .tempdir()
+        .expect("a scratch home")
+}
+
 // `here` signed in and `there` parked and ready: the shape every switch starts from.
 pub(crate) fn machine(name: &str) -> Rig {
-    let root = std::env::temp_dir().join(format!(
-        "pitboard-crash-{name}-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("a scratch home");
+    let scratch = scratch_home(name);
+    let root = scratch.path();
 
     let ScratchMachine {
         ctx,
         host: mem,
         api,
-    } = ScratchMachine::at(&root, |ctx| {
+    } = ScratchMachine::at(root, |ctx| {
         ctx.with_pitboard_home(root.join(".pitboard"))
             .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
             // A test holding one of Claude Code's locks lets go of it at a point, not after a while.
@@ -279,7 +276,7 @@ pub(crate) fn machine(name: &str) -> Rig {
         ctx,
         mem,
         api,
-        root,
+        root: scratch,
         service,
         which: ProviderId::Claude,
     }
@@ -303,7 +300,7 @@ pub(crate) fn signed_in_outside(name: &str) -> Rig {
 /// Claude Code's config naming `who`, as another Claude Code process that started or signed
 /// in on `who`'s login writes it, with the login in the keychain left as it was.
 pub(crate) fn config_names(m: &Rig, who: &str) {
-    let path = m.root.join(".claude.json");
+    let path = m.root.path().join(".claude.json");
     let mut config: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
     let owner = owner(who);
@@ -499,18 +496,13 @@ pub(crate) fn unchanged(m: &Rig, before: &Snapshot, why: &str) {
 
 // Claude closed and signed in to `work`, enrolled as `desktop/work` by the real `enroll`.
 pub(crate) fn desktop_machine(name: &str) -> Rig {
-    let root = std::env::temp_dir().join(format!(
-        "pitboard-desktop-{name}-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("a scratch home");
+    let scratch = scratch_home(name);
+    let root = scratch.path();
     let ScratchMachine {
         ctx,
         host: mem,
         api,
-    } = ScratchMachine::at(&root, |ctx| {
+    } = ScratchMachine::at(root, |ctx| {
         ctx.with_pitboard_home(root.join(".pitboard"))
             .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
             .with_awaited_every(std::time::Duration::from_millis(2))
@@ -520,7 +512,7 @@ pub(crate) fn desktop_machine(name: &str) -> Rig {
         ctx,
         mem,
         api,
-        root,
+        root: scratch,
         service: String::new(),
         which: ProviderId::Desktop,
     };
@@ -585,7 +577,7 @@ pub(crate) fn sign_in_inside(
 // A kill is a panic here, so a temporary it left is this process's own, which a sweep
 // leaves alone: renamed to a dead process's, as the one a killed run leaves is.
 pub(crate) fn as_a_dead_runs(m: &Rig) {
-    let data = m.root.join("claude/data");
+    let data = m.root.path().join("claude/data");
     for entry in std::fs::read_dir(&data).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         if crate::atomic::temp_owner(&name) == Some(std::process::id()) {
@@ -611,7 +603,10 @@ fn sessions(m: &Rig) -> Vec<(String, String)> {
     let LoginKind::Folder(app) = provider::of(m.which) else {
         return Vec::new();
     };
-    let mut places = vec![("Claude".to_string(), m.root.join("claude/data/Cookies"))];
+    let mut places = vec![(
+        "Claude".to_string(),
+        m.root.path().join("claude/data/Cookies"),
+    )];
     for name in store::folder::list(&m.ctx)
         .ok()
         .flatten()
@@ -649,7 +644,7 @@ pub(crate) fn rested(m: &Rig, after: &str) {
             "{after}: the session in {place} is also somewhere else"
         );
     }
-    let data = m.root.join("claude/data");
+    let data = m.root.path().join("claude/data");
     for entry in std::fs::read_dir(&data).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         assert!(
@@ -721,19 +716,15 @@ impl Rig {
 
 // The same for Codex, OpenAI answering for both.
 pub(crate) fn codex_machine(name: &str) -> Rig {
-    let root = std::env::temp_dir().join(format!(
-        "pitboard-crash-codex-{name}-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
+    let scratch = scratch_home(name);
+    let root = scratch.path();
     std::fs::create_dir_all(root.join(".codex")).expect("a scratch codex home");
 
     let ScratchMachine {
         ctx,
         host: mem,
         api,
-    } = ScratchMachine::at(&root, |ctx| {
+    } = ScratchMachine::at(root, |ctx| {
         ctx.with_pitboard_home(root.join(".pitboard"))
             .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
             .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
@@ -742,7 +733,7 @@ pub(crate) fn codex_machine(name: &str) -> Rig {
         ctx,
         mem,
         api,
-        root,
+        root: scratch,
         service: String::new(),
         which: ProviderId::Codex,
     };
@@ -760,7 +751,7 @@ pub(crate) fn codex_machine(name: &str) -> Rig {
         );
     }
 
-    std::fs::create_dir_all(machine.root.join(".pitboard")).expect("a Pitboard home");
+    std::fs::create_dir_all(machine.root.path().join(".pitboard")).expect("a Pitboard home");
     let parked_service =
         park::reserve(&machine.ctx, Permit::for_a_test(), &codex_id("there")).expect("a free name");
     let parked = park::store_at(
@@ -999,7 +990,7 @@ pub(crate) fn usage_answer(percent: f64) -> Value {
 /// Claude Code's usage cache, put in its config as 2.1.294 writes one: stamped with `here`,
 /// the account the config names, whichever login `answer` was asked with.
 pub(crate) fn cache_usage(m: &Rig, answer: Value) {
-    let path = m.root.join(".claude.json");
+    let path = m.root.path().join(".claude.json");
     let mut config: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
     config["cachedUsageUtilization"] = json!({
@@ -1264,7 +1255,7 @@ fn hold_folder(
     }
 
     // Nothing was deleted: Claude makes a store only where one is missing, so never these bytes.
-    let data = m.root.join("claude/data");
+    let data = m.root.path().join("claude/data");
     if holds.nothing_deleted {
         for (store, file) in crate::desktop_testing::STORES {
             let within = std::path::Path::new(store).join(file);

@@ -496,11 +496,8 @@ mod tests {
     // Every system, as the release gate opens each build the tests run.
     #[test]
     fn the_app_asks_the_core_whether_it_may_start() {
-        let scratch = std::env::temp_dir().join(format!(
-            "pitboard-may-start-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("home");
         let environment = |pitboard: &str| -> HashMap<String, String> {
             HashMap::from([
                 ("HOME".into(), scratch.to_string_lossy().into_owned()),
@@ -527,11 +524,8 @@ mod tests {
     // The core's own tests take a task away on a scheduler in memory; this one reaches none.
     #[test]
     fn a_path_that_is_no_app_takes_no_renewal_task_away() {
-        let scratch = std::env::temp_dir().join(format!(
-            "pitboard-unschedule-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("home");
         let home = scratch.to_string_lossy().into_owned();
         let environment = HashMap::from([
             ("HOME".into(), home.clone()),

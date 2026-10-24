@@ -500,9 +500,8 @@ mod tests {
     // Under a fake home, so a write the guard lets through lands in a scratch.
     #[test]
     fn nothing_here_writes_inside_the_accounts_own_application_support() {
-        let home =
-            std::env::temp_dir().join(format!("pitboard-fake-claude-home-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let _guarding = crate::context::testing::also_guarding(&home);
         // Where the guard looks on each system.
         let below = match crate::host::OS {
@@ -522,7 +521,6 @@ mod tests {
         let planted_through = refused(&|| plant(&climbed, &WORK, JarAs::StandIn));
         let signed_in_through = refused(&|| sign_in_on_disk(&climbed, &WORK, JarAs::StandIn));
         let written = home.exists();
-        let _ = std::fs::remove_dir_all(&home);
         assert!(planted, "plant");
         assert!(signed_in, "sign_in_on_disk");
         assert!(sqlite, "write_jar, SQLite");
@@ -540,9 +538,8 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes no link"
     )]
     fn nothing_here_writes_through_a_link_to_a_file_not_made_yet() {
-        let root =
-            std::env::temp_dir().join(format!("pitboard-fake-claude-link-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let home = root.join("home");
         let data = home.join("Library/Application Support/Claude");
         let scratch = root.join("scratch");
@@ -556,7 +553,6 @@ mod tests {
         let stand_in = refused(&|| write_jar(&jar, JarAs::StandIn, &[]));
         let bare = refused(&|| write_stand_in_jar(&jar, 24, &[]));
         let written = data.join("Cookies").exists();
-        let _ = std::fs::remove_dir_all(&root);
         assert!(sqlite, "write_jar, SQLite");
         assert!(stand_in, "write_jar, the stand-in");
         assert!(bare, "write_stand_in_jar");

@@ -356,17 +356,6 @@ mod tests {
     use crate::helper::{self, Job};
     use std::path::{Path, PathBuf};
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-job-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
-        dir
-    }
-
     // This test's program under a tool's name, which the helper runs as.
     fn copy_as(dir: &Path, name: &str) -> PathBuf {
         let program = dir.join(name);
@@ -400,7 +389,8 @@ mod tests {
 
     #[test]
     fn a_cancel_ends_every_program_of_the_tool_and_frees_its_port() {
-        let dir = scratch("port");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let (tool, server) = (
             copy_as(&dir.join("a"), "codex.exe"),
             copy_as(&dir.join("b"), "codex.exe"),
@@ -421,12 +411,12 @@ mod tests {
         running.stop();
         assert!(!runs(tool) && !runs(server));
         assert!(port_is_free(), "let go of as it ended");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_browser_the_sign_in_opened_outlives_a_cancel_and_pitboard() {
-        let dir = scratch("browser");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let (tool, browser) = (
             copy_as(&dir.join("tool"), "claude.exe"),
             copy_as(&dir.join("browser"), "browser.exe"),
@@ -464,12 +454,12 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(20));
             }
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_program_started_breaking_away_starts_and_is_left_alone() {
-        let dir = scratch("breakaway");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let (tool, daemon) = (
             copy_as(&dir.join("a"), "codex.exe"),
             copy_as(&dir.join("b"), "codex.exe"),
@@ -496,14 +486,14 @@ mod tests {
             assert!(gone.elapsed().as_secs() < 20, "the daemon stand-in ends");
             std::thread::sleep(Duration::from_millis(20));
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // As npm's shim for a program starts it.
     #[test]
     fn a_cmd_hands_its_program_each_argument_whole_and_a_line_break_starts_nothing() {
-        let dir = scratch("cmd");
-        copy_as(&dir, "records.exe");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
+        copy_as(dir, "records.exe");
         let front = dir.join("front.cmd");
         std::fs::write(&front, "@ECHO off\r\n\"%~dp0records.exe\"   %*\r\n").expect("a shim");
         let handed = [
@@ -534,13 +524,13 @@ mod tests {
         }
         std::thread::sleep(Duration::from_millis(500));
         assert!(!refused.exists(), "nothing started");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // What `common::os::found_no_interpreter` takes for npm's shim with no `node` to find.
     #[test]
     fn npms_shim_with_no_interpreter_to_find_exits_1() {
-        let dir = scratch("no-node");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let shim = dir.join("codex.cmd");
         std::fs::write(
             &shim,
@@ -556,7 +546,6 @@ mod tests {
         command.arg("login").env("PATH", system32());
         let ended = start(command).expect("started").wait().expect("ended");
         assert_eq!(ended.code(), Some(1), "{ended:?}");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn system32() -> PathBuf {
@@ -614,8 +603,9 @@ mod tests {
 
     #[test]
     fn a_run_that_ended_says_what_it_printed_and_leaves_nothing_it_started() {
-        let dir = scratch("run-ended");
-        let (tool, child, started, opened) = tool_and_child(&dir);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
+        let (tool, child, started, opened) = tool_and_child(dir);
         let tool_held = helper::hold(&started);
         let _child_held = helper::hold(&opened);
         let command = helper::starting(&tool, false, &started, (&child, Job::Waits, &opened));
@@ -639,13 +629,13 @@ mod tests {
         assert_eq!((ran.exit, ran.timed_out), (Some(0), false));
         assert!(ran.stdout.contains("pitboard-helper: "), "{}", ran.stdout);
         assert!(!runs(child), "what the run started ended with it");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_run_past_its_ceiling_is_ended_whole() {
-        let dir = scratch("run-ceiling");
-        let (tool, child, started, opened) = tool_and_child(&dir);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
+        let (tool, child, started, opened) = tool_and_child(dir);
         let _held = (helper::hold(&started), helper::hold(&opened));
         let command = helper::starting(&tool, false, &started, (&child, Job::Waits, &opened));
         let watching = {
@@ -662,13 +652,13 @@ mod tests {
         let (tool, child) = watching.join().expect("both started");
         assert_eq!((ran.exit, ran.timed_out), (None, true));
         assert!(!runs(tool) && !runs(child));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn nothing_a_run_starts_breaks_away() {
-        let dir = scratch("run-breakaway");
-        let (tool, child, started, opened) = tool_and_child(&dir);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
+        let (tool, child, started, opened) = tool_and_child(dir);
         let _held = (helper::hold(&started), helper::hold(&opened));
         let command = helper::starting(&tool, true, &started, (&child, Job::Waits, &opened));
         let ran = run_within(
@@ -682,12 +672,12 @@ mod tests {
         let said = helper::written(&started);
         assert!(said.starts_with("refused"), "{said}");
         assert!(!opened.exists(), "nothing started");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_run_is_handed_nothing_on_a_descriptor() {
-        let dir = scratch("run-descriptor");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let said = dir.join("console");
         let command = quietly(helper::command(
             &std::env::current_exe().expect("this test"),
@@ -705,14 +695,14 @@ mod tests {
         assert_eq!(refused.kind(), io::ErrorKind::Unsupported);
         std::thread::sleep(Duration::from_millis(500));
         assert!(!said.exists(), "nothing started");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn with_no_console_to_share_the_tool_gets_no_window() {
         assert_eq!(flags(true), CREATE_SUSPENDED);
         assert_eq!(flags(false), CREATE_SUSPENDED | CREATE_NO_WINDOW);
-        let dir = scratch("console");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let said = dir.join("console");
         let command = quietly(helper::command(
             &std::env::current_exe().expect("this test"),
@@ -722,6 +712,5 @@ mod tests {
         let mut running = start_with(command, false).expect("started");
         assert!(running.wait().expect("ended").success());
         assert_eq!(helper::written(&said), "none");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

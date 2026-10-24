@@ -125,7 +125,8 @@ mod tests {
     fn a_build_for_tests_cannot_name_the_accounts_own_data_folder() {
         let refused = root(&Context::for_unit_test()).expect_err("no scratch was named");
         assert_eq!(reason(refused), NOT_NAMED);
-        let scratch = std::env::temp_dir().join(format!("pitboard-paths-{}", std::process::id()));
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("claude");
         let named = Context::for_unit_test().with_scratch_claude(scratch.clone());
         assert_eq!(root(&named).unwrap(), scratch.join("data"));
     }
@@ -136,7 +137,8 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes no link"
     )]
     fn home_naming_another_folder_makes_the_tool_absent() {
-        let base = std::env::temp_dir().join(format!("pitboard-homes-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let base = scratch.path();
         let (own, other) = (base.join("own"), base.join("other"));
         std::fs::create_dir_all(&own).unwrap();
         std::fs::create_dir_all(&other).unwrap();
@@ -145,7 +147,6 @@ mod tests {
             own.join("Library/Application Support/Claude")
         );
         let link = base.join("link");
-        let _ = std::fs::remove_file(&link);
         host::fs::testing::link_dir(&own, &link).unwrap();
         assert!(
             real_for(Some(own.clone()), &link).is_ok(),
@@ -160,7 +161,6 @@ mod tests {
             reason(real_for(None, &own).unwrap_err()),
             "this system names no home folder for this account"
         );
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -169,8 +169,8 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes no link"
     )]
     fn a_link_or_a_third_party_deployment_beside_it_is_refused() {
-        let base = std::env::temp_dir().join(format!("pitboard-refuses-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let base = scratch.path();
         let root = base.join("Claude");
         std::fs::create_dir_all(&root).unwrap();
         assert_eq!(refuses(&root), None);
@@ -212,7 +212,6 @@ mod tests {
         host::fs::testing::link_dir(&root, &link).unwrap();
         assert_eq!(refuses(&link), Some(Unfit::Link));
         assert_eq!(Unfit::Link.to_string(), "is a link");
-        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
