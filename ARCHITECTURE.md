@@ -2870,12 +2870,18 @@ Flushing and times:
   attributes alone fails 5. On the SMB share the flush fails 1.
 - NTFS, ReFS and the SMB share keep mtimes in 100 ns steps, exFAT and FAT32 in whole seconds
   (run 38418961905).
-- Beside the rest of the suite, 10,000 replaces through `atomic::write`, which flushes the
-  file and then its folder, took 75 to 360 s on windows-2025 and 154 to 246 s on
-  windows-11-arm, against about 13 s for the probe's unflushed replaces in a job of their
-  own. A status line run, which wrote two files that way, took 27 to 97 ms past a start on
-  windows-2025, once 351 ms, and 49 to 59 ms on windows-11-arm (CI runs 40036129585 to
-  40071211611).
+- J2, the test of a warm status line run's budget in `windows_terminal.rs`, runs alone,
+  first after the build, and each of its runs writes `sessions.json`. In the 94 CI runs from
+  39307046581 to 40083986071 that flushed it, J2's median past a start was 50 ms on
+  windows-2025, over 250 ms 7 times in 112, and 54 ms on windows-11-arm, at most 69 ms.
+  Unflushed, it was 43.0 and 45.9 ms (run 40081734815).
+- Timed by step, with flushed and unflushed runs in turn (runs 40085923782 and
+  40087183590), flushing the temporary took a median of 6.0 to 8.6 ms, at most 444 and
+  268 ms on windows-2025 and 22 and 517 ms on windows-11-arm, and its folder 1.5 to 3.0 ms.
+  A flushed run took up to 571 ms past a start, an unflushed one 61 ms. Beside a thread
+  rewriting 1 GB unflushed, the flush took a median of 22 to 26 ms.
+- 37 to 40 ms of every J2 run is `Context::with_scratch_claude`, which only a build for
+  tests makes. Every other step of an unflushed run took under 2 ms.
 
 Locks:
 

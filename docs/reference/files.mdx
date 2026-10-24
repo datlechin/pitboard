@@ -42,7 +42,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 
 Only `vault/`, `signin/` and `parks/` can hold a login. `backups/` holds your email address, account ids and the path of each project Claude Code has opened.
 
-Pitboard writes `usage.json` and `sessions.json` without waiting for the disk, so a power cut can lose their last changes.
+The status line writes `usage.json` and `sessions.json` without waiting for the disk, so after a power cut either can hold an earlier copy or nothing.
 
 Pitboard refuses a directory that a sync client copies to other machines, with `state_on_synced_drive`. It reads the path with links resolved:
 
