@@ -212,7 +212,6 @@ mod tests {
         assert_eq!(kept, ["open"]);
     }
 
-    // The status line keeps a run after every response, and a flush waits on the whole disk.
     #[test]
     fn a_run_is_kept_without_waiting_for_the_disk() {
         let (ctx, _scratch) = machine();

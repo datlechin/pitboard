@@ -1866,11 +1866,14 @@ window loads its site, and whatever the site's pages load, as a browser would.
 - An answer from Anthropic that Pitboard read whole replaces a Claude Code account's
   reading, and a session only moves that reading, within the limits the answer gave. So
   numbers filed under the wrong account go at that account's next answer.
-- `usage.json` and `sessions.json`, which the status line writes after each response, are
-  replaced whole and never flushed (`atomic::write_unsynced`): a flush waits on every
-  program's writes to the disk, and Claude Code 2.1.302 cancels a run of the line still going
-  when it starts the next, 300 ms after a change. A power cut may take either back to an
-  earlier copy or leave it unreadable, which reads as no reading and no run. Every other file is flushed, and its folder after the rename (`atomic::write`).
+- What the status line writes after each response, `sessions.json` and a session's move of
+  a reading in `usage.json`, is replaced whole and not flushed (`atomic::write_unsynced`):
+  on a busy disk a flush took longer than 300 ms (Flushing and times), and Claude Code
+  2.1.302 cancels a run of the line still going when it starts the next, 300 ms after a
+  change. On exFAT, FAT32 and an SMB share the rename still writes through. A power cut may
+  take either file back to an earlier copy or leave it unreadable, which reads as no reading
+  and no run. An answer's reading and an account forgotten are flushed, so a forgotten
+  account's reading does not come back.
 - Pitboard files usage only under the account it is proven to be of: an answer for that
   account's own login, or a session's numbers whose windows that account's answered reading
   holds, where no other account's reading does. That reading holds no other running window
