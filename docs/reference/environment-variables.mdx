@@ -72,7 +72,7 @@ As read in Claude Code 2.1.309, a session signs in with an Anthropic profile bef
 
 Claude Code keeps the profiles in `configs` in `~/.config/anthropic`, or in `anthropic` in `XDG_CONFIG_HOME`. On Windows, they are in `%APPDATA%\Anthropic`. `ANTHROPIC_CONFIG_DIR` names another folder on every system.
 
-Pitboard reads these variables and `ANTHROPIC_CONFIG_DIR` from the `env` of Claude Code's settings, as Claude Code does, and from its own environment where no settings file sets them. A profile counts as a [variable that overrides the login](#variables-that-override-the-login) does.
+Pitboard reads these variables and `ANTHROPIC_CONFIG_DIR` from the `env` of managed settings, of your own `settings.json` and of `~/.claude.json`, in that order, as Claude Code does, and from its own environment where none sets them. A project's settings and a `--settings` file can set them too, and Pitboard does not read those. A profile counts as a [variable that overrides the login](#variables-that-override-the-login) does.
 
 ## Proxies
 

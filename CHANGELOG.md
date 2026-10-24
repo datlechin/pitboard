@@ -112,9 +112,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an older Codex left, by the process ID Codex records for it, and says to restart it, instead of
   counting it as a `codex` session.
 - Pitboard warns with `auth_overridden`, and the automatic switch holds back, while
-  `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile, named in the environment or in the `env` of
-  Claude Code's settings, or managed settings that require the Cloud gateway make Claude Code
-  sign in another way.
+  `CLAUDE_CODE_USE_MANTLE`, managed settings that require the Cloud gateway, or an Anthropic
+  profile named in the environment or in the `env` of Claude Code's settings or `~/.claude.json`
+  make Claude Code sign in another way.
 - On Linux, Pitboard and its install script work as root where root owns every folder they write
   in, as on a server whose only user is root, and refuse only under `sudo` or as root in a folder
   another user owns.

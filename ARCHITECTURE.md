@@ -3595,12 +3595,16 @@ treated, and only the macOS build shows it. The run reads both builds since.
   `anthropic_profiles`, `profile_folder`, `windows_profile_folder`, `organisation_pin`): a
   session also signs in another way under `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile, or
   managed settings that require the Cloud gateway's sign-in. `settings::overrides` names
-  each, as it names a variable. `settings::Profiles` reads the profile variables from the
-  environment only: Claude Code reads them from `process.env`, and Pitboard does not follow
-  which settings `env` blocks reach it. A managed `forceLoginOrgUUID` makes Claude Code refuse
-  a login of another organisation as a session starts, so `Provider::refuses` asks it of the
-  account going in, by the organisation Pitboard recorded for it. Where several managed
-  sources set it, a login none of them names is refused.
+  each, as it names a variable. Claude Code reads the profile variables from `process.env`,
+  which it sets at start from the `env` of its config file and of each settings source. Read
+  again on 24 October 2026, `settings::profile` takes each variable and `ANTHROPIC_CONFIG_DIR`
+  from the highest managed source, the person's `settings.json` or the config file that sets
+  it, and from what `settings::Profiles` kept of the environment Pitboard started with where
+  none does. A project's, a local and a `--settings` file are not read. A managed
+  `forceLoginOrgUUID` makes Claude Code refuse a login of another organisation as a session
+  starts, so `Provider::refuses` asks it of the account going in, by the organisation Pitboard
+  recorded for it. Where several managed sources set it, a login none of them names is
+  refused.
 - Read on 23 October 2026 from the darwin-arm64 build of 2.1.309
   (`macos_managed_preferences`): on macOS a configuration profile's plist, the person's in
   `/Library/Managed Preferences/<user>` before the device's, is a managed source too. Claude

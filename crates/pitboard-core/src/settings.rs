@@ -258,6 +258,17 @@ fn own(path: &Path) -> Option<Layer> {
     })
 }
 
+// As Claude Code's config loader reads it: UTF-8, one byte order mark dropped
+// (`settings_byte_order_mark`).
+fn config(ctx: &Context) -> Option<Layer> {
+    let path = claude::config_file(ctx);
+    let text = std::fs::read_to_string(&path).ok()?;
+    Some(Layer {
+        name: path.display().to_string(),
+        text: claude::without_byte_order_mark(&text).to_owned(),
+    })
+}
+
 fn administered(name: String, text: &str) -> Layer {
     Layer {
         name,
@@ -347,8 +358,8 @@ pub(crate) struct Profiles {
 }
 
 impl Profiles {
-    // Each trimmed, as Claude Code reads them, and an empty one unset.
     pub(crate) fn read(env: &Environment) -> Profiles {
+        // Each trimmed, as Claude Code reads them, and an empty one unset.
         let set = |name| env.text(name).map(str::trim).filter(|v| !v.is_empty());
         let under = |name, path: &[&str]| {
             set(name).map(|dir| path.iter().fold(PathBuf::from(dir), |p, part| p.join(part)))
@@ -356,7 +367,7 @@ impl Profiles {
         Profiles {
             started: [CONFIG_DIR, NAMED, PAIR[0], PAIR[1]]
                 .into_iter()
-                .filter_map(|name| Some((name, set(name)?.to_owned())))
+                .filter_map(|name| Some((name, env.text(name)?.to_owned())))
                 .collect(),
             fallback: match env.os() {
                 Os::Windows => under("APPDATA", &["Anthropic"])
@@ -374,11 +385,11 @@ impl Profiles {
     }
 }
 
-// What a session takes for `name`, and where from: Claude Code applies the highest settings `env`
-// that sets it over the environment it starts with, a number or a boolean as its text, and drops
-// any other value there. Trimmed, and an empty one unset.
-fn taken(ctx: &Context, layers: &[(Layer, bool)], name: &str) -> Option<(String, Override)> {
-    let set = layers.iter().find_map(|(layer, _)| {
+// What a session takes for `name`, and where from: Claude Code applies the highest `env` of
+// `layers` that sets it over the environment it starts with, a number or a boolean as its text,
+// and drops any other value there. Trimmed, and an empty one unset.
+fn taken(ctx: &Context, layers: &[Layer], name: &str) -> Option<(String, Override)> {
+    let set = layers.iter().find_map(|layer| {
         let text = match setting(ctx.os, layer, name)? {
             Value::String(text) => text,
             Value::Number(number) => number.to_string(),
@@ -437,7 +448,14 @@ fn mode(folder: &Path, name: &str) -> Option<String> {
 // the federation both variables set, else the active profile where it federates. Claude Code
 // takes a claude.ai login before an active profile that signs in with OAuth.
 fn profile(ctx: &Context) -> Vec<Override> {
-    let layers = env_layers(ctx).unwrap_or_default();
+    // Below the settings, the config file's `env` (anthropic_profiles). A managed source Pitboard
+    // cannot read leaves in every one it can, as `layered` does.
+    let layers: Vec<Layer> = managed_taken(ctx)
+        .unwrap_or_else(|_| managed(ctx))
+        .into_iter()
+        .chain(own(&claude::config_dir(ctx).join("settings.json")))
+        .chain(config(ctx))
+        .collect();
     let folder = taken(ctx, &layers, CONFIG_DIR)
         .map(|(dir, _)| PathBuf::from(dir))
         .or_else(|| ctx.anthropic.fallback.clone());
@@ -577,15 +595,6 @@ pub(crate) struct EnvSetting {
     pub(crate) managed: bool,
 }
 
-// Highest first: the managed sources a session takes, then the person's own settings.json, which
-// Claude Code assigns before them (`windows_backend_choice`), each with whether it is managed.
-// Err names a managed source Pitboard cannot read that may be taken.
-fn env_layers(ctx: &Context) -> Result<Vec<(Layer, bool)>, String> {
-    let managed = managed_taken(ctx)?.into_iter().map(|layer| (layer, true));
-    let own = own(&claude::config_dir(ctx).join("settings.json")).map(|layer| (layer, false));
-    Ok(managed.chain(own).collect())
-}
-
 // A layer's `env` value for a variable: a name in any case on Windows, as it takes one.
 fn setting(os: Os, layer: &Layer, name: &str) -> Option<Value> {
     let json = serde_json::from_str::<Value>(&layer.text).ok()?;
@@ -596,9 +605,14 @@ fn setting(os: Os, layer: &Layer, name: &str) -> Option<Value> {
         .map(|(_, value)| value.clone())
 }
 
+// Highest first: the managed sources a session takes, then the person's own settings.json, which
+// Claude Code assigns before them (`windows_backend_choice`). Err names a managed source Pitboard
+// cannot read that may be taken.
 pub(crate) fn env_settings(ctx: &Context, name: &str) -> Result<Vec<EnvSetting>, String> {
-    Ok(env_layers(ctx)?
-        .into_iter()
+    let managed = managed_taken(ctx)?.into_iter().map(|layer| (layer, true));
+    let own = own(&claude::config_dir(ctx).join("settings.json")).map(|layer| (layer, false));
+    Ok(managed
+        .chain(own)
         .filter_map(|(layer, managed)| {
             Some(EnvSetting {
                 value: setting(ctx.os, &layer, name)?,
@@ -1385,6 +1399,47 @@ mod profile_tests {
                 "ANTHROPIC_FEDERATION_RULE_ID in the environment".to_string(),
                 format!("env.ANTHROPIC_ORGANIZATION_ID in {}", settings.display()),
             ]
+        );
+    }
+
+    // Claude Code 2.1.309 applies its config file's `env` first, below every settings file's.
+    #[test]
+    fn a_profile_the_config_file_names_is_taken_below_the_settings() {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let folder = scratch.path().join(".config").join("anthropic");
+        profile(&folder, "home", "user_oauth");
+        profile(&folder, "work", "oidc_federation");
+        let ctx = on(Os::Linux, scratch.path(), &[("ANTHROPIC_PROFILE", "home")]);
+        let config = crate::provider::claude::paths::config_file(&ctx);
+        std::fs::create_dir_all(config.parent().expect("its folder")).expect("a folder");
+        let env = json!({"env": {"ANTHROPIC_PROFILE": "work"}});
+        std::fs::write(&config, format!("\u{feff}{env}")).expect("written");
+        assert_eq!(
+            said(&ctx),
+            [format!("env.ANTHROPIC_PROFILE in {}", config.display())]
+        );
+
+        own_settings(scratch.path(), json!({"ANTHROPIC_PROFILE": "home"}));
+        assert_eq!(said(&ctx), Vec::<String>::new());
+    }
+
+    // Claude Code applies the person's own settings whatever a managed source it cannot read
+    // holds.
+    #[test]
+    fn a_profile_the_persons_settings_name_is_taken_beside_an_unreadable_managed_source() {
+        let memory = crate::host::memory::MemoryHost::new();
+        memory.administers_unreadably("/etc/claude-code/managed-settings.json", "denied");
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let ctx = on(Os::Linux, scratch.path(), &[]).with_memory_stores(memory);
+        profile(
+            &scratch.path().join(".config").join("anthropic"),
+            "work",
+            "oidc_federation",
+        );
+        let settings = own_settings(scratch.path(), json!({"ANTHROPIC_PROFILE": "work"}));
+        assert_eq!(
+            said(&ctx),
+            [format!("env.ANTHROPIC_PROFILE in {}", settings.display())]
         );
     }
 
