@@ -78,8 +78,7 @@ pub(crate) fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
     }
 }
 
-// A parked login that switches for now, as `pitboard status` hints a sign-in for it: one due
-// to expire, or one whose sign-in may have lapsed already.
+// As `pitboard status` hints for a parked login due to expire, or whose sign-in may have lapsed.
 pub(crate) fn sign_in_hint(life: &str, lapsed: bool) -> String {
     if lapsed {
         format!("{life}: sign in again")
@@ -722,8 +721,7 @@ pub(crate) fn check_text(text: &str) -> String {
     typeset(&prose_capitalised(text))
 }
 
-// The apps' typography for the core's words. What the core quotes, in backticks or not, keeps
-// every letter: a name, a command, a path, an address or a system's own message.
+// The apps' typography for the core's words, where what the core quotes keeps every letter.
 pub(crate) fn typeset(core: &str) -> String {
     let mut said = String::with_capacity(core.len());
     for (at, part) in core.split('`').enumerate() {
@@ -749,8 +747,7 @@ pub(crate) fn quoted(name: &str) -> String {
     format!("`{name}`")
 }
 
-// Where the core quotes without backticks, in order: a word with a path's or a link's slash in
-// it, an address up to its domain's end, and a system's message as Rust and Windows end one.
+// What the core quotes without backticks: a path or link, an address, a system's own message.
 fn quoted_in(text: &str) -> Vec<Range<usize>> {
     let mut spans = Vec::new();
     let mut start = 0;
