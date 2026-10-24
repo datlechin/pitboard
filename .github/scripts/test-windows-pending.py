@@ -17,7 +17,6 @@ ACCEPTED = {
     "runs as a standard user only": None,
     "a gap being closed": 1,
 }
-UNSAID = {("crates/a/src/lib.rs", "waits")}
 LIB = "crates/a/src/lib.rs"
 TESTS = "crates/a/tests/t.rs"
 CS = "apps/windows/Pitboard.Windows.Tests/T.cs"
@@ -216,11 +215,6 @@ CASES = [
         [("", '"a gap being closed" is given 2 times, more than its 1')],
     ),
     (
-        "a test with no reason yet that is listed",
-        {LIB: ignored("#[cfg(unix)]", "waits") + "\n" + ignored("#[cfg(unix)]", "other")},
-        [(f"{LIB}:6", f"the test other, {NO_REASON}")],
-    ),
-    (
         "C# ignores with no reason or one not accepted",
         {
             CS: "[TestClass]\npublic sealed class T\n{\n"
@@ -269,13 +263,13 @@ CASES = [
 ]
 
 
-def run(files, accepted=ACCEPTED, unsaid=UNSAID):
+def run(files, accepted=ACCEPTED):
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
         for path, text in files.items():
             (root / path).parent.mkdir(parents=True, exist_ok=True)
             (root / path).write_text(text, encoding="utf-8")
-        return pending.check(root, accepted, unsaid)
+        return pending.check(root, accepted)
 
 
 class WindowsPending(unittest.TestCase):
@@ -300,7 +294,6 @@ class WindowsPending(unittest.TestCase):
             [
                 '"a gap being closed" is given 1 times: lower its ceiling to 1',
                 'no test gives "gone" now: take it out of ACCEPTED',
-                f"{LIB}: waits is not compiled out on Windows now: take it out of UNSAID",
             ],
         )
 
