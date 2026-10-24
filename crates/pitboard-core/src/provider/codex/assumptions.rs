@@ -86,9 +86,10 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
     read_from_0_164_0("codex_login_shape"),
-    everywhere("codex_identity_is_local", VERIFIED_AGAINST),
+    // Measured, not read: a reading of 0.164.0's source dates neither.
+    everywhere("codex_identity_is_local", "0.154.0"),
     read_from_0_164_0("codex_renewal"),
-    everywhere("codex_usage_endpoint", VERIFIED_AGAINST),
+    everywhere("codex_usage_endpoint", "0.154.0"),
     everywhere("codex_revokes_on_its_own_sign_out", VERIFIED_AGAINST),
     read_from_0_164_0("codex_never_follows_a_switch"),
     PerSystem {
@@ -359,7 +360,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `https://api.openai.com/auth` the `chatgpt_account_id` and `chatgpt_plan_type`. \
                So who a parked Codex login belongs to costs no network call at all",
         read_from: "the real id_token this machine's Codex had written",
-        verified_against: VERIFIED_AGAINST,
+        verified_against: "0.154.0",
         depends: "provider::codex::engine::identify, and provider::codex::engine's plan, which \
                   reads `chatgpt_plan_type` for `pitboard status`, the app and the account's \
                   record",
@@ -403,7 +404,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     parser written from the source had the windows one level up, the length \
                     in minutes and the reset under another name, and returned nothing while \
                     the request succeeded",
-        verified_against: VERIFIED_AGAINST,
+        verified_against: "0.154.0",
         depends: "provider::codex::api::usage, and every limit Pitboard shows for a Codex \
                   account",
         probe: &["wham/usage", "ChatGPT-Account-ID", "used_percent"],
@@ -424,18 +425,25 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "codex_never_follows_a_switch",
         fact: "a running Codex caches its login in memory for the life of the process with no \
-               expiry and no file watcher, and refuses a reload whose account id has changed, \
-               so a switch is invisible until it is started again. A refresh it makes after \
-               the file changed writes nothing there unless the file holds the same login, by \
+               expiry and no file watcher. Before each refresh it makes, ahead of time, after \
+               a 401 or for the app server, it reads the file again and takes it only where it \
+               names the same `account_id`. After a switch to another account id it makes no \
+               refresh, and fails with `Your access token could not be refreshed because you \
+               have since logged out or signed in to another account. Please sign in again.` \
+               until it is started again. A refresh already under way when the file changes \
+               writes nothing there unless the file holds the same login, by \
                `login_owner_id`, `account_id` and `chatgpt_user_id`, and refuses with \
                `Account credentials changed during refresh.`; it has spent the refresh token \
-               it sent all the same. Until 0.163.0 it wrote its own account's tokens over \
-               whatever was there, keeping the account id it found, which left one login \
-               naming two accounts",
-        read_from: "the auth manager's cache, reload_if_account_id_matches, persist_tokens, \
+               it sent all the same. Until 0.163.0 such a refresh wrote its own account's \
+               tokens over whatever was there, keeping the account id it found, which left one \
+               login naming two accounts",
+        read_from: "the auth manager's cache, auth, refresh_token, refresh_token_with_reason, \
+                    reload_if_account_id_matches, UnauthorizedRecovery's steps, persist_tokens, \
                     same_login_for_persistence and same_account_login in \
-                    codex-rs/login/src/auth, at tag rust-v0.164.0, read on 2026-10-23, and \
-                    persist_tokens at rust-v0.163.0",
+                    codex-rs/login/src/auth/manager.rs, and the app server's \
+                    refresh_token_if_requested in \
+                    codex-rs/app-server/src/request_processors/account_processor.rs, at tag \
+                    rust-v0.164.0, read on 2026-10-23, and persist_tokens at rust-v0.163.0",
         verified_against: "0.164.0",
         depends: "Adoption::RestartRequired for Codex, what a switch tells the person, and \
                   the refusal to park a login naming two accounts, which an older Codex leaves",
@@ -470,13 +478,20 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                `releases/<version>/bin/codex` through the link `current`. Where that has no \
                `current` and an older Codex left a daemon's pid file or log in \
                `$CODEX_HOME/app-server-daemon`, it runs from `packages/standalone/current` \
-               instead, the package a standalone install's terminal sessions run from",
+               instead, the package a standalone install's terminal sessions run from. The \
+               daemon its updater starts in place of one runs from the release `current` \
+               resolves to, `packages/standalone/releases/<version>/bin/codex` there, a \
+               terminal session's path",
         read_from: "the process list of 0.159.3 on 2026-10-01 and the daemon subcommands of the \
-                    codex it ran; package_root and managed_codex_bin in \
-                    codex-rs/app-server-daemon/src/managed_install.rs at tag rust-v0.164.0, \
-                    read on 2026-10-23",
+                    codex it ran; package_root, managed_codex_bin and \
+                    resolved_managed_codex_bin in \
+                    codex-rs/app-server-daemon/src/managed_install.rs, the update loop's \
+                    restart in update_loop.rs and try_restart_if_running in lib.rs, at tag \
+                    rust-v0.164.0, read on 2026-10-23",
         verified_against: "0.164.0",
-        depends: "provider::codex::holders's two app_server_daemon kinds",
+        depends: "provider::codex::holders's two app_server_daemon kinds. A daemon in the \
+                  standalone package that its updater started again reads as a session on \
+                  every system, and on Linux every such daemon does",
         probe: &["app-server daemon restart"],
         absent: &[],
     },
@@ -891,8 +906,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                holding a comma, or a value of another kind, stops it from starting. As the TUI \
                starts, a ChatGPT login that the forced two leave out, by its method or its ID \
                token's `chatgpt_account_id`, is signed out of in every store and deleted, with \
-               no revoke. A login the requirements leave out, by its `tokens.account_id` \
-               first, is left unused. A trusted project's config and an enterprise's cloud \
+               no revoke. Every Codex leaves unused a login that the forced workspaces or the \
+               requirements leave out, by its `tokens.account_id` first, and then by that \
+               claim. A trusted project's config and an enterprise's cloud \
                configuration can set the forced two as well, and are not read, as for the store",
         read_from: "enforce_login_restrictions_with_agent_identity_authapi_base_url, \
                     logout_with_message, logout_all_stores, AuthConfig and \

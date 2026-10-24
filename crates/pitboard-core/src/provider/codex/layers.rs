@@ -51,6 +51,7 @@
 use super::paths::Backend;
 use crate::context::Context;
 use crate::host::{Administered, Os};
+use crate::words::listed_values;
 use base64::prelude::{BASE64_STANDARD, Engine as _};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -707,8 +708,8 @@ impl Method {
 }
 
 // Which ChatGPT logins this machine's Codex keeps (`codex_login_restrictions`). What the
-// configuration forces, Codex signs out of and deletes as it starts; what the requirements
-// leave out, it leaves unused.
+// configuration forces, the interactive `codex` signs out of and deletes as it starts; what
+// either leaves out, every Codex leaves unused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Restrictions {
     method: Option<(Layer, Method)>,
@@ -731,13 +732,13 @@ impl Restrictions {
                 self.place(*layer)
             ));
         }
-        let signs_out = "so Codex signs out of it as it starts, and deletes it";
+        let signs_out = "so the interactive `codex` signs out of it as it starts, and deletes it";
         let unused = "so Codex does not use it";
         let of = |ids: &[String], workspace: Option<&str>| {
             (!workspace.is_some_and(|id| ids.iter().any(|allowed| allowed == id))).then(|| {
                 format!(
                     "{}, and this login is {}",
-                    listed(ids),
+                    listed_values(ids),
                     workspace
                         .map_or_else(|| "of no workspace".to_owned(), |id| format!("of `{id}`"))
                 )
@@ -763,16 +764,22 @@ impl Restrictions {
             return Some(format!(
                 "{} sets `{ALLOWED_METHODS}` to {}, which leaves out a ChatGPT sign-in, {unused}",
                 self.place(*layer),
-                listed(&methods.iter().map(|m| m.word()).collect::<Vec<_>>())
+                listed_values(&methods.iter().map(|m| m.word()).collect::<Vec<_>>())
             ));
         }
-        if let Some((layer, ids)) = &self.allowed_workspaces
-            && let Some(outside) = of(ids, stored.or(claimed))
-        {
-            return Some(format!(
-                "{} sets `{ALLOWED_WORKSPACES}` to {outside}, {unused}",
-                self.place(*layer)
-            ));
+        // Its AuthManager holds `tokens.account_id`, else the claim, to what either names.
+        for (key, set) in [
+            (FORCED_WORKSPACES, &self.workspaces),
+            (ALLOWED_WORKSPACES, &self.allowed_workspaces),
+        ] {
+            if let Some((layer, ids)) = set
+                && let Some(outside) = of(ids, stored.or(claimed))
+            {
+                return Some(format!(
+                    "{} sets `{key}` to {outside}, {unused}",
+                    self.place(*layer)
+                ));
+            }
         }
         None
     }
@@ -782,18 +789,19 @@ impl Restrictions {
         let set = |layer: Layer, key: &str, to: String| {
             format!("`{key}` set to {to} in {}", self.place(layer))
         };
-        let methods =
-            |methods: &[Method]| listed(&methods.iter().map(|m| m.word()).collect::<Vec<_>>());
+        let methods = |methods: &[Method]| {
+            listed_values(&methods.iter().map(|m| m.word()).collect::<Vec<_>>())
+        };
         if let Some((layer, why)) = &self.unreadable {
             return vec![format!("{} {why}", self.place(*layer))];
         }
         self.method
-            .map(|(layer, method)| set(layer, FORCED_METHOD, listed(&[method.word()])))
+            .map(|(layer, method)| set(layer, FORCED_METHOD, listed_values(&[method.word()])))
             .into_iter()
             .chain(
                 self.workspaces
                     .as_ref()
-                    .map(|(layer, ids)| set(*layer, FORCED_WORKSPACES, listed(ids))),
+                    .map(|(layer, ids)| set(*layer, FORCED_WORKSPACES, listed_values(ids))),
             )
             .chain(
                 self.allowed_methods
@@ -803,7 +811,7 @@ impl Restrictions {
             .chain(
                 self.allowed_workspaces
                     .as_ref()
-                    .map(|(layer, ids)| set(*layer, ALLOWED_WORKSPACES, listed(ids))),
+                    .map(|(layer, ids)| set(*layer, ALLOWED_WORKSPACES, listed_values(ids))),
             )
             .collect()
     }
@@ -817,18 +825,6 @@ impl Restrictions {
     }
 }
 
-fn listed<T: AsRef<str>>(items: &[T]) -> String {
-    if items.is_empty() {
-        return "an empty list".into();
-    }
-    items
-        .iter()
-        .map(|item| format!("`{}`", item.as_ref()))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-// The restrictions this machine's Codex keeps to, read for the home `ctx` names.
 pub(crate) fn restrictions_of(ctx: &Context, own: &Path) -> Restrictions {
     let system = system_dir_of(ctx);
     restrictions(crate::host::OS, &system, own, &|layer| {
@@ -1839,13 +1835,22 @@ mod tests {
             one.refuses(Some("b"), Some("b")).as_deref(),
             Some(
                 "/Users/someone/.codex/config.toml sets `forced_chatgpt_workspace_id` to `a`, and \
-                 this login is of `b`, so Codex signs out of it as it starts, and deletes it"
+                 this login is of `b`, so the interactive `codex` signs out of it as it starts, \
+                 and deletes it"
             )
         );
         assert!(
             one.refuses(None, Some("a"))
                 .is_some_and(|said| said.contains("this login is of no workspace")),
             "the ID token's workspace is the one held to it"
+        );
+        assert_eq!(
+            one.refuses(Some("a"), Some("b")).as_deref(),
+            Some(
+                "/Users/someone/.codex/config.toml sets `forced_chatgpt_workspace_id` to `a`, and \
+                 this login is of `b`, so Codex does not use it"
+            ),
+            "and its AuthManager holds `tokens.account_id` to it"
         );
 
         let two = restricted(

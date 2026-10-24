@@ -340,7 +340,6 @@ pub struct Context {
     /// something other than the login Pitboard moves. Only half the answer: the rest is in
     /// files, which [`crate::settings::overrides`] reads and an app can see too.
     pub(crate) overriding_auth: Vec<String>,
-    // Where Claude Code finds an Anthropic profile, and which one the environment names.
     pub(crate) anthropic: crate::settings::Profiles,
     /// Whether a login too large for `security -i` may be written the way Claude Code
     /// writes it: as a command argument, where `ps` can see it for the length of the call.

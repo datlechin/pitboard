@@ -3568,6 +3568,13 @@ treated, and only the macOS build shows it. The run reads both builds since.
   a login of another organisation as a session starts, so `Provider::refuses` asks it of the
   account going in, by the organisation Pitboard recorded for it. Where several managed
   sources set it, a login none of them names is refused.
+- Read on 23 October 2026 from the darwin-arm64 build of 2.1.309
+  (`macos_managed_preferences`): on macOS a configuration profile's plist, the person's in
+  `/Library/Managed Preferences/<user>` before the device's, is a managed source too. Claude
+  Code converts the first it can read with `plutil` and takes it over the folder unless
+  `managedSourcesBehavior` merges them, where it takes `HKLM` on Windows.
+  `host::Host::managed_plist` converts it the same way, and `settings::managed_taken` puts it
+  in `HKLM`'s place.
 - Read on 15 October 2026 from the win32-x64 and win32-arm64 builds of 2.1.300
   (`windows_version_resource`): `claude.exe` carries a version resource whose product
   version is `2.1.300.0`. So doctor reads the release there on Windows, once npm's
@@ -3739,10 +3746,11 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   `forced_login_method` and `forced_chatgpt_workspace_id` come from the same layers as the
   store, and `allowed_login_methods` and `allowed_chatgpt_workspaces` from the requirements.
   As the TUI starts, Codex signs out of a login the forced two rule out, in every store, and
-  deletes it with no revoke; one the requirements rule out it leaves unused. A Codex park is
-  the only copy, so a switch, and a sign-in that would replace the login in use, ask
-  `Provider::refuses` of the login going in before anything moves, and stop with
-  `login_restricted`. `doctor` names each setting and the accounts it rules out.
+  deletes it with no revoke; `codex exec`, the app server and the ChatGPT app do not. Every
+  Codex leaves unused a login that any of the four rules out, by its `tokens.account_id`
+  first. A Codex park is the only copy, so a switch, and a sign-in that would replace the
+  login in use, ask `Provider::refuses` of the login going in before anything moves, and stop
+  with `login_restricted`. `doctor` names each setting and the accounts it rules out.
 - Read from 0.163.0's config loader on 16 October 2026 (`codex_windows_store_layers`): on
   Windows this machine's `config.toml` and `requirements.toml` are in `OpenAI\Codex` under
   `FOLDERID_ProgramData`, or under `C:\ProgramData` where Windows cannot say that folder.
@@ -3775,12 +3783,16 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
 - A running Codex holds its login in memory for the life of the process and watches no file.
   It refuses a reload whose account id has changed (`Adoption::RestartRequired`), so it
   never picks up a switch.
-- Read from 0.164.0's source on 23 October 2026 (`codex_never_follows_a_switch`): a refresh
-  a running Codex makes after the file changed writes nothing there unless the file holds
-  the same login, by `login_owner_id`, `account_id` and `chatgpt_user_id`, and fails with
-  `Account credentials changed during refresh.` It has spent the refresh token it sent, the
-  one Pitboard parked. Until 0.163.0 it wrote its own account's tokens under whatever
-  account id it found there, which is why a login naming two accounts is never parked.
+- Read from 0.164.0's source on 23 October 2026 (`codex_never_follows_a_switch`): before
+  each refresh a running Codex reads the file again, and takes it only where it names the
+  same `account_id`. After a switch to another account id it makes no refresh, and fails
+  with "...signed in to another account. Please sign in again." until it is started again.
+  A refresh already under way when the file changes writes nothing there unless the file
+  holds the same login, by `login_owner_id`, `account_id` and `chatgpt_user_id`, and fails
+  with `Account credentials changed during refresh.` It has spent the refresh token it sent,
+  the one Pitboard parked. Until 0.163.0 such a refresh wrote its own account's tokens under
+  whatever account id it found there, which is why a login naming two accounts is never
+  parked.
 - Codex writes `auth.json` with no lock of any kind, so there is none for Pitboard to share.
 - Measured on 2026-10-01 from the process list of a Mac running each of them:
   - OpenAI's ChatGPT app for macOS 26.928.31416, bundle id `com.openai.codex`, runs a codex
@@ -3802,7 +3814,9 @@ real `auth.json` that build wrote. The register is `provider/codex/assumptions.r
   has no `current` and an older Codex left a daemon's pid file or log, the daemon runs from
   `packages/standalone/current`. A second `app_server_daemon` holder takes those directories,
   `holder::Location::WithinEach`. On Linux the path resolves to a release, as a standalone
-  install's sessions do, so such a daemon reads as a session there.
+  install's sessions do, so such a daemon reads as a session there. One the daemon's updater
+  starts again runs from the release itself (`resolved_managed_codex_bin`), and reads as a
+  session on macOS too.
 - Read on 23 October 2026 from the amd64 `.deb` of ChatGPT for Linux 26.1016.61520, as bytes
   and never run (`codex_linux_app`): it installs to `/usr/lib/chatgpt` and runs its own
   `resources/codex` as `codex app-server` with the app's environment. So a folder named

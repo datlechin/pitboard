@@ -299,7 +299,10 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     },
     PerSystem {
         name: "windows_managed_settings",
-        macos: NotRead("macOS has no registry, and its managed folder is settings.rs's"),
+        macos: NotRead(
+            "macOS has no registry: its managed folder is settings.rs's, and its profile's plist \
+             macos_managed_preferences'",
+        ),
         linux: NotRead("Linux has no registry, and its managed folder is settings.rs's"),
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
@@ -481,6 +484,15 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.309"),
     },
     read_from_2_1_309("organisation_pin"),
+    PerSystem {
+        name: "macos_managed_preferences",
+        macos: Read("2.1.309"),
+        linux: NotRead("Linux has no managed preferences, and its managed folder is settings.rs's"),
+        windows: NotRead(
+            "Windows has no managed preferences, and its policy keys are \
+                          windows_managed_settings'",
+        ),
+    },
 ];
 
 pub(crate) const ASSUMPTIONS: &[Assumption] = &[
@@ -2054,7 +2066,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     builds of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
         depends: "settings::Profiles and settings::overrides, so doctor's auth_source check, a \
-                  switch's auth_overridden warning and the automatic switch name the profile",
+                  switch's auth_overridden warning and the automatic switch name the profile. \
+                  They take a credentials file that is there and not empty for one that holds a \
+                  login, and never read it",
         probe: &[
             r#"["ANTHROPIC_FEDERATION_RULE_ID","ANTHROPIC_ORGANIZATION_ID"]"#,
             "An Anthropic profile (~/.config/anthropic) is configured, but a claude.ai login \
@@ -2102,13 +2116,40 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     sign-in runs, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
                     builds of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
-        depends: "settings::organisation_pins and Claude's Provider::refuses, so a switch and a \
+        depends: "settings::organisation_pins, through the managed sources settings::managed_taken \
+                  takes, the profile's plist on macOS (macos_managed_preferences) among them, and \
+                  Claude's Provider::refuses, so a switch and a \
                   sign-in that would replace the login in use refuse with `login_restricted` an \
                   account of an organisation no managed source names",
         probe: &[
             "Organization UUID to require for OAuth login. Accepts a single UUID string or an \
              array of UUIDs (any one is permitted).",
             "forceLoginOrgUUID in managed settings is set to an empty array.",
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "macos_managed_preferences",
+        fact: "on macOS Claude Code also takes managed settings from a configuration profile's \
+               plist: `/Library/Managed Preferences/<user>/com.anthropic.claudecode.plist`, \
+               `<user>` the name this user's passwd entry gives, then \
+               `/Library/Managed Preferences/com.anthropic.claudecode.plist`, the first it can \
+               read, converted with `/usr/bin/plutil -convert json -o - --` within 5 seconds. \
+               One `plutil -lint` takes but that cannot be converted, holding a date or data, is \
+               unreadable; one it does not take for a plist is empty. Where that plist holds a \
+               policy it is taken over the managed folder, as `HKLM` is on Windows, unless \
+               `managedSourcesBehavior` merges them",
+        read_from: "the plists' paths and labels, their reading through `plutil`, and the managed \
+                    sources' order, whose second tier is the plist on macOS and `HKLM` on \
+                    Windows, in the darwin-arm64 build of 2.1.309, read as bytes on 2026-10-23",
+        verified_against: "2.1.309",
+        depends: "settings::overrides, custom_oauth, env_settings and organisation_pins, through \
+                  host::Host::managed_plist and settings::managed_taken",
+        probe: &[
+            "/Library/Managed Preferences/",
+            "per-user managed preferences",
+            "device-level managed preferences",
+            "it holds a value plutil cannot convert to JSON (a date or data value)",
         ],
         absent: &[],
     },
