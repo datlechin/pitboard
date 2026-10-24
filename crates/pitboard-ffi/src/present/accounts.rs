@@ -238,11 +238,15 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         None
     } else {
         let parked = account.parked.as_ref();
-        let life = said::parked_life(parked.and_then(|p| p.refresh_expires_at), seen.now)
+        let renewable = parked.and_then(|p| p.refresh_expires_at);
+        let life = said::parked_life(renewable, seen.now)
             .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
             .map(|life| words::typeset(&life));
         match account.standing {
-            status::Standing::Expiring => life.map(|life| words::sign_in_to_keep(&life)),
+            // Without a refresh token's date, it is a Claude Desktop session's that has passed.
+            status::Standing::Expiring => {
+                life.map(|life| words::sign_in_hint(&life, renewable.is_none()))
+            }
             _ => life,
         }
     };
@@ -1177,7 +1181,7 @@ mod tests {
         let life = said::session_life(Some(NOW - 1), NOW).expect("a date");
         assert_eq!(
             desktop_rows(vec![lapsed])[0].notes,
-            [words::sign_in_to_keep(&life)],
+            [words::sign_in_hint(&life, true)],
             "as `pitboard status` hints a sign-in for it"
         );
     }
@@ -1200,7 +1204,7 @@ mod tests {
             .standing(status::Standing::Expiring)
             .build());
         let life = said::parked_life(Some(due), NOW).expect("a date");
-        assert_eq!(expiring.notes, [words::sign_in_to_keep(&life)]);
+        assert_eq!(expiring.notes, [words::sign_in_hint(&life, false)]);
         assert!(!expiring.needs_sign_in);
         assert!(matches!(
             expiring.action.map(|action| action.intent),

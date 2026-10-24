@@ -77,10 +77,14 @@ pub(crate) fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
     }
 }
 
-// A parked login that switches for now, as its row's note says it: one due to expire, or
-// whose sign-in may have lapsed, as `pitboard status` hints a sign-in for it.
-pub(crate) fn sign_in_to_keep(life: &str) -> String {
-    format!("{life}: sign in again to keep it")
+// A parked login that switches for now, as `pitboard status` hints a sign-in for it: one due
+// to expire, or one whose sign-in may have lapsed already.
+pub(crate) fn sign_in_hint(life: &str, lapsed: bool) -> String {
+    if lapsed {
+        format!("{life}: sign in again")
+    } else {
+        format!("{life}: sign in again to keep it")
+    }
 }
 
 /// A button's, a menu item's or a heading's words as each system writes them: title case
@@ -1889,12 +1893,12 @@ mod tests {
     #[test]
     fn a_parked_login_a_sign_in_keeps_says_so_after_its_life() {
         assert_eq!(
-            sign_in_to_keep("Parked login good for 2 more days"),
+            sign_in_hint("Parked login good for 2 more days", false),
             "Parked login good for 2 more days: sign in again to keep it"
         );
         assert_eq!(
-            sign_in_to_keep("Its sign-in may have lapsed"),
-            "Its sign-in may have lapsed: sign in again to keep it"
+            sign_in_hint("Its sign-in may have lapsed", true),
+            "Its sign-in may have lapsed: sign in again"
         );
     }
 
