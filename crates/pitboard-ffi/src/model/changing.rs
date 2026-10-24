@@ -211,11 +211,11 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
     assert_eq!(ids.len(), rows.len(), "one uuid, two tools, two rows");
     let codex_work = rows
         .iter()
-        .find(|row| row.provider == "codex" && row.title == "work")
+        .find(|row| row.qualified.as_deref() == Some("codex/work"))
         .expect("Codex's work");
     let claude_work = rows
         .iter()
-        .find(|row| row.provider == "claude" && row.title == "work")
+        .find(|row| row.qualified.as_deref() == Some("claude/work"))
         .expect("Claude Code's work");
     assert_ne!(codex_work.id, claude_work.id);
 
@@ -224,7 +224,7 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
         model.run(&mut machine);
     }
     assert_eq!(machine.forgot, ["codex/work", "claude/work"]);
-    assert_eq!(codex_work.spoken_name, "work (Codex)");
+    assert_eq!(codex_work.spoken, "work (Codex)");
 }
 
 /// Naming or renaming closes its own sheet once it is done, and only that. The name is saved

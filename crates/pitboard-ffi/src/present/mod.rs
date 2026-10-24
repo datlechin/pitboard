@@ -82,6 +82,19 @@ pub struct MenuBarText {
     pub tip: String,
 }
 
+/// What went wrong in the sheet that is up: an alert's words, said inside it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FailureText {
+    /// One higher for each failure said, so an app tells a new one from one it has shown.
+    pub id: u64,
+    /// What was being done: "Couldn’t sign in to work".
+    pub title: String,
+    /// What went wrong. Pitboard's errors already say what to do, so it is shown as it is.
+    pub message: String,
+    /// Everything else it warned about, a sentence each.
+    pub warnings: Vec<String>,
+}
+
 /// One tool's accounts, under its name: one section, unheaded, while every account shown is
 /// one tool's, so a machine with one tool looks as it always did.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -98,8 +111,6 @@ pub struct AccountSection {
 pub struct AccountItem {
     /// The account's `id`, unique among the accounts shown.
     pub id: String,
-    /// The tool, as a `Tool`'s code.
-    pub provider: String,
     /// Its label with its tool, for what is asked of it. `None` for a login not enrolled.
     pub qualified: Option<String>,
     /// Its name, or its email address while it has none, or what is wrong with a login
@@ -112,9 +123,6 @@ pub struct AccountItem {
     /// Its title as the menu says it, with its plan: "work · Team 5x", and on Windows the
     /// figure the menu bar would show of it: "work · Team 5x · 64%".
     pub menu_title: String,
-    /// Its name where nothing around it says which tool it is for, as VoiceOver reads a row
-    /// apart from its heading: "work", or "work (Codex)" beside another tool's accounts.
-    pub spoken_name: String,
     /// The row as VoiceOver reads it as one thing: "work (Codex), in use".
     pub spoken: String,
     pub in_use: bool,
@@ -197,8 +205,6 @@ pub struct WindowOffer {
 /// One limit of an account, as a row of its bars.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct LimitRow {
-    /// As a sentence names it, with its scope: "5-hour", "weekly Fable".
-    pub name: String,
     /// As the column beside its bar names it: "5h", "week · Fable".
     pub short: String,
     /// The share used, as the service said it, for the bar. Past 100 once exceeded.
@@ -736,7 +742,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         window_request: state.window,
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
-        sheet_failure: state.sheet_failure.clone(),
+        sheet_failure: state.sheet_failure.as_ref().map(sheets::failure_text),
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
         account_menu: accounts::account_menu(seen.os),

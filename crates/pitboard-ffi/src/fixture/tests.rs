@@ -379,7 +379,11 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
         snapshot
             .signing_in
             .as_ref()
-            .is_some_and(|signing| signing.wants_code && signing.code_refused)
+            .is_some_and(|signing| signing.wants_code)
+            && snapshot
+                .signing_in_text
+                .as_ref()
+                .is_some_and(|text| text.refused.is_some())
     });
     assert_eq!(
         refused
@@ -1301,7 +1305,7 @@ fn daily_renewal_turns_on() {
     let (model, told) = started(&launched);
     model.send(Intent::SetSchedule { on: true });
     told.last_where("the schedule on", |snapshot| {
-        snapshot.machine.schedule.on && !snapshot.machine.schedule.changing
+        snapshot.machine.schedule.on && snapshot.machine.schedule.enabled
     });
     model.shutdown();
 }
@@ -1774,15 +1778,15 @@ fn this_mac_shows_the_cores_checks() {
         "{:#?}",
         checks.lines
     );
-    let worth_looking_at: Vec<(&str, &str)> = checks
+    let worth_looking_at: Vec<&str> = checks
         .lines
         .iter()
         .filter(|line| line.level != crate::Level::Ok)
-        .map(|line| (line.code.as_str(), line.name.as_str()))
+        .map(|line| line.name.as_str())
         .collect();
     assert_eq!(
         worth_looking_at,
-        [("parked_login", "Account personal")],
+        ["Account personal"],
         "{:#?}",
         checks.lines
     );
@@ -1791,7 +1795,7 @@ fn this_mac_shows_the_cores_checks() {
     let parked: Vec<&str> = checks
         .lines
         .iter()
-        .filter(|line| line.code == "parked_login")
+        .filter(|line| line.name.starts_with("Account "))
         .map(|line| line.name.as_str())
         .collect();
     assert!(parked.len() > 1, "{:#?}", checks.lines);
@@ -1865,7 +1869,7 @@ fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
         .checks
         .lines
         .iter()
-        .find(|line| line.code == "in_use")
+        .find(|line| line.name == crate::present::words::check_name("in_use", "in use"))
         .expect("the account in use");
     let said = in_use
         .detail
@@ -2431,7 +2435,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
             .checks
             .lines
             .last()
-            .is_some_and(|line| line.code == "notification_not_posted")
+            .is_some_and(|line| line.name == "Notifications")
     });
     model.shutdown();
 

@@ -76,6 +76,10 @@ fn running(model: &Hand) -> RunningSignIn {
     model.shown().signing_in.expect("a sign-in under way")
 }
 
+fn code_refused(model: &Hand) -> bool {
+    model.state.signing().is_some_and(|s| s.code_refused())
+}
+
 /// The tool of the sign-in `id` says `text`, as its thread hands it on.
 fn says(model: &mut Hand, id: u64, text: &str) {
     model.give(Answer::SignInSaid {
@@ -135,7 +139,7 @@ fn a_sign_in_that_cannot_start_is_reported() {
         failure.message,
         "a sign-in here would write over the login in use"
     );
-    assert_eq!(failure.code.as_deref(), Some("sign_in_not_isolated"));
+    assert_eq!(model.sheet_failure_code(), Some("sign_in_not_isolated"));
     assert_eq!(model.state.presented, None, "not in an alert over it");
     assert_eq!(model.state.failure, None);
 }
@@ -491,7 +495,7 @@ fn a_refused_sign_in_says_what_it_found_on_the_way() {
         failure.message,
         "a sign-in here would write over the login in use"
     );
-    assert_eq!(failure.warnings, std::slice::from_ref(&recovered));
+    assert_eq!(failure.warnings, std::slice::from_ref(&recovered.message));
     assert_eq!(model.state.warnings, [recovered]);
 }
 
@@ -597,8 +601,9 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again() {
     says(&mut model, id, CODEX_ADDRESS);
     let shown = running(&model);
     assert_eq!(machine.signed_in, ["codex/work"]);
+    let signing = model.state.signing().expect("a sign-in");
     assert_eq!(
-        (shown.provider.as_str(), shown.name.as_str()),
+        (signing.provider.as_str(), signing.name.as_str()),
         ("codex", "work")
     );
     assert!(shown.url.is_some());
@@ -627,7 +632,10 @@ fn a_second_sign_in_while_one_runs_starts_nothing() {
 
     assert_eq!(model.send(sign_in("codex", "home")), []);
     let shown = running(&model);
-    assert_eq!((shown.id, shown.name.as_str()), (first, "work"));
+    assert_eq!(
+        (shown.id, model.state.signing().map(|s| s.name.as_str())),
+        (first, Some("work"))
+    );
     ends(&mut model, &mut machine, first);
     assert_eq!(machine.signed_in, ["codex/work"]);
     assert_eq!(model.shown().signing_in, None);
@@ -702,8 +710,8 @@ fn a_sign_in_asked_for_after_a_cancel_starts_once_the_cancelled_one_has_stopped(
         let waiting = running(&model);
         assert_ne!(waiting.id, first);
         assert_eq!(
-            (waiting.said.as_str(), waiting.url, waiting.wants_code),
-            ("", None, false),
+            (waiting.url, waiting.wants_code),
+            (None, false),
             "{case}: shown as starting"
         );
         assert_eq!(model.shown().sheet, Some(add(None)), "{case}");
@@ -998,7 +1006,10 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
             .signing_in
             .as_ref()
             .expect("the sign-in started since");
-        assert_eq!((still.id, still.name.as_str()), (next, "other"));
+        assert_eq!(
+            (still.id, model.state.signing().map(|s| s.name.as_str())),
+            (next, Some("other"))
+        );
         assert_eq!(shown.sheet, Some(add(Some("claude"))), "{stopped_first}");
         assert!(model.state.warnings.is_empty(), "{stopped_first}");
         assert_eq!((&model.state.presented, shown.sheet_failure), (&None, None));
@@ -1289,12 +1300,12 @@ fn a_code_claude_code_refused_may_be_pasted_again() {
         }]
     );
     let shown = running(&model);
-    assert!(!shown.wants_code && !shown.code_refused);
+    assert!(!shown.wants_code && !code_refused(&model));
 
     says(&mut model, id, REFUSED);
     let shown = running(&model);
     assert!(shown.wants_code, "asked again");
-    assert!(shown.code_refused);
+    assert!(code_refused(&model));
 
     let typed = model.send(paste("the-code#the-state"));
     assert_eq!(
@@ -1307,7 +1318,7 @@ fn a_code_claude_code_refused_may_be_pasted_again() {
     );
     let shown = running(&model);
     assert!(
-        !shown.wants_code && !shown.code_refused,
+        !shown.wants_code && !code_refused(&model),
         "nothing said of it yet"
     );
     model.run(&mut machine);
@@ -1339,7 +1350,7 @@ fn only_what_the_tool_says_after_a_code_refuses_it() {
     model.send(paste("two"));
     says(&mut model, id, "Login successful.\n");
     let shown = running(&model);
-    assert!(!shown.wants_code && !shown.code_refused);
+    assert!(!shown.wants_code && !code_refused(&model));
 }
 
 /// A name and a code are taken without the white space around them, as the Swift sheets took
@@ -1358,7 +1369,10 @@ fn a_name_and_a_code_are_trimmed_as_the_sheet_trimmed_them() {
             qualified: "claude/travel".into()
         }]
     );
-    assert_eq!(running(&model).name, "travel");
+    assert_eq!(
+        model.state.signing().map(|s| s.name.as_str()),
+        Some("travel")
+    );
     model.run(&mut machine);
     says(&mut model, 1, PROMPT);
     assert_eq!(model.send(paste(" \t\u{200b}")), []);
@@ -1514,7 +1528,7 @@ fn a_sign_in_lost_to_a_panic_is_said_and_over() {
     assert_eq!(shown.signing_in, None);
     let failure = shown.sheet_failure.expect("said in the sheet");
     assert_eq!(failure.title, "Couldn’t sign in to work");
-    assert_eq!(failure.code, None);
+    assert_eq!(model.sheet_failure_code(), None);
 
     let id = starts(&mut model, &mut machine, "claude", "work");
     model.give(Answer::SignInQuiet { id });

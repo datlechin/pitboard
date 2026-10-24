@@ -8,8 +8,8 @@ public sealed class MachineViewModelTests
     private static readonly ChecksShown Checked = new(
         Lines:
         [
-            new CheckLine(0, "claude", "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
-            new CheckLine(1, "parked_login", "Account personal", Level.Warn, "Worth looking at", "Lapses in 2 days", "Use it to renew it."),
+            new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
+            new CheckLine(1, "Account personal", Level.Warn, "Worth looking at", "Lapses in 2 days", "Use it to renew it."),
         ],
         Summary: "One thing is worth looking at.", Level: Level.Warn, Checking: false, Checked: "Checked at 09:00", Waiting: null);
 

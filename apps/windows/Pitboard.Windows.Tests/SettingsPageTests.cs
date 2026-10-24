@@ -340,16 +340,14 @@ public sealed class SettingsPageTests
     [UITestMethod]
     public async Task RenewalIsTheSwitchAlone()
     {
-        const string task = @"\Pitboard\Renew S-1-5-21-1004";
         var model = new StandInModel(With(1, machine => machine with
         {
-            Schedule = machine.Schedule with { Schedule = new Schedule.Installed(task, 86_400), On = true },
+            Schedule = machine.Schedule with { On = true },
         }));
         var page = await Shown(new AppModel(model));
         var texts = Views.Texts(page);
 
         Assert.DoesNotContain("Every day", texts);
-        Assert.DoesNotContain(task, texts);
         Assert.IsFalse(Views.Visible<Button>(page).Any(button => button.Content is "Renew now" or "Copy"));
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsOn);
 
@@ -363,7 +361,7 @@ public sealed class SettingsPageTests
         const string none = "This PC has no scheduler Pitboard knows how to write to.";
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with
         {
-            Schedule = machine.Schedule with { Schedule = new Schedule.Unsupported(), Enabled = false, Note = none },
+            Schedule = machine.Schedule with { Enabled = false, Note = none },
         }))));
 
         Assert.Contains(none, Views.Texts(page));

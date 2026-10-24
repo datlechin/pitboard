@@ -84,7 +84,7 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public Sheet? Sheet => Part<Sheet?>();
 
-    public Failure? SheetFailure => Part<Failure?>();
+    public FailureText? SheetFailure => Part<FailureText?>();
 
     public MenuBarText MenuBar => Part<MenuBarText>();
 

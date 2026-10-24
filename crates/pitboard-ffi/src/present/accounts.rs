@@ -262,7 +262,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     }
     AccountItem {
         id: account.id.clone(),
-        provider: account.provider.clone(),
         qualified: account.qualified.clone(),
         summary: summary(seen, account),
         title,
@@ -305,7 +304,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
                     .collect()
             })
             .unwrap_or_default(),
-        spoken_name,
     }
 }
 
@@ -641,7 +639,6 @@ pub(crate) fn limit_row(limit: &Limit, read_at: i64, now: i64) -> LimitRow {
             said: said::pace_column(pace),
             help: words::pace_help(pace),
         }),
-        name,
     }
 }
 
@@ -1083,7 +1080,6 @@ mod tests {
             now,
             now,
         );
-        assert_eq!(row.name, "weekly Fable");
         assert_eq!(row.short, "week · Fable");
         assert_eq!(row.figure, "72%");
         assert_eq!(row.level, crate::UsageLevel::Low);

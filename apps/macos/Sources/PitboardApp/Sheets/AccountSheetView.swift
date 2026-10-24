@@ -120,7 +120,7 @@ struct NameProblem: View {
 /// A failure said inside the sheet that met it, where the name typed is still there to
 /// correct.
 struct SheetFailure: View {
-    let failure: Failure
+    let failure: FailureText
 
     var body: some View {
         Section {
@@ -129,7 +129,7 @@ struct SheetFailure: View {
                     Text(failure.title).fontWeight(.medium)
                     Text(failure.message).explanatory().textSelection(.enabled)
                     ForEach(failure.warnings, id: \.self) { warning in
-                        Text(warning.message).explanatory()
+                        Text(warning).explanatory()
                     }
                 }
             } icon: {

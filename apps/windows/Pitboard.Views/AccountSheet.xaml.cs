@@ -260,7 +260,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
     // The InfoBar announces itself as it opens, so a failure after another opens it again. Focus goes back to the field
     // the failure is about, so Enter tries again.
-    private void ShowFailure(Failure? failure)
+    private void ShowFailure(FailureText? failure)
     {
         var fresh = failure is not null && failure.Id != _failureShown;
         _failureShown = failure?.Id;
@@ -276,7 +276,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         Warnings.Children.Clear();
         foreach (var warning in failure.Warnings)
         {
-            Warnings.Children.Add(new TextBlock { Text = warning.Message, TextWrapping = TextWrapping.Wrap });
+            Warnings.Children.Add(new TextBlock { Text = warning, TextWrapping = TextWrapping.Wrap });
         }
 
         Warnings.Visibility = Look.Shown(failure.Warnings.Length > 0);

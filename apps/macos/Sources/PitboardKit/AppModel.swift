@@ -33,7 +33,7 @@ public final class AppModel {
     /// The sheet over the main window, while one is asked for.
     public private(set) var sheet: Sheet?
     /// What went wrong in the sheet that is up, said inside it.
-    public private(set) var sheetFailure: Failure?
+    public private(set) var sheetFailure: FailureText?
     /// What the menu bar item says beside its mark, in each form its setting can choose.
     public private(set) var menuBar: MenuBarText
     /// The accounts, a section per tool once there is more than one.

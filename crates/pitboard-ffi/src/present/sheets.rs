@@ -5,8 +5,8 @@
 
 use super::words;
 use super::{
-    Choice, Missing, NameCheck, Question, Seen, SheetText, SheetTool, SigningInText, StowText,
-    alert_of,
+    Choice, FailureText, Missing, NameCheck, Question, Seen, SheetText, SheetTool, SigningInText,
+    StowText, alert_of,
 };
 use crate::Tool;
 use crate::account_windows::AlertText;
@@ -427,7 +427,7 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
     if let Some(signing) = seen.state.signing().filter(|signing| signing.in_its_app) {
         return Some(in_app_signing_in_text(seen, signing));
     }
-    let signing = seen.state.shown_sign_in()?;
+    let signing = seen.state.signing()?;
     let tool = seen.tool_name(&signing.provider);
     Some(SigningInText {
         waiting: "Waiting for your browser".into(),
@@ -456,7 +456,7 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         // The owner approved this sentence as written on 6 October 2026. The owner decided
         // that a code may be pasted again, and the Swift app, which never asked again, had
         // nothing to say here.
-        refused: signing.code_refused.then(|| {
+        refused: signing.code_refused().then(|| {
             format!(
                 "{tool} didn’t take that code. Copy the whole code your browser shows, and \
                  paste it again."
@@ -665,6 +665,19 @@ pub(crate) fn quit_confirmation(seen: &Seen, question: &QuitQuestion, then: &Aft
 /// it warned about.
 pub(crate) fn failure_alert(failure: &Failure) -> AlertText {
     alert_of(&failure.title, &failure.message, &failure.warnings)
+}
+
+pub(crate) fn failure_text(failure: &Failure) -> FailureText {
+    FailureText {
+        id: failure.id,
+        title: failure.title.clone(),
+        message: failure.message.clone(),
+        warnings: failure
+            .warnings
+            .iter()
+            .map(|warning| warning.message.clone())
+            .collect(),
+    }
 }
 
 #[cfg(test)]

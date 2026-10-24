@@ -194,7 +194,6 @@ fn an_account_carries_the_plan_its_login_says() {
     assert_eq!(team.plan.as_deref(), Some("Team 5x"));
     assert_eq!(team.menu_title, "work · Team 5x");
     assert_eq!(team.spoken, "work, Team 5x, in use");
-    assert_eq!(team.spoken_name, "work");
     let spare = described(account(Some("spare")).build());
     assert_eq!((spare.plan, spare.menu_title.as_str()), (None, "spare"));
 }
@@ -2490,7 +2489,10 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
             email: "a@example.com".into()
         }
     );
-    assert_eq!(shown.sections[0].accounts[0].spoken_name, "a@example.com");
+    assert_eq!(
+        shown.sections[0].accounts[0].spoken,
+        "a@example.com, in use"
+    );
     assert_eq!(
         shown.setup,
         Some(SetupStep {

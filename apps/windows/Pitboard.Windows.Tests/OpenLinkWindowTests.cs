@@ -22,8 +22,8 @@ public sealed class OpenLinkWindowTests
             Title: "Open this chatgpt.com link as:", Link: Shared, LinkText: "chatgpt.com/c/shared",
             Accounts:
             [
-                new PickerAccount(Main, "main@example.com", Open: false),
-                new PickerAccount(Spare, "spare@example.com, window open", Open: true),
+                new PickerAccount(Main, "main@example.com"),
+                new PickerAccount(Spare, "spare@example.com, window open"),
             ],
             Chosen: Main.Store, Open: "Open"));
 

@@ -608,7 +608,6 @@ fn a_link_for_an_open_window_loads_in_it() {
         panic!("accounts to choose from");
     };
     assert_eq!(accounts[0].detail, "main@example.com, window open");
-    assert!(accounts[0].open);
     armed(&mut model);
     choose(&mut model, &main);
     let after = open_window(&model, &main).expect("still open").load;

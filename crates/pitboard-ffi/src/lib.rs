@@ -38,10 +38,10 @@ pub use sites::{Conjunction, Site, SiteLink, site_names};
 
 mod model;
 pub use model::{
-    AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure,
-    Intent, LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications,
-    Pane, PitboardModel, PlatformError, QuitQuestion, ReadFailure, RunOutNotice, RunningSignIn,
-    Sheet, Snapshot, Tip, WindowRequest, WindowsLaunch,
+    AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Intent,
+    LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications, Pane,
+    PitboardModel, PlatformError, QuitQuestion, ReadFailure, RunOutNotice, RunningSignIn, Sheet,
+    Snapshot, Tip, WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -53,12 +53,12 @@ mod present;
 pub use present::{
     AccountItem, AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown,
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice,
-    CommandLineShown, DownloadShown, DownloadState, EmptyList, Footing, ItemAction, ItemOffer,
-    LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
-    NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount,
-    PickerShown, Question, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
-    SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown,
-    WindowOffer, WindowWaiting, check_name, downloads_quit_question,
+    CommandLineShown, DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction,
+    ItemOffer, LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices,
+    Missing, NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice,
+    PickerAccount, PickerShown, Question, ScheduleShown, SetupLink, SetupStep, Severity, SheetText,
+    SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown,
+    WarmShown, WindowOffer, WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;
@@ -206,30 +206,24 @@ pub fn windows_records_key(directory: String) -> String {
     pitboard_core::host::path_key_in_any_case(&directory)
 }
 
-/// Something to know about that did not stop the operation.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Warning {
+// Something to know about that did not stop the operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Warning {
     pub code: String,
     pub message: String,
-    /// The account a warning that stands until it is put right is about, as `Account.id`
-    /// names it, where its words change while it stands: `login_replaced` names whose login
-    /// the tool has stored now, which every switch changes. `None` for every other warning.
+    // as `Account.id` names it, for a warning whose words change while it stands
     pub account: Option<String>,
-    /// What the file a `fallback_login` warning is about holds, which says whether it can be
-    /// put away: one Pitboard cannot read cannot. `None` for every other warning.
+    // what the file a `fallback_login` warning is about holds, so whether it can be put away
     pub held: Option<Held>,
     // the tool it is about, as a `Tool`'s code, where it names one
     pub provider: Option<String>,
 }
 
-/// What a file behind a tool's store holds, as far as Pitboard can read it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Held {
-    /// A login of the tool's, which a session that cannot read that store signs in with.
+// What a file behind a tool's store holds, as far as Pitboard can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Held {
     Login,
-    /// No login of the tool's.
     NoLogin,
-    /// It is there, and cannot be read.
     Unreadable,
 }
 
@@ -244,14 +238,14 @@ pub(crate) struct Abandoned {
     pub logins_kept: u32,
 }
 
-/// Whether anything keeps parked logins alive on this machine without a command being run.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum Schedule {
-    /// The platform's own scheduler runs `pitboard renew` every `every_seconds`.
+// Whether anything keeps parked logins alive on this machine without a command being run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Schedule {
+    // the platform's own scheduler runs `pitboard renew` every `every_seconds`
     Installed { path: String, every_seconds: u32 },
-    /// Nothing does. Parked logins are renewed when Pitboard runs, and otherwise not.
+    // parked logins are renewed when Pitboard runs, and otherwise not
     Absent,
-    /// This platform has no scheduler Pitboard knows how to write.
+    // no scheduler Pitboard knows how to write
     Unsupported,
 }
 

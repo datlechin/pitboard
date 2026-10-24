@@ -7,8 +7,8 @@ internal static class Items
 {
     public static AccountItem Account(string provider, string label, bool inUse = false) =>
         new(
-            Id: $"{provider}:{label}", Provider: provider, Qualified: $"{provider}/{label}", Title: label,
-            Email: $"{label}@example.com", Plan: null, MenuTitle: label, SpokenName: label,
+            Id: $"{provider}:{label}", Qualified: $"{provider}/{label}", Title: label,
+            Email: $"{label}@example.com", Plan: null, MenuTitle: label,
             Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false, Unplaced: false,
             Switching: false,
             Action: inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")),
@@ -31,7 +31,7 @@ internal static class Items
 
     public static LimitRow Limit(double percent, PaceStanding standing = PaceStanding.Even) =>
         new(
-            Name: "5-hour", Short: "5h", Percent: percent, Figure: $"{percent:0}%",
+            Short: "5h", Percent: percent, Figure: $"{percent:0}%",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
             Resets: "resets in 2h 10m",
             Pace: new LimitPace(Expected: 30, Standing: standing, Said: standing == PaceStanding.Over ? "over pace" : "", Help: "Even use would be at 30% by now"),
@@ -73,8 +73,8 @@ internal static class Items
             Title: $"Rename “{label}”", Message: "The account keeps its parked login.", Tools: [], Tool: "claude",
             Account: null, Name: label, Prompt: label, Confirm: "Rename", Saving: false, Progress: null);
 
-    public static RunningSignIn Running(string provider, string? url = null, bool wantsCode = false) =>
-        new(Id: 1, Provider: provider, Name: "third", Said: "", Url: url, WantsCode: wantsCode, CodeRefused: false);
+    public static RunningSignIn Running(string? url = null, bool wantsCode = false) =>
+        new(Id: 1, Url: url, WantsCode: wantsCode);
 
     public static SigningInText SigningIn(string tool) =>
         new(

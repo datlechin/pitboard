@@ -276,7 +276,7 @@ fn what_stops_it_is_said_in_the_sheet() {
     assert_eq!(shown.sheet, Some(Sheet::Stow));
     let failure = shown.sheet_failure.expect("said in the sheet");
     assert_eq!(failure.title, "Couldn’t put the login away");
-    assert_eq!(failure.code.as_deref(), Some("left_login_changed"));
+    assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     assert!(!shown.stow_text.expect("still up").saving);
 }
 
@@ -301,14 +301,8 @@ fn a_refused_put_away_looks_again() {
 
     assert_eq!(model.count(a_look_left), 2);
     let shown = model.shown();
-    assert_eq!(
-        shown
-            .sheet_failure
-            .expect("said in the sheet")
-            .code
-            .as_deref(),
-        Some("left_login_changed")
-    );
+    assert!(shown.sheet_failure.is_some(), "said in the sheet");
+    assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     let looking = shown.stow_text.expect("still up");
     assert!(looking.looking.is_some());
     assert!(!looking.can_confirm);

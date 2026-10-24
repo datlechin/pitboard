@@ -116,12 +116,8 @@ pub struct TermsShown {
 /// Daily renewal, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ScheduleShown {
-    // as the core last read it
-    pub schedule: Option<Schedule>,
     // what was asked for while a change is under way, so the switch does not snap back
     pub on: bool,
-    // from the moment it is asked for until the schedule is read back after it
-    pub changing: bool,
     // turning renewal off always can, which is how a schedule that cannot work goes
     pub enabled: bool,
     // while the scheduler does not have it: none here, or why this copy cannot schedule
@@ -158,9 +154,6 @@ pub struct CheckLine {
     /// one of a tool's is `parked_login`, or `codex_parked_login`, so a list whose rows
     /// claimed the code would have two or more rows of one identity.
     pub id: u64,
-    /// What kind of check it is, as `pitboard doctor --json` gives a check's `code`. Several
-    /// checks can share one.
-    pub code: String,
     pub name: String,
     pub level: Level,
     /// The level in words, where a symbol shows it: "Passed", "Worth looking at", "Failed".
@@ -476,9 +469,7 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         })
         .filter(|failed| note.as_ref() != Some(failed));
     ScheduleShown {
-        schedule: machine.schedule.clone(),
         on: machine.scheduling.unwrap_or(renews_daily),
-        changing: machine.scheduling.is_some(),
         enabled: machine.scheduling.is_none() && (renews_daily || cannot.is_none()),
         note,
         failed,
@@ -514,7 +505,6 @@ fn checks(seen: &Seen) -> ChecksShown {
             .zip(&checks)
             .map(|(id, check)| CheckLine {
                 id,
-                code: check.code.clone(),
                 name: words::check_name(&check.code, &check.name),
                 level: check.level,
                 spoken_level: words::spoken_level(check.level).to_owned(),

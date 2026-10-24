@@ -787,25 +787,27 @@ impl SigningIn {
     /// was typed back is no longer one typed back: the tool reads another, so the field is
     /// offered again.
     fn shown(&self) -> RunningSignIn {
-        let (view, code_refused) = match ProviderId::parse(&self.provider) {
+        let view = match ProviderId::parse(&self.provider) {
             Some(tool) => {
-                let refused = self.pasted_at.is_some_and(|at| {
-                    provider::refused_code(tool, self.said.get(at..).unwrap_or_default())
-                });
-                let pasted = self.pasted_at.is_some() && !refused;
-                (provider::sign_in_view(tool, &self.said, pasted), refused)
+                let pasted = self.pasted_at.is_some() && !self.code_refused();
+                provider::sign_in_view(tool, &self.said, pasted)
             }
-            None => (provider::SignInView::default(), false),
+            None => provider::SignInView::default(),
         };
         RunningSignIn {
             id: self.id,
-            provider: self.provider.clone(),
-            name: self.name.clone(),
-            said: self.said.clone(),
             url: view.url,
             wants_code: view.wants_code,
-            code_refused,
         }
+    }
+
+    // Whether the tool refused the last code typed back, and reads another in its place.
+    pub(crate) fn code_refused(&self) -> bool {
+        ProviderId::parse(&self.provider).is_some_and(|tool| {
+            self.pasted_at.is_some_and(|at| {
+                provider::refused_code(tool, self.said.get(at..).unwrap_or_default())
+            })
+        })
     }
 }
 

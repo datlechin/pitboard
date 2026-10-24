@@ -141,7 +141,7 @@ public sealed class AccountSheetTests
         var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
         await using var up = await Up.Over(renaming);
         await up.Type("sheet.name", "work");
-        var failure = new Failure(7, "Couldn’t rename personal", "work is already the name of another account.", "name_taken", []);
+        var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", []);
 
         up.App.Apply(renaming with { Revision = 2, SheetFailure = failure });
 
@@ -161,7 +161,7 @@ public sealed class AccountSheetTests
         up.App.Apply(renaming with
         {
             Revision = 2,
-            SheetFailure = new Failure(7, "Couldn’t rename personal", "work is already the name of another account.", "name_taken", []),
+            SheetFailure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", []),
         });
         await Views.Until(() => bar.IsOpen, "the failure was not said");
         var opened = new List<bool>();
@@ -170,7 +170,7 @@ public sealed class AccountSheetTests
         up.App.Apply(renaming with
         {
             Revision = 3,
-            SheetFailure = new Failure(8, "Couldn’t rename personal", "home is already the name of another account.", "name_taken", []),
+            SheetFailure = new FailureText(8, "Couldn’t rename personal", "home is already the name of another account.", []),
         });
 
         await Views.Until(() => bar.Message == "home is already the name of another account.", "the second failure was not said");
@@ -185,7 +185,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount() with { Name = "third" },
-            SigningIn = Items.Running("claude", Address),
+            SigningIn = Items.Running(Address),
             SigningInText = Items.SigningIn("Claude Code"),
         };
         await using var up = await Up.Over(signingIn);
@@ -195,8 +195,8 @@ public sealed class AccountSheetTests
             Revision = 2,
             SigningIn = null,
             SigningInText = null,
-            SheetFailure = new Failure(
-                9, "Couldn’t add third", "The sign-in did not finish, so nothing was enrolled.", "sign_in_incomplete", []),
+            SheetFailure = new FailureText(
+                9, "Couldn’t add third", "The sign-in did not finish, so nothing was enrolled.", []),
         });
 
         var name = up.Element<TextBox>("sheet.name");
@@ -214,7 +214,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("claude", Address, wantsCode: true),
+            SigningIn = Items.Running(Address, wantsCode: true),
             SigningInText = Items.SigningIn("Claude Code"),
         };
         await using var up = await Up.Over(signingIn);
@@ -310,7 +310,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("claude", Address, wantsCode: true),
+            SigningIn = Items.Running(Address, wantsCode: true),
             SigningInText = Items.SigningIn("Claude Code"),
         });
         var field = up.Element<TextBox>("sheet.code");
@@ -329,7 +329,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("claude", Address, wantsCode: true),
+            SigningIn = Items.Running(Address, wantsCode: true),
             SigningInText = Items.SigningIn("Claude Code"),
         });
         var field = up.Element<TextBox>("sheet.code");
@@ -352,7 +352,7 @@ public sealed class AccountSheetTests
         Assert.AreEqual("A name can’t contain “/”.", Views.Description(field));
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled);
 
-        var failure = new Failure(7, "Couldn’t rename personal", "work is already the name of another account.", "name_taken", []);
+        var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", []);
         up.App.Apply(renaming with { Revision = 2, SheetFailure = failure });
         await Views.Until(() => up.Element<InfoBar>("sheet.failure").IsOpen, "the failure was not said");
         await up.Type("sheet.name", "home");
@@ -368,7 +368,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("claude", Address),
+            SigningIn = Items.Running(Address),
             SigningInText = Items.SigningIn("Claude Code"),
         };
         await using var up = await Up.Over(signingIn);
@@ -376,7 +376,7 @@ public sealed class AccountSheetTests
         Assert.AreEqual("", up.Sheet.PrimaryButtonText);
         Assert.AreEqual("Waiting for your browser", AutomationProperties.GetName(up.Element<ProgressRing>("Waiting")));
 
-        up.App.Apply(signingIn with { Revision = 2, SigningIn = Items.Running("claude", Address, wantsCode: true) });
+        up.App.Apply(signingIn with { Revision = 2, SigningIn = Items.Running(Address, wantsCode: true) });
         await Views.Until(() => up.Visible("sheet.code"), "no code field once the tool asked");
         Assert.AreEqual("Submit code", up.Sheet.PrimaryButtonText);
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled, "Submit code with no code");
@@ -395,14 +395,14 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("claude"),
+            SigningIn = Items.Running(),
             SigningInText = Items.SigningIn("Claude Code"),
         };
         await using var up = await Up.Over(signingIn);
         Assert.IsFalse(Views.Button(up.Sheet, "Open").IsEnabled, "Open with nothing to open");
         Assert.IsFalse(Views.Button(up.Sheet, "Copy link").IsEnabled);
 
-        up.App.Apply(signingIn with { Revision = 2, SigningIn = Items.Running("claude", Address) });
+        up.App.Apply(signingIn with { Revision = 2, SigningIn = Items.Running(Address) });
         await Views.Until(() => Views.Button(up.Sheet, "Open").IsEnabled, "Open stayed dimmed");
         Views.Press(Views.Button(up.Sheet, "Open"));
 
@@ -416,7 +416,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("codex"),
+            SigningIn = Items.Running(),
             SigningInText = Items.SigningIn("Codex"),
         });
 
@@ -434,7 +434,7 @@ public sealed class AccountSheetTests
         {
             Sheet = Add,
             SheetText = Items.AddAccount(),
-            SigningIn = Items.Running("codex"),
+            SigningIn = Items.Running(),
             SigningInText = Items.SigningIn("Codex"),
         });
         var upWhenTold = new List<bool>();

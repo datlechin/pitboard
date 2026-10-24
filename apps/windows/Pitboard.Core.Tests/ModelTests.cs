@@ -114,7 +114,7 @@ public sealed class ModelTests
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
-            Schedule: null, On: false, Changing: false, Enabled: true, Note: null, Failed: null,
+            On: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
         Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…"),
         Activity: new ActivityShown(
@@ -223,7 +223,6 @@ public sealed class ModelTests
             Assert.AreEqual(new AccountsShown.Reading("Reading accounts…"), first.AccountsShown);
             Assert.AreEqual("Pitboard", first.MenuBar.Spoken);
             Assert.AreEqual("Not read yet", first.UpdatedMenu);
-            Assert.IsNull(first.Machine.Schedule.Schedule);
             Assert.IsFalse(first.Machine.Schedule.On);
             Assert.Contains("renews your parked logins once a day", first.Machine.Schedule.About);
             Assert.IsEmpty(first.Machine.Checks.Lines);
@@ -346,7 +345,7 @@ public sealed class ModelTests
                 Arrival: 1, Armed: true,
                 Shown: new PickerShown.Choose(
                     Title: "Open this claude.ai link as:", Link: link, LinkText: "claude.ai/chat/x",
-                    Accounts: [new PickerAccount(work, "work@example.com, window open", true)], Chosen: Store,
+                    Accounts: [new PickerAccount(work, "work@example.com, window open")], Chosen: Store,
                     Open: "Open")),
             Downloads =
             [
@@ -362,7 +361,7 @@ public sealed class ModelTests
         Assert.AreEqual(1UL, snapshot.AccountWindows.Deleting[0].Ask);
         var choose = Assert.IsInstanceOfType<PickerShown.Choose>(snapshot.AccountWindows.Picker?.Shown);
         Assert.AreEqual(Store, choose.Chosen);
-        Assert.IsTrue(choose.Accounts[0].Open);
+        Assert.AreEqual("work@example.com, window open", choose.Accounts[0].Detail);
         Assert.IsInstanceOfType<DownloadState.Running>(snapshot.AccountWindows.Downloads[0].State);
         var clear = snapshot.AccountWindows.Open[0].ClearDownloads;
         Assert.IsNotNull(clear);
@@ -410,26 +409,22 @@ public sealed class ModelTests
     [TestMethod]
     public void ASnapshotCarriesASignInAndItsSheet()
     {
-        var running = new RunningSignIn(
-            Id: 3, Provider: "claude", Name: "travel",
-            Said: "Paste code here if prompted > Invalid code. Please make sure the full code was copied.\n",
-            Url: "https://claude.com/cai/oauth/authorize?code=true", WantsCode: true, CodeRefused: true);
+        var running = new RunningSignIn(Id: 3, Url: "https://claude.com/cai/oauth/authorize?code=true", WantsCode: true);
         var snapshot = Read(5) with
         {
             SigningIn = running,
             Sheet = new Sheet.SignInAgain(Provider: "claude", Label: "work"),
-            SheetFailure = new Failure(
+            SheetFailure = new FailureText(
                 Id: 4, Title: "Couldn’t sign in to work", Message: "`claude` is not on this machine",
-                Code: "claude_program_missing", Warnings: []),
+                Warnings: ["The account in use is unchanged."]),
         };
 
         Assert.AreEqual(3UL, snapshot.SigningIn?.Id);
         Assert.IsTrue(snapshot.SigningIn?.WantsCode);
-        Assert.IsTrue(snapshot.SigningIn?.CodeRefused);
         Assert.AreEqual("https://claude.com/cai/oauth/authorize?code=true", snapshot.SigningIn?.Url);
         Assert.AreEqual(running, snapshot.SigningIn);
         Assert.AreEqual<Sheet?>(new Sheet.SignInAgain("claude", "work"), snapshot.Sheet);
-        Assert.AreEqual("claude_program_missing", snapshot.SheetFailure?.Code);
+        Assert.AreEqual("The account in use is unchanged.", snapshot.SheetFailure?.Warnings.Single());
         Assert.IsNull(Read(5).SigningIn);
     }
 
@@ -496,7 +491,7 @@ public sealed class ModelTests
     public void ASnapshotSaysWhatTheMenuAndTheWindowShow()
     {
         var limit = new LimitRow(
-            Name: "5-hour", Short: "5h", Percent: 72.4, Figure: "72%", Level: UsageLevel.Low,
+            Short: "5h", Percent: 72.4, Figure: "72%", Level: UsageLevel.Low,
             Resets: "resets in 1h 05m", Pace: null,
             Spoken: "5-hour limit, 72 percent used, resets in 1 hour, 5 minutes");
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
@@ -504,8 +499,8 @@ public sealed class ModelTests
             Sites.ChatGpt, Label: "spare", Email: "spare@example.com", Store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40",
             InUse: false, Title: "spare");
         var spare = new AccountItem(
-            Id: "codex:spare", Provider: "codex", Qualified: "codex/spare", Title: "spare",
-            Email: "spare@example.com", Plan: null, MenuTitle: "spare", SpokenName: "spare (Codex)",
+            Id: "codex:spare", Qualified: "codex/spare", Title: "spare",
+            Email: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
             NeedsSignIn: false, Unplaced: false, Switching: false, Action: use,
             Summary: "5-hour 72%", Problem: null, StaleNote: null, Pace: null,
@@ -592,9 +587,8 @@ public sealed class ModelTests
     [TestMethod]
     public void ASnapshotSaysWhatIsKnownOfTheMachine()
     {
-        var plist = "/Users/x/Library/LaunchAgents/com.usepitboard.renew.plist";
         var keychain = new CheckLine(
-            Id: 0, Code: "keychain", Name: "Keychain", Level: Level.Fail, SpokenLevel: "Failed", Detail: "locked",
+            Id: 0, Name: "Keychain", Level: Level.Fail, SpokenLevel: "Failed", Detail: "locked",
             Advice: "Unlock the login keychain.");
         var switched = new ActivityLine(
             Id: 0, Date: "Oct 5, 2026 at 2:05 PM", Change: "Switch", Account: "codex/spare",
@@ -602,8 +596,7 @@ public sealed class ModelTests
         var machine = Unread() with
         {
             Schedule = new ScheduleShown(
-                Schedule: new Schedule.Installed(Path: plist, EverySeconds: 86_400), On: true, Changing: false,
-                Enabled: true, Note: null, Failed: null,
+                On: true, Enabled: true, Note: null, Failed: null,
                 About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
             Checks = new ChecksShown(
                 Lines: [keychain], Summary: "1 broken: do not switch accounts until fixed.", Level: Level.Fail,
@@ -617,8 +610,7 @@ public sealed class ModelTests
         };
         var snapshot = Read(7) with { Machine = machine };
 
-        Assert.AreEqual(plist, ((Schedule.Installed)snapshot.Machine.Schedule.Schedule!).Path);
-        Assert.AreEqual(86_400U, ((Schedule.Installed)snapshot.Machine.Schedule.Schedule!).EverySeconds);
+        Assert.IsTrue(snapshot.Machine.Schedule.On);
         Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Lines[0].Level);
         Assert.AreEqual("Failed", snapshot.Machine.Checks.Lines[0].SpokenLevel);
         Assert.AreEqual(0UL, snapshot.Machine.Checks.Lines[0].Id);
@@ -918,7 +910,7 @@ public sealed class ModelTests
 
         model.Send(new Intent.PaneShown(Pane.Machine));
         var checkedIn = waiting.Until(
-            snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Code == "notification_not_posted", Patience);
+            snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Name == "Notifications", Patience);
         model.Shutdown();
 
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");

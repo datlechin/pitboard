@@ -757,15 +757,16 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     at.world.signed_in_privately("away", "access-away", 20.0);
 
     at.model.send(paste("half-a-code"));
-    let told = at
-        .told
-        .until("the code refused", signing(|s| s.code_refused));
+    let told = at.told.until("the code refused", |told| {
+        told.last()
+            .and_then(|last| last.signing_in_text.as_ref())
+            .is_some_and(|text| text.refused.is_some())
+    });
     let refused = told
         .last()
         .and_then(|last| last.signing_in.clone())
         .expect("the sign-in");
     assert!(refused.wants_code, "asked for again");
-    assert!(refused.said.contains("Invalid code."), "{:?}", refused.said);
 
     at.model.send(paste("the-code#the-state"));
     let told = at
@@ -1658,22 +1659,14 @@ fn the_machine_is_kept_over_the_real_core() {
     told.until("the account read", shows("work"));
 
     model.send(Intent::ReadSchedule);
-    let read = told.last_where("the schedule read", |last| {
-        last.machine.schedule.schedule == Some(Schedule::Absent)
-    });
-    let schedule = &read.machine.schedule;
-    assert!(schedule.enabled && !schedule.on, "{schedule:?}");
-    assert_eq!(schedule.note, None, "this copy can schedule it");
-
     model.send(Intent::SetSchedule { on: true });
+    // Held back while it changes, and on once the scheduler is read back with the job.
     let on = told.last_where("daily renewal on", |last| {
-        let schedule = &last.machine.schedule;
-        schedule.on
-            && !schedule.changing
-            && matches!(schedule.schedule, Some(Schedule::Installed { .. }))
+        last.machine.schedule.on && last.machine.schedule.enabled
     });
-    let Some(Schedule::Installed { path: job, .. }) = on.machine.schedule.schedule.clone() else {
-        unreachable!("waited for")
+    assert_eq!(on.machine.schedule.note, None, "this copy can schedule it");
+    let Some(Schedule::Installed { path: job, .. }) = core.schedule() else {
+        panic!("the job installed");
     };
     let kept = match OS {
         Os::MacOs | Os::Linux => std::path::PathBuf::from(&job),
@@ -1728,8 +1721,9 @@ fn the_machine_is_kept_over_the_real_core() {
 
     model.send(Intent::SetSchedule { on: false });
     told.last_where("daily renewal off", |last| {
-        last.machine.schedule.schedule == Some(Schedule::Absent) && !last.machine.schedule.changing
+        !last.machine.schedule.on && last.machine.schedule.enabled
     });
+    assert_eq!(core.schedule(), Some(Schedule::Absent));
     assert!(!kept.exists(), "taken away");
 
     model.send(Intent::LookForCommandLine);

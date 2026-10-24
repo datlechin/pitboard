@@ -73,9 +73,9 @@ mod windowing;
 
 use crate::account_windows::AlertText;
 use crate::present::{
-    AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, Footing, MachineShown,
-    MenuBarText, MenuNotices, PanelNotice, Question, SetupStep, SheetText, SigningInText, StowText,
-    present,
+    AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
+    MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, SetupStep, SheetText,
+    SigningInText, StowText, present,
 };
 use crate::{AppCore, Warning};
 use lanes::Lanes;
@@ -444,18 +444,12 @@ pub enum Sheet {
     Stow,
 }
 
-/// A sign-in under way, and what its tool has said so far.
+/// A sign-in under way, as far as its tool has said.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RunningSignIn {
     /// Tells this sign-in from any other, where the Swift model compared objects: one higher
     /// for each sign-in asked for.
     pub id: u64,
-    /// The tool, as a `Tool`'s code.
-    pub provider: String,
-    /// The name the account is to be enrolled under, bare, as it was asked for.
-    pub name: String,
-    /// Everything the tool has said so far, as it said it.
-    pub said: String,
     /// The address the tool printed for a person to open when the browser did not open by
     /// itself, as printed, for the app to open or to copy into another browser. Read by the
     /// tool's own module.
@@ -463,9 +457,6 @@ pub struct RunningSignIn {
     /// Whether to offer a field for the code the browser shows, which the tool is waiting to
     /// have typed back. Read by the tool's own module.
     pub wants_code: bool,
-    /// Whether the tool refused the last code typed back, and reads another in its place:
-    /// the field is offered again, and the sheet can say why.
-    pub code_refused: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -522,19 +513,14 @@ pub(crate) struct LastSwitch {
     pub opens: Option<String>,
 }
 
-/// Something a person asked for that did not happen, for the window to say: an alert's
-/// title and its message.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Failure {
-    /// One higher for each failure said, so an app tells a new one from one it has shown.
+// Something a person asked for that did not happen, numbered one higher for each said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Failure {
     pub id: u64,
-    /// What was being done, as an alert's title says it: "Couldn’t switch to personal".
+    // what was being done, as an alert's title says it: "Couldn’t switch to personal"
     pub title: String,
-    /// What went wrong. Pitboard's errors already say what to do, so it is shown as it is.
     pub message: String,
-    /// The stable code behind it, for deciding what to offer, where the core gave one.
     pub code: Option<String>,
-    /// Everything else it warned about.
     pub warnings: Vec<Warning>,
 }
 
@@ -592,7 +578,7 @@ pub struct Snapshot {
     /// there to correct: a sign-in started from it that could not start or finish, or a name
     /// it could not save. Numbered with the failures said in the window, and gone with the
     /// sheet.
-    pub sheet_failure: Option<Failure>,
+    pub sheet_failure: Option<FailureText>,
     /// What the menu bar item says beside its mark.
     pub menu_bar: MenuBarText,
     /// The accounts, a section per tool once there is more than one, each as its row.

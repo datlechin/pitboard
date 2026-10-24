@@ -168,8 +168,6 @@ pub struct PickerAccount {
     /// The line under its label: its email, and whether its window is open, where the link
     /// replaces what the window shows.
     pub detail: String,
-    /// Whether its window is open.
-    pub open: bool,
 }
 
 /// A download an account window started.
@@ -353,7 +351,6 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
                         } else {
                             window.email.clone()
                         },
-                        open,
                         window,
                     }
                 })
