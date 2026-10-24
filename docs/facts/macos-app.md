@@ -49,3 +49,9 @@ its own date.
   sheet's window and shows over it. The window's failure alert and quit question are
   attached through `WindowAlerts` to whichever is in front.
   `testAddingAClaudeDesktopAccountAsksToQuitClaudeOverTheSheet` holds it.
+- Read on macOS 27.0.1 (26A434): the Notifications pane's settings extension takes the
+  `x-apple.systempreferences` scheme (`allowsXAppleSystemPreferencesURLScheme`) and reveals
+  an app by its bundle identifier, which Apple does not document. So the settings' **Open
+  Notification Settings** opens
+  `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=` and the app's
+  bundle identifier. Nobody has opened the URL to see it land on Pitboard's page.

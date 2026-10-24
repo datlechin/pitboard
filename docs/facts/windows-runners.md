@@ -85,6 +85,9 @@ Accounts and tokens:
   then `DownloadStarting` for the file. A download whose page was the last to close raised
   no `StateChanged`, and its browser process exited; one whose page closed while another
   kept the browser process was still in progress five seconds later.
+- CF7, the download list, on both images in run 38872384945: WebView2's own downloads dialog
+  listed each file with Open file, and offered Open downloads folder and Search downloads,
+  with no Show in folder of a file's own.
 - CF8, sparse packages, as the fresh standard user on both images in run 38928930271: with a
   throwaway certificate trusted in `LocalMachine\TrustedPeople` by the job's user,
   `Add-AppxPackage` registered the probe's package from either manifest for that user, status
