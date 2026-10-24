@@ -11,12 +11,8 @@ struct AccountSheetView: View {
             switch sheet {
             case .add, .signInAgain:
                 SignInSheet(model: model, sheet: sheet)
-            case .name(let provider, _):
-                NameSheet(model: model, sheet: sheet) { .enrol(provider: provider, name: $0) }
-            case .rename(let provider, let label):
-                NameSheet(model: model, sheet: sheet) {
-                    .rename(provider: provider, label: label, to: $0)
-                }
+            case .name, .rename:
+                NameSheet(model: model, sheet: sheet)
             case .stow:
                 StowSheet(model: model)
             }

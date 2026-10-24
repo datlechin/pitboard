@@ -1047,6 +1047,7 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
             Sheet::Add {
                 provider: Some("codex".into())
             },
+            "codex".into(),
             "codex/phu".into()
         )
         .problem

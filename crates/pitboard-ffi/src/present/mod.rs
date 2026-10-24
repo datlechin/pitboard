@@ -44,6 +44,7 @@ pub use machine::{
     WarmShown,
 };
 pub use sheets::check_name;
+pub(crate) use sheets::saved_name;
 pub use windows::{
     AccountWindowsShown, DownloadShown, DownloadState, LinkPicker, OpenWindow, PageLoad,
     PickerAccount, PickerShown, StoreDeletion, WaitingShown, WindowWaiting,
@@ -498,11 +499,12 @@ pub struct Missing {
     pub link: String,
 }
 
-/// A name typed in a sheet: the name it would save, or why it cannot be one.
+/// A name typed in a sheet: why it cannot be one, or what the sheet's default button sends
+/// with it, `None` while there is nothing to save.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NameCheck {
-    pub name: Option<String>,
     pub problem: Option<String>,
+    pub intent: Option<Intent>,
 }
 
 /// What a sign-in under way says, in the sheet it was started from.

@@ -188,9 +188,11 @@ public sealed class ModelTests
     public void TheBindingsAgreeWithTheLibraryOnTheModel()
     {
         // The first call loads the library: every checksum is compared, and the listener's
-        // calls are registered, before it answers. Saying what a sheet saves reads only what
+        // calls are registered, before it answers. Saying what a sheet sends reads only what
         // it is given, so it answers at once.
-        Assert.AreEqual("home", PitboardFfiMethods.CheckName(new Sheet.Name("claude", "a@example.com"), " home ").Name);
+        Assert.AreEqual(
+            new Intent.Enrol("claude", "home"),
+            PitboardFfiMethods.CheckName(new Sheet.Name("claude", "a@example.com"), "claude", " home ").Intent);
     }
 
     // Never started, so nothing on this machine is read.
@@ -629,16 +631,18 @@ public sealed class ModelTests
     }
 
     [TestMethod]
-    public void ANameIsSavedAsTheSheetOffersIt()
+    public void ANameComesWithWhatItsSheetSends()
     {
         var named = new Sheet.Name("claude", "a@example.com");
-        Assert.AreEqual(new NameCheck("home", null), PitboardFfiMethods.CheckName(named, "  home "));
-        Assert.AreEqual(new NameCheck(null, null), PitboardFfiMethods.CheckName(named, " \n"));
-        Assert.IsNull(PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "work"), " work ").Name);
-        Assert.AreEqual("work", PitboardFfiMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "").Name);
+        Assert.AreEqual(new NameCheck(null, new Intent.Enrol("claude", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
+        Assert.AreEqual(new NameCheck(null, null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
+        Assert.IsNull(PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
         Assert.AreEqual(
-            new NameCheck(null, "A name can’t contain “/”. Choose the tool above."),
-            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex/phu"));
+            new Intent.SignIn("codex", "work"),
+            PitboardFfiMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "codex", "").Intent);
+        Assert.AreEqual(
+            new NameCheck("A name can’t contain “/”. Choose the tool above.", null),
+            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"));
     }
 
     private sealed class Waiting : ModelListener

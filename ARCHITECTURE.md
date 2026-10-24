@@ -608,7 +608,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     enrolled of is read only once its step is taken up, `Intent::NameSignedIn`), `sheets.rs` the
     sheets with their default buttons' words, the quit question and a failure's alert, with
     `check_name`, the rule a sheet's default button and the model both save by, which says
-    why what is typed cannot be a name,
+    why what is typed cannot be a name or gives the intent the button sends,
     `machine.rs` what the settings and the window's other panes show of this machine, daily
     renewal, doctor's checks, the activity log and the command line,
     `windows.rs` the account windows, what a window says until it can show its page, what

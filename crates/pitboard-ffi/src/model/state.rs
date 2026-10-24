@@ -1469,7 +1469,7 @@ impl State {
         {
             return None;
         }
-        crate::present::check_name(kind, typed.to_owned()).name
+        crate::present::saved_name(&kind, typed).ok().flatten()
     }
 
     /// The sheet up, as the one a save is asked from, which holds back until it answers.
@@ -1512,7 +1512,7 @@ impl State {
             .as_ref()
             .is_some_and(|sheet| self.saving.contains(sheet));
         let asked = self.sheet.clone().unwrap_or(Sheet::Add { provider: None });
-        let Some(name) = crate::present::check_name(asked, typed.to_owned()).name else {
+        let Some(name) = crate::present::saved_name(&asked, typed).ok().flatten() else {
             return;
         };
         if self.signing_in.is_some() || held {

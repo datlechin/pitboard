@@ -18,29 +18,52 @@ use pitboard_core::state::Key;
 use pitboard_core::switch::{Foreseen, WaitStep};
 use pitboard_core::words as said;
 
-/// The name a sheet would save, trimmed, or why what is typed cannot be one. The model saves by
-/// the same rule, and it answers at once, so a view asks it as it is typed in.
+/// What a sheet's default button sends with `typed` as the name, `tool` picked where the sheet
+/// picks one, or why what is typed cannot be a name. The model saves by the same rule, and it
+/// answers at once, so a view asks it as it is typed in.
 #[uniffi::export]
-pub fn check_name(sheet: Sheet, typed: String) -> NameCheck {
-    let saves = |name: Option<&str>| NameCheck {
-        name: name.map(str::to_owned),
-        problem: None,
-    };
-    if let Sheet::SignInAgain { label, .. } = &sheet {
-        return saves(Some(label));
-    }
-    let name = trimmed(&typed);
-    match &sheet {
-        Sheet::Stow => saves(None),
-        Sheet::Rename { label, .. } if label == name => saves(None),
-        _ => match label::check(name) {
-            Ok(()) => saves(Some(name)),
-            Err(unusable) => NameCheck {
-                name: None,
-                problem: words::unusable_name(unusable, matches!(sheet, Sheet::Add { .. })),
-            },
+pub fn check_name(sheet: Sheet, tool: String, typed: String) -> NameCheck {
+    match saved_name(&sheet, &typed) {
+        Ok(name) => NameCheck {
+            problem: None,
+            intent: name.and_then(|name| saves(sheet, tool, name)),
+        },
+        Err(unusable) => NameCheck {
+            problem: words::unusable_name(unusable, matches!(sheet, Sheet::Add { .. })),
+            intent: None,
         },
     }
+}
+
+/// The name `typed` saves as from `sheet`, trimmed: none where there is nothing to save, as in
+/// a rename to the name the account has.
+pub(crate) fn saved_name(sheet: &Sheet, typed: &str) -> Result<Option<String>, label::Unusable> {
+    if let Sheet::SignInAgain { label, .. } = sheet {
+        return Ok(Some(label.clone()));
+    }
+    let name = trimmed(typed);
+    match sheet {
+        Sheet::Stow => Ok(None),
+        Sheet::Rename { label, .. } if label == name => Ok(None),
+        _ => label::check(name).map(|()| Some(name.to_owned())),
+    }
+}
+
+fn saves(sheet: Sheet, tool: String, name: String) -> Option<Intent> {
+    Some(match sheet {
+        Sheet::Add { .. } => Intent::SignIn {
+            provider: tool,
+            name,
+        },
+        Sheet::SignInAgain { provider, .. } => Intent::SignIn { provider, name },
+        Sheet::Name { provider, .. } => Intent::Enrol { provider, name },
+        Sheet::Rename { provider, label } => Intent::Rename {
+            provider,
+            label,
+            to: name,
+        },
+        Sheet::Stow => return None,
+    })
 }
 
 /// The tool the sheet for `sheet` starts on: the one it is about, and for a new account
@@ -512,11 +535,11 @@ mod tests {
     }
 
     fn saved(sheet: Sheet, typed: &str) -> Option<String> {
-        check_name(sheet, typed.into()).name
+        saved_name(&sheet, typed).ok().flatten()
     }
 
     fn problem(sheet: Sheet, typed: &str) -> Option<String> {
-        check_name(sheet, typed.into()).problem
+        check_name(sheet, "claude".into(), typed.into()).problem
     }
 
     // Save waits for a name, trimmed: in a rename, one the account does not already have.
@@ -546,6 +569,61 @@ mod tests {
             Some("my work"),
             "the account's own name, whatever a new one may be"
         );
+    }
+
+    // What each sheet's default button sends, so neither app maps a sheet to an intent.
+    #[test]
+    fn a_name_comes_with_what_its_sheet_sends() {
+        let sends = |sheet: Sheet, tool: &str, typed: &str| {
+            check_name(sheet, tool.into(), typed.into()).intent
+        };
+        assert_eq!(
+            sends(Sheet::Add { provider: None }, "codex", " travel"),
+            Some(Intent::SignIn {
+                provider: "codex".into(),
+                name: "travel".into()
+            }),
+            "the tool picked"
+        );
+        assert_eq!(
+            sends(
+                Sheet::SignInAgain {
+                    provider: "codex".into(),
+                    label: "work".into()
+                },
+                "codex",
+                ""
+            ),
+            Some(Intent::SignIn {
+                provider: "codex".into(),
+                name: "work".into()
+            })
+        );
+        assert_eq!(
+            sends(
+                Sheet::Name {
+                    provider: "codex".into(),
+                    email: "a@example.com".into()
+                },
+                "codex",
+                "home"
+            ),
+            Some(Intent::Enrol {
+                provider: "codex".into(),
+                name: "home".into()
+            })
+        );
+        assert_eq!(
+            sends(rename("work"), "claude", "home"),
+            Some(Intent::Rename {
+                provider: "claude".into(),
+                label: "work".into(),
+                to: "home".into()
+            })
+        );
+        assert_eq!(sends(rename("work"), "claude", "work"), None, "unchanged");
+        assert_eq!(sends(Sheet::Add { provider: None }, "codex", "a/b"), None);
+        assert_eq!(sends(Sheet::Stow, "claude", "work"), None);
     }
 
     // The tool is picked apart from the name, so a name naming one again is refused as typed,

@@ -60,14 +60,13 @@ public abstract record SheetPage
         // Null where Pitboard found the tool.
         public Missing? NotFound(string tool) => Chosen(tool)?.Missing;
 
-        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, typed).Problem;
+        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Problem;
 
         // What the name field says under itself: why what is typed cannot be a name, or that Sign In waits for one alone.
         public string? Note(string tool, string typed) => Problem(typed) ?? (Ready(tool) ? Needed(typed, Confirm(tool)) : null);
 
         // Null while Sign In cannot be pressed.
-        public Intent? Start(string tool, string typed) =>
-            Ready(tool) && PitboardFfiMethods.CheckName(Sheet, typed).Name is { } name ? new Intent.SignIn(tool, name) : null;
+        public Intent? Start(string tool, string typed) => Ready(tool) ? PitboardFfiMethods.CheckName(Sheet, tool, typed).Intent : null;
 
         // All Sign In waits for is a name.
         private bool Ready(string tool) => !Text.Saving && !Running && NotFound(tool) is null;
@@ -79,17 +78,11 @@ public abstract record SheetPage
     {
         public override bool Closable => !Text.Saving;
 
-        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, typed).Problem;
+        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Problem;
 
         public string? Note(string typed) => Problem(typed) ?? Needed(typed, Text.Confirm);
 
-        public Intent? Save(string typed) =>
-            (Text.Saving ? null : PitboardFfiMethods.CheckName(Sheet, typed).Name, Sheet) switch
-            {
-                ({ } name, Sheet.Name named) => new Intent.Enrol(named.Provider, name),
-                ({ } name, Sheet.Rename renamed) => new Intent.Rename(renamed.Provider, renamed.Label, name),
-                _ => null,
-            };
+        public Intent? Save(string typed) => Text.Saving ? null : PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Intent;
     }
 
     public sealed record SigningIn(RunningSignIn SignIn, SigningInText Text) : SheetPage
