@@ -251,7 +251,6 @@ pub(crate) enum Schedule {
     Unsupported,
 }
 
-// Named for what it is rather than `Window`, which SwiftUI and WinUI each have a type of.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Limit {
     // Anthropic's `session`, `weekly_all` or `weekly_scoped`, or one named after its length

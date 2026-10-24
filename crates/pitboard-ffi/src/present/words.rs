@@ -373,8 +373,7 @@ pub(crate) const COULD_NOT_READ_USAGE: &str = "Couldn’t read usage";
 
 pub(crate) const LAST_MEASURED: &str = "The numbers shown are the last ones measured.";
 
-/// The heading of a sign-in inside an app left halfway: of `again`, an account added
-/// already, or of a new `tool` account.
+// A sign-in inside an app left halfway: `again` names the account added already.
 pub(crate) fn unfinished(tool: &str, again: Option<&str>) -> String {
     match again {
         Some(label) => format!("Signing in to {label} again isn’t finished"),
@@ -444,12 +443,9 @@ pub(crate) fn update_config(os: Os) -> String {
     )
 }
 
-/// A notification's button that switches.
 pub(crate) const SWITCH: &str = "Switch";
 
-/// What a notification of a switch Pitboard made or held back by itself says: how much of a
-/// limit the account it would leave has used, "work has used 96% of its 5-hour limit.", then
-/// what came of it.
+// "work has used 96% of its 5-hour limit.", then what came of it.
 pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
     format!(
         "{}. {then}",
@@ -484,7 +480,7 @@ pub(crate) const UNUSABLE_LOGIN: &str =
 
 pub(crate) const SHOW_IN_PITBOARD: &str = "Show in Pitboard";
 
-/// What VoiceOver and Narrator call the spinner of a row a switch is under way to.
+// What VoiceOver and Narrator call a switching row's spinner.
 pub(crate) const SWITCHING: &str = "Switching";
 
 pub(crate) fn in_use(os: Os) -> String {
@@ -952,7 +948,6 @@ fn readable(code: &str) -> String {
     capitalised(&code.replace('_', " "))
 }
 
-/// What stands in for the activity list while it has nothing in it: its title, and why.
 pub(crate) const GIVE_IT_A_NAME: &str = "Give this account a name";
 
 // `tool`: the tool named, where the account's is not the only one shown.
@@ -996,6 +991,7 @@ pub(crate) fn no_link(os: Os) -> (String, String) {
     )
 }
 
+// What stands in for the activity list while it is empty: its title, and why.
 pub(crate) fn no_activity(os: Os) -> (String, &'static str) {
     (
         titled(os, "No Activity", "No activity"),
@@ -1087,14 +1083,11 @@ pub(crate) fn part_still_running(os: Os, app: &str, again: &str) -> String {
     )
 }
 
-/// Said beside the field that sets the share, where a system says a field's range: "From 50%
-/// to 99%".
 pub(crate) fn share_range(lowest: u8, highest: u8) -> String {
     format!("From {lowest}% to {highest}%")
 }
 
-/// Where no `pitboard` was found on Windows: the installer puts the one inside the app on the
-/// `PATH`, and only a terminal opened after that sees it.
+// The installer puts the app's `pitboard` on the `PATH`, which only terminals opened after see.
 pub(crate) const NEW_TERMINALS: &str =
     "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
 
@@ -1178,8 +1171,6 @@ pub(crate) fn in_app_waiting(
     )
 }
 
-/// What the sheet for signing in through `tool`'s own sign-in says, for a new account or, as
-/// `again`, for one signed in to again.
 pub(crate) fn sign_in_message(tool: &str, again: Option<&str>) -> String {
     match again {
         None => format!(
@@ -1294,7 +1285,7 @@ pub(crate) fn recording(app: &str, step: Recording) -> String {
     }
 }
 
-/// What the name field shows while it is empty.
+// What the name field shows while it is empty.
 pub(crate) const NAME_PROMPT: &str = "work";
 
 pub(crate) fn name_this_account(os: Os) -> String {

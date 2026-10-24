@@ -62,7 +62,7 @@ public final class AppModel {
     public private(set) var signingInText: SigningInText?
     /// What the sheet for putting away a login left in a file says, while it is up.
     public private(set) var stowText: StowText?
-    /// The alert for `failure`, while there is one to say.
+    /// The alert for something asked for that did not happen, until somebody has read it.
     public private(set) var failureAlert: AlertText?
     /// What the settings and the window's other panes show of this machine.
     public private(set) var machine: MachineShown

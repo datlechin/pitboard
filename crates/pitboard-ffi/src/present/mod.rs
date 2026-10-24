@@ -468,7 +468,7 @@ pub struct SheetText {
     /// What the empty name field shows.
     pub prompt: String,
     /// What its default button says, which does what the sheet is for: "Sign In", "Save",
-    /// "Rename". It can be pressed once `check_name` gives a name, the tool picked is not
+    /// "Rename". It can be pressed once `check_name` gives an intent, the tool picked is not
     /// missing, and nothing is being saved.
     pub confirm: String,
     /// A name typed in it is being saved, which cannot be withdrawn: nothing in it can be

@@ -140,6 +140,16 @@ impl LimitExt for Limit {
     }
 }
 
+// Where a test's account stands unless the test says: ready to switch to, where it is enrolled.
+pub(crate) fn standing_of(signed_in: bool, named: bool) -> Standing {
+    match (signed_in, named) {
+        (true, true) => Standing::InUse,
+        (true, false) => Standing::NotEnrolled,
+        (false, true) => Standing::Ready,
+        (false, false) => Standing::NothingParked,
+    }
+}
+
 /// An account as the core reports one, a Claude Code one not signed in unless a test says
 /// otherwise. `None` is a login signed in and not enrolled. Ready to switch to unless it is the
 /// one signed in, and its numbers every limit it has where its tool is Claude Code, as a real
@@ -263,12 +273,7 @@ impl AccountMade {
             signed_in: self.signed_in,
             standing: self
                 .standing
-                .unwrap_or(match (self.signed_in, &self.label) {
-                    (true, Some(_)) => Standing::InUse,
-                    (true, None) => Standing::NotEnrolled,
-                    (false, Some(_)) => Standing::Ready,
-                    (false, None) => Standing::NothingParked,
-                }),
+                .unwrap_or_else(|| standing_of(self.signed_in, self.label.is_some())),
             parked: self.parked,
             usage: self.measured.then_some(Usage {
                 observed_at: Some(self.read_at),

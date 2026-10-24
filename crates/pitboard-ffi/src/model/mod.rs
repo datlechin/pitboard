@@ -470,37 +470,27 @@ pub(crate) struct QuitQuestion {
     pub(crate) name: String,
 }
 
-/// What a switch means for a tool's running sessions, for a tool whose sessions never pick
-/// a switch up: they keep the account they started with until they are started again.
+// For a tool whose running sessions keep the account they started with until started again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RestartNeeded {
-    /// The command a person quits and starts again: `codex`.
+    // the command a person quits and starts again: `codex`
     pub program: String,
-    /// The account they keep using, by its label alone, since the tool is named already.
+    // by its label alone, since the tool is named already
     pub from: String,
 }
 
-/// What a tool's last switch said that the read after it does not say again, until the
-/// tool no longer has the account it switched to signed in, or somebody puts it away. One
-/// per tool: a switch of one tool says nothing about another's sessions.
+// What a tool's last switch said that the reads after it do not say again, until the tool no
+// longer has that account signed in or somebody puts it away.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LastSwitch {
-    /// The tool, as a `Tool`'s code.
     pub provider: String,
-    /// The account switched to, as the core types it: bare for Claude Code, `codex/work`
-    /// for any other tool.
+    // as the core types it: bare for Claude Code, `codex/work` for any other tool
     pub to: String,
-    /// When sessions already open will have picked it up, in epoch seconds, for a tool that
-    /// follows a switch by itself.
+    // when sessions already open will have picked it up, for a tool that follows by itself
     pub follows_at: Option<i64>,
-    /// For a tool whose running sessions never pick a switch up.
     pub restart: Option<RestartNeeded>,
-    /// What a sign-in that put a new login in use in place of the account's old one said it
-    /// did, where that is what this is: sessions already running are left on the old login
-    /// exactly as a switch leaves them on the old account. Kept beside what the tool's last
-    /// switch said, which it leaves as it was, since the tool did not switch.
+    // what a sign-in that replaced the account's login in use said, since no switch did
     pub said: Option<String>,
-    /// What the switch warned about, every warning of it.
     pub warnings: Vec<Warning>,
     // For a tool whose app holds the login from when it is next opened: that, as a sentence.
     pub opens: Option<String>,
