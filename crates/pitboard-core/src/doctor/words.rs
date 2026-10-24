@@ -895,8 +895,7 @@ pub(super) fn set_aside(count: usize, parks: impl Display, holding: &[String]) -
     }
 }
 
-// The rest of a set-aside's detail, after what holds a login; `only` where they hold nothing
-// but what Claude made while signed out.
+// After what holds a login; `only` where the rest is all Claude made while signed out.
 pub(super) fn the_rest_hold(none_held: bool, only: bool, rest: &[String]) -> String {
     let whose = if none_held {
         "they hold"

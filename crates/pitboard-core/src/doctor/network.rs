@@ -1,16 +1,12 @@
 use super::{Check, ok, warn, words};
 use std::fmt::Write as _;
 
-/// How Pitboard's requests leave this machine: directly, or through the HTTP proxy its
-/// environment names, read as ureq 3.4.2 reads one from a process's environment. A SOCKS
-/// proxy, which Pitboard does not use yet, fails each request it would have carried.
+// The environment's proxy, read as ureq 3.4.2 reads a process's.
 pub(crate) struct NetworkFact {
-    /// The proxy the environment names, where it names one Pitboard can read.
     pub(crate) proxy: Option<ProxyFact>,
-    /// The variables before it set to something that is not a proxy's address, which
-    /// Pitboard passes over, in the order it reads them.
+    // The variables before it that hold no proxy's address, in the order they are read.
     pub(crate) passed_over: Vec<&'static str>,
-    // Each proxy variable set to anything, as the tools read the ones they read.
+    // Each proxy variable set to anything, which the tools read by their own rules.
     pub(crate) set: Vec<&'static str>,
 }
 
@@ -20,30 +16,21 @@ impl NetworkFact {
     }
 }
 
-/// The proxy the environment names.
 pub(crate) struct ProxyFact {
-    /// The variable that names it.
     pub(crate) variable: &'static str,
-    /// Its scheme, host and port, with `***` for a user name or a password it holds.
+    // With `***` for a user name or a password.
     pub(crate) address: String,
-    /// Its host and port, `proxy.example.com:3128`, as `address` shows them: the part of it
-    /// that can name the company whose network it is.
+    // Host and port: the part that can name the company whose network it is.
     pub(crate) server: String,
-    /// Whether its host is loopback, this machine itself, which names nothing beyond it.
     pub(crate) on_loopback: bool,
-    /// Whether it is a SOCKS proxy, which Pitboard does not use yet: a request to a host it
-    /// does not exempt fails before anything is sent, and one to a host it exempts goes out
-    /// directly.
     pub(crate) socks: bool,
-    // Whether a request to a host Pitboard calls fails, as `Proxies::refuses_some` says.
+    // As `Proxies::refuses_some` says.
     pub(crate) fails: bool,
-    /// `NO_PROXY` or `no_proxy`, whichever is read, where either is set.
     pub(crate) exempting: Option<&'static str>,
-    /// The hosts Pitboard calls that it exempts, which Pitboard reaches directly.
+    // The hosts Pitboard calls that go around it.
     pub(crate) exempt: Vec<String>,
 }
 
-/// How the context's requests leave this machine, as its environment says.
 pub(super) fn network_fact(proxies: &crate::proxy::Proxies) -> NetworkFact {
     NetworkFact {
         proxy: proxies
@@ -69,16 +56,7 @@ pub(super) fn network_fact(proxies: &crate::proxy::Proxies) -> NetworkFact {
     }
 }
 
-/// How Pitboard's requests leave this machine: directly, or through the HTTP proxy the
-/// environment names, and from which variable, with the hosts Pitboard calls that the
-/// variable exempting hosts sends around it. It warns where Pitboard passes over a variable
-/// that holds no proxy's address, since its requests then go where the person may have meant
-/// them not to.
-///
-/// A SOCKS proxy, which Pitboard does not use yet, is named in the words a request fails
-/// with, then the proxy, and warns, since each request to a host Pitboard calls that the
-/// variable exempting hosts does not name fails. With every one of them exempt, nothing
-/// fails, and it does not warn for that.
+// A variable passed over sends requests where the person may have meant them not to go.
 pub(super) fn judge_network(network: &NetworkFact) -> Check {
     const NAME: &str = "network";
     let (passed, set_right) = match network.passed_over.as_slice() {
@@ -137,8 +115,6 @@ pub(super) fn judge_network(network: &NetworkFact) -> Check {
     }
 }
 
-/// What the variable exempting hosts does with the hosts Pitboard calls, where one is set:
-/// "NO_PROXY exempts api.anthropic.com, which Pitboard reaches directly".
 pub(super) fn exempting(proxy: &ProxyFact) -> Option<String> {
     proxy.exempting.map(|exempting| {
         if proxy.exempt.is_empty() {

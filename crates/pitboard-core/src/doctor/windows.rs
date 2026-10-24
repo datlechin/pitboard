@@ -12,8 +12,7 @@ pub(crate) struct WslFact {
     pub(crate) codex_home_on_windows: Option<PathBuf>,
 }
 
-// The shell Claude Code runs the status line in, and the pitboard the PATH it hands that shell
-// finds. Both shells take `pitboard.exe` for a bare `pitboard`.
+// Both shells Claude Code runs the status line in take `pitboard.exe` for a bare `pitboard`.
 pub(crate) struct StatusLineFact {
     pub(crate) git_bash: claude::GitBash,
     pub(crate) powershell: Option<claude::PowerShell>,
@@ -117,8 +116,7 @@ pub(super) fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
             )
         });
     }
-    // hyper-util fills Codex's https proxy in from Windows' settings wherever HTTPS_PROXY is
-    // unset or empty, whatever HTTP_PROXY and ALL_PROXY say (`codex_windows_system_proxy`).
+    // Codex takes Windows' setting wherever HTTPS_PROXY is unset (`codex_windows_system_proxy`).
     if let Some(server) = &settings.proxy
         && facts
             .network

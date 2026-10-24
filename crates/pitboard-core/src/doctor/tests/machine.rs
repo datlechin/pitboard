@@ -1,7 +1,5 @@
 use super::*;
 
-// Each service Pitboard asks is named once, and Claude Desktop, which it asks nothing,
-// adds none.
 #[test]
 fn asking_names_each_service_it_asks_once() {
     let account = |label: &str, detail| crate::state::Account {
@@ -150,8 +148,7 @@ fn a_world_readable_park_is_found_on_the_disk() {
     assert_eq!(folder.1, Kind::Directory, "{found:?}");
 }
 
-// A seal stops others reading a park, not writing it: a vault or park another account can
-// change is still a finding.
+// A seal stops others reading a park, not writing it.
 #[test]
 fn a_sealed_park_others_can_change_is_reported() {
     let scratch = tempfile::tempdir().expect("a scratch home");
@@ -184,10 +181,7 @@ fn a_sealed_park_others_can_change_is_reported() {
     );
 }
 
-/// On a machine with no keychain every parked login is a plaintext OAuth token in a
-/// file, and the only thing between it and everyone else with an account here is a
-/// mode bit. A backup restore, a `cp -r`, an rsync or a careless umask changes one
-/// quietly, and nothing else in Pitboard would ever mention it.
+// A restore, a `cp -r` or a careless umask changes a mode quietly.
 #[test]
 fn a_login_anyone_on_this_machine_can_read_is_a_failure() {
     let mut f = facts();
@@ -285,9 +279,6 @@ fn an_interrupted_switch_and_leftover_parks_are_reported() {
     assert!(healthy(&checks), "neither stops Pitboard working");
 }
 
-/// A switch the next change cannot finish is said in the words that change would be
-/// refused with, with the way out, and not as one the next change finishes, which is
-/// what the check said of every interrupted switch.
 #[test]
 fn a_switch_the_next_change_cannot_finish_says_why_and_the_way_out() {
     let mut f = facts();

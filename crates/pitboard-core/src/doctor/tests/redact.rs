@@ -34,13 +34,7 @@ fn a_claude_desktop_login_is_redacted_from_a_report() {
     }
 }
 
-/// The report a person pastes shows a digest in place of the proxy's host and port,
-/// which can name the company whose network it is, as it does an organisation's name.
-/// A proxy on loopback names nothing beyond this machine, and is shown. The report a
-/// person reads on their own machine hides neither.
-/// Claude Code's Windows build names its Credential Manager item with a literal, as its
-/// macOS build does where no login name passes its screen. A report hides a person's login
-/// name there, and shows the literal, which names nobody.
+// Claude Code's Windows build names its item with a literal, which names nobody.
 #[test]
 fn the_literal_claude_code_names_its_item_with_is_shown_in_a_report() {
     let ctx = Context::new(PathBuf::from("/home/x"));
@@ -78,7 +72,7 @@ fn a_proxys_host_is_redacted_from_a_report_unless_it_is_on_loopback() {
     assert_eq!(redaction_for(&ctx, &f).over(&detail), detail);
 }
 
-/// What a pasted report must not carry, now that it can carry a Codex login too.
+// What a pasted report must not carry, now that it can carry a Codex login too.
 #[test]
 fn a_codex_login_is_redacted_from_a_report() {
     let mut f = facts();

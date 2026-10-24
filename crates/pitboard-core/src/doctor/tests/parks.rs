@@ -1,7 +1,5 @@
 use super::*;
 
-/// Read from the vault, a park behind a locked keychain is locked, not broken: nothing
-/// is known of it but that.
 #[test]
 fn a_park_behind_a_locked_keychain_is_read_as_locked() {
     use crate::host::memory::MemoryHost;
@@ -126,8 +124,7 @@ fn every_parked_login_is_judged_and_a_way_back_is_offered() {
             assert_eq!(c.advice, words::sign_in_again(label));
         }
     }
-    // A parked login's life is said in the column `pitboard status` shows, after the
-    // check's own words, and an expired one with when it expired.
+    // The column `pitboard status` shows, after the check's own words.
     let life = |left: i64| said::parked_life_column(NOW + left, NOW);
     assert_eq!(
         named(&checks, "account fine").detail,
@@ -220,8 +217,7 @@ fn parks_sealed_to_the_account_are_said_so_and_all_lost_at_once_is_one_finding()
     );
 }
 
-// Parks missing from the vault are not a lost key, so doctor does not tell the person to
-// sign every account in again; each keeps its own per-park finding.
+// Each keeps its own finding: nobody is told to sign every account in again.
 #[test]
 fn missing_sealed_parks_are_not_a_reset_finding() {
     let mut f = facts();
@@ -240,8 +236,7 @@ fn missing_sealed_parks_are_not_a_reset_finding() {
     assert_eq!(named(&checks, "account codex/home").level, Level::Fail);
 }
 
-// A sealed park that will not open in this logon (a network logon over SSH, not the reset
-// code) gets neutral wording, not "an administrator reset your password".
+// A logon without the key, as over SSH, is no administrator's reset.
 #[test]
 fn sealed_parks_lost_to_this_logon_get_neutral_wording() {
     let mut f = facts();
@@ -262,16 +257,13 @@ fn sealed_parks_lost_to_this_logon_get_neutral_wording() {
     );
 }
 
-/// The advice has to be something a person can type and have it act on the right
-/// account. `pitboard enroll work --sign-in` about a Codex account would enroll a
-/// Claude Code one.
+// `pitboard enroll work --sign-in` about a Codex account would enrol a Claude Code one.
 #[test]
 fn advice_names_a_codex_account_the_way_it_is_typed() {
     let mut f = facts();
     let mut codex = codex_parked("work", Some(NOW - 1));
     codex.last_used_at = Some(NOW - 400 * 86_400);
-    // Both tools have a `work`, so a bare `work` would be refused as ambiguous, and the
-    // name gathered for Claude Code's is the qualified one.
+    // Both tools have a `work`, so the name gathered for Claude Code's is the qualified one.
     let mut claude = parked("work", Some(NOW - 1));
     claude.name = "claude/work".into();
     claude.last_used_at = Some(NOW - 400 * 86_400);
@@ -299,11 +291,7 @@ fn advice_names_a_codex_account_the_way_it_is_typed() {
     }
 }
 
-/// Whether an account is the one signed in is its own tool's question: Claude Code's from
-/// what Anthropic last said of its login, which the config naming another does not move,
-/// and Codex's from its login's own claims. Asked of Claude Code's config for every
-/// account, a signed-in Codex account read as one with nothing parked to switch to, and
-/// the advice was to sign in again.
+// Asked of Claude Code's config, a signed-in Codex account read as one with nothing parked.
 #[test]
 fn an_account_is_active_by_its_own_tools_record() {
     use crate::host::memory::MemoryHost;

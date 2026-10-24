@@ -6,21 +6,15 @@ use crate::host::task::Task;
 use crate::schedule::Fault;
 use std::path::PathBuf;
 
-/// The daily renewal schedule as it is installed, read from what Pitboard wrote: a file, or
-/// on Windows the task as Task Scheduler keeps it.
 pub(crate) struct ScheduleFact {
     pub(crate) location: crate::schedule::Location,
     // Task Scheduler's word on its runs and its settings; none from launchd or systemd.
     pub(crate) task: Option<Task>,
-    /// The Pitboard it runs, where the file names one the way Pitboard writes it.
     pub(crate) program: Option<PathBuf>,
-    /// Whether that Pitboard is still there to be run.
     pub(crate) program_found: bool,
-    /// How its runs send requests, as the proxy variables its file gives them say: those of
-    /// the Pitboard that installed it, read as this run's are ([`Facts::network`]).
+    // The proxy variables of the Pitboard that installed it.
     pub(crate) network: NetworkFact,
-    /// Whether its runs send requests another way than this run does: through another proxy
-    /// or none, with another user name or password, or with other hosts exempt.
+    // Another proxy, user name, password or exempt host than this run's.
     pub(crate) network_differs: bool,
 }
 
@@ -33,7 +27,6 @@ pub(crate) struct WatchServiceFact {
     pub(crate) task: Option<Task>,
 }
 
-/// The schedule, where this home has one.
 pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
     if !crate::schedule::serves(ctx) {
         return None;
@@ -71,13 +64,7 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
     })
 }
 
-/// The schedule runs a Pitboard by its path, and the path can stop leading anywhere after
-/// it was written: an upgrade that deletes the version it named, an app moved or thrown
-/// away. The scheduler then fails once a day where nobody looks, and the parked logins it
-/// was keeping alive run out. Nothing is said where there is no schedule.
-///
-/// An app up to 0.3.0 scheduled itself rather than a command line, and that app renews
-/// nothing when it is started with `renew`, so that is said as well.
+// A path an upgrade or a move took away fails once a day where nobody looks.
 pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
     let again = again(facts.os);
     let schedule = facts.schedule.as_ref()?;
@@ -138,8 +125,7 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
     })
 }
 
-// Nothing is said where there is no service. A Pitboard gone from its path or a last run that
-// failed stops every switch it would make, where nobody looks.
+// A Pitboard gone from its path, or a failed run, stops every switch where nobody looks.
 pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
     let service = facts.watch_service.as_ref()?;
     let again = words::INSTALL_THE_SERVICE_AGAIN;
@@ -171,22 +157,7 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
     })
 }
 
-/// The system starts the schedule's runs with its own environment, not the person's shell,
-/// so they are given the proxy variables of the Pitboard that installed it. Where those send
-/// requests another way than this run does, through another proxy or none, with another user
-/// name or password, or with other hosts exempt, that is said, credentials as `***`. Nothing
-/// is said where they go the same way, or where there is no schedule.
-///
-/// From a terminal it is a warning: the terminal's proxy is the one the person works with,
-/// and installing the schedule again from there gives it that proxy. Where that proxy is a
-/// SOCKS one whose requests fail, the advice is to change the variable naming it first, so
-/// the schedule is not given a proxy that fails its requests too. In the app it is no
-/// warning.
-/// The app is started with the system's environment as the schedule's runs are, which on
-/// macOS names no proxy unless `launchctl setenv` set one, so a schedule installed from a terminal with
-/// a proxy differs from it for good, and the app's switch, the one way it installs the
-/// schedule, would give the schedule the app's proxy variables and take the terminal's away.
-/// There the line says what each goes through, and how each way of installing it chooses.
+// The app is started as the schedule's runs are, so a terminal's proxy differs: no warning there.
 pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
     let schedule = facts.schedule.as_ref()?;
     if !schedule.network_differs {
@@ -197,8 +168,7 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
         None => words::INSTALLED_WITH_NO_PROXY.to_string(),
         Some(proxy) => words::installed_with(&words::proxy_named(proxy)),
     };
-    // A SOCKS proxy is not gone through, so it is said to be given, and the network check
-    // says what becomes of the requests.
+    // A SOCKS proxy is not gone through: the network check says what becomes of the requests.
     let this_run = match &facts.network.proxy {
         None => words::goes_directly(here),
         Some(proxy) if proxy.socks => words::is_given(here, &words::proxy_named(proxy)),
@@ -220,8 +190,7 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
             advice: words::THE_APPS_OWN_ENVIRONMENT.into(),
         });
     }
-    // Installed again from here, the schedule would be given a SOCKS proxy that fails its
-    // requests, so the variable is to be changed first.
+    // Installed again from here, it would be given a SOCKS proxy that fails its requests.
     let advice = match &facts.network.proxy {
         Some(proxy) if proxy.fails => words::socks_would_fail(proxy.variable),
         _ => words::INSTALL_AGAIN_FROM_HERE.to_string(),
@@ -234,7 +203,6 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
     ))
 }
 
-/// How to write the schedule again.
 pub(super) fn again(os: Os) -> &'static str {
     if has_app(os) {
         words::AGAIN_IN_THE_APP_OR_A_TERMINAL
@@ -243,7 +211,6 @@ pub(super) fn again(os: Os) -> &'static str {
     }
 }
 
-/// Whether Pitboard has an app for `os`, with Settings of its own.
 pub(super) fn has_app(os: Os) -> bool {
     match os {
         Os::MacOs | Os::Windows => true,

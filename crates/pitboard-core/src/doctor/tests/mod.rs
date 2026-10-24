@@ -32,7 +32,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// What a mode looks like as access, the way a Unix system describes one.
+// What a mode looks like as access, the way a Unix system describes one.
 pub(super) fn mode(mode: u32) -> Access {
     Access {
         shared: mode & 0o077 != 0,
@@ -40,7 +40,7 @@ pub(super) fn mode(mode: u32) -> Access {
     }
 }
 
-/// A network whose requests go out directly, as no variable names a proxy.
+// A network whose requests go out directly, as no variable names a proxy.
 pub(super) fn direct() -> NetworkFact {
     NetworkFact {
         proxy: None,
@@ -176,9 +176,7 @@ pub(super) fn facts() -> Facts {
     }
 }
 
-/// What [`facts`] holds of whose login Claude Code has stored: the login in its
-/// keychain, `acc`'s in `org`, as Anthropic named it a minute ago, with the config naming
-/// it too.
+// `acc`'s login in `org`, as Anthropic named it a minute ago, with the config naming it.
 pub(super) fn in_use_as_named() -> crate::in_use::Known {
     let owner = crate::provider::Owner {
         account_uuid: "acc".into(),
@@ -228,12 +226,12 @@ pub(super) fn open_to_users() -> Access {
     }
 }
 
-/// Codex's section for a machine with no Codex accounts parked.
+// Codex's section for a machine with no Codex accounts parked.
 pub(super) fn codex_checks(codex: &CodexFacts) -> Vec<Check> {
     judge_codex(crate::host::OS, None, codex, &[], NOW, &time::moment)
 }
 
-/// A machine whose Codex is signed in, with its login where it should be.
+// A machine whose Codex is signed in, with its login where it should be.
 pub(super) fn with_codex() -> CodexFacts {
     CodexFacts {
         present: true,
@@ -270,7 +268,7 @@ pub(super) fn parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
     }
 }
 
-/// A Codex account's park, named as a command here would take it.
+// A Codex account's park, named as a command here would take it.
 pub(super) fn codex_parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
     ParkFact {
         provider: ProviderId::Codex,
@@ -287,7 +285,7 @@ pub(super) fn check<'a>(checks: &'a [Check], code: &str) -> &'a Check {
     checks.iter().find(|c| c.code == code).expect(code)
 }
 
-/// A schedule that runs a Pitboard still there, installed with `network`.
+// A schedule that runs a Pitboard still there, installed with `network`.
 pub(super) fn scheduled(network: NetworkFact, network_differs: bool) -> ScheduleFact {
     ScheduleFact {
         location: Location::File(PathBuf::from(
@@ -301,7 +299,7 @@ pub(super) fn scheduled(network: NetworkFact, network_differs: bool) -> Schedule
     }
 }
 
-/// A network whose requests go through `proxy`.
+// A network whose requests go through `proxy`.
 pub(super) fn by(proxy: ProxyFact) -> NetworkFact {
     NetworkFact {
         set: vec![proxy.variable],
@@ -310,7 +308,7 @@ pub(super) fn by(proxy: ProxyFact) -> NetworkFact {
     }
 }
 
-/// A proxy `HTTPS_PROXY` names, exempting the hosts Pitboard calls that `exempt` lists.
+// A proxy `HTTPS_PROXY` names, exempting the hosts Pitboard calls that `exempt` lists.
 pub(super) fn through(exempting: Option<&'static str>, exempt: &[&str]) -> ProxyFact {
     ProxyFact {
         variable: "HTTPS_PROXY",
@@ -324,7 +322,7 @@ pub(super) fn through(exempting: Option<&'static str>, exempt: &[&str]) -> Proxy
     }
 }
 
-/// The accounts `facts` has in use, by the name a command takes.
+// The accounts `facts` has in use, by the name a command takes.
 pub(super) fn in_use(facts: &Facts) -> Vec<String> {
     facts
         .parks

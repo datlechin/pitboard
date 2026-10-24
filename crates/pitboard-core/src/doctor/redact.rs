@@ -4,10 +4,7 @@ use crate::provider::ProviderId;
 use crate::provider::claude::slot;
 use crate::proxy::system_proxies;
 
-/// Everything in a diagnosis that names a person or an account.
-///
-/// The salt is this machine and this moment, so identifiers line up inside one report and
-/// two reports from one machine do not line up with each other. It is never printed.
+// Salted with this machine and moment: names line up inside one report, never across two.
 pub(super) fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Sheet {
     let mut sheet = crate::redact::Sheet::of(
         ctx,
@@ -26,8 +23,7 @@ pub(super) fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Shee
             sheet = sheet.hide(name.clone(), "org");
         }
     }
-    // Whose login is stored, as Anthropic last named it, and whom Claude Code's config names,
-    // which need not be accounts anybody enrolled.
+    // Neither need be an account anybody enrolled.
     let named = facts
         .in_use
         .iter()
@@ -109,10 +105,7 @@ pub(super) fn redaction_for(ctx: &Context, facts: &Facts) -> crate::redact::Shee
     for entry in system_proxy.map(system_proxies).unwrap_or_default() {
         sheet = sheet.hide(entry.server.to_owned(), "proxy");
     }
-    // A proxy's host can name the company whose network it is, as an organisation's name
-    // does. Its port goes with it, so that a host that is also a word, such as `proxy`, is
-    // hidden where it is the host and nowhere else. One on loopback names nothing. The one
-    // the schedule was installed with is hidden the same way.
+    // With its port, so a host that is also a word is hidden only where it is the host.
     let schedules = facts
         .schedule
         .as_ref()

@@ -8,9 +8,7 @@ use crate::store;
 use crate::words as said;
 use std::path::PathBuf;
 
-// Every file holding a login that others may read, or, where it is sealed, change: who a file
-// lets in is what a restore, a copy or a careless umask changes, and on Windows Claude Code's
-// file takes its folder's access list (Claude Code 2.1.300, RF-C1b).
+// On Windows Claude Code's file takes its folder's access list (2.1.300, RF-C1b).
 pub(super) fn loose_logins(ctx: &Context) -> Vec<(String, Kind, Access)> {
     let mut loose = Vec::new();
     let mut look = |path: PathBuf| {
@@ -26,9 +24,7 @@ pub(super) fn loose_logins(ctx: &Context) -> Vec<(String, Kind, Access)> {
         }
     };
     look(claude_live::credential_file(ctx));
-    // A sealed park opens for this Windows account alone, but sealing stops reading, not
-    // writing: another account with write access can corrupt or plant a park, so the vault and
-    // its parks are still checked.
+    // A seal stops reading, not writing: another account could still plant or spoil a park.
     let vault = store::vault_dir(ctx);
     look(vault.clone());
     if let Ok(entries) = std::fs::read_dir(&vault) {
@@ -227,16 +223,8 @@ pub(super) fn judge_machine_id(facts: &Facts) -> Option<Check> {
     }
 }
 
-/// Whether Pitboard is waiting before asking Anthropic about anything.
-///
-/// Ordinarily nothing is waiting: an account is asked about whenever its tightest limit
-/// could have moved by a percentage point, and that is the floor rather than a wait. A wait
-/// means Anthropic asked for less traffic or could not be reached, and a person watching a
-/// number not move deserves to know which.
 pub(super) fn judge_asking(facts: &Facts) -> Check {
-    // Which services Pitboard asks, named by the tools that have accounts here, and which
-    // of them are being held back: a hold is a service's answer, so blaming the wrong one
-    // sends somebody to look at a service that is answering normally.
+    // A hold is a service's answer, so the one holding back is named, not every one asked.
     let tool_of = |id: &str| {
         facts
             .state
@@ -295,9 +283,7 @@ pub(super) fn judge_asking(facts: &Facts) -> Check {
     }
 }
 
-/// A name written down before a park was created, still unresolved. Ordinarily there is
-/// nothing here: the next change resolves every one of them. What is left is an item that
-/// could not be read, which on macOS is a locked keychain and nothing worse.
+// The next change resolves every name; one left could not be read, as behind a locked keychain.
 pub(super) fn judge_pending(facts: &Facts) -> Check {
     match facts.pending_parks.len() {
         0 => ok(

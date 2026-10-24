@@ -1,6 +1,6 @@
 use super::*;
 
-/// The network check, for a network that is `proxy`, passing over `passed_over`.
+// The network check, for a network that is `proxy`, passing over `passed_over`.
 fn network(proxy: Option<ProxyFact>, passed_over: &[&'static str]) -> Check {
     let mut f = facts();
     f.network = NetworkFact {
@@ -23,9 +23,6 @@ fn network(proxy: Option<ProxyFact>, passed_over: &[&'static str]) -> Check {
     }
 }
 
-/// doctor says how Pitboard's requests leave this machine: directly, or through which
-/// proxy and from which variable, and which of the hosts Pitboard calls go around it. It
-/// had no such check, while ureq read the variables itself, so nobody could tell.
 #[test]
 fn the_network_check_names_the_proxy_and_the_variable_it_came_from() {
     let direct = network(None, &[]);
@@ -77,8 +74,6 @@ fn the_network_check_names_the_proxy_and_the_variable_it_came_from() {
     }
 }
 
-/// The network check of a context read from `pairs`, and nothing else of the environment
-/// but a home.
 fn network_read_from(pairs: &[(&'static str, &str)]) -> Check {
     let env: crate::context::Environment = pairs
         .iter()
@@ -89,13 +84,7 @@ fn network_read_from(pairs: &[(&'static str, &str)]) -> Check {
     network(fact.proxy, &fact.passed_over)
 }
 
-/// A SOCKS proxy, which Pitboard does not use yet, is a warning. The check says so in the
-/// words a request fails with, naming the variable that named the proxy, then the proxy,
-/// and says what to set. A host the variable exempting hosts names still goes out
-/// directly; with every host Pitboard calls exempt, nothing fails, and it is no warning.
-///
-/// It named a SOCKS proxy as one Pitboard went through, like any other, while Pitboard
-/// spoke SOCKS itself.
+// It named a SOCKS proxy as one Pitboard went through, while Pitboard spoke SOCKS itself.
 #[test]
 fn a_socks_proxy_is_a_warning_naming_its_variable() {
     let socks = network_read_from(&[("all_proxy", "socks5://127.0.0.1:7890")]);
@@ -159,8 +148,6 @@ fn a_socks_proxy_is_a_warning_naming_its_variable() {
     );
 }
 
-/// Where Pitboard passes over a variable that holds no proxy's address, the check warns
-/// and says what to set.
 #[test]
 fn a_variable_pitboard_cannot_read_is_a_warning() {
     let passed = network(None, &["HTTPS_PROXY"]);
@@ -188,8 +175,6 @@ fn a_variable_pitboard_cannot_read_is_a_warning() {
     assert_eq!(passed.advice, words::SET_EACH_RIGHT);
 }
 
-/// What doctor is given is read from the context, as the agent's proxy is, with the
-/// user name and password in the address hidden, and the hosts exempt judged by ureq.
 #[test]
 fn the_network_is_read_from_the_context() {
     let env: crate::context::Environment = [

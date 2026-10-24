@@ -11,12 +11,10 @@ use crate::words as said;
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// Claude Code's plaintext fallback file, there while the keychain holds the login in use.
+// Claude Code's plaintext file, there while the keychain holds the login in use.
 pub(crate) struct FallbackLogin {
     pub(crate) path: PathBuf,
-    /// A handle on the refresh token of the login it holds, never the token: `None` where
-    /// it holds no login, empty where that login has no refresh token, and why where what
-    /// it holds cannot be read.
+    // `None` where it holds no login, and empty where that login has no refresh token.
     pub(crate) fingerprint: Result<Option<String>, store::Error>,
 }
 
@@ -39,8 +37,7 @@ pub(super) fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, 
     (said, ruled_out)
 }
 
-// Nothing where whether it is there cannot be told: an unreadable keychain is the
-// `credential_store` check's to say.
+// Nothing where that cannot be told: an unreadable keychain is `credential_store`'s to say.
 pub(super) fn fallback_login(ctx: &Context) -> Option<FallbackLogin> {
     let login = claude_live::login_behind(ctx)?;
     Some(FallbackLogin {
@@ -85,12 +82,7 @@ pub(super) fn found(ctx: &Context, service: &str) -> Found {
     }
 }
 
-/// What is taking up the room in a credential document, largest first.
-///
-/// A login that will not fit is almost never the login: on one real machine the OAuth block
-/// was 506 bytes and eleven MCP server tokens were 3679. Saying "8503 of 4032 bytes" leaves
-/// a person to guess which of those to do something about, and the answer is in the
-/// document Pitboard has already read.
+// MCP server tokens, not the login itself, are what usually fill a store's ceiling.
 pub(super) fn parts_of(document: &Value) -> Vec<(String, usize)> {
     let weigh = |value: &Value| serde_json::to_string(value).map(|s| s.len()).unwrap_or(0);
     let Some(root) = document.as_object() else {
@@ -99,7 +91,7 @@ pub(super) fn parts_of(document: &Value) -> Vec<(String, usize)> {
     let mut parts: Vec<(String, usize)> = root
         .iter()
         .flat_map(|(key, value)| match (key.as_str(), value.as_object()) {
-            // The usual culprit, and the one a person can act on server by server.
+            // The usual culprit, which a person signs out of server by server.
             ("mcpOAuth", Some(servers)) if servers.len() > 1 => servers
                 .iter()
                 .map(|(server, held)| (format!("mcpOAuth {server}"), weigh(held)))
@@ -111,7 +103,6 @@ pub(super) fn parts_of(document: &Value) -> Vec<(String, usize)> {
     parts
 }
 
-// Claude Code writes its config and its account once it has run.
 pub(super) fn run_claude_once(facts: &Facts) -> String {
     let found = facts.claude_program.as_deref();
     let program = said::spelling(facts.os, ProviderId::Claude, found).of(ProviderId::Claude);
@@ -181,8 +172,7 @@ pub(super) fn judge_slot(facts: &Facts) -> Check {
     )
 }
 
-// A login that grows past the ceiling cannot be switched at all, and it grows by things
-// done elsewhere, so it is worth saying before the day it refuses.
+// Said before the day a login grown past the ceiling cannot be switched at all.
 pub(super) fn judge_size(facts: &Facts) -> Option<Check> {
     let price = facts.credential_cost?;
     if let Ok(store::Backend::CredentialManager) = &facts.backend {
@@ -191,8 +181,6 @@ pub(super) fn judge_size(facts: &Facts) -> Option<Check> {
     let (bytes, limit) = (price.needs, price.limit);
     let biggest = words::biggest(&facts.credential_parts);
     Some(if price.refused() {
-        // The refusal was asked for. Say what it will cost when the day comes rather
-        // than only on the day itself.
         fail(
             "credential_size",
             "login size",
@@ -200,9 +188,7 @@ pub(super) fn judge_size(facts: &Facts) -> Option<Check> {
             words::NO_THIRD_WAY,
         )
     } else if price.over() {
-        // Not a fault: `security` takes this much of a command from stdin and no more,
-        // and the argument line is the only other way it offers. Claude Code writes
-        // this same login that way itself on every refresh.
+        // No fault: Claude Code writes this same login on the argument line on every refresh.
         warn(
             "credential_size",
             "login size",
@@ -262,8 +248,7 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
             words::NOT_READ_YET,
             words::UNKNOWN_NOT_EMPTY,
         ),
-        // As a switch refuses with `live_credential_elsewhere`: what would follow Claude Code
-        // moving where it keeps a login.
+        // As a switch refuses with `live_credential_elsewhere`.
         Ok(store::Backend::Absent) => match &facts.config_account {
             Some(named) => fail(
                 "credential_store",
@@ -290,12 +275,7 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
     }
 }
 
-/// Whose login Claude Code has stored, as Anthropic last said, which every reader that does
-/// not ask takes as the account in use, and whether something may have signed in since.
-/// Doctor asks nobody, so a login renewed since, which Claude Code does every few hours, is
-/// said and is no warning; Claude Code's config naming another account is, since only a
-/// read that asks can say whether another login came with it. Nothing is said where nothing
-/// is recorded and no Claude Code account is enrolled.
+// A login renewed since is no warning; a config naming another account is, as only asking tells.
 pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -> Option<Check> {
     let (code, name) = ("in_use", "in use");
     let known = facts.in_use.as_ref()?;
@@ -344,7 +324,6 @@ pub(super) fn judge_in_use(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -
             words::status_shows(&config, &account.how_to_name()),
         ));
     }
-    // The login stored now by its fingerprint, empty for a login with no refresh token:
     // `Some(None)` where none is stored, and `None` where the store or its shape cannot be read.
     let claude_code = crate::provider::claude_code();
     let stored = match &facts.credential {
@@ -424,9 +403,7 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
             words::NOTHING_STORED,
             words::NOTHING_SIGNED_IN,
         ),
-        // Read in 2.1.294 (the register's `locked_keychain_keeps_last_login`): a session
-        // keeps serving the login it last read while the keychain is locked, and one that
-        // read none reads the keychain as empty and falls through to the file.
+        // `locked_keychain_keeps_last_login`: a session keeps the login it last read.
         Err(store::Error::Locked) if facts.os == Os::Windows => fail(
             "credential",
             "credential",
@@ -463,9 +440,7 @@ pub(super) fn judge_credential(facts: &Facts) -> Check {
     }
 }
 
-// What leaves the file and keeps it there: `locked_sign_in_writes_fallback` and
-// `fallback_outlives_keychain_writes` on macOS, `credman_unreachable_writes_file` and
-// `credman_migration` on Windows.
+// The register's `locked_sign_in_writes_fallback` and `fallback_outlives_keychain_writes`.
 pub(super) fn judge_fallback_login(facts: &Facts) -> Option<Check> {
     let left = facts.fallback_login.as_ref()?;
     let path = left.path.display();
@@ -490,15 +465,7 @@ pub(super) fn judge_fallback_login(facts: &Facts) -> Option<Check> {
     Some(warn("fallback_login", "fallback login", detail, advice))
 }
 
-/// Claude Code's successor credential backend.
-///
-/// Measured in 2.1.278: the flag does not move the login out of the keychain. The live
-/// chain is built as keychain-with-plaintext-fallback either way, and the flag only decides
-/// what backs the fallback half, and only for a caller that hands a backend in. An ordinary
-/// `claude` hands none in, so the fallback stays `<storage dir>/.credentials.json`. The
-/// combination worth saying something about is the flag on *and* the login living in the
-/// fallback, because that is the one case where what Pitboard reads may not be what a
-/// session reads.
+// The flag moves no login out of the keychain (2.1.278): only a login in the file may differ.
 pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
     let flag_on = facts
         .config
@@ -563,7 +530,6 @@ pub(super) fn judge_login_restrictions(facts: &Facts) -> Option<Check> {
     })
 }
 
-// From files as well, since an app launched from Finder has no environment to read.
 pub(super) fn judge_auth(facts: &Facts) -> Check {
     if facts.auth_overrides.is_empty() {
         let read = if facts.fallback_login.is_some() {
@@ -586,12 +552,7 @@ pub(super) fn judge_auth(facts: &Facts) -> Check {
     )
 }
 
-/// Which Claude Code is installed, against which one Pitboard's facts were read.
-///
-/// Stated rather than warned about. Claude Code ships several times a week, so a mismatch
-/// is the ordinary state of the world within days of a release and warning about it would
-/// be noise on every machine. What is worth a warning is an assumption that has actually
-/// stopped holding, which is a probe's job and not a version number's.
+// Stated, never warned about: Claude Code ships several times a week.
 pub(super) fn judge_claude_version(facts: &Facts) -> Check {
     let verified = read_from(ProviderId::Claude, facts.os);
     ok(
@@ -605,9 +566,7 @@ pub(super) fn judge_claude_version(facts: &Facts) -> Check {
     )
 }
 
-/// Claude Code's supervisor daemon is a second writer of the login, on a schedule nobody
-/// typed. It takes the same write lock, so it cannot write underneath a switch, but a
-/// person reading a diagnosis should be able to see that it is there.
+// A second writer of the login, which takes the same write lock as a switch.
 pub(super) fn judge_daemon(facts: &Facts) -> Check {
     let Some(d) = &facts.daemon else {
         return ok("claude_daemon", "Claude Code daemon", words::NO_DAEMON);

@@ -7,46 +7,33 @@ use crate::words as said;
 use crate::{park, store};
 
 pub(crate) struct ParkFact {
-    /// Which tool the account belongs to, which is what decides how it is named back to a
-    /// person: bare for Claude Code, `codex/work` for Codex.
     pub(crate) provider: ProviderId,
-    /// The name a command on this machine takes for it: qualified where another tool has an
-    /// account of the same name, since a bare one would then be ambiguous.
+    // As a command here takes it: qualified where another tool has an account of the name.
     pub(crate) name: String,
-    /// Whether its login is the one its tool has stored, as far as files say.
+    // Whether its login is the one its tool has stored, as far as files say.
     pub(crate) active: bool,
-    /// When this account last came to be in use, where that is recorded.
     pub(crate) last_used_at: Option<i64>,
     pub(crate) park: Option<Park>,
-    /// Why it cannot be read back, if it cannot.
     pub(crate) unreadable: Option<Unreadable>,
 }
 
-/// Why a parked login could not be read back.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Unreadable {
-    /// It is behind a keychain that is locked here, which says nothing about the login.
+    // Behind a locked keychain, which says nothing about the login.
     Locked,
-    /// A park sealed to this account that will not open in this logon, with
-    /// `CryptUnprotectData`'s code where there was one: a lost key, not a missing or damaged
-    /// file.
+    // A lost key, with `CryptUnprotectData`'s code: not a missing or damaged file.
     Sealed(Option<i32>),
-    /// Missing, damaged, or refused by the store, in words.
     Broken(String),
 }
 
 impl ParkFact {
-    /// The account's name as a command here would take it.
     pub(super) fn typed(&self) -> String {
         self.name.clone()
     }
 }
 
 pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
-    // Whose login each tool has stored, as its service last said, asked once per tool and
-    // only of a tool that has accounts here, and from files alone: Pitboard's record, and a
-    // Codex login's own claims. Never Claude Code's config, which a Claude Code process
-    // started or signed in on another login can rewrite with its own account.
+    // From files alone, never Claude Code's config, which another session can rewrite.
     let in_use: std::collections::BTreeMap<ProviderId, Option<crate::provider::Owner>> =
         ProviderId::ALL
             .iter()
@@ -88,18 +75,10 @@ pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
         .collect()
 }
 
-/// A refresh token's own life, from a real renewal answer: thirty days. An account that has
-/// been parked for longer than that without being switched to has had its login kept alive
-/// purely by Pitboard, through at least one whole token lifetime, for nobody.
+// A refresh token's own life, from a real renewal answer.
 pub(super) const A_TOKEN_LIFETIME: i64 = 30 * 86_400;
 
-/// An account nobody has come back to.
-///
-/// Pitboard renews a parked login for as long as the account is enrolled, so one enrolled
-/// once and never used again keeps a live, continuously rotated refresh token on this
-/// machine indefinitely. That is a defensible thing to do and an indefensible thing to do
-/// silently. Nothing is dropped on a timer Pitboard chose: the threshold here is the
-/// token's own lifetime, and all it does is say so.
+// Pitboard keeps a parked login alive for as long as its account is enrolled, so it says so.
 pub(super) fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
     // The sentence below says Pitboard renews the login, which it does only for a document.
     match crate::provider::of(park.provider) {
@@ -126,13 +105,10 @@ pub(super) fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
     ))
 }
 
-// The code `CryptUnprotectData` returns after an administrator's password reset, as RF-D1d
-// measured (run 38797729796), where the account's master key no longer opens the blob.
+// `CryptUnprotectData`'s code after an administrator resets the password (RF-D1d).
 pub(super) const DPAPI_KEY_RESET: i32 = 0x8009_000B_u32 as i32;
 
-// Every sealed park lost at once, as after an administrator resets the password, is one
-// finding. A seal that reads 0x8009000B for all of them points at a reset or a restored
-// profile; any other code (a logon without the key, as over SSH) gets neutral wording.
+// Every sealed park lost at once is one finding, worded for a reset only where the code says so.
 pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
     if facts.vault != store::Backend::SealedFile {
         return None;
@@ -163,8 +139,7 @@ pub(super) fn judge_vault(facts: &Facts, lost: &[&ParkFact]) -> Option<Check> {
     ))
 }
 
-// Two sealed parks or more in a sealed vault, each failing to open: a lost key, not a missing
-// or damaged file, so a reset or a restored profile is told from a stray unreadable park.
+// Two or more, each sealed and failing to open: a lost key, not a stray unreadable park.
 pub(super) fn lost_parks(facts: &Facts) -> Vec<&ParkFact> {
     let parked: Vec<&ParkFact> = facts
         .parks

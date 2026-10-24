@@ -1,8 +1,6 @@
 use super::*;
 use crate::provider::codex::paths::Backend;
 
-// A machine without Codex reads exactly as it did before Pitboard knew Codex existed; one
-// with it gets a section of its own, and nothing of Claude Code's moves.
 #[test]
 fn codex_has_a_section_only_where_there_is_a_codex() {
     let without = evaluate(&facts());
@@ -34,8 +32,7 @@ fn codex_has_a_section_only_where_there_is_a_codex() {
         words::codex_login("w@example.com", "work-account", "0123456789abcdef")
     );
 
-    // Accounts enrolled on a machine whose Codex home has gone still get the section, and
-    // a switch puts a parked one in use while nothing is signed in.
+    // Accounts enrolled where Codex's home has gone still get the section.
     f.codex = CodexFacts {
         enrolled: 1,
         ..no_codex()
@@ -53,8 +50,7 @@ fn codex_has_a_section_only_where_there_is_a_codex() {
     assert_eq!(file.advice, words::use_or_sign_in("codex.cmd"));
 }
 
-// The session's This PC listed no Codex section for a Codex installed with npm and never
-// run, though it lists Claude Code's for a Claude Code in the same state.
+// The session's This PC listed none for a Codex installed with npm and never run.
 #[test]
 fn codex_installed_and_never_run_has_its_section() {
     let mut f = facts();
@@ -69,13 +65,7 @@ fn codex_installed_and_never_run_has_its_section() {
     assert!(healthy(&checks));
 }
 
-/// A keychain store is Codex's to use and Pitboard's to leave alone, so it is said
-/// rather than read, and a store in memory holds nothing to switch. Each is a choice,
-/// not a fault: it fails for somebody with Codex accounts enrolled, because every one of
-/// them is out of reach, and is only stated for anybody else. It used to be a warning
-/// whoever it was, so a person with Codex accounts saw a healthy report on a machine
-/// where `pitboard use codex/...` refused, and a person with none was handed something
-/// to look at about a setting they chose.
+// A choice, not a fault: it fails only for somebody with Codex accounts enrolled.
 #[test]
 fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
     let setting = |backend: Backend| {
@@ -141,9 +131,6 @@ fn each_codex_store_is_judged_for_what_pitboard_can_do_with_it() {
     }
 }
 
-/// The file store's line says which setting chose it, and that a project's own config is
-/// not read, since in a trusted project that sets the store Codex keeps its login
-/// somewhere else.
 #[test]
 fn the_file_store_says_what_chose_it_and_what_is_not_read() {
     let checks = codex_checks(&with_codex());
@@ -156,8 +143,6 @@ fn the_file_store_says_what_chose_it_and_what_is_not_read() {
     assert_eq!(found.advice, words::PROJECTS_NOT_READ);
 }
 
-/// A store nobody can tell stops Codex itself, so it is broken rather than a choice: a
-/// failure where Codex accounts are enrolled, and a warning where none are.
 #[test]
 fn a_codex_store_nobody_can_tell_is_broken() {
     let unknown = |enrolled| CodexFacts {
@@ -181,8 +166,7 @@ fn a_codex_store_nobody_can_tell_is_broken() {
     }
 }
 
-// Codex 0.164.0 signs out of a login from a workspace its configuration leaves out
-// (`codex_login_restrictions`), so the setting is named with the accounts it rules out.
+// Codex 0.164.0 signs out of those logins (`codex_login_restrictions`).
 #[test]
 fn codexs_login_restrictions_are_named_with_the_accounts_they_rule_out() {
     use crate::switch::harness::codex_account;
@@ -228,9 +212,7 @@ fn codexs_login_restrictions_are_named_with_the_accounts_they_rule_out() {
     assert_eq!(found.advice, words::RESTRICTIONS_UNREADABLE);
 }
 
-/// What this machine's folder of Codex's configuration and the person's own config say is
-/// gathered as Codex reads it, and a store a requirement pins is said to be one no line of
-/// the person's own changes. On Windows a keyring store is the secret store by default.
+// On Windows a keyring store is the secret store by default.
 #[test]
 fn a_store_an_administrator_pinned_is_gathered_and_said() {
     let host = crate::host::memory::MemoryHost::new();
@@ -377,10 +359,7 @@ fn a_codex_home_that_names_no_folder_is_said_as_it_is() {
     }
 }
 
-/// Signed in with an API key is somebody's choice, and nothing about it is broken or
-/// unreadable. It used to be reported as a login that "cannot be read", failing the
-/// whole report for anybody with Codex accounts and telling them to sign in with
-/// `codex` again.
+// It used to fail the report, telling a person to sign in with `codex` again.
 #[test]
 fn a_codex_login_with_an_api_key_is_a_choice_rather_than_a_fault() {
     let why = "Codex is signed in with an API key rather than a ChatGPT account, so there is \
@@ -411,9 +390,6 @@ fn a_codex_login_with_an_api_key_is_a_choice_rather_than_a_fault() {
     assert_eq!(login.advice, words::chatgpt_sign_ins_only("codex"));
 }
 
-/// Every check about a Codex account is in Codex's section and under a Codex code, so
-/// `codex_` finds everything about Codex. A Codex account's park used to be judged among
-/// Claude Code's, under Claude Code's codes and in Claude Code's column.
 #[test]
 fn a_codex_account_is_judged_in_codex_section_under_a_codex_code() {
     let claude_only = {
@@ -463,8 +439,7 @@ fn a_codex_account_is_judged_in_codex_section_under_a_codex_code() {
     );
 }
 
-/// Found and not named is not missing. A `codex` behind a version manager's shim runs
-/// perfectly well from a path that says nothing about its version.
+// As behind a version manager's shim.
 #[test]
 fn a_codex_whose_version_cannot_be_read_is_not_called_missing() {
     let found = CodexFacts {
@@ -595,11 +570,7 @@ fn running_codex_processes_are_reported_as_a_fact() {
     );
 }
 
-/// doctor asks what runs Codex the way a switch does, through the same host, so the two
-/// never disagree about what is still on the account a switch left. They used to count
-/// with two different scans, and only the switch's could be stood in for. Nor do they
-/// disagree where the process list cannot be read: doctor says it could not tell, and a
-/// switch that nobody can say.
+// They used to count with two scans, and only the switch's could be stood in for.
 #[test]
 fn doctor_and_a_switch_see_the_same_codex_running() {
     use crate::host::memory::MemoryHost;
@@ -665,8 +636,6 @@ fn every_codex_failure_and_warning_tells_the_user_something() {
     }
 }
 
-/// What the section is judged on, read off a real disk: a scratch Codex home with a
-/// login in it, in the file Codex keeps it in.
 #[test]
 fn codex_facts_are_read_off_the_disk() {
     use crate::host::fs::testing;
@@ -674,8 +643,7 @@ fn codex_facts_are_read_off_the_disk() {
     let scratch = tempfile::tempdir().expect("a scratch home");
     let root = scratch.path().to_path_buf();
     let home = root.join("codex");
-    // A `codex` of this test's own. Looked up on `PATH`, it would be this machine's, and
-    // the standalone installer keeps that inside the real `~/.codex`.
+    // Looked up on `PATH`, it would be this machine's, kept inside the real `~/.codex`.
     let codex = format!("codex{}", std::env::consts::EXE_SUFFIX);
     let program = root.join("bin").join(&codex);
     let ctx = Context::new(root.clone())
@@ -752,8 +720,7 @@ fn codex_facts_are_read_off_the_disk() {
         Ok(_) => panic!("an API key is not an account"),
     }
 
-    // One account's tokens under another's id, which a running codex leaves when it
-    // refreshes in the middle of a switch: not one account's login.
+    // As a running codex leaves it, refreshing in the middle of a switch.
     let mixed = json!({
         "auth_mode": "chatgpt",
         "tokens": {
@@ -787,8 +754,7 @@ fn codex_facts_are_read_off_the_disk() {
         "a store Pitboard does not handle is not read"
     );
 
-    // A keychain store with the encrypted-file feature is named as what it is, never as
-    // plain `keyring`, which the configuration does not say.
+    // Named as what it is, never as plain `keyring`, which the configuration does not say.
     std::fs::write(
         home.join("config.toml"),
         "cli_auth_credentials_store = \"auto\"\n[features]\nsecret_auth_storage = true\n",

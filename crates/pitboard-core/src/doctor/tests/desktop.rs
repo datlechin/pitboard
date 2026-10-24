@@ -487,8 +487,6 @@ fn a_folder_set_aside_warns_only_where_its_account_holds_nothing_else() {
     );
 }
 
-// Claude's settings name an account since Pitboard last read Claude signed out: doctor
-// says it as the read's warning does.
 #[test]
 fn claude_desktop_named_since_signed_out_reads_as_the_warning_does() {
     let mut state = State::default();

@@ -1,7 +1,5 @@
 use super::*;
 
-/// A document whose `claudeAiOauth` is there and is not an object is a shape that
-/// moved, which nothing should be written into until it is understood.
 #[test]
 fn a_credential_whose_login_is_not_an_object_is_a_failure() {
     let mut f = facts();
@@ -21,9 +19,7 @@ fn an_unreadable_store_fails_rather_than_reporting_nothing_stored() {
     assert_eq!(check(&checks, "credential_store").level, Level::Fail);
 }
 
-/// A keychain locked where it cannot ask to be unlocked, as over SSH, is one thing to
-/// fix, said once with what fixes it and what Claude Code does meanwhile. Every parked
-/// login behind it used to fail as well, each advised to sign in again for nothing.
+// Every parked login behind it used to fail too, each advised to sign in again for nothing.
 #[test]
 fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
     let mut f = facts();
@@ -56,8 +52,6 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
         "one cause, one failure"
     );
 
-    // Where a login is left in the fallback file, a session started here signs in
-    // with it, and the advice says so.
     f.fallback_login = Some(FallbackLogin {
         path: f.credential_file.clone(),
         fingerprint: Ok(Some("0123456789abcdef".into())),
@@ -68,8 +62,6 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
     );
 }
 
-/// A login left in `.credentials.json` behind the one in the keychain is what a Claude
-/// Code that cannot read the keychain signs in with, and no switch reaches it.
 #[test]
 fn a_login_left_behind_the_keychain_is_said_with_what_reads_it() {
     let mut f = facts();
@@ -92,9 +84,7 @@ fn a_login_left_behind_the_keychain_is_said_with_what_reads_it() {
     assert!(healthy(&checks), "nothing Pitboard does is stopped by it");
 }
 
-/// A running session watches the file by its being there, so one with no login in it
-/// holds sessions to their account after a switch all the same. It is said, with what
-/// lets them follow, and the login check's advice does not send a session to it.
+// A running session watches the file by its being there, whatever it holds.
 #[test]
 fn a_file_behind_the_keychain_with_no_login_in_it_is_said_with_what_it_holds_back() {
     let mut f = facts();
@@ -123,10 +113,7 @@ fn a_file_behind_the_keychain_with_no_login_in_it_is_said_with_what_it_holds_bac
     );
 }
 
-/// A running session looks at the file and never reads it to decide, so one Pitboard
-/// cannot read holds sessions to their account after a switch all the same. It is said
-/// with why, without guessing whether a login is in it, and so is the login check's
-/// advice for a session that cannot read the keychain.
+// A running session looks at the file and never reads it to decide.
 #[test]
 fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
     let mut f = facts();
@@ -160,8 +147,7 @@ fn a_file_behind_the_keychain_that_cannot_be_read_is_said_with_why() {
     );
 }
 
-// Behind Credential Manager, a network logon is what reads the file, and PowerShell deletes
-// it, with each single quote in the path doubled.
+// PowerShell deletes it, with each single quote in the path doubled.
 #[test]
 fn a_file_behind_credential_manager_is_said_in_the_words_of_windows() {
     let mut f = facts();
@@ -203,9 +189,6 @@ fn a_file_behind_credential_manager_is_said_in_the_words_of_windows() {
     );
 }
 
-/// What the checks above are given, read off the stores: the file while the keychain
-/// holds the login in use, with the login in it, none, or why it cannot be read, and
-/// nothing where the file is the store in use.
 #[test]
 fn a_login_left_behind_the_keychain_is_found_in_its_file() {
     use crate::host::memory::MemoryHost;
@@ -334,8 +317,7 @@ fn the_successor_backend_is_quiet_when_it_is_off() {
     assert_eq!(check(&checks, "storage_v5").level, Level::Ok);
 }
 
-// On macOS the file is a fallback after a keychain write failed. On Windows the chain is
-// the file only where nothing turns Credential Manager on and it holds no login.
+// On macOS the file is a fallback after a keychain write failed.
 #[test]
 fn a_file_store_is_the_whole_answer_on_linux_and_windows() {
     let mut f = facts();
@@ -361,9 +343,7 @@ fn a_file_store_is_the_whole_answer_on_linux_and_windows() {
     }
 }
 
-/// The failure that would follow Claude Code moving where it keeps a login: not an
-/// absence, a mismatch, and the difference is what decides whether the advice is "sign
-/// in" or "Pitboard is looking in the wrong place".
+// A mismatch, not an absence: what would follow Claude Code moving where it keeps a login.
 #[test]
 fn a_config_that_names_somebody_signed_in_with_no_login_anywhere_is_a_failure() {
     let mut f = facts();
@@ -519,12 +499,7 @@ fn a_login_past_the_ceiling_reads_differently_when_the_way_past_it_is_refused() 
     assert_eq!(refused.detail, words::size_refused(8503, 4032, ""));
 }
 
-/// An account nobody has come back to keeps a live, continuously rotated refresh token
-/// on this machine for as long as it stays enrolled. Nothing is dropped on a timer
-/// Pitboard chose; the threshold is the token's own lifetime and all it does is say so.
-/// A login that will not fit is almost never the login. On one real machine the OAuth
-/// block was 506 bytes and eleven MCP server tokens were 3679, and the check said
-/// "8503 of 4032 bytes" and left the person to guess which of those to act on.
+// It said "8503 of 4032 bytes" and left the person to guess what to sign out of.
 #[test]
 fn a_login_too_big_says_what_is_taking_up_the_room() {
     let mut f = facts();
@@ -597,10 +572,6 @@ fn the_daemon_is_reported_without_being_a_problem() {
     assert_eq!(stopped.detail, words::daemon_stopped(&version));
 }
 
-/// The account in use is the one Anthropic last named for the login stored, known by
-/// that login's fingerprint, and doctor says when it was named. Claude Code's config
-/// naming another, once a read has found the login is still the one named, is said, and
-/// moves nothing.
 #[test]
 fn the_account_in_use_is_the_one_anthropic_named() {
     use crate::switch::harness::{NOW, config_names, machine};
@@ -633,9 +604,7 @@ fn the_account_in_use_is_the_one_anthropic_named() {
     assert_eq!(in_use(&facts), ["here"]);
 }
 
-/// Claude Code renews its login by itself, and a renewed login has another fingerprint.
-/// That is what happens every few hours, so it is no warning: the next read asks whose it
-/// is. Doctor asks nobody.
+// Claude Code renews its login every few hours, and doctor asks nobody.
 #[test]
 fn a_renewed_login_is_not_a_warning() {
     use crate::switch::harness::{NOW, document, machine};
@@ -653,10 +622,7 @@ fn a_renewed_login_is_not_a_warning() {
     assert_eq!(m.api.calls(), 0);
 }
 
-/// Claude Code's config has named another account since Anthropic last named the login
-/// stored, as a sign-in leaves it and another Claude Code process starting on another
-/// login can. Something may have signed in, and only Anthropic can say whose the login is
-/// now.
+// As a sign-in leaves it, and another session starting on another login can.
 #[test]
 fn a_config_that_moved_since_is_a_warning() {
     use crate::switch::harness::{NOW, config_names, machine};
@@ -680,8 +646,7 @@ fn a_config_that_moved_since_is_a_warning() {
     assert_eq!(m.api.calls(), 0);
 }
 
-// Claude Code 2.1.309 refuses, as a session starts, a login of an organisation a managed
-// `forceLoginOrgUUID` leaves out (organisation_pin), so the setting is named as Codex's are.
+// Claude Code 2.1.309 refuses those logins as a session starts (`organisation_pin`).
 #[test]
 fn a_managed_organisation_pin_is_named_with_the_accounts_it_rules_out() {
     use crate::switch::harness::account;
@@ -785,8 +750,7 @@ fn a_machine_where_claude_code_never_ran_is_told_to_run_it() {
     }
 }
 
-// The session's fresh PC read "1 broken: do not switch accounts until fixed." for this
-// alone, with nothing enrolled and Claude Code installed but never run.
+// The session's fresh PC read "1 broken" for this alone, with nothing enrolled.
 #[test]
 fn claude_code_that_never_ran_breaks_nothing() {
     let mut facts = facts();
@@ -817,8 +781,7 @@ fn claude_code_that_never_ran_breaks_nothing() {
     }
 }
 
-// What Claude Code 2.1.302 left on the session's PC (2026-10-18) as it moved its login
-// into Credential Manager, which a fresh session read as "Not logged in".
+// What Claude Code 2.1.302 left on the session's PC (2026-10-18) moving into Credential Manager.
 #[test]
 fn pieces_nobody_can_join_are_said_to_be_unreadable_to_claude_code_too() {
     for (found, spelling) in [
@@ -846,7 +809,7 @@ fn pieces_nobody_can_join_are_said_to_be_unreadable_to_claude_code_too() {
     }
 }
 
-/// What `/logout` leaves is nobody signed in, not a login whose shape moved.
+// What `/logout` leaves is nobody signed in, not a login whose shape moved.
 #[test]
 fn a_signed_out_credential_is_said_to_be_one() {
     let mut facts = facts();

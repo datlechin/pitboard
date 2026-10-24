@@ -100,8 +100,7 @@ pub(super) fn desktop_facts(
     Some(facts)
 }
 
-// An index from a Mac can hold Claude Desktop's accounts, which nothing on Windows or Linux
-// changes. Only a build for tests gives Linux a Claude data folder.
+// An index from a Mac; only a build for tests gives Linux a Claude data folder.
 pub(super) fn judge_desktop_off_macos(state: &State) -> Check {
     let held: Vec<String> = state
         .accounts
@@ -317,8 +316,7 @@ pub(super) fn judge_desktop(
                 }
             })
             .collect();
-        // No session: an account's earlier keys, the parts of its login a give-up left, or
-        // what Claude made while signed out.
+        // No session: earlier keys, what a give-up left, or what Claude made while signed out.
         let mut rest: Vec<String> = parts
             .iter()
             .filter_map(|aside| {
@@ -481,8 +479,7 @@ pub(super) fn judge_desktop_build(facts: &DesktopFacts) -> Check {
     }
 }
 
-// What the report's `desktop` block says on every machine: whether the folder is a directory,
-// never what it holds.
+// The report's `desktop` block, on every machine: whether the folder is one, never what it holds.
 pub(crate) struct Installed {
     pub(crate) folder: Option<PathBuf>,
     pub(crate) present: bool,

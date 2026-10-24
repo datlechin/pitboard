@@ -1,11 +1,4 @@
-//! `pitboard doctor`: check, on this machine, that what Pitboard relies on about Claude Code
-//! still holds, and say which assumption broke when one has. Gathering is kept apart from
-//! judging so every judgement can be tested.
-//!
-//! Codex has a section of its own, after everything about Claude Code, and only on a
-//! machine where Codex has been run or has accounts enrolled. Its checks are coded
-//! `codex_...` so a program can tell them from Claude Code's, which read exactly as they did
-//! before there was a second tool.
+//! `pitboard doctor`: whether what Pitboard relies on here still holds, and which assumption broke.
 
 mod claude;
 mod codex;
@@ -62,9 +55,8 @@ pub struct Check {
     pub advice: String,
 }
 
-/// Everything read from the machine, so judging it touches nothing.
+// Everything read from the machine, so judging it touches nothing.
 pub(crate) struct Facts {
-    /// The system these were read on, which is what decides some of the judgements.
     pub(crate) os: Os,
     // The person's Windows SID, which advice to make a file private names.
     pub(crate) sid: Option<String>,
@@ -80,11 +72,11 @@ pub(crate) struct Facts {
     pub(crate) vault: store::Backend,
     pub(crate) credential_file: PathBuf,
     pub(crate) credential: Result<Option<Value>, store::Error>,
-    /// What the live login costs against the store's ceiling, where there is one.
+    // Against the store's ceiling, where it has one.
     pub(crate) credential_cost: Option<store::Cost>,
     // `PITBOARD_NO_ARGV=1`, which nothing on Windows has an argument line to refuse.
     pub(crate) no_argv: bool,
-    /// What is taking up the room, largest first: (what it is, bytes).
+    // (what it is, bytes), largest first.
     pub(crate) credential_parts: Vec<(String, usize)>,
     pub(crate) home: PathBuf,
     pub(crate) home_access: Option<Access>,
@@ -92,57 +84,40 @@ pub(crate) struct Facts {
     pub(crate) readable_by_others: Vec<(String, Kind, Access)>,
     pub(crate) machine_id_known: bool,
     pub(crate) windows: Option<WindowsHomes>,
-    /// `CLAUDE_CODE_HOVER_REST`, which switches on the successor credential backend.
+    // `CLAUDE_CODE_HOVER_REST`, which turns on the successor credential backend.
     pub(crate) hover_rest_env: bool,
-    /// Claude Code's supervisor daemon, where one has ever run for this slot.
     pub(crate) daemon: Option<daemon::Daemon>,
-    /// Names Pitboard wrote down before creating a park and has not resolved yet.
+    // Names written down before a park was made, and not resolved yet.
     pub(crate) pending_parks: Vec<String>,
-    /// Which Claude Code is installed here, read off disk.
     pub(crate) claude_version: Option<String>,
-    // The `claude` program Pitboard finds where it looks for one.
     pub(crate) claude_program: Option<PathBuf>,
-    /// Every reason a session here would authenticate as something other than the stored
-    /// login, read from settings files as well as from this process's environment.
+    // From settings files as well as this process's environment.
     pub(crate) auth_overrides: Vec<crate::settings::Override>,
-    // Each managed `forceLoginOrgUUID` a session takes, and where, and the enrolled accounts none
-    // of them lets Claude Code keep.
+    // Each managed `forceLoginOrgUUID`, and where.
     pub(crate) organisation_pins: Vec<String>,
+    // The enrolled accounts those leave out.
     pub(crate) pinned_out: Vec<String>,
-    /// Accounts Pitboard is not asking Anthropic about yet, and for how long: (uuid, seconds).
+    // (uuid, seconds) of each account not asked about yet.
     pub(crate) asking_held: Vec<(String, i64)>,
     pub(crate) state: Result<State, Error>,
-    /// Whose login Claude Code has stored, as Anthropic last said, where the account list
-    /// can be read.
     pub(crate) in_use: Option<crate::in_use::Known>,
-    /// Each enrolled account's parked login, read back from the vault.
     pub(crate) parks: Vec<ParkFact>,
     pub(crate) interrupted: bool,
-    /// The refusal the next change would make over the interrupted switch, where that
-    /// change could not finish it and that can be told without asking anybody.
+    // The refusal of the next change, over an interrupted switch it cannot finish.
     pub(crate) stuck: Option<String>,
-    /// What is read about Codex here, for the section that is about it.
     pub(crate) codex: CodexFacts,
-    /// Whether Claude Code is on this machine at all: installed, run once, signed in, or
-    /// holding enrolled accounts. A machine that uses only Codex is not told Claude Code is
-    /// broken.
+    // Installed, run, signed in or enrolled: a machine with only Codex is not judged on it.
     pub claude_present: bool,
-    // Claude Desktop's, where an account of it is enrolled or a folder is set aside for it.
+    // Where a Claude Desktop account is enrolled or a folder is set aside for one.
     pub desktop: Option<DesktopFacts>,
     pub(crate) desktop_app: desktop::Installed,
-    /// The daily renewal schedule, where this home has one installed.
     pub(crate) schedule: Option<ScheduleFact>,
     pub(crate) watch_service: Option<WatchServiceFact>,
-    /// How Pitboard's requests leave this machine, as its environment says.
     pub(crate) network: NetworkFact,
-    /// Whether this is the app's doctor, whose environment is the one the system started the
-    /// app with, not a shell's: the schedule's runs are started the same way, and given a
-    /// shell's proxy only where it was installed from one.
+    // The app runs with the environment the system started it with, as the schedule's runs do.
     pub(crate) in_the_app: bool,
-    /// Whether this process runs as the person themselves, as the host says, which is what
-    /// the gate every change passes asks.
     pub(crate) elevation: crate::host::Elevation,
-    /// Claude Code's fallback file, where it is behind the keychain holding the login in use.
+    // Claude Code's file, where it sits behind the store holding the login in use.
     pub(crate) fallback_login: Option<FallbackLogin>,
     pub(crate) floor: crate::host::Floor,
     // Windows' alone, where a shell decides whether `pitboard statusline` is found.
@@ -226,8 +201,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         codex: codex::codex_facts(ctx, state.as_ref().ok()),
         desktop,
         desktop_app,
-        // Read as the next change reads it, without the one question it may put to a
-        // service: `doctor` sends no request.
+        // As the next change reads it, without its question: `doctor` sends no request.
         stuck: state
             .as_ref()
             .ok()
@@ -310,13 +284,10 @@ pub(crate) fn evaluate(facts: &Facts) -> Vec<Check> {
     evaluate_with(facts, &crate::time::moment)
 }
 
-/// Every check, each moment it names written as `moment` writes it, given the moment and when
-/// the checks are made.
+// `moment` writes each moment a check names, given it and now.
 pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) -> Vec<Check> {
     let mut checks = Vec::new();
-    // Claude Code's own checks, where there is a Claude Code, or where there is no other
-    // tool either: a new machine is told what to do first, as it always was. A machine
-    // that uses only Codex is not told to run a program it does not use.
+    // A new machine is told about Claude Code first; one with only Codex is not.
     let codex_here =
         facts.codex.present || facts.codex.program.is_some() || facts.codex.enrolled > 0;
     let claude_here = facts.claude_present || !(codex_here || facts.desktop.is_some());
@@ -346,8 +317,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
     let lost = parks::lost_parks(facts);
     checks.extend(parks::judge_vault(facts, &lost));
     checks.push(machine::judge_state(facts));
-    // Claude Code's accounts here; every other tool's go in its own section, so a program
-    // reading codes can tell them apart and Claude Code's column is Claude Code's alone.
+    // Every other tool's accounts are judged in its own section.
     let judged = |p: &&ParkFact| !lost.iter().any(|gone| std::ptr::eq(*gone, *p));
     let claude_parks: Vec<&ParkFact> = facts
         .parks
@@ -389,8 +359,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
             .iter()
             .filter_map(|p| parks::judge_dormant(p, facts.now)),
     );
-    // Only where there is a Codex to say something about. A machine without it reads exactly
-    // as it did before Pitboard knew Codex existed.
+    // A machine without Codex reads as it did before Pitboard knew Codex.
     if codex_here || !codex_parks.is_empty() {
         checks.extend(codex::judge_codex_installer_home(facts));
         checks.extend(codex::judge_codex(
@@ -416,8 +385,7 @@ pub(crate) fn evaluate_with(facts: &Facts, moment: &dyn Fn(i64, i64) -> String) 
     checks
 }
 
-/// The checks that are about Claude Code's own files and settings, rather than about
-/// Pitboard or the machine. Named once, so a new one is added here or is always shown.
+// Left out on a machine without Claude Code: a new check of Claude Code's goes here.
 const CLAUDE_CODES_OWN: &[&str] = &[
     "config_file",
     "identity",
@@ -435,7 +403,7 @@ const CLAUDE_CODES_OWN: &[&str] = &[
     "login_restrictions",
 ];
 
-// The tool whose section a check is in; None for Claude Code's and Pitboard's own.
+/// The tool whose section a check is in; `None` for Claude Code's and Pitboard's own.
 pub fn section(code: &str) -> Option<ProviderId> {
     ProviderId::ALL
         .iter()
@@ -447,9 +415,7 @@ pub fn section(code: &str) -> Option<ProviderId> {
         })
 }
 
-/// The code an account's check goes under: Claude Code's as it always was, and every other
-/// tool's in that tool's own namespace, so `codex_` is enough to find everything about
-/// Codex.
+// Claude Code's codes as they always were, every other tool's under its own prefix.
 fn account_code(
     provider: ProviderId,
     claude: &'static str,
@@ -467,14 +433,12 @@ fn read_from(tool: ProviderId, os: Os) -> &'static str {
     crate::assumptions::verified_against(tool, crate::assumptions::Platform::of(os))
 }
 
-/// The checks, and where Claude Code's files were found, for a program to read rather than
-/// parse out of the checks' wording.
+/// The checks, and where Claude Code's files were found, for a program to read.
 #[derive(Debug)]
 pub struct Diagnosis {
     pub checks: Vec<Check>,
     pub environment: Value,
-    /// What must not leave this machine in a report. A person reading their own diagnosis
-    /// should see their own email; the thing they paste somewhere else should not carry it.
+    /// What must not leave this machine in a report a person pastes elsewhere.
     pub redaction: crate::redact::Sheet,
 }
 
@@ -492,8 +456,7 @@ pub(crate) fn run(ctx: &Context, moment: &dyn Fn(i64, i64) -> String) -> Diagnos
             "credential_service": facts.service,
             "credential_store": facts.backend.as_ref().map_or("unreadable", |b| b.name()),
             "home": facts.home,
-            // Codex's, beside Claude Code's rather than among them, so nothing a program
-            // already reads here moves.
+            // Beside Claude Code's, so nothing a program already reads moves.
             "codex": {
                 "home": facts.codex.home,
                 "present": facts.codex.present,
@@ -512,11 +475,7 @@ pub(crate) fn run(ctx: &Context, moment: &dyn Fn(i64, i64) -> String) -> Diagnos
     }
 }
 
-/// What doctor says where a home the environment names is empty or relative
-/// ([`crate::home::check_absolute`]): how this process runs, where that fails, and the
-/// `homes` check, failed, and nothing else. Every other check reads files under one of the
-/// homes, and a relative one would have it read whatever is under the folder doctor was run
-/// from.
+// Every other check reads under a home, which a relative one would put wherever doctor runs.
 fn unplaced(ctx: &Context, variable: &str, path: &std::path::Path) -> Diagnosis {
     let homes = fail(
         "homes",
@@ -542,7 +501,7 @@ fn unplaced(ctx: &Context, variable: &str, path: &std::path::Path) -> Diagnosis 
     }
 }
 
-/// No check failed. Warnings are advice; a failure means an assumption broke.
+/// No check failed: a warning is advice, a failure an assumption that broke.
 pub fn healthy(checks: &[Check]) -> bool {
     checks.iter().all(|c| c.level != Level::Fail)
 }

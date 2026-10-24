@@ -52,8 +52,7 @@ fn every_failure_and_warning_tells_the_user_something() {
     }
 }
 
-/// Advice is read as sentences, and a string broken across lines in the source without
-/// its continuation keeps the indentation as a run of spaces in the middle of one.
+// A string broken across lines without its continuation keeps the indentation as spaces.
 #[test]
 fn advice_reads_as_it_was_written() {
     let mut f = facts();
@@ -81,8 +80,7 @@ fn each_check_is_told_apart_by_code_and_name() {
     assert_eq!(keys.len(), before);
 }
 
-/// The app says a moment on the person's own clock, which the command line's 24 hours
-/// are not, so a front end can write each moment a check names.
+// The app says a moment on the person's own clock.
 #[test]
 fn each_moment_a_check_names_is_written_as_the_front_end_writes_it() {
     use crate::switch::harness::{NOW, machine};
@@ -143,8 +141,6 @@ fn no_system_is_told_a_warm_up_is_not_available() {
     }
 }
 
-/// A machine that uses only Codex is not told Claude Code is broken, nor to run a
-/// program it does not use. Everything about Pitboard itself is still checked.
 #[test]
 fn a_machine_with_only_codex_is_not_judged_on_claude_code() {
     let mut windows = facts();
@@ -207,7 +203,7 @@ fn a_home_that_is_not_a_full_path_still_hears_why_nothing_changes() {
     assert_eq!(codes, ["system_too_old", "elevated", "homes"]);
 }
 
-/// With neither tool present, a new machine is told what to do first, as it always was.
+// With neither tool present, a new machine is told what to do first, as it always was.
 #[test]
 fn a_machine_with_neither_tool_still_hears_about_claude_code() {
     let mut facts = facts();
@@ -216,9 +212,7 @@ fn a_machine_with_neither_tool_still_hears_about_claude_code() {
     assert!(checks.iter().any(|c| c.code == "config_file"));
 }
 
-/// Where a home the environment names is not a full path, doctor says so and checks
-/// nothing else, since every other check reads under one of the homes. It read Claude
-/// Code's and Pitboard's files under whatever folder it was run from.
+// It read Claude Code's and Pitboard's files under whatever folder it was run from.
 #[test]
 fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
     use crate::context::Environment;
@@ -249,8 +243,7 @@ fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
     }
 }
 
-// `pitboard doctor` prints its checks in this order: the command line heads each tool's
-// section where its codes start.
+// The command line heads each tool's section where its codes start.
 #[test]
 fn the_checks_come_in_the_order_each_system_prints_them() {
     let codes = |os| -> Vec<&'static str> {

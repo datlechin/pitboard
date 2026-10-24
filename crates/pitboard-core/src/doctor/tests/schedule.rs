@@ -211,8 +211,6 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
     assert_eq!(drifted.advice, again(Os::Windows));
 }
 
-/// The way back works from the command line everywhere, and names the app only where
-/// there is one.
 #[test]
 fn a_broken_schedule_is_written_again_by_whatever_this_machine_has() {
     for os in [Os::MacOs, Os::Windows] {
@@ -225,8 +223,6 @@ fn a_broken_schedule_is_written_again_by_whatever_this_machine_has() {
     );
 }
 
-/// What the check above is given, read off a real disk: a schedule written the way
-/// `pitboard schedule install` writes it, whose Pitboard is then taken away.
 #[test]
 fn a_schedule_whose_pitboard_is_gone_is_found_on_the_disk() {
     let scratch = tempfile::tempdir().expect("a scratch home");
@@ -299,10 +295,6 @@ fn a_task_changed_in_task_scheduler_is_read_where_it_is_kept() {
     assert_eq!(read(&ctx), Some(fresh));
 }
 
-/// The schedule's runs are given the proxy variables of the Pitboard that installed it.
-/// Where those send requests another way than this run's, doctor says so, with what each
-/// goes through and the user name and password as `***`, and says how to give the
-/// schedule this run's. Where they go the same way, nothing is said.
 #[test]
 fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
     let mut f = facts();
@@ -343,9 +335,7 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
         )
     );
 
-    // A SOCKS proxy, which Pitboard does not use yet, is given, not gone through. Installing
-    // the schedule again from here would give it that proxy, and its requests would fail
-    // too, so the advice is to change the variable first.
+    // Installed again from here, the schedule would be given a SOCKS proxy that fails too.
     let socks = || ProxyFact {
         address: "socks5h://127.0.0.1:1080".into(),
         server: "127.0.0.1:1080".into(),
@@ -366,8 +356,6 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
             words::socks_would_fail("ALL_PROXY")
         )
     );
-    // With every host Pitboard calls exempt from it, nothing fails, and installing the
-    // schedule again from here is the advice as for any other proxy.
     f.network = by(ProxyFact {
         exempt: [
             "api.anthropic.com",
@@ -394,10 +382,7 @@ fn a_schedule_whose_proxy_differs_from_this_runs_is_said() {
     );
 }
 
-/// In the app, whose environment is the system's and names no proxy a shell set, a
-/// schedule installed from a terminal with a proxy differs from it for good, and the
-/// app's switch would take that proxy away. So the line is no warning there: it says what
-/// each goes through, and how each way of installing the schedule chooses its proxy.
+// The app's environment names no proxy a shell set, so the line is no warning there.
 #[test]
 fn in_the_app_a_schedules_other_proxy_is_said_without_a_warning() {
     let mut f = facts();
@@ -429,10 +414,6 @@ fn in_the_app_a_schedules_other_proxy_is_said_without_a_warning() {
     );
 }
 
-/// What the line above is given, read off a real disk: a schedule `pitboard schedule
-/// install` wrote with a proxy, against runs with the same proxy, the same one with
-/// another password, and none. The report a person pastes hides the proxy's host, as it
-/// does this run's.
 #[test]
 fn the_schedules_proxy_is_read_from_what_install_wrote() {
     let scratch = tempfile::tempdir().expect("a scratch home");
