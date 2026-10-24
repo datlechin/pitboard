@@ -136,15 +136,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schedule runs.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
+- The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
+  again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
+- The app lines up the usage bars of every account, where a row that said no pace had wider
+  bars.
 - On Windows, an update of the app leaves a file in use to be replaced at your next restart,
   instead of restarting Windows by itself.
 - While the app or `pitboard watch` switches Claude Code by itself, the other waits for that
   switch and says where it went, instead of saying the account in use is tried again in a
   minute.
-- The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
-  again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
-- The app lines up the usage bars of every account, where a row that said no pace had wider
-  bars.
 - The app counts a limit whose reset time has passed as back, as the command line does, and no
   longer calls it used up, notifies you of it or offers a switch away from it.
 - The app notifies you of a warm-up that came to nothing once for each account and reason until

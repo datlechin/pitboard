@@ -236,7 +236,7 @@ public sealed class AccountsWindowTests
         launched.Invoke("Give up");
         var notice = launched.Find(found => found.ByAutomationId("notice.abandoned"), "notice abandoned");
 
-        Assert.Contains("Gave up on the interrupted switch", Launched.Lines(notice));
+        Launched.Shows(notice, "Gave up on the interrupted switch");
         Assert.Contains("2 logins kept", Launched.Said(notice));
     }
 
