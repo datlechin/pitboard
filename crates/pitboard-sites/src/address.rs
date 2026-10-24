@@ -1,6 +1,6 @@
 //! A link split into its parts the way Foundation's `URLComponents` splits one, which is how
-//! the macOS app read every link before these rules moved here. Measured on macOS 27 alone:
-//! ARCHITECTURE.md's Foundation's URLs has what was measured.
+//! the macOS app read every link before these rules moved here, as
+//! docs/facts/foundation-urls.md has it.
 //!
 //! RFC 3986's grammar, with what it does not allow percent-encoded rather than refused, as
 //! Foundation encodes it: a space in a path is `%20`, a second `#` is `%23`, a `%` that starts

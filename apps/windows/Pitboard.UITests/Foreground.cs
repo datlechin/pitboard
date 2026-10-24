@@ -6,7 +6,7 @@ using FlaUI.Core.Tools;
 namespace Pitboard.UITests;
 
 // Real input reaches Pitboard only while its window is in front. On windows-11-arm a full-screen window of the job user's
-// keeps the foreground from every program the tests start (ARCHITECTURE.md, CF1).
+// keeps the foreground from every program the tests start (docs/facts/windows-runners.md).
 internal static partial class Foreground
 {
     public static nint Window() => GetForegroundWindow();

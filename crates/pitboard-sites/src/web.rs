@@ -1,8 +1,7 @@
 //! A web address as an account window's rules read one: the page a navigation asks for, a
 //! response's address, a download's. WebKit hands the macOS app each as a `URL`, whose
 //! scheme, host, port and user the rules compared before they were Rust, so they are read
-//! here as Foundation's `URL` reads them. ARCHITECTURE.md's Foundation's URLs has what was
-//! measured.
+//! here as Foundation's `URL` reads them, as docs/facts/foundation-urls.md has it.
 
 use crate::address;
 

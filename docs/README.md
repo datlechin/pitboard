@@ -48,7 +48,8 @@ link from a page here to an id usepitboard.com does not have. Run them as
   app, as [Run the debug build](../CONTRIBUTING.md#run-the-debug-build) says.
   `menu-windows.png` and `window-windows.png` come from CI's `windows-app-pictures`, as
   [The app on CI](../CONTRIBUTING.md#the-app-on-ci) says.
-- `.mintignore` lists the files Mintlify must not publish, such as `AGENTS.md`.
+- `.mintignore` lists the files Mintlify must not publish, such as `AGENTS.md` and `facts/`,
+  the measured facts the code rests on.
 
 Pitboard's mark is the board the apps' icons and `MenuBarMark.swift` draw. Nothing regenerates
 its copies, so change them together:

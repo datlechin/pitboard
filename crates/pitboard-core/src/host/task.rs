@@ -573,7 +573,8 @@ mod tests {
         assert_eq!(path(Job::Renew, SID), format!(r"\Pitboard\Renew {SID}"));
     }
 
-    // A start at the sign-in a SID in UserId names is documented, not measured (ARCHITECTURE.md).
+    // A start at the sign-in a SID in UserId names is documented, not measured
+    // (docs/facts/windows-documented.md).
     #[test]
     fn the_watch_task_starts_at_the_persons_own_sign_in_and_runs_with_no_limit() {
         let exe = Path::new(r"C:\Users\Dana\Tools & Apps\pitboard.exe");

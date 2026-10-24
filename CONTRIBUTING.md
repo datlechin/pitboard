@@ -342,7 +342,7 @@ signatures, and `pack-session-bundle.ps1`. They run on CI's runners only.
 `gh workflow run windows-facts.yml --ref <branch>` measures both runner images with
 `pitboard-probe` and `.github/scripts/runner-facts.ps1`. No pull request runs it on its own:
 one that changes the probe, its helpers or the script dispatches it on its branch and names
-the run. `ARCHITECTURE.md` records what it measured.
+the run. [Windows runners](docs/facts/windows-runners.md) records what it measured.
 
 With `-f session=true -f age-recipient=<age public key>`, the workflow builds the session
 bundle for [the session machine](AGENTS.md#the-session-machine) instead. Only the owner

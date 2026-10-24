@@ -123,8 +123,7 @@ impl SignIn {
 
 impl Drop for SignIn {
     // Unlocked, not only closed: a process another thread is starting holds a copy of the file
-    // until it runs its program, which kept the lock for milliseconds (ARCHITECTURE.md's
-    // Measured facts) and refused a sign-in started meanwhile.
+    // until it runs its program (docs/facts/sign-in-lock.md).
     fn drop(&mut self) {
         match &self.how {
             How::Privately { tool, dir, .. } => {
@@ -2119,11 +2118,7 @@ mod tests {
         let _ = watched.finish();
     }
 
-    /// A cancel has let go of the core's one sign-in at a time by the time it returns, even
-    /// while a copy of its lock's descriptor is open elsewhere, as one is in every process
-    /// another thread is starting until that process runs its program. Closing the file let
-    /// go of it only once every copy was closed, so the next sign-in was refused as one
-    /// already waiting for as long as that took, which ARCHITECTURE.md's Measured facts give.
+    // The copy a process another thread is starting holds (docs/facts/sign-in-lock.md).
     #[test]
     fn a_cancelled_sign_in_lets_the_next_start_while_a_copy_of_its_lock_is_open() {
         for (tool, make) in MACHINES {

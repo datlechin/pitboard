@@ -256,5 +256,7 @@ checks of each other section of CONTRIBUTING.md the change reaches.
 ## Where things are
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): the code map and the rules the code keeps.
+- [docs/facts](docs/facts/README.md): what the code rests on about the systems, libraries and
+  sites around it.
 - [RELEASING.md](RELEASING.md): how a release is made.
 - `docs/`: the documentation site; [docs/AGENTS.md](docs/AGENTS.md) has its writing rules.
