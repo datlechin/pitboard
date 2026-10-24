@@ -1,7 +1,4 @@
-//! The one durable write, for every file that must survive an interrupted run: a private
-//! temporary, its contents synced, renamed over the file, and the rename made durable as the
-//! system allows. The directory must already exist: who may reach it is the caller's to
-//! choose. It takes the [`Permit`] only the one gate every change passes makes.
+// A file replaced whole from a private temporary, in a folder the caller made with its own access.
 
 use crate::host::fs;
 use crate::service::Permit;
@@ -22,6 +19,18 @@ pub(crate) fn write(permit: Permit, path: &Path, contents: &[u8], perms: Perms) 
     write_at(permit, path, contents, perms, "atomic.temp_written")
 }
 
+// For a file a power cut may roll back or leave unreadable: a flush waits on the whole disk.
+pub(crate) fn write_unsynced(permit: Permit, path: &Path, contents: &[u8]) -> io::Result<()> {
+    replace(
+        permit,
+        path,
+        contents,
+        Perms::Secret,
+        "atomic.temp_written",
+        false,
+    )
+}
+
 // `write`, with a fault point named `at` between the temporary and its rename.
 pub(crate) fn write_at(
     permit: Permit,
@@ -29,6 +38,17 @@ pub(crate) fn write_at(
     contents: &[u8],
     perms: Perms,
     at: &'static str,
+) -> io::Result<()> {
+    replace(permit, path, contents, perms, at, true)
+}
+
+fn replace(
+    permit: Permit,
+    path: &Path,
+    contents: &[u8],
+    perms: Perms,
+    at: &'static str,
+    synced: bool,
 ) -> io::Result<()> {
     let dir = path
         .parent()
@@ -45,11 +65,15 @@ pub(crate) fn write_at(
     ));
 
     let result = (|| -> io::Result<()> {
-        // Created private and given the existing access afterwards: too closed for a moment
-        // is safe, too open is not.
+        // Private first, given the existing access after: too closed for a moment is safe.
         let mut file = create_fresh(permit, &temp)?;
         file.write_all(contents)?;
-        file.sync_all()?;
+        if synced {
+            if crate::fault::fails("atomic.synced") {
+                return Err(io::Error::other("a test failed this flush"));
+            }
+            file.sync_all()?;
+        }
         // Closed before Windows opens it again to set its list and to rename it.
         drop(file);
         if let Perms::MatchExisting = perms {
@@ -63,7 +87,9 @@ pub(crate) fn write_at(
         let _ = fs::remove_file(permit, &temp);
         return result;
     }
-    fs::sync_dir(dir);
+    if synced {
+        fs::sync_dir(dir);
+    }
     Ok(())
 }
 
@@ -194,6 +220,21 @@ mod tests {
         write(Permit::for_a_test(), &path, b"one", Perms::Secret).unwrap();
         write(Permit::for_a_test(), &path, b"two", Perms::Secret).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"two");
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 1);
+    }
+
+    // A temporary left behind can hold a whole login.
+    #[test]
+    fn a_write_whose_flush_fails_leaves_the_file_and_no_temporary() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
+        let path = dir.join("state.json");
+        write(Permit::for_a_test(), &path, b"one", Perms::Secret).unwrap();
+        let failed = crate::fault::failing("atomic.synced", || {
+            write(Permit::for_a_test(), &path, b"two", Perms::Secret)
+        });
+        assert!(failed.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"one");
         assert_eq!(std::fs::read_dir(dir).unwrap().count(), 1);
     }
 
