@@ -20,8 +20,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `pitboard doctor` reports the watch service, and `pitboard uninstall` stops and removes it.
 - `pitboard watch --help` and `pitboard watch install` say that Anthropic's terms may cover
   automatic switching and warm-ups, and link to what they say.
-- The install script ends with the command to run next and, where your login shell is zsh, the
-  lines that make zsh load Pitboard's completions.
+- The install script ends with the command to run next and, where your login shell is zsh and
+  it installs into your home, the lines that make zsh load Pitboard's completions.
 - The app's notification that a login was replaced outside Pitboard, and its notice in the
   window, offer **Sign In Again**.
 - The app posts a notification once for each account whose parked login can no longer be used,
@@ -109,16 +109,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pitboard warns with `auth_overridden`, and the automatic switch holds back, while
   `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile or managed settings that require the Cloud
   gateway make Claude Code sign in another way.
-- On Linux, Pitboard and its install script work as root in a home root owns, as on a server
-  whose only user is root, and refuse only under `sudo` or as root in another user's home.
+- On Linux, Pitboard and its install script work as root where root owns every folder they write
+  in, as on a server whose only user is root, and refuse only under `sudo` or as root in a folder
+  another user owns.
 - `pitboard --help` wraps to the terminal, lists the commands in the order you use them and
   ends with three examples.
 - Where a login file behind the keychain or Credential Manager keeps running Claude Code
   sessions on their account, `pitboard use` says that `pitboard stow` puts it away, instead of
   sending you to `pitboard doctor`.
 - On a Linux that systemd did not start, as in many containers, `pitboard schedule install`
-  refuses with `schedule_unsupported` and says so, instead of a `home_unwritable` error that
-  named `systemctl`.
+  refuses with `schedule_unsupported` and `pitboard schedule status` says why, instead of a
+  `home_unwritable` error that named `systemctl`.
 - Shell completions leave out `pitboard renew --scheduled`, which only the daily renewal
   schedule runs.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
@@ -127,6 +128,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
 - The app lines up the usage bars of every account, where a row that said no pace had wider
   bars.
+- On Windows, an update of the app leaves a file in use to be replaced at your next restart,
+  instead of restarting Windows by itself.
+- While the app or `pitboard watch` switches Claude Code by itself, the other waits for that
+  switch and says where it went, instead of saying the account in use is tried again in a
+  minute.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

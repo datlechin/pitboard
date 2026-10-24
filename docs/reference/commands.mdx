@@ -120,7 +120,7 @@ With nobody to ask, these answer as they do with `--yes`:
 
 - `pitboard stow` with nothing behind the keychain or Credential Manager, as always on Linux, or with a login of an account not enrolled.
 - `pitboard forget` with a label that names no account. It fails with that label's error, such as `account_unknown`.
-- `pitboard forget` and `pitboard uninstall` where Pitboard may change nothing, and `pitboard stow` there once it finds a file to put away. Each fails with the reason: `elevated` as root, under `sudo` or elevated on Windows, and `system_too_old` on a Windows older than Windows 11 24H2.
+- `pitboard forget` and `pitboard uninstall` where Pitboard may change nothing, and `pitboard stow` there once it finds a file to put away. Each fails with the reason, [`elevated`](/reference/errors#root-sudo-and-administrator) or [`system_too_old`](/reference/errors#windows).
 
 With nobody to ask, a refusal found only once the command runs shows only with `--yes`. Without it, the answer is `confirmation_needed`. Forgetting the account in use is one, with `cannot_forget_active_account`. `identity_unverifiable`, `custom_oauth_endpoint`, `app_open` and `uninstall`'s `pitboard_open` are others.
 

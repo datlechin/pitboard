@@ -679,10 +679,10 @@ fn a_scheduled_renewal_renews_the_default_home_whatever_pitboard_home_says() {
     renewal.assert();
 }
 
-// Linux lets root act in its own home, so its refusal names only what it refuses.
+// Linux lets root act in folders it owns, so its refusal names only what it refuses.
 #[cfg(unix)]
 const UNDER_SUDO: &str = if cfg!(target_os = "linux") {
-    "with sudo or as root in another user's home"
+    "with sudo or as root in a folder another user owns"
 } else {
     "as root or with sudo"
 };

@@ -103,32 +103,32 @@ In the order of `pitboard --help`:
 | Command | `data` |
 | --- | --- |
 | `status` | See [Status data](/reference/json-output#status-data). |
-| `enroll` | `label` as typed, `provider` (`claude`, `codex` or `desktop`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [`enroll`](/reference/account-commands#enroll) explains. |
 | `use`, already in use | `to`, `changed` (`false`) and `config_updated`, `true` where Claude Code's config named another account and `use` wrote this one into it. |
 | `use`, after a switch | `from`, `to`, `provider`, `changed` (`true`), `parked_at` (when the login of `from` was parked), `adoption_ceiling_seconds` and `adoption`. |
 | `use`, where nothing was signed in | The same, with `from` and `parked_at` set to `null`. |
+| `enroll` | `label` as typed, `provider` (`claude`, `codex` or `desktop`), `email`, and `enrolled`: `current`, `signed_in`, `renewed` or `in_use`, as [`enroll`](/reference/account-commands#enroll) explains. |
+| `rename` | `from`, `to` and `email`. |
 | `forget` | `label` and `email`. |
-| `stow` | `stowed`, `false` when no login file sits behind the keychain or Credential Manager. When `true`, also `path`, the file deleted, and `login`, what became of its login: a code from [`stow`](/reference/recovery-commands#stow). Then `account`, the label of the login's account or `null`, and `dropped`, the file's other keys. |
-| `abandon` | `abandoned`, `true` when it gave up a Claude Code or Codex switch, with `from`, `to` and `logins_kept`, a count. `moves_given_up`, one object per Claude Desktop move it gave up, as [Moves given up](/reference/json-output#moves-given-up) lists, or an empty array. |
-| `repair` | `given_back`, objects with `label` and `service`, the parked login's name. `deleted`, `strangers` and `unreadable`, lists of parked login names, as [`repair`](/reference/recovery-commands#repair) explains. `set_aside`, the names of the folders it set aside in `parks/`. |
-| `adopt` | `adopted`, `false` when the Pitboard directory was already this computer's. When `true`, also `accounts`, the labels kept, `logins_dropped`, the labels whose parked login was dropped, and `set_aside`, the labels whose Claude Desktop parked login was set aside. |
+| `watch` | One envelope per event, as [Watch events](/reference/json-output#watch-events) lists. |
+| `watch install` | `installed` (`true`), `threshold`, the share it switches at, and `path`, the job's file. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
+| `watch status` | `installed`. When `true`, also `threshold`, `null` where the job names none the way Pitboard writes it, and `path`, or `task` on Windows. Where Pitboard has no scheduler to write, also `supported` (`false`). |
+| `watch uninstall` | `installed` (`false`) and `removed`, `false` when nothing was installed. |
+| `warm` | `range`, with `from` and `to` as `HH:MM`; `halted`, `null`, or an object with `reason`, a `warm_up_halted` code from [Watch events](/reference/json-output#watch-events), where nothing can be warmed up here; and `accounts`, one object per Claude Code account with `label` and `on`. An account turned on also has `state`: `due`, `running`, `resting`, `waiting` or `held`, with `until` and `next_at` where they are known and, for `held`, `reason`, a code from [Watch events](/reference/json-output#watch-events). |
+| `warm on`, `warm off` | `label`, `on`, and `changed`, `false` when it was so already. |
+| `warm range` | `range`, with `from` and `to`. |
+| `warm now` | `label`, `outcome`, `started` or `running`, and `until`, when its five-hour period resets, or `null` where Anthropic has not said yet. |
+| `statusline` | `line`, the status line without colour, as [`statusline`](/reference/integration-commands#statusline) describes. |
 | `renew` | `accounts`, one object per parked login that was due, with `label`, `provider` and `outcome`; and `renewed`, a count. `outcome` is `renewed`, `parked_login_refused`, `renewal_deferred` or an error code, as [`renew`](/reference/maintenance-commands#renew) explains. |
 | `schedule install` | `installed` (`true`) and `path`, the job's file. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
 | `schedule status` | `installed`. When `true`, also `every_seconds` (`86400`) and `path`, or `task` on Windows. Where Pitboard has no scheduler to write, also `supported` (`false`). |
 | `schedule uninstall` | `installed` (`false`) and `removed`, `false` when nothing was scheduled. |
 | `log` | `entries`, oldest first, each with `at`, `caller` (`cli`, `app` or `unknown`), `verb`, `subject` and `outcome`, as [`log`](/reference/maintenance-commands#log) explains. |
-| `uninstall` | The counts `parks_removed`, `parks_pending` (could not be deleted, or a renewal of Claude Code's login not saved yet), `parks_left` (left because another Pitboard may own them) and `set_aside_removed` (folders set aside it deleted), the booleans `home_removed`, `warming_up` (a warm-up running kept the directory), `schedule_removed` and `watch_service_removed`, and `home_kept_by`, the paths of the files that could not be removed, which kept the directory. |
-| `rename` | `from`, `to` and `email`. |
 | `doctor` | `environment`, the paths, login stores and versions Pitboard found, as [Doctor environment](/reference/json-output#doctor-environment) lists. `checks`, each with `code`, `name`, `level` (`ok`, `warn` or `fail`), `detail` and `advice`, as [`doctor`](/reference/maintenance-commands#doctor) lists. |
-| `statusline` | `line`, the status line without colour, as [`statusline`](/reference/integration-commands#statusline) describes. |
-| `warm` | `range`, with `from` and `to` as `HH:MM`; `halted`, `null`, or an object with `reason`, a `warm_up_halted` code from [Watch events](/reference/json-output#watch-events), where nothing can be warmed up here; and `accounts`, one object per Claude Code account with `label` and `on`. An account turned on also has `state`: `due`, `running`, `resting`, `waiting` or `held`, with `until` and `next_at` where they are known and, for `held`, `reason`, a code from [Watch events](/reference/json-output#watch-events). |
-| `warm on`, `warm off` | `label`, `on`, and `changed`, `false` when it was so already. |
-| `warm range` | `range`, with `from` and `to`. |
-| `warm now` | `label`, `outcome`, `started` or `running`, and `until`, when its five-hour period resets, or `null` where Anthropic has not said yet. |
-| `watch` | One envelope per event, as [Watch events](/reference/json-output#watch-events) lists. |
-| `watch install` | `installed` (`true`), `threshold`, the share it switches at, and `path`, the job's file. On Windows, `task`, the task's path in Task Scheduler, in place of `path`. |
-| `watch status` | `installed`. When `true`, also `threshold`, `null` where the job names none the way Pitboard writes it, and `path`, or `task` on Windows. Where Pitboard has no scheduler to write, also `supported` (`false`). |
-| `watch uninstall` | `installed` (`false`) and `removed`, `false` when nothing was installed. |
+| `uninstall` | The counts `parks_removed`, `parks_pending` (could not be deleted, or a renewal of Claude Code's login not saved yet), `parks_left` (left because another Pitboard may own them) and `set_aside_removed` (folders set aside it deleted), the booleans `home_removed`, `warming_up` (a warm-up running kept the directory), `schedule_removed` and `watch_service_removed`, and `home_kept_by`, the paths of the files that could not be removed, which kept the directory. |
+| `stow` | `stowed`, `false` when no login file sits behind the keychain or Credential Manager. When `true`, also `path`, the file deleted, and `login`, what became of its login: a code from [`stow`](/reference/recovery-commands#stow). Then `account`, the label of the login's account or `null`, and `dropped`, the file's other keys. |
+| `repair` | `given_back`, objects with `label` and `service`, the parked login's name. `deleted`, `strangers` and `unreadable`, lists of parked login names, as [`repair`](/reference/recovery-commands#repair) explains. `set_aside`, the names of the folders it set aside in `parks/`. |
+| `abandon` | `abandoned`, `true` when it gave up a Claude Code or Codex switch, with `from`, `to` and `logins_kept`, a count. `moves_given_up`, one object per Claude Desktop move it gave up, as [Moves given up](/reference/json-output#moves-given-up) lists, or an empty array. |
+| `adopt` | `adopted`, `false` when the Pitboard directory was already this computer's. When `true`, also `accounts`, the labels kept, `logins_dropped`, the labels whose parked login was dropped, and `set_aside`, the labels whose Claude Desktop parked login was set aside. |
 | `completions`, `manpage` | `{}`, in the failure shape [The envelope](/reference/json-output#the-envelope) gives. |
 
 A Claude Desktop account has no email address, so `email` is empty wherever one of its accounts appears.

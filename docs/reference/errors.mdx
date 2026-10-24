@@ -234,7 +234,7 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 
 | Code | Exit | Meaning | What to do |
 | --- | --- | --- | --- |
-| `elevated` | 1 | Pitboard runs with `sudo`, as root on macOS, or as root in another user's home on Linux, so it refuses every change. `pitboard status` and the app's reads warn `read_only` instead. | Run the command as yourself. See [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root). |
+| `elevated` | 1 | Pitboard runs with `sudo`, as root on macOS, or as root in a folder another user owns on Linux, so it refuses every change. `pitboard status` and the app's reads warn `read_only` instead. | Run the command as yourself. See [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root). |
 | `elevated` | 1 | On Windows, Pitboard runs elevated: from a terminal started with **Run as administrator**, with User Account Control off, or as the built-in Administrator. Reads warn `read_only`. | See [Pitboard changes nothing as administrator](/troubleshooting/refused-changes#pitboard-changes-nothing-as-administrator). |
 
 ## Windows
@@ -258,7 +258,7 @@ An interrupted Claude Desktop move shows `move_waiting` on each read, as [Warnin
 
 | `stale` | Text | What to do |
 | --- | --- | --- |
-| `not_asked` | `read without asking Anthropic` | Pitboard read without asking, as `--offline` does. Run `pitboard status` without `--offline`, and not as root. |
+| `not_asked` | `read without asking Anthropic` | Pitboard read without asking, as `--offline` does. Run `pitboard status` without `--offline`, as yourself. |
 | `asked_recently` | None | Nothing. Pitboard asked too recently for the limit to have moved one percentage point. `pitboard status --fresh` asks anyway. |
 | `interrupted` | `the check did not finish` | Run the command again. |
 | `unreachable` | `Anthropic could not be reached` | Check the connection, then run `pitboard status --fresh`. |
@@ -347,4 +347,4 @@ A warning does not stop the command or change its exit status. In the Pitboard w
 | `login_taken_as_named` | **A login was taken as the account named for it** | An enrolment, the one that finishes `--sign-in` included: Pitboard had recorded the login Claude held as another account's, and filed it as the account Claude's settings name. The message names both. | Open Claude and check which account it shows. If it is another, quit Claude, then run `pitboard enroll desktop/<label>` with that account's label. |
 | `looks_signed_out` | **The account in use may be signed out** | Claude's settings look signed out since Pitboard last read the account in use. | Nothing. The next change to a Claude Desktop account checks. |
 | Any other error code | **Pitboard has a warning** | A renewal or a config update failed with that error without stopping the command. | See that code's row. |
-| `read_only` | **Pitboard has a warning** | Pitboard runs as root, with `sudo`, elevated on Windows, or on a Windows older than Windows 11 24H2. A read shows the last numbers, and renews and writes nothing. | See [Root, sudo and administrator](#root-sudo-and-administrator) and [Windows](#windows). |
+| `read_only` | **Pitboard has a warning** | A change here would fail with `elevated` or `system_too_old`. A read shows the last numbers, and renews and writes nothing. | See [Root, sudo and administrator](#root-sudo-and-administrator) and [Windows](#windows). |

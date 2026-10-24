@@ -45,7 +45,6 @@ pub(crate) trait Service: Send + Sync + std::fmt::Debug {
     fn read(&self, ctx: &Context, name: &str) -> Result<Option<Registered>>;
     fn register(&self, permit: Permit, ctx: &Context, name: &str, xml: &str) -> Result<()>;
     fn delete(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()>;
-    // Start the task now, as its trigger would.
     fn run(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()>;
     // End each of its runs under way; a task with none, or none at all, is already stopped.
     fn stop(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()>;
@@ -374,18 +373,17 @@ impl Scheduler for Tasks {
             .collect();
         let text = (!given.is_empty()).then(|| environment_text(&given));
         let named = name(job, &self.sid);
-        if job == Job::Watch && previous.is_some() {
-            self.service.stop(permit, ctx, &named)?;
-        }
         keep_environment(permit, ctx, job, text.as_deref())?;
         let xml = definition(job, program, options, &first_start(ctx), &self.sid);
-        let started = self
-            .service
-            .register(permit, ctx, &named, &xml)
-            .and_then(|()| match job {
-                Job::Renew => Ok(()),
-                Job::Watch => self.service.run(permit, ctx, &named),
-            });
+        let started = match job {
+            Job::Watch if previous.is_some() => self.service.stop(permit, ctx, &named),
+            _ => Ok(()),
+        }
+        .and_then(|()| self.service.register(permit, ctx, &named, &xml))
+        .and_then(|()| match job {
+            Job::Renew => Ok(()),
+            Job::Watch => self.service.run(permit, ctx, &named),
+        });
         if let Err(refused) = started {
             let _ = keep_environment(permit, ctx, job, before.as_deref());
             // Whether a refused update leaves the old definition is not measured.
@@ -408,12 +406,15 @@ impl Scheduler for Tasks {
     }
 
     // A task Task Scheduler cannot say is there or not stops an uninstall, which would leave
-    // it running every day. Its run under way is ended first, as no deletion is documented to.
+    // it running every day. The watch service's run is ended first, as no deletion is documented
+    // to; renewal's is left to finish, since ending it could lose the login it was renewing.
     fn remove(&self, ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
         let named = name(job, &self.sid);
         let there = self.registered(ctx, job)?.is_some();
         if there {
-            self.service.stop(permit, ctx, &named)?;
+            if job == Job::Watch {
+                self.service.stop(permit, ctx, &named)?;
+            }
             self.service.delete(permit, ctx, &named)?;
         }
         keep_environment(permit, ctx, job, None)?;
@@ -755,6 +756,218 @@ mod tests {
                 .with_memory_stores(Arc::clone(&self.1))
                 .with_schedule_program(self.program())
         }
+    }
+
+    // Task Scheduler as the pretend keeps it, writing down each run and stop it is asked for
+    // and refusing the next run where a test says so.
+    #[derive(Debug)]
+    struct Asked {
+        tasks: Pretend,
+        refuse_run: std::sync::atomic::AtomicBool,
+        asked: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Asked {
+        fn new() -> Arc<Asked> {
+            Arc::new(Asked {
+                tasks: Pretend {
+                    refuse_start: Arc::default(),
+                },
+                refuse_run: std::sync::atomic::AtomicBool::new(false),
+                asked: std::sync::Mutex::new(Vec::new()),
+            })
+        }
+
+        fn said(&self, what: &str, name: &str) {
+            self.asked
+                .lock()
+                .expect("a poisoned test is a failed test")
+                .push(format!("{what} {name}"));
+        }
+
+        fn taken(&self) -> Vec<String> {
+            std::mem::take(&mut self.asked.lock().expect("a poisoned test is a failed test"))
+        }
+    }
+
+    impl Service for Asked {
+        fn read(&self, ctx: &Context, name: &str) -> Result<Option<Registered>> {
+            self.tasks.read(ctx, name)
+        }
+
+        fn register(&self, permit: Permit, ctx: &Context, name: &str, xml: &str) -> Result<()> {
+            self.tasks.register(permit, ctx, name, xml)
+        }
+
+        fn delete(&self, permit: Permit, ctx: &Context, name: &str) -> Result<()> {
+            self.tasks.delete(permit, ctx, name)
+        }
+
+        fn run(&self, _: Permit, _ctx: &Context, name: &str) -> Result<()> {
+            self.said("run", name);
+            if self
+                .refuse_run
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                return Err(Error::ScheduleRefused {
+                    detail: "Task Scheduler would not run it in a test".into(),
+                });
+            }
+            Ok(())
+        }
+
+        fn stop(&self, _: Permit, _ctx: &Context, name: &str) -> Result<()> {
+            self.said("stop", name);
+            Ok(())
+        }
+    }
+
+    fn at(percent: &str) -> Vec<String> {
+        vec!["--at".to_string(), percent.to_string()]
+    }
+
+    // Ending renewal's run could land between Anthropic's answer and the park it renews.
+    #[test]
+    fn only_the_watch_services_run_is_ended_when_its_task_is_taken_away() {
+        let machine = Machine::new();
+        let ctx = machine.ctx(&[]);
+        let asked = Asked::new();
+        let tasks = Tasks::new(SID.into(), asked.clone());
+        let program = machine.program();
+        tasks
+            .put(&ctx, Permit::for_a_test(), Job::Renew, &program, &[], &[])
+            .expect("renewal");
+        tasks
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                &program,
+                &at("90"),
+                &[],
+            )
+            .expect("the watch service");
+        asked.taken();
+
+        assert!(
+            tasks
+                .remove(&ctx, Permit::for_a_test(), Job::Renew)
+                .expect("taken away")
+        );
+        assert_eq!(asked.taken(), Vec::<String>::new());
+        assert!(
+            tasks
+                .remove(&ctx, Permit::for_a_test(), Job::Watch)
+                .expect("taken away")
+        );
+        assert_eq!(asked.taken(), [format!("stop Watch {SID}")]);
+    }
+
+    // Registered, a new task would start at the next sign-in all the same; one before is run
+    // again as it was.
+    #[test]
+    fn a_watch_task_that_will_not_run_is_taken_away_or_put_back() {
+        let machine = Machine::new();
+        let ctx = machine.ctx(&[]);
+        let asked = Asked::new();
+        let tasks = Tasks::new(SID.into(), asked.clone());
+        let program = machine.program();
+        let watch = format!("Watch {SID}");
+
+        asked
+            .refuse_run
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let refused = tasks
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                &program,
+                &at("90"),
+                &[],
+            )
+            .expect_err("refused");
+        assert_eq!(refused.code(), "schedule_refused");
+        assert!(!tasks.installed(&ctx, Job::Watch));
+        assert_eq!(asked.taken(), [format!("run {watch}")]);
+
+        tasks
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                &program,
+                &at("90"),
+                &[],
+            )
+            .expect("installed");
+        asked.taken();
+        asked
+            .refuse_run
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let proxied = [(
+            "HTTPS_PROXY".to_string(),
+            "http://proxy.example.com:3128".to_string(),
+        )];
+        tasks
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                &program,
+                &at("70"),
+                &proxied,
+            )
+            .expect_err("refused");
+        assert_eq!(tasks.options(&ctx, Job::Watch), at("90"));
+        assert!(!environment_file(&ctx, Job::Watch).exists());
+        assert_eq!(
+            asked.taken(),
+            [
+                format!("stop {watch}"),
+                format!("run {watch}"),
+                format!("run {watch}")
+            ]
+        );
+    }
+
+    // The run under way is ended only once nothing is left to fail before the new one starts.
+    #[test]
+    fn a_watch_environment_that_cannot_be_written_leaves_the_run_under_way() {
+        let machine = Machine::new();
+        let ctx = machine.ctx(&[]);
+        let asked = Asked::new();
+        let tasks = Tasks::new(SID.into(), asked.clone());
+        let program = machine.program();
+        tasks
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                &program,
+                &at("90"),
+                &[],
+            )
+            .expect("installed");
+        asked.taken();
+        std::fs::create_dir_all(environment_file(&ctx, Job::Watch).join("in the way"))
+            .expect("a folder where the file goes");
+        let proxied = [(
+            "HTTPS_PROXY".to_string(),
+            "http://proxy.example.com:3128".to_string(),
+        )];
+        tasks
+            .put(
+                &ctx,
+                Permit::for_a_test(),
+                Job::Watch,
+                &program,
+                &at("70"),
+                &proxied,
+            )
+            .expect_err("unwritable");
+        assert_eq!(asked.taken(), Vec::<String>::new());
+        assert_eq!(tasks.options(&ctx, Job::Watch), at("90"));
     }
 
     const PROXIED: [(&str, &str); 3] = [

@@ -18,7 +18,7 @@
     <Property Id="ARPPRODUCTICON" Value="Pitboard.ico" />
     <!-- One feature and no UI: Modify would only install the same files again. -->
     <Property Id="ARPNOMODIFY" Value="1" />
-    <!-- WinSparkle installs an update with /passive LAUNCHAFTERINSTALL=1, after Pitboard quit itself for it. -->
+    <!-- WinSparkle installs an update with /passive /norestart LAUNCHAFTERINSTALL=1, after Pitboard quit itself for it. -->
     <Property Id="LAUNCHAFTERINSTALL" Secure="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">

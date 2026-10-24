@@ -150,28 +150,55 @@ fn elevation_of(sudo: bool, root: bool) -> Elevation {
 }
 
 #[cfg(any(target_os = "linux", test))]
-const IN_ANOTHER_USERS_HOME: &str = "as root in another user's home";
+const IN_ANOTHER_USERS_FOLDER: &str = "as root in a folder another user owns";
 
-// Linux's: root in a home root owns writes only what root's own runs read back.
+// Linux's: root writes only where root's own runs read back, so every place a change writes in
+// must be root's. `places` are those of `home::written`; a relative one is the gate's to refuse.
 #[cfg(target_os = "linux")]
-pub(crate) fn linux_elevation(sudo: bool, home: &std::path::Path) -> Elevation {
-    use std::os::unix::fs::MetadataExt;
+pub(crate) fn linux_elevation(sudo: bool, places: &[PathBuf]) -> Elevation {
     // SAFETY: `geteuid` cannot fail and touches no memory of this process.
     let root = unsafe { libc::geteuid() } == 0;
-    let owner = std::fs::metadata(home).ok().map(|home| home.uid());
-    linux_elevation_of(sudo, root, owner)
+    let owners: Vec<Option<u32>> = if root && !sudo {
+        places
+            .iter()
+            .filter(|place| place.is_absolute())
+            .map(|place| owner(place))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    linux_elevation_of(sudo, root, &owners)
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn linux_elevation_of(sudo: bool, root: bool, home_owner: Option<u32>) -> Elevation {
-    match (root, home_owner) {
-        _ if sudo => Elevation::Elevated { why: "with sudo" },
-        (false, _) | (true, Some(0)) => Elevation::Normal,
-        (true, Some(_)) => Elevation::Elevated {
-            why: IN_ANOTHER_USERS_HOME,
-        },
-        (true, None) => Elevation::Unknown,
+fn linux_elevation_of(sudo: bool, root: bool, owners: &[Option<u32>]) -> Elevation {
+    if sudo {
+        Elevation::Elevated { why: "with sudo" }
+    } else if !root {
+        Elevation::Normal
+    } else if owners.iter().any(|owner| owner.is_some_and(|uid| uid != 0)) {
+        Elevation::Elevated {
+            why: IN_ANOTHER_USERS_FOLDER,
+        }
+    } else if owners.contains(&None) {
+        Elevation::Unknown
+    } else {
+        Elevation::Normal
     }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn owner(place: &std::path::Path) -> Option<u32> {
+    use std::io::ErrorKind;
+    use std::os::unix::fs::MetadataExt;
+    place
+        .ancestors()
+        .find_map(|there| match std::fs::metadata(there) {
+            Ok(found) => Some(Some(found.uid())),
+            Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => None,
+            Err(_) => Some(None),
+        })
+        .flatten()
 }
 
 /// What `read` takes from this user's passwd entry, while the buffer its strings live in is
@@ -366,33 +393,65 @@ mod tests {
         assert_eq!(elevation_of(false, false), Elevation::Normal);
     }
 
-    // A machine whose only user is root, and `su` without `-`, which keeps the caller's HOME.
+    // A machine whose only user is root; `su -m`, which keeps the caller's HOME; plain `su`, which
+    // keeps the caller's CODEX_HOME and the others; and a container given the caller's `~/.claude`.
     #[test]
-    fn on_linux_root_in_its_own_home_is_the_person_and_in_another_users_is_not() {
-        assert_eq!(linux_elevation_of(false, true, Some(0)), Elevation::Normal);
+    fn on_linux_root_changes_only_where_root_owns_every_place_pitboard_writes() {
+        let another = Elevation::Elevated {
+            why: IN_ANOTHER_USERS_FOLDER,
+        };
         assert_eq!(
-            linux_elevation_of(false, true, Some(1000)),
-            Elevation::Elevated {
-                why: IN_ANOTHER_USERS_HOME
-            }
+            linux_elevation_of(false, true, &[Some(0), Some(0)]),
+            Elevation::Normal
+        );
+        assert_eq!(linux_elevation_of(false, true, &[Some(1000)]), another);
+        assert_eq!(
+            linux_elevation_of(false, true, &[Some(0), Some(0), Some(1000)]),
+            another
         );
         assert_eq!(
-            linux_elevation_of(false, true, None),
+            linux_elevation_of(false, true, &[Some(0), None]),
             Elevation::Unknown,
-            "a home whose owner cannot be read"
+            "a place whose owner cannot be read"
         );
-        for (root, owner) in [(true, Some(0)), (false, Some(1000)), (false, Some(0))] {
+        assert_eq!(
+            linux_elevation_of(false, true, &[None, Some(1000)]),
+            another,
+            "what is known is said"
+        );
+        for (root, owners) in [
+            (true, &[Some(0)][..]),
+            (false, &[Some(1000)]),
+            (false, &[Some(0)]),
+        ] {
             assert_eq!(
-                linux_elevation_of(true, root, owner),
+                linux_elevation_of(true, root, owners),
                 Elevation::Elevated { why: "with sudo" },
-                "{root} {owner:?}"
+                "{root} {owners:?}"
             );
         }
         assert_eq!(
-            linux_elevation_of(false, false, Some(0)),
+            linux_elevation_of(false, false, &[Some(0)]),
             Elevation::Normal,
-            "a person is not elevated by a home they do not own"
+            "a person is not elevated by a folder they do not own"
         );
+    }
+
+    // A place not made yet is owned as the folder it would be made in.
+    #[test]
+    fn a_place_is_owned_as_its_nearest_folder_there_is() {
+        use std::os::unix::fs::MetadataExt;
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let mine = std::fs::metadata(scratch.path()).expect("its owner").uid();
+        assert_eq!(owner(scratch.path()), Some(mine));
+        assert_eq!(owner(&scratch.path().join("not/made/yet")), Some(mine));
+        std::fs::write(scratch.path().join("file"), "").expect("a file");
+        assert_eq!(
+            owner(&scratch.path().join("file/below")),
+            Some(mine),
+            "a file in the way"
+        );
+        assert_eq!(owner(Path::new("/")), Some(0));
     }
 
     /// Root is read from the effective user id, which is checked here against what the

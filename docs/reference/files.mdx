@@ -230,8 +230,9 @@ The environment holds the proxy variables as they were set at install, and on ma
 | --- | --- | --- | --- |
 | Where | `~/Library/LaunchAgents/com.datlechin.pitboard.watch.plist` | The task `\Pitboard\Watch <SID>` in Task Scheduler | `pitboard-watch.service` in `~/.config/systemd/user` |
 | Runs | `<program> watch --scheduled --at <PERCENT>` | The same | The same |
-| When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `Crashed` true: again after a crash | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-abnormal`: again after a crash |
+| When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `SuccessfulExit` false and `Crashed` true, and `ThrottleInterval` 60: again a minute after it fails or crashes | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-failure` and `RestartSec=60`: again a minute after it fails or crashes |
 | Environment | `EnvironmentVariables` | `watch.env` in Pitboard's directory | One `Environment=` line each |
+| Lines it prints | `~/Library/Logs/Pitboard/watch.log`, removed with the service | Kept nowhere | Your user's journal |
 
 `<program>` and the environment are as for the [renewal schedule](/reference/files#renewal-schedule).
 

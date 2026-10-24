@@ -44,7 +44,7 @@ The two options cannot be given together.
 | `looks_signed_out` | Claude Desktop | Claude's settings look signed out since Pitboard last read the account in use. | Yes |
 | `move_waiting` | Claude Desktop | A move was interrupted, and its record waits. | Yes |
 | `sign_in_awaited` | Claude Desktop | Claude is signed out for a sign-in, and the account that was in use is parked. | Yes |
-| `read_only` | Any | `status` runs where Pitboard may change nothing: as root, under `sudo`, elevated on Windows, or on a Windows older than Windows 11 24H2. It answers as `--offline` does. | No |
+| `read_only` | Any | `status` runs where a change fails with [`elevated`](/reference/errors#root-sudo-and-administrator) or [`system_too_old`](/reference/errors#windows). It answers as `--offline` does. | No |
 
 [Warning codes](/reference/errors#warning-codes) gives each message and what to do.
 
@@ -441,7 +441,7 @@ Three reasons end the line in their own way:
 
 A switch or a warm-up that fails prints its error on standard error, as `pitboard use` would, and `watch` goes on. [Automatic switching](/reference/automatic-switching) says what ends each reason and how long Pitboard waits after a failure.
 
-`watch` ends with the error's exit status where Pitboard may change nothing: as root, under `sudo` or elevated on Windows (`elevated`), and on a Windows older than Windows 11 24H2 (`system_too_old`). It also ends on an error in [The Pitboard directory](/reference/errors#the-pitboard-directory) while deciding whether to switch. No warm-up error ends it.
+`watch` ends with the error's exit status where a change fails with [`elevated`](/reference/errors#root-sudo-and-administrator) or [`system_too_old`](/reference/errors#windows). It also ends on an error in [The Pitboard directory](/reference/errors#the-pitboard-directory) while deciding whether to switch. No warm-up error ends it.
 
 With `--once`, `watch` prints only the line of one decision, with no start line or time. It may still ask Anthropic to identify Claude Code's stored login, and a switch checks the parked login as `use` does. It exits 0, or with the error's status.
 
@@ -463,9 +463,13 @@ Watching work: 62% of its 5-hour limit, as of 14:00.
 | `status` | Checks that the job is there, not whether it runs. | `Pitboard watches Claude Code in the background` or `Nothing watches Claude Code in the background here.` |
 | `uninstall` | Stops the job and deletes what `install` wrote. | `Stopped watching Claude Code in the background.` or `Nothing was watching Claude Code in the background.` |
 
-The service starts at each sign-in and runs `watch` at the share `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On Linux, its lines go to your user's journal. On macOS and Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
+The service starts at each sign-in and runs `watch` at the share `install` was given. Its first line ends `` Stop it with `pitboard watch uninstall`. `` in place of `Stop with Ctrl-C.` On macOS, its lines go to `~/Library/Logs/Pitboard/watch.log`, and on Linux to your user's journal. On Windows, nothing keeps them. [`pitboard log`](/reference/maintenance-commands#log) records each switch and warm-up either way. [Watch service](/reference/files#watch-service) lists where each system keeps it.
 
-Where `watch` ends on an error, the service starts again at your next sign-in, or with `pitboard watch install`. On macOS and Linux, the system also starts it again after a crash.
+On Linux, your user's systemd runs the service from your first sign-in to your last sign-out. To keep it running with nobody signed in, as on a server, run `loginctl enable-linger`, as loginctl(1) says.
+
+Where `watch` ends on an error or a crash, macOS and Linux start the service again a minute later. On Windows, it starts again at your next sign-in, or with `pitboard watch install`.
+
+After you update Pitboard, the service runs the updated `pitboard` from your next sign-in, or at once after `pitboard watch install`. On Windows, Scoop and WinGet cannot update a `pitboard.exe` the service is running: `scoop update` skips it, and `winget upgrade` fails. Run `pitboard watch uninstall` before you update, and `pitboard watch install` after.
 
 `install` follows the rules of [`schedule install`](/reference/maintenance-commands#schedule):
 

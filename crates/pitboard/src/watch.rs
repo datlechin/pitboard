@@ -94,9 +94,15 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                     format!(
                         "Pitboard watches Claude Code in the background from now on, and at each \
                          sign-in. It switches once a limit of the account in use reaches {}%, \
-                         and warms up the accounts `pitboard warm on` turned on.\n{location}\n\n\
+                         and warms up the accounts `pitboard warm on` turned on.\n{}{location}\n\n\
                          {}\n",
                         threshold.percent(),
+                        if cfg!(target_os = "linux") {
+                            "Your user's systemd runs it while you are signed in. To keep it \
+                             running when you are not, run `loginctl enable-linger`.\n"
+                        } else {
+                            ""
+                        },
                         terms()
                     ),
                 ),
@@ -140,7 +146,13 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                 ),
                 Installed::Unsupported => (
                     json!({ "installed": false, "supported": false }),
-                    "This computer has no scheduler Pitboard knows how to write.\n".to_string(),
+                    format!(
+                        "{}\n",
+                        words::no_scheduler(
+                            pitboard_core::host::OS,
+                            pitboard_core::schedule::Job::Watch
+                        )
+                    ),
                 ),
             };
             Report::done("watch", data, human)
@@ -765,6 +777,15 @@ mod tests {
         );
         assert!(
             installed.human.ends_with(&format!("\n\n{}\n", terms())),
+            "{}",
+            installed.human
+        );
+        assert_eq!(
+            installed.human.contains(
+                "Your user's systemd runs it while you are signed in. To keep it running when \
+                 you are not, run `loginctl enable-linger`.\n"
+            ),
+            cfg!(target_os = "linux"),
             "{}",
             installed.human
         );

@@ -42,10 +42,10 @@ impl Permit {
 }
 
 /// The one gate every change passes: whether this process may change anything here, as the
-/// host says. A process that runs as root or under sudo, or elevated on Windows, changes
-/// nothing, and nor does one the host cannot place: a file it wrote would be root's or the
-/// administrators', and a keychain item might be, where the person's own runs might never
-/// read, replace or remove it again.
+/// host says. A process the host says is not the person themselves
+/// ([`crate::host::Host::elevation`]) changes nothing, and nor does one the host cannot place:
+/// a file it wrote would be root's or the administrators', and a keychain item might be, where
+/// the person's own runs might never read, replace or remove it again.
 ///
 /// Nor does one whose environment names a home that is empty or relative
 /// ([`crate::home::check_absolute`]): what it wrote would land under whichever folder it
@@ -245,10 +245,10 @@ pub enum Warning {
         label: String,
         item: String,
     },
-    /// This process may change nothing, because it runs as root or under sudo, or elevated on
-    /// Windows, or nobody could tell whether it does, so a read answers from what Pitboard
-    /// last measured: it renews nothing, asks nobody and writes nothing. `why` is how it runs,
-    /// as the host said it, and `None` where the host could not say.
+    /// This process may change nothing, because the host says it is not the person themselves
+    /// (`Host::elevation`), or nobody could tell whether it is, so a read answers from what
+    /// Pitboard last measured: it renews nothing, asks nobody and writes nothing. `why` is how it
+    /// runs, as the host said it, and `None` where the host could not say.
     ReadOnly {
         why: Option<&'static str>,
     },

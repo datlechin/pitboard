@@ -301,7 +301,7 @@ On macOS, Claude Desktop's checks read the folders in `~/.pitboard/parks`, open 
   | Code | Name | What it checks |
   | --- | --- | --- |
   | `system_too_old` | `runs on` | Windows only, when it is older than Windows 11 24H2, build 26100, or Pitboard cannot tell its build. Always fails: see [Pitboard changes nothing on this version of Windows](/troubleshooting/refused-changes#pitboard-changes-nothing-on-this-version-of-windows). |
-  | `elevated` | `runs as` | Only as root, with `sudo`, elevated on Windows, or when Pitboard cannot tell. Always fails: see [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root) and [Pitboard changes nothing as administrator](/troubleshooting/refused-changes#pitboard-changes-nothing-as-administrator). On Windows, it names User Account Control where that is off. |
+  | `elevated` | `runs as` | Only where Pitboard may change nothing as it runs, or cannot tell whether it may. Always fails: see [Pitboard changes nothing as root](/troubleshooting/refused-changes#pitboard-changes-nothing-as-root) and [Pitboard changes nothing as administrator](/troubleshooting/refused-changes#pitboard-changes-nothing-as-administrator). On Windows, it names User Account Control where that is off. |
   | `homes` | `homes` | Only when a variable naming a home is empty or not a full path. Always fails, and nothing after it is checked. |
   | `security_tool` | `security tool` | macOS only. `/usr/bin/security`, which reads the keychain, is there. |
   | `config_file` | `config file` | Claude Code's config file can be read. Warns where Claude Code has never run, and says to install it first where Pitboard finds no `claude`. Fails where the file cannot be read. |
