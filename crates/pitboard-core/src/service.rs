@@ -12,6 +12,7 @@ use crate::permit::gate;
 use crate::provider::{LoginKind, ProviderId};
 use crate::state::{self, Account, Key};
 use crate::switch::{self, Enrolled, Outcome, Renewal, Settled, SignIn};
+use crate::usage::budget::Ask;
 use crate::usage::readings;
 pub use crate::warning::Warning;
 use crate::{audit, schedule, status, statusline};
@@ -110,7 +111,8 @@ impl Pitboard {
         // Beside the answers: asked one after the other, a silent service held the read twice.
         let (stuck, answers) = std::thread::scope(|scope| {
             let stuck = scope.spawn(|| switch::stuck(&self.ctx, &state, switch::Asking::Service));
-            let answers = status::ask(&self.ctx, permit, &state, fresh);
+            let when = if fresh { Ask::Now } else { Ask::WhenDue };
+            let answers = status::ask(&self.ctx, permit, &state, when);
             (stuck.join().ok().flatten(), answers)
         });
         switch::identify::record_read(&self.ctx, permit, &answers.found, &answers.plans);

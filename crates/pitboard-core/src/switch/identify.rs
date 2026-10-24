@@ -659,6 +659,7 @@ mod tests {
     use crate::error::Cause;
     use crate::service::Pitboard;
     use crate::store::memory::Fault;
+    use crate::usage::budget::Ask;
     use std::cell::Cell;
     use std::rc::Rc;
     use std::sync::Arc;
@@ -804,7 +805,7 @@ mod tests {
         parked["subscriptionType"] = "pro".into();
         m.mem.vault().plant(&there.service, &parked.to_string());
         let read = state::load(&m.ctx).expect("state");
-        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, true);
+        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, Ask::Now);
         enrolled_again(&m, "there", on_max(&m, "there", "there-new"));
 
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
@@ -816,7 +817,7 @@ mod tests {
         live["claudeAiOauth"]["subscriptionType"] = "pro".into();
         m.sign_in(&live);
         let read = state::load(&m.ctx).expect("state");
-        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, true);
+        let answers = crate::status::ask(&m.ctx, Permit::for_a_test(), &read, Ask::Now);
         enrolled_again(&m, "here", on_max(&m, "here", "here-new"));
 
         record_read(&m.ctx, Permit::for_a_test(), &answers.found, &answers.plans);
