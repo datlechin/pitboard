@@ -383,8 +383,12 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `proxy.rs`: the proxy those requests go through, read from the context's environment by
     the rules ureq 3.4.2 reads a process's with, the refusal of each request a SOCKS proxy
     would have carried (`proxy::Refusal`), what `doctor`'s `network` check says of it, and
-    the variables a renewal schedule installed from that context is given. See
+    the variables a renewal schedule installed from that context is given. It reads Windows'
+    own proxy setting too, which only doctor shows (`system_proxies`). See
     [ureq's proxies](#ureqs-proxies).
+  - `service.rs`: `Pitboard`, each operation run as every front end must run it. It
+    re-exports `Permit` (`permit.rs`, with the gate), `Warning` (`warning.rs`) and `Stored`
+    (`in_use.rs`), so the front ends name them through it.
   - `usage/pace.rs`: how a limit's use compared with an even use across its window when it was
     read: the part of the window gone by then, how far the share used was from it, which
     side of a 5-point margin it was on, and for a limit over pace when it runs out at the
@@ -410,8 +414,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     once the last has reset. They never add a limit or found a reading, since they do not
     say whose they are. A reading's `answered_at` is when its service last answered, absent
     from one an older Pitboard wrote.
-  - `status.rs`, `doctor.rs`, `statusline.rs` and `schedule.rs` serve the commands of the
-    same names. A row's numbers in `status.rs` are its service's answer folded into the
+  - `status.rs`, `doctor/`, `statusline.rs` and `schedule.rs` serve the commands of the
+    same names. `doctor/` has a module per concern, each with its facts, its gather and its
+    judges: `mod.rs` makes the checks in the order `pitboard doctor` prints them, and
+    `words.rs` says them. A row's numbers in `status.rs` are its service's answer folded into the
     reading every front end records in `usage.json`, or that reading alone where no answer
     came, and never a tool's own cache (see [Claude Code](#claude-code)). A Claude Desktop
     row has no numbers, since no usage of it is read, and says when a change last read its
@@ -422,7 +428,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `pitboard status` and the app go by. The usage of a login nobody
     could name is not asked, and the account the record names stands in for it. Offline rows
     (`gather_offline`) take the account in use from `in_use::known`, an account nobody
-    enrolled included, which gets its row as it does online. `Pitboard::standing` says what
+    enrolled included, which gets its row as it does online. `status::standing` says what
     stands on every read: `login_replaced`, `in_use_unconfirmed` where the read could not
     ask and Claude Code's config has moved since the record was checked, or the record was
     never checked, whatever the config names (`Known::unconfirmed`, which doctor's `in_use`
@@ -1174,7 +1180,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   reads the tool's login and the copy the switch parked, which on macOS are keychain items;
   with no record there, the check is one look at whether the file is there.
 - `status` and `status_offline` say a Claude Desktop move waiting in `state.json`'s `moving`
-  as `move_waiting` (`Pitboard::standing`), and `doctor` as its `desktop_move` check. A read
+  as `move_waiting` (`status::standing`), and `doctor` as its `desktop_move` check. A read
   opens no jar, so it does not predict what settling the move will do.
 - Pitboard changes nothing where it runs as root or under sudo, or elevated on Windows, or
   where the host cannot say whether it does: a file it wrote would be root's or the
@@ -1192,8 +1198,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   change anything on a Windows older than 11 24H2, build 26100, which Windows Server 2025
   shares, read as `RtlGetVersion` gives the build and never from the product name; that
   refusal is `system_too_old`, said before how the process runs, since no way of running
-  Pitboard changes the system. One gate, `service::gate`, asks the host's `floor` and
-  `elevation` and hands out a `service::Permit`, a value only it makes,
+  Pitboard changes the system. One gate, `permit::gate`, asks the host's `floor` and
+  `elevation` and hands out a `Permit`, a value only it makes,
   and everything that changes anything takes one as an argument: `atomic::write`, every
   function in `host::fs` that makes, moves or removes a file or a directory,
   `RawStore::write` and `delete` (the keychain among the stores), `Scheduler::put` and
