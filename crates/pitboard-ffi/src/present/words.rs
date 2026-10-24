@@ -705,7 +705,7 @@ pub(crate) fn check_name(code: &str, name: &str) -> String {
     match code {
         "storage_v5" => "Claude Code’s new login storage".into(),
         "machine_id" => "Machine ID".into(),
-        _ => capitalised(name),
+        _ => typeset(&capitalised(name)),
     }
 }
 

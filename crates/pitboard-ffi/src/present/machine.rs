@@ -736,6 +736,7 @@ mod tests {
                 ("claude_version", "Claude Code build"),
                 ("no_argv", "PITBOARD_NO_ARGV"),
                 ("machine_id", "machine id"),
+                ("schedule_proxy", "renewal schedule's proxy"),
             ]),
             [
                 "Config file",
@@ -744,6 +745,7 @@ mod tests {
                 "Claude Code build",
                 "PITBOARD_NO_ARGV",
                 "Machine ID",
+                "Renewal schedule’s proxy",
             ]
         );
     }
