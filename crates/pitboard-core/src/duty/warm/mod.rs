@@ -23,6 +23,7 @@ pub(crate) mod decide;
 pub(crate) mod run;
 
 pub use decide::{Hold, Standing};
+pub use run::Ran;
 
 use crate::context::Context;
 use crate::error::{Error, Result};

@@ -26,7 +26,13 @@ pub(crate) struct Headless {
     pub(crate) token: Option<String>,
 }
 
-pub(crate) use crate::host::Ran;
+/// What a warm-up's run came to: `exit` is `None` where a signal or the ceiling ended it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Ran {
+    pub exit: Option<i32>,
+    pub stdout: String,
+    pub timed_out: bool,
+}
 
 // Under Pitboard's directory; `prepare` makes its `home`, `tmp`, `work` and `config` folders.
 pub(crate) fn home(ctx: &Context, tool: ProviderId) -> PathBuf {
@@ -136,8 +142,7 @@ impl Started {
 }
 
 /// Runs `headless` for at most [`CEILING`], or plays it where a test or a fixture said to.
-// Starting the tool asks for the permit, as a sign-in's `Provider::sign_in` does.
-pub(crate) fn run(ctx: &Context, _: Permit, headless: Headless) -> std::io::Result<Ran> {
+pub(crate) fn run(ctx: &Context, permit: Permit, headless: Headless) -> std::io::Result<Ran> {
     #[cfg(any(test, feature = "test-support"))]
     if let Some(script) = ctx.warm_script() {
         let command = &headless.command;
@@ -160,7 +165,7 @@ pub(crate) fn run(ctx: &Context, _: Permit, headless: Headless) -> std::io::Resu
     let input = token
         .as_deref()
         .map_or(Input::Nothing, |token| Input::Descriptor3(token.as_bytes()));
-    match crate::host::proc::run_within(command, input, CEILING) {
+    match crate::host::proc::run_tool(permit, command, input, CEILING) {
         Ok(out) => Ok(Ran {
             exit: out.status.code(),
             stdout: String::from_utf8_lossy(&out.stdout).into_owned(),

@@ -2,6 +2,7 @@
 
 use super::proc::image;
 use crate::host::Input;
+use crate::permit::Permit;
 use std::io;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
@@ -73,8 +74,10 @@ fn spawn_into(mut command: Command, job: &Job) -> io::Result<Child> {
     Ok(child)
 }
 
-// A warm-up's tool, and all it starts, ended past the ceiling (`TimedOut`) or with Pitboard.
-pub(crate) fn run_within(
+// A warm-up's tool, started by the gate's permit, and all it starts, ended past the ceiling
+// (`TimedOut`) or with Pitboard: its errors unread, its first MiB kept.
+pub(crate) fn run_tool(
+    _: Permit,
     mut command: Command,
     input: Input<'_>,
     ceiling: Duration,
@@ -88,12 +91,12 @@ pub(crate) fn run_within(
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::null())
         .creation_flags(flags(false));
     let job = job(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)?;
     let mut child = spawn_into(command, &job)?;
-    let stdout = crate::host::drained(child.stdout.take());
-    let stderr = crate::host::drained(child.stderr.take());
+    let stdout = crate::host::drained(child.stdout.take(), crate::host::TOOL_PRINTS);
+    let stderr = crate::host::drained(child.stderr.take(), crate::host::TOOL_PRINTS);
     let millis = u32::try_from(ceiling.as_millis()).unwrap_or(u32::MAX - 1);
     // SAFETY: the child's own process handle, which it holds open until it is dropped.
     let ended = unsafe { WaitForSingleObject(child.as_raw_handle(), millis) } == WAIT_OBJECT_0;
@@ -102,11 +105,7 @@ pub(crate) fn run_within(
     if !ended {
         return Err(crate::host::timed_out(ceiling));
     }
-    Ok(Output {
-        status,
-        stdout: stdout(),
-        stderr: stderr(),
-    })
+    crate::host::output(status, stdout, stderr)
 }
 
 // A process leaves the job's list before it ends, so each is waited on by a handle taken then.
@@ -626,7 +625,13 @@ mod tests {
                 child
             })
         };
-        let out = run_within(command, Input::Nothing, Duration::from_secs(60)).expect("ran");
+        let out = run_tool(
+            Permit::for_a_test(),
+            command,
+            Input::Nothing,
+            Duration::from_secs(60),
+        )
+        .expect("ran");
         let child = watching.join().expect("both started");
         assert_eq!(out.status.code(), Some(0));
         let printed = String::from_utf8_lossy(&out.stdout);
@@ -645,8 +650,13 @@ mod tests {
             let (started, opened) = (started.clone(), opened.clone());
             std::thread::spawn(move || (pid_in(&started), pid_in(&opened)))
         };
-        let refused =
-            run_within(command, Input::Nothing, Duration::from_secs(10)).expect_err("stopped");
+        let refused = run_tool(
+            Permit::for_a_test(),
+            command,
+            Input::Nothing,
+            Duration::from_secs(10),
+        )
+        .expect_err("stopped");
         let (tool, child) = watching.join().expect("both started");
         assert_eq!(refused.kind(), io::ErrorKind::TimedOut);
         assert!(!runs(tool) && !runs(child));
@@ -659,7 +669,13 @@ mod tests {
         let (tool, child, started, opened) = tool_and_child(dir);
         let _held = (helper::hold(&started), helper::hold(&opened));
         let command = helper::starting(&tool, true, &started, (&child, Job::Waits, &opened));
-        let out = run_within(command, Input::Nothing, Duration::from_secs(60)).expect("ran");
+        let out = run_tool(
+            Permit::for_a_test(),
+            command,
+            Input::Nothing,
+            Duration::from_secs(60),
+        )
+        .expect("ran");
         assert_eq!(out.status.code(), Some(0));
         let said = helper::written(&started);
         assert!(said.starts_with("refused"), "{said}");
@@ -676,7 +692,8 @@ mod tests {
             Job::SaysItsConsole,
             &said,
         ));
-        let refused = run_within(
+        let refused = run_tool(
+            Permit::for_a_test(),
             command,
             Input::Descriptor3(b"access"),
             Duration::from_secs(60),

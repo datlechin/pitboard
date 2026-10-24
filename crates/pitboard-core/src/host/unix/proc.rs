@@ -1,6 +1,7 @@
 //! Processes, the POSIX way.
 
 use crate::host::Input;
+use crate::permit::Permit;
 use std::ffi::CString;
 use std::io::{self, Read, Write};
 use std::os::fd::AsRawFd;
@@ -14,12 +15,40 @@ use std::time::Duration;
 /// How long a run past its ceiling is given to end once asked, before it is made to.
 const GRACE: Duration = Duration::from_secs(2);
 
-// `security`, `ps`, `plutil` and a warm-up's tool, each in a process group of its own, ended past
-// the ceiling (`TimedOut`) and once the run ended, so nothing it started outlives it.
-pub(crate) fn run_within(
-    mut command: Command,
+// `security`, `ps` and `plutil`, whose answers are read whole.
+#[cfg(any(target_os = "macos", test))]
+pub(in crate::host) fn run_within(
+    command: Command,
     input: Input<'_>,
     ceiling: Duration,
+) -> io::Result<Output> {
+    run(command, Stdio::piped(), input, ceiling, u64::MAX)
+}
+
+// A warm-up's tool, started by the gate's permit: its errors unread, its first MiB kept.
+pub(crate) fn run_tool(
+    _: Permit,
+    command: Command,
+    input: Input<'_>,
+    ceiling: Duration,
+) -> io::Result<Output> {
+    run(
+        command,
+        Stdio::null(),
+        input,
+        ceiling,
+        crate::host::TOOL_PRINTS,
+    )
+}
+
+// Each in a process group of its own, ended past the ceiling (`TimedOut`) and once the run ended,
+// so nothing it started outlives it.
+fn run(
+    mut command: Command,
+    stderr: Stdio,
+    input: Input<'_>,
+    ceiling: Duration,
+    kept: u64,
 ) -> io::Result<Output> {
     command
         .stdin(match input {
@@ -27,7 +56,7 @@ pub(crate) fn run_within(
             Input::Nothing | Input::Descriptor3(_) => Stdio::null(),
         })
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(stderr)
         .process_group(0);
     let reader = match input {
         Input::Descriptor3(bytes) => {
@@ -59,8 +88,8 @@ pub(crate) fn run_within(
     }
     let mut child = command.spawn()?;
     drop(reader);
-    let stdout = crate::host::drained(child.stdout.take());
-    let stderr = crate::host::drained(child.stderr.take());
+    let stdout = crate::host::drained(child.stdout.take(), kept);
+    let stderr = crate::host::drained(child.stderr.take(), kept);
     if let (Input::Stdin(bytes), Some(mut stdin)) = (input, child.stdin.take()) {
         let bytes = bytes.to_vec();
         // Closed once written, which is how a helper reading commands learns there are no more.
@@ -82,11 +111,7 @@ pub(crate) fn run_within(
     if !ended {
         return Err(crate::host::timed_out(ceiling));
     }
-    Ok(Output {
-        status,
-        stdout: stdout(),
-        stderr: stderr(),
-    })
+    crate::host::output(status, stdout, stderr)
 }
 
 // Once `child` ended, left unreaped so its pid is not given to another process meanwhile.
@@ -310,6 +335,19 @@ mod tests {
         head.args(["-c", "1000000", "/dev/zero"]);
         let out = run_within(head, Input::Nothing, Duration::from_secs(10)).expect("ran");
         assert_eq!(out.stdout.len(), 1_000_000);
+    }
+
+    #[test]
+    fn a_tools_run_keeps_its_first_mib_and_none_of_its_errors() {
+        let out = run_tool(
+            Permit::for_a_test(),
+            shell("head -c 2000000 /dev/zero; echo no >&2"),
+            Input::Nothing,
+            Duration::from_secs(10),
+        )
+        .expect("ran");
+        assert_eq!(out.stdout.len(), 1 << 20);
+        assert!(out.stderr.is_empty());
     }
 
     /// What is handed arrives on descriptor 3 and nowhere else: not on standard input, which

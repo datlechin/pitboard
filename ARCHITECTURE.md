@@ -94,9 +94,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     (`host/administered.rs`) and no app installed on the machine. `fs`, `proc` and `user`
     are plain functions for what the system does whoever asks: private files and
     directories, every other change to the disk, whether a process is alive, a program run
-    with a ceiling (`proc::run_within`, the one way Pitboard waits on `security`, `ps`,
-    `plutil` and a warm-up's tool), the login name, whether this process runs as root,
-    and the `PATH` the person's login shell builds, which `unix/shell.rs` asks for. `fs`
+    with a ceiling (`proc::run_within`, the one way Pitboard waits on `security`, `ps` and
+    `plutil`, which `proc::run_tool` runs a warm-up's tool through), the login name, whether
+    this process runs as root, and the `PATH` the person's login shell builds, which
+    `unix/shell.rs` asks for. `fs`
     creates each private file itself and hands it back open (`create_private`,
     `open_private_append` and `open_private_lock`), so how a file is made private is the
     face's alone. A login kept as files moves through four more:
@@ -282,7 +283,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     limit is a fixed cycle. `run.rs` runs the tool's own headless mode in `warm/<tool>/`, made
     afresh for each run and removed after it, with an environment built from nothing but
     `PATH`, the person's name, the proxy and, on Windows, `SystemRoot`, through
-    `host::proc::run_within`: the access token on descriptor 3 through a pipe `dup2`ed in
+    `host::proc::run_tool`: the access token on descriptor 3 through a pipe `dup2`ed in
     `pre_exec`, for at most 120 seconds, its process group stopped past that, and whatever it
     left in the group stopped after it. On
     Windows, which reads no descriptor (`windows_token_handover`), the token goes in
@@ -1209,7 +1210,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   function in `host::fs` that makes, moves or removes a file or a directory,
   `RawStore::write` and `delete` (the keychain among the stores), `Scheduler::put` and
   `remove` and the service manager they ask, a tool's sign-in or warm-up run started
-  (`Provider::sign_in`, `duty::warm::run::run`), and the token exchange, `Provider::renew`
+  (`Provider::sign_in`, `host::proc::run_tool`), and the token exchange, `Provider::renew`
   down to the request.
   So a change that skips the gate does not compile, and nothing rotates a refresh token it
   could not then write down. Every change asks the gate before it reads, locks or records

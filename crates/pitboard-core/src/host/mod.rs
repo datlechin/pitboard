@@ -735,15 +735,7 @@ pub enum JarError {
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use os::write_jar;
 
-/// What a warm-up's run came to: `exit` is `None` where a signal or the ceiling ended it.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Ran {
-    pub exit: Option<i32>,
-    pub stdout: String,
-    pub timed_out: bool,
-}
-
-// What `proc::run_within` hands the program to read. Windows refuses descriptor 3.
+// What a run is handed to read. Windows takes `Nothing` alone.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Input<'a> {
     Nothing,
@@ -753,24 +745,68 @@ pub(crate) enum Input<'a> {
     Descriptor3(&'a [u8]),
 }
 
+// What is kept of what a warm-up's tool prints.
+const TOOL_PRINTS: u64 = 1 << 20;
+
 // How long what a run printed is waited for once it ended: something that left its group may
-// still hold the pipe.
+// still hold a pipe.
 const DRAINED: std::time::Duration = std::time::Duration::from_secs(5);
 
-// What a run's pipe carries, read on a thread of its own so a chatty program cannot stall.
-fn drained(pipe: Option<impl std::io::Read + Send + 'static>) -> impl FnOnce() -> Vec<u8> {
+// Up to `kept` bytes of what a pipe carries, read on a thread of its own so a chatty program
+// cannot stall.
+fn drained(
+    pipe: Option<impl std::io::Read + Send + 'static>,
+    kept: u64,
+) -> std::sync::mpsc::Receiver<Vec<u8>> {
     let (said, printed) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
+        use std::io::Read;
         let mut bytes = Vec::new();
-        if let Some(mut pipe) = pipe {
-            let _ = pipe.read_to_end(&mut bytes);
+        if let Some(pipe) = pipe {
+            let _ = pipe.take(kept).read_to_end(&mut bytes);
         }
         let _ = said.send(bytes);
     });
-    move || printed.recv_timeout(DRAINED).unwrap_or_default()
+    printed
 }
 
-// What `ceiling` stopped, as `proc::run_within` says it.
+// What a run that ended with `status` printed, both pipes by one deadline.
+fn output(
+    status: std::process::ExitStatus,
+    stdout: std::sync::mpsc::Receiver<Vec<u8>>,
+    stderr: std::sync::mpsc::Receiver<Vec<u8>>,
+) -> std::io::Result<std::process::Output> {
+    let by = std::time::Instant::now() + DRAINED;
+    let (stdout, stderr) = printed(&stdout, &stderr, by)?;
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+// A pipe still open at `by` fails the run, rather than answer with part of what it said.
+fn printed(
+    stdout: &std::sync::mpsc::Receiver<Vec<u8>>,
+    stderr: &std::sync::mpsc::Receiver<Vec<u8>>,
+    by: std::time::Instant,
+) -> std::io::Result<(Vec<u8>, Vec<u8>)> {
+    let read = |pipe: &std::sync::mpsc::Receiver<Vec<u8>>| {
+        pipe.recv_timeout(by.saturating_duration_since(std::time::Instant::now()))
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "its output was still open {}s after it ended",
+                        DRAINED.as_secs()
+                    ),
+                )
+            })
+    };
+    Ok((read(stdout)?, read(stderr)?))
+}
+
+// What `ceiling` stopped, as a run says it.
 fn timed_out(ceiling: std::time::Duration) -> std::io::Error {
     std::io::Error::new(
         std::io::ErrorKind::TimedOut,
@@ -1042,6 +1078,26 @@ pub(crate) fn current_program() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // As a pipe a program started meanwhile took with it, or one that left the run's group.
+    #[test]
+    fn a_pipe_still_open_once_a_run_ended_fails_the_run() {
+        let closed = || {
+            let (reader, writer) = std::io::pipe().expect("a pipe");
+            drop(writer);
+            drained(Some(reader), u64::MAX)
+        };
+        let soon = std::time::Instant::now() + DRAINED;
+        assert!(printed(&closed(), &closed(), soon).is_ok());
+        let (reader, _held) = std::io::pipe().expect("a pipe");
+        let refused = printed(
+            &drained(Some(reader), u64::MAX),
+            &closed(),
+            std::time::Instant::now(),
+        )
+        .expect_err("still open");
+        assert_eq!(refused.kind(), std::io::ErrorKind::TimedOut);
+    }
 
     // This crate's clippy.toml replaces the root's, so it repeats each of its rules.
     #[test]

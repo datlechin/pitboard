@@ -107,8 +107,7 @@ pub mod testing {
     pub use crate::api::scripted::{Answer, Asked, ScriptedApi, Trouble};
     pub use crate::context::ScratchMachine;
     pub use crate::desktop_testing as desktop;
-    pub use crate::duty::warm::run::{Started, WarmScript};
-    pub use crate::host::Ran;
+    pub use crate::duty::warm::run::{Ran, Started, WarmScript};
     /// What a test or a fixture does to a file's access, or to make a link, which only this
     /// system's face says how to do: the integration tests and the apps' fixtures do it here,
     /// as the core's own tests do.

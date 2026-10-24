@@ -1,6 +1,6 @@
 //! Processes on Windows, and the programs a Windows shell starts.
 
-pub(crate) use super::job::{Tool, run_within, start};
+pub(crate) use super::job::{Tool, run_tool, start};
 use crate::host::Listed;
 use crate::host::owner::{self, Owner, Told};
 use std::collections::HashMap;
