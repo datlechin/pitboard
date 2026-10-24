@@ -464,10 +464,8 @@ mod tests {
     #[test]
     fn root_is_read_from_the_effective_user_id() {
         use std::os::unix::fs::MetadataExt;
-        let made = std::env::temp_dir().join(format!("pitboard-euid-{}", std::process::id()));
-        std::fs::write(&made, b"").expect("a file of this process's own");
-        let owner = std::fs::metadata(&made).map(|made| made.uid());
-        let _ = std::fs::remove_file(&made);
+        let made = tempfile::NamedTempFile::new().expect("a file of this process's own");
+        let owner = made.as_file().metadata().map(|made| made.uid());
         let root = owner.expect("the file this process made") == 0;
         assert_eq!(elevation(false), elevation_of(false, root));
         assert_eq!(elevation(true), Elevation::Elevated { why: "with sudo" });

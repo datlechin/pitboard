@@ -1139,34 +1139,34 @@ mod tests {
     use crate::api::scripted::Trouble;
     use crate::store::memory::Fault;
     use crate::switch::harness::{
-        self, Machine, NOW, Tool, codex_id, codex_login, codex_machine, hold, login_of, machine,
-        oauth, renews, signed_in,
+        self, NOW, Rig, Tool, codex_id, codex_login, codex_machine, hold, login_of, machine, oauth,
+        renews, signed_in,
     };
     use crate::switch::{Due, Outcome, renew_due, settle, switch};
     use crate::time::FixedClock;
     use std::sync::Arc;
     use std::time::Duration;
 
-    type Make = fn(&str) -> Machine;
+    type Make = fn(&str) -> Rig;
     /// A machine of each tool: `here` signed in, `there` parked and ready.
     const MACHINES: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
 
     /// Whether the login in use is the one this refresh token belongs to.
-    fn in_use(m: &Machine, refresh: &str) -> bool {
+    fn in_use(m: &Rig, refresh: &str) -> bool {
         m.live().is_some_and(|live| {
             provider::document(m.which).fingerprint(&live) == store::fingerprint(refresh)
         })
     }
 
     /// Enrols what a sign-in left under `label`, the way the next command would.
-    fn enrolled_as(m: &Machine, label: &str, login: SignIn) -> Result<(Enrolled, Vec<Warning>)> {
+    fn enrolled_as(m: &Rig, label: &str, login: SignIn) -> Result<(Enrolled, Vec<Warning>)> {
         let settled = settle(&m.ctx, Permit::for_a_test(), Some(m.which))
             .expect("nothing to recover")
             .0;
         enroll(settled, &m.key(label), Some(login))
     }
 
-    fn park_of(m: &Machine, label: &str) -> Option<Park> {
+    fn park_of(m: &Rig, label: &str) -> Option<Park> {
         state::load(&m.ctx)
             .expect("state")
             .get(&m.key(label))
@@ -1174,7 +1174,7 @@ mod tests {
     }
 
     /// `here` in another organisation, signed in through `refresh`.
-    fn here_in(m: &Machine, org: &str, refresh: &str) -> SignIn {
+    fn here_in(m: &Rig, org: &str, refresh: &str) -> SignIn {
         m.api.owned_by(
             &format!("access-{refresh}"),
             Owner {
@@ -1459,7 +1459,7 @@ mod tests {
     /// not answer about, for Codex one whose ID token cannot be read.
     #[test]
     fn a_login_in_use_whose_account_cannot_be_told_is_not_written_over() {
-        let mut cases: Vec<(String, Machine)> = Vec::new();
+        let mut cases: Vec<(String, Rig)> = Vec::new();
         for (name, trouble) in [
             ("refused", Trouble::Unauthorized),
             ("offline", Trouble::Offline),
@@ -1986,7 +1986,7 @@ mod tests {
 
     /// `ctx` with each tool's program named where there is none.
     fn nowhere(ctx: &Context) -> Context {
-        let missing = std::env::temp_dir().join("pitboard-no-such-directory");
+        let missing = ctx.home().join("no-such-directory");
         ctx.clone()
             .with_claude_program(missing.join("claude"))
             .with_codex_program(missing.join("codex"))

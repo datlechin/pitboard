@@ -19,12 +19,10 @@
 //!
 //! The model and what it presents came from the macOS app's Swift. Where a comment here
 //! names a Swift file the app no longer has, such as `AppModel.swift`, `MachineModel.swift`
-//! or `Notifier.swift`, or a test in `AppModelTests.swift`, `PresentationTests.swift` or
-//! `MenuTests.swift`, it means that file as it was before the app ran on the model, at
-//! commit 277539b. The `AppModelTests.swift` the app's package has since is another. The
-//! account windows' bookkeeping moved later, and a comment that names its Swift, such as
-//! `LinkInbox.swift`, `StoreJanitor.swift`'s sweep or `AccountPickerTests.swift`, means it as
-//! it was at commit a3e5ce0, where the comment says so.
+//! or `Notifier.swift`, it means that file as it was before the app ran on the model, at
+//! commit 277539b. The account windows' bookkeeping moved later, and a comment that names its
+//! Swift, such as `LinkInbox.swift`, `StoreJanitor.swift`'s sweep or
+//! `AccountPickerTests.swift`, means it as it was at commit a3e5ce0, where the comment says so.
 
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
@@ -496,11 +494,8 @@ mod tests {
     // Every system, as the release gate opens each build the tests run.
     #[test]
     fn the_app_asks_the_core_whether_it_may_start() {
-        let scratch = std::env::temp_dir().join(format!(
-            "pitboard-may-start-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("home");
         let environment = |pitboard: &str| -> HashMap<String, String> {
             HashMap::from([
                 ("HOME".into(), scratch.to_string_lossy().into_owned()),
@@ -527,11 +522,8 @@ mod tests {
     // The core's own tests take a task away on a scheduler in memory; this one reaches none.
     #[test]
     fn a_path_that_is_no_app_takes_no_renewal_task_away() {
-        let scratch = std::env::temp_dir().join(format!(
-            "pitboard-unschedule-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let scratch = folder.path().join("home");
         let home = scratch.to_string_lossy().into_owned();
         let environment = HashMap::from([
             ("HOME".into(), home.clone()),

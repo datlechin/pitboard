@@ -324,6 +324,7 @@ fn apply(
 mod tests {
     use super::*;
     use crate::api::scripted::{Asked as Question, ScriptedApi, Trouble};
+    use crate::context::ScratchMachine;
     use crate::host::memory::MemoryHost;
     use crate::provider::claude::api::Renewed;
     use crate::state::Account;
@@ -334,36 +335,27 @@ mod tests {
 
     const NOW: i64 = 1_760_000_000;
 
-    struct Machine {
+    struct Scratch {
         ctx: Context,
         mem: Arc<MemoryHost>,
         api: Arc<ScriptedApi>,
-        home: std::path::PathBuf,
+        home: tempfile::TempDir,
     }
 
-    impl Drop for Machine {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.home);
-        }
-    }
-
-    /// A machine with no keychain, no network and a clock that stands still.
-    fn machine(name: &str) -> Machine {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-renew-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).expect("a scratch home");
-        let mem = MemoryHost::new();
-        let api = ScriptedApi::new();
-        let ctx = Context::new(home.clone())
-            .with_pitboard_home(home.clone())
-            .with_memory_stores(Arc::clone(&mem))
-            .with_scripted_api(Arc::clone(&api))
-            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn crate::time::Clock>);
-        Machine {
+    fn machine(name: &str) -> Scratch {
+        let home = tempfile::Builder::new()
+            .prefix(&format!("pitboard-renew-{name}-"))
+            .tempdir()
+            .expect("a scratch home");
+        let ScratchMachine {
+            ctx,
+            host: mem,
+            api,
+        } = ScratchMachine::at(home.path(), |ctx| {
+            ctx.with_pitboard_home(home.path().to_path_buf())
+                .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn crate::time::Clock>)
+        });
+        Scratch {
             ctx,
             mem,
             api,
@@ -381,7 +373,7 @@ mod tests {
     }
 
     /// One account holding one park, written the way a switch would have written it.
-    fn with_park(m: &Machine, label: &str, refresh: &str, access_expires_at: i64) -> Park {
+    fn with_park(m: &Scratch, label: &str, refresh: &str, access_expires_at: i64) -> Park {
         park_in(&m.ctx, label, refresh, access_expires_at)
     }
 
@@ -676,7 +668,10 @@ mod tests {
                 .ctx
                 .clone()
                 .with_pitboard_home(m.ctx.default_pitboard_home());
-            let elsewhere = m.ctx.clone().with_pitboard_home(m.home.join("elsewhere"));
+            let elsewhere = m
+                .ctx
+                .clone()
+                .with_pitboard_home(m.home.path().join("elsewhere"));
             park_in(&default, "work", "default-old", NOW - 1);
             park_in(&elsewhere, "other", "elsewhere-old", NOW - 1);
             m.api.renews("default-old", fresh("default-new"));

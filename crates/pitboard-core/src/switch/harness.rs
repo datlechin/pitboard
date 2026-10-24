@@ -13,6 +13,7 @@
 
 use super::*;
 use crate::api::scripted::ScriptedApi;
+use crate::context::ScratchMachine;
 use crate::provider::Owner;
 use crate::provider::ProviderId;
 use crate::provider::claude::api::Renewed;
@@ -39,40 +40,6 @@ pub(crate) const POINTS: [&str; 6] = [
     "switch.config_updated",
 ];
 
-// Every place a move of an app's login can be killed, by the name the code gives it.
-pub(crate) const FOLDER_POINTS: [&str; 30] = [
-    "leave.recorded",
-    "leave.keys_kept",
-    "leave.keys_out",
-    "leave.jar_out",
-    "leave.item_out",
-    "leave.verified",
-    "leave.done",
-    "arrive.recorded",
-    "arrive.aside_kept",
-    "arrive.keys_cleared",
-    "arrive.item_aside",
-    "arrive.item_in",
-    "arrive.jar_in",
-    "arrive.keys_in",
-    "arrive.verified",
-    "arrive.done",
-    "settings.temp_written",
-    "settle.keys_back",
-    "settle.aside_named",
-    "settle.aside_kept",
-    "settle.keys_cleared",
-    "settle.item_back",
-    "settle.item_aside",
-    "settle.saved",
-    "give_up.aside_named",
-    "give_up.item_aside",
-    "give_up.done",
-    "start.aside_kept",
-    "start.keys_cleared",
-    "start.saved",
-];
-
 // The tools whose login is a document, for a test's match on a document machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tool {
@@ -90,26 +57,26 @@ impl Tool {
     }
 }
 
-pub(crate) struct Machine {
+pub(crate) struct Rig {
     pub(crate) ctx: Context,
     pub(crate) mem: Arc<MemoryHost>,
     pub(crate) api: Arc<ScriptedApi>,
-    root: PathBuf,
+    root: tempfile::TempDir,
     /// The keychain item Claude Code's login is in, on a Claude Code machine.
     pub(crate) service: String,
     /// Which tool's accounts this machine holds.
     pub(crate) which: ProviderId,
 }
 
-impl Machine {
+impl Rig {
     /// Where the tool's own files are, for a test that needs to change one.
     pub(crate) fn ctx_home(&self) -> PathBuf {
-        self.root.clone()
+        self.root.path().to_path_buf()
     }
 
     // Pitboard's directory moved to the one the schedule renews, which on Windows is not
     // `.pitboard`.
-    pub(crate) fn in_the_default_home(mut self) -> Machine {
+    pub(crate) fn in_the_default_home(mut self) -> Rig {
         let (here, default) = (home::dir(&self.ctx), self.ctx.default_pitboard_home());
         if here != default {
             std::fs::create_dir_all(default.parent().expect("its folder")).expect("made");
@@ -169,12 +136,6 @@ impl Machine {
     }
 }
 
-impl Drop for Machine {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
 pub(crate) fn oauth(refresh: &str, expires_in_days: i64) -> Value {
     json!({
         "accessToken": format!("access-{refresh}"),
@@ -208,26 +169,29 @@ pub(crate) fn owner(uuid: &str) -> Owner {
     }
 }
 
-/// Two accounts: `here` is signed in, `there` is parked and ready. The shape every switch
-/// starts from.
-pub(crate) fn machine(name: &str) -> Machine {
-    let root = std::env::temp_dir().join(format!(
-        "pitboard-crash-{name}-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("a scratch home");
+// Named after the test, so a path in a failure says whose it is.
+fn scratch_home(name: &str) -> tempfile::TempDir {
+    tempfile::Builder::new()
+        .prefix(&format!("pitboard-{name}-"))
+        .tempdir()
+        .expect("a scratch home")
+}
 
-    let mem = MemoryHost::new();
-    let api = ScriptedApi::new();
-    let ctx = Context::new(root.clone())
-        .with_pitboard_home(root.join(".pitboard"))
-        .with_memory_stores(Arc::clone(&mem))
-        .with_scripted_api(Arc::clone(&api))
-        .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
-        // A test holding one of Claude Code's locks lets go of it at a point, not after a while.
-        .with_lock_waiting(1, std::time::Duration::from_millis(1));
+// `here` signed in and `there` parked and ready: the shape every switch starts from.
+pub(crate) fn machine(name: &str) -> Rig {
+    let scratch = scratch_home(name);
+    let root = scratch.path();
+
+    let ScratchMachine {
+        ctx,
+        host: mem,
+        api,
+    } = ScratchMachine::at(root, |ctx| {
+        ctx.with_pitboard_home(root.join(".pitboard"))
+            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
+            // A test holding one of Claude Code's locks lets go of it at a point, not after a while.
+            .with_lock_waiting(1, std::time::Duration::from_millis(1))
+    });
 
     // Claude Code's own files: the live credential, and the config a switch rewrites.
     let service = claude::live_service(&ctx);
@@ -274,11 +238,11 @@ pub(crate) fn machine(name: &str) -> Machine {
     );
     state::save(&ctx, Permit::for_a_test(), &state).expect("saved");
 
-    Machine {
+    Rig {
         ctx,
         mem,
         api,
-        root,
+        root: scratch,
         service,
         which: ProviderId::Claude,
     }
@@ -287,7 +251,7 @@ pub(crate) fn machine(name: &str) -> Machine {
 /// [`machine`], where `elsewhere`, enrolled with nothing parked, has since signed in to
 /// Claude Code outside Pitboard over `here`, whose only login that was, as `/login` does:
 /// its login in the keychain and its account in the config.
-pub(crate) fn signed_in_outside(name: &str) -> Machine {
+pub(crate) fn signed_in_outside(name: &str) -> Rig {
     let m = machine(name);
     m.api
         .owned_by("access-elsewhere-refresh", owner("elsewhere"));
@@ -301,8 +265,8 @@ pub(crate) fn signed_in_outside(name: &str) -> Machine {
 
 /// Claude Code's config naming `who`, as another Claude Code process that started or signed
 /// in on `who`'s login writes it, with the login in the keychain left as it was.
-pub(crate) fn config_names(m: &Machine, who: &str) {
-    let path = m.root.join(".claude.json");
+pub(crate) fn config_names(m: &Rig, who: &str) {
+    let path = m.root.path().join(".claude.json");
     let mut config: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
     let owner = owner(who);
@@ -315,7 +279,7 @@ pub(crate) fn config_names(m: &Machine, who: &str) {
 }
 
 /// The activity log's lines of `verb`, as subject and outcome.
-pub(crate) fn audit_lines(m: &Machine, verb: &str) -> Vec<(String, String)> {
+pub(crate) fn audit_lines(m: &Rig, verb: &str) -> Vec<(String, String)> {
     crate::audit::read(&m.ctx, 100)
         .into_iter()
         .filter(|entry| entry.verb == verb)
@@ -324,7 +288,7 @@ pub(crate) fn audit_lines(m: &Machine, verb: &str) -> Vec<(String, String)> {
 }
 
 /// `state.json` as it is on disk, with when it was last written.
-pub(crate) fn state_file(m: &Machine) -> (Vec<u8>, std::time::SystemTime) {
+pub(crate) fn state_file(m: &Rig) -> (Vec<u8>, std::time::SystemTime) {
     let path = home::dir(&m.ctx).join("state.json");
     let written = std::fs::metadata(&path)
         .and_then(|meta| meta.modified())
@@ -332,33 +296,17 @@ pub(crate) fn state_file(m: &Machine) -> (Vec<u8>, std::time::SystemTime) {
     (std::fs::read(&path).expect("a state file"), written)
 }
 
-/// Where OpenAI puts its own claims in a standard token.
-const OPENAI: &str = "https://api.openai.com/auth";
-
 /// A Codex login as `codex login` writes one, for the account `who`.
 ///
 /// The access token is unique to the refresh token so every login has its own, which is
 /// what the scripted usage answers are keyed by.
 pub(crate) fn codex_login(who: &str, refresh: &str) -> Value {
-    json!({
-        "auth_mode": "chatgpt",
-        "OPENAI_API_KEY": null,
-        "tokens": {
-            "id_token": provider::jwt::unsigned(&json!({
-                "email": format!("{who}@example.com"),
-                "exp": NOW + 3600,
-                OPENAI: {
-                    "chatgpt_account_id": who,
-                    "chatgpt_user_id": format!("user-{who}"),
-                    "chatgpt_plan_type": "pro",
-                },
-            })),
-            "access_token": codex_access(refresh),
-            "refresh_token": refresh,
-            "account_id": who,
-        },
-        "last_refresh": "2025-10-09T08:00:00Z",
-    })
+    provider::codex::login_for_a_test(
+        who,
+        &format!("{who}@example.com"),
+        &codex_access(refresh),
+        refresh,
+    )
 }
 
 /// The identity Codex's own claims give the account `who`: the ChatGPT account with the
@@ -397,128 +345,25 @@ pub(crate) const STRANGER: crate::desktop_testing::Person = crate::desktop_testi
     session: "stranger-session",
 };
 
-// Claude's data folder on a machine `desktop_machine` made.
-pub(crate) fn data(m: &Machine) -> PathBuf {
-    m.ctx_home().join("claude/data")
-}
-
-pub(crate) fn settled(m: &Machine) -> Settled {
-    settle(&m.ctx, Permit::for_a_test(), Some(ProviderId::Desktop))
-        .expect("nothing of a document to recover")
-        .0
-}
-
-// Every entry under `root`, by its path from there, with each file's bytes.
-pub(crate) fn tree(root: &std::path::Path) -> Vec<(PathBuf, Option<Vec<u8>>)> {
-    fn walk(
-        root: &std::path::Path,
-        dir: &std::path::Path,
-        out: &mut Vec<(PathBuf, Option<Vec<u8>>)>,
-    ) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let within = path
-                .strip_prefix(root)
-                .expect("under the root")
-                .to_path_buf();
-            let kind = std::fs::symlink_metadata(&path).expect("metadata");
-            if kind.is_symlink() {
-                let target = std::fs::read_link(&path).expect("a link");
-                out.push((within, Some(target.to_string_lossy().as_bytes().to_vec())));
-            } else if kind.is_dir() {
-                out.push((within, None));
-                walk(root, &path, out);
-            } else {
-                out.push((within, Some(std::fs::read(&path).expect("a file"))));
-            }
-        }
-    }
-    let mut found = Vec::new();
-    walk(root, root, &mut found);
-    found.sort();
-    found
-}
-
-pub(crate) type Stat = (PathBuf, Option<u64>, u64, Option<std::time::SystemTime>);
-
-pub(crate) type Snapshot = (
-    Vec<u8>,
-    Vec<u8>,
-    Vec<(PathBuf, Option<Vec<u8>>)>,
-    Vec<String>,
-    Vec<Stat>,
-);
-
-// Claude's folder and each entry under it, links not followed: inode, size and when changed.
-pub(crate) fn stats(root: &std::path::Path) -> Vec<Stat> {
-    let stat = |within: PathBuf| {
-        let found = std::fs::symlink_metadata(root.join(&within)).ok();
-        let inode = crate::host::fs::testing::inode(&root.join(&within)).ok();
-        let size = found.as_ref().map_or(0, std::fs::Metadata::len);
-        (
-            within,
-            inode,
-            size,
-            found.and_then(|kind| kind.modified().ok()),
-        )
-    };
-    let mut found = vec![stat(PathBuf::new())];
-    found.extend(tree(root).into_iter().map(|(within, _)| stat(within)));
-    found
-}
-
-// What a refusal must leave as it was: the index, `pending`, Claude's folder and `parks`.
-pub(crate) fn snapshot(m: &Machine) -> Snapshot {
-    let home = home::dir(&m.ctx);
-    (
-        std::fs::read(home.join("state.json")).unwrap_or_default(),
-        std::fs::read(home.join("pending")).unwrap_or_default(),
-        tree(&data(m)),
-        store::folder::list(&m.ctx)
-            .expect("parks")
-            .unwrap_or_default(),
-        stats(&data(m)),
-    )
-}
-
-pub(crate) fn unchanged(m: &Machine, before: &Snapshot, why: &str) {
-    let now = snapshot(m);
-    assert!(now.0 == before.0, "{why}: state.json changed");
-    assert!(now.1 == before.1, "{why}: `pending` changed");
-    assert!(now.2 == before.2, "{why}: Claude's folder changed");
-    assert!(now.3 == before.3, "{why}: `parks` changed");
-    assert!(
-        now.4 == before.4,
-        "{why}: an entry of Claude's folder was touched"
-    );
-}
-
 // Claude closed and signed in to `work`, enrolled as `desktop/work` by the real `enroll`.
-pub(crate) fn desktop_machine(name: &str) -> Machine {
-    let root = std::env::temp_dir().join(format!(
-        "pitboard-desktop-{name}-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("a scratch home");
-    let mem = MemoryHost::new();
-    let api = ScriptedApi::new();
-    let ctx = Context::new(root.clone())
-        .with_pitboard_home(root.join(".pitboard"))
-        .with_memory_stores(Arc::clone(&mem))
-        .with_scripted_api(Arc::clone(&api))
-        .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
-        .with_awaited_every(std::time::Duration::from_millis(2))
-        .with_scratch_claude(root.join("claude"));
-    let m = Machine {
+pub(crate) fn desktop_machine(name: &str) -> Rig {
+    let scratch = scratch_home(name);
+    let root = scratch.path();
+    let ScratchMachine {
+        ctx,
+        host: mem,
+        api,
+    } = ScratchMachine::at(root, |ctx| {
+        ctx.with_pitboard_home(root.join(".pitboard"))
+            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
+            .with_awaited_every(std::time::Duration::from_millis(2))
+            .with_scratch_claude(root.join("claude"))
+    });
+    let m = Rig {
         ctx,
         mem,
         api,
-        root,
+        root: scratch,
         service: String::new(),
         which: ProviderId::Desktop,
     };
@@ -530,7 +375,7 @@ pub(crate) fn desktop_machine(name: &str) -> Machine {
 }
 
 // `work` in use and `home` parked, by the real sign-in inside Claude and the real switch.
-pub(crate) fn desktop_pair(name: &str) -> Machine {
+pub(crate) fn desktop_pair(name: &str) -> Rig {
     let m = desktop_machine(name);
     sign_in_inside(&m, "home", &HOME).expect("`home` added, `work` parked");
     let (settled, _) = settle(&m.ctx, Permit::for_a_test(), Some(ProviderId::Desktop))
@@ -542,7 +387,7 @@ pub(crate) fn desktop_pair(name: &str) -> Machine {
 // `pitboard enroll desktop/<label> --sign-in`, with Claude opened, signed in to `who` and quit
 // once the wait has said it saw Claude open.
 pub(crate) fn sign_in_inside(
-    m: &Machine,
+    m: &Rig,
     label: &str,
     who: &crate::desktop_testing::Person,
 ) -> Result<(Enrolled, Vec<Warning>)> {
@@ -580,36 +425,14 @@ pub(crate) fn sign_in_inside(
         .map_err(|failed| failed.error)
 }
 
-// A kill is a panic here, so a temporary it left is this process's own, which a sweep
-// leaves alone: renamed to a dead process's, as the one a killed run leaves is.
-pub(crate) fn as_a_dead_runs(m: &Machine) {
-    let data = m.root.join("claude/data");
-    for entry in std::fs::read_dir(&data).into_iter().flatten().flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if crate::atomic::temp_owner(&name) == Some(std::process::id()) {
-            let dead = name.replace(
-                &format!(".{}.", std::process::id()),
-                &format!(".{}.", i32::MAX - 1),
-            );
-            std::fs::rename(entry.path(), data.join(dead)).expect("renamed");
-        }
-    }
-}
-
-// Every folder that holds `who`'s session: Claude's, or one under `parks`.
-pub(crate) fn whereabouts(m: &Machine, who: &crate::desktop_testing::Person) -> Vec<String> {
-    sessions(m)
-        .into_iter()
-        .filter(|(_, login)| *login == who.login())
-        .map(|(place, _)| place)
-        .collect()
-}
-
-fn sessions(m: &Machine) -> Vec<(String, String)> {
+pub(crate) fn sessions(m: &Rig) -> Vec<(String, String)> {
     let LoginKind::Folder(app) = provider::of(m.which) else {
         return Vec::new();
     };
-    let mut places = vec![("Claude".to_string(), m.root.join("claude/data/Cookies"))];
+    let mut places = vec![(
+        "Claude".to_string(),
+        m.root.path().join("claude/data/Cookies"),
+    )];
     for name in store::folder::list(&m.ctx)
         .ok()
         .flatten()
@@ -625,89 +448,7 @@ fn sessions(m: &Machine) -> Vec<(String, String)> {
         .collect()
 }
 
-// A resting state: no move recorded, no temporary of Pitboard's in Claude's folder, no
-// `pending` line for a folder the index names, and Claude's folder holding nobody, or one
-// account whole under its own name.
-pub(crate) fn rested(m: &Machine, after: &str) {
-    let LoginKind::Folder(app) = provider::of(m.which) else {
-        panic!("{after}: a folder tool");
-    };
-    // The next command's sweep, which drops each `pending` line the index has taken up.
-    recover(m).unwrap_or_else(|e| panic!("{after}: {e}"));
-    let state = state::load(&m.ctx).expect("state");
-    assert!(
-        state.moving(m.which).is_none(),
-        "{after}: a move still waits"
-    );
-    // One session, one place: Claude's folder or one folder under `parks`.
-    let mut seen = HashSet::new();
-    for (place, login) in sessions(m) {
-        assert!(
-            seen.insert(login),
-            "{after}: the session in {place} is also somewhere else"
-        );
-    }
-    let data = m.root.join("claude/data");
-    for entry in std::fs::read_dir(&data).into_iter().flatten().flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        assert!(
-            crate::atomic::temp_owner(&name).is_none(),
-            "{after}: {name} was left in Claude's folder"
-        );
-    }
-    let pending = std::fs::read_to_string(home::dir(&m.ctx).join("pending")).unwrap_or_default();
-    for line in pending.lines() {
-        let name = line.strip_prefix("folder ").unwrap_or(line);
-        assert!(!state.names(name), "{after}: `pending` still lists {name}");
-    }
-    if !data.exists() {
-        return;
-    }
-    let settings = app.settings(&data).expect("settings");
-    let jar = data.join(app.items()[0]);
-    if !jar.exists() {
-        let left: Vec<String> = app
-            .items()
-            .iter()
-            .filter(|item| data.join(item).exists())
-            .map(|item| (*item).to_string())
-            .collect();
-        let listed = store::folder::list(&m.ctx)
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|name| store::folder::manifest(&m.ctx, &name).ok().flatten())
-            .any(|manifest| !left.is_empty() && manifest.left_in_folder == left);
-        assert!(
-            left.is_empty() && settings.account_keys(app).is_empty() || listed,
-            "{after}: Claude's folder has no jar and holds {left:?}"
-        );
-        return;
-    }
-    let Some(session) = app.session(&m.ctx, &jar).expect("the jar reads") else {
-        return;
-    };
-    let named = settings.named(app);
-    for account in state.accounts.iter().filter(|a| a.provider() == m.which) {
-        let holds_it = state
-            .in_use(m.which)
-            .is_some_and(|record| record.login == session.login)
-            && state
-                .account_in_use(m.which)
-                .is_some_and(|a| a.id == account.id);
-        if holds_it {
-            assert_eq!(
-                named.as_deref(),
-                Some(account.account_uuid.as_str()),
-                "{after}: {}'s session beside another name",
-                account.label
-            );
-        }
-    }
-}
-
-impl Machine {
+impl Rig {
     pub(crate) fn claude(&self) -> crate::desktop_testing::FakeClaude {
         crate::desktop_testing::FakeClaude::on(
             Arc::clone(&self.mem),
@@ -717,30 +458,26 @@ impl Machine {
     }
 }
 
-/// The same shape for Codex: `here` is signed in, `there` is parked and ready, and OpenAI
-/// answers for both.
-pub(crate) fn codex_machine(name: &str) -> Machine {
-    let root = std::env::temp_dir().join(format!(
-        "pitboard-crash-codex-{name}-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
+// The same for Codex, OpenAI answering for both.
+pub(crate) fn codex_machine(name: &str) -> Rig {
+    let scratch = scratch_home(name);
+    let root = scratch.path();
     std::fs::create_dir_all(root.join(".codex")).expect("a scratch codex home");
 
-    let mem = MemoryHost::new();
-    let api = ScriptedApi::new();
-    let ctx = Context::new(root.clone())
-        .with_pitboard_home(root.join(".pitboard"))
-        .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
-        .with_memory_stores(Arc::clone(&mem))
-        .with_scripted_api(Arc::clone(&api))
-        .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>);
-    let machine = Machine {
+    let ScratchMachine {
+        ctx,
+        host: mem,
+        api,
+    } = ScratchMachine::at(root, |ctx| {
+        ctx.with_pitboard_home(root.join(".pitboard"))
+            .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
+            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
+    });
+    let machine = Rig {
         ctx,
         mem,
         api,
-        root,
+        root: scratch,
         service: String::new(),
         which: ProviderId::Codex,
     };
@@ -758,7 +495,7 @@ pub(crate) fn codex_machine(name: &str) -> Machine {
         );
     }
 
-    std::fs::create_dir_all(machine.root.join(".pitboard")).expect("a Pitboard home");
+    std::fs::create_dir_all(machine.root.path().join(".pitboard")).expect("a Pitboard home");
     let parked_service =
         park::reserve(&machine.ctx, Permit::for_a_test(), &codex_id("there")).expect("a free name");
     let parked = park::store_at(
@@ -804,7 +541,7 @@ pub(crate) fn record_in_use(ctx: &Context, state: &mut State, which: ProviderId,
 
 /// A login of the account `who` as this machine's tool writes one, with the service taught
 /// whose it is where the tool has to ask.
-pub(crate) fn login_of(m: &Machine, who: &str, refresh: &str) -> Value {
+pub(crate) fn login_of(m: &Rig, who: &str, refresh: &str) -> Value {
     match Tool::of(m.which) {
         Tool::Claude => {
             m.api.owned_by(&format!("access-{refresh}"), owner(who));
@@ -815,7 +552,7 @@ pub(crate) fn login_of(m: &Machine, who: &str, refresh: &str) -> Value {
 }
 
 /// A sign-in the tool finished as `who`, left where a finished one leaves its login.
-pub(crate) fn signed_in(m: &Machine, who: &str, refresh: &str) -> SignIn {
+pub(crate) fn signed_in(m: &Rig, who: &str, refresh: &str) -> SignIn {
     planted(
         &m.ctx,
         Permit::for_a_test(),
@@ -826,7 +563,7 @@ pub(crate) fn signed_in(m: &Machine, who: &str, refresh: &str) -> SignIn {
 }
 
 /// The service answers a renewal of the login on `refresh` with one on `renewed`.
-pub(crate) fn renews(m: &Machine, refresh: &str, renewed: &str) {
+pub(crate) fn renews(m: &Rig, refresh: &str, renewed: &str) {
     match Tool::of(m.which) {
         Tool::Claude => {
             m.api.renews(
@@ -879,7 +616,7 @@ pub(crate) fn lock_dir(target: &std::path::Path) -> PathBuf {
 }
 
 /// What Claude Code's write lock guards.
-pub(crate) fn write_target(m: &Machine) -> PathBuf {
+pub(crate) fn write_target(m: &Rig) -> PathBuf {
     provider::document(ProviderId::Claude)
         .write_lock(&m.ctx)
         .expect("Claude Code takes one")
@@ -887,7 +624,7 @@ pub(crate) fn write_target(m: &Machine) -> PathBuf {
 
 /// Takes Claude Code's write lock at the moment it is called, as a session writing its
 /// credentials does.
-pub(crate) fn takes_the_write_lock(m: &Machine) -> impl FnOnce() + 'static {
+pub(crate) fn takes_the_write_lock(m: &Rig) -> impl FnOnce() + 'static {
     let writing = lock_dir(&write_target(m));
     move || {
         let parent = writing.parent().expect("the storage directory");
@@ -898,7 +635,7 @@ pub(crate) fn takes_the_write_lock(m: &Machine) -> impl FnOnce() + 'static {
 
 /// Lets go of Claude Code's write lock at the moment it is called, as a session that has
 /// written does.
-pub(crate) fn lets_go_of_the_write_lock(m: &Machine) -> impl FnOnce() + 'static {
+pub(crate) fn lets_go_of_the_write_lock(m: &Rig) -> impl FnOnce() + 'static {
     let writing = lock_dir(&write_target(m));
     move || std::fs::remove_dir(&writing).expect("the session lets go")
 }
@@ -911,7 +648,7 @@ pub(crate) fn lets_go_of_the_write_lock(m: &Machine) -> impl FnOnce() + 'static 
 /// under the write lock where it can take it, and otherwise once [`saves`] says it is let go
 /// of.
 pub(crate) fn renews_meanwhile(
-    m: &Machine,
+    m: &Rig,
     store: Arc<store::memory::MemoryStore>,
     session: &std::rc::Rc<Session>,
 ) -> impl FnOnce() + 'static {
@@ -952,7 +689,7 @@ pub(crate) fn renews_meanwhile(
 /// The session's save, held up by Claude Code's write lock, once that is let go of: only
 /// where `store` still holds the refresh token it sent, as Claude Code's save compares it, so
 /// nothing where that login has gone.
-pub(crate) fn saves(m: &Machine, store: &store::memory::MemoryStore, session: &Session) {
+pub(crate) fn saves(m: &Rig, store: &store::memory::MemoryStore, session: &Session) {
     if session.saving.borrow().is_none() {
         return;
     }
@@ -996,8 +733,8 @@ pub(crate) fn usage_answer(percent: f64) -> Value {
 
 /// Claude Code's usage cache, put in its config as 2.1.294 writes one: stamped with `here`,
 /// the account the config names, whichever login `answer` was asked with.
-pub(crate) fn cache_usage(m: &Machine, answer: Value) {
-    let path = m.root.join(".claude.json");
+pub(crate) fn cache_usage(m: &Rig, answer: Value) {
+    let path = m.root.path().join(".claude.json");
     let mut config: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("a config")).expect("JSON");
     config["cachedUsageUtilization"] = json!({
@@ -1053,7 +790,7 @@ pub(crate) fn in_organisation(label: &str, who: &str, org: &str, parked: Option<
 
 /// Everything that must be true after a killed change has been recovered, whatever the
 /// change was and wherever it died.
-pub(crate) fn hold(m: &Machine, after: &str) {
+pub(crate) fn hold(m: &Rig, after: &str) {
     let state = state::load(&m.ctx)
         .unwrap_or_else(|e| panic!("{after}: the state file must still parse, got {e}"));
     match provider::of(m.which) {
@@ -1129,8 +866,10 @@ pub(crate) fn hold(m: &Machine, after: &str) {
     }
 }
 
-// `hold`, for a test where `forget`, `uninstall` or the test itself deleted what was planted.
-pub(crate) fn hold_where_deleted(m: &Machine, after: &str) {
+// `hold`, for a Claude Desktop test where `forget`, `uninstall` or the test deleted what was
+// planted.
+#[cfg(not(windows))]
+pub(crate) fn hold_where_deleted(m: &Rig, after: &str) {
     let state = state::load(&m.ctx)
         .unwrap_or_else(|e| panic!("{after}: the state file must still parse, got {e}"));
     let LoginKind::Folder(app) = provider::of(m.which) else {
@@ -1143,8 +882,10 @@ pub(crate) fn hold_where_deleted(m: &Machine, after: &str) {
     hold_folder(m, after, &state, app, holds);
 }
 
-// `hold`, for a test that puts one session in two places on purpose (rows 14 to 20).
-pub(crate) fn hold_where_twice(m: &Machine, after: &str) {
+// `hold`, for a Claude Desktop test that puts one session in two places on purpose (rows 14
+// to 20).
+#[cfg(not(windows))]
+pub(crate) fn hold_where_twice(m: &Rig, after: &str) {
     let state = state::load(&m.ctx)
         .unwrap_or_else(|e| panic!("{after}: the state file must still parse, got {e}"));
     let LoginKind::Folder(app) = provider::of(m.which) else {
@@ -1181,7 +922,7 @@ impl Holds {
 
 // What must hold of a tool whose login is its app's files, after every step of a change.
 fn hold_folder(
-    m: &Machine,
+    m: &Rig,
     after: &str,
     state: &State,
     app: &'static dyn provider::folder::Folder,
@@ -1262,7 +1003,7 @@ fn hold_folder(
     }
 
     // Nothing was deleted: Claude makes a store only where one is missing, so never these bytes.
-    let data = m.root.join("claude/data");
+    let data = m.root.path().join("claude/data");
     if holds.nothing_deleted {
         for (store, file) in crate::desktop_testing::STORES {
             let within = std::path::Path::new(store).join(file);
@@ -1358,6 +1099,6 @@ fn hold_folder(
 }
 
 /// Recovery, run the way the next command runs it.
-pub(crate) fn recover(m: &Machine) -> Result<()> {
+pub(crate) fn recover(m: &Rig) -> Result<()> {
     settle(&m.ctx, Permit::for_a_test(), None).map(|_| ())
 }

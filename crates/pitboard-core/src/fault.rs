@@ -97,8 +97,8 @@ pub(crate) fn counting<T>(name: &'static str, change: impl FnOnce() -> T) -> (T,
     (outcome, reached.map_or(0, |(_, reached)| reached))
 }
 
-// Every point `change` reached, in order, with what it returned.
-#[cfg(test)]
+// Every point `change` reached, in order, with what it returned, for Claude Desktop's tests.
+#[cfg(all(test, not(windows)))]
 pub(crate) fn trail<T>(change: impl FnOnce() -> T) -> (T, Vec<&'static str>) {
     TRAIL.with(|trail| *trail.borrow_mut() = Some(Vec::new()));
     let outcome = change();
@@ -206,8 +206,8 @@ pub(crate) fn failing_counted<T>(name: &'static str, change: impl FnOnce() -> T)
     failing_as(asked, change)
 }
 
-// `failing`, the `nth` time the change reaches the step alone.
-#[cfg(test)]
+// `failing`, the `nth` time the change reaches the step alone, for Claude Desktop's tests.
+#[cfg(all(test, not(windows)))]
 pub(crate) fn failing_nth<T>(name: &'static str, nth: usize, change: impl FnOnce() -> T) -> T {
     let asked = Failing {
         name: name.to_string(),

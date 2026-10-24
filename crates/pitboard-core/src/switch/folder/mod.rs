@@ -1,5 +1,7 @@
 pub(crate) mod awaited;
 #[cfg(test)]
+// windows: Claude Desktop is macOS only: Windows refuses its folder calls
+#[cfg(not(windows))]
 #[allow(
     clippy::disallowed_methods,
     reason = "a test sets up its scratch files as a person or a tool would"
@@ -8,6 +10,8 @@ mod crash;
 mod moves;
 mod settle;
 #[cfg(test)]
+// windows: Claude Desktop is macOS only: Windows refuses its folder calls
+#[cfg(not(windows))]
 #[allow(
     clippy::disallowed_methods,
     reason = "a test sets up its scratch files as a person or a tool would"

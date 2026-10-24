@@ -372,12 +372,8 @@ mod tests {
     /// once it is opened any other way.
     #[test]
     fn a_schedule_is_not_repaired_from_inside_its_own_job() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-launchd-inside-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         std::fs::create_dir_all(home.join(".pitboard")).expect("a Pitboard home");
         let app = home.join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
         let bundled = home.join("Applications/Pitboard.app/Contents/Helpers/pitboard");
@@ -417,18 +413,13 @@ mod tests {
             "opened from Finder"
         );
         assert_eq!(installed_program(&ctx), Some(bundled));
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// The path is written as XML text and read back as the path it was.
     #[test]
     fn a_path_launchd_has_to_escape_reads_back_as_it_was() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-launchd-escape-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let bundled = home.join("Tools&Apps/Pitboard.app/Contents/Helpers/pitboard");
         std::fs::create_dir_all(bundled.parent().unwrap()).expect("its directory");
         std::fs::write(&bundled, "").expect("a program");
@@ -440,7 +431,6 @@ mod tests {
         assert!(written.contains("/Tools&amp;Apps/"), "{written}");
         assert!(!written.contains("/Tools&Apps/"), "{written}");
         assert_eq!(installed_program(&ctx), Some(bundled));
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// What it runs is one verb with no arguments, and what it does not do is as much the
@@ -520,13 +510,8 @@ mod tests {
     // launchd opens the log but makes no folder for it, and the log goes with the agent.
     #[test]
     fn the_watch_agent_keeps_its_lines_in_a_private_log_that_goes_with_it() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-launchd-log-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).expect("a scratch home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_memory_stores(MemoryHost::new());
         let launchd = Launchd::new(Arc::new(service::Pretend {
             refuse_start: Arc::default(),
@@ -556,7 +541,6 @@ mod tests {
                 .expect("taken away")
         );
         assert!(!folder.exists());
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// launchd refuses a plist that is not well formed, and a folder's name can hold any of
@@ -637,12 +621,8 @@ mod tests {
     /// and reads back as itself.
     #[test]
     fn a_variable_a_plist_cannot_hold_is_refused_by_name() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-launchd-unwritable-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its directory")).expect("made");
         std::fs::write(&program, "").expect("a program");
@@ -668,7 +648,6 @@ mod tests {
             !Launchd::agent(&ctx, Job::Renew).exists(),
             "nothing was written"
         );
-        let _ = std::fs::remove_dir_all(&home);
 
         let handed = pairs(&[("NO_PROXY", "a\rb")]);
         let body = plist(
@@ -692,12 +671,8 @@ mod tests {
     /// Pitboard wrote it before.
     #[test]
     fn an_installed_agent_carries_the_proxy_and_only_its_owner_can_read_it() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-launchd-proxy-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its directory")).expect("made");
         std::fs::write(&program, "").expect("a program");
@@ -732,6 +707,5 @@ mod tests {
             Some("mode 600".to_string())
         );
         assert_eq!(installed_program(&ctx), Some(program));
-        let _ = std::fs::remove_dir_all(&home);
     }
 }

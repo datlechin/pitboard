@@ -177,6 +177,11 @@ CASES = [
         [(f"{TESTS}:1", "this file, compiled out on Windows, says no reason")],
     ),
     (
+        "a test binary's module compiled out",
+        {"crates/a/tests/t/m.rs": '#![cfg(target_os = "macos")]\n\n#[test]\nfn a() {}\n'},
+        [("crates/a/tests/t/m.rs:1", "this file, compiled out on Windows, says no reason")],
+    ),
+    (
         "integration test files with a reason, and for Windows",
         {
             TESTS: "// windows: a keychain's ceiling is what `security` reads from stdin\n"

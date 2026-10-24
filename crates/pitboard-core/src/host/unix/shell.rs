@@ -437,18 +437,12 @@ mod tests {
     /// plain `/bin/sh` that reads no startup files, after `before`. `before` runs in a
     /// directory of the shell's own, which is taken away with it.
     struct FakeShell {
-        dir: PathBuf,
+        dir: tempfile::TempDir,
     }
 
     impl FakeShell {
-        fn new(name: &str, before: &str) -> FakeShell {
-            let dir = std::env::temp_dir().join(format!(
-                "pitboard-shell-{name}-{}-{:?}",
-                std::process::id(),
-                std::thread::current().id()
-            ));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).expect("a directory for the shell");
+        fn new(before: &str) -> FakeShell {
+            let dir = tempfile::tempdir().expect("a scratch folder");
             let script = format!(
                 "#!/bin/sh\n[ \"$1 $2 $3\" = \"-l -i -c\" ] || exit 64\n\
                  cd \"$(/usr/bin/dirname \"$0\")\" || exit 65\n{before}\nexec /bin/sh -c \"$4\"\n"
@@ -458,7 +452,7 @@ mod tests {
             // copy, and running the shell would fail with ETXTBSY.
             let status = std::process::Command::new("/bin/sh")
                 .args(["-c", "printf %s \"$2\" > \"$1\" && chmod 755 \"$1\"", "sh"])
-                .arg(dir.join("shell"))
+                .arg(dir.path().join("shell"))
                 .arg(script)
                 .status()
                 .expect("sh runs");
@@ -467,22 +461,16 @@ mod tests {
         }
 
         fn path(&self) -> PathBuf {
-            self.dir.join("shell")
+            self.dir.path().join("shell")
         }
 
         /// The processes `before` wrote down in `pids`, one per line.
         fn pids(&self) -> Vec<libc::pid_t> {
-            std::fs::read_to_string(self.dir.join("pids"))
+            std::fs::read_to_string(self.dir.path().join("pids"))
                 .unwrap_or_default()
                 .lines()
                 .filter_map(|line| line.trim().parse().ok())
                 .collect()
-        }
-    }
-
-    impl Drop for FakeShell {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
 
@@ -508,7 +496,7 @@ mod tests {
     /// back.
     #[test]
     fn a_shell_is_run_and_its_path_read_back() {
-        let shell = FakeShell::new("round", "echo 'Last login: never'");
+        let shell = FakeShell::new("echo 'Last login: never'");
         let given = shell.path();
         let answer = login_path(
             &env(&[
@@ -526,7 +514,7 @@ mod tests {
     /// A shell that fails has no answer.
     #[test]
     fn a_shell_that_fails_has_no_answer() {
-        let failing = FakeShell::new("fails", "exit 3");
+        let failing = FakeShell::new("exit 3");
         assert_eq!(
             run(
                 &failing.path(),
@@ -555,10 +543,7 @@ mod tests {
     /// likes.
     #[test]
     fn a_shell_that_hangs_is_stopped_with_everything_it_started() {
-        let hanging = FakeShell::new(
-            "hangs",
-            "echo $$ > pids; /bin/sleep 30 & echo $! >> pids; wait",
-        );
+        let hanging = FakeShell::new("echo $$ > pids; /bin/sleep 30 & echo $! >> pids; wait");
         let started = Instant::now();
         assert_eq!(
             run(
@@ -591,7 +576,7 @@ mod tests {
     /// lets go, which here is well after the shell's time is up.
     #[test]
     fn a_shell_is_done_when_it_exits_even_if_something_it_started_is_not() {
-        let shell = FakeShell::new("leaves", "/bin/sleep 10 & echo $! > pids");
+        let shell = FakeShell::new("/bin/sleep 10 & echo $! > pids");
         let given = shell.path();
         let answer = login_path(
             &env(&[

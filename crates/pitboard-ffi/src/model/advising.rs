@@ -1,14 +1,11 @@
-//! Advice about which account to switch to, and telling each run-out once, as the Swift
-//! model did them: AppModelTests.swift's tests on those and PresentationTests.swift's on what
-//! the window says of them, each under its own name in snake case, driven through
+//! Advice about which account to switch to, and telling each run-out once, driven through
 //! `State::apply` by hand. Telling is a notification posted through the app's system, which a
 //! test's machine keeps, and the record of what was told, which it keeps too.
 
 use super::advice::{Advice, Told};
 use super::switching::switch;
-use super::testing::{
-    Hand, Machine, already_active, refusal, status, switched, titled, warned, warning,
-};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{already_active, refusal, status, switched, titled, warned, warning};
 use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
@@ -44,12 +41,10 @@ fn told_work() -> String {
 /// A session's status line records that the account in use has run out, and the menu bar
 /// shows it within seconds. The advice to switch, and its notification, came only with the
 /// app's next read of its own, minutes later.
-///
-/// AppModelTests.swift's numbersThatRunAnAccountOutAdviseAtOnceAndTellItOnce.
 #[test]
 fn numbers_that_run_an_account_out_advise_at_once_and_tell_it_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert!(model.state.advice.is_empty());
 
@@ -81,12 +76,10 @@ fn numbers_that_run_an_account_out_advise_at_once_and_tell_it_once() {
 
 /// Advice says the account in use has none of a limit left. Once what is recorded shows the
 /// window after it, with room, that is no longer true.
-///
-/// AppModelTests.swift's adviceTheNumbersNoLongerBearOutIsPutAway.
 #[test]
 fn advice_the_numbers_no_longer_bear_out_is_put_away() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.state.advice.len(), 1);
 
@@ -99,12 +92,10 @@ fn advice_the_numbers_no_longer_bear_out_is_put_away() {
 /// Advice told when what sessions recorded ran the account out stays while the numbers bear
 /// it out, whatever read comes next. The app's own read worked advice out afresh, leaving out
 /// what had been told, so opening the panel put it away with the account still at 100%.
-///
-/// AppModelTests.swift's adviceToldFromWhatSessionsRecordedOutlastsTheAppsNextRead.
 #[test]
 fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
     model.refresh(&mut machine);
     machine.offline = Ok(status(vec![work(100.0, 7_200), personal()]));
     machine.readings += 1;
@@ -119,12 +110,10 @@ fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
 
 /// The same for advice a read told: the next read found the window already told about and
 /// left it out, so it was gone a minute later, or at once if the panel was opened again.
-///
-/// AppModelTests.swift's adviceToldByAReadOutlastsTheNextReadAndIsToldOnce.
 #[test]
 fn advice_told_by_a_read_outlasts_the_next_read_and_is_told_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.state.advice.len(), 1);
 
@@ -142,12 +131,10 @@ fn advice_told_by_a_read_outlasts_the_next_read_and_is_told_once() {
 /// A change to the account index can leave the account in use run out, and the poll that
 /// notices it reads who is signed in and the numbers again. What they show is advised then,
 /// not at the app's next read of its own.
-///
-/// AppModelTests.swift's theAccountIndexChangingElsewhereIsAdvisedOnAtOnce.
 #[test]
 fn the_account_index_changing_elsewhere_is_advised_on_at_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(20.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(20.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert!(model.state.advice.is_empty());
 
@@ -162,8 +149,6 @@ fn the_account_index_changing_elsewhere_is_advised_on_at_once() {
 /// account offered may have been forgotten, may need signing in again or may have run out
 /// itself since, and choosing it then failed. What it says is left follows the numbers, and
 /// with nothing left to offer the advice goes.
-///
-/// AppModelTests.swift's adviceOffersWhatCanStillBeUsedAfterEveryRead.
 #[test]
 fn advice_offers_what_can_still_be_used_after_every_read() {
     let spent = || work(100.0, 7_200);
@@ -182,7 +167,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
             .collect()
     }
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         spent(),
         other("personal", 10.0, true),
         other("side", 40.0, true),
@@ -250,12 +235,11 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
 /// A switch puts away the advice about its own tool, which is about the account it has just
 /// left, and leaves another tool's: as true as it was, and never told again.
 ///
-/// AppModelTests.swift's `use`, which the Swift tested through PresentationTests.swift's
-/// adviceAboutOneToolOutlivesASwitchOfAnother, and that test's notices are presenting's.
+/// What its notices say is presenting's.
 #[test]
 fn a_switch_puts_away_the_advice_about_its_own_tool() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         work(100.0, 7_200),
         personal(),
         account(Some("side"))
@@ -282,13 +266,10 @@ fn a_switch_puts_away_the_advice_about_its_own_tool() {
 /// same words, and switches to the account offered: worked once for both, where the Swift
 /// worded the panel's, the notification's and a sentence only its tests spoke each their own
 /// way. Beside another tool's accounts it names the tool beneath its title.
-///
-/// Advice.swift's `notification` and Notices.swift's advice, which the Swift tested only
-/// through MenuTests.swift's theAccountWithTheMostLeftIsOffered and its userInfo.
 #[test]
 fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted,
@@ -309,7 +290,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     assert_eq!(notice.lines, [machine.posted[0].body.clone()]);
 
     let mut both = Hand::new();
-    let mut beside = Machine::reading(Ok(status(vec![
+    let mut beside = Stub::reading(Ok(status(vec![
         work(100.0, 7_200),
         personal(),
         account(Some("job")).of("codex").signed_in().build(),
@@ -335,7 +316,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
 #[test]
 fn a_run_out_notified_before_a_relaunch_is_not_notified_again() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_201), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_201), personal()])));
     machine.told_before = Told::from([(told_work(), 7_200)]);
     model.send(Intent::Start);
     model.run(&mut machine);
@@ -368,14 +349,14 @@ fn a_run_out_notified_before_a_relaunch_is_not_notified_again() {
 #[test]
 fn nothing_is_told_before_what_was_told_is_in() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     machine.told_before = Told::from([(told_work(), 7_200)]);
     model.send(Intent::Start);
     model.run_but(&mut machine, |job| {
         matches!(job, super::state::Job::LoadKept)
     });
     assert_eq!(
-        model.count(super::testing::any_read),
+        model.count(super::testing::machine::any_read),
         1,
         "the read goes ahead"
     );
@@ -394,7 +375,7 @@ fn nothing_is_told_before_what_was_told_is_in() {
 #[test]
 fn a_record_that_came_to_nothing_is_nothing_told() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.send(Intent::Start);
     let kept = model.take(|job| matches!(job, super::state::Job::LoadKept));
     model.run(&mut machine);
@@ -413,7 +394,7 @@ fn a_record_that_came_to_nothing_is_nothing_told() {
 #[test]
 fn what_stands_in_for_a_failed_read_is_not_advised_on() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "unreachable",
         "could not be reached",
         Vec::new(),
@@ -447,7 +428,7 @@ fn what_stands_in_for_a_failed_read_is_not_advised_on() {
 #[test]
 fn advice_goes_once_the_account_is_back_under_its_limit() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.state.advice.len(), 1);
     machine.answer = Ok(status(vec![work(97.0, 7_200), personal()]));
@@ -461,7 +442,7 @@ fn advice_goes_once_the_account_is_back_under_its_limit() {
 #[test]
 fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     machine.told_before = Told::from([(told_work(), 7_200)]);
     model.send(Intent::Start);
     let kept = model.take(|job| matches!(job, super::state::Job::LoadKept));
@@ -485,7 +466,7 @@ fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
 #[test]
 fn a_switch_to_the_account_in_use_keeps_the_advice_about_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(switches_to(&model), ["claude/personal"]);
 
@@ -506,7 +487,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
          `work`’s.",
     );
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![work(100.0, 7_200), personal()],
         vec![names_another],
     )));
@@ -536,7 +517,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
 #[test]
 fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     let posted = machine.posted[0].clone();
 
@@ -637,7 +618,7 @@ fn model_clicked(argument: &str, then: impl FnOnce(&Hand)) {
 // What happens once a limit reaches the share chosen.
 
 /// The app's preferences read from their file, with `choice` made at the default share.
-fn chose(model: &mut Hand, machine: &mut Machine, choice: AtLimit) {
+fn chose(model: &mut Hand, machine: &mut Stub, choice: AtLimit) {
     let mut preferences = super::preferences::Preferences::default();
     preferences.choose(choice);
     model.give(super::state::Answer::Kept {
@@ -654,7 +635,7 @@ fn chose(model: &mut Hand, machine: &mut Machine, choice: AtLimit) {
 #[test]
 fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(94.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(94.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert!(machine.posted.is_empty(), "below the share");
 
@@ -692,7 +673,7 @@ fn a_limit_past_its_reset_is_neither_notified_nor_advised_on() {
         let mut model = Hand::new();
         let mut read = status(vec![work(percent, 1_800_000_000), personal()]);
         read.now = 1_800_000_000;
-        let mut machine = Machine::reading(Ok(read));
+        let mut machine = Stub::reading(Ok(read));
         model.refresh(&mut machine);
         assert!(machine.posted.is_empty(), "{percent}");
         assert!(switches_to(&model).is_empty(), "{percent}");
@@ -705,7 +686,7 @@ fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
     let mut model = Hand::new();
     let mut read = status(vec![work(97.0, 1_800_003_900)]);
     read.now = 1_800_000_000;
-    let mut machine = Machine::reading(Ok(read));
+    let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
     assert_eq!(notice.title, "work has used 97% of its 5-hour limit");
@@ -723,7 +704,7 @@ fn an_account_past_the_share_is_not_offered_at_the_share() {
         .build();
     let mut read = status(vec![work(96.0, 1_800_003_900), past]);
     read.now = 1_800_000_000;
-    let mut machine = Machine::reading(Ok(read));
+    let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
     assert_eq!(notice.body, "Resets in 1h 05m.");
@@ -734,7 +715,7 @@ fn an_account_past_the_share_is_not_offered_at_the_share() {
 #[test]
 fn do_nothing_notifies_nothing() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     chose(&mut model, &mut machine, AtLimit::Nothing);
     model.refresh(&mut machine);
     assert!(machine.posted.is_empty());
@@ -754,13 +735,15 @@ fn switch_notifies_of_codex_alone() {
         if signed_in { made.signed_in() } else { made }.build()
     };
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         work(97.0, 7_200),
         personal(),
         codex("job", 97.0, true),
         codex("side", 10.0, false),
     ])));
-    machine.look = Ok(crate::AutoLooked::Stands(super::testing::watching("work")));
+    machine.look = Ok(crate::AutoLooked::Stands(
+        super::testing::records::watching("work"),
+    ));
     chose(&mut model, &mut machine, AtLimit::Switch);
     model.refresh(&mut machine);
     let posted: Vec<(&str, Option<&str>)> = machine
@@ -779,7 +762,7 @@ fn switch_notifies_of_codex_alone() {
 #[test]
 fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
     chose(&mut model, &mut machine, AtLimit::Notify);
     let shown = model.on_a_mac().machine;
     let titles: Vec<String> = shown

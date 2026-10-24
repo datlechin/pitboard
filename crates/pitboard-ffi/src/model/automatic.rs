@@ -6,7 +6,8 @@
 use super::advice::Told;
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
-use super::testing::{Hand, Machine, Refusal, any_read, offline_read, refusal, status, watching};
+use super::testing::machine::{Hand, Stub, any_read, offline_read};
+use super::testing::records::{Refusal, refusal, status, watching};
 use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
@@ -43,7 +44,7 @@ fn read_preferences(model: &mut Hand, on: bool) {
 
 /// The app's preferences read with switching by itself on, and what they lead to answered as
 /// `machine` stands. Nothing is looked at before the first read.
-fn turned_on(model: &mut Hand, machine: &mut Machine) {
+fn turned_on(model: &mut Hand, machine: &mut Stub) {
     read_preferences(model, true);
     model.run(machine);
 }
@@ -105,7 +106,7 @@ const ON: &str = r#"{"has_been_seen":true,"auto_switch":true}"#;
 
 /// The app started with switching by itself on, as `app.json` says, its first read and the
 /// numbers that read recorded looked at: two seconds in, with the next look due at 32.
-fn started_on(machine: &mut Machine) -> Hand {
+fn started_on(machine: &mut Stub) -> Hand {
     machine.preferences_file = Some(ON.into());
     let mut model = Hand::new();
     model.send(Intent::Start);
@@ -118,7 +119,7 @@ fn started_on(machine: &mut Machine) -> Hand {
 
 /// `seconds` pass one at a time, the timers due in each answered, except the jobs that are
 /// `but`, which wait.
-fn seconds(model: &mut Hand, machine: &mut Machine, seconds: u64, but: fn(&Job) -> bool) {
+fn seconds(model: &mut Hand, machine: &mut Stub, seconds: u64, but: fn(&Job) -> bool) {
     for _ in 0..seconds {
         model.later(Duration::from_secs(1));
         model.tick();
@@ -139,7 +140,7 @@ fn standing(model: &Hand) -> Option<String> {
 fn nothing_is_switched_by_itself_unless_somebody_turned_it_on() {
     let mut model = Hand::new();
     read_preferences(&mut model, false);
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     machine.look = Ok(AutoLooked::Act);
     model.refresh(&mut machine);
     assert_eq!(model.count(auto_look), 0, "the core is not even asked");
@@ -155,7 +156,7 @@ fn nothing_is_switched_by_itself_unless_somebody_turned_it_on() {
 #[test]
 fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwhile() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(94.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(94.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     assert_eq!(machine.looked_at, [95], "after the read");
@@ -196,7 +197,7 @@ fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwh
 /// nobody writing anything.
 #[test]
 fn it_looks_again_every_thirty_seconds_though_nothing_was_written() {
-    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     let mut model = started_on(&mut machine);
     let looked = machine.looked_at.len();
     assert!(looked > 0, "after the read and the numbers it recorded");
@@ -218,7 +219,7 @@ fn it_looks_again_every_thirty_seconds_though_nothing_was_written() {
 #[test]
 fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(62.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(62.0), personal()])));
     turned_on(&mut model, &mut machine);
     let now = model.now.epoch();
     let watching = |held_until| {
@@ -258,10 +259,10 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
 #[test]
 fn the_settings_say_why_it_is_not_switching() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     let now = model.now.epoch();
-    let says = |model: &mut Hand, machine: &mut Machine, looked: AutoSwitched| {
+    let says = |model: &mut Hand, machine: &mut Stub, looked: AutoSwitched| {
         machine.look = Ok(AutoLooked::Stands(looked));
         model.refresh(machine);
         standing(model).expect("something said")
@@ -354,7 +355,7 @@ fn the_settings_say_why_it_is_not_switching() {
 #[test]
 fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = switched_work_to_personal();
@@ -407,7 +408,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
 #[test]
 fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     assert_eq!(
@@ -419,9 +420,9 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
         )
     );
 
-    machine.answer = Ok(super::testing::warned(
+    machine.answer = Ok(super::testing::records::warned(
         vec![work(40.0), personal()],
-        vec![super::testing::warning(
+        vec![super::testing::records::warning(
             "fallback_login",
             "/Users/x/.claude/.credentials.json is there with no Claude Code login in it.",
         )],
@@ -450,7 +451,7 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
 #[test]
 fn a_reason_it_did_not_switch_is_said_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     let overridden = |resets: i64| AutoSwitched::Skipped {
         key: format!("skipped/work/session//{resets}/auth_overridden"),
@@ -495,7 +496,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
 #[test]
 fn a_reason_it_is_not_watching_is_said_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Stands(AutoSwitched::NotWatching {
         key: "not-watching/switch_interrupted".into(),
@@ -537,7 +538,7 @@ fn a_reason_it_is_not_watching_is_said_once() {
 #[test]
 fn a_refusal_is_said_once_and_lets_go() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Err(refusal(
@@ -565,7 +566,7 @@ fn a_refusal_is_said_once_and_lets_go() {
 #[test]
 fn after_a_refusal_it_waits_as_the_core_waits() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Err(unwritable());
@@ -615,7 +616,7 @@ fn after_a_refusal_it_waits_as_the_core_waits() {
 /// not at the next look 30 seconds after the last.
 #[test]
 fn the_next_switch_is_asked_for_as_a_refusals_wait_ends() {
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Err(unwritable());
     machine.preferences_file = Some(ON.into());
@@ -640,7 +641,7 @@ fn the_next_switch_is_asked_for_as_a_refusals_wait_ends() {
 #[test]
 fn a_switch_ends_a_row_of_refusals() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Err(unwritable());
@@ -671,7 +672,7 @@ fn a_switch_ends_a_row_of_refusals() {
 #[test]
 fn turned_off_and_on_again_it_asks_at_once_though_a_refusals_wait_runs() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Err(unwritable());
@@ -696,7 +697,7 @@ fn turned_off_and_on_again_it_asks_at_once_though_a_refusals_wait_runs() {
 #[test]
 fn a_look_answered_after_it_was_turned_off_asks_for_no_switch() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     model.send(Intent::Refresh { asked: false });
@@ -717,7 +718,7 @@ fn a_look_answered_after_it_was_turned_off_asks_for_no_switch() {
 #[test]
 fn a_decision_answered_after_it_was_turned_off_says_nothing_and_holds_nothing_back() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     for came in [Err(unwritable()), Ok(no_room(9_000))] {
@@ -750,7 +751,7 @@ fn a_decision_answered_after_it_was_turned_off_says_nothing_and_holds_nothing_ba
 #[test]
 fn a_switch_made_as_it_was_turned_off_is_still_said() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = switched_work_to_personal();
@@ -788,7 +789,7 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
 #[test]
 fn the_first_look_of_a_launch_follows_its_first_read() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     machine.preferences_file = Some(ON.into());
     machine.look = Ok(AutoLooked::Stands(AutoSwitched::NotWatching {
         key: "not-watching/no_reading/work".into(),
@@ -811,7 +812,7 @@ fn the_first_look_of_a_launch_follows_its_first_read() {
 #[test]
 fn a_read_that_landed_before_the_preferences_is_looked_at_as_they_are_read() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     machine.preferences_file = Some(ON.into());
     model.send(Intent::Start);
     model.run_but(&mut machine, |job| matches!(job, Job::LoadKept));
@@ -825,7 +826,7 @@ fn a_read_that_landed_before_the_preferences_is_looked_at_as_they_are_read() {
 /// A look lost to a panic says nothing, and the next comes 30 seconds later.
 #[test]
 fn after_a_look_is_lost_the_next_comes_at_its_time() {
-    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     let mut model = started_on(&mut machine);
     seconds(&mut model, &mut machine, 30, auto_look);
     let look = model.take(auto_look);
@@ -842,7 +843,7 @@ fn after_a_look_is_lost_the_next_comes_at_its_time() {
 #[test]
 fn a_change_made_elsewhere_is_looked_at() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(40.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     let looked = machine.looked_at.len();
@@ -858,7 +859,7 @@ fn a_change_made_elsewhere_is_looked_at() {
 #[test]
 fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(97.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Ok(no_room(9_000));
@@ -883,7 +884,7 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
 #[test]
 fn not_while_another_switch_is_under_way() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(90.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     model.send(Intent::SwitchTo {
@@ -904,7 +905,7 @@ fn not_while_another_switch_is_under_way() {
 fn not_while_another_change_is_under_way() {
     let mut model = Hand::new();
     let spare = account(Some("spare")).build();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0), personal(), spare])));
+    let mut machine = Stub::reading(Ok(status(vec![work(90.0), personal(), spare])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     model.send(Intent::Forget {
@@ -940,7 +941,7 @@ fn turning_it_on_is_kept_and_looks_at_once() {
     assert!(!model.shown().machine.at_limit.enabled);
 
     read_preferences(&mut model, false);
-    let mut machine = Machine::reading(Ok(status(vec![work(92.0), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(92.0), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.count(auto_look), 0);
 

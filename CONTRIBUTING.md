@@ -91,8 +91,12 @@ build it first, with the `--release` or `--target` the tests use:
 cargo build --locked -p pitboard --example stand-in
 ```
 
-Unit tests run on `MemoryHost` and `Context::for_unit_test`, which reach no real home.
-Integration tests use the harness in `crates/pitboard/tests/common`.
+Unit tests run on `MemoryHost` and `Context::for_unit_test`, which reach no real home. A
+test that needs a machine of its own with its services scripted builds it with
+`pitboard_core::testing::ScratchMachine`, which panics where its context still reaches this
+machine's keychain or the network. The command line's tests are one test binary,
+`crates/pitboard/tests/cli`: a new one is a module its `main.rs` names, on the harness in its
+`common`.
 
 A build for tests finds Claude Desktop only in a scratch folder a test names, with
 `Context::with_scratch_claude` or `PITBOARD_TEST_CLAUDE_DESKTOP`. Claude's data folder is
@@ -105,9 +109,13 @@ open. `pitboard_core::testing::desktop` writes a data folder as Claude leaves on
 As root, under `sudo`, from an elevated terminal on Windows, or on a file system without Unix
 modes, some tests fail and say why.
 
-The snapshots in `crates/pitboard/tests/snapshots` pin the `--json` contract, which changes
+The snapshots in `crates/pitboard/tests/cli/snapshots` pin the `--json` contract, which changes
 only on purpose. Review a changed one with `cargo insta review`, and say in the pull request
-why the contract moved.
+why the contract moved. They hold each message as `[message]`: its code is the contract.
+
+A test of what Pitboard does checks codes and fields, and compares a sentence with the
+function that makes it. Each sentence is pinned once, in the tests of the module that makes
+it: `pitboard_core`'s `words.rs` or `error.rs`, or `pitboard-ffi`'s `present/words.rs`.
 
 For a change to the install script, `packaging/install.sh`, another template in `packaging/`,
 or `.github/scripts/fill-template.sh`, which fills them at release time:

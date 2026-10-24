@@ -946,7 +946,7 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     let path = file(ctx);
     home::check_absolute(ctx)?;
     home::check_location(ctx, &home::dir(ctx))?;
-    let raw = match std::fs::read_to_string(&path) {
+    let raw = match atomic::read(&path, |path| std::fs::read_to_string(path)) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((State::default(), true)),
         Err(source) => return Err(Error::StateUnreadable { path, source }),
@@ -1186,8 +1186,8 @@ mod tests {
     /// kept for when its slot is read again, whatever another slot records meanwhile.
     #[test]
     fn whose_login_another_slot_holds_is_not_claimed_here() {
-        let home = std::env::temp_dir().join(format!("pitboard-slots-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let here = Context::new(home.clone()).with_pitboard_home(home.clone());
         let elsewhere = here
             .clone()
@@ -1233,7 +1233,6 @@ mod tests {
             Some(&there),
             "and so is the other's"
         );
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// `CODEX_HOME` picks which `auth.json` is Codex's live login, the way
@@ -1241,12 +1240,8 @@ mod tests {
     /// says nothing about another, and says nothing about Claude Code's at all.
     #[test]
     fn another_codex_home_is_another_codex_slot() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-codex-slots-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let here = Context::new(home.clone()).with_pitboard_home(home.clone());
         let mut state = State::default();
         state.accounts.push(account("work", None));
@@ -1276,7 +1271,6 @@ mod tests {
             label_in_use(&load(&here).unwrap(), ProviderId::Codex).as_deref(),
             Some("work")
         );
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// A file written by the version in people's hands today. The command line and the app
@@ -1369,13 +1363,8 @@ mod tests {
     /// as what the service said until the service is asked.
     #[test]
     fn a_schema_5_file_comes_forward_with_the_account_in_use_unconfirmed() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-schema-5-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
         std::fs::write(
             home.join("state.json"),
@@ -1429,18 +1418,12 @@ mod tests {
         assert_eq!(written["schema"], SCHEMA);
         assert!(written.get("active").is_none(), "{written}");
         assert_eq!(written["in_use"]["claude"]["known_at"], 0);
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]
     fn a_schema_6_file_is_written_back_at_schema_8_and_otherwise_as_it_was() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-schema-6-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
         let mut state = State::default();
         state.accounts.push(account("work", Some(park("parked"))));
@@ -1465,18 +1448,12 @@ mod tests {
 
         written["schema"] = 8.into();
         assert_eq!(read(&path), written);
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]
     fn a_schema_7_file_0_11_0_wrote_is_written_back_at_schema_8_with_its_discarded_parks_typed() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-schema-7-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
         let mut state = State::default();
         state.accounts.push(account("work", Some(park("parked"))));
@@ -1501,7 +1478,6 @@ mod tests {
             {"service": "pitboard-park-b-2"}
         ]);
         assert_eq!(read(&path), written);
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]
@@ -1722,13 +1698,8 @@ mod tests {
     /// 0.11.0 kept a Codex plan beside the workspace, as its token says it.
     #[test]
     fn a_codex_plan_0_11_0_recorded_is_the_accounts_plan() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-plan-0-11-0-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
         let mut state = State::default();
         state.accounts.push(codex_account("work"));
@@ -1749,7 +1720,6 @@ mod tests {
         written["schema"] = 8.into();
         assert_eq!(read(&path), written);
         assert_eq!(read(&path)["accounts"][0]["label"], "work");
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// A file as 0.8.0 writes it. Each account keeps the id its parks, readings and windows
@@ -1904,13 +1874,8 @@ mod tests {
     /// corrupt, its advice would be to delete it, which orphans every parked login.
     #[test]
     fn an_account_of_an_unknown_tool_asks_for_an_upgrade_not_a_deletion() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-unknown-tool-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
         std::fs::write(
             home.join("state.json"),
@@ -1930,7 +1895,6 @@ mod tests {
         assert_eq!(err.code(), "state_names_unknown_tool");
         assert!(err.to_string().contains("somethingnew"), "{err}");
         assert!(!err.to_string().contains("Delete"), "{err}");
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// Two writes of the index within one second are two changes to a front end that follows
@@ -1938,13 +1902,8 @@ mod tests {
     /// until it next looked for another reason.
     #[test]
     fn two_writes_within_one_second_are_two_changes() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-changed-at-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
         std::fs::write(home.join("state.json"), "{}").unwrap();
         let second = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_760_000_000);
@@ -1959,7 +1918,6 @@ mod tests {
             changed_at(&ctx)
         };
         assert_ne!(written_at(100), written_at(600));
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// The other direction cannot work, and the message has to say which half to upgrade.

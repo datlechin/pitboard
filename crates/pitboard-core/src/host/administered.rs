@@ -111,23 +111,13 @@ pub(crate) fn unread(e: &std::io::Error) -> Administered {
 mod tests {
     use super::*;
 
-    fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-administered-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
-        dir
-    }
-
     /// A file that is not there sets nothing. One that is there is read whole, and one that
     /// cannot be read, or is not text, says so rather than reading as unset: a tool that
     /// cannot read it does not start, which is not the same as nothing being set.
     #[test]
     fn a_file_is_unset_set_or_unreadable() {
-        let dir = scratch("file");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         assert_eq!(read_text(&dir.join("absent.toml")), Administered::Unset);
         std::fs::write(dir.join("set.toml"), "a = 1\n").expect("written");
         assert_eq!(
@@ -139,25 +129,24 @@ mod tests {
             read_text(&dir.join("bytes.toml")),
             Administered::Unreadable("is not UTF-8 text".into())
         );
-        let folder = read_text(&dir);
+        let folder = read_text(dir);
         assert!(
             matches!(&folder, Administered::Unreadable(why) if why.starts_with("cannot be read")),
             "a folder where the file should be cannot be read as one: {folder:?}"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_bounded_read_takes_a_file_up_to_its_limit_alone() {
-        let dir = scratch("bounded");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let file = dir.join(".api_key");
         assert_eq!(read_up_to(&file, 8), Administered::Unset);
         std::fs::write(&file, "12345678").expect("written");
         assert_eq!(read_up_to(&file, 8), Administered::Set("12345678".into()));
         std::fs::write(&file, "123456789").expect("written");
         assert_eq!(read_up_to(&file, 8), larger_than(8));
-        assert_eq!(read_up_to(&dir, 8), not_a_file());
-        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(read_up_to(dir, 8), not_a_file());
     }
 
     /// No build for tests reads what this machine's administrator set.

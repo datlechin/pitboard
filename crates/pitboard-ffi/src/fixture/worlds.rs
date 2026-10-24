@@ -28,7 +28,7 @@ use pitboard_core::state::Key;
 use pitboard_core::testing::desktop::{self as desktop, FakeClaude, JarAs};
 use pitboard_core::testing::fs as files;
 use pitboard_core::testing::{
-    Fault, FixedClock, MemoryHost, ScriptedApi, live_service, unsigned_token,
+    Fault, FixedClock, MemoryHost, ScratchMachine, ScriptedApi, live_service, unsigned_token,
 };
 use pitboard_core::usage;
 use serde_json::json;
@@ -277,7 +277,7 @@ pub(crate) struct Login {
 }
 
 /// A world's machine: everything the core reaches on it, and what the fixture plays on it.
-pub(crate) struct Machine {
+pub(crate) struct Stage {
     /// The fixture's own folder, which holds everything on disk.
     folder: Folder,
     pub(crate) host: Arc<MemoryHost>,
@@ -302,37 +302,31 @@ pub(crate) struct Machine {
     tokens: Mutex<HashMap<String, Vec<String>>>,
 }
 
-impl Machine {
-    fn new(folder: Folder) -> Result<Machine, Unmade> {
+impl Stage {
+    fn new(folder: Folder) -> Result<Stage, Unmade> {
         let root = folder.path().to_path_buf();
         let home = root.join("home");
         // Codex on Windows does not start where CODEX_HOME names no folder.
         let codex_home = home.join(".codex");
         std::fs::create_dir_all(&codex_home)?;
-        let host = MemoryHost::new();
-        let api = ScriptedApi::new();
-        let base = Context::new(home.clone())
-            .with_codex_home(codex_home.to_string_lossy().into_owned())
-            .with_user("dana".into())
-            // Nothing on this machine's own `PATH` is ever found.
-            .with_search_path(String::new())
-            .with_claude_program(Machine::program_in(&root, ProviderId::Claude))
-            .with_codex_program(Machine::program_in(&root, ProviderId::Codex))
-            .with_schedule_program(Machine::helper_in(&root))
-            .with_memory_stores(Arc::clone(&host))
-            .with_scripted_api(Arc::clone(&api))
-            .with_scratch_claude(root.join("claude"))
-            .with_awaited_every(std::time::Duration::from_millis(10));
-        // Claude Code's login goes in its default slot, under the name the real one has on
-        // this machine, so nothing is put anywhere until the machine is known to be the one
-        // in memory.
-        if !base.reaches_only(&host, &api) {
-            return Err(Unmade(
-                "the fixture's machine reaches this one's keychain or the network".into(),
-            ));
-        }
+        // Claude Code's login goes under the real one's name, so the check comes first.
+        let ScratchMachine {
+            ctx: base,
+            host,
+            api,
+        } = ScratchMachine::at(&home, |ctx| {
+            ctx.with_codex_home(codex_home.to_string_lossy().into_owned())
+                .with_user("dana".into())
+                // Nothing on this machine's own `PATH` is ever found.
+                .with_search_path(String::new())
+                .with_claude_program(Stage::program_in(&root, ProviderId::Claude))
+                .with_codex_program(Stage::program_in(&root, ProviderId::Codex))
+                .with_schedule_program(Stage::helper_in(&root))
+                .with_scratch_claude(root.join("claude"))
+                .with_awaited_every(std::time::Duration::from_millis(10))
+        });
         let claude = Arc::new(FakeClaude::on(Arc::clone(&host), &base, JarAs::StandIn));
-        Ok(Machine {
+        Ok(Stage {
             folder,
             host,
             api,
@@ -384,7 +378,7 @@ impl Machine {
     }
 
     pub(crate) fn helper(&self) -> PathBuf {
-        Machine::helper_in(self.root())
+        Stage::helper_in(self.root())
     }
 
     /// Where a terminal looks for `pitboard` on this machine, and where the macOS app's
@@ -526,28 +520,14 @@ impl Machine {
         let refresh = format!("{}-refresh-{n}", person.id);
         match person.tool {
             ProviderId::Codex => {
-                let id_token = unsigned_token(&json!({
-                    "email": person.email,
-                    "exp": access_until,
-                    "https://api.openai.com/auth": {
-                        "chatgpt_account_id": person.id,
-                        "chatgpt_user_id": format!("user-{}", person.id),
-                        "chatgpt_plan_type": "pro",
-                    },
-                }));
                 let access = unsigned_token(&json!({ "exp": access_until, "for": refresh }));
                 self.answers_for(person, &access);
-                let document = json!({
-                    "auth_mode": "chatgpt",
-                    "OPENAI_API_KEY": null,
-                    "tokens": {
-                        "id_token": id_token,
-                        "access_token": access,
-                        "refresh_token": refresh,
-                        "account_id": person.id,
-                    },
-                    "last_refresh": "2026-10-01T08:00:00Z",
-                });
+                let document = pitboard_core::testing::codex_login(
+                    &person.id,
+                    &person.email,
+                    &access,
+                    &refresh,
+                );
                 Login {
                     document: document.to_string(),
                     access,
@@ -753,7 +733,7 @@ pub(crate) struct Launched {
     pub(crate) windows: WindowsLaunch,
     /// The machine, for a test to look at. The core keeps it as long as it needs it.
     #[cfg(test)]
-    pub(crate) machine: Arc<Machine>,
+    pub(crate) machine: Arc<Stage>,
 }
 
 impl Launched {
@@ -802,7 +782,7 @@ impl Launched {
 pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
     // Seeding passes the release gate before the AppCore below names the version.
     pitboard_core::release::set_version(env!("CARGO_PKG_VERSION"));
-    let machine = Arc::new(Machine::new(folder)?);
+    let machine = Arc::new(Stage::new(folder)?);
     install(&machine, world.installed())?;
     seed(world, &machine)?;
     if world != World::FirstLaunch {
@@ -864,9 +844,9 @@ pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
 /// The programs of `tools` and the command line inside the stand-in app, each a file that is
 /// there to be found and is never run: a sign-in is played by the fixture's browser, and the
 /// schedule's scheduler starts nothing. Were one run, it would refuse and do nothing.
-fn install(machine: &Machine, tools: &[ProviderId]) -> Result<(), Unmade> {
+fn install(machine: &Stage, tools: &[ProviderId]) -> Result<(), Unmade> {
     for &tool in tools {
-        never_run(&Machine::program_in(machine.root(), tool))?;
+        never_run(&Stage::program_in(machine.root(), tool))?;
     }
     never_run(&machine.helper())?;
     std::fs::create_dir_all(machine.bin())?;
@@ -910,7 +890,7 @@ fn refusing_program(path: &Path) -> Result<(), Unmade> {
 }
 
 /// Puts `world`'s accounts on `machine`, each as a person would have put it there.
-fn seed(world: World, machine: &Machine) -> Result<(), Unmade> {
+fn seed(world: World, machine: &Stage) -> Result<(), Unmade> {
     match world {
         // In the order it happened, which is the order the log keeps.
         World::TwoTools | World::ChatGptOpen => {
@@ -988,7 +968,7 @@ fn seed(world: World, machine: &Machine) -> Result<(), Unmade> {
 }
 
 /// What `person` has used of their limits.
-fn uses(machine: &Machine, person: &Person) {
+fn uses(machine: &Stage, person: &Person) {
     let session = 5 * HOUR;
     let week = 7 * DAY;
     if *person == work() {
@@ -1024,7 +1004,7 @@ fn uses(machine: &Machine, person: &Person) {
 /// and personal signed in privately and parked from the app two days ago. Personal's parked
 /// login lasts two days more, so it is due to be renewed, and doctor warns of it, as it does
 /// of every parked login that is due.
-fn claude_accounts(machine: &Machine) -> Result<(), Unmade> {
+fn claude_accounts(machine: &Stage) -> Result<(), Unmade> {
     let (work, personal) = (work(), personal());
     uses(machine, &work);
     uses(machine, &personal);
@@ -1037,7 +1017,7 @@ fn claude_accounts(machine: &Machine) -> Result<(), Unmade> {
 
 /// A switch to personal from a terminal two hours ago, and one back to work from the app an
 /// hour ago, which leave work in use and personal parked.
-fn claude_switches(machine: &Machine) -> Result<(), Unmade> {
+fn claude_switches(machine: &Stage) -> Result<(), Unmade> {
     machine
         .switched("claude/personal", "cli", 2 * HOUR)
         .map_err(refused("switching to personal"))?;
@@ -1047,7 +1027,7 @@ fn claude_switches(machine: &Machine) -> Result<(), Unmade> {
 }
 
 // home enrolled five days ago, then work added two days ago by a sign-in inside Claude.
-fn claude_desktop(machine: &Machine) -> Result<(), Unmade> {
+fn claude_desktop(machine: &Stage) -> Result<(), Unmade> {
     let data = machine.claude.data();
     desktop::plant(&data, &desktop::HOME, JarAs::StandIn);
     machine
@@ -1060,7 +1040,7 @@ fn claude_desktop(machine: &Machine) -> Result<(), Unmade> {
         .map_err(Unmade)
 }
 
-fn signed_in_outside(machine: &Machine) -> Result<(), Unmade> {
+fn signed_in_outside(machine: &Stage) -> Result<(), Unmade> {
     let personal = personal();
     let now = machine.now;
     let login = machine.login(&personal, now + DAY, now + 30 * DAY);
@@ -1075,7 +1055,7 @@ fn signed_in_outside(machine: &Machine) -> Result<(), Unmade> {
 
 /// A Claude Code account parked a month ago and never switched to since: its access token
 /// lapsed thirty days ago and its refresh token yesterday, so it needs a sign-in.
-fn expired(machine: &Machine) -> Result<(), Unmade> {
+fn expired(machine: &Stage) -> Result<(), Unmade> {
     let old = old();
     let now = machine.now;
     let login = machine.login(&old, now - 30 * DAY, now - DAY);
@@ -1083,7 +1063,7 @@ fn expired(machine: &Machine) -> Result<(), Unmade> {
 }
 
 /// Codex signed in as main and enrolled from a terminal four days ago.
-fn codex_in_use(machine: &Machine) -> Result<(), Unmade> {
+fn codex_in_use(machine: &Stage) -> Result<(), Unmade> {
     let main = codex_main();
     uses(machine, &main);
     let now = machine.now;
@@ -1092,7 +1072,7 @@ fn codex_in_use(machine: &Machine) -> Result<(), Unmade> {
 }
 
 /// Codex's spare signed in privately and parked from the app a day ago.
-fn codex_parked(machine: &Machine) -> Result<(), Unmade> {
+fn codex_parked(machine: &Stage) -> Result<(), Unmade> {
     let spare = codex_spare();
     uses(machine, &spare);
     let now = machine.now;
@@ -1108,7 +1088,7 @@ fn codex_parked(machine: &Machine) -> Result<(), Unmade> {
 /// administrator reads a file whatever its mode says, and a system without Unix modes has
 /// none to give it: there, the world is not made, rather than made otherwise than its name
 /// says.
-fn unreadable_index(machine: &Machine) -> Result<(), Unmade> {
+fn unreadable_index(machine: &Stage) -> Result<(), Unmade> {
     let pitboard = service::Pitboard::new(machine.base.clone()).directory();
     files::deny_reading(&pitboard.join("state.json"))?;
     match service::Pitboard::new(machine.base.clone()).status_offline() {
@@ -1128,7 +1108,7 @@ fn unreadable_index(machine: &Machine) -> Result<(), Unmade> {
 /// is remembered, and nothing newer can be. No world is made this way; a test makes oneTool
 /// so, as readFailure was before it was given an account index the core cannot read.
 #[cfg(test)]
-pub(crate) fn out_of_reach(machine: &Machine) -> Result<(), Unmade> {
+pub(crate) fn out_of_reach(machine: &Stage) -> Result<(), Unmade> {
     let (_, front_end) = machine.front_end("app", 10 * 60);
     front_end
         .status(true)
@@ -1146,7 +1126,7 @@ pub(crate) fn out_of_reach(machine: &Machine) -> Result<(), Unmade> {
 
 /// A login of personal's that a sign-in left in `.credentials.json` in Claude Code's own
 /// directory, behind its own store, which it could not reach, as over SSH.
-fn left_in_a_file(machine: &Machine) {
+fn left_in_a_file(machine: &Stage) {
     let login = machine.login(&personal(), machine.now + DAY, machine.now + 30 * DAY);
     machine
         .host
@@ -1159,7 +1139,7 @@ fn left_in_a_file(machine: &Machine) {
 /// written and kept its record of the switch, and every copy. Claude Code has since renewed
 /// work's login in the keychain, so it matches neither side the record kept, and its session
 /// has expired, so Anthropic will not say whose it is either.
-fn interrupted(machine: &Machine) -> Result<(), Unmade> {
+fn interrupted(machine: &Stage) -> Result<(), Unmade> {
     let live = live_service(&machine.base);
     machine.host.live().fault(&live, Fault::LocksOnWrite);
     let locked = machine.switched("claude/personal", "app", 10 * 60);

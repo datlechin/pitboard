@@ -846,7 +846,7 @@ mod tests {
     /// whether it is days away or a minute past midnight: which day it falls on decides, not
     /// how far off it is. The person's own calendar says which day that is.
     ///
-    /// PresentationTests.swift's aClockTimeNamesItsDayOnlyWhenItIsNotToday, in UTC.
+    /// The clock is read in UTC.
     #[test]
     fn a_clock_time_names_its_day_only_when_it_is_not_today() {
         let state = State::new(Cadence::APP);
@@ -871,8 +871,6 @@ mod tests {
     /// The log keeps local time with its offset. The same moment written in three time zones
     /// is one moment, said as the person's own calendar and clock say it, and text that is
     /// not a time is said as the log keeps it, as is a time the app's own code cannot say.
-    ///
-    /// PresentationTests.swift's aChangesTimeIsReadWithItsOffset.
     #[test]
     fn a_changes_time_is_read_with_its_offset() {
         let state = State::new(Cadence::APP);

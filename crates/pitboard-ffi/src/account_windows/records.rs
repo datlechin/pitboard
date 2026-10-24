@@ -506,8 +506,6 @@ mod tests {
 
     /// The record is kept per Pitboard directory: a copy of the app run with another home
     /// shares the web stores with the copy installed and none of its accounts.
-    ///
-    /// StoreJanitorTests.swift's eachPitboardDirectoryKeepsItsOwnRecord.
     #[test]
     fn each_pitboard_directory_keeps_its_own_record() {
         let one = "00000000-0000-4000-8000-000000000001";
@@ -532,9 +530,6 @@ mod tests {
 
     /// A store another directory recorded is that one's while the directory is there, in
     /// whatever case it was written; once the directory is gone, the store is nobody's.
-    ///
-    /// StoreJanitorTests.swift's aStoreAnotherDirectoryRecordedIsNotDeleted and
-    /// aStoreRecordedOnlyByADirectoryThatIsGoneIsDeleted.
     #[test]
     fn a_store_another_directory_still_there_recorded_is_its_own() {
         let records = Records::earlier(&EarlierWindowRecords {

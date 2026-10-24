@@ -1,0 +1,175 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "status",
+    "ok": true,
+    "data": {
+      "slot": {
+        "service": "[slot]",
+        "default": false
+      },
+      "signed_in": {
+        "account_uuid": "2909a95b-a111-4111-8111-111111111111",
+        "email": "a@example.com",
+        "organization_uuid": "2909a95b-o111-4111-8111-111111111111"
+      },
+      "signed_in_error": null,
+      "accounts": [
+        {
+          "label": "alpha",
+          "email": "a@example.com",
+          "account_uuid": "2909a95b-a111-4111-8111-111111111111",
+          "organization_uuid": "2909a95b-o111-4111-8111-111111111111",
+          "signed_in": true,
+          "switchable": false,
+          "parked": null,
+          "lasts": null,
+          "usage": {
+            "source": "live",
+            "observed_at": "[time]",
+            "windows": [
+              {
+                "kind": "five_hour",
+                "scope": null,
+                "percent": 12.0,
+                "resets_at": 1789986600,
+                "is_active": false,
+                "severity": null,
+                "length_seconds": 18000,
+                "pace": null
+              },
+              {
+                "kind": "seven_day",
+                "scope": null,
+                "percent": 40.0,
+                "resets_at": 1790474400,
+                "is_active": false,
+                "severity": null,
+                "length_seconds": 604800,
+                "pace": null
+              }
+            ]
+          },
+          "stale": null,
+          "provider": "claude",
+          "qualified": "claude/alpha",
+          "plan": "Max",
+          "read_at": null,
+          "reason": null
+        },
+        {
+          "label": "beta",
+          "email": "b@example.com",
+          "account_uuid": "2909a95b-b111-4111-8111-111111111111",
+          "organization_uuid": "2909a95b-p111-4111-8111-111111111111",
+          "signed_in": false,
+          "switchable": true,
+          "parked": {
+            "parked_at": "[time]",
+            "access_expires_at": "[time]",
+            "refresh_expires_at": "[time]",
+            "session_expires_at": null
+          },
+          "lasts": null,
+          "usage": {
+            "source": "live",
+            "observed_at": "[time]",
+            "windows": [
+              {
+                "kind": "five_hour",
+                "scope": null,
+                "percent": 12.0,
+                "resets_at": 1789986600,
+                "is_active": false,
+                "severity": null,
+                "length_seconds": 18000,
+                "pace": null
+              },
+              {
+                "kind": "seven_day",
+                "scope": null,
+                "percent": 40.0,
+                "resets_at": 1790474400,
+                "is_active": false,
+                "severity": null,
+                "length_seconds": 604800,
+                "pace": null
+              }
+            ]
+          },
+          "stale": null,
+          "provider": "claude",
+          "qualified": "claude/beta",
+          "plan": "Max",
+          "read_at": null,
+          "reason": null
+        },
+        {
+          "label": "work",
+          "email": "",
+          "account_uuid": "6f1c0a52-1111-4a6e-9d0b-2f6c1a9e7b10",
+          "organization_uuid": null,
+          "signed_in": false,
+          "switchable": true,
+          "parked": {
+            "parked_at": "[time]",
+            "access_expires_at": null,
+            "refresh_expires_at": null,
+            "session_expires_at": "[time]"
+          },
+          "lasts": null,
+          "usage": null,
+          "stale": "no_usage",
+          "provider": "desktop",
+          "qualified": "desktop/work",
+          "plan": null,
+          "read_at": null,
+          "reason": null
+        },
+        {
+          "label": "home",
+          "email": "",
+          "account_uuid": "b2aa91c4-3333-4c7a-a1d2-5e8f0c21d4e5",
+          "organization_uuid": null,
+          "signed_in": false,
+          "switchable": true,
+          "parked": {
+            "parked_at": "[time]",
+            "access_expires_at": null,
+            "refresh_expires_at": null,
+            "session_expires_at": "[time]"
+          },
+          "lasts": null,
+          "usage": null,
+          "stale": "no_usage",
+          "provider": "desktop",
+          "qualified": "desktop/home",
+          "plan": null,
+          "read_at": null,
+          "reason": null
+        }
+      ],
+      "awaiting": [
+        {
+          "provider": "desktop",
+          "label": "desktop/travel",
+          "put_back": "desktop/work",
+          "since": "[time]",
+          "again": false
+        }
+      ]
+    },
+    "warnings": [
+      {
+        "code": "sign_in_awaited",
+        "message": "[message]"
+      }
+    ],
+    "error": null
+  }
+}

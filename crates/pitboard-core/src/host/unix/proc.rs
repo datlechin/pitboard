@@ -172,9 +172,8 @@ mod tests {
     #[test]
     fn a_program_is_a_regular_file_this_user_may_execute() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("pitboard-can-run-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         let made = |name: &str, mode: u32| {
             let path = dir.join(name);
             std::fs::write(&path, "#!/bin/sh\n").expect("a file");
@@ -207,7 +206,6 @@ mod tests {
                 "only its group and others may execute it"
             );
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn shell(script: &str) -> Command {

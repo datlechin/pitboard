@@ -63,7 +63,7 @@ CS_ATTRIBUTES = re.compile(r"(?m)^[ \t]*\[(?=[A-Za-z_])")
 CS_ATTRIBUTE = re.compile(r"\s*(?:[\w.]+\.)?(\w+?)(?:Attribute)?\s*(?=\(|$)")
 IGNORE_MESSAGE = re.compile(r"\bIgnoreMessage\s*=(?!=)")
 WINDOWS_LINE = "// windows:"
-INTEGRATION_TEST = re.compile(r"crates/[^/]+/tests/[^/]+\.rs")
+INTEGRATION_TEST = re.compile(r"crates/[^/]+/tests/(?:[^/]+/)*[^/]+\.rs")
 SKIPPED_FOLDERS = {"target", "bin", "obj", "Generated", "node_modules"}
 
 

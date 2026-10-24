@@ -507,13 +507,8 @@ mod tests {
     /// what a change of it since the last answer is told by.
     #[test]
     fn a_config_naming_no_organisation_names_its_account_with_no_group() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-config-org-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone());
         let config = |account: Value| {
             std::fs::write(
@@ -544,7 +539,6 @@ mod tests {
                 organization_uuid: "org".into(),
             })
         );
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     // Behind the keychain on macOS, or Credential Manager on Windows, whatever the file holds and

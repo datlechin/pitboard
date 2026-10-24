@@ -172,6 +172,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whole name, as the command line does, where it said only what came after the slash.
 - The app keeps what a switch said, its countdown and its warnings, past the read after it when
   another tool has an account of the same name, where that read put it away.
+- On Windows, a switch to a Claude Code login too large for one Credential Manager item goes
+  through while another program reads Credential Manager, where it could be undone as
+  unfinished.
+- On Windows, the app, the status line and `pitboard status` no longer show no accounts for a
+  moment while another Pitboard run saves its list of accounts.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

@@ -1,0 +1,27 @@
+---
+source: crates/pitboard/tests/cli/contract.rs
+expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
+---
+{
+  "exit": 0,
+  "envelope": {
+    "v": 1,
+    "command": "watch",
+    "ok": true,
+    "data": {
+      "event": "idle",
+      "threshold": 95,
+      "account": "beta",
+      "limit": {
+        "kind": "weekly_all",
+        "scope": null,
+        "percent": 30.0,
+        "resets_at": "[time]"
+      },
+      "as_of": "[time]",
+      "held_until": null
+    },
+    "warnings": [],
+    "error": null
+  }
+}

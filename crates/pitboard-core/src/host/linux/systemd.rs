@@ -476,12 +476,8 @@ mod tests {
     /// own name; nothing systemd passes is read.
     #[test]
     fn a_unit_written_without_the_marker_still_names_its_program_and_install_adds_it() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-systemd-marker-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its directory")).expect("made");
         std::fs::write(&program, "").expect("a program");
@@ -521,7 +517,6 @@ mod tests {
             !systemd.started_this_process(Job::Renew, None),
             "what systemd passes is not read"
         );
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     // systemd as a test asks it: each call written down, and the next one carrying the word a
@@ -566,15 +561,9 @@ mod tests {
         }
     }
 
-    fn scratch_home(name: &str) -> (PathBuf, Context) {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-systemd-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        std::fs::create_dir_all(&home).expect("a scratch home");
-        let ctx = Context::new(home.clone()).with_memory_stores(MemoryHost::new());
+    fn scratch_home() -> (tempfile::TempDir, Context) {
+        let home = tempfile::tempdir().expect("a scratch home");
+        let ctx = Context::new(home.path().to_path_buf()).with_memory_stores(MemoryHost::new());
         (home, ctx)
     }
 
@@ -582,7 +571,7 @@ mod tests {
     // before is restarted as it was.
     #[test]
     fn a_watch_service_systemd_will_not_restart_is_taken_away_or_put_back() {
-        let (home, ctx) = scratch_home("restart");
+        let (_home, ctx) = scratch_home();
         let asked = Arc::new(Asked::default());
         let systemd = Systemd::new(asked.clone());
         let program = Path::new("/usr/local/bin/pitboard");
@@ -649,14 +638,13 @@ mod tests {
                 restart
             ]
         );
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     // A watch service left running would write the Pitboard directory again once `pitboard
     // uninstall` removed it; renewal's units go whatever systemd says.
     #[test]
     fn a_watch_service_systemd_will_not_stop_stays_installed() {
-        let (home, ctx) = scratch_home("stop");
+        let (_home, ctx) = scratch_home();
         let asked = Arc::new(Asked::default());
         let systemd = Systemd::new(asked.clone());
         let program = Path::new("/usr/local/bin/pitboard");
@@ -682,7 +670,6 @@ mod tests {
         );
         assert!(!systemd.installed(&ctx, Job::Renew));
         assert!(!Systemd::units(&ctx).join(SERVICE).exists());
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// `pitboard schedule install` writes the proxy variables it was started with into the
@@ -691,12 +678,8 @@ mod tests {
     /// which kept its mode when Pitboard wrote it before.
     #[test]
     fn an_installed_unit_carries_the_proxy_and_only_its_owner_can_read_it() {
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-systemd-proxy-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its directory")).expect("made");
         std::fs::write(&program, "").expect("a program");
@@ -734,6 +717,5 @@ mod tests {
             );
         }
         assert_eq!(installed_program(&ctx), Some(program));
-        let _ = std::fs::remove_dir_all(&home);
     }
 }

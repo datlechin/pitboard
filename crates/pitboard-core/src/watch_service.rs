@@ -114,20 +114,20 @@ mod tests {
 
     /// A home of the test's own on a machine whose scheduler asks nobody, with a Pitboard in
     /// it for the service to run.
-    struct Machine(tempfile::TempDir, Arc<MemoryHost>);
+    struct ServiceHome(tempfile::TempDir, Arc<MemoryHost>);
 
-    impl Machine {
-        fn new() -> Machine {
-            Machine::on(MemoryHost::new())
+    impl ServiceHome {
+        fn new() -> ServiceHome {
+            ServiceHome::on(MemoryHost::new())
         }
 
         // As Windows schedules, through Task Scheduler as this machine has it, on any system.
-        fn scheduling_tasks() -> Machine {
-            Machine::on(MemoryHost::scheduling_tasks(SID))
+        fn scheduling_tasks() -> ServiceHome {
+            ServiceHome::on(MemoryHost::scheduling_tasks(SID))
         }
 
-        fn on(host: Arc<MemoryHost>) -> Machine {
-            let machine = Machine(tempfile::tempdir().expect("a scratch home"), host);
+        fn on(host: Arc<MemoryHost>) -> ServiceHome {
+            let machine = ServiceHome(tempfile::tempdir().expect("a scratch home"), host);
             std::fs::create_dir_all(machine.program().parent().expect("its folder")).expect("made");
             std::fs::write(machine.program(), "").expect("a program");
             std::fs::create_dir_all(machine.ctx(&[]).default_pitboard_home())
@@ -169,7 +169,7 @@ mod tests {
     /// once, apart from the renewal schedule.
     #[test]
     fn the_service_runs_watch_at_its_share_until_it_is_taken_away() {
-        for machine in [Machine::new(), Machine::scheduling_tasks()] {
+        for machine in [ServiceHome::new(), ServiceHome::scheduling_tasks()] {
             let ctx = machine.ctx(&[]);
             assert_eq!(status(&ctx), Installed::No);
 
@@ -231,7 +231,7 @@ mod tests {
     /// there, and taken away from any home.
     #[test]
     fn the_service_is_installed_only_where_pitboard_home_is_the_default_home() {
-        let machine = Machine::new();
+        let machine = ServiceHome::new();
         let ctx = machine.ctx(&[]);
         let default = ctx.default_pitboard_home();
         let elsewhere = machine.0.path().join("elsewhere");
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn a_run_of_the_service_watches_the_default_home_with_the_proxy_it_was_given() {
         let proxied = [("HTTPS_PROXY", "http://alice:s3cret@proxy.example.com:3128")];
-        for machine in [Machine::new(), Machine::scheduling_tasks()] {
+        for machine in [ServiceHome::new(), ServiceHome::scheduling_tasks()] {
             let ctx = machine.ctx(&proxied);
             install(&ctx, Permit::for_a_test(), at(95)).expect("installed");
             let handed = schedule::scheduler(&ctx)
@@ -309,7 +309,7 @@ mod tests {
     /// A service the system will not start leaves the one before as it was, or nothing.
     #[test]
     fn a_service_the_system_will_not_start_leaves_the_one_before() {
-        for machine in [Machine::new(), Machine::scheduling_tasks()] {
+        for machine in [ServiceHome::new(), ServiceHome::scheduling_tasks()] {
             let ctx = machine.ctx(&[]);
             machine.1.refuse_next_start();
             let refused = install(&ctx, Permit::for_a_test(), at(95)).expect_err("refused");
@@ -332,7 +332,7 @@ mod tests {
     // Ended while a change is under way, the service's run could lose the login it was renewing.
     #[test]
     fn the_services_run_is_ended_only_between_changes() {
-        for machine in [Machine::new(), Machine::scheduling_tasks()] {
+        for machine in [ServiceHome::new(), ServiceHome::scheduling_tasks()] {
             let ctx = machine.ctx(&[]);
             install(&ctx, Permit::for_a_test(), at(90)).expect("installed");
             for (reinstalling, before) in [(true, 90), (false, 80)] {
@@ -365,7 +365,7 @@ mod tests {
     /// Where there is no scheduler, installing says what to do instead.
     #[test]
     fn a_machine_with_no_scheduler_says_to_leave_watch_running() {
-        let machine = Machine::new();
+        let machine = ServiceHome::new();
         machine.1.without_a_scheduler();
         let ctx = machine.ctx(&[]);
         assert_eq!(status(&ctx), Installed::Unsupported);

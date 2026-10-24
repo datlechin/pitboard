@@ -654,7 +654,6 @@ mod tests {
         bar_title(accounts, &[], false)
     }
 
-    /// MenuTests.swift's theMenuBarNamesTheAccountInUseAndItsTightestLimit.
     #[test]
     fn the_menu_bar_names_the_account_in_use_and_its_tightest_limit() {
         let read = [
@@ -673,9 +672,7 @@ mod tests {
     /// display has little. The settings can drop the name, and then the figure too, leaving
     /// the mark.
     ///
-    /// MenuTests.swift's theMenuBarShowsNoMoreThanTheSettingsAskFor, and
-    /// PresentationTests.swift's theMenuBarSaysAsMuchAsTheSettingsAskAndTheMarkAloneSaysNothing:
-    /// the mark alone is the app's setting, which shows neither.
+    /// The mark alone is the app's setting, which shows neither.
     #[test]
     fn the_menu_bar_shows_no_more_than_the_settings_ask_for() {
         let read = [account(Some("work"))
@@ -693,8 +690,6 @@ mod tests {
 
     /// Before the first read there is nothing true to say, and the icon is already there, so
     /// the item shows the mark alone rather than a name it has not checked.
-    ///
-    /// MenuTests.swift's theMenuBarSaysNothingBeforeTheFirstRead.
     #[test]
     fn the_menu_bar_says_nothing_before_the_first_read() {
         assert_eq!(title(&[]), "");
@@ -703,9 +698,6 @@ mod tests {
 
     /// The bar is shared with everything else running, so a name longer than twelve
     /// characters is cut to eleven and an ellipsis, and a name that fits is left whole.
-    ///
-    /// MenuTests.swift's aLongLabelIsBounded and PresentationTests.swift's
-    /// aNameLongerThanTwelveCharactersIsCutToElevenAndAnEllipsis.
     #[test]
     fn a_name_longer_than_twelve_characters_is_cut_to_eleven_and_an_ellipsis() {
         let bar = |label: &str, usage_only: bool| {
@@ -727,8 +719,6 @@ mod tests {
 
     /// Before anything is measured the bar still says whose account is in use, and a setting
     /// that asks for the figure alone shows the mark until there is one.
-    ///
-    /// PresentationTests.swift's anAccountWithNothingMeasuredIsNamedAloneInTheBar.
     #[test]
     fn an_account_with_nothing_measured_is_named_alone_in_the_bar() {
         let unmeasured = [account(Some("work")).signed_in().build()];
@@ -746,8 +736,6 @@ mod tests {
 
     /// With nobody signed in there is no account in use to name, and naming one that is not
     /// would be wrong.
-    ///
-    /// PresentationTests.swift's nobodySignedInLeavesTheBarToItsMark.
     #[test]
     fn nobody_signed_in_leaves_the_bar_to_its_mark() {
         let read = [
@@ -762,8 +750,6 @@ mod tests {
     }
 
     /// The figure is a whole percentage, rounded the way a person rounds: a half goes up.
-    ///
-    /// PresentationTests.swift's theBarsFigureIsRoundedToTheNearestWholePercent.
     #[test]
     fn the_bars_figure_is_rounded_to_the_nearest_whole_percent() {
         let bar = |percent: f64| {
@@ -784,8 +770,6 @@ mod tests {
 
     /// A limit scoped to one model is not the account's limit. Reading 98% in the menu bar
     /// while the binding limit is at 30% says the day is over when it is not.
-    ///
-    /// MenuTests.swift's aScopedLimitDoesNotTakeTheMenuBar.
     #[test]
     fn a_scoped_limit_does_not_take_the_menu_bar() {
         let read = [account(Some("work"))
@@ -800,8 +784,6 @@ mod tests {
 
     /// Among the account's own limits, the one it is working against wins, and failing that
     /// the fullest; two as full give the first.
-    ///
-    /// MenuTests.swift's theLimitInUseIsThePreferredHeadline.
     #[test]
     fn the_limit_in_use_is_the_preferred_headline() {
         let windows = [
@@ -816,9 +798,6 @@ mod tests {
 
     /// With an account in use in each tool and one bar, the bar shows the one closest to
     /// running out, judged by its own limits and not one scoped to a single model.
-    ///
-    /// MenuTests.swift's theMenuBarFollowsTheMostUsedAccountAcrossTools and
-    /// PresentationTests.swift's theBarIsAboutTheToolClosestToRunningOut.
     #[test]
     fn the_bar_is_about_the_tool_closest_to_running_out() {
         let read = [
@@ -861,9 +840,6 @@ mod tests {
     /// A tie goes to the tool the listing puts first, whatever order the rows came in, so the
     /// bar does not move between two accounts at the same figure from one read to the next,
     /// and a login nobody has named does not take the bar from one that has a name.
-    ///
-    /// MenuTests.swift's aTieInTheMenuBarGoesToTheFirstTool and PresentationTests.swift's
-    /// aTieGoesToTheToolListedFirstAndNotTheRowThatCameFirst.
     #[test]
     fn a_tie_goes_to_the_tool_listed_first_and_not_the_row_that_came_first() {
         let tied = [
@@ -898,8 +874,6 @@ mod tests {
     }
 
     /// An account with nothing measured is not closer to running out than one at nought.
-    ///
-    /// PresentationTests.swift's anAccountWithNothingMeasuredGivesTheBarToOneThatWasMeasured.
     #[test]
     fn an_account_with_nothing_measured_gives_the_bar_to_one_that_was_measured() {
         let read = [
@@ -918,8 +892,6 @@ mod tests {
 
     /// With nobody enrolled signed in to any tool the bar says what is signed in, as it would
     /// with one tool, rather than nothing. With nobody signed in at all it is about nobody.
-    ///
-    /// PresentationTests.swift's withNobodyEnrolledSignedInTheBarIsAboutWhoeverIsSignedIn.
     #[test]
     fn with_nobody_enrolled_signed_in_the_bar_is_about_whoever_is_signed_in() {
         let login_only = [
@@ -1083,8 +1055,6 @@ mod tests {
 
     /// Sections come in the order the tools are listed, each once, whatever order the rows
     /// came in, and a code the listing does not know follows in the order it first appeared.
-    ///
-    /// PresentationTests.swift's toolCodesFollowTheListingEachOnce.
     #[test]
     fn tool_codes_follow_the_listing_each_once() {
         assert_eq!(
@@ -1139,8 +1109,6 @@ mod tests {
     /// The column beside a bar says when a limit resets as `pitboard status` does, minutes in
     /// two digits, and that it is resetting once that moment has come. A limit with no reset
     /// known has nothing there. Every span it can say is the core's to test.
-    ///
-    /// PresentationTests.swift's aResetIsSaidAsTheCommandLineSaysIt.
     #[test]
     fn a_reset_is_said_as_the_command_line_says_it() {
         let noon = 1_768_392_000;

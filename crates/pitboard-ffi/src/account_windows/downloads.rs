@@ -192,8 +192,7 @@ mod tests {
             .into_owned()
     }
 
-    /// A download never overwrites a file, and two downloads never get one name. From
-    /// AccountWindowsTests.swift.
+    /// A download never overwrites a file, and two downloads never get one name.
     #[test]
     fn a_download_is_numbered_past_names_taken() {
         assert_eq!(
@@ -332,11 +331,8 @@ mod tests {
     /// The export looks at the folder as well as the names reserved for downloads running.
     #[test]
     fn a_file_already_there_or_a_name_reserved_is_taken() {
-        let folder = std::env::temp_dir().join(format!(
-            "pitboard-download-destination-{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let folder = scratch.path();
         std::fs::write(folder.join("report.pdf"), b"").expect("a file");
         let reserved = folder.join("report 2.pdf").to_string_lossy().into_owned();
         let chosen = download_destination(
@@ -344,12 +340,11 @@ mod tests {
             "report.pdf".into(),
             vec![reserved],
         );
-        let expected = destination(OS, &folder, "report.pdf", |candidate| {
+        let expected = destination(OS, folder, "report.pdf", |candidate| {
             candidate == folder.join("report.pdf") || candidate == folder.join("report 2.pdf")
         });
         assert_eq!(chosen, expected.to_string_lossy());
         assert_ne!(Path::new(&chosen), folder.join("report.pdf"));
-        std::fs::remove_dir_all(&folder).expect("removed");
     }
 
     /// A name given to a download still running is taken whatever Unicode form the app hands
@@ -357,10 +352,8 @@ mod tests {
     /// is given as a `URL`, whose `path` Foundation gives decomposed, measured on macOS 27.0.
     #[test]
     fn a_name_reserved_in_another_unicode_form_is_taken() {
-        let folder = std::env::temp_dir().join(format!(
-            "pitboard-download-reserved-{}-not-made",
-            std::process::id()
-        ));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let folder = scratch.path().join("not-made");
         let at = |name: &str| folder.join(name).to_string_lossy().into_owned();
         let choose = |suggested: &str, reserved: &[&str]| {
             download_destination(
@@ -435,7 +428,7 @@ mod tests {
         assert_eq!(name, Path::new("/d/B\u{e1}o c\u{e1}o 2.pdf"));
     }
 
-    /// From AccountWindowsTests.swift, and an address's host as `URL.host` gives it.
+    /// An address's host as `URL.host` gives it.
     #[test]
     fn a_downloads_host_is_read_from_inside_a_blob_link() {
         let host = |url: Option<&str>| download_host(url.map(str::to_owned));

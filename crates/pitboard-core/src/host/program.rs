@@ -225,7 +225,8 @@ mod tests {
     #[test]
     fn only_a_directory_named_from_the_root_is_looked_in() {
         let mut looked = Vec::new();
-        let root = std::env::temp_dir().join("bin");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("bin");
         let search = std::env::join_paths([
             "".into(),
             "bin".into(),

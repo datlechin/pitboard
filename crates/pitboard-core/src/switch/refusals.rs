@@ -238,7 +238,7 @@ fn a_login_pitboard_cannot_find_is_not_the_same_as_nobody_being_signed_in() {
 #[test]
 fn the_first_account_goes_in_where_nothing_is_signed_in() {
     for (tool, make) in [
-        ("claude", machine as fn(&str) -> harness::Machine),
+        ("claude", machine as fn(&str) -> harness::Rig),
         ("codex", harness::codex_machine),
     ] {
         let m = make(&format!("first-{tool}"));
@@ -295,7 +295,7 @@ fn the_first_account_goes_in_where_nothing_is_signed_in() {
     ignore = "on Linux the file is Claude Code's only store, never behind a keychain"
 )]
 fn a_switch_with_a_file_behind_the_keychain_says_sessions_take_it_at_renewal() {
-    let switched = |m: &harness::Machine| {
+    let switched = |m: &harness::Rig| {
         let settled = settle(&m.ctx, Permit::for_a_test(), None)
             .expect("nothing to recover")
             .0;
@@ -337,7 +337,7 @@ fn a_switch_with_a_file_behind_the_keychain_says_sessions_take_it_at_renewal() {
 }
 
 /// What Claude Code's config names, by account.
-fn config_names_now(m: &harness::Machine) -> String {
+fn config_names_now(m: &harness::Rig) -> String {
     let config: Value = serde_json::from_str(
         &std::fs::read_to_string(m.ctx_home().join(".claude.json")).expect("a config"),
     )
@@ -519,7 +519,7 @@ fn the_config_is_written_only_while_the_account_is_in_use() {
     );
 }
 
-fn settled(m: &harness::Machine) -> Settled {
+fn settled(m: &harness::Rig) -> Settled {
     settle(&m.ctx, Permit::for_a_test(), None)
         .expect("nothing to recover")
         .0
@@ -527,7 +527,7 @@ fn settled(m: &harness::Machine) -> Settled {
 
 /// `here`'s login in use, lapsed, and refused for good as it is renewed, as Claude Code
 /// leaves a login nobody ran for a month: the switch cannot park it, and says so first.
-fn dead_in_use(name: &str) -> harness::Machine {
+fn dead_in_use(name: &str) -> harness::Rig {
     let m = machine(name);
     m.sign_in(&harness::lapsed("here-dead"));
     m.api.renew_trouble("here-dead", Trouble::InvalidGrant);

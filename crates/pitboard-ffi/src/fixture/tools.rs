@@ -18,7 +18,7 @@
 //! signs in again as themselves, and anybody else is somebody new, `<name>@example.com`,
 //! with a five-hour limit barely touched.
 
-use super::worlds::{Machine, Person};
+use super::worlds::{Person, Stage};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::testing::{
     Ran, ScriptedSignIn, SignInScript, Started, WarmScript, service_for_dir,
@@ -57,11 +57,11 @@ pub(crate) const CLAUDE_REFUSES: &str =
 /// five-hour period of the account whose access token it was handed starts, as Anthropic's
 /// next answer says.
 pub(crate) struct Warmer {
-    machine: Arc<Machine>,
+    machine: Arc<Stage>,
 }
 
 impl Warmer {
-    pub(crate) fn new(machine: Arc<Machine>) -> Warmer {
+    pub(crate) fn new(machine: Arc<Stage>) -> Warmer {
         Warmer { machine }
     }
 }
@@ -87,11 +87,11 @@ impl WarmScript for Warmer {
 
 /// The browser and each tool's sign-in on a fixture's machine.
 pub(crate) struct Browser {
-    machine: Arc<Machine>,
+    machine: Arc<Stage>,
 }
 
 impl Browser {
-    pub(crate) fn new(machine: Arc<Machine>) -> Browser {
+    pub(crate) fn new(machine: Arc<Stage>) -> Browser {
         Browser { machine }
     }
 }
@@ -161,7 +161,7 @@ impl ScriptedSignIn for Playing {
 /// `person`'s tool signs in, as it prints and reads, into `dir`. Whether it ended signed in;
 /// `say` goes with it, which is the tool having stopped saying anything.
 fn play(
-    machine: &Machine,
+    machine: &Stage,
     person: &Person,
     dir: &Path,
     say: &Sender<String>,
@@ -248,7 +248,7 @@ fn stopped_within(hears: &Receiver<Told>, wait: Duration, typed: &mut Vec<String
     }
 }
 
-impl Machine {
+impl Stage {
     /// Whom a sign-in of `which`'s tool for `label` signs in as: the person enrolled under
     /// it, or somebody new.
     fn signing_in_as(&self, which: ProviderId, label: &str) -> Person {

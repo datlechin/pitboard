@@ -812,7 +812,8 @@ impl Context {
         crate::state::machine_id()
     }
 
-    #[cfg(test)]
+    // For a Claude Desktop test of a Mac that cannot be identified.
+    #[cfg(all(test, not(windows)))]
     pub(crate) fn with_unknown_machine(mut self) -> Context {
         self.unknown_machine = true;
         self
@@ -1035,14 +1036,8 @@ impl Context {
         self.warm_script.as_ref()
     }
 
-    /// Whether this context reaches no machine but `memory` and no service but `api`. A
-    /// fixture asks it of the context it made before it puts a login anywhere, so that an
-    /// edit leaving either out of the builder fails there, rather than writing Claude Code's
-    /// login to this machine's keychain under the real one's service name, or asking
-    /// Anthropic.
     #[cfg(any(test, feature = "test-support"))]
-    #[doc(hidden)]
-    pub fn reaches_only(
+    fn reaches_only(
         &self,
         memory: &Arc<crate::host::memory::MemoryHost>,
         api: &Arc<crate::api::scripted::ScriptedApi>,
@@ -1050,6 +1045,34 @@ impl Context {
         std::ptr::addr_eq(Arc::as_ptr(&self.host), Arc::as_ptr(memory))
             && std::ptr::addr_eq(Arc::as_ptr(&self.api), Arc::as_ptr(api))
             && std::ptr::addr_eq(Arc::as_ptr(&self.openai), Arc::as_ptr(api))
+    }
+}
+
+// A test's or a fixture's machine: its home, the stores in memory and every service scripted.
+#[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
+pub struct ScratchMachine {
+    pub ctx: Context,
+    pub host: Arc<crate::host::memory::MemoryHost>,
+    pub api: Arc<crate::api::scripted::ScriptedApi>,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ScratchMachine {
+    // Panics where `more` put back this machine's keychain or the network, before any write.
+    pub fn at(home: &std::path::Path, more: impl FnOnce(Context) -> Context) -> ScratchMachine {
+        let host = crate::host::memory::MemoryHost::new();
+        let api = crate::api::scripted::ScriptedApi::new();
+        let ctx = more(
+            Context::new(home.to_path_buf())
+                .with_memory_stores(Arc::clone(&host))
+                .with_scripted_api(Arc::clone(&api)),
+        );
+        assert!(
+            ctx.reaches_only(&host, &api),
+            "a scratch machine reaches this one's keychain or the network"
+        );
+        ScratchMachine { ctx, host, api }
     }
 }
 
@@ -1063,7 +1086,8 @@ mod tests {
         assert!(variables().any(|name| name == "PITBOARD_TEST_CLAUDE_DESKTOP"));
         assert!(!READ.contains(&"PITBOARD_TEST_CLAUDE_DESKTOP"));
         assert!(Context::for_unit_test().scratch_claude().is_none());
-        let folder = std::env::temp_dir().join("pitboard-scratch-claude");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let folder = scratch.path().join("claude");
         let named = folder.to_string_lossy().into_owned();
         let env: Environment = [
             ("HOME", "/home/x"),
@@ -1099,16 +1123,14 @@ mod tests {
         assert!(named(support.clone()));
         assert!(named(home.join("Library")), "it holds it");
         // The home is linked, since Linux has no `Library` for a link to resolve through.
-        let link = std::env::temp_dir().join(format!("pitboard-home-link-{}", std::process::id()));
-        let _ = std::fs::remove_file(&link);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let link = scratch.path().join("home-link");
         crate::host::fs::testing::link_dir(&home, &link).expect("a link");
         let through = named(link.join("Library/Application Support/pitboard-test-never-made"));
         let _ = std::fs::remove_file(&link);
         assert!(through, "through a link");
-        assert!(!named(
-            std::env::temp_dir().join("pitboard-scratch-elsewhere")
-        ));
-        let _guarding = testing::also_guarding(&std::env::temp_dir().join("pitboard-fake-home"));
+        assert!(!named(scratch.path().join("elsewhere")));
+        let _guarding = testing::also_guarding(&scratch.path().join("fake-home"));
         assert!(
             named(support.join("pitboard-test-never-made")),
             "while a test guards a fake home too"
@@ -1133,10 +1155,9 @@ mod tests {
         for dir in &local {
             assert!(named(dir.join("AnthropicClaude")));
         }
-        assert!(!named(
-            std::env::temp_dir().join("pitboard-scratch-elsewhere")
-        ));
-        let fake = std::env::temp_dir().join("pitboard-fake-profile");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        assert!(!named(scratch.path().join("elsewhere")));
+        let fake = scratch.path().join("fake-profile");
         let _guarding = testing::also_guarding(&fake);
         let roaming = fake.join("AppData").join("Roaming");
         assert!(named(roaming.join("Claude").join("x")), "a fake profile's");
@@ -1145,8 +1166,8 @@ mod tests {
     // `..` past a folder not made yet is resolved only once something makes that folder.
     #[test]
     fn a_scratch_named_through_a_folder_not_made_yet_panics() {
-        let home =
-            std::env::temp_dir().join(format!("pitboard-scratch-climb-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let _guarding = testing::also_guarding(&home);
         let climbed = std::panic::catch_unwind(|| {
             Context::new("/nowhere".into())
@@ -1179,9 +1200,8 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows makes no link"
     )]
     fn a_scratch_whose_data_or_app_links_to_a_real_place_panics() {
-        let root =
-            std::env::temp_dir().join(format!("pitboard-scratch-links-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path();
         let home = root.join("home");
         let support = home.join("Library/Application Support/Claude");
         let app = home.join("Applications/Claude.app");
@@ -1208,7 +1228,6 @@ mod tests {
             "data",
             Path::new("../home/Library/Application Support/Claude/never-made"),
         );
-        std::fs::remove_dir_all(&root).expect("the scratch removed");
         assert!(data, "data linked into Application Support");
         assert!(claude, "Claude.app linked to ~/Applications/Claude.app");
         assert!(!elsewhere, "data linked to a folder of the test's own");
@@ -1222,8 +1241,8 @@ mod tests {
         ignore = "Claude Desktop is macOS only: Windows has no `/Applications`"
     )]
     fn a_scratch_of_an_applications_folder_panics() {
-        let home =
-            std::env::temp_dir().join(format!("pitboard-scratch-apps-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let _guarding = testing::also_guarding(&home);
         let named = |folder: PathBuf| {
             std::panic::catch_unwind(move || {
@@ -1243,9 +1262,8 @@ mod tests {
         ignore = "a firmlink to the Data volume is macOS's own"
     )]
     fn a_scratch_named_through_the_data_volume_panics() {
-        let root =
-            std::env::temp_dir().join(format!("pitboard-scratch-data-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path();
         let support = root.join("home/Library/Application Support/Claude");
         let scratch = root.join("scratch");
         for made in [&support, &scratch] {
@@ -1266,9 +1284,8 @@ mod tests {
         };
         let linked = named(scratch);
         let inside = named(through(&support).join("pitboard-test"));
-        let own = named(through(&root).join("own"));
+        let own = named(through(root).join("own"));
         let applications = named("/System/Volumes/Data/Applications".into());
-        std::fs::remove_dir_all(&root).expect("the scratch removed");
         assert!(
             linked,
             "data linked into Application Support through the Data volume"
@@ -1290,7 +1307,7 @@ mod tests {
     /// Pitboard at `~/.claude`, where no Claude Code started with it keeps anything.
     #[test]
     fn an_explicit_context_reads_claude_codes_settings_the_way_the_environment_does() {
-        let (home, named) = full_home();
+        let (_scratch, home, named) = full_home();
         let ctx = Context::new(home.clone())
             .with_claude_config_dir(String::new())
             .with_secure_storage_dir(String::new());
@@ -1331,9 +1348,24 @@ mod tests {
         }
     }
 
-    /// What a fixture asks of the context it made: whether it reaches nothing but the machine
-    /// in memory and the scripted services it was given, which leaving out either, or giving
-    /// another, makes false.
+    #[test]
+    fn a_scratch_machine_whose_context_reaches_another_host_or_api_panics() {
+        use crate::api::scripted::ScriptedApi;
+        use crate::host::memory::MemoryHost;
+        let home = Path::new("/home/x");
+        let made = ScratchMachine::at(home, |ctx| ctx.with_caller("app".into()));
+        assert_eq!(made.ctx.home(), home);
+        let another_machine = std::panic::catch_unwind(|| {
+            ScratchMachine::at(home, |ctx| ctx.with_memory_stores(MemoryHost::new()))
+        });
+        assert!(another_machine.is_err());
+        let other_services = std::panic::catch_unwind(|| {
+            ScratchMachine::at(home, |ctx| ctx.with_scripted_api(ScriptedApi::new()))
+        });
+        assert!(other_services.is_err());
+    }
+
+    // Leaving out either, or giving another, makes it false.
     #[test]
     fn a_context_says_whether_it_reaches_only_the_machine_and_services_it_was_given() {
         use crate::api::scripted::ScriptedApi;
@@ -1383,7 +1415,7 @@ mod tests {
     /// every variable can be tried without changing what the tests themselves run in.
     #[test]
     fn the_command_line_reads_the_environment_it_is_given() {
-        let (home, named) = full_home();
+        let (_scratch, home, named) = full_home();
         let env: Environment = [
             (crate::host::OS.home_variable(), named.as_str()),
             ("PITBOARD_CLAUDE", "/elsewhere/claude"),
@@ -1476,7 +1508,8 @@ mod tests {
     // Git Bash sets `HOME`, which neither tool takes for the home on Windows.
     #[test]
     fn each_tool_finds_its_home_in_userprofile_on_windows_whatever_home_says() {
-        let profile = std::env::temp_dir().join("pitboard-profile-tools");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let profile = scratch.path().to_path_buf();
         let named = profile.to_string_lossy().into_owned();
         let pairs = [("HOME", "/c/Users/x"), ("USERPROFILE", named.as_str())];
         let ctx = Context::read(&Environment::on(Os::Windows, pairs), "cli");
@@ -1501,11 +1534,12 @@ mod tests {
         assert_eq!(posix.home, PathBuf::from("/c/Users/x"));
     }
 
-    // A full path on every system, which nothing makes.
-    fn full_home() -> (PathBuf, String) {
-        let home = std::env::temp_dir().join("pitboard-never-made-home");
+    // A full path on every system, which nothing makes, in a folder of the test's own.
+    fn full_home() -> (tempfile::TempDir, PathBuf, String) {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let named = home.to_string_lossy().into_owned();
-        (home, named)
+        (scratch, home, named)
     }
 
     /// A variable read without being listed is caught the first time a test reads it, so the

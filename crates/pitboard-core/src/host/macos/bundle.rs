@@ -27,10 +27,9 @@ fn said(bundle: &Path, key: &'static str) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn scratch_app(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!("pitboard-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let app = root.join("Scratch.app");
+    fn scratch_app() -> (tempfile::TempDir, std::path::PathBuf) {
+        let root = tempfile::tempdir().expect("a scratch folder");
+        let app = root.path().join("Scratch.app");
         std::fs::create_dir_all(app.join("Contents")).expect("a scratch bundle");
         std::fs::write(
             app.join("Contents/Info.plist"),
@@ -47,22 +46,20 @@ mod tests {
 
     #[test]
     fn a_bundle_says_its_identifier_and_version_and_a_folder_that_is_none_says_nothing() {
-        let (root, app) = scratch_app("bundle");
+        let (root, app) = scratch_app();
         assert_eq!(identifier(&app).as_deref(), Some("com.example.scratch"));
         assert_eq!(version(&app).as_deref(), Some("2.31226.1"));
-        assert_eq!(identifier(&root.join("Missing.app")), None);
-        assert_eq!(version(&root.join("Missing.app")), None);
-        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(identifier(&root.path().join("Missing.app")), None);
+        assert_eq!(version(&root.path().join("Missing.app")), None);
     }
 
     // So no test reads the Claude installed on the machine running it.
     #[test]
     fn a_build_for_tests_reads_no_app_the_machine_holds() {
-        let (root, app) = scratch_app("bundle-unread");
+        let (_root, app) = scratch_app();
         let host = crate::host::current();
         let (id, built) = (host.app_id(&app), host.app_version(&app));
         let readable = identifier(&app);
-        let _ = std::fs::remove_dir_all(&root);
         assert_eq!(readable.as_deref(), Some("com.example.scratch"));
         assert_eq!(id, None);
         assert_eq!(built, None);

@@ -33,7 +33,7 @@ mod tests {
 
     /// The values the Swift `storeID` gave before the rule was Rust, which every window
     /// released since keeps its data under: a store can never change once released, or the
-    /// sweep deletes every window's data. From WindowAccountTests.swift.
+    /// sweep deletes every window's data.
     #[test]
     fn an_enrolled_claude_account_has_a_store_derived_from_its_account_id() {
         assert_eq!(

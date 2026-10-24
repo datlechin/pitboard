@@ -565,13 +565,8 @@ mod tests {
     /// told. A real file, since what a look and a read each say of one is the point.
     #[test]
     fn a_file_that_cannot_be_read_is_still_behind() {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-store-behind-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().to_path_buf();
         let path = dir.join(".credentials.json");
         std::fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
         let keychain = holding(Backend::Keychain, "svc", "in use");
@@ -582,7 +577,6 @@ mod tests {
             .expect("which backend is in use is told")
             .expect("the file is behind")
             .read("svc");
-        let _ = std::fs::remove_dir_all(&dir);
         assert!(matches!(behind, Err(Error::Unreadable(_))), "{behind:?}");
     }
 

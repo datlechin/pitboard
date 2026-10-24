@@ -1,4 +1,4 @@
-use super::harness::{Machine, codex_access, codex_machine, login_of, machine, recover};
+use super::harness::{Rig, codex_access, codex_machine, login_of, machine, recover};
 use super::*;
 use crate::api::scripted::Asked;
 use crate::fault;
@@ -37,7 +37,7 @@ struct Seen {
     gone: Vec<String>,
 }
 
-fn pin(m: Machine, what: &str, change: fn(&Machine), pinned: Pinned) {
+fn pin(m: Rig, what: &str, change: fn(&Rig), pinned: Pinned) {
     let tool = m.which.code();
     let seen = watch(&m, change);
     let touched: Vec<Touch> = pinned
@@ -55,7 +55,7 @@ fn pin(m: Machine, what: &str, change: fn(&Machine), pinned: Pinned) {
     assert_eq!(seen.gone, pinned.gone, "{tool} {what}: what it removed");
 }
 
-fn watch(m: &Machine, change: fn(&Machine)) -> Seen {
+fn watch(m: &Rig, change: fn(&Rig)) -> Seen {
     let root = m.ctx_home();
     let (touched, asked) = (m.mem.trail().len(), m.api.calls());
     let before = listing(&root);
@@ -147,32 +147,32 @@ fn listing(root: &Path) -> BTreeSet<String> {
     found
 }
 
-fn settled(m: &Machine) -> Settled {
+fn settled(m: &Rig) -> Settled {
     settle(&m.ctx, Permit::for_a_test(), None)
         .expect("nothing to recover")
         .0
 }
 
-fn switched(m: &Machine) {
+fn switched(m: &Rig) {
     switch(settled(m), &m.key("there")).expect("switched");
 }
 
-fn forgotten(m: &Machine) {
+fn forgotten(m: &Rig) {
     forget(settled(m), &m.key("there")).expect("forgotten");
 }
 
-fn enrolled(m: &Machine) {
+fn enrolled(m: &Rig) {
     enroll(settled(m), &m.key("third"), None).expect("enrolled");
 }
 
-fn recovered(m: &Machine) {
+fn recovered(m: &Rig) {
     let settled = settled(m);
     let died = fault::killing("switch.park_recorded", || switch(settled, &m.key("there")));
     assert_eq!(died.unwrap_err(), "switch.park_recorded");
     recover(m).expect("recovered");
 }
 
-fn signed_in_as_third(m: Machine) -> Machine {
+fn signed_in_as_third(m: Rig) -> Rig {
     m.sign_in(&login_of(&m, "third", "third-refresh"));
     m
 }

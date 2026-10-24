@@ -919,14 +919,11 @@ mod tests {
     use crate::host::{Kind, Os};
     use std::io::Write;
 
-    fn scratch(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-host-fs-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
+    // `name`, not made yet, in a folder of the test's own.
+    fn scratch(name: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let folder = tempfile::tempdir().expect("a scratch folder");
+        let dir = folder.path().join(name);
+        (folder, dir)
     }
 
     #[test]
@@ -961,7 +958,7 @@ mod tests {
 
     #[test]
     fn what_pitboard_makes_is_the_persons_alone_and_what_is_made_inside_takes_it() {
-        let dir = scratch("private");
+        let (_folder, dir) = scratch("private");
         let permit = Permit::for_a_test();
         let nested = dir.join("a").join("b");
         create_private_dir(permit, &nested).expect("made");
@@ -1011,7 +1008,7 @@ mod tests {
 
     #[test]
     fn what_is_there_already_keeps_its_access_and_its_contents() {
-        let dir = scratch("there");
+        let (_folder, dir) = scratch("there");
         let permit = Permit::for_a_test();
         std::fs::create_dir_all(&dir).expect("a folder");
         testing::open_to_others(&dir).expect("opened");
@@ -1058,7 +1055,7 @@ mod tests {
 
     #[test]
     fn each_way_a_test_sets_a_file_up_does_what_it_says() {
-        let dir = scratch("testing");
+        let (_folder, dir) = scratch("testing");
         std::fs::create_dir_all(&dir).expect("a folder");
         let file = dir.join("file");
         std::fs::write(&file, "x").expect("written");
@@ -1165,7 +1162,7 @@ mod tests {
 
     #[test]
     fn access_names_who_else_reads_a_file_in_windows_words() {
-        let dir = scratch("access");
+        let (_folder, dir) = scratch("access");
         let folder = dir.join("folder");
         std::fs::create_dir_all(&folder).expect("a folder");
         let file = dir.join("file");
@@ -1246,7 +1243,7 @@ mod tests {
 
     #[test]
     fn the_icacls_advice_closes_a_login_to_others_and_its_owner_still_reads_it() {
-        let dir = scratch("icacls Đạt");
+        let (_folder, dir) = scratch("icacls Đạt");
         std::fs::create_dir_all(&dir).expect("a folder");
         testing::open_to_others(&dir).expect("opened");
         // As a folder made under one others read is open: through what it inherits.
@@ -1294,7 +1291,7 @@ mod tests {
 
     #[test]
     fn a_path_with_a_space_has_a_short_name_that_leads_to_it() {
-        let long = std::env::temp_dir().join(format!("pitboard short {}", std::process::id()));
+        let (_folder, long) = scratch("pitboard short");
         std::fs::create_dir_all(&long).expect("a scratch folder");
         let short = short_path(&long).expect("a short name");
         assert!(
@@ -1326,7 +1323,7 @@ mod tests {
     #[test]
     fn what_replaces_a_tools_file_keeps_its_list_inherited_or_protected() {
         use crate::atomic::{Perms, write};
-        let dir = scratch("keeps");
+        let (_folder, dir) = scratch("keeps");
         std::fs::create_dir_all(&dir).expect("a folder");
         let permit = Permit::for_a_test();
         let (inherited, protected) = (dir.join(".claude.json"), dir.join(".credentials.json"));
@@ -1353,7 +1350,7 @@ mod tests {
     #[test]
     fn a_read_only_file_is_refused_and_left_as_it_was() {
         use crate::atomic::{Perms, write};
-        let dir = scratch("read-only");
+        let (_folder, dir) = scratch("read-only");
         std::fs::create_dir_all(&dir).expect("a folder");
         let path = dir.join(".claude.json");
         std::fs::write(&path, "{}").expect("written");
@@ -1384,7 +1381,7 @@ mod tests {
     // As proper-lockfile keeps a lock: the time set is the time read back.
     #[test]
     fn a_folders_time_is_set_flushed_and_read_back() {
-        let dir = scratch("touch");
+        let (_folder, dir) = scratch("touch");
         let lock = dir.join("target.lock");
         std::fs::create_dir_all(&lock).expect("a lock");
         let at = SystemTime::now() - std::time::Duration::from_secs(3600);
@@ -1403,13 +1400,13 @@ mod tests {
     }
 
     // RF-C4's 10,000 replaces, through Pitboard's own write, beside another process reading the
-    // file again and again as std opens one, sharing its deletion; then beside one holding it
-    // without sharing that.
+    // file again and again through Pitboard's own read; then beside one holding it without
+    // sharing its deletion.
     #[test]
     fn ten_thousand_replaces_never_leave_a_reader_without_the_whole_file() {
         use crate::atomic::{Perms, write};
         use crate::helper::{Helper, Job, counts, record};
-        let dir = scratch("replaces");
+        let (_folder, dir) = scratch("replaces");
         std::fs::create_dir_all(&dir).expect("a folder");
         let path = dir.join("state.json");
         let permit = Permit::for_a_test();
@@ -1486,7 +1483,7 @@ mod tests {
 
     #[test]
     fn a_file_a_test_wrote_is_runnable_as_it_is() {
-        let dir = std::env::temp_dir().join(format!("pitboard-runnable-{}", std::process::id()));
+        let (_folder, dir) = scratch("runnable");
         std::fs::create_dir_all(&dir).expect("a scratch folder");
         let program = dir.join("program.exe");
         std::fs::copy(std::env::current_exe().expect("this test"), &program).expect("copied");

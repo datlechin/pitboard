@@ -644,9 +644,7 @@ mod tests {
     }
 
     mod running {
-        use super::super::super::harness::{
-            Machine, NOW, audit_lines, lapsed, machine, owner, renews,
-        };
+        use super::super::super::harness::{NOW, Rig, audit_lines, lapsed, machine, owner, renews};
         use super::super::WarmUp;
         use crate::duty::Look;
         use crate::duty::warm::run::{Ran, Started, WarmScript};
@@ -708,7 +706,7 @@ mod tests {
         }
 
         /// Pitboard's reading of `id`: its five-hour period not running, with `weekly` used.
-        fn idle(m: &Machine, id: &str, weekly: f64) {
+        fn idle(m: &Rig, id: &str, weekly: f64) {
             crate::usage::readings::answered(
                 &m.ctx,
                 Permit::for_a_test(),
@@ -718,7 +716,7 @@ mod tests {
 
         /// [`machine`], with `there` turned on for warm-ups, at 08:53 UTC, a Claude Code program
         /// Pitboard finds, and its run played by a script that exits `exit` printing `prints`.
-        fn warming(name: &str, exit: i32, prints: &str) -> (Machine, Arc<Script>) {
+        fn warming(name: &str, exit: i32, prints: &str) -> (Rig, Arc<Script>) {
             let ran = Ran {
                 exit: Some(exit),
                 stdout: prints.to_owned(),
@@ -732,7 +730,7 @@ mod tests {
         }
 
         /// [`warming`], with the run coming to `ran`, on `clock`.
-        fn warming_as(name: &str, ran: Ran, clock: Arc<dyn Clock>) -> (Machine, Arc<Script>) {
+        fn warming_as(name: &str, ran: Ran, clock: Arc<dyn Clock>) -> (Rig, Arc<Script>) {
             let mut m = machine(name);
             let program = m
                 .ctx_home()
@@ -757,7 +755,7 @@ mod tests {
             (m, script)
         }
 
-        fn warmed(m: &Machine) -> crate::service::Changing<WarmUp> {
+        fn warmed(m: &Rig) -> crate::service::Changing<WarmUp> {
             Pitboard::new(m.ctx.clone()).warm_up()
         }
 

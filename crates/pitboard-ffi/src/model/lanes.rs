@@ -928,15 +928,15 @@ mod tests {
     use crate::model::Intent;
     use crate::model::QuitQuestion;
     use crate::model::state::{After, Cadence, Now, State};
-    use crate::model::testing::{
-        CHATGPT_CODEX, CLAUDE, Posted, StandInApps, World, chatgpt_holding,
-    };
+    use crate::model::testing::platform::{Posted, StandInApps};
+    use crate::model::testing::records::{CHATGPT_CODEX, CLAUDE, chatgpt_holding};
+    use crate::model::testing::world::World;
     use pitboard_core::host::awake;
     use pitboard_core::provider::ProviderId;
     use pitboard_core::testing::fs as files;
     use std::time::Instant;
 
-    const CHATGPT: &str = crate::model::testing::CHATGPT;
+    const CHATGPT: &str = crate::model::testing::records::CHATGPT;
 
     fn worker(core: Arc<AppCore>, apps: Arc<StandInApps>) -> Worker {
         Worker {
@@ -1095,10 +1095,10 @@ mod tests {
         assert_eq!(Job::AutoSwitch { at: 95 }.lane(), Lane::Changes);
     }
 
-    /// AppModelTests.swift's onlyARunningAppHoldingTheToolIsAskedAbout once more, on the real
-    /// core, whose holder detection reads the process list: `switching.rs` has it over the
-    /// holdings a test says. What is left of an app that has gone cannot be quit, and a tool
-    /// nothing holds is switched at once: ChatGPT holds Codex's login, not Claude Code's.
+    /// Only a running app holding the tool is asked about, on the real core, whose holder
+    /// detection reads the process list: `switching.rs` has it over the holdings a test says.
+    /// What is left of an app that has gone cannot be quit, and a tool nothing holds is
+    /// switched at once: ChatGPT holds Codex's login, not Claude Code's.
     #[test]
     fn the_core_says_which_running_app_holds_a_login() {
         let world = World::new("holder");
@@ -1163,10 +1163,9 @@ mod tests {
         assert_eq!(found.map(|q| q.app_id), Some(CHATGPT.into()));
     }
 
-    /// AppModelTests.swift's anAppIsGivenItsTimeToQuitAndNoMore. An app that quits when
-    /// asked is waited for, and the copy that ran is the one to open again; one not running
-    /// is not asked; one that does not quit is given its time and no more, and is left
-    /// running.
+    /// An app that quits when asked is waited for, and the copy that ran is the one to open
+    /// again; one not running is not asked; one that does not quit is given its time and no
+    /// more, and is left running.
     #[test]
     fn an_app_is_given_its_time_to_quit_and_no_more() {
         let apps = StandInApps::new(&[CHATGPT], true);
@@ -1387,15 +1386,25 @@ mod tests {
             !sign_ins.stopped_within(Duration::from_millis(50)),
             "one still starting"
         );
-        let ending = {
+        let (answer, answered) = channel();
+        let waiting = {
             let sign_ins = Arc::clone(&sign_ins);
             std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(50));
-                sign_ins.end(2);
+                let _ = answer.send(sign_ins.stopped_within(Duration::from_secs(20)));
             })
         };
-        assert!(sign_ins.stopped_within(Duration::from_secs(20)));
-        ending.join().expect("the thread that ends it");
+        assert_eq!(
+            answered.recv_timeout(Duration::from_millis(50)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout),
+            "still waiting for the one starting"
+        );
+        sign_ins.end(2);
+        assert_eq!(
+            answered.recv_timeout(Duration::from_secs(20)),
+            Ok(true),
+            "stopped once it ended"
+        );
+        waiting.join().expect("the thread that waits");
     }
 
     /// A sign-in whose thread the system cannot start comes to nothing, as one whose thread
@@ -1542,7 +1551,6 @@ mod tests {
         format!("pitboard{}", std::env::consts::EXE_SUFFIX)
     }
 
-    // MachineModelTests.swift's theCommandLineIsLookedForWhereATerminalWouldFindIt.
     #[test]
     fn the_command_line_is_looked_for_where_a_terminal_would_find_it() {
         use crate::FoundCommandLine;
@@ -1571,7 +1579,7 @@ mod tests {
             }
         );
 
-        crate::model::testing::a_program_at(&cargo.join(pitboard()));
+        crate::model::testing::world::a_program_at(&cargo.join(pitboard()));
         assert_eq!(
             found(&worker),
             FoundCommandLine::Another {
@@ -1581,8 +1589,8 @@ mod tests {
         );
     }
 
-    // AppModelTests.swift's theSettingsLookForTheCommandLineWhereTheLoginShellSays. Nothing of
-    // this machine is looked in: each tool is named outright, and no login shell or registry read.
+    // Nothing of this machine is looked in: each tool is named outright, and no login shell or
+    // registry read.
     #[test]
     fn the_settings_look_for_the_command_line_where_the_login_shell_says() {
         use crate::{FoundCommandLine, Made, OwnCommandLine};
@@ -1606,8 +1614,8 @@ mod tests {
         };
         let (bin, home) = (world.dir("bin"), world.dir("home"));
         let cargo = home.join(".cargo").join("bin").join(pitboard());
-        crate::model::testing::a_program_at(&helper);
-        crate::model::testing::a_program_at(&cargo);
+        crate::model::testing::world::a_program_at(&helper);
+        crate::model::testing::world::a_program_at(&cargo);
         std::fs::create_dir_all(&bin).expect("a bin");
         let linked = bin.join(pitboard());
         files::link(&helper, &linked).expect("a link");
@@ -1714,9 +1722,6 @@ mod tests {
     /// Whether this copy has a command line a schedule or a link would keep reaching is read
     /// from the file inside it each time: none at all, one nobody may run, and one that runs.
     /// A copy with none, or one that cannot run, is refused before the scheduler is asked.
-    ///
-    /// MachineModelTests.swift's anAppWithoutACommandLineItCanRunCannotLinkOrSchedule, over a
-    /// real file.
     #[test]
     fn the_command_line_inside_is_read_from_the_file_each_time() {
         let read = |worker: &Worker| match worker.work(Job::ReadSchedule {

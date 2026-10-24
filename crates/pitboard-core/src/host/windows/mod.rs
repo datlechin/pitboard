@@ -423,8 +423,8 @@ mod tests {
     )]
     fn a_codex_this_user_runs_is_found_where_it_runs_from_in_any_case() {
         use crate::helper::{Helper, Job};
-        let dir = std::env::temp_dir().join(format!("pitboard-codex-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path();
         let programs = [
             dir.join("a").join("codex.exe"),
             dir.join("b").join("Codex.EXE"),
@@ -470,7 +470,6 @@ mod tests {
             );
             helper.stop();
         }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -547,7 +546,8 @@ mod tests {
     // Claude Desktop's folders are never moved here.
     #[test]
     fn no_apps_folder_is_moved() {
-        let dir = std::env::temp_dir().join(format!("pitboard-windows-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let dir = scratch.path().join("dir");
         let permit = crate::service::Permit::for_a_test();
         let unsupported = |made: std::io::Result<()>| {
             assert_eq!(

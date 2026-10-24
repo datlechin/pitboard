@@ -370,12 +370,8 @@ mod tests {
     /// own.
     #[test]
     fn what_an_older_pitboard_kept_and_this_one_does_not_is_removed() {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-home-retired-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let ctx = Context::new(root.clone()).with_pitboard_home(root.join(".pitboard"));
         let readings = dir(&ctx).join("readings");
         std::fs::create_dir_all(&readings).expect("a readings folder");
@@ -398,25 +394,14 @@ mod tests {
         assert!(!readings.join("acc.ndjson").exists());
         assert!(readings.join("notes.txt").exists());
         assert!(readings.join("my data.ndjson").exists());
-
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    fn scratch(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-home-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
-        root
     }
 
     // Each file is tried on its own, so one that stays keeps no other.
     #[test]
     fn what_could_not_be_removed_is_named_alone_and_the_rest_goes() {
         use crate::host::fs::testing;
-        let home = scratch("kept");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let stuck = home.join("stuck");
         std::fs::create_dir_all(&stuck).expect("a folder");
         std::fs::write(stuck.join("kept"), "x").expect("written");
@@ -445,7 +430,8 @@ mod tests {
     #[test]
     fn a_file_held_without_sharing_its_deletion_keeps_only_itself() {
         use crate::helper::{Helper, Job};
-        let home = scratch("held");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         std::fs::create_dir_all(&home).expect("a folder");
         for name in ["audit.log", "state.json", "usage.json"] {
             std::fs::write(home.join(name), "x").expect("written");
@@ -467,7 +453,8 @@ mod tests {
     /// is `USERPROFILE` on Windows.
     #[test]
     fn a_home_that_is_not_a_full_path_is_refused_by_the_variable_that_named_it() {
-        let full = std::env::temp_dir().join("pitboard-full-home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let full = scratch.path().join("home");
         let at = |name: &str| full.join(name).to_string_lossy().into_owned();
         let (pitboard, claude, slot, codex) =
             (at("pitboard"), at("claude"), at("slot"), at("codex"));
@@ -540,7 +527,8 @@ mod tests {
                  nothing until then."
             )
         );
-        let full = std::env::temp_dir().to_string_lossy().into_owned();
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let full = scratch.path().to_string_lossy().into_owned();
         assert!(
             said(&[(variable, full.as_str()), ("CODEX_HOME", "codex")])
                 .starts_with("CODEX_HOME is `codex`, which is not a full path, so ")

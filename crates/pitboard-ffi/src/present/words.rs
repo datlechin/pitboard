@@ -1299,8 +1299,6 @@ mod tests {
 
     /// A phrase that starts a line starts with a capital, and nothing else about it changes:
     /// a figure first stays as it is, and so does a phrase already capitalised.
-    ///
-    /// PresentationTests.swift's onlyTheFirstLetterOfAPhraseIsCapitalised.
     #[test]
     fn only_the_first_letter_of_a_phrase_is_capitalised() {
         assert_eq!(capitalised(""), "");
@@ -1348,8 +1346,6 @@ mod tests {
     /// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit
     /// is said in words: its name as a sentence says it, what it has used, and when it
     /// resets.
-    ///
-    /// WordingTests.swift's aLimitIsSpokenInWordsAndNotInItsColumnsShorthand.
     #[test]
     fn a_limit_is_spoken_in_words_and_not_in_its_columns_shorthand() {
         assert_eq!(
@@ -1434,8 +1430,6 @@ mod tests {
     /// Pitboard says everything in English, so a span of time VoiceOver reads inside one of
     /// its sentences is English too, whatever the region: the Swift app wrote it in
     /// `en_US_POSIX` for that reason. Here it has no region to follow.
-    ///
-    /// WordingTests.swift's aSpokenSpanOfTimeReadsTheSameInEveryRegion.
     #[test]
     fn a_spoken_span_of_time_reads_the_same_in_every_region() {
         assert_eq!(
@@ -1778,8 +1772,6 @@ mod tests {
 
     /// A warning is named in the menu by a heading from its code, each its own, and a code
     /// the app does not know yet still gets one rather than an empty line.
-    ///
-    /// PresentationTests.swift's everyWarningCodeHasItsOwnHeadingAndAnUnknownOneAGeneralOne.
     #[test]
     fn every_warning_code_has_its_own_heading_and_an_unknown_one_a_general_one() {
         let headings = [
@@ -1902,8 +1894,6 @@ mod tests {
     /// A `pitboard` installed apart from the app is updated the way it was installed, and none
     /// of those ways does it by itself. Saying it "updates on its own" read as though nothing
     /// needed doing, until the app moved on and the command line refused its newer files.
-    ///
-    /// WordingTests.swift's aCommandLineInstalledApartSaysHowToUpdateIt.
     #[test]
     fn a_command_line_installed_apart_says_how_to_update_it() {
         assert_eq!(
@@ -1919,8 +1909,6 @@ mod tests {
     /// A check is shown as a shape and a colour, and said as a word. If two levels ever came
     /// to sound the same, a broken check would read as a passing one. Its shape and its colour
     /// are each app's own.
-    ///
-    /// WordingTests.swift's everyLevelLooksAndSoundsLikeItself, but for the symbols.
     #[test]
     fn every_level_sounds_like_itself() {
         let spoken: Vec<&str> = [Level::Ok, Level::Warn, Level::Fail]
@@ -1937,8 +1925,6 @@ mod tests {
 
     /// The activity list names a change by the verb the log keeps, in words, and one it does
     /// not know yet by the verb itself made readable rather than not at all.
-    ///
-    /// PresentationTests.swift's aChangeIsNamedByItsVerbAndAnUnknownOneReadably.
     #[test]
     fn a_change_is_named_by_its_verb_and_an_unknown_one_readably() {
         for (verb, name) in [
@@ -2001,10 +1987,80 @@ mod tests {
         assert_eq!(change_outcome("second_sign_in"), "Second sign-in");
     }
 
+    // The notices' sentences, pinned once: the panel's tests compare with these functions.
+    #[test]
+    fn a_notice_says_what_happened_in_these_words() {
+        assert_eq!(switched_to(None, "work"), "Switched to work");
+        assert_eq!(
+            switched_to(Some("Claude Code"), "work"),
+            "Switched Claude Code to work"
+        );
+        assert_eq!(sessions_follow_in(None), "Sessions already open follow in");
+        assert_eq!(
+            sessions_follow_in(Some("Claude Code")),
+            "Claude Code sessions already open follow in"
+        );
+        assert_eq!(
+            restart_notice("codex", "personal"),
+            "Any codex session started before this switch keeps using personal until it is quit \
+             and started again."
+        );
+        assert_eq!(has_a_new_login(None, "work"), "work has a new login");
+        assert_eq!(
+            has_a_new_login(Some("Codex"), "work"),
+            "work in Codex has a new login"
+        );
+        assert_eq!(
+            signed_in_now("work", true, None),
+            "Signed in to work again. Its new login is the one in use now."
+        );
+        assert_eq!(
+            signed_in_now("work", false, None),
+            "Enrolled work, the account signed in now. Its new login is the one in use."
+        );
+        assert_eq!(
+            gave_up("personal", "work", 2),
+            "The switch from personal to work was given up. 2 logins kept, and nothing was \
+             deleted."
+        );
+        assert_eq!(
+            gave_up("personal", "work", 1),
+            "The switch from personal to work was given up. 1 login kept, and nothing was \
+             deleted."
+        );
+        assert_eq!(ran_out("work", "5-hour"), "work has no 5-hour limit left");
+        assert_eq!(
+            room_left("spare", Some(80)),
+            "spare has 80% of its own left."
+        );
+        assert_eq!(room_left("seat", None), "seat has no such limit.");
+        assert_eq!(
+            of_tool(Some("Claude Code"), "work has no 5-hour limit left"),
+            "Claude Code: work has no 5-hour limit left"
+        );
+        assert_eq!(things_to_look_at(2), "2 things to look at");
+        assert_eq!(
+            switch_waits_for("Anthropic or OpenAI"),
+            "An interrupted switch can’t be finished until Anthropic or OpenAI answers."
+        );
+        assert_eq!(
+            give_up_stuck(&[]),
+            "Every login is kept, and nothing is deleted. Pitboard stops trying to finish it."
+        );
+        assert_eq!(
+            give_up_stuck(&[("Claude Desktop".into(), "Claude")]),
+            "Every login is kept, and nothing is deleted. Pitboard stops trying to finish it and, \
+             with Claude quit, settles or gives up the interrupted Claude Desktop move too."
+        );
+        assert_eq!(
+            move_waits_too("Claude Desktop", "Claude"),
+            "A Claude Desktop move was interrupted too. With Claude quit, Give Up… settles it or \
+             gives it up as well, and keeps every folder."
+        );
+    }
+
     /// A change that worked says so in a word, and one that did not says what stopped it,
     /// from the code the log keeps.
-    ///
-    /// PresentationTests.swift's aChangeSaysHowItEnded.
     #[test]
     fn a_change_says_how_it_ended() {
         assert_eq!(change_outcome("ok"), "Done");
@@ -2017,8 +2073,6 @@ mod tests {
 
     /// Who asked for a change: this app, a terminal, or a line written before that was
     /// recorded, and a caller the app does not know yet by its own name.
-    ///
-    /// PresentationTests.swift's aChangeSaysWhoAskedForIt.
     #[test]
     fn a_change_says_who_asked_for_it() {
         assert_eq!(change_caller("app"), "Pitboard app");

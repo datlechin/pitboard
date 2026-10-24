@@ -34,7 +34,7 @@ pub(crate) enum Job {
     // editors and scanners open one.
     #[cfg(windows)]
     HoldsWithoutDelete,
-    // The file read whole, again and again, opened as std opens one.
+    // The file read whole, again and again, as Pitboard reads a file it replaces.
     Reads,
     // A sign-in's address on standard error, then nothing for 30 s, as `codex login` waits.
     SaysAnAddress,
@@ -380,7 +380,7 @@ mod tests {
                 let mut failed = Vec::new();
                 while !closed.load(Ordering::Acquire) {
                     reads += 1;
-                    match std::fs::read(&file) {
+                    match crate::atomic::read(&file, |file| std::fs::read(file)) {
                         Ok(read) if whole(&read) => whole_reads += 1,
                         Ok(_) => torn += 1,
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => missing += 1,

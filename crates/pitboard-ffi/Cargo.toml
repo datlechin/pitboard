@@ -34,6 +34,7 @@ uuid.workspace = true
 # The core's machine in memory and its scripted services, which the model's tests run the
 # real core on. Tests alone: the libraries the apps link are built without them.
 pitboard-core = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true

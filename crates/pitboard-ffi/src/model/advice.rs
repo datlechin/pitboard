@@ -333,7 +333,6 @@ mod tests {
         Advice::about(status, &[], told)
     }
 
-    /// MenuTests.swift's theAccountWithTheMostLeftIsOffered.
     #[test]
     fn the_account_with_the_most_left_is_offered() {
         let read = status(vec![
@@ -410,7 +409,6 @@ mod tests {
         );
     }
 
-    /// MenuTests.swift's anAccountThatCannotBeSwitchedToIsNotOffered.
     #[test]
     fn an_account_that_cannot_be_switched_to_is_not_offered() {
         let read = status(vec![
@@ -426,7 +424,6 @@ mod tests {
         assert!(about(&read, &Told::new()).is_empty());
     }
 
-    /// MenuTests.swift's nothingIsSaidWhenEveryAccountIsSpent.
     #[test]
     fn nothing_is_said_when_every_account_is_spent() {
         let read = status(vec![
@@ -453,8 +450,7 @@ mod tests {
         ])
     }
 
-    /// MenuTests.swift's oneExhaustedWindowIsMentionedOnce. The next window is its own; what
-    /// was said about the last one does not carry over.
+    /// The next window is its own; what was said about the last one does not carry over.
     #[test]
     fn one_exhausted_window_is_mentioned_once() {
         let read = spent_at(42);
@@ -471,8 +467,6 @@ mod tests {
     /// A session is given a reset in whole seconds, and Anthropic's answer gives a fraction
     /// that is dropped, so one window can come back a second apart from what was told about
     /// it. The core counts resets a minute apart as one, and so does what is told.
-    ///
-    /// MenuTests.swift's aWindowToldAboutIsNotToldAgainWithItsResetRoundedOtherwise.
     #[test]
     fn a_window_told_about_is_not_told_again_with_its_reset_rounded_otherwise() {
         let told = Advice::key("claude", "work", &window("session", 100.0));
@@ -481,8 +475,6 @@ mod tests {
 
     /// Advice is about one window. The window after it, spent as well, is advice of its own
     /// to tell, and not this advice still holding.
-    ///
-    /// MenuTests.swift's adviceHoldsForTheWindowItIsAboutAndNotTheOneAfter.
     #[test]
     fn advice_holds_for_the_window_it_is_about_and_not_the_one_after() {
         let advice = about(&spent_at(7_200), &Told::new()).remove(0);
@@ -565,7 +557,6 @@ mod tests {
         );
     }
 
-    /// MenuTests.swift's aWeeklyLimitIsComparedWithWeeklyLimits.
     #[test]
     fn a_weekly_limit_is_compared_with_weekly_limits() {
         let read = status(vec![
@@ -634,8 +625,6 @@ mod tests {
 
     /// A Codex account with room is no help to somebody whose Claude Code account has run
     /// out: a switch between them is not a switch at all.
-    ///
-    /// MenuTests.swift's adviceNeverCrossesTools.
     #[test]
     fn advice_never_crosses_tools() {
         let read = status(vec![
@@ -658,9 +647,7 @@ mod tests {
 
     /// Each tool is advised about from its own accounts, and says which tool it is about.
     ///
-    /// MenuTests.swift's eachToolIsAdvisedFromItsOwnAccounts. Its `said`, which only tests
-    /// spoke, words nothing the panel or a notification says; their words are
-    /// presenting's.
+    /// What the panel and a notification say of it is presenting's.
     #[test]
     fn each_tool_is_advised_from_its_own_accounts() {
         let read = status(vec![
@@ -690,8 +677,6 @@ mod tests {
     }
 
     /// What was said about one tool's `work` says nothing about another's.
-    ///
-    /// MenuTests.swift's whatWasToldIsKeptApartByTool.
     #[test]
     fn what_was_told_is_kept_apart_by_tool() {
         let exhausted = window("session", 100.0).resets(Some(7));
@@ -718,8 +703,6 @@ mod tests {
     /// What has been told is kept per tool and account. A rename moves what was told about
     /// that one account, every limit of it, and nothing else: not the same name in another
     /// tool, and not a name that only starts with it.
-    ///
-    /// AppModelTests.swift's aRenameMovesWhatWasToldAboutThatAccountAlone.
     #[test]
     fn a_rename_moves_what_was_told_about_that_account_alone() {
         let mut told = Told::from([

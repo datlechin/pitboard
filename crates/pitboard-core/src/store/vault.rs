@@ -368,11 +368,8 @@ mod tests {
     /// park on Linux was refused, after a browser sign-in had already been finished.
     #[test]
     fn a_real_codex_park_name_is_one_the_vault_stores() {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-vault-codex-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().to_path_buf();
         let ctx = Context::new(root.clone()).with_pitboard_home(root.clone());
         let vault = FileVault::new(&ctx);
         let name = crate::park::service_name(
@@ -381,7 +378,6 @@ mod tests {
         );
         assert!(vault.path(&name).is_ok(), "{name}");
         assert!(crate::park::is_park_name(&name));
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     // SECURITY.md says a park and its folder are private to their owner, sealed or not.

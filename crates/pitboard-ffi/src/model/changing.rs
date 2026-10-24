@@ -12,10 +12,13 @@ use super::signing::quits_failed;
 use super::state::{After, Answer, Job};
 use super::stowing::{left, parked_now};
 use super::switching::{a_read_that_started_before, switch};
-use super::testing::{
-    CLAUDE, Hand, Machine, StandInApps, a_look, a_look_or_a_read, a_switch, any_read, claude,
-    codex_account, desktop_machine, enrolled_as, offline_read, refusal, status, still_running,
-    switched, titled, warned, warning,
+use super::testing::machine::{
+    Hand, Stub, a_look, a_look_or_a_read, a_switch, any_read, desktop_machine, offline_read,
+};
+use super::testing::platform::StandInApps;
+use super::testing::records::{
+    CLAUDE, claude, codex_account, enrolled_as, refusal, status, still_running, switched, titled,
+    warned, warning,
 };
 use super::{Intent, Sheet};
 use crate::present::testing::account;
@@ -65,7 +68,7 @@ fn renaming(provider: &str, label: &str) -> Sheet {
 }
 
 /// Puts `sheet` up and answers what that asks.
-fn put_up(model: &mut Hand, machine: &mut Machine, sheet: Sheet) {
+fn put_up(model: &mut Hand, machine: &mut Stub, sheet: Sheet) {
     model.send(Intent::PresentSheet { sheet });
     model.run(machine);
 }
@@ -82,12 +85,10 @@ fn tos(model: &Hand) -> Vec<String> {
 /// The account signed in but not enrolled is the one the app can record by itself: no
 /// browser, no terminal. The sheet closes once the name is taken, and stays open with the
 /// name in it when it is refused, so it can be corrected rather than typed again.
-///
-/// AppModelTests.swift's onlyAnUnenrolledSignedInAccountCanBeNamedHere.
 #[test]
 fn only_an_unenrolled_signed_in_account_can_be_named_here() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(None).signed_in().uuid("a").build(),
     ])));
     model.refresh(&mut machine);
@@ -129,12 +130,10 @@ fn only_an_unenrolled_signed_in_account_can_be_named_here() {
 
 /// Naming a Codex login enrols it as Codex's. A bare name means Claude Code to the core, and
 /// would have enrolled nothing or the wrong tool's login.
-///
-/// AppModelTests.swift's aCodexLoginIsNamedAsCodexs.
 #[test]
 fn a_codex_login_is_named_as_codexs() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
         account(None).of("codex").signed_in().uuid("c").build(),
     ])));
@@ -153,12 +152,10 @@ fn a_codex_login_is_named_as_codexs() {
 
 /// Forgetting is destructive, so what the model does with a refusal matters. The refusal is
 /// said to whoever asked, in the core's own words, and one that went through says nothing.
-///
-/// AppModelTests.swift's aRefusedForgetIsReported.
 #[test]
 fn a_refused_forget_is_reported() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.send(forget("claude/alpha"));
     model.run(&mut machine);
     assert_eq!(model.shown().failure, None);
@@ -194,12 +191,11 @@ fn a_refused_forget_is_reported() {
 /// Two tools can each have a `work`. Every call names the one meant, with its tool, and the
 /// rows are told apart by their id rather than by a label they share.
 ///
-/// AppModelTests.swift's twoToolsWorkAccountsAreSwitchedAndForgottenByTheirOwnName, the
-/// forgetting and the row's name: the switch is switching.rs's.
+/// The switch is switching.rs's.
 #[test]
 fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().uuid("same").build(),
         account(Some("personal")).build(),
         account(Some("work")).of("codex").uuid("same").build(),
@@ -235,12 +231,10 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
 /// Naming or renaming closes its own sheet once it is done, and only that. The name is saved
 /// even when somebody has since put up another sheet, and closing that one threw away
 /// whatever was in it.
-///
-/// AppModelTests.swift's namingAndRenamingCloseOnlyTheirOwnSheet.
 #[test]
 fn naming_and_renaming_close_only_their_own_sheet() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(None).signed_in().uuid("a").build(),
         account(Some("personal")).build(),
     ])));
@@ -280,8 +274,7 @@ fn naming_and_renaming_close_only_their_own_sheet() {
     );
 }
 
-/// AppModelTests.swift's aReadThatStartedBeforeAChangeIsDroppedWhenItLands, for an
-/// enrolment.
+/// A read that started before an enrolment is dropped when it lands, as for every change.
 #[test]
 fn a_read_that_started_before_naming_an_account_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
@@ -321,14 +314,11 @@ fn a_read_that_started_before_forgetting_is_dropped_when_it_lands() {
 /// runs of the whole suite. The poll leaves the account index alone until the read after the
 /// change has landed, as it does while a switch runs, and a change made elsewhere after that
 /// is noticed as before.
-pub(super) fn a_look_landing_after(
-    after: Vec<Account>,
-    change: impl FnOnce(&mut Hand, &mut Machine),
-) {
+pub(super) fn a_look_landing_after(after: Vec<Account>, change: impl FnOnce(&mut Hand, &mut Stub)) {
     let after = status(after);
     let elsewhere = status(vec![codex_account("personal", false)]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         codex_account("personal", true),
         codex_account("spare", false),
     ])));
@@ -430,7 +420,7 @@ fn a_look_landing_after_updating_the_config_leaves_the_read_after_it() {
 /// left the menu bar blind to every switch typed in a terminal until the app quit.
 #[test]
 fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
-    type Ending = Box<dyn Fn(&mut Hand, &mut Machine)>;
+    type Ending = Box<dyn Fn(&mut Hand, &mut Stub)>;
     let refused = || Err(refusal("refused", "it was refused", Vec::new()));
     let cases: Vec<(&str, Ending)> = vec![
         (
@@ -552,7 +542,7 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
     ];
     for (case, change) in cases {
         let mut model = Hand::new();
-        let mut machine = Machine::reading(Ok(status(vec![
+        let mut machine = Stub::reading(Ok(status(vec![
             codex_account("personal", true),
             codex_account("spare", false),
         ])));
@@ -578,7 +568,7 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
 #[test]
 fn a_look_while_a_rename_is_made_leaves_what_was_said_about_the_account() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 100.0),
         claude("personal", false, 10.0),
     ])));
@@ -621,12 +611,10 @@ fn a_look_while_a_rename_is_made_leaves_what_was_said_about_the_account() {
 /// said under the new name, and one tool's rename says nothing about another tool's accounts.
 /// Keyed by the old name, the read after a rename took the switch for undone and the advice
 /// for new, and told it again.
-///
-/// AppModelTests.swift's aRenameCarriesWhatWasSaidAboutTheAccount.
 #[test]
 fn a_rename_carries_what_was_said_about_the_account() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 100.0),
         claude("personal", false, 10.0),
         codex_account("work", true),
@@ -749,7 +737,7 @@ fn a_name_is_saved_as_its_sheet_offers_it() {
 #[test]
 fn a_sheet_saving_a_name_holds_back_until_it_answers() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     put_up(&mut model, &mut machine, naming("claude", "a@example.com"));
     let jobs = model.send(enrol("claude", "work"));
     assert_eq!(jobs.len(), 1);
@@ -769,7 +757,7 @@ fn a_sheet_saving_a_name_holds_back_until_it_answers() {
 #[test]
 fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.enrolling_current = Err(refusal("label_taken", "Taken.", Vec::new()));
     machine.renaming = Err(refusal("label_taken", "Taken too.", Vec::new()));
 
@@ -801,7 +789,7 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
 #[test]
 fn a_save_that_came_to_nothing_says_so() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     put_up(&mut model, &mut machine, renaming("claude", "work"));
     let jobs = model.send(rename("claude", "work", "office"));
     let job = jobs.into_iter().next().expect("the rename");
@@ -863,7 +851,7 @@ fn updating_claude_codes_config_is_no_switch() {
         "/Users/you/.claude/.credentials.json holds another Claude Code login.",
     );
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         work_in_use(),
         vec![names_another(), behind.clone()],
     )));
@@ -909,7 +897,7 @@ fn a_config_that_could_not_be_updated_is_said_beside_the_read_after() {
         "Claude Code's config at /Users/you/.claude.json could not be updated (disk full).",
     );
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(work_in_use(), vec![names_another()])));
+    let mut machine = Stub::reading(Ok(warned(work_in_use(), vec![names_another()])));
     model.refresh(&mut machine);
 
     machine.updating_config = Ok(vec![not_written.clone()]);
@@ -937,7 +925,7 @@ fn a_config_that_could_not_be_updated_is_said_beside_the_read_after() {
 #[test]
 fn a_config_update_refused_is_said_in_the_window() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(work_in_use(), vec![names_another()])));
+    let mut machine = Stub::reading(Ok(warned(work_in_use(), vec![names_another()])));
     model.refresh(&mut machine);
 
     machine.updating_config = Err(refusal(
@@ -956,7 +944,7 @@ fn a_config_update_refused_is_said_in_the_window() {
 }
 
 // Recording the account an app shows, which reads its data folder only while it is closed.
-fn recording_travel(model: &mut Hand, machine: &mut Machine) {
+fn recording_travel(model: &mut Hand, machine: &mut Stub) {
     model.refresh(machine);
     model.send(enrol("desktop", "travel"));
     model.run(machine);

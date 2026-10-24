@@ -1571,21 +1571,19 @@ mod tests {
     #[test]
     fn stow_refuses_a_login_of_an_account_not_enrolled_as_the_look_found_it() {
         use pitboard_core::provider::Owner;
-        use pitboard_core::testing::{FixedClock, MemoryHost, ScriptedApi, live_service};
+        use pitboard_core::testing::{FixedClock, ScratchMachine, live_service};
         use std::sync::Arc;
         const NOW: i64 = 1_760_000_000;
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-cli-stow-not-enrolled-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
-        let (mem, api) = (MemoryHost::new(), ScriptedApi::new());
-        let ctx = Context::new(home.clone())
-            .with_pitboard_home(home.join(".pitboard"))
-            .with_memory_stores(Arc::clone(&mem))
-            .with_scripted_api(Arc::clone(&api))
-            .with_clock(Arc::new(FixedClock::at(NOW)));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
+        let ScratchMachine {
+            ctx,
+            host: mem,
+            api,
+        } = ScratchMachine::at(&home, |ctx| {
+            ctx.with_pitboard_home(home.join(".pitboard"))
+                .with_clock(Arc::new(FixedClock::at(NOW)))
+        });
         let service = live_service(&ctx);
         let login = |who: &str| {
             api.owned_by(
@@ -1612,7 +1610,6 @@ mod tests {
         let report = stow(&pitboard, |_| panic!("nothing is asked")).expect("a refusal");
 
         let logged = pitboard.log(10);
-        let _ = std::fs::remove_dir_all(&home);
         assert!(
             matches!(&report.result, Err(error) if error.code() == "left_login_not_enrolled"),
             "{:?}",
@@ -1729,7 +1726,8 @@ mod tests {
         use pitboard_core::host::Elevation;
         use pitboard_core::testing::MemoryHost;
         let mem = MemoryHost::new();
-        let home = std::env::temp_dir().join("pitboard-cli-confirm");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let pitboard = Pitboard::new(
             Context::new(home.clone())
                 .with_pitboard_home(home.join(".pitboard"))
@@ -1768,11 +1766,8 @@ mod tests {
     #[test]
     fn uninstall_names_the_folder_it_asks_about_and_deletes() {
         use pitboard_core::testing::MemoryHost;
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-cli-uninstall-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let elsewhere = home.join("elsewhere");
         std::fs::create_dir_all(&elsewhere).expect("a Pitboard folder");
         let pitboard = Pitboard::new(
@@ -1804,18 +1799,14 @@ mod tests {
             "{said}"
         );
         assert!(!elsewhere.exists());
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     // A warm-up's tool runs in a home inside Pitboard's directory while it holds `warm.lock`.
     #[test]
     fn uninstall_keeps_the_folder_a_warm_up_runs_in_and_says_so() {
         use pitboard_core::testing::MemoryHost;
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-cli-uninstall-warm-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let folder = home.join(".pitboard");
         std::fs::create_dir_all(&folder).expect("a Pitboard folder");
         let pitboard = Pitboard::new(
@@ -1840,7 +1831,6 @@ mod tests {
         let said = uninstall(&pitboard);
         assert!(said.human.contains("is gone"), "{}", said.human);
         assert!(!folder.exists());
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]
@@ -2031,12 +2021,8 @@ mod tests {
     #[test]
     fn schedule_status_from_another_home_says_what_the_schedule_renews() {
         use pitboard_core::testing::MemoryHost;
-        let home = std::env::temp_dir().join(format!(
-            "pitboard-cli-schedule-status-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&home);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let program = home.join("bin/pitboard");
         std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
         std::fs::write(&program, "").expect("a command line");
@@ -2084,7 +2070,6 @@ mod tests {
             "{there}"
         );
         assert!(there.contains(renews_only), "{there}");
-        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// A build that may do nothing here, a Windows build of a release before Windows is

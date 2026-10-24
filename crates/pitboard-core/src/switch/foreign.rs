@@ -10,7 +10,7 @@
 //! there a park `repair` finds is this Pitboard's own.
 
 use super::harness::{
-    Machine, NOW, Tool, account, codex_access, codex_account, codex_id, codex_login, codex_machine,
+    NOW, Rig, Tool, account, codex_access, codex_account, codex_id, codex_login, codex_machine,
     machine, oauth, owner, renews,
 };
 use super::*;
@@ -18,12 +18,12 @@ use crate::api::scripted::Trouble;
 use crate::service::Permit;
 use serde_json::json;
 
-type Make = fn(&str) -> Machine;
+type Make = fn(&str) -> Rig;
 
 const MACHINES: [Make; 2] = [machine, codex_machine];
 
 /// The account id this machine's tool gives `who`.
-fn id(m: &Machine, who: &str) -> String {
+fn id(m: &Rig, who: &str) -> String {
     match Tool::of(m.which) {
         Tool::Claude => who.to_string(),
         Tool::Codex => codex_id(who),
@@ -31,7 +31,7 @@ fn id(m: &Machine, who: &str) -> String {
 }
 
 /// `who`'s account, enrolled the way this machine's tool enrols one.
-fn enrolled(m: &Machine, who: &str, parked: Option<Park>) -> Account {
+fn enrolled(m: &Rig, who: &str, parked: Option<Park>) -> Account {
     match Tool::of(m.which) {
         Tool::Claude => account(who, who, parked),
         Tool::Codex => codex_account(who, who, parked),
@@ -40,7 +40,7 @@ fn enrolled(m: &Machine, who: &str, parked: Option<Park>) -> Account {
 
 /// A login of `who`'s on a refresh chain of its own, as this machine's tool parks one, and
 /// a service that answers for it.
-fn login(m: &Machine, who: &str, refresh: &str) -> Value {
+fn login(m: &Rig, who: &str, refresh: &str) -> Value {
     match Tool::of(m.which) {
         Tool::Claude => {
             m.api.owned_by(&format!("access-{refresh}"), owner(who));
@@ -63,7 +63,7 @@ fn login(m: &Machine, who: &str, refresh: &str) -> Value {
 }
 
 /// The same, with its access token lapsed, so the next renewal is due.
-fn lapsed(m: &Machine, who: &str, refresh: &str) -> Value {
+fn lapsed(m: &Rig, who: &str, refresh: &str) -> Value {
     let mut document = login(m, who, refresh);
     match Tool::of(m.which) {
         Tool::Claude => document["expiresAt"] = json!((NOW - 60) * 1000),
@@ -78,7 +78,7 @@ fn lapsed(m: &Machine, who: &str, refresh: &str) -> Value {
 
 /// `away` is enrolled, not signed in, and holds nothing: its park is gone, the way a
 /// refused one goes.
-fn enrol_away(m: &Machine) {
+fn enrol_away(m: &Rig) {
     let mut state = state::load(&m.ctx).expect("state");
     state.upsert(enrolled(m, "away", None));
     state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
@@ -86,7 +86,7 @@ fn enrol_away(m: &Machine) {
 
 /// Another Pitboard on the same machine, with a home of its own and the same keychain,
 /// parks a login of `who`'s and records it, the way its own switch would have.
-fn parked_elsewhere(m: &Machine, who: &str, document: &Value) -> (Context, Park) {
+fn parked_elsewhere(m: &Rig, who: &str, document: &Value) -> (Context, Park) {
     let other = m
         .ctx
         .clone()
@@ -106,7 +106,7 @@ fn parked_elsewhere(m: &Machine, who: &str, document: &Value) -> (Context, Park)
     (other, parked)
 }
 
-fn repair_here(m: &Machine) -> Reclaimed {
+fn repair_here(m: &Rig) -> Reclaimed {
     repair(
         settle(&m.ctx, Permit::for_a_test(), None)
             .expect("nothing to recover")
@@ -403,7 +403,7 @@ fn a_park_this_pitboard_wrote_down_and_lost_is_still_deleted_when_replaced() {
 
 /// A park written into this vault and then lost from this home's records, as a state file
 /// restored from a backup leaves it. Only its account names it.
-fn lost(m: &Machine, who: &str, document: &Value) -> Park {
+fn lost(m: &Rig, who: &str, document: &Value) -> Park {
     let service = park::service_name(&id(m, who), (NOW - 60) * 1000);
     park::store_at(
         &m.ctx,

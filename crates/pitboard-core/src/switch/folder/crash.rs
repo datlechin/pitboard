@@ -1,11 +1,11 @@
 // A move killed at every point it reaches, with Claude doing each thing it can do before the
 // next change, then recovered by that change's first step.
 
-use super::super::harness::{
-    FOLDER_POINTS, HOME, Machine, STRANGER, WORK, as_a_dead_runs, data, desktop_pair, hold,
-    recover, rested, settled, snapshot, unchanged,
-};
+use super::super::harness::{HOME, Rig, STRANGER, WORK, desktop_pair, hold, recover};
 use super::super::{abandon, enroll, switch, update_config};
+use super::tests::{
+    FOLDER_POINTS, as_a_dead_runs, data, rested, settled, snapshot, stats, tree, unchanged,
+};
 use crate::desktop_testing::{EMPTIED, Person};
 use crate::error::Error;
 use crate::fault;
@@ -49,16 +49,16 @@ enum Claude {
 }
 
 // Whose session the jar in Claude's folder holds, of the two accounts.
-fn in_the_folder(m: &Machine) -> Option<Person> {
+fn in_the_folder(m: &Rig) -> Option<Person> {
     let raw = std::fs::read_to_string(data(m).join("Cookies")).ok()?;
     [WORK, HOME]
         .into_iter()
         .find(|who| raw.contains(&hex::encode(format!("v10{}", who.session))))
 }
 
-fn machine(change: Change, name: &str) -> Machine {
+fn machine(change: Change, name: &str) -> Rig {
     let m = desktop_pair(&format!("crash-{change:?}-{name}"));
-    let signed_out = |m: &Machine| {
+    let signed_out = |m: &Rig| {
         let died = fault::killing("leave.done", || switch(settled(m), &m.key("home")));
         assert_eq!(died.expect_err("killed"), "leave.done");
     };
@@ -85,7 +85,7 @@ fn machine(change: Change, name: &str) -> Machine {
     m
 }
 
-fn run(m: &Machine, change: Change) -> Result<(), Error> {
+fn run(m: &Rig, change: Change) -> Result<(), Error> {
     match change {
         Change::Switch | Change::ArriveOver | Change::ArriveEmpty => {
             switch(settled(m), &m.key("home")).map(drop)
@@ -99,7 +99,7 @@ fn run(m: &Machine, change: Change) -> Result<(), Error> {
 
 // The next change's first step: `begin`, which settles, and for the start of a sign-in the
 // sweep, since it leaves no record but its `pending` line.
-fn recovery(m: &Machine) -> Result<(), Error> {
+fn recovery(m: &Rig) -> Result<(), Error> {
     match update_config(settled(m), &m.key("work")) {
         Ok(_) => Ok(()),
         // By its code: where settling did anything, the refusal comes with what it said.
@@ -110,7 +110,7 @@ fn recovery(m: &Machine) -> Result<(), Error> {
 
 // What any next command sweeps first, `pending`'s lines and Pitboard's own temporaries, taken
 // before a snapshot so the snapshot compares what recovery's row did.
-fn swept(m: &Machine) {
+fn swept(m: &Rig) {
     recover(m).expect("swept");
     crate::atomic::sweep(Permit::for_a_test(), &data(m));
 }
@@ -137,7 +137,7 @@ fn inode(path: PathBuf) -> Option<u64> {
 }
 
 // By inode, which a rename keeps; not the settings, which each write of them makes anew.
-fn entries(m: &Machine) -> BTreeSet<(String, Option<u64>)> {
+fn entries(m: &Rig) -> BTreeSet<(String, Option<u64>)> {
     walk(&data(m))
         .into_iter()
         .filter(|path| !path.ends_with("/config.json"))
@@ -155,14 +155,14 @@ fn app() -> &'static dyn crate::provider::folder::Folder {
     }
 }
 
-fn keys(m: &Machine) -> BTreeMap<String, String> {
+fn keys(m: &Rig) -> BTreeMap<String, String> {
     app()
         .settings(&data(m))
         .map(|settings| settings.account_keys(app()).digests())
         .unwrap_or_default()
 }
 
-fn kept_keys(m: &Machine) -> Vec<BTreeMap<String, String>> {
+fn kept_keys(m: &Rig) -> Vec<BTreeMap<String, String>> {
     let names = crate::store::folder::list(&m.ctx)
         .ok()
         .flatten()
@@ -181,7 +181,7 @@ struct Inside {
     kept: Vec<BTreeMap<String, String>>,
 }
 
-fn inside(m: &Machine) -> Inside {
+fn inside(m: &Rig) -> Inside {
     Inside {
         entries: entries(m),
         keys: keys(m),
@@ -190,7 +190,7 @@ fn inside(m: &Machine) -> Inside {
 }
 
 // Keys are cleared only once a folder under `parks` kept them, and put only where none were.
-fn took_nothing_in(m: &Machine, at: &str, before: &Inside) {
+fn took_nothing_in(m: &Rig, at: &str, before: &Inside) {
     let now = entries(m);
     let came = now.difference(&before.entries).collect::<Vec<_>>();
     assert!(
@@ -233,7 +233,7 @@ fn reached(change: Change) -> Vec<(&'static str, usize)> {
     points
 }
 
-fn played(m: &Machine, claude: Claude) {
+fn played(m: &Rig, claude: Claude) {
     let app = m.claude();
     let there = in_the_folder(m);
     match (claude, there) {
@@ -369,7 +369,7 @@ fn cell(change: Change, point: &'static str, nth: usize, claude: Claude) -> Opti
 
 // Where a give-up without the person's word refuses: the park holds the record's jar, and an
 // item of the account's other than the jar's is in Claude's folder and not in the park.
-fn mixed(m: &Machine) -> bool {
+fn mixed(m: &Rig) -> bool {
     let state = crate::state::load(&m.ctx).expect("state");
     let Some(moving) = state.moving(ProviderId::Desktop) else {
         return false;
@@ -410,10 +410,6 @@ fn column(change: Change, claude: Claude) -> Vec<(String, String)> {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn every_point_recovers_to_a_resting_state() {
     for change in CHANGES {
         let stopped = column(change, Claude::NeverRan);
@@ -424,10 +420,6 @@ fn every_point_recovers_to_a_resting_state() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn a_point_killed_after_its_save_left_nothing_to_recover() {
     for (change, point) in [
         (Change::Switch, "leave.done"),
@@ -447,10 +439,6 @@ fn a_point_killed_after_its_save_left_nothing_to_recover() {
 
 // Claude opened and quit as whoever its folder held: every cell is a row's, and none stops.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn every_cell_takes_a_named_row() {
     for change in CHANGES {
         let stopped = column(change, Claude::RanAndQuit);
@@ -459,10 +447,6 @@ fn every_cell_takes_a_named_row() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn claude_still_open_refuses_and_keeps_the_record() {
     let stopped = column(Change::Switch, Claude::StillOpen);
     assert!(stopped.is_empty(), "{stopped:#?}");
@@ -471,10 +455,6 @@ fn claude_still_open_refuses_and_keeps_the_record() {
 // Claude replaced the session, or somebody signed in to a third account: recovery changes
 // nothing, says which row stopped it, and `enroll` is the way out.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn recovery_stops_at_a_session_it_did_not_record() {
     for change in [Change::Switch, Change::ArriveOver] {
         for claude in [Claude::Renewed, Claude::Stranger] {
@@ -500,7 +480,7 @@ enum Since {
     Emptied,
 }
 
-fn set(m: &Machine, key: &str, value: &str) {
+fn set(m: &Rig, key: &str, value: &str) {
     let path = data(m).join("config.json");
     let mut settings: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("settings")).expect("JSON");
@@ -510,7 +490,7 @@ fn set(m: &Machine, key: &str, value: &str) {
 }
 
 // A change killed at `point` and not yet recovered, Claude never run since.
-fn killed(change: Change, point: &'static str, since: Since, name: &str) -> Machine {
+fn killed(change: Change, point: &'static str, since: Since, name: &str) -> Rig {
     let m = machine(change, &format!("{point}-{since:?}-{name}"));
     let died = fault::killing(point, || run(&m, change));
     assert_eq!(died.expect_err("killed"), point);
@@ -555,10 +535,6 @@ fn reached_by_recovery(change: Change, point: &'static str, since: Since) -> Vec
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn recovery_puts_nothing_into_claudes_folder() {
     for (change, point, since) in ROWS {
         for claude in [Claude::NeverRan, Claude::RanAndQuit, Claude::Stranger] {
@@ -573,10 +549,6 @@ fn recovery_puts_nothing_into_claudes_folder() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn recovery_never_writes_keys_over_keys() {
     let cache = "oauth:tokenCache";
     // Claude renewed its tokens since a leave was recorded: they stay as Claude wrote them.
@@ -615,10 +587,6 @@ fn recovery_never_writes_keys_over_keys() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn recovery_killed_partway_recovers() {
     for (change, point, since) in ROWS {
         for at in reached_by_recovery(change, point, since) {
@@ -639,10 +607,6 @@ fn recovery_killed_partway_recovers() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn claude_opened_during_recovery_keeps_the_record() {
     for (change, point, since) in ROWS {
         let mut seen = BTreeSet::new();
@@ -684,7 +648,7 @@ fn claude_opened_during_recovery_keeps_the_record() {
         "give-up-meanwhile",
     );
     played(&m, Claude::Stranger);
-    let third = |m: &Machine| enroll(settled(m), &m.key("third"), None);
+    let third = |m: &Rig| enroll(settled(m), &m.key("third"), None);
     let app = m.claude();
     let midway = fault::meanwhile("give_up.item_aside", move || app.opens(), || third(&m));
     let midway = midway.expect_err("Claude opened while a give-up set things aside");
@@ -792,10 +756,6 @@ fn opened_at(change: Change, point: &'static str) {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn claude_opened_at_any_point_stops_at_the_third_look() {
     for change in CHANGES {
         for (point, nth) in reached(change) {
@@ -809,10 +769,6 @@ fn claude_opened_at_any_point_stops_at_the_third_look() {
 // A stranger signed in where the park holds the record's jar and items of it are in Claude's
 // folder: a give-up killed partway, then `enroll` run again, which names a second aside.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn a_give_up_killed_partway_is_taken_up_by_enroll_again() {
     let last = reached(Change::Switch)
         .into_iter()
@@ -820,7 +776,7 @@ fn a_give_up_killed_partway_is_taken_up_by_enroll_again() {
         .map(|(_, nth)| nth)
         .max()
         .expect("items arrive");
-    let third = |m: &Machine| enroll(settled(m), &m.key("third"), None);
+    let third = |m: &Rig| enroll(settled(m), &m.key("third"), None);
     for (point, nth) in [("leave.item_out", 1), ("arrive.item_in", last)] {
         for (given, given_nth) in [
             ("give_up.aside_named", 1),
@@ -843,7 +799,7 @@ fn a_give_up_killed_partway_is_taken_up_by_enroll_again() {
             let first = state.moving(ProviderId::Desktop).map(|moving| {
                 let name = moving.asides.keys().next().cloned().expect("named");
                 let folder = crate::store::folder::at(&m.ctx, &name);
-                (name, super::super::harness::tree(&folder))
+                (name, tree(&folder))
             });
             assert_eq!(
                 first.is_none(),
@@ -867,11 +823,7 @@ fn a_give_up_killed_partway_is_taken_up_by_enroll_again() {
                 assert_eq!(named.len(), 2, "{at}: {named:?}");
                 assert!(named.contains_key(name), "{at}: the first aside is kept");
                 let folder = crate::store::folder::at(&m.ctx, name);
-                assert_eq!(
-                    &super::super::harness::tree(&folder),
-                    files,
-                    "{at}: the first aside as it was"
-                );
+                assert_eq!(&tree(&folder), files, "{at}: the first aside as it was");
             }
             let state = crate::state::load(&m.ctx).expect("state");
             assert_eq!(
@@ -895,10 +847,6 @@ fn a_give_up_killed_partway_is_taken_up_by_enroll_again() {
 // A Log out, then a third account signed in before Claude reported it: the arriving account's
 // name stays beside another session, which nothing files under that name (row 12).
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn a_session_signed_in_after_a_log_out_is_never_filed_under_the_arriving_name() {
     let m = killed(
         Change::Switch,
@@ -933,10 +881,6 @@ fn a_session_signed_in_after_a_log_out_is_never_filed_under_the_arriving_name() 
 
 // The second look of a leave, after its folder is reserved and before its record.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn claude_opened_before_a_leave_is_recorded_stops_it() {
     let m = desktop_pair("second-look");
     recover(&m).expect("swept");
@@ -956,10 +900,7 @@ fn claude_opened_before_a_leave_is_recorded_stops_it() {
         let (app, folder, seen) = (m.claude(), folder.clone(), std::rc::Rc::clone(&seen));
         move || {
             app.opens();
-            *seen.borrow_mut() = Some((
-                super::super::harness::tree(&folder),
-                super::super::harness::stats(&folder),
-            ));
+            *seen.borrow_mut() = Some((tree(&folder), stats(&folder)));
         }
     };
     let refused = fault::meanwhile("atomic.temp_written", opened, || run(&m, Change::Switch))
@@ -969,10 +910,7 @@ fn claude_opened_before_a_leave_is_recorded_stops_it() {
     assert!(state.moving.is_empty(), "no record");
     let seen = seen.borrow_mut().take().expect("opened");
     assert_eq!(
-        (
-            super::super::harness::tree(&folder),
-            super::super::harness::stats(&folder)
-        ),
+        (tree(&folder), stats(&folder)),
         seen,
         "nothing of Claude's folder moved"
     );
@@ -984,10 +922,6 @@ fn claude_opened_before_a_leave_is_recorded_stops_it() {
 // A give-up killed while it set aside what a leave left beside a stranger's session, then the
 // stranger logged out: the leave is finished, and the aside the give-up named is indexed.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Claude Desktop is macOS only: the folder mover's file calls are refused on Windows"
-)]
 fn a_leave_finished_after_a_give_up_killed_partway_indexes_its_aside() {
     let m = machine(Change::Switch, "leave-aside");
     let died = fault::killing_nth("leave.item_out", 1, || run(&m, Change::Switch));

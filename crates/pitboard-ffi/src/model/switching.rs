@@ -7,11 +7,15 @@
 
 use super::changing::a_look_landing_after;
 use super::state::{After, Answer, Job};
-use super::testing::{
-    CHATGPT, CLAUDE, Hand, MONITOR, Machine, StandInApps, a_look_or_a_read, a_switch,
-    already_active, any_read, chatgpt_holding, claude, codex_account, desktop_account,
-    desktop_machine, desktop_warning, fresh_read, holding_ask, offline_read, percent, refusal,
-    status, still_running, switched, warned, warning,
+use super::testing::machine::{
+    Hand, Stub, a_look_or_a_read, a_switch, any_read, desktop_machine, fresh_read, holding_ask,
+    offline_read,
+};
+use super::testing::platform::StandInApps;
+use super::testing::records::{
+    CHATGPT, CLAUDE, MONITOR, already_active, chatgpt_holding, claude, codex_account,
+    desktop_account, desktop_warning, percent, refusal, status, still_running, switched, warned,
+    warning,
 };
 use super::{Intent, LastSwitch, Pane, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
 use crate::{Abandoned, GaveUp};
@@ -19,7 +23,7 @@ use std::time::Duration;
 
 /// Asks for a switch to `qualified` and answers everything it leads to, as the Swift
 /// model's tests awaited `use` or `switchAsked`.
-pub(super) fn switch(model: &mut Hand, machine: &mut Machine, qualified: &str) {
+pub(super) fn switch(model: &mut Hand, machine: &mut Stub, qualified: &str) {
     model.send(Intent::SwitchTo {
         qualified: qualified.into(),
     });
@@ -49,7 +53,7 @@ fn tos(model: &Hand) -> Vec<String> {
 #[test]
 fn a_failed_switch_says_so_and_changes_nothing() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
     switch(&mut model, &mut machine, "work");
 
@@ -81,7 +85,7 @@ fn a_failed_switch_says_so_and_changes_nothing() {
 #[test]
 fn a_switch_records_when_open_sessions_follow() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
         claude("personal", false, 0.0),
     ])));
@@ -93,16 +97,14 @@ fn a_switch_records_when_open_sessions_follow() {
     assert_eq!(last.restart, None);
 }
 
-/// AppModelTests.swift's aSwitchThatNeedsARestartSaysSoAndCountsNothingDown, apart from the
-/// sentence, which comes with what the window says. A running `codex` never picks a switch
-/// up, so a countdown there would promise something that does not happen. When the core
-/// counted the sessions still running, its warning says so, with the count and with what not
-/// to do in them, and it outlives the read after the switch, which would otherwise replace
-/// it.
+/// A running `codex` never picks a switch up, so a countdown there would promise something that
+/// does not happen. When the core counted the sessions still running, its warning says so, with
+/// the count and with what not to do in them, and it outlives the read after the switch, which
+/// would otherwise replace it. The sentence comes with what the window says.
 #[test]
 fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         codex_account("work", true),
         claude("personal", false, 0.0),
     ])));
@@ -143,7 +145,7 @@ fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
 #[test]
 fn each_tool_keeps_what_its_own_last_switch_said() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("b", true, 0.0),
         codex_account("b", true),
     ])));
@@ -179,7 +181,7 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
 #[test]
 fn a_switch_to_a_name_two_tools_share_outlives_the_read_after_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
         claude("personal", false, 0.0),
         codex_account("work", true),
@@ -200,7 +202,7 @@ fn only_a_switch_made_elsewhere_puts_away_what_a_switch_said() {
         codex_account("work", true),
     ]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(after.clone()));
+    let mut machine = Stub::reading(Ok(after.clone()));
     machine.switched = switched(
         "codex",
         "codex/personal",
@@ -250,7 +252,7 @@ fn a_failed_read_after_a_switch_does_not_put_away_what_it_said() {
         codex_account("work", true),
     ]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(before));
+    let mut machine = Stub::reading(Ok(before));
     model.refresh(&mut machine);
 
     machine.answer = Err(refusal(
@@ -279,7 +281,7 @@ fn a_failed_read_after_a_switch_does_not_put_away_what_it_said() {
 #[test]
 fn a_failed_switch_leaves_what_the_last_switch_said() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
         codex_account("work", true),
     ])));
@@ -317,7 +319,7 @@ fn a_failed_switch_leaves_what_the_last_switch_said() {
 #[test]
 fn a_switch_to_the_account_in_use_leaves_what_the_last_one_said() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         codex_account("work", true),
         claude("home", true, 0.0),
     ])));
@@ -346,7 +348,7 @@ fn a_switch_to_the_account_in_use_leaves_what_the_last_one_said() {
 fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
     let overridden = warning("auth_overridden", "OPENAI_API_KEY is set");
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("home", true, 0.0),
         codex_account("work", true),
     ])));
@@ -383,16 +385,15 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
     );
 }
 
-/// AppModelTests.swift's numbersMovingLeaveWhoIsSignedInAndWhatASwitchSaid. A reading moving
-/// says nothing about who is signed in, so only its numbers are taken. Here the read that
-/// brings them names the account before the switch, and taken whole it would put away the
-/// one warning the switch gave. Numbers move several times a minute, so within seconds of
-/// the switch.
+/// A reading moving says nothing about who is signed in, so only its numbers are taken. Here
+/// the read that brings them names the account before the switch, and taken whole it would put
+/// away the one warning the switch gave. Numbers move several times a minute, so within seconds
+/// of the switch.
 #[test]
 fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
     let lagging = warning("config_write_failed", "the config did not update");
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("a", false, 10.0),
         claude("b", true, 10.0),
     ])));
@@ -434,7 +435,7 @@ fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
 #[test]
 fn numbers_recorded_during_a_switch_are_taken_once_it_is_over() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 20.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 20.0)])));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
     model.refresh(&mut machine);
     model.notice(&mut machine);
@@ -455,14 +456,13 @@ fn numbers_recorded_during_a_switch_are_taken_once_it_is_over() {
     assert_eq!(percent(&model.shown(), 0), Some(22.0));
 }
 
-/// AppModelTests.swift's twoToolsWorkAccountsAreSwitchedAndForgottenByTheirOwnName, the
-/// switch: forgetting comes with the account changes, and the row's name with what the
-/// window says. Two tools can each have a `work`, and the switch names the one meant, with
-/// its tool, as the row gives it.
+/// Two tools can each have a `work`, and the switch names the one meant, with its tool, as the
+/// row gives it. Forgetting comes with the account changes, and the row's name with what the
+/// window says.
 #[test]
 fn two_tools_work_accounts_are_switched_by_their_own_name() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
         claude("personal", false, 0.0),
         codex_account("work", false),
@@ -485,13 +485,13 @@ fn two_tools_work_accounts_are_switched_by_their_own_name() {
 /// What `change` does while a read started before it waits on a service: the read lands
 /// after it, and is dropped.
 ///
-/// AppModelTests.swift's aReadThatStartedBeforeAChangeIsDroppedWhenItLands, for a change
-/// this app makes. A read waits on a service with who was signed in when it started, and
-/// whatever is changed meanwhile is changed before the read lands. Taken as it was, the read
-/// showed the accounts as they had been and put away what the change had said, a Codex
-/// switch's warning that sessions keep the account it left among it. It is dropped: the read
-/// the change starts itself says what is true now.
-pub(super) fn a_read_that_started_before(change: impl FnOnce(&mut Hand, &mut Machine)) {
+/// A read that started before a change this app makes is dropped when it lands. A read waits on
+/// a service with who was signed in when it started, and whatever is changed meanwhile is
+/// changed before the read lands. Taken as it was, the read showed the accounts as they had
+/// been and put away what the change had said, a Codex switch's warning that sessions keep the
+/// account it left among it. It is dropped: the read the change starts itself says what is true
+/// now.
+pub(super) fn a_read_that_started_before(change: impl FnOnce(&mut Hand, &mut Stub)) {
     let before = vec![
         codex_account("personal", true),
         codex_account("work", false),
@@ -502,7 +502,7 @@ pub(super) fn a_read_that_started_before(change: impl FnOnce(&mut Hand, &mut Mac
         codex_account("work", true),
     ]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(before.clone())));
+    let mut machine = Stub::reading(Ok(status(before.clone())));
     model.refresh(&mut machine);
 
     // What the held read finds when it starts, with a warning nothing after it carries.
@@ -572,7 +572,7 @@ fn a_read_that_started_before_giving_up_on_a_switch_is_dropped_when_it_lands() {
 #[test]
 fn a_failed_read_that_started_before_a_switch_says_nothing_once_it_lands() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         codex_account("personal", true),
         codex_account("work", false),
     ])));
@@ -637,7 +637,7 @@ fn a_change_the_poll_saw_during_a_switch_is_noticed_once_the_switch_is_over() {
         claude("personal", true, 0.0),
     ]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(before.clone()));
+    let mut machine = Stub::reading(Ok(before.clone()));
     machine.switched = Err(refusal(
         "parked_login_expired",
         "spare's parked login has expired",
@@ -675,7 +675,7 @@ fn a_change_the_poll_saw_during_a_switch_is_noticed_once_the_switch_is_over() {
 #[test]
 fn a_switch_asked_for_while_one_runs_does_nothing() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("personal", true, 0.0),
         claude("work", false, 0.0),
         claude("spare", false, 0.0),
@@ -725,7 +725,7 @@ fn a_switch_is_claimed_before_anything_is_asked() {
 #[test]
 fn a_switch_is_under_way_until_the_read_after_it_lands() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
         claude("personal", false, 0.0),
     ])));
@@ -765,7 +765,7 @@ fn a_switch_is_under_way_until_the_read_after_it_lands() {
 #[test]
 fn each_failure_is_numbered_so_an_app_says_it_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
     switch(&mut model, &mut machine, "claude/spare");
     assert_eq!(model.shown().failure.map(|f| f.id), Some(1));
@@ -789,8 +789,8 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
 // An app that holds a tool's login.
 
 /// A Codex machine with ChatGPT open and running Codex's login, about to switch to `spare`.
-fn chatgpt_open(quits: bool) -> (Hand, Machine) {
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+fn chatgpt_open(quits: bool) -> (Hand, Stub) {
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.held.insert("codex".into(), vec![chatgpt_holding()]);
     machine.switched = switched("codex", "codex/main", "codex/spare", Vec::new());
     machine.apps = StandInApps::new(&[CHATGPT], quits);
@@ -1124,10 +1124,10 @@ fn what_holds_a_login_lost_to_a_panic_holds_nothing_and_a_lost_quit_quit_nothing
 
 // Giving up on a stuck switch.
 
-/// PresentationTests.swift's givingUpOnASwitchSaysWhatWasKeptUntilPutAway, apart from what
-/// the notice says. Giving up on an interrupted switch deletes nothing, and what it kept is
-/// kept to say until somebody puts it away. Nothing is stuck once it is given up, and every
-/// service is asked again, since who is signed in is what the switch had left unknown.
+/// Giving up on an interrupted switch deletes nothing, and what it kept is kept to say until
+/// somebody puts it away. Nothing is stuck once it is given up, and every service is asked
+/// again, since who is signed in is what the switch had left unknown. What the notice says is
+/// presenting's.
 #[test]
 fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     let interrupted = warning(
@@ -1135,7 +1135,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
         "An interrupted switch cannot be finished until Anthropic answers.",
     );
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![claude("work", true, 0.0)],
         vec![interrupted],
     )));
@@ -1185,14 +1185,14 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
 /// refusal the next change would make, and the model offers to give up on it at once.
 #[test]
 fn the_cores_own_read_of_a_stuck_switch_offers_to_give_up_on_it() {
-    let world = super::testing::World::new("stuck-read");
+    let world = super::testing::world::World::new("stuck-read");
     world.enrolled("work", "here", 10.0);
     world.parked("personal", "there", 20.0);
     world.stuck_switching_to("personal");
 
     let read = world.core().status(false).expect("a read is not refused");
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(read));
+    let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
 
     let shown = model.shown();
@@ -1216,20 +1216,19 @@ fn the_cores_own_read_of_a_stuck_switch_offers_to_give_up_on_it() {
     );
 }
 
-/// Every read says whether a switch is stuck, the one made when the account index moves
-/// too, as AppModelTests.swift's aStuckSwitchIsTakenFromTheReadMadeWhenTheIndexMoves has
-/// it. A switch interrupted in a terminal that nothing can finish is offered to give up on
-/// as the index moves. One given up on in a terminal stopped being offered only at the next
-/// read every few minutes, and offering it meanwhile offered nothing to give up on. A read
-/// that asks nobody says nothing of it then, which is also what it says of a switch only a
-/// service could judge, so the model asks: the read that asks says which, and until it
-/// lands what is offered stays.
+/// Every read says whether a switch is stuck, the one made when the account index moves too. A
+/// switch interrupted in a terminal that nothing can finish is offered to give up on as the
+/// index moves. One given up on in a terminal stopped being offered only at the next read every
+/// few minutes, and offering it meanwhile offered nothing to give up on. A read that asks
+/// nobody says nothing of it then, which is also what it says of a switch only a service could
+/// judge, so the model asks: the read that asks says which, and until it lands what is offered
+/// stays.
 #[test]
 fn a_stuck_switch_is_taken_from_the_read_made_when_the_index_moves() {
     let accounts = || vec![claude("work", true, 0.0)];
     let interrupted = warning("recovery_undetermined", "An interrupted switch is waiting.");
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(accounts())));
+    let mut machine = Stub::reading(Ok(status(accounts())));
     model.refresh(&mut machine);
     assert!(!model.shown().stuck);
 
@@ -1275,7 +1274,7 @@ fn a_stuck_switch_is_taken_from_the_read_made_when_the_index_moves() {
 fn giving_up_that_is_refused_is_said_in_the_window() {
     let interrupted = warning("recovery_undetermined", "An interrupted switch is waiting.");
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![claude("work", true, 0.0)],
         vec![interrupted],
     )));
@@ -1301,7 +1300,7 @@ fn giving_up_that_is_refused_is_said_in_the_window() {
 #[test]
 fn giving_up_on_nothing_keeps_nothing_to_say() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.abandoned = Ok(GaveUp::default());
     model.send(Intent::AbandonStuckSwitch);
     model.run(&mut machine);
@@ -1318,7 +1317,7 @@ fn add_sheet() -> Sheet {
 }
 
 // travel's add waiting, work parked for it, and Claude since opened by the person
-fn waiting_in_claude() -> (Hand, Machine, u64) {
+fn waiting_in_claude() -> (Hand, Stub, u64) {
     let mut model = Hand::new();
     let mut machine = desktop_machine(false);
     machine.put_back = Some("desktop/work".into());
@@ -1335,7 +1334,7 @@ fn waiting_in_claude() -> (Hand, Machine, u64) {
     (model, machine, id)
 }
 
-fn desktop_switched() -> Result<crate::Switched, super::testing::Refusal> {
+fn desktop_switched() -> Result<crate::Switched, super::testing::records::Refusal> {
     switched("desktop", "desktop/work", "desktop/home", Vec::new())
 }
 
@@ -2034,7 +2033,7 @@ const REFUSED_FOR_GOOD: &str = "Anthropic no longer accepts Claude Code's login 
 #[test]
 fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
     switch(&mut model, &mut machine, "work");
 
@@ -2052,7 +2051,7 @@ fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
 #[test]
 fn an_agreed_replacement_is_made_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
     switch(&mut model, &mut machine, "work");
     machine.switched = switched("claude", "personal", "work", Vec::new());
@@ -2076,7 +2075,7 @@ fn an_agreed_replacement_is_made_once() {
 #[test]
 fn a_replacement_answered_after_the_question_closed_is_made() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
     switch(&mut model, &mut machine, "work");
 
@@ -2107,7 +2106,7 @@ fn a_replacement_answered_after_the_question_closed_is_made() {
 #[test]
 fn another_switch_takes_the_replace_question_away() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
     switch(&mut model, &mut machine, "work");
     model.send(Intent::KeepLogin);
@@ -2126,7 +2125,7 @@ fn another_switch_takes_the_replace_question_away() {
 #[test]
 fn a_switch_asked_for_meanwhile_brings_the_replace_question_back() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
     switch(&mut model, &mut machine, "work");
     let serial = model.shown().window_request.serial;

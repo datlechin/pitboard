@@ -103,6 +103,7 @@ pub(crate) mod store;
 #[doc(hidden)]
 pub mod testing {
     pub use crate::api::scripted::{Answer, Asked, ScriptedApi, Trouble};
+    pub use crate::context::ScratchMachine;
     pub use crate::desktop_testing as desktop;
     pub use crate::duty::warm::run::{Started, WarmScript};
     pub use crate::host::Ran;
@@ -127,6 +128,15 @@ pub mod testing {
     /// from every command it runs unless it means to pass one on.
     pub fn variables() -> impl Iterator<Item = &'static str> {
         crate::context::variables()
+    }
+
+    pub fn codex_login(
+        account: &str,
+        email: &str,
+        access: &str,
+        refresh: &str,
+    ) -> serde_json::Value {
+        crate::provider::codex::login_for_a_test(account, email, access, refresh)
     }
 
     pub fn park_unread(label: &str, path: &std::path::Path, why: &str) -> crate::error::Error {

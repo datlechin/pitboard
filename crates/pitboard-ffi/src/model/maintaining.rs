@@ -1,17 +1,15 @@
-//! What the model keeps of this machine rather than its accounts, as MachineModelTests.swift
-//! drove MachineModel.swift: the daily renewal schedule and the one change to it at a time,
-//! the repair once a launch, doctor's checks, the activity log and the
-//! `pitboard` a terminal runs, each under its own name in snake case, with what the settings,
-//! MachinePane.swift and ActivityPane.swift said of them. The state is driven through
+//! What the model keeps of this machine rather than its accounts, as MachineModel.swift kept
+//! it: the daily renewal schedule and the one change to it at a time, the repair once a
+//! launch, doctor's checks, the activity log and the `pitboard` a terminal runs, with what the
+//! settings, MachinePane.swift and ActivityPane.swift said of them. The state is driven through
 //! `State::apply` by hand over a core the test scripts, and read as `present` makes it on a
 //! Mac, its clock times in UTC. Opening at login and linking the command line with an
 //! administrator's password are the app's own, and so are their tests.
 
 use super::machine::ScheduleFailure;
 use super::state::Job;
-use super::testing::{
-    Hand, Machine, PLIST, change, check, claude, refusal, status, warned, warning,
-};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, present_on};
@@ -32,8 +30,8 @@ fn window_failure(model: &Hand) -> bool {
 }
 
 /// A machine with one account and nothing on its scheduler, as the core answers.
-fn machine() -> Machine {
-    Machine::reading(Ok(status(vec![claude("work", true, 10.0)])))
+fn machine() -> Stub {
+    Stub::reading(Ok(status(vec![claude("work", true, 10.0)])))
 }
 
 fn installed() -> Schedule {
@@ -65,8 +63,6 @@ const MOVE_IT_FIRST: &str = "Move Pitboard to your Applications folder first. Un
 
 /// Daily renewal reads as on only while the scheduler has the job. A scheduler this Mac does
 /// not have is not a schedule that is on. Nothing is read until the settings ask.
-///
-/// MachineModelTests.swift's dailyRenewalIsOnOnlyWhileTheSchedulerHasIt.
 #[test]
 fn daily_renewal_is_on_only_while_the_scheduler_has_it() {
     let mut model = Hand::new();
@@ -117,8 +113,6 @@ fn the_settings_say_where_no_scheduler_is() {
 
 /// Turning daily renewal on or off changes the scheduler, and the switch then shows what the
 /// scheduler has, read again rather than assumed.
-///
-/// MachineModelTests.swift's turningDailyRenewalOnAndOffChangesTheScheduler.
 #[test]
 fn turning_daily_renewal_on_and_off_changes_the_scheduler() {
     let mut model = Hand::new();
@@ -149,10 +143,8 @@ fn turning_daily_renewal_on_and_off_changes_the_scheduler() {
 /// nothing is asked of the scheduler, nor read. Turning it off never is: that is how a
 /// schedule that cannot work is taken away.
 ///
-/// MachineModelTests.swift's dailyRenewalIsRefusedWhereNothingWouldBeThereToRun, and
-/// AppModelTests.swift's dailyRenewalIsTurnedOnOnlyFromAnAppThatStaysWhereItIs, whose build
-/// directory with no command line inside it is `lanes.rs`'s, over a core made as the app
-/// makes it.
+/// A build directory with no command line inside it is `lanes.rs`'s, over a core made as the
+/// app makes it.
 #[test]
 fn daily_renewal_is_refused_where_nothing_would_be_there_to_run() {
     let mut model = Hand::new();
@@ -222,8 +214,7 @@ fn a_schedule_this_copy_cannot_make_can_still_be_taken_away() {
 /// the same as none, until it can be run, which is read again with the schedule. Nor is a
 /// link to it offered, where none is found: it would run nothing.
 ///
-/// MachineModelTests.swift's anAppWithoutACommandLineItCanRunCannotLinkOrSchedule, but for
-/// asking for a link, which the app's own code refuses: `lanes.rs` has it over a real file.
+/// Asking for a link is the app's own code to refuse, and `lanes.rs` has this over a real file.
 #[test]
 fn an_app_without_a_command_line_it_can_run_cannot_link_or_schedule() {
     let mut model = Hand::new();
@@ -302,8 +293,6 @@ fn whether_this_copy_can_schedule_is_read_with_the_schedule() {
 /// snapping back to the old one until it answers and the schedule has been read back, which
 /// can be a while behind a renewal or a switch. Pressed again meanwhile it does nothing: it
 /// was pressed on a switch that did not yet show the first press.
-///
-/// MachineModelTests.swift's dailyRenewalShowsWhatWasAskedForWhileItChanges.
 #[test]
 fn daily_renewal_shows_what_was_asked_for_while_it_changes() {
     let mut model = Hand::new();
@@ -358,8 +347,6 @@ fn only_the_read_after_a_change_ends_it() {
 
 /// When the scheduler refuses, the core's own words are said beside the switch, and the
 /// switch shows the schedule as it is. The next try starts from nothing said.
-///
-/// MachineModelTests.swift's aScheduleTheCoreCouldNotChangeSaysWhyUntilTheNextTry.
 #[test]
 fn a_schedule_the_core_could_not_change_says_why_until_the_next_try() {
     let mut model = Hand::new();
@@ -391,9 +378,6 @@ fn a_schedule_the_core_could_not_change_says_why_until_the_next_try() {
 /// the command line inside this app, once a launch, and the schedule is read again only when
 /// it did. Nothing repaired, or a repair that failed, says nothing: the schedule is as it was,
 /// and doctor still reports it.
-///
-/// MachineModelTests.swift's anOlderAppsScheduleIsReadAgainOnlyOnceItWasRepaired, and
-/// AppModelTests.swift's anOldScheduleIsRepairedOnceTheAppStarts.
 #[test]
 fn an_older_apps_schedule_is_read_again_only_once_it_was_repaired() {
     let failed = refusal("schedule_refused", "the scheduler refused", Vec::new());
@@ -424,8 +408,6 @@ fn an_older_apps_schedule_is_read_again_only_once_it_was_repaired() {
 /// Doctor's checks are shown with when they were made, in place of the last ones, made again
 /// every time the pane is shown, and the pane says it is checking while doctor runs. What
 /// stands in for them before there are any says the machine is being checked.
-///
-/// MachineModelTests.swift's doctorsChecksAreShownWithWhenTheyWereMade.
 #[test]
 fn doctors_checks_are_shown_with_when_they_were_made() {
     let mut model = Hand::new();
@@ -644,8 +626,6 @@ fn the_pane_checks_until_the_last_check_asked_for_is_in() {
 /// `pitboard doctor` looks at everything on this machine, so its checks are made when
 /// somebody asks to see them, and not with the model's start, a read or a glance, and they
 /// say when they were made.
-///
-/// AppModelTests.swift's doctorIsOnlyReadWhenAskedFor.
 #[test]
 fn doctor_is_only_read_when_asked_for() {
     let mut model = Hand::new();
@@ -689,7 +669,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     };
     let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced("work")])));
+    let mut machine = Stub::reading(Ok(warned(accounts(), vec![replaced("work")])));
     machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
     machine.post_refused = Some("COMException 0x80070490".into());
 
@@ -765,9 +745,6 @@ fn when_the_checks_were_made_names_its_day_once_that_is_over() {
 /// read every time the pane is shown, the newest 500 of them. Each change is said in words:
 /// what was done, to what, how it ended and who asked, with when, as the person's clock says
 /// it. The list says what it is for while it has nothing in it.
-///
-/// MachineModelTests.swift's changesAreShownNewestFirst, with PresentationTests.swift's
-/// words for a change, which ActivityPane.swift said.
 #[test]
 fn changes_are_shown_newest_first() {
     let mut model = Hand::new();
@@ -898,8 +875,7 @@ fn the_accounts_pane_shown_reads_numbers_a_minute_old() {
 /// that there is none, and only then offer to link this app's own, where it has one a link
 /// would keep reaching. It is looked for only when the settings ask.
 ///
-/// MachineModelTests.swift's theCommandLineIsLookedForWhereATerminalWouldFindIt, as the
-/// settings say it; `lanes.rs` has where it is looked for, over real files.
+/// `lanes.rs` has where it is looked for, over real files.
 #[test]
 fn the_command_line_is_said_as_a_terminal_would_find_it() {
     let mut model = Hand::new();

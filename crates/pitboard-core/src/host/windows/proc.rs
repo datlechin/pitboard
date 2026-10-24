@@ -471,17 +471,6 @@ mod tests {
     use std::ffi::OsStr;
     use std::path::PathBuf;
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "pitboard-programs-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
-        dir
-    }
-
     // Nothing here is ever run.
     fn program(at: &Path) -> PathBuf {
         std::fs::create_dir_all(at.parent().expect("its folder")).expect("a folder");
@@ -495,7 +484,8 @@ mod tests {
 
     #[test]
     fn a_program_is_found_as_a_windows_shell_finds_it() {
-        let root = scratch("lookup");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path();
         let (first, second) = (root.join("first"), root.join("second"));
         let cmd = program(&first.join("claude.cmd"));
         let exe = program(&second.join("claude.exe"));
@@ -535,13 +525,13 @@ mod tests {
             Some(exe),
             "named in full without its extension"
         );
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     // This account's own aliases are only read.
     #[test]
     fn an_app_execution_alias_runs_from_windows_apps() {
-        let root = scratch("aliases");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path();
         let target = std::env::var_os("SystemRoot")
             .map(|windows| PathBuf::from(windows).join(r"System32\cmd.exe"))
             .expect("SystemRoot");
@@ -553,7 +543,6 @@ mod tests {
             &root.join("Elsewhere").join("pitboard-test.exe"),
             &target
         )));
-        let _ = std::fs::remove_dir_all(&root);
 
         let own = std::env::var_os("LOCALAPPDATA")
             .map(|local| PathBuf::from(local).join(r"Microsoft\WindowsApps"));
@@ -636,12 +625,9 @@ mod tests {
             (crate::host::WINDOWS_FLOOR..=running).contains(&u32::from(build)),
             "{build} on {running}"
         );
-        assert_eq!(
-            product_version(&std::env::temp_dir()),
-            None,
-            "a folder has none"
-        );
-        let script = scratch("versions").join("plain.cmd");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        assert_eq!(product_version(scratch.path()), None, "a folder has none");
+        let script = scratch.path().join("plain.cmd");
         std::fs::write(&script, "@echo off").expect("a script");
         assert_eq!(product_version(&script), None, "nor has a script");
         // cmd.exe's version resource names Windows, not Claude Code, so a `claude.exe` that was

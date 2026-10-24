@@ -1,5 +1,5 @@
 # Every text file is checked out with LF endings on every system. Git on a Windows runner
 # has core.autocrlf=true, which would otherwise give the snapshots in
-# crates/pitboard/tests/snapshots and every file a test reads with include_str! CRLF endings,
-# and fail them there alone.
+# crates/pitboard/tests/cli/snapshots and every file a test reads with include_str! CRLF
+# endings, and fail them there alone.
 * text=auto eol=lf

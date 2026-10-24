@@ -84,7 +84,7 @@ pub(crate) fn forget(settled: Settled, key: &Key) -> Result<(String, Vec<Warning
 )]
 mod tests {
     use super::super::harness::{
-        Machine, NOW, account, config_names, document, in_organisation, machine,
+        NOW, Rig, account, config_names, document, in_organisation, machine,
     };
     use super::*;
     use crate::in_use::InUse;
@@ -93,7 +93,7 @@ mod tests {
     /// `here` in a second organisation beside the first, with the login stored, `here`'s,
     /// recorded as Anthropic named it for `recorded`, and Claude Code's config naming `here`
     /// in `org`, or in no organisation at all.
-    fn two_organisations(name: &str, recorded: &str, org: Option<&str>) -> Machine {
+    fn two_organisations(name: &str, recorded: &str, org: Option<&str>) -> Rig {
         let m = machine(name);
         let mut state = state::load(&m.ctx).expect("state");
         state.upsert(in_organisation("team", "here", "org-team", None));
@@ -116,7 +116,7 @@ mod tests {
         m
     }
 
-    fn forgotten(m: &Machine, label: &str) -> Result<(String, Vec<Warning>)> {
+    fn forgotten(m: &Rig, label: &str) -> Result<(String, Vec<Warning>)> {
         let settled = super::super::settle(&m.ctx, Permit::for_a_test(), Some(m.which))
             .expect("nothing to recover")
             .0;

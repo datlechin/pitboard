@@ -1725,7 +1725,7 @@ mod tests {
     fn a_session_renewing_the_outgoing_login_during_a_switch_waits_for_it() {
         use harness::{Session, lock_dir, renews_meanwhile, saves};
         let refreshing =
-            |m: &harness::Machine| lock_dir(&provider::claude::paths::refresh_lock(&m.ctx));
+            |m: &harness::Rig| lock_dir(&provider::claude::paths::refresh_lock(&m.ctx));
         for point in ["switch.journal_written", "switch.park_recorded"] {
             let m = harness::machine(&format!("refresh-lock-{point}"));
             let keychain = std::sync::Arc::clone(m.mem.live());

@@ -465,7 +465,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     each kind of process found running a tool (`holder::Holding`) carry that name, since their
     words are made with no context.
 - `crates/pitboard`: the command line. Arguments, rendering for people, the man page, and
-  the `--json` contract, pinned by the snapshots in `crates/pitboard/tests/snapshots`.
+  the `--json` contract, pinned by the snapshots in `crates/pitboard/tests/cli/snapshots`.
   `build.rs` gives a Windows build its manifest, which the linker embeds, and its version
   resource, which `rc.exe` or `llvm-rc` compiles, both through `build/versioninfo.rs`.
   `json.rs` is the one writer of that JSON, for every command and every error. Its example
@@ -648,8 +648,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
     `fixture_names` and `fixture_page`, which without the feature refuse, naming it, or name
     none. `fixture` makes its model over the fixture's apps and notifications; `fixture_in`,
     for a test of an app's bindings, over the `AppControl` and `Notifications` it is handed,
-    as `new` takes them. `tests.rs` is the macOS app's former `FixtureTests.swift` ported,
-    and what each UI test reads in its world.
+    as `new` takes them. `tests.rs` is where each fixture starts, the tools and apps it
+    stands in for, and what each UI test reads in its world.
 - `crates/pitboard-sites`: the sites an account's window opens, and what a link from outside
   may be. A leaf, with no I/O and nothing of the core, whose one dependency is `url`, for
   IDNA alone.
@@ -1094,7 +1094,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   from a link to a file or to nothing, `link`. So a system whose files have no mode, or that
   links a directory otherwise than a file, says how in its own face and nowhere else. The
   integration tests' harness says what differs by system in
-  `crates/pitboard/tests/common/os.rs`, one `match` on `host::OS` for each fact: where
+  `crates/pitboard/tests/cli/common/os.rs`, one `match` on `host::OS` for each fact: where
   Claude Code keeps the login it uses (`.credentials.json` on Windows, as on Linux, unless a
   test turns Credential Manager on, `Env::turn_credential_manager_on`, whose items in its own
   slot the harness deletes by name: `windows_backend_choice`), where Pitboard
@@ -1260,7 +1260,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `watch_service`. Its run is ended only while Pitboard's lock is held, so never in the middle
   of a renewal or a switch; a removal of renewal's task leaves its run to finish. On Linux, a
   watch service systemd will not stop stays installed and says why. The app may be switching too: a switch is decided again under the lock
-  (`switch::auto`), and `tests/watch.rs` has four processes decide from one reading and make
+  (`switch::auto`), and `tests/cli/watch.rs` has four processes decide from one reading and make
   one switch.
 - On Windows `doctor` also reads what Task Scheduler keeps of the task (`Scheduler::task`):
   when it last ran and how that run ended, and the settings Pitboard writes that were changed
@@ -1535,9 +1535,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   finalizer thread ([The C# bindings](#the-c-bindings)); `shutdown` waits for the actor and
   the sign-ins under way, neither of which waits on the listener.
 - No test makes the app model over the machine's own environment. Its Rust tests run the
-  real core over a context of their own, with `MemoryHost` and `ScriptedApi` and a home in a
-  scratch directory, and so does a fixture. The C# tests make one only as `ModelTests.cs`
-  does: every home a fresh folder, and never started or sent an intent, so it reads nothing,
+  real core over a `pitboard_core::testing::ScratchMachine`, a home in a scratch directory
+  with `MemoryHost` and `ScriptedApi`, and so does a fixture. The C# tests make one only as
+  `ModelTests.cs` does: every home a fresh folder, and never started or sent an intent, so
+  it reads nothing,
   or a fixture's, which reads no machine and may be started. The Swift tests make one only
   as a fixture's, in `PitboardKitTests`, started from Swift; every other Swift test hands
   `AppModel` snapshots from a stand-in for `PitboardModelProtocol`, which keeps what it is
@@ -2819,8 +2820,14 @@ Replacing a file:
   each open 50 ms, needed no retry: about 13 s on NTFS on both images, and 2000 took 1.4 s
   on ReFS. No reader saw a torn or empty file.
 - A reader thread in the renaming process itself found the file missing in 10788 of its
-  69694 opens during those renames on windows-2025, and in none on windows-11-arm. Readers in
-  other processes never did.
+  69694 opens during those renames on windows-2025, and in none on windows-11-arm. In later
+  runs the probe reader in a process of its own did too, `CreateFileW` failing 2: in 5658 of
+  208735 opens on windows-2025 (run 39320680285) and 2323 of 186195 on windows-11-arm (run
+  40030964166). In run 38878569423 no reader found it missing on either image, and on ReFS
+  none ever has. Every writer of `state.json` loads it under Pitboard's lock, so a read
+  without the lock, the app's, the status line's or `pitboard status`'s, could take it for
+  missing and show no accounts. On Windows `atomic::read`, which `state.json`'s load uses,
+  looks again five times, 2 ms apart, before it takes a file it replaces for missing.
 - Beside readers that reopen the file without a pause, one not sharing delete,
   `MoveFileExW` fails 5 most of the time. In 180 s it replaced the file 154 times on
   windows-2025, 30 rounds running out of 50 retries, and 2439 times on windows-11-arm, in up
@@ -3547,8 +3554,11 @@ treated, and only the macOS build shows it. The run reads both builds since.
   with one step of its own: while it replaces pieces in place, the manifest names a length
   no base64 has, and as many pieces as the write may leave, so Claude Code's read fails, and
   a session keeps the login it has, rather than read a mix. A write takes away every piece
-  the manifest or a `#p` a stopped write left counts. Pitboard reads a manifest Claude Code
-  would pass over, or `#p` beside one, as unreadable, and only a whole write ends a write
+  the manifest or a `#p` a stopped write left counts. Beside other readers, the read after a
+  write in pieces has found the `#p` it deleted (runs 39137503718 and 39909919492): where
+  the pieces hold the login, the write deletes `#p` again, five times at most, 20 ms apart,
+  and one that still finds it says what the delete said. Pitboard reads a manifest Claude
+  Code would pass over, or `#p` beside one, as unreadable, and only a whole write ends a write
   that stopped there: a switch whose write failed partway writes the login that was there
   back, and one killed partway is finished by the next change, which writes the incoming
   login whole, without the outgoing document's part that is no account's, such as MCP
@@ -4219,7 +4229,7 @@ against ureq's own `Proxy::try_from_env` in a process given that row's variables
   to, and it failed with `Connection refused`, unless `NO_PROXY` named the host. That is
   what 0.7.0 did. With the refusal, each of the five fails before anything reaches the
   proxy or the host, in the core's tests (`proxy.rs`) and in `pitboard enroll`
-  (`tests/proxy.rs`), and an exempt host is reached with nothing but its own address
+  (`tests/cli/proxy.rs`), and an exempt host is reached with nothing but its own address
   looked up.
 - `Proxy::username` and `Proxy::password` are the address's own text, split at the last
   `:` before the `@`, and ureq sends them to an HTTP proxy as `Proxy-Authorization: Basic`.
@@ -5105,7 +5115,7 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
   skipped and says why.
 - The real core answers some things in the fixtures otherwise than the Swift `FixtureCore`
   did, which the UI tests were written against and read since the macOS app launches into
-  the Rust worlds, each held by a test in `crates/pitboard-ffi/src/fixture/tests.rs`:
+  the Rust worlds, each held by a test of the fixtures, the core or the `--json` contract:
   - A read whose service cannot be reached answers, each account's numbers the last
     measured and saying "Anthropic could not be reached"; `status` fails only where the
     account index cannot be read, and the read of what is known fails with it. The Swift

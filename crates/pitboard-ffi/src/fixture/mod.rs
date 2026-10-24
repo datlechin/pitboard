@@ -188,7 +188,7 @@ fn failed(error: impl std::fmt::Display) -> FixtureError {
 #[cfg(all(test, not(feature = "fixture")))]
 mod without {
     use super::*;
-    use crate::model::testing::{Posted, StandInApps};
+    use crate::model::testing::platform::{Posted, StandInApps};
     use crate::model::{PlatformError, Snapshot};
 
     struct Unheard;
@@ -219,8 +219,8 @@ mod without {
             reason.contains("build-xcframework.sh --fixture"),
             "{reason}"
         );
-        let directory =
-            std::env::temp_dir().join(format!("pitboard-no-fixture-{}", std::process::id()));
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let directory = scratch.path().join("fixture");
         let refused_in = PitboardModel::fixture_in(
             "twoTools".into(),
             directory.to_string_lossy().into_owned(),

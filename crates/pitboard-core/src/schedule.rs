@@ -1084,7 +1084,8 @@ mod tests {
     /// else leaves the schedule alone.
     #[test]
     fn the_schedule_belongs_to_the_default_home_alone() {
-        let home = std::env::temp_dir().join("pitboard-schedule-home");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
         let ctx = Context::new(home.clone());
         let default = crate::host::OS.default_pitboard_home(&home);
         assert!(serves(&ctx));
@@ -1107,7 +1108,8 @@ mod tests {
     // folder from `USERPROFILE`, wherever `HOME` points.
     #[test]
     fn a_windows_schedule_renews_the_folder_in_userprofile_whatever_home_says() {
-        let profile = std::env::temp_dir().join("pitboard-profile");
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let profile = scratch.path().join("profile");
         let named = profile.to_string_lossy().into_owned();
         let env = crate::context::Environment::on(
             Os::Windows,
@@ -1310,12 +1312,8 @@ mod tests {
     /// manager would reach the person's real schedule.
     #[test]
     fn a_test_never_reaches_the_systems_own_scheduler() {
-        let root = std::env::temp_dir().join(format!(
-            "pitboard-schedule-real-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let root = scratch.path().join("root");
         let program = root.join("bin/pitboard");
         a_program_at(&program);
         let ctx = Context::new(root.clone()).with_schedule_program(program);
@@ -1323,6 +1321,5 @@ mod tests {
             install(&ctx, Permit::for_a_test()).expect_err("refused before it reaches the system");
         assert_eq!(refused.code(), "schedule_refused");
         assert_eq!(status(&ctx), Installed::No, "and nothing is left written");
-        let _ = std::fs::remove_dir_all(&root);
     }
 }

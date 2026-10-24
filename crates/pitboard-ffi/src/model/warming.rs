@@ -4,7 +4,9 @@
 //! is due, and what a warm-up runs, are the core's own and have their own tests.
 
 use super::state::{Answer, Job};
-use super::testing::{Hand, Machine, Refusal, World, refusal, status, titled};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{Refusal, refusal, status, titled};
+use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::{Account, PitboardError};
@@ -46,15 +48,15 @@ fn warm_up(job: &Job) -> bool {
 }
 
 /// The app started over `machine`, with its first read landed.
-fn started(machine: &mut Machine) -> Hand {
+fn started(machine: &mut Stub) -> Hand {
     let mut model = Hand::new();
     model.send(Intent::Start);
     model.run(machine);
     model
 }
 
-fn reading(warm: Overview) -> Machine {
-    let mut machine = Machine::reading(Ok(status(vec![personal()])));
+fn reading(warm: Overview) -> Stub {
+    let mut machine = Stub::reading(Ok(status(vec![personal()])));
     machine.warm = Some(warm);
     machine.warming = Ok(WarmUp::Stands(Box::new(overview(false, Standing::Due))));
     machine

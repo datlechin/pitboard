@@ -1993,12 +1993,12 @@ impl Audited for switch::Removed {
 mod tests {
     use super::*;
     use crate::switch::harness::{
-        Machine, Tool, audit_lines, codex_machine, hold, machine, signed_in_outside, state_file,
+        Rig, Tool, audit_lines, codex_machine, hold, machine, signed_in_outside, state_file,
     };
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
-    type Make = fn(&str) -> Machine;
+    type Make = fn(&str) -> Rig;
 
     // Codex's login says whose it is, so reading it asks nobody; Claude Code's does not say.
     #[test]
@@ -2138,7 +2138,7 @@ mod tests {
         std::fs::create_dir_all(scratch.join("data")).expect("a data folder");
         std::fs::write(scratch.join("data/config.json"), "{").expect("settings");
         crate::host::fs::testing::deny_reading(&scratch.join("data/config.json")).expect("000");
-        let read = |m: &Machine, ctx: Context| {
+        let read = |m: &Rig, ctx: Context| {
             let pitboard = Pitboard::new(ctx);
             let codes = |done: Done<status::Report>| {
                 let warnings: Vec<&str> = done.warnings.iter().map(Warning::code).collect();
@@ -2622,7 +2622,7 @@ mod tests {
 
     /// A switch from `here` to `there` killed after parking `here` and before installing
     /// `there`, so its record is all that says it happened.
-    fn interrupted(make: Make, name: &str) -> Machine {
+    fn interrupted(make: Make, name: &str) -> Rig {
         let m = make(name);
         let settled = switch::settle(&m.ctx, Permit::for_a_test(), None)
             .expect("nothing to recover yet")
@@ -2638,7 +2638,7 @@ mod tests {
     /// The same switch, which the next change cannot finish: nothing is signed in to the
     /// tool any more, so nothing says which side of the switch won. Told apart without
     /// asking anyone, for either tool.
-    fn stuck(make: Make, name: &str) -> Machine {
+    fn stuck(make: Make, name: &str) -> Rig {
         let m = interrupted(make, name);
         m.fault_live(crate::store::memory::Fault::Vanish);
         m
@@ -2649,7 +2649,7 @@ mod tests {
     /// it matches neither side the record kept, and its session has expired, so Anthropic
     /// will not say whose it is. An access token the scripted service does not know is one
     /// it refuses.
-    fn stuck_unless_asked(name: &str) -> Machine {
+    fn stuck_unless_asked(name: &str) -> Rig {
         let m = interrupted(machine, name);
         m.sign_in(&switch::harness::document("renewed-since"));
         m
@@ -2672,7 +2672,7 @@ mod tests {
         Option<serde_json::Value>,
     );
 
-    fn untouched(m: &Machine) -> Untouched {
+    fn untouched(m: &Rig) -> Untouched {
         let kept_by_a_read = ["usage.json", "usage.lock", "asking.json"];
         let mut files = files(m);
         files.retain(|path, _| !kept_by_a_read.iter().any(|kept| path.ends_with(kept)));
@@ -2732,7 +2732,7 @@ mod tests {
 
     /// Plants `contents` in Claude Code's `.credentials.json` behind the keychain, as a
     /// sign-in where the keychain could not be read leaves it, and gives back its path.
-    fn plant_behind(m: &Machine, contents: &str) -> std::path::PathBuf {
+    fn plant_behind(m: &Rig, contents: &str) -> std::path::PathBuf {
         let left = crate::provider::claude::live::credential_file(&m.ctx);
         m.mem.file_at(left.clone()).plant(
             &crate::provider::claude::paths::live_service(&m.ctx),
@@ -2904,6 +2904,72 @@ mod tests {
                 [("recovery_undetermined", refused.error.to_string())],
                 "{tool}: said in the refusal's own words"
             );
+        }
+    }
+
+    #[test]
+    fn giving_up_on_a_switch_nothing_can_finish_happens_once() {
+        for (tool, make) in MACHINES {
+            let m = stuck(make, &format!("give-up-once-{tool}"));
+            let pitboard = Pitboard::new(m.ctx.clone());
+
+            let gave = pitboard.abandon_recovery().expect("given up");
+            let abandoned = gave.switch.expect("the switch given up");
+            assert_eq!(
+                (abandoned.from, abandoned.to),
+                (m.key("here").typed(), m.key("there").typed())
+            );
+            let again = pitboard.abandon_recovery().expect("nothing to give up");
+            assert!(
+                again.switch.is_none() && again.moves.is_empty(),
+                "{tool}: {again:?}"
+            );
+
+            let read = pitboard.status(false).expect("a read");
+            assert_eq!(said(&read), [], "{tool}: nothing waits");
+            let changed = pitboard.switch_to(&m.key("there").typed());
+            assert!(
+                changed
+                    .as_ref()
+                    .err()
+                    .is_none_or(|refused| refused.error.code() != "recovery_undetermined"),
+                "{tool}: {:?}",
+                changed.err().map(|refused| refused.error)
+            );
+        }
+    }
+
+    #[test]
+    fn each_change_is_logged_newest_last_as_the_command_line_types_it() {
+        for (tool, make) in MACHINES {
+            let m = make(&format!("logged-{tool}"));
+            let pitboard = Pitboard::new(m.ctx.clone().with_caller("app".into()));
+
+            pitboard
+                .switch_to(&m.key("there").typed())
+                .expect("a switch");
+            pitboard
+                .rename(&m.key("here").typed(), "office")
+                .expect("renamed");
+
+            let log = pitboard.log(2);
+            let (here, there) = (m.key("here"), m.key("there"));
+            assert_eq!(
+                log.iter()
+                    .map(|change| (
+                        change.caller.as_str(),
+                        change.verb.as_str(),
+                        change.subject.clone(),
+                        change.outcome.as_str()
+                    ))
+                    .collect::<Vec<_>>(),
+                [
+                    ("app", "use", there.typed(), "ok"),
+                    ("app", "rename", format!("{here} -> office"), "ok"),
+                ],
+                "{tool}"
+            );
+            assert_eq!(pitboard.log(1), log[1..], "{tool}");
         }
     }
 
@@ -3616,7 +3682,7 @@ mod tests {
     }
 
     /// The park the interrupted switch reserved, as its record names it.
-    fn reserved(m: &Machine) -> String {
+    fn reserved(m: &Rig) -> String {
         let raw = std::fs::read_to_string(crate::home::dir(&m.ctx).join("journal.json"))
             .expect("a record");
         serde_json::from_str::<serde_json::Value>(&raw).expect("a record is JSON")["park_service"]
@@ -3662,7 +3728,7 @@ mod tests {
     }
 
     /// Every file in Pitboard's own directory but the audit log.
-    fn files(m: &Machine) -> BTreeMap<String, Vec<u8>> {
+    fn files(m: &Rig) -> BTreeMap<String, Vec<u8>> {
         std::fs::read_dir(crate::home::dir(&m.ctx))
             .expect("a Pitboard home")
             .map(|entry| entry.expect("an entry").path())
@@ -3675,7 +3741,7 @@ mod tests {
     }
 
     /// The last two lines of the audit log, as verb and outcome.
-    fn last_audited(m: &Machine) -> Vec<(String, String)> {
+    fn last_audited(m: &Rig) -> Vec<(String, String)> {
         audit::read(&m.ctx, 2)
             .into_iter()
             .map(|entry| (entry.verb, entry.outcome))
@@ -3820,14 +3886,14 @@ mod tests {
     ];
 
     impl Refused {
-        fn said_by(self, m: &Machine) {
+        fn said_by(self, m: &Rig) {
             match self {
                 Refused::As(elevation) => m.mem.runs_with(elevation),
                 Refused::On(floor) => m.mem.runs_on(floor),
             }
         }
 
-        fn lifted(m: &Machine) {
+        fn lifted(m: &Rig) {
             m.mem.runs_with(Elevation::Normal);
             m.mem.runs_on(Floor::Met);
         }
@@ -3861,7 +3927,7 @@ mod tests {
         })
     }
 
-    type Change = fn(&Pitboard, &Machine) -> Option<Failed>;
+    type Change = fn(&Pitboard, &Rig) -> Option<Failed>;
 
     /// Every change a front end can ask for, by its name. `enroll_signed_in` is asked apart,
     /// since it takes a sign-in made before.
@@ -3918,7 +3984,7 @@ mod tests {
         Option<serde_json::Value>,
     );
 
-    fn everything(m: &Machine) -> Everything {
+    fn everything(m: &Rig) -> Everything {
         fn walk(dir: &std::path::Path, into: &mut BTreeMap<String, Option<Vec<u8>>>) {
             for entry in std::fs::read_dir(dir).expect("a directory to read") {
                 let path = entry.expect("an entry").path();
