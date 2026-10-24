@@ -98,8 +98,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app and `pitboard use` say in one sentence, naming the account, why putting its login in
   place of a Claude Code login Anthropic refuses for good loses nothing, and `pitboard use`
   asks `Replace it?`.
-- The app writes the sentences it shares with the command line as it writes its own, with curly
-  apostrophes and contractions such as **isn't**, and without a terminal's backticks.
+- The app writes every sentence with curly apostrophes and contractions such as **isn't**, those
+  it shares with the command line included, and without a terminal's backticks.
 - `pitboard doctor` says why Pitboard leaves a Codex keychain store alone, and that Claude Code's
   config names somebody no store holds, in the words a refused switch uses.
 - An account's row in the app says to sign in again where its parked login is due to expire, or

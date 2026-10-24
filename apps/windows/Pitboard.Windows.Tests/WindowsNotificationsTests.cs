@@ -19,7 +19,7 @@ public sealed class WindowsNotificationsTests
     // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-ffi/src/model/warming.rs).
     private static readonly RunOutNotice WarmFailed = new(
         Id: "warm-failed/personal/warm_up_not_started",
-        Title: "Pitboard could not warm up an account", Subtitle: null,
+        Title: "Pitboard couldn’t warm up an account", Subtitle: null,
         Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
         Clicked: "limits", Button: null);
 

@@ -370,11 +370,11 @@ fn the_settings_say_why_it_is_not_switching() {
     machine.auto = Err(unwritable());
     model.refresh(&mut machine);
     assert_eq!(
-        standing(&model).as_deref(),
-        Some(
-            "Pitboard could not switch Claude Code, and tries again at 08:01: could not write \
-             to Pitboard's directory at /Users/x/.pitboard: read-only"
-        )
+        standing(&model),
+        Some(words::auto_stopped(
+            Some("08:01"),
+            "could not write to Pitboard's directory at /Users/x/.pitboard: read-only"
+        ))
     );
 
     machine.look = Err(refusal(
@@ -384,11 +384,11 @@ fn the_settings_say_why_it_is_not_switching() {
     ));
     model.refresh(&mut machine);
     assert_eq!(
-        standing(&model).as_deref(),
-        Some(
-            "Pitboard cannot tell whether to switch Claude Code: Pitboard's account list at \
-             /Users/x/.pitboard/state.json is damaged"
-        ),
+        standing(&model),
+        Some(words::auto_stopped(
+            None,
+            "Pitboard's account list at /Users/x/.pitboard/state.json is damaged"
+        )),
         "files the core could not read"
     );
 }

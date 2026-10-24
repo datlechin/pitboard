@@ -154,7 +154,7 @@ private final class Opened: @unchecked Sendable {
 @Test func aNoticeWithNoButtonHasNoCategory() {
     let content = MacNotifications.content(
         of: RunOutNotice(
-            id: "auto-refused/switch_failed", title: "Pitboard could not switch Claude Code",
+            id: "auto-refused/switch_failed", title: "Pitboard couldn’t switch Claude Code",
             subtitle: nil, body: "It was refused.", clicked: "limits", button: nil))
     #expect(content.categoryIdentifier.isEmpty)
     #expect(

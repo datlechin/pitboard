@@ -457,13 +457,23 @@ pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
     )
 }
 
-pub(crate) const NOT_SWITCHED: &str = "Claude Code was not switched";
+pub(crate) const NOT_SWITCHED: &str = "Claude Code wasn’t switched";
 
-pub(crate) const NOT_SWITCHING: &str = "Pitboard is not switching Claude Code";
+pub(crate) const NOT_SWITCHING: &str = "Pitboard isn’t switching Claude Code";
 
-pub(crate) const COULD_NOT_SWITCH_ITSELF: &str = "Pitboard could not switch Claude Code";
+pub(crate) const COULD_NOT_SWITCH_ITSELF: &str = "Pitboard couldn’t switch Claude Code";
 
-pub(crate) const COULD_NOT_WARM_ITSELF: &str = "Pitboard could not warm up an account";
+pub(crate) const COULD_NOT_WARM_ITSELF: &str = "Pitboard couldn’t warm up an account";
+
+// Under the setting, where switching by itself stopped on `message`: `until` it tries again.
+pub(crate) fn auto_stopped(until: Option<&str>, message: &str) -> String {
+    match until {
+        Some(until) => {
+            format!("Pitboard couldn’t switch Claude Code, and tries again at {until}: {message}")
+        }
+        None => format!("Pitboard can’t tell whether to switch Claude Code: {message}"),
+    }
+}
 
 pub(crate) fn needs_signing_in(label: &str) -> String {
     format!("{label} needs signing in again")
@@ -2078,6 +2088,29 @@ mod tests {
         assert_eq!(
             typeset("cannot.reply@example.com's login cannot be read"),
             "cannot.reply@example.com’s login can’t be read"
+        );
+    }
+
+    // The contractions the apps give the core's words.
+    #[test]
+    fn the_apps_own_words_on_switching_by_itself_take_their_contractions() {
+        assert_eq!(NOT_SWITCHED, "Claude Code wasn’t switched");
+        assert_eq!(NOT_SWITCHING, "Pitboard isn’t switching Claude Code");
+        assert_eq!(
+            COULD_NOT_SWITCH_ITSELF,
+            "Pitboard couldn’t switch Claude Code"
+        );
+        assert_eq!(
+            COULD_NOT_WARM_ITSELF,
+            "Pitboard couldn’t warm up an account"
+        );
+        assert_eq!(
+            auto_stopped(Some("08:01"), "Couldn’t write."),
+            "Pitboard couldn’t switch Claude Code, and tries again at 08:01: Couldn’t write."
+        );
+        assert_eq!(
+            auto_stopped(None, "Couldn’t read."),
+            "Pitboard can’t tell whether to switch Claude Code: Couldn’t read."
         );
     }
 

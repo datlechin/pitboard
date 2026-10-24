@@ -435,19 +435,9 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
                 until.map(|until| seen.clock(until)).as_deref(),
             )
         }
-        AutoStanding::Stopped {
-            message,
-            until: Some(until),
-        } => {
-            return format!(
-                "Pitboard could not switch Claude Code, and tries again at {}: {message}",
-                seen.clock(*until)
-            );
+        AutoStanding::Stopped { message, until } => {
+            return words::auto_stopped(until.map(|until| seen.clock(until)).as_deref(), message);
         }
-        AutoStanding::Stopped {
-            message,
-            until: None,
-        } => return format!("Pitboard cannot tell whether to switch Claude Code: {message}"),
     };
     words::typeset(&came)
 }
