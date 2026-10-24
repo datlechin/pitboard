@@ -11,6 +11,7 @@ use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::{Intent, Sheet};
 use crate::{Account, Limit, Tool};
 use pitboard_core::host::Os;
+use pitboard_core::status::{self, Stale};
 use pitboard_core::usage::pace::{self, Pace, Standing};
 use pitboard_core::words as said;
 use std::cmp::Ordering;
@@ -197,8 +198,8 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let needs_sign_in = needs_sign_in(account);
     let switching = account.qualified.is_some() && account.qualified.as_deref() == switching_for;
     let title = if account.unplaced {
-        match account.stale.as_deref() {
-            Some("login_unreadable" | "login_unusable") => "Login Pitboard can’t use",
+        match account.stale {
+            Some(Stale::LoginUnreadable | Stale::LoginUnusable) => "Login Pitboard can’t use",
             // Read, and not one Anthropic or OpenAI named, whether or not it could be asked.
             _ => "Login Pitboard can’t identify",
         }
@@ -217,7 +218,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         busy,
         &spoken_name,
     );
-    let problem = if account.unplaced || (!account.switchable && !account.signed_in) {
+    let problem = if account.unplaced || (!account.standing.switchable() && !account.signed_in) {
         account.stale_explanation.clone()
     } else {
         None
@@ -230,7 +231,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             said::span(seen.now - read_at),
             seen.program_of(&account.provider)
         )),
-        _ if problem.is_some() || account.stale.as_deref() == Some("no_usage") => None,
+        _ if problem.is_some() || account.stale == Some(Stale::NoUsage) => None,
         _ => account.stale_explanation.clone(),
     };
     let parked_note = if account.signed_in {
@@ -479,7 +480,7 @@ fn action(
     if account.signed_in {
         return None;
     }
-    if account.switchable
+    if account.standing.switchable()
         && let Some(qualified) = &account.qualified
     {
         return Some(ItemAction {
@@ -541,17 +542,7 @@ fn runs_out_first(account: &Account, now: i64) -> Option<(usize, i64)> {
 }
 
 pub(crate) fn needs_sign_in(account: &Account) -> bool {
-    !account.unplaced
-        && account.label.is_some()
-        && !account.signed_in
-        && !account.switchable
-        && !login_unread(account)
-}
-
-/// An account not in use whose login may be the one in use that could not be read, which no
-/// sign-in would fix.
-fn login_unread(account: &Account) -> bool {
-    !account.signed_in && account.stale.as_deref() == Some("login_unreadable")
+    account.label.is_some() && account.standing.needs_sign_in()
 }
 
 // The line under an account in the menu: its limits, or what stands in their way.
@@ -564,7 +555,7 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
     {
         return Some("Switching…".into());
     }
-    if account.unplaced || login_unread(account) {
+    if account.unplaced || account.standing == status::Standing::LoginUnread {
         return Some(
             account
                 .stale_explanation
@@ -579,7 +570,7 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
         return Some("Needs signing in again".into());
     }
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-    if windows.is_empty() && account.stale.as_deref() == Some("no_usage") {
+    if windows.is_empty() && account.stale == Some(Stale::NoUsage) {
         return Some(words::NO_USAGE_READ.into());
     }
     windows.is_empty().then(|| account.email.clone())
@@ -1190,7 +1181,7 @@ mod tests {
                 .build(),
             account(Some("spare")).build(),
             account(Some("old"))
-                .switchable(false)
+                .standing(status::Standing::LoginExpired)
                 .limits(vec![window("session", 3.0)])
                 .build(),
         ];

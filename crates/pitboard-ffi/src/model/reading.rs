@@ -13,6 +13,7 @@ use super::testing::records::{
 };
 use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
 use crate::{Account, Warning};
+use pitboard_core::status::{Stale, Standing};
 use std::time::Duration;
 
 /// The title is said with the menu bar's wording; the number it says is here.
@@ -390,7 +391,7 @@ fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
 /// `label`, parked, its login no longer one Pitboard can switch to.
 fn expired(label: &str) -> Account {
     Account {
-        switchable: false,
+        standing: Standing::LoginExpired,
         ..claude(label, false, 0.0)
     }
 }
@@ -458,13 +459,14 @@ fn a_parked_login_posted_before_a_relaunch_is_not_posted_again() {
 #[test]
 fn a_refused_parked_login_needs_signing_in_again() {
     let refused = Account {
-        stale: Some("login_refused".into()),
+        stale: Some(Stale::LoginRefused),
         stale_explanation: Some("Its parked login is no longer accepted; sign in again".into()),
-        switchable: false,
+        standing: Standing::LoginRefused,
         ..claude("work", false, 0.0)
     };
     let replaced_away = Account {
-        stale: Some("login_replaced".into()),
+        stale: Some(Stale::LoginReplaced),
+        standing: Standing::LoginReplaced,
         ..expired("side")
     };
     let mut model = Hand::new();
@@ -501,34 +503,41 @@ fn a_refused_parked_login_needs_signing_in_again() {
 #[test]
 fn a_refusal_stands_through_reads_that_did_not_ask() {
     // As the core reads each: a refused login is not one to switch to.
-    let parked = |stale: &str| Account {
-        stale: Some(stale.into()),
-        switchable: stale != "login_refused",
+    let parked = |stale: Stale| Account {
+        stale: Some(stale),
+        standing: if stale == Stale::LoginRefused {
+            Standing::LoginRefused
+        } else {
+            Standing::Ready
+        },
         ..claude("work", false, 0.0)
     };
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![
         claude("home", true, 5.0),
-        parked("login_refused"),
+        parked(Stale::LoginRefused),
     ])));
     model.refresh(&mut machine);
     assert_eq!(machine.posted.len(), 1);
 
-    machine.offline = Ok(status(vec![claude("home", true, 5.0), parked("not_asked")]));
+    machine.offline = Ok(status(vec![
+        claude("home", true, 5.0),
+        parked(Stale::NotAsked),
+    ]));
     machine.changed += 1;
     model.notice(&mut machine);
     assert!(model.shown().sections[0].accounts[1].needs_sign_in);
 
     machine.answer = Ok(status(vec![
         claude("home", true, 5.0),
-        parked("asked_recently"),
+        parked(Stale::AskedRecently),
     ]));
     model.refresh(&mut machine);
     assert!(model.shown().sections[0].accounts[1].needs_sign_in);
 
     machine.answer = Ok(status(vec![
         claude("home", true, 5.0),
-        parked("login_refused"),
+        parked(Stale::LoginRefused),
     ]));
     model.refresh(&mut machine);
     assert_eq!(machine.posted.len(), 1, "once while it stands");

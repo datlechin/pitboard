@@ -4,6 +4,7 @@ use crate::{
     PitboardError, Remedy, Status, Switch, Switched, Tool, Usage, Warning,
 };
 use pitboard_core::provider::ProviderId;
+use pitboard_core::status::Standing;
 
 /// A control's words as this system writes them, title case on a Mac and sentence case on
 /// Windows, for a test of what `shown` says.
@@ -86,7 +87,12 @@ pub(crate) fn account(
         email: format!("{uuid}@example.com"),
         account_id: uuid.into(),
         signed_in,
-        switchable: !signed_in && label.is_some(),
+        standing: match (signed_in, label) {
+            (true, Some(_)) => Standing::InUse,
+            (true, None) => Standing::NotEnrolled,
+            (false, Some(_)) => Standing::Ready,
+            (false, None) => Standing::NothingParked,
+        },
         parked: None,
         usage: Some(Usage {
             observed_at: Some(0),

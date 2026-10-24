@@ -63,6 +63,7 @@ use pitboard_core::duty::warm::Overview;
 use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
 use pitboard_core::state::Key;
+use pitboard_core::status::{Stale, Standing};
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Foreseen, Left, Stowed, WaitStep};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -2042,7 +2043,7 @@ impl State {
             .iter()
             .filter(|account| {
                 crate::present::needs_sign_in(account)
-                    && account.stale.as_deref() != Some("login_replaced")
+                    && account.standing != Standing::LoginReplaced
             })
             .map(|account| (format!("{UNUSABLE}{}", account.id), account))
             .collect();
@@ -4042,38 +4043,40 @@ fn plans_kept(mut read: Status, shown: &Status) -> Status {
     read
 }
 
-// What a read says of a login it did not ask its service about.
-const UNASKED: [&str; 7] = [
-    "not_asked",
-    "asked_recently",
-    "unreachable",
-    "rate_limited",
-    "server_error",
-    "interrupted",
-    "parked_access_expired",
-];
-
 // `read`, where a parked login `shown` says its service refused, and `read` did not ask about
 // again, is still refused, and not switchable, as the core says of a refused one. Parked
 // again, it is another login.
 fn refusals_kept(mut read: Status, shown: &Status) -> Status {
-    for account in read.accounts.iter_mut().filter(|account| {
-        !account.signed_in
-            && account
-                .stale
-                .as_deref()
-                .is_some_and(|stale| UNASKED.contains(&stale))
-    }) {
+    // what a read says of a login it did not ask its service about
+    let unasked = |stale: Option<Stale>| {
+        matches!(
+            stale,
+            Some(
+                Stale::NotAsked
+                    | Stale::AskedRecently
+                    | Stale::Unreachable
+                    | Stale::RateLimited
+                    | Stale::ServerError
+                    | Stale::Interrupted
+                    | Stale::ParkedAccessExpired
+            )
+        )
+    };
+    for account in read
+        .accounts
+        .iter_mut()
+        .filter(|account| !account.signed_in && unasked(account.stale))
+    {
         if let Some(refused) = shown.accounts.iter().find(|refused| {
             refused.id == account.id
                 && refused.parked == account.parked
-                && refused.stale.as_deref() == Some("login_refused")
+                && refused.stale == Some(Stale::LoginRefused)
         }) {
-            account.stale.clone_from(&refused.stale);
+            account.stale = refused.stale;
             account
                 .stale_explanation
                 .clone_from(&refused.stale_explanation);
-            account.switchable = refused.switchable;
+            account.standing = refused.standing;
         }
     }
     read

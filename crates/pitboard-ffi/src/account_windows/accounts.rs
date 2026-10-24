@@ -161,6 +161,7 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use pitboard_core::status::Standing;
 
     /// An account as the core reports one, as the Swift tests made them. `label` `None` is a
     /// login signed in and not enrolled.
@@ -174,7 +175,11 @@ pub(crate) mod tests {
             email: format!("{}@example.com", label.unwrap_or(uuid)),
             account_id: uuid.into(),
             signed_in: false,
-            switchable: label.is_some(),
+            standing: if label.is_some() {
+                Standing::Ready
+            } else {
+                Standing::NothingParked
+            },
             parked: None,
             usage: None,
             stale: None,
@@ -194,7 +199,7 @@ pub(crate) mod tests {
             unplaced: true,
             email: String::new(),
             account_id: String::new(),
-            switchable: false,
+            standing: Standing::Unplaced,
             ..account(None, provider, "")
         }
     }

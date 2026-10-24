@@ -337,8 +337,8 @@ fn account(row: status::Row, now: i64) -> Account {
         provider: row.provider.code().into(),
         qualified: key.map(|k| k.qualified()),
         unplaced,
-        switchable: row.switchable(now),
-        stale: row.stale.map(|s| s.code().to_string()),
+        standing: row.standing(now),
+        stale: row.stale,
         // In the row's own tool's words: a Codex row is not about Anthropic.
         stale_explanation: row.explanation(),
         plan: row.plan,

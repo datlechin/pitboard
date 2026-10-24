@@ -22,6 +22,7 @@ use crate::present::{
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::OS;
+use pitboard_core::status::{Stale, Standing};
 use std::time::Duration;
 
 /// 12:00 UTC on Wednesday 14 January 2026, a day far from any change of clocks.
@@ -254,7 +255,11 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         None,
         "already in use"
     );
-    let stale = described(account(Some("stale")).switchable(false).build());
+    let stale = described(
+        account(Some("stale"))
+            .standing(Standing::LoginExpired)
+            .build(),
+    );
     assert_eq!(
         sends(&stale),
         Some(present_sheet(Sheet::SignInAgain {
@@ -368,7 +373,12 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
             email: "u@example.com".into()
         }))
     );
-    let stale = described_while(account(Some("stale")).switchable(false).build(), signing_in);
+    let stale = described_while(
+        account(Some("stale"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        signing_in,
+    );
     assert_eq!(sends(&stale), None);
     assert_eq!(
         offered(&stale),
@@ -423,7 +433,9 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     let accounts = vec![
         account(Some("work")).signed_in().build(),
         spare.clone(),
-        account(Some("stale")).switchable(false).build(),
+        account(Some("stale"))
+            .standing(Standing::LoginExpired)
+            .build(),
     ];
     let (model, _) = reading(accounts.clone());
     let [work, spare_row, stale] = &rows(&model)[..] else {
@@ -575,7 +587,7 @@ fn an_accounts_own_menu_opens_its_windows() {
 fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
     let stale = || {
         account(Some("stale"))
-            .switchable(false)
+            .standing(Standing::LoginExpired)
             .limits(vec![window("session", 12.0)])
             .build()
     };
@@ -595,9 +607,9 @@ fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
 fn an_account_whose_login_could_not_be_read_is_not_said_to_need_signing_in() {
     let why = "Claude Code's login could not be read; run `pitboard doctor`";
     let unread = Account {
-        stale: Some("login_unreadable".into()),
+        stale: Some(Stale::LoginUnreadable),
         ..account(Some("beta"))
-            .switchable(false)
+            .standing(Standing::LoginUnread)
             .unmeasured()
             .explained(why)
             .build()
@@ -630,7 +642,7 @@ fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
     assert_eq!(
         described(
             account(Some("stale"))
-                .switchable(false)
+                .standing(Standing::LoginExpired)
                 .limits(limits())
                 .build()
         )
@@ -755,7 +767,7 @@ fn only_an_account_that_cannot_be_used_says_why() {
     assert_eq!(
         described(
             account(Some("stale"))
-                .switchable(false)
+                .standing(Standing::LoginExpired)
                 .explained(refused_login)
                 .build()
         )
@@ -764,7 +776,12 @@ fn only_an_account_that_cannot_be_used_says_why() {
         Some(refused_login)
     );
     assert_eq!(
-        described(account(Some("stale")).switchable(false).build()).problem,
+        described(
+            account(Some("stale"))
+                .standing(Standing::LoginExpired)
+                .build()
+        )
+        .problem,
         None,
         "nothing to say"
     );
@@ -777,7 +794,6 @@ fn only_an_account_that_cannot_be_used_says_why() {
         described(
             account(Some("work"))
                 .signed_in()
-                .switchable(false)
                 .explained(old_numbers)
                 .build()
         )
@@ -803,7 +819,6 @@ fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
     let in_use = described(
         account(Some("work"))
             .signed_in()
-            .switchable(false)
             .explained(old_numbers)
             .build(),
     );
@@ -812,7 +827,7 @@ fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
 
     let expired = described(
         account(Some("stale"))
-            .switchable(false)
+            .standing(Standing::LoginExpired)
             .explained(refused_login)
             .build(),
     );
@@ -996,8 +1011,13 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
 fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() {
     let (model, _) = reading(vec![
         account(Some("personal")).of("codex").signed_in().build(),
-        account(Some("work")).of("codex").switchable(false).build(),
-        account(Some("spare")).switchable(false).build(),
+        account(Some("work"))
+            .of("codex")
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("spare"))
+            .standing(Standing::LoginExpired)
+            .build(),
     ]);
     let shown = rows(&model);
     let again = |provider: &str, label: &str| {
@@ -2874,7 +2894,7 @@ fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
 #[test]
 fn a_login_whose_account_cannot_be_told_is_shown_from_the_first_run() {
     let mut untold = unplaced("claude", false);
-    untold.stale = Some("refused".into());
+    untold.stale = Some(Stale::Refused);
     untold.stale_explanation = Some(
         "Pitboard could not tell which account Claude Code's login is (Anthropic answered 400)"
             .into(),

@@ -1160,7 +1160,7 @@ fn an_account_is_added_through_the_sheet_from_start_to_finish() {
         .find(|account| account.qualified.as_deref() == Some("claude/travel"))
         .expect("travel enrolled");
     assert!(!travel.signed_in);
-    assert!(travel.switchable);
+    assert!(travel.standing.switchable());
     assert!(model.state.warnings.is_empty());
 }
 
@@ -1200,7 +1200,7 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
     );
     let work = &model.state.status.clone().expect("accounts").accounts[0];
     assert!(work.signed_in);
-    assert!(!work.switchable);
+    assert!(!work.standing.switchable());
 }
 
 /// Opening the form for another account asks again what is installed: the first answer may have

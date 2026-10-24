@@ -27,6 +27,7 @@
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
+use pitboard_core::status::{Stale, Standing};
 use pitboard_core::{doctor, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -295,10 +296,10 @@ pub(crate) struct Account {
     // what its windows' stores derive from; empty for a login Pitboard cannot place
     pub account_id: String,
     pub signed_in: bool,
-    pub switchable: bool,
+    pub standing: Standing,
     pub parked: Option<Parked>,
     pub usage: Option<Usage>,
-    pub stale: Option<String>,
+    pub stale: Option<Stale>,
     pub stale_explanation: Option<String>,
     pub plan: Option<String>,
     // when Pitboard last read it in use, for a tool no read asks

@@ -9,6 +9,7 @@ use super::testing::records::{already_active, refusal, status, switched, titled,
 use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
+use pitboard_core::status::Standing;
 
 /// `work`, in use, its five-hour limit `percent` used until `resets`.
 fn work(percent: f64, resets: i64) -> Account {
@@ -154,7 +155,11 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     let spent = || work(100.0, 7_200);
     let other = |label: &str, percent: f64, switchable: bool| {
         account(Some(label))
-            .switchable(switchable)
+            .standing(if switchable {
+                Standing::Ready
+            } else {
+                Standing::LoginExpired
+            })
             .limits(vec![window("session", percent).resets(Some(9_000))])
             .build()
     };

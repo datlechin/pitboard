@@ -19,6 +19,7 @@ use crate::present::{AccountItem, AccountsShown, Footing};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::{self, ProviderId};
+use pitboard_core::status::Stale;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -45,12 +46,12 @@ fn described(status: &Status) -> Vec<String> {
                 .unwrap_or_else(|| account.email.clone());
             if account.signed_in {
                 format!("{name}, in use")
-            } else if account.switchable {
+            } else if account.standing.switchable() {
                 name
             } else {
                 format!(
                     "{name}, {}",
-                    account.stale.as_deref().unwrap_or("not switchable")
+                    account.stale.map_or("not switchable", Stale::code)
                 )
             }
         })
@@ -154,7 +155,7 @@ fn each_fixture_starts_where_its_tests_expect() {
                 fresh
                     .accounts
                     .iter()
-                    .all(|account| account.stale.as_deref() != Some("unreachable")),
+                    .all(|account| account.stale != Some(Stale::Unreachable)),
                 "{}",
                 world.name()
             );
@@ -1630,7 +1631,7 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
         fresh
             .accounts
             .iter()
-            .map(|account| (account.stale.as_deref(), account.usage.is_some()))
+            .map(|account| (account.stale.map(Stale::code), account.usage.is_some()))
             .collect::<Vec<_>>(),
         [(Some("unreachable"), true), (Some("unreachable"), true)]
     );

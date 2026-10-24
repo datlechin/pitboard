@@ -361,6 +361,17 @@ impl Standing {
     pub fn switchable(self) -> bool {
         matches!(self, Standing::Ready | Standing::Expiring)
     }
+
+    // Usable no more: only a sign-in brings it back.
+    pub fn needs_sign_in(self) -> bool {
+        matches!(
+            self,
+            Standing::LoginReplaced
+                | Standing::NothingParked
+                | Standing::LoginRefused
+                | Standing::LoginExpired
+        )
+    }
 }
 
 #[derive(Debug)]
