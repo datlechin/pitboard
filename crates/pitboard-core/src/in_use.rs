@@ -12,6 +12,7 @@ use crate::context::Context;
 use crate::provider::Owner;
 use crate::provider::{self, LoginKind, ProviderId};
 use crate::state::{Key, State, new_id};
+use crate::warning::Warning;
 use serde::{Deserialize, Serialize};
 
 /// Whose login one tool has stored, and which login that was.
@@ -214,6 +215,25 @@ pub(crate) fn naming(which: ProviderId, owner: &Owner) -> Option<String> {
         LoginKind::Document(tool) => (!tool.identifies_by_itself()).then(|| new_id(which, owner)),
         LoginKind::Folder(_) => Some(new_id(which, owner)),
     }
+}
+
+pub(crate) fn in_doubt(state: &State, tool: ProviderId, known: &Known) -> Option<Warning> {
+    let named = Stored::of(state, tool, known.own_record.as_ref());
+    if let Some(doubt) = known.unconfirmed() {
+        return Some(Warning::InUseUnconfirmed {
+            tool,
+            last: Stored::of(state, tool, known.owner()),
+            named,
+            asked: doubt == Doubt::NamedMoved,
+        });
+    }
+    known
+        .named_another(tool)
+        .map(|_| Warning::ConfigNamesAnother {
+            tool,
+            config: named,
+            in_use: Stored::of(state, tool, known.owner()),
+        })
 }
 
 /// An account as a warning or a doctor check names it.

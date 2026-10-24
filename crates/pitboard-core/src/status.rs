@@ -11,16 +11,17 @@
 
 use crate::context::Context;
 use crate::error::Cause;
-use crate::in_use::{self, InUse};
+use crate::in_use::{self, InUse, Stored};
 use crate::park;
 use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::claude::paths as claude;
 use crate::provider::{LoginKind, Provider, ProviderError, ProviderId};
 use crate::state::{Key, Park, State};
-use crate::switch::identify;
+use crate::switch::{self, identify};
 use crate::usage::{Snapshot, Source};
 use crate::usage::{budget, readings};
+use crate::warning::Warning;
 use crate::words::Spelling;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -458,6 +459,81 @@ fn tools(state: &State) -> Vec<ProviderId> {
 // The one rule: a read's warnings and `doctor` ask it too.
 pub(crate) fn shown(state: &State, which: ProviderId) -> bool {
     which == crate::label::DEFAULT || state.accounts.iter().any(|a| a.provider() == which)
+}
+
+// What a read says for as long as it stands. `found` is whose login a store holds as this read
+// learned it; for every other tool, what Pitboard recorded stands.
+pub(crate) fn standing(
+    ctx: &Context,
+    state: &State,
+    found: &[(ProviderId, InUse)],
+) -> Vec<Warning> {
+    let mut warnings = replaced(state);
+    // So a Mac with no Claude Desktop account enrolled reads nothing of Claude.
+    for &tool in ProviderId::ALL.iter().filter(|&&tool| shown(state, tool)) {
+        let (known, signed_out) = match crate::provider::of(tool) {
+            LoginKind::Document(driver) if driver.identifies_by_itself() => continue,
+            LoginKind::Document(_) => {
+                let known = match found.iter().find(|(which, _)| *which == tool) {
+                    Some((_, found)) => in_use::judged(ctx, tool, Some(found.clone())),
+                    None => in_use::known(ctx, state, tool),
+                };
+                (known, None)
+            }
+            LoginKind::Folder(app) => {
+                warnings.extend(sign_in_awaited(state, tool));
+                // A move under way leaves the settings between two accounts: only it is said.
+                if let Some(moving) = state.moving(tool) {
+                    warnings.push(Warning::MoveWaiting {
+                        tool,
+                        label: state.typed(&Key::new(tool, moving.label.clone())),
+                    });
+                    continue;
+                }
+                // No read learns whose an app's login is, so `found` names none.
+                switch::folder::read(ctx, state, app)
+            }
+        };
+        warnings.extend(in_use::in_doubt(state, tool, &known));
+        warnings.extend(signed_out.map(|key| Warning::LooksSignedOut {
+            tool,
+            label: state.typed(&key),
+        }));
+    }
+    warnings
+}
+
+fn replaced(state: &State) -> Vec<Warning> {
+    state
+        .accounts
+        .iter()
+        .filter(|account| account.replaced_at.is_some() && account.parked.is_none())
+        .map(|account| {
+            let tool = account.provider();
+            let now = state.in_use(tool).map_or(Stored::Unknown, |record| {
+                Stored::of(state, tool, record.owner.as_ref())
+            });
+            Warning::LoginReplaced {
+                tool,
+                id: account.id.clone(),
+                label: state.typed(&account.key()),
+                now,
+            }
+        })
+        .collect()
+}
+
+// The sign-in a read says is waited for, with the account parked for it.
+fn sign_in_awaited(state: &State, tool: ProviderId) -> Option<Warning> {
+    let awaited = state.awaiting(tool)?;
+    let put_back = state.by_id(tool, &awaited.put_back)?.key();
+    Some(Warning::SignInAwaited {
+        tool,
+        label: state.typed(&Key::new(tool, awaited.label.clone())),
+        put_back: state.typed(&put_back),
+        since: awaited.since,
+        again: awaited.account.is_some(),
+    })
 }
 
 /// What is known without asking anyone: whose login each tool has stored, as its service last
@@ -2957,5 +3033,90 @@ mod tests {
             .expect("a Claude Code config");
         }
         (ctx, mem, api)
+    }
+
+    #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+    )]
+    fn what_stands_is_judged_from_one_read_of_claudes_settings() {
+        let m = switch::harness::desktop_machine("one-read");
+        let state = crate::state::load(&m.ctx).expect("state");
+        let (warnings, reads) =
+            crate::fault::counting("settings.read", || standing(&m.ctx, &state, &[]));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(reads, 1);
+        let (known, reads) = crate::fault::counting("settings.read", || {
+            in_use::known(&m.ctx, &state, ProviderId::Desktop)
+        });
+        assert_eq!((known.doubt, reads), (None, 1));
+    }
+
+    /// What a replaced login is said to have been replaced with is what the record holds of
+    /// the store: an account nobody enrolled, by its email, no login at all, or nothing where
+    /// nothing is recorded of the store.
+    #[test]
+    fn a_replaced_login_says_what_the_store_holds_instead_as_far_as_it_is_known() {
+        use crate::switch::harness::{account, owner};
+        let mut state = State::default();
+        state.accounts.push(account("here", "here", None));
+        state.accounts[0].replaced_at = Some(1);
+        let said = |state: &State| -> Vec<String> {
+            replaced(state).iter().map(ToString::to_string).collect()
+        };
+        let then = "and Pitboard holds no login for `here`. Run `pitboard enroll here \
+                    --sign-in` to sign in to it again.";
+
+        let somebody = InUse {
+            owner: Some(owner("new")),
+            login: "new-login".into(),
+            known_at: 1,
+            named: None,
+        };
+        state
+            .in_use
+            .insert(ProviderId::Claude.code().into(), somebody);
+        assert_eq!(
+            said(&state),
+            [format!(
+                "`here`'s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 new@example.com's login stored, {then}"
+            )]
+        );
+
+        state.in_use.insert(
+            ProviderId::Claude.code().into(),
+            identify::nobody(None, 1).expect("a store holding no login"),
+        );
+        assert_eq!(
+            said(&state),
+            [format!(
+                "`here`'s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+                 no login stored, {then}"
+            )]
+        );
+
+        state.in_use.clear();
+        assert_eq!(
+            said(&state),
+            [format!(
+                "`here`'s login was replaced by a sign-in outside Pitboard, {then}"
+            )]
+        );
+
+        state.accounts[0].parked = Some(Park {
+            service: "pitboard-park-here-1".into(),
+            parked_at: 1,
+            kind: crate::state::ParkKind::Vault,
+            login: "f".into(),
+            access_expires_at: None,
+            refresh_expires_at: None,
+            session_expires_at: None,
+        });
+        assert!(
+            said(&state).is_empty(),
+            "a login parked for it is a way back"
+        );
     }
 }
