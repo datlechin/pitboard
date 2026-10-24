@@ -22,15 +22,6 @@ ACCEPTED = {
     # CI runs the UI tests as the elevated job user and again as a standard user.
     "runs as an elevated user only": None,
     "runs as a standard user only": None,
-    "pins the stores a change touches as macOS and Linux have them": 1,
-}
-
-# Tests compiled out on Windows that give no reason yet, by file and name. Each may only go.
-UNSAID = {
-    (
-        "crates/pitboard-ffi/src/model/threaded.rs",
-        "adding_codex_without_its_cli_says_so_before_sign_in",
-    ),
 }
 
 RUST_SKIPPED = re.compile(
@@ -257,10 +248,8 @@ def returns_on_windows(cond):
 
 
 class Check:
-    def __init__(self, accepted, unsaid):
+    def __init__(self, accepted):
         self.accepted = accepted
-        self.unsaid = set(unsaid)
-        self.unsaid_used = set()
         self.problems = []
         self.counts = {reason: 0 for reason in accepted}
 
@@ -282,15 +271,13 @@ class Check:
             return
         self.counts[max(known, key=len)] += 1
 
-    def left_out(self, source, offset, said, name, what):
+    def left_out(self, source, offset, said, what):
         found = source.windows_line_above(offset)
         if found:
             above, reason = found
             said.add(above)
             where = source.starts[above - 1]
             self.reason(source, where, reason, f"the `{WINDOWS_LINE}` line of {what}")
-        elif (source.path, name) in self.unsaid:
-            self.unsaid_used.add((source.path, name))
         else:
             self.problem(
                 source,
@@ -335,7 +322,7 @@ class Check:
             for attribute in run:
                 if attribute.inner and attribute.path == "cfg" and compiled_out(attribute):
                     what = "this file, compiled out on Windows,"
-                    self.left_out(source, attribute.at, said, None, what)
+                    self.left_out(source, attribute.at, said, what)
         outer = [a for a in run if not a.inner]
         test = any(a.path == "test" or a.path.endswith("::test") for a in outer)
         fn = FN.match(source.code, item)
@@ -352,7 +339,7 @@ class Check:
             return
         for attribute in outer:
             if attribute.path == "cfg" and compiled_out(attribute):
-                self.left_out(source, attribute.at, said, name, what)
+                self.left_out(source, attribute.at, said, what)
 
     def test_module(self, source, outer, module):
         if module.group(1) == "tests":
@@ -370,7 +357,7 @@ class Check:
         for m in EARLY.finditer(source.code, start, end):
             cond = source.text[m.start("cond") : m.end("cond")].strip()
             if returns_on_windows(cond):
-                self.left_out(source, m.start(), said, name, f"the early return of {name}")
+                self.left_out(source, m.start(), said, f"the early return of {name}")
 
     def csharp(self, source):
         conditions = []
@@ -439,8 +426,6 @@ class Check:
                 said.append(f'no test gives "{reason}" now: take it out of ACCEPTED')
             elif ceiling is not None and count < ceiling:
                 said.append(f'"{reason}" is given {count} times: lower its ceiling to {count}')
-        for path, name in sorted(self.unsaid - self.unsaid_used):
-            said.append(f"{path}: {name} is not compiled out on Windows now: take it out of UNSAID")
         return said
 
 
@@ -455,8 +440,8 @@ def sources(root, folder, suffix):
                 yield Path(directory) / name
 
 
-def check(root, accepted=ACCEPTED, unsaid=UNSAID):
-    result = Check(accepted, unsaid)
+def check(root, accepted=ACCEPTED):
+    result = Check(accepted)
     for path in sources(root, "crates", ".rs"):
         result.rust(Source(root, path, RUST_SKIPPED))
     for path in sources(root, "apps/windows", ".cs"):
@@ -475,8 +460,6 @@ def main():
     for reason, count in result.counts.items():
         ceiling = result.accepted[reason]
         print(f"{count:4} {reason}" + ("" if ceiling is None else f", at most {ceiling}"))
-    for path, name in sorted(result.unsaid_used):
-        print(f"   1 {path}: {name}, no reason yet")
     return 1 if result.problems else 0
 
 
