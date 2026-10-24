@@ -305,6 +305,18 @@ impl Pitboard {
         switch::running_already(&self.ctx, which)
     }
 
+    /// What `sign_in` refuses before its program starts, for a front end to ask before it says
+    /// the sign-in opens.
+    pub fn ready_to_sign_in(&self, typed: &str) -> std::result::Result<(), Failed> {
+        let permit = self.permitted()?;
+        let key = self.chosen(permit, "enroll", typed)?;
+        match crate::provider::of(key.provider) {
+            LoginKind::Document(driver) => switch::ready_to_sign_in(&self.ctx, driver)
+                .map_err(|error| self.not_started(permit, typed, error)),
+            LoginKind::Folder(_) => Ok(()),
+        }
+    }
+
     /// A program's sign-in, in a private directory, taking no lock but its own.
     pub fn sign_in(&self, typed: &str) -> std::result::Result<SignIn, Failed> {
         let permit = self.permitted()?;
@@ -2486,9 +2498,7 @@ mod tests {
         );
     }
 
-    // Under a managed `console` pin, Claude Code 2.1.310's sign-in makes an API key and stores no
-    // claude.ai login (login_method_pin). The person's own settings do not reach a sign-in in
-    // Pitboard's private folder.
+    // login_method_pin, read in 2.1.310.
     #[test]
     fn a_claude_code_sign_in_a_managed_console_pin_would_make_a_console_login_is_refused() {
         let m = machine("console-pin");
@@ -2508,6 +2518,7 @@ mod tests {
         m.mem
             .administers(&managed, r#"{"forceLoginMethod": "console"}"#);
         for refused in [
+            pitboard.ready_to_sign_in("new").expect_err("refused"),
             pitboard.sign_in("new").expect_err("refused"),
             pitboard.sign_in_watched("here").expect_err("refused"),
         ] {

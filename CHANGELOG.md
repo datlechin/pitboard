@@ -152,6 +152,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Shell completions leave out `pitboard renew --scheduled`, which only the daily renewal
   schedule runs.
 - Shell completions leave out `pitboard manpage`, as `pitboard --help` does.
+- `pitboard enroll --sign-in` checks what would refuse a Claude Code or Codex sign-in before it
+  says the sign-in opens, instead of after.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
 - The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
