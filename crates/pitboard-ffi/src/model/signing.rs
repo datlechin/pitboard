@@ -9,10 +9,14 @@ use super::changing::a_look_landing_after;
 use super::lanes::Lane;
 use super::state::{After, Answer, Job};
 use super::switching::a_read_that_started_before;
-use super::testing::{
-    CLAUDE, Hand, MONITOR, StandInApps, Stub, a_look_or_a_read, any_read, awaiting, claude,
-    claude_code, claude_desktop, codex, codex_account, desktop_account, desktop_machine,
-    desktop_warning, enrolled_as, installed_ask, refusal, status, still_running, switched, warning,
+use super::testing::machine::{
+    Hand, Stub, a_look_or_a_read, any_read, desktop_machine, installed_ask,
+};
+use super::testing::platform::StandInApps;
+use super::testing::records::{
+    CLAUDE, MONITOR, awaiting, claude, claude_code, claude_desktop, codex, codex_account,
+    desktop_account, desktop_warning, enrolled_as, refusal, status, still_running, switched,
+    warning,
 };
 use super::{Intent, Pane, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
 use crate::EnrolledAs;
@@ -1677,7 +1681,7 @@ fn a_park_refused_opens_the_app_again_behind() {
     machine.changed += 1;
     model.notice(&mut machine);
     assert_eq!(
-        model.count(super::testing::offline_read),
+        model.count(super::testing::machine::offline_read),
         1,
         "a refused park lets the index go"
     );
@@ -1721,7 +1725,7 @@ fn cancelling_while_parking_stops_what_started_and_opens_claude_behind() {
     );
     machine.changed += 1;
     model.notice(&mut machine);
-    assert_eq!(model.count(super::testing::offline_read), 1);
+    assert_eq!(model.count(super::testing::machine::offline_read), 1);
 }
 
 #[test]
@@ -1747,7 +1751,7 @@ fn an_add_cancelled_before_its_park_starts_lets_the_index_go_and_opens_claude_be
     );
     machine.changed += 1;
     model.notice(&mut machine);
-    assert_eq!(model.count(super::testing::offline_read), 1);
+    assert_eq!(model.count(super::testing::machine::offline_read), 1);
 }
 
 #[test]
@@ -1796,7 +1800,11 @@ fn a_park_cancelled_in_flight_and_asked_again_keeps_each_hold_its_own() {
         );
         machine.changed += 1;
         model.notice(&mut machine);
-        assert_eq!(model.count(super::testing::offline_read), 1, "{open}");
+        assert_eq!(
+            model.count(super::testing::machine::offline_read),
+            1,
+            "{open}"
+        );
     }
 }
 
@@ -1845,7 +1853,7 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
         machine.changed += 1;
         model.notice(&mut machine);
         assert_eq!(
-            model.count(super::testing::offline_read),
+            model.count(super::testing::machine::offline_read),
             1,
             "the index is not held"
         );
@@ -2214,7 +2222,7 @@ fn parking_for_a_sign_in_holds_the_index_until_its_read_is_over() {
     machine.changed += 1;
     model.notice(&mut machine);
     assert_eq!(
-        model.count(super::testing::offline_read),
+        model.count(super::testing::machine::offline_read),
         0,
         "the park is this app's own change"
     );
@@ -2224,7 +2232,7 @@ fn parking_for_a_sign_in_holds_the_index_until_its_read_is_over() {
     machine.changed += 1;
     model.notice(&mut machine);
     assert_eq!(
-        model.count(super::testing::offline_read),
+        model.count(super::testing::machine::offline_read),
         1,
         "let go once the read after it is over"
     );
@@ -2315,7 +2323,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
 fn nothing_parked_from_a_logged_out_claude_offers_no_put_back() {
     let mut model = Hand::new();
     let mut machine = desktop_machine(false);
-    machine.answer = Ok(super::testing::warned(
+    machine.answer = Ok(super::testing::records::warned(
         vec![
             desktop_account("work", true),
             desktop_account("home", false),

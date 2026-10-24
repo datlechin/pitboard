@@ -7,10 +7,11 @@
 use super::signing::{add, adding_in_claude, signs_in, travel};
 use super::state::{Answer, Job};
 use super::switching::switch;
-use super::testing::{
-    CHATGPT, Hand, StandInApps, Stub, awaiting, chatgpt_holding, claude_code, codex,
-    desktop_account, desktop_machine, desktop_warning, enrolled_as, refusal, status, switched,
-    titled, warned, warning,
+use super::testing::machine::{Hand, Stub, desktop_machine};
+use super::testing::platform::StandInApps;
+use super::testing::records::{
+    CHATGPT, awaiting, chatgpt_holding, claude_code, codex, desktop_account, desktop_warning,
+    enrolled_as, refusal, status, switched, titled, warned, warning,
 };
 use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
@@ -2392,7 +2393,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
     );
     let mut machine = Stub::reading(Ok(status(vec![account(Some("work")).signed_in().build()])));
     model.send(Intent::Refresh { asked: false });
-    model.run_but(&mut machine, super::testing::any_read);
+    model.run_but(&mut machine, super::testing::machine::any_read);
     let shown = model.shown();
     assert_eq!(
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),

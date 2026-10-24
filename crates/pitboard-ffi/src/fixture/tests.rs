@@ -7,7 +7,7 @@ use super::apps::{CHATGPT, CLAUDE, chatgpt};
 use super::pages;
 use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
-use crate::model::testing::{Posted, StandInApps};
+use crate::model::testing::platform::{Posted, StandInApps};
 use crate::model::{
     AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
     PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,

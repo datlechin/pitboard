@@ -5,7 +5,8 @@
 
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
-use super::testing::{Hand, Stub, status};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::status;
 use super::{AtLimit, EarlierPreferences, Intent, Tip, WindowRequest};
 use crate::Footing;
 use crate::present::testing::account;

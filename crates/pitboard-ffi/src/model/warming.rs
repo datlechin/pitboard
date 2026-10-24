@@ -4,7 +4,9 @@
 //! is due, and what a warm-up runs, are the core's own and have their own tests.
 
 use super::state::{Answer, Job};
-use super::testing::{Hand, Refusal, Stub, World, refusal, status, titled};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{Refusal, refusal, status, titled};
+use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::{Account, PitboardError};

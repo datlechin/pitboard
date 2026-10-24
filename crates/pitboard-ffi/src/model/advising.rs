@@ -6,9 +6,8 @@
 
 use super::advice::{Advice, Told};
 use super::switching::switch;
-use super::testing::{
-    Hand, Stub, already_active, refusal, status, switched, titled, warned, warning,
-};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{already_active, refusal, status, switched, titled, warned, warning};
 use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
@@ -375,7 +374,7 @@ fn nothing_is_told_before_what_was_told_is_in() {
         matches!(job, super::state::Job::LoadKept)
     });
     assert_eq!(
-        model.count(super::testing::any_read),
+        model.count(super::testing::machine::any_read),
         1,
         "the read goes ahead"
     );
@@ -760,7 +759,9 @@ fn switch_notifies_of_codex_alone() {
         codex("job", 97.0, true),
         codex("side", 10.0, false),
     ])));
-    machine.look = Ok(crate::AutoLooked::Stands(super::testing::watching("work")));
+    machine.look = Ok(crate::AutoLooked::Stands(
+        super::testing::records::watching("work"),
+    ));
     chose(&mut model, &mut machine, AtLimit::Switch);
     model.refresh(&mut machine);
     let posted: Vec<(&str, Option<&str>)> = machine

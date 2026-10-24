@@ -5,8 +5,10 @@
 //! model ends every thread it started, a drop waiting on none of them.
 
 use super::state::Cadence;
-use super::testing::StandIn;
-use super::testing::{CHATGPT, CHATGPT_CODEX, Posted, StandInApps, World};
+use super::testing::platform::{Posted, StandInApps};
+use super::testing::records::{CHATGPT, CHATGPT_CODEX};
+use super::testing::world::StandIn;
+use super::testing::world::World;
 use super::{
     AppControl, Intent, LocalTime, ModelListener, PitboardModel, Platform, PlatformError, Sheet,
     Snapshot,

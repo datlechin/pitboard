@@ -188,7 +188,7 @@ fn failed(error: impl std::fmt::Display) -> FixtureError {
 #[cfg(all(test, not(feature = "fixture")))]
 mod without {
     use super::*;
-    use crate::model::testing::{Posted, StandInApps};
+    use crate::model::testing::platform::{Posted, StandInApps};
     use crate::model::{PlatformError, Snapshot};
 
     struct Unheard;

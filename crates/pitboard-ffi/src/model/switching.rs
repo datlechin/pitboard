@@ -7,11 +7,15 @@
 
 use super::changing::a_look_landing_after;
 use super::state::{After, Answer, Job};
-use super::testing::{
-    CHATGPT, CLAUDE, Hand, MONITOR, StandInApps, Stub, a_look_or_a_read, a_switch, already_active,
-    any_read, chatgpt_holding, claude, codex_account, desktop_account, desktop_machine,
-    desktop_warning, fresh_read, holding_ask, offline_read, percent, refusal, status,
-    still_running, switched, warned, warning,
+use super::testing::machine::{
+    Hand, Stub, a_look_or_a_read, a_switch, any_read, desktop_machine, fresh_read, holding_ask,
+    offline_read,
+};
+use super::testing::platform::StandInApps;
+use super::testing::records::{
+    CHATGPT, CLAUDE, MONITOR, already_active, chatgpt_holding, claude, codex_account,
+    desktop_account, desktop_warning, percent, refusal, status, still_running, switched, warned,
+    warning,
 };
 use super::{Intent, LastSwitch, Pane, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
 use crate::{Abandoned, GaveUp};
@@ -1185,7 +1189,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
 /// refusal the next change would make, and the model offers to give up on it at once.
 #[test]
 fn the_cores_own_read_of_a_stuck_switch_offers_to_give_up_on_it() {
-    let world = super::testing::World::new("stuck-read");
+    let world = super::testing::world::World::new("stuck-read");
     world.enrolled("work", "here", 10.0);
     world.parked("personal", "there", 20.0);
     world.stuck_switching_to("personal");
@@ -1335,7 +1339,7 @@ fn waiting_in_claude() -> (Hand, Stub, u64) {
     (model, machine, id)
 }
 
-fn desktop_switched() -> Result<crate::Switched, super::testing::Refusal> {
+fn desktop_switched() -> Result<crate::Switched, super::testing::records::Refusal> {
     switched("desktop", "desktop/work", "desktop/home", Vec::new())
 }
 

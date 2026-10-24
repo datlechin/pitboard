@@ -6,7 +6,8 @@
 //! asks while downloads run.
 
 use super::state::Job;
-use super::testing::{DANA, Hand, Stub, refusal, status, titled};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{DANA, refusal, status, titled};
 use super::windows::{LINK_SCHEME, WEB_SCHEME};
 use super::{DownloadEnd, EarlierWindowRecords, Intent};
 use crate::account_windows::records::{Entry, Records};

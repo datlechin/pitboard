@@ -9,7 +9,8 @@
 
 use super::machine::ScheduleFailure;
 use super::state::Job;
-use super::testing::{Hand, PLIST, Stub, change, check, claude, refusal, status, warned, warning};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, present_on};

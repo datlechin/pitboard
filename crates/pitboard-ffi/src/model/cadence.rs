@@ -6,7 +6,8 @@
 
 use super::Intent;
 use super::state::{Cadence, Job};
-use super::testing::{Hand, Stub, any_read, claude, fresh_read, status};
+use super::testing::machine::{Hand, Stub, any_read, fresh_read};
+use super::testing::records::{claude, status};
 use std::time::Duration;
 
 fn machine() -> Stub {

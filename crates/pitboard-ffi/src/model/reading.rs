@@ -6,9 +6,10 @@
 use super::advice::Told;
 use super::state::{Answer, Job};
 use super::switching::switch;
-use super::testing::{
-    Hand, Stub, account, any_read, claude, claude_code, codex, codex_account, fresh_read,
-    installed_ask, offline_read, percent, refusal, status, titled, warned, warning,
+use super::testing::machine::{Hand, Stub, any_read, fresh_read, installed_ask, offline_read};
+use super::testing::records::{
+    account, claude, claude_code, codex, codex_account, percent, refusal, status, titled, warned,
+    warning,
 };
 use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
 use crate::{Account, Warning};

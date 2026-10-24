@@ -3,7 +3,8 @@
 //! then puts it away once somebody confirms what it says, as `pitboard stow` asks first.
 
 use super::state::{Answer, Job};
-use super::testing::{Hand, Stub, claude, refusal, titled, warned, warning};
+use super::testing::machine::{Hand, Stub};
+use super::testing::records::{claude, refusal, titled, warned, warning};
 use super::{Intent, Sheet};
 use crate::Held;
 use crate::present::Severity;

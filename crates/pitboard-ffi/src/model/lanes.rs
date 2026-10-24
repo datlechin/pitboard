@@ -928,15 +928,15 @@ mod tests {
     use crate::model::Intent;
     use crate::model::QuitQuestion;
     use crate::model::state::{After, Cadence, Now, State};
-    use crate::model::testing::{
-        CHATGPT_CODEX, CLAUDE, Posted, StandInApps, World, chatgpt_holding,
-    };
+    use crate::model::testing::platform::{Posted, StandInApps};
+    use crate::model::testing::records::{CHATGPT_CODEX, CLAUDE, chatgpt_holding};
+    use crate::model::testing::world::World;
     use pitboard_core::host::awake;
     use pitboard_core::provider::ProviderId;
     use pitboard_core::testing::fs as files;
     use std::time::Instant;
 
-    const CHATGPT: &str = crate::model::testing::CHATGPT;
+    const CHATGPT: &str = crate::model::testing::records::CHATGPT;
 
     fn worker(core: Arc<AppCore>, apps: Arc<StandInApps>) -> Worker {
         Worker {
@@ -1581,7 +1581,7 @@ mod tests {
             }
         );
 
-        crate::model::testing::a_program_at(&cargo.join(pitboard()));
+        crate::model::testing::world::a_program_at(&cargo.join(pitboard()));
         assert_eq!(
             found(&worker),
             FoundCommandLine::Another {
@@ -1616,8 +1616,8 @@ mod tests {
         };
         let (bin, home) = (world.dir("bin"), world.dir("home"));
         let cargo = home.join(".cargo").join("bin").join(pitboard());
-        crate::model::testing::a_program_at(&helper);
-        crate::model::testing::a_program_at(&cargo);
+        crate::model::testing::world::a_program_at(&helper);
+        crate::model::testing::world::a_program_at(&cargo);
         std::fs::create_dir_all(&bin).expect("a bin");
         let linked = bin.join(pitboard());
         files::link(&helper, &linked).expect("a link");

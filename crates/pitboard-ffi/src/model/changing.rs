@@ -12,10 +12,13 @@ use super::signing::quits_failed;
 use super::state::{After, Answer, Job};
 use super::stowing::{left, parked_now};
 use super::switching::{a_read_that_started_before, switch};
-use super::testing::{
-    CLAUDE, Hand, StandInApps, Stub, a_look, a_look_or_a_read, a_switch, any_read, claude,
-    codex_account, desktop_machine, enrolled_as, offline_read, refusal, status, still_running,
-    switched, titled, warned, warning,
+use super::testing::machine::{
+    Hand, Stub, a_look, a_look_or_a_read, a_switch, any_read, desktop_machine, offline_read,
+};
+use super::testing::platform::StandInApps;
+use super::testing::records::{
+    CLAUDE, claude, codex_account, enrolled_as, refusal, status, still_running, switched, titled,
+    warned, warning,
 };
 use super::{Intent, Sheet};
 use crate::present::testing::account;

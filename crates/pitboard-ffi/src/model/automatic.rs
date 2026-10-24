@@ -6,7 +6,8 @@
 use super::advice::Told;
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
-use super::testing::{Hand, Refusal, Stub, any_read, offline_read, refusal, status, watching};
+use super::testing::machine::{Hand, Stub, any_read, offline_read};
+use super::testing::records::{Refusal, refusal, status, watching};
 use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
@@ -419,9 +420,9 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
         )
     );
 
-    machine.answer = Ok(super::testing::warned(
+    machine.answer = Ok(super::testing::records::warned(
         vec![work(40.0), personal()],
-        vec![super::testing::warning(
+        vec![super::testing::records::warning(
             "fallback_login",
             "/Users/x/.claude/.credentials.json is there with no Claude Code login in it.",
         )],
