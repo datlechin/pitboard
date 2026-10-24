@@ -456,7 +456,12 @@ fn statusline(pitboard: &Pitboard) -> Report {
     if !std::io::stdin().is_terminal() {
         let _ = std::io::stdin().read_to_string(&mut input);
     }
+    pitboard_core::timing::mark("stdin");
     let line = render::statusline::human(&pitboard.statusline(&input));
+    pitboard_core::timing::mark("drawn");
+    if pitboard_core::timing::on() {
+        eprintln!("{}", pitboard_core::timing::report());
+    }
     if std::env::var_os("NO_COLOR").is_none() {
         ColorChoice::Always.write_global();
     }
@@ -1313,11 +1318,13 @@ fn parse() -> Result<Cli, ExitCode> {
 }
 
 fn main() -> ExitCode {
+    pitboard_core::timing::mark("main");
     pitboard_core::release::set_version(env!("CARGO_PKG_VERSION"));
     let cli = match parse() {
         Ok(cli) => cli,
         Err(exit) => return exit,
     };
+    pitboard_core::timing::mark("parsed");
     let command = cli.command.unwrap_or(Command::Status {
         offline: false,
         fresh: false,
@@ -1331,6 +1338,7 @@ fn main() -> ExitCode {
         return emit(&Report::failed(Some(command.name()), refused), cli.json);
     }
     let ctx = Context::from_env();
+    pitboard_core::timing::mark("context");
     // A job's run says so by its marker, rather than by what the system passes it.
     let ctx = match command {
         Command::Renew { scheduled: true } => ctx.started_by_the_schedule(),
@@ -1340,6 +1348,7 @@ fn main() -> ExitCode {
         _ => ctx,
     };
     let pitboard = Pitboard::new(ctx);
+    pitboard_core::timing::mark("new");
     // A home that is empty or relative is refused before a command reads or writes under
     // it, rather than taken to be under the folder this was run from. The core refuses it
     // too, wherever it reads Pitboard's accounts or is asked to change anything; this also
@@ -1350,6 +1359,7 @@ fn main() -> ExitCode {
     {
         return emit(&Report::failed(Some(command.name()), refused), cli.json);
     }
+    pitboard_core::timing::mark("homes");
     let report = match command {
         Command::Status { offline, fresh } => status(&pitboard, offline, fresh),
         Command::Doctor => doctor(&pitboard),

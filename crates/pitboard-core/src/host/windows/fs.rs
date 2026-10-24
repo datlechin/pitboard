@@ -432,6 +432,7 @@ pub(crate) fn rename(_: Permit, from: &Path, to: &Path) -> io::Result<()> {
             format!("{name} is read-only, and Pitboard does not replace a read-only file"),
         ));
     }
+    crate::timing::mark("r_meta");
     let mut waits = replace::waits();
     loop {
         let refused = match replaced(from, to) {
@@ -464,7 +465,10 @@ fn replaced(from: &Path, to: &Path) -> io::Result<()> {
         DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
         FILE_FLAG_OPEN_REPARSE_POINT,
     )?;
-    match replace::route(volume_flags(&source)) {
+    crate::timing::mark("r_open");
+    let flags = volume_flags(&source);
+    crate::timing::mark("r_vol");
+    match replace::route(flags) {
         Route::Posix => posix_rename(&source, to),
         Route::MoveFile => {
             drop(source);

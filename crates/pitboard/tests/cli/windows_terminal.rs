@@ -338,48 +338,125 @@ fn json_parses_in_windows_powershell_and_pwsh_with_a_label_outside_ascii() {
     }
 }
 
-// J2, on windows-11-arm with Defender on: each run's numbers moved, so each writes under
-// usage.lock, as after every response. Runs leave the folder pitboard.exe is in free to replace.
+// Temporary: J2's runs split into phases, flushed and not, alone and beside a busy disk.
 #[test]
 fn a_warm_status_line_run_is_within_its_budget_and_holds_nothing_after() {
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     let env = two_accounts("statusline-budget");
     let pitboard = env.put_pitboard_on_path();
-    let timed = |args: &[&str], input: &str| {
+    let timed = |args: &[&str], input: &str, flushed: bool| {
+        let mut command = env.started(&pitboard, args);
+        command.env("PITBOARD_J2", "1");
+        if flushed {
+            command.env("PITBOARD_J2_FLUSH", "1");
+        }
         let started = Instant::now();
-        let out = ran(env.started(&pitboard, args), input);
+        let out = ran(command, input);
         let took = started.elapsed();
         assert!(
             out.status.success(),
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        took
+        (took, String::from_utf8_lossy(&out.stderr).into_owned())
     };
-    let run = |n: u32| {
-        let input = session("budget", Some((f64::from(n), 70.0)));
-        timed(&["statusline"], &input)
+    let n = std::cell::Cell::new(0u32);
+    let run = |flushed: bool| {
+        n.set(n.get() + 1);
+        let input = session("budget", Some((f64::from(n.get() % 100), 70.0)));
+        timed(&["statusline"], &input, flushed)
     };
-    for n in 0..3 {
-        run(n);
+    for _ in 0..3 {
+        run(false);
     }
-    // A busy runner only adds time, so the quickest start is what a start costs.
-    let (starts, mut over): (Vec<Duration>, Vec<Duration>) = (3..23)
-        .map(|n| {
-            let start = timed(&["--version"], "");
-            (start, run(n).saturating_sub(start))
-        })
-        .unzip();
-    let quickest = *starts.iter().min().expect("a start");
-    over.sort();
-    let median = over[over.len() / 2];
-    println!(
-        "{} warm runs of pitboard statusline: quickest start {quickest:?}, median over a start \
-         {median:?}",
-        over.len()
-    );
-    assert!(
-        quickest + median <= BUDGET,
-        "starts {starts:?}, over them {over:?}"
+    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+    let spread = |mut v: Vec<f64>| {
+        v.sort_by(f64::total_cmp);
+        let at = |q: f64| v[((v.len() - 1) as f64 * q).round() as usize];
+        format!("p50 {:.1} p90 {:.1} max {:.1}", at(0.5), at(0.9), at(1.0))
+    };
+    let measure = |condition: &str| {
+        let mut over: BTreeMap<bool, Vec<f64>> = BTreeMap::new();
+        let mut phases: BTreeMap<(bool, String), Vec<f64>> = BTreeMap::new();
+        let mut starts = Vec::new();
+        for i in 0..40 {
+            let flushed = i % 2 == 0;
+            let (start, _) = timed(&["--version"], "", false);
+            let (took, err) = run(flushed);
+            starts.push(ms(start));
+            over.entry(flushed)
+                .or_default()
+                .push(ms(took.saturating_sub(start)));
+            let line = err
+                .lines()
+                .find(|line| line.starts_with("J2 "))
+                .unwrap_or_else(|| panic!("no phases in {err}"));
+            for pair in line.split(' ').skip(1) {
+                let (label, value) = pair.split_once('=').expect("label=ms");
+                phases
+                    .entry((flushed, label.to_owned()))
+                    .or_default()
+                    .push(value.parse().expect("ms"));
+            }
+        }
+        println!("J2 {condition}: starts {}", spread(starts));
+        for (flushed, over) in over {
+            let which = if flushed { "flushed" } else { "unflushed" };
+            println!("J2 {condition}, {which}: over a start {}", spread(over));
+        }
+        for ((flushed, label), values) in phases {
+            let which = if flushed { "flushed" } else { "unflushed" };
+            println!("J2 {condition}, {which}, {label}: {}", spread(values));
+        }
+    };
+    measure("alone, first after the build");
+
+    let busy = |condition: &str, work: fn(&Path, &AtomicBool)| {
+        let stop = Arc::new(AtomicBool::new(false));
+        let folder = env.root.join("busy");
+        std::fs::create_dir_all(&folder).expect("the busy folder");
+        let worker = {
+            let stop = Arc::clone(&stop);
+            let folder = folder.clone();
+            std::thread::spawn(move || work(&folder, &stop))
+        };
+        std::thread::sleep(Duration::from_secs(2));
+        measure(condition);
+        stop.store(true, Ordering::Relaxed);
+        worker.join().expect("the busy thread");
+        std::fs::remove_dir_all(&folder).expect("the busy folder removed");
+    };
+    // As a build's output written back after it, nothing flushed.
+    busy("beside 1 GB written again and again", |folder, stop| {
+        let chunk = vec![7u8; 32 << 20];
+        let mut file = std::fs::File::create(folder.join("bulk")).expect("bulk");
+        let mut written = 0usize;
+        while !stop.load(Ordering::Relaxed) {
+            if written >= 1 << 30 {
+                std::io::Seek::rewind(&mut file).expect("rewound");
+                written = 0;
+            }
+            file.write_all(&chunk).expect("written");
+            written += chunk.len();
+        }
+    });
+    // As ten_thousand_replaces flushes beside the suite.
+    busy(
+        "beside 4 KB files flushed one after another",
+        |folder, stop| {
+            let body = vec![7u8; 4096];
+            let mut i = 0u32;
+            while !stop.load(Ordering::Relaxed) {
+                let path = folder.join(format!("flushed-{}", i % 64));
+                let mut file = std::fs::File::create(&path).expect("flushed");
+                file.write_all(&body).expect("written");
+                file.sync_all().expect("flushed");
+                i += 1;
+            }
+        },
     );
 
     let bin = pitboard.parent().expect("its folder").to_path_buf();

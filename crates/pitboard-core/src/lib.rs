@@ -74,6 +74,7 @@ pub mod status;
 pub mod statusline;
 pub mod switch;
 pub mod time;
+pub mod timing;
 pub mod usage;
 pub mod watch_service;
 pub mod words;

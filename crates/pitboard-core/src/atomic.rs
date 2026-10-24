@@ -57,6 +57,7 @@ fn replace(
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
     sweep(permit, dir);
+    crate::timing::mark("sweep");
     let temp = dir.join(format!(
         ".{}.{}.{}.pitboard",
         name.to_string_lossy(),
@@ -67,20 +68,26 @@ fn replace(
     let result = (|| -> io::Result<()> {
         // Private first, given the existing access after: too closed for a moment is safe.
         let mut file = create_fresh(permit, &temp)?;
+        crate::timing::mark("create");
         file.write_all(contents)?;
+        crate::timing::mark("write");
         if synced {
             if crate::fault::fails("atomic.synced") {
                 return Err(io::Error::other("a test failed this flush"));
             }
             file.sync_all()?;
+            crate::timing::mark("sync_all");
         }
         // Closed before Windows opens it again to set its list and to rename it.
         drop(file);
+        crate::timing::mark("close");
         if let Perms::MatchExisting = perms {
             fs::copy_access(permit, path, &temp)?;
         }
         crate::fault::point(at);
-        fs::rename(permit, &temp, path)
+        let renamed = fs::rename(permit, &temp, path);
+        crate::timing::mark("rename");
+        renamed
     })();
 
     if result.is_err() {
@@ -89,6 +96,7 @@ fn replace(
     }
     if synced {
         fs::sync_dir(dir);
+        crate::timing::mark("sync_dir");
     }
     Ok(())
 }
