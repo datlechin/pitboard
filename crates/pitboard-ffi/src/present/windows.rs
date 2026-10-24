@@ -261,7 +261,7 @@ fn waiting(seen: &Seen) -> WindowWaiting {
         window_title: "Account".into(),
         shown: match (&seen.state.status, seen.problem()) {
             (None, Some(problem)) => WaitingShown::ReadFailed {
-                title: read_failed(seen.os),
+                title: words::could_not_read_accounts(seen.os),
                 detail: problem.to_owned(),
                 retry: retry(seen.os),
             },
@@ -275,17 +275,12 @@ fn waiting(seen: &Seen) -> WindowWaiting {
 /// What a window and the Open Link window say while the accounts are read for the first time.
 const READING: &str = "Reading accounts…";
 
-/// What they say where the accounts could not be read, and nothing is known.
-fn read_failed(os: Os) -> String {
-    words::titled(os, "Couldn’t Read Accounts", "Couldn’t read accounts")
-}
-
 /// Reading the accounts again, as somebody asked. Offered while a read runs too, as
 /// AccountWindowView.swift and AccountPicker.swift offered it, where the accounts pane holds
 /// its own back.
 fn retry(os: Os) -> Choice {
     Choice {
-        title: words::titled(os, "Try Again", "Try again"),
+        title: words::try_again(os),
         intent: Intent::Refresh { asked: true },
         enabled: true,
     }
@@ -306,12 +301,12 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             title: READING.into(),
         },
         Picking::ReadFailed(problem) => PickerShown::ReadFailed {
-            title: read_failed(seen.os),
+            title: words::could_not_read_accounts(seen.os),
             detail: problem,
             retry: retry(seen.os),
         },
         Picking::Refused(refusal) => PickerShown::Refused {
-            title: words::titled(seen.os, "Can’t Open This Link", "Can’t open this link"),
+            title: words::cannot_open_link(seen.os),
             reason: refusal.to_string(),
         },
         Picking::NoAccount(link) => {
@@ -345,7 +340,7 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             accounts,
             chosen,
         } => PickerShown::Choose {
-            title: format!("Open this {} link as:", link.site.name),
+            title: words::open_link_as(&link.site.name),
             link_text: link_text(&link.url),
             accounts: accounts
                 .into_iter()

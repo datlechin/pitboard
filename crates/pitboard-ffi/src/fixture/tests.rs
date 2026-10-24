@@ -1185,7 +1185,7 @@ fn the_login_in_use_is_offered_a_name() {
     let shown = told.last_where("the accounts read", read_in);
     assert_eq!(
         shown.setup.as_ref().map(|step| step.title.as_str()),
-        Some("Give this account a name")
+        Some(words::GIVE_IT_A_NAME)
     );
     model.send(Intent::Enrol {
         provider: "claude".into(),
@@ -1245,7 +1245,7 @@ fn one_account_is_offered_a_second_until_not_now() {
     let shown = told.last_where("the accounts read", read_in);
     assert_eq!(
         shown.setup.as_ref().map(|step| step.title.as_str()),
-        Some("Add a second account")
+        Some(words::add_a_second(None).as_str())
     );
     model.send(Intent::DeclineSecondAccount {
         provider: "claude".into(),
@@ -1488,7 +1488,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         .collect();
     let titles = |titles: &[&str]| titles.iter().map(|&title| title.to_owned()).collect();
     let again = words::sign_in_again(OS, true);
-    let now = titled(OS, "Warm Up Now", "Warm up now");
+    let now = words::warm_up_now(OS);
     assert_eq!(
         menus,
         [
@@ -1592,15 +1592,15 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     assert!(shown.sections.is_empty(), "nothing is known");
     assert_eq!(
         shown.menu_accounts_note.as_deref(),
-        Some("No accounts to show")
+        Some(words::NO_ACCOUNTS_TO_SHOW)
     );
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::ReadFailed {
-            title: titled(OS, "Couldn’t Read Accounts", "Couldn’t read accounts"),
+            title: words::could_not_read_accounts(OS),
             detail: failure,
             retry: crate::present::Choice {
-                title: titled(OS, "Try Again", "Try again"),
+                title: words::try_again(OS),
                 intent: Intent::Refresh { asked: true },
                 enabled: true,
             },
@@ -1678,7 +1678,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
             .confirm
             .as_ref()
             .map(|question| question.confirm.clone()),
-        Some(titled(OS, "Give Up", "Give up"))
+        Some(words::give_up(OS, false))
     );
     let item = shown.menu_notices.others.expect("an item");
     assert_eq!(item.title, words::SWITCH_WAITING);
@@ -1957,7 +1957,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
     else {
         panic!("accounts to choose from: {picker:?}");
     };
-    assert_eq!(title, "Open this chatgpt.com link as:");
+    assert_eq!(title, &words::open_link_as("chatgpt.com"));
     let labels: Vec<&str> = accounts.iter().map(|a| a.window.label.as_str()).collect();
     assert_eq!(labels, ["main", "spare"]);
     let spare = accounts[1].window.store.clone();
@@ -1998,10 +1998,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
     else {
         unreachable!()
     };
-    assert_eq!(
-        title,
-        titled(OS, "Can’t Open This Link", "Can’t open this link")
-    );
+    assert_eq!(title, words::cannot_open_link(OS));
     assert!(reason.contains("This link is on example.com."), "{reason}");
     model.shutdown();
 }

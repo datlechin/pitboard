@@ -13,11 +13,12 @@ use super::{DownloadEnd, EarlierWindowRecords, Intent};
 use crate::account_windows::records::{Entry, Records};
 use crate::account_windows::{WindowNoteKind, stores::derive};
 use crate::present::testing::account;
+use crate::present::words;
 use crate::{
     Account, Choice, DownloadState, LinkPicker, OpenWindow, PickerShown, Question, SiteMenu,
     WaitingShown, WindowWaiting, downloads_quit_question,
 };
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
 
@@ -204,7 +205,7 @@ fn the_picker_offers_the_sites_accounts_with_one_chosen() {
     else {
         panic!("accounts to choose from");
     };
-    assert_eq!(title, "Open this claude.ai link as:");
+    assert_eq!(title, words::open_link_as("claude.ai"));
     assert_eq!(link.url, "https://claude.ai/chat/x");
     assert_eq!(link_text, "claude.ai/chat/x");
     assert_eq!(open, "Open");
@@ -240,7 +241,7 @@ fn the_picker_says_what_stands_in_the_way() {
     assert_eq!(
         picker(&model).shown,
         PickerShown::Refused {
-            title: titled("Can’t Open This Link", "Can’t open this link"),
+            title: words::cannot_open_link(OS),
             reason: "Pitboard opens claude.ai and chatgpt.com links only. This link is on \
                      example.com."
                 .into(),
@@ -268,12 +269,9 @@ fn the_picker_says_what_stands_in_the_way() {
     else {
         panic!("the read that failed");
     };
-    assert_eq!(
-        title,
-        titled("Couldn’t Read Accounts", "Couldn’t read accounts")
-    );
+    assert_eq!(title, words::could_not_read_accounts(OS));
     assert_eq!(detail, "No network.");
-    assert_eq!(retry.title, titled("Try Again", "Try again"));
+    assert_eq!(retry.title, words::try_again(OS));
     assert_eq!(retry.intent, Intent::Refresh { asked: true });
 
     let mut codex_only = Stub::reading(Ok(status(vec![account(Some("main")).of("codex").build()])));
@@ -321,7 +319,7 @@ fn the_inbox_takes_pitboard_links_of_its_own_scheme() {
     let mut machine = machine();
     let mut model = started_on_stand_ins(&mut machine);
     assert_eq!(model.shown().account_windows.picker, None);
-    let (title, detail) = crate::present::words::no_link(pitboard_core::host::OS);
+    let (title, detail) = words::no_link(OS);
     assert_eq!(
         model.shown().account_windows.no_link,
         crate::present::EmptyList { title, detail },
@@ -341,7 +339,7 @@ fn the_inbox_takes_pitboard_links_of_its_own_scheme() {
     assert_eq!(
         second.shown,
         PickerShown::Refused {
-            title: titled("Can’t Open This Link", "Can’t open this link"),
+            title: words::cannot_open_link(OS),
             reason: pitboard_sites::LinkRefusal::Unreadable.to_string(),
         },
         "another build's scheme"
@@ -486,10 +484,10 @@ fn a_window_that_cannot_show_its_page_says_why_in_the_models_words() {
         WindowWaiting {
             window_title: "Account".into(),
             shown: WaitingShown::ReadFailed {
-                title: titled("Couldn’t Read Accounts", "Couldn’t read accounts"),
+                title: words::could_not_read_accounts(OS),
                 detail: "could not read Pitboard's account list".into(),
                 retry: Choice {
-                    title: titled("Try Again", "Try again"),
+                    title: words::try_again(OS),
                     intent: Intent::Refresh { asked: true },
                     enabled: true,
                 },

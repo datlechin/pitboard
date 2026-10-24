@@ -881,6 +881,38 @@ fn readable(code: &str) -> String {
 }
 
 /// What stands in for the activity list while it has nothing in it: its title, and why.
+pub(crate) const GIVE_IT_A_NAME: &str = "Give this account a name";
+
+// `tool`: the tool named, where the account's is not the only one shown.
+pub(crate) fn add_a_second(tool: Option<&str>) -> String {
+    match tool {
+        Some(tool) => format!("Add a second {tool} account"),
+        None => "Add a second account".into(),
+    }
+}
+
+pub(crate) const NO_ACCOUNTS_TO_SHOW: &str = "No accounts to show";
+
+pub(crate) fn could_not_read_accounts(os: Os) -> String {
+    titled(os, "Couldn’t Read Accounts", "Couldn’t read accounts")
+}
+
+pub(crate) fn try_again(os: Os) -> String {
+    titled(os, "Try Again", "Try again")
+}
+
+pub(crate) fn warm_up_now(os: Os) -> String {
+    titled(os, "Warm Up Now", "Warm up now")
+}
+
+pub(crate) fn open_link_as(site: &str) -> String {
+    format!("Open this {site} link as:")
+}
+
+pub(crate) fn cannot_open_link(os: Os) -> String {
+    titled(os, "Can’t Open This Link", "Can’t open this link")
+}
+
 pub(crate) fn no_link(os: Os) -> (String, String) {
     (
         titled(os, "No Link to Open", "No link to open"),
@@ -2904,6 +2936,34 @@ mod tests {
     #[test]
     fn the_settings_and_the_open_link_window_say_these() {
         assert_eq!(share_range(50, 99), "From 50% to 99%");
+        assert_eq!(
+            open_link_as("chatgpt.com"),
+            "Open this chatgpt.com link as:"
+        );
+        assert_eq!(
+            (cannot_open_link(Os::MacOs), cannot_open_link(Os::Windows)),
+            ("Can’t Open This Link".into(), "Can’t open this link".into())
+        );
+        assert_eq!(
+            (
+                could_not_read_accounts(Os::MacOs),
+                could_not_read_accounts(Os::Windows)
+            ),
+            (
+                "Couldn’t Read Accounts".into(),
+                "Couldn’t read accounts".into()
+            )
+        );
+        assert_eq!(
+            (try_again(Os::MacOs), try_again(Os::Windows)),
+            ("Try Again".into(), "Try again".into())
+        );
+        assert_eq!(
+            (warm_up_now(Os::MacOs), warm_up_now(Os::Windows)),
+            ("Warm Up Now".into(), "Warm up now".into())
+        );
+        assert_eq!(add_a_second(None), "Add a second account");
+        assert_eq!(add_a_second(Some("Codex")), "Add a second Codex account");
         assert_eq!(
             no_link(Os::MacOs),
             (

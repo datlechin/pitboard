@@ -110,7 +110,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                 .map(|tool| format!(" to {tool}"))
                 .unwrap_or_default();
             Some(SetupStep {
-                title: "Give this account a name".into(),
+                title: words::GIVE_IT_A_NAME.into(),
                 detail: format!(
                     "{email} is signed in{to}. Pitboard parks logins under a name you choose, \
                      and can’t park this one until it has one."
@@ -135,6 +135,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             } else {
                 seen.tool_if_shown(provider)
             };
+            let title = words::add_a_second(named.as_deref());
             let tool = named.map(|tool| format!("{tool} ")).unwrap_or_default();
             let adding = if in_its_app {
                 format!(
@@ -145,7 +146,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                 "Adding another signs in to it and parks its login beside this one.".into()
             };
             Some(SetupStep {
-                title: format!("Add a second {tool}account"),
+                title,
                 detail: format!(
                     "{label} is the only {tool}account Pitboard knows, so there’s nothing to \
                      switch to. {adding}"
@@ -276,12 +277,12 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
             link: INSTALL_CLAUDE_CODE.into(),
         },
         _ if seen.problem().is_some() && seen.accounts().is_empty() => AccountsShown::ReadFailed {
-            title: words::titled(seen.os, "Couldn’t Read Accounts", "Couldn’t read accounts"),
+            title: words::could_not_read_accounts(seen.os),
             detail: seen.problem().unwrap_or_default().to_owned(),
             // Held back while the accounts are read again, as the toolbar's Refresh is, so
             // pressing it is seen to have done something; AccountsPane.swift held it back.
             retry: Choice {
-                title: words::titled(seen.os, "Try Again", "Try again"),
+                title: words::try_again(seen.os),
                 intent: Intent::Refresh { asked: true },
                 enabled: seen.state.reads == 0,
             },
@@ -310,7 +311,7 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
 pub(crate) fn menu_accounts_note(seen: &Seen, footing: &Footing) -> Option<String> {
     match &seen.state.status {
         None if seen.problem().is_none() => Some("Reading accounts…".into()),
-        None => Some("No accounts to show".into()),
+        None => Some(words::NO_ACCOUNTS_TO_SHOW.into()),
         Some(status) if status.accounts.is_empty() && *footing != Footing::NoClaudeCode => {
             Some("No accounts yet".into())
         }
@@ -346,7 +347,7 @@ pub(crate) fn updated_window(seen: &Seen) -> String {
 #[cfg(test)]
 mod tests {
     use crate::present::testing::{Utc, claude_desktop, desktop_account, read, status};
-    use crate::present::{AccountsShown, present_on};
+    use crate::present::{AccountsShown, present_on, words};
     use pitboard_core::host::Os;
 
     #[test]
@@ -358,7 +359,7 @@ mod tests {
         let step = present_on(Os::MacOs, &state, 0, &Utc)
             .setup
             .expect("a second account offered");
-        assert_eq!(step.title, "Add a second Claude Desktop account");
+        assert_eq!(step.title, words::add_a_second(Some("Claude Desktop")));
         assert_eq!(
             step.detail,
             "work is the only Claude Desktop account Pitboard knows, so there’s nothing to \

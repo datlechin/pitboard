@@ -1332,10 +1332,10 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let reason = "/Users/dana/.pitboard/state.json was written on another Mac.";
     let failed = || Err(refusal("state_wrong_machine", reason, Vec::new()));
     let read_failed = AccountsShown::ReadFailed {
-        title: titled("Couldn’t Read Accounts", "Couldn’t read accounts"),
+        title: words::could_not_read_accounts(OS),
         detail: reason.into(),
         retry: Choice {
-            title: titled("Try Again", "Try again"),
+            title: words::try_again(OS),
             intent: Intent::Refresh { asked: true },
             enabled: true,
         },
@@ -1416,7 +1416,7 @@ fn the_panes_try_again_is_held_back_while_the_accounts_are_read() {
     assert_eq!(
         retry(&model),
         Choice {
-            title: titled("Try Again", "Try again"),
+            title: words::try_again(OS),
             intent: Intent::Refresh { asked: true },
             enabled: false,
         }
@@ -2365,7 +2365,7 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     unknown.refresh(&mut machine);
     assert_eq!(
         unknown.shown().menu_accounts_note.as_deref(),
-        Some("No accounts to show")
+        Some(words::NO_ACCOUNTS_TO_SHOW)
     );
 
     let (empty, _) = reading(Vec::new());
@@ -2500,7 +2500,7 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
     assert_eq!(
         shown.setup,
         Some(SetupStep {
-            title: "Give this account a name".into(),
+            title: words::GIVE_IT_A_NAME.into(),
             detail: "a@example.com is signed in. Pitboard parks logins under a name you \
                      choose, and can’t park this one until it has one."
                 .into(),
@@ -2538,7 +2538,7 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
     assert_eq!(
         shown.setup,
         Some(SetupStep {
-            title: "Add a second account".into(),
+            title: words::add_a_second(None),
             detail: "work is the only account Pitboard knows, so there’s nothing to switch to. \
                      Adding another signs in to it and parks its login beside this one."
                 .into(),
@@ -2838,7 +2838,7 @@ fn only_one_account_is_counted_per_tool() {
         }
     );
     let step = shown.setup.expect("a step");
-    assert_eq!(step.title, "Add a second Codex account");
+    assert_eq!(step.title, words::add_a_second(Some("Codex")));
     assert!(
         step.detail
             .starts_with("job is the only Codex account Pitboard knows"),

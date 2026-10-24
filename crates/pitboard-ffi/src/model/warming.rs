@@ -5,7 +5,7 @@
 
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{Refusal, refusal, status, titled};
+use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
@@ -13,6 +13,7 @@ use crate::present::words;
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
+use pitboard_core::host::OS;
 use pitboard_core::switch::warm::{Apart, WarmUp, told_apart};
 use pitboard_core::testing::{Ran, Started, WarmScript};
 use std::sync::Arc;
@@ -438,7 +439,7 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         .collect();
     assert_eq!(
         warm,
-        [(titled("Warm Up Now", "Warm up now"), false)],
+        [(words::warm_up_now(OS), false)],
         "its period runs, so nothing to start now"
     );
 }

@@ -409,7 +409,7 @@ fn warm_offer(seen: &Seen, account: &Account) -> Option<ItemOffer> {
         .as_ref()
         .is_some_and(|overview| overview.halted.is_some());
     Some(ItemOffer {
-        title: words::titled(seen.os, "Warm Up Now", "Warm up now"),
+        title: words::warm_up_now(seen.os),
         intent: Intent::WarmNow {
             qualified: choice.qualified.clone(),
         },
