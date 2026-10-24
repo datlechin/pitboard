@@ -429,7 +429,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         name: "windows_token_env",
         macos: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
         linux: NotRead("macOS and Linux hand a descriptor as headless_token_descriptor says"),
-        windows: Read("2.1.309"),
+        windows: Read("2.1.310"),
     },
     PerSystem {
         name: "windows_statusline_shell",
@@ -1744,16 +1744,16 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     environment and what turns it on, and the `where.exe` lookup the Git Bash \
                     finder falls back to, started with `env:process.env`, in the win32-x64 and \
                     win32-arm64 builds of 2.1.303, read as bytes on 2026-10-19 and 2026-10-20, \
-                    and again in those of 2.1.309 on 2026-10-23",
-        verified_against: "2.1.309",
+                    and again in those of 2.1.309 on 2026-10-23 and of 2.1.310 on 2026-10-24",
+        verified_against: "2.1.310",
         depends: "Claude Code's warm-up command on Windows, which hands a run the access token \
                   alone in `CLAUDE_CODE_OAUTH_TOKEN`, with the scrub on and no other variable \
                   that signs it in, and names in `CLAUDE_CODE_GIT_BASH_PATH` the Git Bash \
                   Pitboard finds, so no `where.exe` is asked for `git` where it finds one",
         probe: &[
-            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(i.CLAUDE_CODE_OAUTH_TOKEN||QI()!==null)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
-            "(){if(i.CLAUDE_CODE_OAUTH_TOKEN)return Zf(i.CLAUDE_CODE_OAUTH_TOKEN);",
-            "{accessToken:e,refreshToken:null,expiresAt:null,scopes:zw(),",
+            r#"return{source:"ANTHROPIC_AUTH_TOKEN",hasToken:!0};if(i.CLAUDE_CODE_OAUTH_TOKEN||gM()!==null)return{source:"CLAUDE_CODE_OAUTH_TOKEN",hasToken:!0}"#,
+            "(){if(i.CLAUDE_CODE_OAUTH_TOKEN)return bp(i.CLAUDE_CODE_OAUTH_TOKEN);",
+            "{accessToken:e,refreshToken:null,expiresAt:null,scopes:eA(),",
             r#""ANTHROPIC_API_KEY","CLAUDE_CODE_OAUTH_TOKEN","CLAUDE_CODE_ARTIFACTS_API_TOKEN""#,
             "process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
             "windowsHide:!0,env:process.env}).trim().split(",
