@@ -58,5 +58,5 @@ internal static class Snapshots
     ];
 
     public static readonly TermsShown Terms = new(
-        "Anthropic's terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
+        "Anthropic’s terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 }

@@ -19,15 +19,20 @@ internal static class Items
     public static AccountItem Acting(AccountItem item, ItemAction? action) =>
         action is null ? item with { Action = null } : item with { Action = action, End = new RowEnd.Button(action) };
 
-    // A site as a snapshot carries one, chatgpt.com's with the sign-in host its window loads, each refusing Google's sign-in.
+    // pitboard-sites' site for the tool, with the hosts and paths a snapshot carries.
     public static Site Site(string provider) =>
-        provider == "codex" ? SiteOf("chatgpt.com", provider, ["auth.openai.com"]) : SiteOf("claude.ai", provider, []);
-
-    private static Site SiteOf(string host, string provider, string[] signInHosts) =>
-        new(
-            Host: host, Name: host, Provider: provider, Aliases: [], Hosts: [host], SignInHosts: signInHosts,
-            BlockedHosts: ["accounts.google.com"], SignInPaths: [], StoreName: provider, SignInSteps: "",
-            BlockedServices: "");
+        provider == "codex"
+            ? new Site(
+                Host: "chatgpt.com", Name: "chatgpt.com", Provider: "codex",
+                Aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
+                Hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
+                SignInHosts: ["auth.openai.com", "login.live.com", "login.microsoftonline.com", "appleid.apple.com"],
+                BlockedHosts: ["accounts.google.com"], SignInPaths: [["api", "auth"]], StoreName: "codex",
+                SignInSteps: "", BlockedServices: "")
+            : new Site(
+                Host: "claude.ai", Name: "claude.ai", Provider: "claude", Aliases: [], Hosts: ["claude.ai"],
+                SignInHosts: [], BlockedHosts: ["accounts.google.com"], SignInPaths: [["magic-link"]],
+                StoreName: "claude", SignInSteps: "", BlockedServices: "");
 
     public static WindowAccount Window(string provider, string label, bool inUse = false) =>
         new(

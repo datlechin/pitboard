@@ -1,16 +1,20 @@
 import PitboardKit
 
 extension Site {
-    // A site as a snapshot carries one, for a test of what the app does with it.
-    package static let claude = site("claude.ai", of: "claude")
-    package static let chatGPT = site("chatgpt.com", of: "codex")
-
-    private static func site(_ host: String, of provider: String) -> Site {
-        Site(
-            host: host, name: host, provider: provider, aliases: [], hosts: [host],
-            signInHosts: [], blockedHosts: [], signInPaths: [], storeName: provider,
-            signInSteps: "", blockedServices: "")
-    }
+    // pitboard-sites' sites, with the hosts and paths a snapshot carries.
+    package static let claude = Site(
+        host: "claude.ai", name: "claude.ai", provider: "claude", aliases: [], hosts: ["claude.ai"],
+        signInHosts: [], blockedHosts: ["accounts.google.com"], signInPaths: [["magic-link"]],
+        storeName: "claude", signInSteps: "", blockedServices: "")
+    package static let chatGPT = Site(
+        host: "chatgpt.com", name: "chatgpt.com", provider: "codex",
+        aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
+        hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
+        signInHosts: [
+            "auth.openai.com", "login.live.com", "login.microsoftonline.com", "appleid.apple.com",
+        ],
+        blockedHosts: ["accounts.google.com"], signInPaths: [["api", "auth"]], storeName: "codex",
+        signInSteps: "", blockedServices: "")
 }
 
 package func window(
@@ -83,7 +87,7 @@ package func snapshot(
                 noneEnrolled: warming.isEmpty ? "No Claude Code account is enrolled yet." : nil,
                 standing: nil, note: "", enabled: false,
                 terms: TermsShown(
-                    sentence: "Anthropic's terms may cover automatic switching and warm-ups.",
+                    sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
                     linkTitle: "Is this allowed?",
                     link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"))),
         accountWindows: windows)

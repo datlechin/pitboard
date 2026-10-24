@@ -142,7 +142,7 @@ public sealed class ModelTests
     ];
 
     private static readonly TermsShown Terms = new(
-        "Anthropic's terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
+        "Anthropic’s terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 
     // ChatGPT, open, as the fixture chatGPTOpen's process list has it. On Windows its running copy is its AUMID.
     private sealed class StandInApps : AppControl

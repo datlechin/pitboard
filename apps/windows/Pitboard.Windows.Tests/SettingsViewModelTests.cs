@@ -197,7 +197,7 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
         Assert.IsTrue(shown.HasAtLimitTerms);
-        Assert.AreEqual("Anthropic's terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
+        Assert.AreEqual("Anthropic’s terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
 
         app.Apply(With(2, machine => machine with
         {
