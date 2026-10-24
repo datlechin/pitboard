@@ -711,6 +711,8 @@ pub struct PitboardModel {
     actor: Mutex<Option<JoinHandle<()>>>,
     /// The sign-ins under way, which `shutdown` waits for.
     sign_ins: Arc<lanes::SignIns>,
+    #[cfg(test)]
+    next_look: Arc<lanes::NextLook>,
 }
 
 #[uniffi::export]
@@ -846,6 +848,8 @@ impl PitboardModel {
             &mailbox,
         );
         let sign_ins = lanes.sign_ins();
+        #[cfg(test)]
+        let next_look = lanes.next_look();
         let actor = Actor {
             state,
             lanes,
@@ -864,6 +868,8 @@ impl PitboardModel {
             stopped,
             actor: Mutex::new(Some(actor)),
             sign_ins,
+            #[cfg(test)]
+            next_look,
         })
     }
 
