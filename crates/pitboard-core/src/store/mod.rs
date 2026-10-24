@@ -100,8 +100,8 @@ pub(crate) const LOCKED: &str = "the keychain is locked and cannot ask to be unl
                                  here; unlock it with `security unlock-keychain`, or run \
                                  Pitboard from a desktop session";
 
-// `ERROR_NO_SUCH_LOGON_SESSION`: a network logon has no credential set (MC-net, measured over
-// sshd on windows-2025).
+// `ERROR_NO_SUCH_LOGON_SESSION`: a network logon has no credential set
+// (docs/facts/windows-runners.md).
 const UNREACHABLE: &str = "Credential Manager cannot be reached from this logon, as in a sign-in \
                            over SSH with a key; run Pitboard from a desktop session";
 
@@ -123,8 +123,8 @@ pub enum Error {
     /// either, and nothing is wrong with what it holds.
     #[error("the credential store could not be read: {}", locked(crate::host::OS))]
     Locked,
-    // Pieces in Credential Manager that no read can join, as Claude Code 2.1.302 left one
-    // login when it moved it there (`credman_move_lost_a_piece`).
+    // Pieces in Credential Manager that no read can join, as Claude Code can leave a login it
+    // moves there (`credman_move_lost_a_piece`).
     #[error(
         "the credential store could not be read: {why}, which Claude Code cannot read either. \
          `{} auth logout` deletes it; sign in to Claude Code again after that",

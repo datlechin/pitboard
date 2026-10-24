@@ -286,8 +286,8 @@ fn the_first_account_goes_in_where_nothing_is_signed_in() {
 
 /// While `.credentials.json` sits behind the keychain, a session already running keeps the
 /// login it holds until that login is next renewed, whatever the file holds, as the
-/// register's `fallback_file_pins_session_login` reads 2.1.294: it looks at the file and
-/// never reads it to decide. A switch says so, naming the file, in place of the 33 seconds
+/// register's `fallback_file_pins_session_login` has it: it looks at the file and never reads
+/// it to decide. A switch says so, naming the file, in place of the 33 seconds
 /// it takes without one, also where Pitboard cannot read what the file holds.
 #[test]
 #[cfg_attr(
@@ -789,7 +789,7 @@ fn a_replacement_of_a_login_with_no_refresh_token_killed_before_its_write_is_und
     assert!(!journal::pending(&m.ctx));
 }
 
-// Codex 0.164.0 signs out of a login from a workspace `forced_chatgpt_workspace_id` leaves out
+// Codex signs out of a login from a workspace `forced_chatgpt_workspace_id` leaves out
 // as it starts, deleting it (`codex_login_restrictions`), and a Codex park is the only copy.
 #[test]
 fn a_codex_login_its_settings_rule_out_is_refused_before_anything_moves() {
@@ -828,7 +828,7 @@ fn a_codex_login_its_settings_rule_out_is_refused_before_anything_moves() {
     switch(settled(&m), &m.key("there")).expect("a workspace it allows");
 }
 
-// Claude Code 2.1.309 refuses, as a session starts, a login of an organisation that a managed
+// Claude Code refuses, as a session starts, a login of an organisation that a managed
 // `forceLoginOrgUUID` leaves out (organisation_pin), so it would not use the account switched to.
 #[test]
 fn a_claude_code_login_of_an_organisation_the_managed_settings_leave_out_is_refused() {

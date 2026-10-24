@@ -10,9 +10,8 @@ use serde_json::Value;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-/// `CLAUDE_CONFIG_DIR ?? ~/.claude`, as Claude Code 2.1.289 reads it: set, even empty, it
-/// is the directory, so an empty one is the empty path, which is refused before anything
-/// is read under it ([`crate::home::check_absolute`]).
+// As Claude Code reads it (`config_file_location`): an empty one is the empty path, which
+// `home::check_absolute` refuses.
 pub(crate) fn config_dir(ctx: &Context) -> PathBuf {
     ctx.claude_config_dir
         .as_ref()

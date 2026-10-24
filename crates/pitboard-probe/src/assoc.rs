@@ -1,4 +1,4 @@
-// The http open command split as webbrowser 1.2.4, Codex 0.162.1's, splits it.
+// The http open command split as Codex's webbrowser splits it (`codex_login_is_driveable`).
 
 pub fn command_args(cmdline: &str, url: &str) -> Vec<String> {
     let mut tokens: Vec<String> = Vec::new();

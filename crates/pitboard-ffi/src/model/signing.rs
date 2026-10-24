@@ -23,12 +23,10 @@ use crate::present::words;
 use pitboard_core::host::{OS, Os};
 use pitboard_core::switch::WaitStep;
 
-/// What `claude auth login` 2.1.289 writes once it reads a code typed back, as the register's
-/// `sign_in_output` holds it.
+// `claude auth login`'s prompt for a code (`sign_in_output`).
 const PROMPT: &str = "Paste code here if prompted > ";
 
-/// What `claude auth login` 2.1.289 writes on refusing a code typed back, as the register's
-/// `sign_in_takes_another_code` holds it.
+// `claude auth login`'s refusal of a code typed back (`sign_in_takes_another_code`).
 const REFUSED: &str = "Invalid code. Please make sure the full code was copied.\n";
 
 /// An address Codex prints for a person to open.
@@ -1279,7 +1277,7 @@ fn a_sheet_is_put_up_over_the_window() {
 // What the Swift model did not do.
 
 /// After Claude Code refuses a code typed back, the person may paste one again: the owner's
-/// decision. Claude Code 2.1.289 refuses a line that is not the whole code with `Invalid
+/// decision. Claude Code refuses a line that is not the whole code with `Invalid
 /// code.` and goes on reading in the same sign-in, as the register's
 /// `sign_in_takes_another_code` holds, so the field is offered again for the same sign-in,
 /// saying the code was refused, and the next code goes to the same tool. The Swift model took
@@ -1354,7 +1352,7 @@ fn only_what_the_tool_says_after_a_code_refuses_it() {
 
 /// A name and a code are taken without the white space around them, as the Swift sheets took
 /// it away with Foundation's `whitespacesAndNewlines`, which holds U+200B ZERO WIDTH SPACE as
-/// well as Unicode's White_Space, as measured on macOS 27.0; one with nothing else in it
+/// well as Unicode's White_Space (docs/facts/foundation-urls.md); one with nothing else in it
 /// starts or types nothing.
 #[test]
 fn a_name_and_a_code_are_trimmed_as_the_sheet_trimmed_them() {

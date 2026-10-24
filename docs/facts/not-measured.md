@@ -34,6 +34,9 @@ not measured, and the register cannot hold them, since every fact in it is read 
 - Where an editor's Codex extension runs Codex from. Pitboard takes a folder named
   `openai.chatgpt-<version>`, the extension's packaged layout, for one: no editor with the
   extension was running on the Mac measured on 1 October 2026.
+- When a Codex limit's period starts. Pitboard warms up Claude Code accounts alone.
+- Whether an `OPENAI_API_KEY` in the environment wins over a ChatGPT login. Pitboard names no
+  override for Codex.
 - Whether the ChatGPT app's WSL mode hands its Linux codex the Windows Codex home (session
   M8). So doctor on Windows says a switch changes the login of a Codex in WSL that uses that
   home, of no distribution in particular.

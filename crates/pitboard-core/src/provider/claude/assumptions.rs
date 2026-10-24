@@ -726,7 +726,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                the keychain; see `fallback_file_pins_session_login`. The 30 seconds are \
                unchanged in 2.1.284; its re-checks after 1, 3 and 10 seconds, behind \
                `tengu_streamed_thimble` from 2.1.281, can only shorten that",
-        read_from: "the keychain backend's cache, and measured against a running session",
+        read_from: "the keychain backend's cache, and measured against a running session on \
+                    one machine: over three runs, swaps at t+8, t+20 and t+28 seconds took \
+                    effect at t+32.3, t+33.5 and t+32.95 from the process's start",
         // The 33 seconds were measured against a running 2.1.278; nothing later was run.
         verified_against: "2.1.278",
         depends: "switch::ADOPTION_CEILING_SECONDS and Claude's adoption where nothing is \
@@ -747,7 +749,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                empty value makes it the empty path and `.config.json` is looked for in the \
                working directory. One of its features refuses a relative config dir: `the \
                configuration home (CLAUDE_CONFIG_DIR) is not an absolute path` (read in \
-               2.1.289's win32-x64 build)",
+               2.1.289's win32-x64 build). It takes no lock on the config file, and a running \
+               session rewrites it about every forty seconds, each time changing something \
+               (measured against a running session on 2026-09-22)",
         read_from: "the config path resolution, and the config dir the secure storage module \
                     shares",
         // Read on 2026-10-15 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64 builds
@@ -806,7 +810,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         fact: "a supervisor daemon outlives the session that started it, refreshes the login on \
                a timer of roughly eight hours, records itself in `<config dir>/daemon.lock` with \
                its pid and the version that started it, leaves that file behind when it stops, \
-               and writes through the same lock as everything else",
+               writes through the same lock as everything else, and exits once no session has \
+               used it for a while",
         read_from: "the daemon's auth scheduler and its lock file",
         // Read again on 2026-10-23 from the darwin-arm64 and linux-x64 builds of 2.1.309.
         verified_against: "2.1.309",
@@ -2110,7 +2115,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "validate_names_the_login",
         fact: "`POST /api/oauth/validate` with an access token as `Authorization: Bearer`, \
-               `Content-Type: application/json` and no body answers `{\"valid\", \
+               `Content-Type: application/json`, no body and no beta header answers `{\"valid\", \
                \"account_uuid\", \"organization_uuid\", \"scopes\"}` for a token with \
                `user:profile`, `user:office` or `user:ccr_inference`. Claude Code asks it where \
                an identity decides something: whether a login is of an organisation managed \
@@ -2344,7 +2349,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                source alone and drops the folder's. In the folder a later file's value overrides \
                an earlier one's. Its schema drops a `forceLoginMethod` other than `claudeai`, \
                `console` or `gateway`, and a `forceLoginGatewayUrl` that is not a string or is \
-               empty",
+               empty. The managed folder is `/Library/Application Support/ClaudeCode` on macOS \
+               and `/etc/claude-code` on Linux, with its `managed-settings.json` and the files \
+               of `managed-settings.d`, and a person's own settings are \
+               `<config dir>/settings.json` (read in 2.1.278)",
         read_from: "the keys the managed sources' merge takes from the first source alone and \
                     drops from the others, the merge, the folder's merge of \
                     `managed-settings.json` and `managed-settings.d`, the machine's login pins \

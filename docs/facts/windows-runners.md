@@ -153,6 +153,8 @@ Accounts and tokens:
   with a build no later than the running Windows, and `pitboard.exe`'s names Pitboard and its
   version (`cmd_exe_carries_the_build_of_the_windows_it_ships_in` and
   `pitboard_exe_carries_its_version_resource`, CI run 39254279757).
+- clap's parser of every subcommand outgrows the 1 MB main stack of a debug build: each probe
+  exited 0xC00000FD (run 39316394518), so the probe links with an 8 MB stack.
 
 Homes and variables:
 

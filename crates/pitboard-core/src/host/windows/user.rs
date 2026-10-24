@@ -112,7 +112,8 @@ pub(crate) fn program_data() -> Option<PathBuf> {
     known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_ProgramData)
 }
 
-// RF-B3 measured flags 0, a local profile, on the runners; `PT_ROAMING` is MC-roam.
+// The runners' profiles are local; `PT_ROAMING` is documented, not measured
+// (docs/facts/windows-documented.md).
 pub(crate) fn profile_roams() -> bool {
     use windows_sys::Win32::System::GroupPolicy::PT_ROAMING;
     use windows_sys::Win32::UI::Shell::GetProfileType;

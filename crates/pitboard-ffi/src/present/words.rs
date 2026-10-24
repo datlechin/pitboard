@@ -140,14 +140,7 @@ fn units(count: i64, unit: &str) -> String {
     }
 }
 
-/// A span of time as VoiceOver reads it inside a sentence: "1 hour, 30 minutes", "3 days".
-///
-/// Foundation's `Duration.UnitsFormatStyle` said it in the Swift app: days, hours and
-/// minutes, wide, at most two of them, in `en_US_POSIX`, and never under a minute. Measured
-/// on macOS 27.0 with Swift 6.4, over 100 spans. It rounds the span to whole minutes, a half
-/// to the even one, to see which units it has, and says the two largest that are not
-/// nought. The last it says is the rest of the span in that unit, rounded the same way,
-/// which can carry into the one before it: 1 day 23 hours 30 minutes is "2 days, 0 hours".
+// A span as VoiceOver heard it in the Swift app, "1 hour, 30 minutes" (docs/facts/macos-app.md).
 pub(crate) fn spoken_span(seconds: i64) -> String {
     let seconds = seconds.max(MINUTE);
     let minutes = rounded_half_even(seconds, MINUTE);

@@ -46,7 +46,8 @@ pub fn window_note(kind: WindowNoteKind, account: WindowAccount) -> String {
         WindowNoteKind::OtherApp { scheme } => {
             format!("This window doesn’t open links to other apps, such as this {scheme}: link.")
         }
-        // WebView2 deletes the folder as the next browser process starts (run 38842851059).
+        // WebView2 deletes the folder as the next browser process starts
+        // (docs/facts/windows-runners.md).
         WindowNoteKind::StoreHeld => "What this window kept before is deleted once every account \
                                       window has closed. It opens after that."
             .into(),

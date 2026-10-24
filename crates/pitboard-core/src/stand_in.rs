@@ -281,12 +281,8 @@ fn write_whole(at: &Path, contents: &str) -> io::Result<()> {
 /// Puts a stand-in at `at` that plays `script`: the script beside it, then a copy of the
 /// built stand-in, which the stand-in itself makes.
 ///
-/// Another process writes the program, so this one never holds it open for writing. Tests
-/// run on threads, and on Linux a thread that starts a process while another holds such a
-/// descriptor gives the child a copy of it; running the file then fails with ETXTBSY, "Text
-/// file busy", until that child has started its own program. CI met it on Linux (run
-/// 36457687750), in the test that ran a fake `codex` it had just written. The script is data
-/// the stand-in reads, never runs, so it is written here.
+/// Another process writes the program, so no test thread holds it open for writing
+/// (docs/facts/sign-in-lock.md). The script is data the stand-in reads, so it is written here.
 pub fn install(at: &Path, script: &Script) -> io::Result<()> {
     let built = built().map_err(|missing| io::Error::new(io::ErrorKind::NotFound, missing))?;
     let text = serde_json::to_string_pretty(script).map_err(io::Error::other)?;

@@ -1,39 +1,8 @@
-//! The locks Claude Code takes around its login: proper-lockfile's, a directory created by
-//! `mkdir`, kept alive by touching its mtime, released by `rmdir`, and treated as abandoned
-//! once older than its staleness. Only the same lock taken the same way excludes Claude
-//! Code. A process killed outright leaves the directory behind for staleness to reclaim.
-//!
-//! The write lock was measured in 2.1.278, against the storage layer in the installed build.
-//! Its constants are the ones Claude Code passes ([`WRITE`]): stale 15000, ten retries,
-//! 100ms to 1000ms of backoff, and the heartbeat at half the staleness. A write under it is
-//! always a read-modify-write: the read cache is dropped, the credential is read again inside
-//! the lock, and a read that fails abandons the write rather than guessing. That is why a
-//! session or a daemon holding an older idea of who is signed in cannot write it back over
-//! a switch.
-//!
-//! Three things the write lock does not give, and all matter more than the lock itself.
-//!
-//! Claude Code treats its own lock going missing as a warning and carries on writing, so
-//! Pitboard cannot expect the other side to stop when a lock is broken. Whatever Pitboard
-//! does about a compromised lock, it has to do alone.
-//!
-//! One write path skips the lock entirely. A write can be marked as already inside the
-//! lock without the lock being taken, which is what `/logout` does after it has retried for
-//! its own 7.5 seconds: it deletes the credential with nothing held. Every other write,
-//! the OAuth refresh's save included, waits or fails. So holding this lock makes a switch
-//! safe against Claude Code writing underneath it, but not against a logout that gave up
-//! waiting, which is why a switch reads the slot back rather than trusting its own write.
-//!
-//! And a refresh spends the refresh token stored outside it. Read in 2.1.294, a refresh
-//! takes a lock of its own ([`REFRESH`]), reads the login again under it, sends the refresh
-//! token, and takes the write lock only to save the answer, where the login stored still
-//! holds the token it sent. Only the refresh lock keeps a refresh from spending a token
-//! Pitboard is about to count on. So a switch holds it while it parks the outgoing login,
-//! `pitboard stow` while it keeps the login left in a file, and Pitboard while it renews a
-//! login of Claude Code's itself, as a refresh does.
-//!
-//! The writers are a session and [`crate::daemon`], the supervisor that outlives sessions
-//! and refreshes on a timer of its own. Both come through here.
+//! Claude Code's locks around its login, taken as it takes them, the one way that excludes it
+//! (`write_lock`, `refresh_lock`).
+
+// The write lock does not stop a writer that lost it, nor `/logout` (`logout_skips_the_lock`),
+// so a switch reads the slot back. Only the refresh lock keeps a refresh token from being spent.
 
 use crate::permit::Permit;
 use std::io;
@@ -170,14 +139,8 @@ fn mtime(path: &Path) -> io::Result<SystemTime> {
     std::fs::metadata(path)?.modified()
 }
 
-/// proper-lockfile renews the lock by setting the directory's mtime, and remembers what the
-/// filesystem stored rather than what it was asked to store.
-///
-/// Measured on macOS 26: APFS keeps nanoseconds and keeps them approximately, returning a
-/// value 18 to 60 nanoseconds from the one it was given. A check that compared against the
-/// value it asked for would find a mismatch every single time and abandon every switch, so
-/// the value read back is the only one worth remembering. It also makes a filesystem that
-/// truncates, which a network home may, a case that needs no special handling at all.
+// The mtime the filesystem stored, not the one asked for: APFS keeps it only roughly
+// (docs/facts/macos.md), and a network home may truncate it.
 fn touch(permit: Permit, path: &Path, at: SystemTime) -> io::Result<SystemTime> {
     crate::host::fs::touch_dir(permit, path, at)?;
     mtime(path)

@@ -1,26 +1,8 @@
-//! What a session here would authenticate as, read from files rather than guessed from
-//! three environment variables.
-//!
-//! Pitboard decided whether a switch would mean anything by reading `ANTHROPIC_API_KEY`,
-//! `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_OAUTH_TOKEN` out of its own process
-//! environment. Two holes followed. Claude Code resolves authentication from a layered
-//! settings system, and any layer can set an `env` block, an `apiKeyHelper`, or one of the
-//! third-party provider switches; under any of those a session ignores the login Pitboard
-//! moves, and Pitboard reported a clean switch. And the app has no shell environment at
-//! all: launched from Finder it saw none of the three, so the one surface that could not
-//! warn was the one most likely to be used on a machine that needed the warning.
-//!
-//! Files are the one thing an app launched from Finder and a shell agree about. Measured in
-//! 2.1.278: managed settings live in `/Library/Application Support/ClaudeCode` on macOS and
-//! `/etc/claude-code` on Linux, as `managed-settings.json` and a `managed-settings.d`
-//! drop-in directory beside it; a person's own are `<config dir>/settings.json`. Read from
-//! 2.1.300, Windows keeps them in `C:\Program Files\ClaudeCode` and in the registry's
-//! policy value `Settings` (`windows_managed_settings` in the register). Read from 2.1.309,
-//! macOS also takes a configuration profile's plist (`macos_managed_preferences`).
-//!
-//! Project settings are deliberately not read. `.claude/settings.json` is a fact about one
-//! directory, not about the machine, and an answer true in the directory Pitboard happened
-//! to be run from is worse than no answer at all.
+//! What a session here would authenticate as, from the settings files Claude Code reads
+//! (`auth_precedence`, `managed_login_pins`, `windows_managed_settings`,
+//! `macos_managed_preferences`), which an app started from Finder reads as a shell does.
+
+// A project's `.claude/settings.json` is not read: it is a fact about one folder.
 
 use crate::context::{Context, Environment};
 use crate::host::{Administered, Hive, Os};

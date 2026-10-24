@@ -31,7 +31,7 @@ pub(crate) struct WindowsHomes {
     pub(crate) roams: bool,
 }
 
-// As Codex 0.163.0's Linux build tells WSL (`codex_wsl`).
+// As Codex's Linux build tells WSL (`codex_wsl`).
 pub(super) fn wsl_fact(ctx: &Context) -> Option<WslFact> {
     let inside = ctx.os == Os::Linux && (ctx.wsl_distro.is_some() || ctx.host().kernel_is_wsl());
     let codex_home = codex::home(ctx);
@@ -97,7 +97,7 @@ pub(super) fn judge_windows_settings(facts: &Facts) -> Vec<Check> {
     let mut checks = Vec::new();
     let settings = facts.windows_settings.clone().unwrap_or_default();
     if !settings.wsl.is_empty() {
-        // The ChatGPT app's WSL mode can hand a Linux codex this home (H9), not yet measured.
+        // The ChatGPT app's WSL mode may hand a Linux codex this home (docs/facts/not-measured.md).
         checks.push(Check {
             advice: words::installs_of_their_own(facts.codex.home.display()),
             ..ok("wsl", "WSL", words::wsl_holds(&settings.wsl))

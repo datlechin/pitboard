@@ -33,13 +33,10 @@ final class WebKitDataStores: WebsiteDataStores {
 
     /// Makes sure WebKit is set up before a deletion asks it to remove a store.
     ///
-    /// WebKit answers a deletion on a main run loop it sets up when it makes its first
-    /// object, and `remove(forIdentifier:)` does not set it up itself. Asked first, as a sweep
-    /// at launch asks before any window has opened, it crashes: measured on macOS 27,
-    /// `remove(forIdentifier:)` as a process's first WebKit call ends in a segmentation fault
-    /// in `WTF::RunLoop::dispatch`, and making any store first prevents it. A non-persistent
-    /// store touches no disk and starts no process. Done here, not at launch, so a person who
-    /// never opens a window never starts WebKit.
+    /// `remove(forIdentifier:)` as a process's first WebKit call crashes, as a sweep at launch
+    /// before any window has opened would make it, and making any store first prevents it
+    /// (docs/facts/webkit.md). A non-persistent store touches no disk and starts no process.
+    /// Done here, not at launch, so a person who never opens a window never starts WebKit.
     private func setUpWebKit() {
         guard !ready else { return }
         _ = WKWebsiteDataStore.nonPersistent()

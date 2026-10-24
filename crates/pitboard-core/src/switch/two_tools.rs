@@ -584,7 +584,7 @@ fn replant(m: &harness::Rig, label: &str, document: &Value) {
     m.mem.vault().plant(&park.service, &document.to_string());
 }
 
-// Codex 0.164.0 renews a login at the issuer and as the client its `tokens.oauth_provenance`
+// Codex renews a login at the issuer and as the client its `tokens.oauth_provenance`
 // records, and keeps `login_owner_id` (`codex_renewal`, `codex_login_shape`).
 #[test]
 fn a_codex_park_is_renewed_where_its_login_was_issued() {
@@ -630,8 +630,8 @@ fn a_codex_park_is_renewed_where_its_login_was_issued() {
     );
 }
 
-// A login Codex made before 0.164.0 as another client records none, so Pitboard renews it as
-// Codex's own, and OpenAI refusing that says nothing of whether the login works.
+// A login an older Codex made as another client records none (`codex_login_shape`), so Pitboard
+// renews it as Codex's own, and OpenAI refusing that says nothing of whether the login works.
 #[test]
 fn a_codex_park_refused_as_another_client_than_its_own_is_kept() {
     let m = codex_machine("other-client");

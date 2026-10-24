@@ -7,8 +7,8 @@ import SwiftUI
 ///
 /// A window behind another app has no way back without a Dock icon, and a window whose app
 /// has no menus has no Edit menu to copy from and no shortcuts. Counted from each window's
-/// root view, which appears when its window opens and disappears when it closes: measured on
-/// macOS 27, not when it is minimised or becomes a background tab.
+/// root view, which appears when its window opens and disappears when it closes, not when it
+/// is minimised or becomes a background tab (docs/facts/webkit.md).
 @MainActor
 final class AppPresence {
     private var open: Set<UUID> = []
@@ -65,9 +65,9 @@ final class AppPresence {
     /// Brings Pitboard to the front for something that came from another app, a shared link,
     /// while Pitboard may be in the background with nobody's click on it.
     ///
-    /// Measured on macOS 27: `NSApp.activate()` from an app in the background is refused, and
-    /// a link from the Share extension at a launch leaves Pitboard there. Launch Services
-    /// opening the app does bring it forward, so Pitboard asks it to.
+    /// `NSApp.activate()` from an app in the background is refused, and a link from the Share
+    /// extension at a launch leaves Pitboard there. Launch Services opening the app does bring
+    /// it forward, so Pitboard asks it to (docs/facts/webkit.md).
     func comeForward() {
         apply(.regular)
         if isActive() {

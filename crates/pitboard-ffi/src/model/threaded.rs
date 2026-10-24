@@ -743,10 +743,10 @@ fn paste(code: &str) -> Intent {
 }
 
 /// The owner's decision, on the real core with a stand-in for `claude` that reads lines as
-/// 2.1.289 reads them: after Claude Code refuses a code typed back, the field is offered
-/// again, and the next code goes to the same sign-in, whose tool takes it and signs in. What
-/// it signed in to is parked beside the account in use, and the sheet it was started from
-/// closes.
+/// `sign_in_takes_another_code` has Claude Code read them: after Claude Code refuses a code
+/// typed back, the field is offered again, and the next code goes to the same sign-in, whose
+/// tool takes it and signs in. What it signed in to is parked beside the account in use, and
+/// the sheet it was started from closes.
 #[test]
 fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     let at = signing_in_world("paste-again");

@@ -1,19 +1,7 @@
-//! Claude Code's supervisor daemon, read only. It outlives the session that started it and
-//! refreshes the login on a schedule of its own, so it is a second writer of the credential
-//! that has nothing to do with anyone typing.
-//!
-//! Measured in 2.1.278. The daemon writes `<config dir>/daemon.lock` when it starts and
-//! leaves it behind when it dies, so the file says which daemon ran, not that one is
-//! running; the pid decides that, and on Windows the creation time 2.1.300 records beside it.
-//! It logs `auth: scheduling proactive refresh in <n>s` with n around eight hours, and exits
-//! on its own once no session has used it for a while.
-//!
-//! Its refresh is a credential write like any other: it takes the same `.storage-write`
-//! lock [`crate::lock`] takes, and every write there invalidates the read cache and reads
-//! the credential again inside the lock before changing it. So a daemon that was started
-//! before a switch cannot write the outgoing account back over the incoming one. What it
-//! can do is rotate the refresh token of whatever login is in the slot at the time, which
-//! is why a switch reads the slot back rather than trusting that its own write stood.
+//! Claude Code's supervisor daemon, read only (`supervisor_daemon`, `windows_daemon_identity`).
+
+// `daemon.lock` outlives the daemon, so its pid, and its creation time on Windows, say whether
+// one runs. A daemon renews whatever login is in the slot, so a switch reads the slot back.
 
 use super::paths as claude;
 use crate::context::Context;

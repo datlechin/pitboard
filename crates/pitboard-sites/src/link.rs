@@ -4,10 +4,8 @@ use crate::address;
 use crate::site::{ALL, Conjunction, Site};
 use std::fmt;
 
-/// `text` without the white space around it, as the macOS app took it away from what was
-/// typed or shared with Foundation's `whitespacesAndNewlines`: Unicode's White_Space, and
-/// U+200B ZERO WIDTH SPACE, which was a space until Unicode 4.0.1. Measured on macOS 27 over
-/// every scalar.
+/// `text` without the white space Foundation's `whitespacesAndNewlines` trims, U+200B
+/// included, as the macOS app trimmed what was typed or shared (docs/facts/foundation-urls.md).
 pub fn trimmed(text: &str) -> &str {
     text.trim_matches(|c: char| c.is_whitespace() || c == '\u{200b}')
 }

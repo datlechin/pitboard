@@ -130,19 +130,8 @@ fn write(permit: Permit, path: &Path, config: &Value) -> Result<()> {
 /// How many times to start again from what is on disk before giving up.
 const ATTEMPTS: usize = 4;
 
-/// Change Claude Code's config without losing what Claude Code wrote meanwhile.
-///
-/// This used to read the file, edit one key in memory, and rename a whole new file over it.
-/// Anything Claude Code wrote in between was silently gone, from the file that holds a
-/// person's project history, their MCP configuration and everything else they have set.
-///
-/// Measured on 22 September 2026 against a running session: the file is rewritten about
-/// every forty seconds and every rewrite changes something, so the window is real. Claude
-/// Code takes no lock on this file, so Pitboard cannot take the same one, and inventing one
-/// would only make Pitboard's runs block a session's writes. What it can do is check that
-/// the bytes it parsed are still the bytes on disk and start again from the new ones when
-/// they are not. That narrows the window from a whole edit to a read and a rename; it does
-/// not close it, and nothing here claims otherwise.
+// Claude Code rewrites the file often and under no lock (`config_file_location`), so a change
+// starts again while the bytes it parsed are no longer on disk, which narrows the window only.
 pub(crate) fn update(
     ctx: &Context,
     permit: Permit,

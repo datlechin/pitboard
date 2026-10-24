@@ -14,6 +14,10 @@ which is `flock`.
   started right after a cancel in the same home was refused as one already waiting 64 times
   in 100 while another thread started a program it could not find, and never in 100 while
   one started `/usr/bin/true` or none started anything.
+- On Linux, a thread that starts a process while another holds a program's file open for
+  writing gives the child a copy of that descriptor, and running the file then fails with
+  ETXTBSY, "Text file busy", until that child has started its own program. CI met it in run
+  36457687750, in a test that ran a fake `codex` it had just written.
 - Measured on 6 October 2026, with Rust 1.98.1, on macOS 27.0 and on Debian 13 with glibc
   2.41 in Docker, both on arm64, by a program of the measurement's own, run three times on
   each: a lock taken on a file, let go of, and at once taken again on the file opened again,

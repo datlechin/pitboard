@@ -19,10 +19,10 @@ use windows::core::BSTR;
 #[derive(Debug)]
 pub(super) struct System;
 
-// RF-E1 read ERROR_FILE_NOT_FOUND's for a missing folder and a missing task (run
-// 38922866517); ERROR_PATH_NOT_FOUND's says the same.
+// ERROR_FILE_NOT_FOUND's for a missing folder or task (docs/facts/windows-runners.md), and
+// ERROR_PATH_NOT_FOUND's says the same.
 const NOT_FOUND: [u32; 2] = [0x8007_0002, 0x8007_0003];
-// ERROR_ALREADY_EXISTS: another process made the folder first (RF-E1, run 38922866517).
+// ERROR_ALREADY_EXISTS: another process made the folder first (docs/facts/windows-runners.md).
 const ALREADY_THERE: u32 = 0x8007_00B7;
 
 // SCHED_E_TASK_NOT_RUNNING: nothing to stop.

@@ -228,7 +228,7 @@ pub(crate) fn write(
     if !in_pieces {
         return Ok(());
     }
-    // Credential Manager can still show `#p` just after its delete (runs 39137503718, 39909919492).
+    // Credential Manager can still show `#p` just after its delete (docs/facts/windows-runners.md).
     let ours = || {
         matches!(manifest(items), Ok(Some(named))
             if joined(items, target, named).is_ok_and(|held| held == contents))
@@ -289,8 +289,8 @@ pub(crate) fn delete(items: &dyn Items, permit: Permit) -> Result<(), Error> {
     Ok(())
 }
 
-// Claude Code's own read, as it is in 2.1.301: a manifest it does not take is none, and `#p` is
-// never read. `Err` is a read that throws, after which a session keeps what it holds.
+// Claude Code's own read (`credman_chunking`). `Err` is a read that throws, after which a
+// session keeps what it holds.
 #[cfg(test)]
 pub(crate) fn claude_code_reads(items: &dyn Items) -> Result<Option<String>, ()> {
     let held = |name: &str| items.get(name).map_err(drop);

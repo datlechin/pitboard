@@ -1,53 +1,12 @@
-//! Which store Codex keeps its login in, read from every layer of configuration Codex reads
-//! outside a project, in the order it reads them.
-//!
-//! Read from `codex-rs/config/src/loader` at tag `rust-v0.160.0` for macOS and Linux:
-//! `load_config_layers_state`, `load_requirements_from_sources` and
-//! `ConfigLayerSource::precedence` for the layers and their order, `apply_to_config` and the
-//! `cli_auth_credentials_store_mode` it feeds for how a requirement pins the store, and
-//! `loader/macos.rs` for the managed preferences. The register calls these
-//! `codex_store_layers` and `codex_managed_preferences`. Windows' are read from the same
-//! loader at tag `rust-v0.163.0`, and the policy that names its requirements file at
-//! `rust-v0.164.0`, `codex_windows_store_layers`.
-//!
-//! A setting in a higher layer replaces the same setting in a lower one, and a requirement
-//! pins it over every layer. Codex starts only where every layer it reads is TOML it can
-//! take, so a layer that is there and cannot be read is a store nobody can tell, which
-//! [`Backend::Unknown`] refuses, and never the file.
-//!
-//! Three layers Codex has are not read:
-//! - A project's own `.codex/config.toml`, which applies while Codex runs inside that
-//!   project once it is trusted: a fact about one folder, not about this machine.
-//!   Pitboard's own sign-ins run from a private folder and name the file store over it.
-//! - A profile's `<name>.config.toml`, which a run of 0.160.0 reads only when it is given
-//!   `--profile <name>`, as a layer of its own just over the person's `config.toml`
-//!   (`ConfigLayerSource::User` with a profile, precedence 21 to the person's 20) and under
-//!   a project's, `-c` and the managed ones. `codex login` and `codex logout` refuse
-//!   `--profile`, so no such profile moves the login they write and remove.
-//! - An enterprise's cloud configuration, which Codex fetches with the login it is about.
-//!   `codex login` does not load it, so it moves no login a sign-in writes, and its
-//!   requirements may not set the store (`LOCAL_ONLY_AUTH_REQUIREMENTS`). Its configuration
-//!   may: nothing strips the store from it. A session of the TUI loads it, between
-//!   `/etc/codex/config.toml` and the person's own. Whether the store a running session keeps
-//!   its login in follows it was not read.
-//!
-//! A `profile = "<name>"` line chooses the profile a `[profiles.<name>]` table defines, as
-//! the owner's answer of 7 October 2026 has Pitboard read it, in whichever layer each is:
-//! the layers are merged before a profile is looked up. 0.160.0 calls the line a legacy way
-//! to choose a profile and does not start with one (`load_config_with_layer_stack`); 0.99.0
-//! has no such refusal and chooses the profile with it. The store is still the one the
-//! layers choose: neither build reads one from a profile's table. Neither one's
-//! `ConfigProfile` has `cli_auth_credentials_store`, so serde drops one there, and each
-//! takes the store from the merged top level alone. 0.160.0 does not apply a profile's
-//! `[features]` (`load_config_with_layer_stack` hands `Features::from_sources` an empty
-//! source for the profile); 0.99.0 applies them, and none of its features is about the
-//! store. A line naming a profile no table defines is a store nobody can tell,
-//! as a layer Codex cannot read is: 0.160.0 refuses every such line, and 0.99.0 holds the
-//! error "config profile \`<name>\` not found". A project's layer may set neither the line
-//! nor a table (`PROJECT_LOCAL_CONFIG_DENYLIST`).
-//!
-//! Which ChatGPT logins Codex keeps is read from the same layers at tag `rust-v0.164.0`,
-//! [`Restrictions`] (`codex_login_restrictions`).
+//! Which store Codex keeps its login in, and which logins it keeps, from every layer it reads
+//! outside a project, in its order (`codex_store_layers`, `codex_windows_store_layers`,
+//! `codex_managed_preferences`, `codex_login_restrictions`).
+
+// A layer that is there and cannot be read is a store nobody can tell, `Backend::Unknown`.
+// Not read: a project's config, which is one folder's; Pitboard's sign-ins run from their own.
+// Not read: a profile's file, which only a run given `--profile` reads, and `codex login` refuses.
+// Not read: an enterprise's cloud configuration, which `codex login` does not load.
+// A `profile` line chooses the table it names, as the owner decided on 7 October 2026.
 
 use super::paths::Backend;
 use crate::context::Context;
@@ -155,9 +114,7 @@ fn places_of(ctx: &Context, own: &Path) -> Places {
     }
 }
 
-// Codex 0.164.0 on Windows takes the file `HKLM`'s policy names, where it can read that, with a
-// leading `~` its profile folder, and does not start where it names no full path
-// (codex_windows_store_layers).
+// The requirements file `HKLM`'s policy names on Windows (`codex_windows_store_layers`).
 fn required_file(system: &Path, named: Administered, profile: &Path) -> Result<PathBuf, String> {
     let Administered::Set(named) = named else {
         return Ok(system.join("requirements.toml"));

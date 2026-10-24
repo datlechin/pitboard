@@ -168,9 +168,8 @@ pub enum Command {
         #[arg(long, default_value = "pitboard-probe-sealed.bin")]
         file: String,
     },
-    /// D2b/H7: build a restricted token shaped like Codex 0.162.1's unelevated sandbox
-    /// (DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED, restricting to a capability SID,
-    /// the logon SID and Everyone, with Codex's default DACL), then from it, on a private
+    /// D2b/H7: build a restricted token shaped like Codex's unelevated sandbox
+    /// (codex_windows_sandbox_token), then from it, on a private
     /// desktop, run the probe's `dpapi --action unseal` on a park it sealed and `acl --open`
     /// on a protected file it made, to see whether a token that cannot see the marker still
     /// opens a vault-style file. Writes those two files first, so it needs the marker; the
@@ -487,7 +486,7 @@ pub enum LockMode {
     Check,
 }
 
-// Claude Code 2.1.300's write lock and refresh lock, as `pitboard_core::lock` keeps them.
+// Claude Code's write lock and refresh lock, as `pitboard_core::lock` keeps them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum LockTiming {
     Write,

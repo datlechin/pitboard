@@ -244,13 +244,11 @@ fn hand_over(
     })
 }
 
-/// How long after an answered request a reading is asked for again where the first had no
-/// period running yet: the measured runs asked 20 seconds after theirs.
+// As the runs measured asked, 20 seconds after (`request_starts_the_five_hour_period`).
 const ASKED_AGAIN_AFTER: u64 = 20;
 
-/// Whether the run started the period: the reset of the account's five-hour limit, as a reading
-/// asked for after it says, where one could be asked for. A reading with no period running is
-/// asked again once, as late as the measured runs asked, before it says the run started nothing.
+// The reset a reading after the run gives, asked once more, as late as the runs measured asked,
+// where the first has no period running.
 fn started(
     ctx: &Context,
     permit: Permit,

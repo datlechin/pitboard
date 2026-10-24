@@ -158,8 +158,8 @@ public sealed class WebSession
     private void Prepare(CoreWebView2 page, PageRole role)
     {
         _web.Prepare(page);
-        // WebView2 still sent the request of a navigation the policy stopped (run 38842851059), so each one's document
-        // request is answered here, empty, before it leaves.
+        // WebView2 still sent the request of a navigation the policy stopped (docs/facts/windows-runners.md), so each
+        // one's document request is answered here, empty, before it leaves.
         var stopped = new HashSet<string>(StringComparer.Ordinal);
         page.NavigationStarting += (sender, args) => Navigating(role, sender, args, frame: false, stopped);
         page.FrameNavigationStarting += (sender, args) => Navigating(role, sender, args, frame: true, stopped);

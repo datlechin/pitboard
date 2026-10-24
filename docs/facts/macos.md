@@ -12,6 +12,11 @@ a scratch item.
 - Claude Code reads its login at every miss of its cache (`credential_cache`), so writing its
   item through the framework would slow Claude Code for good. Pitboard writes a large login on the argument line
   instead, where `ps` can see it for the length of one call.
+- On throwaway items, a read in process by a program the item does not trust adds that
+  program to the item's access list, and a write in process replaces its partition list.
+  Every read by `/usr/bin/security` after that takes 1 to 3 seconds instead of 0.02, or waits
+  on a keychain password dialog in a desktop session. A write through `security -U` changes
+  only the item's modification time.
 - Undoing the framework's change needs `security set-key-partition-list`, which asks for the
   keychain password.
 - APFS keeps a directory's mtime in nanoseconds, but not exactly: setting one and reading it

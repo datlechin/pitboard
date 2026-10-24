@@ -17,8 +17,7 @@ use std::path::PathBuf;
 /// A five-hour period, in seconds.
 const PERIOD: i64 = 5 * 3_600;
 
-/// A period starts at the start of the ten minutes its first request fell in, as measured
-/// (the register's `request_starts_the_five_hour_period`).
+// A period starts with its first request's ten minutes (`request_starts_the_five_hour_period`).
 const START_STEP: i64 = 600;
 
 /// Where an account stands as far as warming it up goes.

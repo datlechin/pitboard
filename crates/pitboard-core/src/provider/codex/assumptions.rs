@@ -476,7 +476,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                running; quitting it stops them",
         read_from: "the process list, the app's Info.plist and the bundled codex-package.json \
                     on a Mac running the app on 2026-10-01; what closing and quitting do is \
-                    read from the app's own code and not yet watched",
+                    read from the app's own code and not yet watched. In 26.1007.71326 that \
+                    codex was a 0.162.0 alpha for Apple silicon alone",
         verified_against: "26.928.31416",
         depends: "provider::codex::holders's chatgpt_app, and the app's offer to quit ChatGPT \
                   before a Codex switch",
@@ -1050,12 +1051,14 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         name: "codex_windows_sandbox_token",
         fact: "on Windows Codex runs its unelevated sandbox's programs with a token made from \
                the person's with `DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED`, a \
-               capability SID, the logon SID and Everyone as restricting SIDs in that order, a \
-               default DACL of its own and a desktop of its own granted to the logon SID. Such \
-               a token is the person's, not elevated",
-        read_from: "`prepare_legacy_session_security` in spawn_prep.rs and \
-                    `create_token_with_caps_from` and `set_default_dacl` in token.rs, in \
-                    codex-rs/windows-sandbox-rs at tag rust-v0.162.1, read on 2026-10-15",
+               capability SID, its read-only one or the write roots', the logon SID and \
+               Everyone as restricting SIDs in that order, a default DACL granting the logon SID \
+               `GENERIC_ALL` and OWNER RIGHTS (`S-1-3-4`) `READ_CONTROL`, and a desktop of its \
+               own granted to the logon SID. Such a token is the person's, not elevated",
+        read_from: "`prepare_legacy_session_security` in spawn_prep.rs, \
+                    `create_token_with_caps_from` and `set_default_dacl` in token.rs and \
+                    `make_random_cap_sid_string` in cap.rs, in codex-rs/windows-sandbox-rs at \
+                    tag rust-v0.162.1, read on 2026-10-15",
         verified_against: "0.162.1",
         depends: "what the seal of a park on Windows keeps out, which a program running as the \
                   person, as this sandbox's do, gets past, and pitboard-probe's restricted \
