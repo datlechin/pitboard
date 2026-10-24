@@ -253,7 +253,7 @@ mod tests {
     use crate::service::Pitboard;
     use crate::store::memory::Fault;
     use crate::time::{Clock, FixedClock};
-    use crate::usage::{Snapshot, Source, Window};
+    use crate::usage::{LimitKind, Snapshot, Source, Window};
     use std::sync::Arc;
 
     /// What Anthropic has just answered of `uuid`'s five-hour and weekly limits.
@@ -952,7 +952,7 @@ mod tests {
                     why: Skip::GaveUp,
                     limit,
                     ..
-                } if limit.kind == "weekly_all"
+                } if limit.kind == LimitKind::WeeklyAll
             ),
             "{looked:?}"
         );

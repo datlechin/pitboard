@@ -257,7 +257,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         ));
     }
     for advice in &state.advice {
-        let limit = said::limit_name(&advice.window.kind, advice.window.length_seconds);
+        let limit = said::limit_name(&crate::model::advice::window(&advice.window));
         said.push(notice(
             format!("advice/{}", advice.key_of()),
             Severity::Warning,
@@ -587,17 +587,11 @@ fn sign_in_again_button(os: Os) -> String {
 // Worded as the window's notice of a run-out is, past 100%. Its id names the account, the limit
 // and the reset, so one limit is one notification however far it goes.
 pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
-    let limit = &heads_up.window;
-    let title = if crate::model::advice::window(limit).used_up(now) {
-        words::ran_out(
-            &heads_up.ran,
-            &said::limit_name(&limit.kind, limit.length_seconds),
-        )
+    let limit = crate::model::advice::window(&heads_up.window);
+    let title = if limit.used_up(now) {
+        words::ran_out(&heads_up.ran, &said::limit_name(&limit))
     } else {
-        said::has_used(
-            &heads_up.ran,
-            &said::share_of_limit(&crate::model::advice::window(limit)),
-        )
+        said::has_used(&heads_up.ran, &said::share_of_limit(&limit))
     };
     let body = match (&heads_up.instead, limit.resets_at) {
         (Some((instead, left, _)), _) => words::room_left(instead, *left),

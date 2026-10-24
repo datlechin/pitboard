@@ -2163,7 +2163,7 @@ mod tests {
             .iter()
             .map(|w| (w.kind.as_str(), w.percent))
             .collect();
-        assert_eq!(shares, [("five_hour", 30.0), ("seven_day", 45.0)]);
+        assert_eq!(shares, [("session", 30.0), ("weekly_all", 45.0)]);
     }
 
     /// Grouped by tool in the order every listing uses, signed in first within each, and

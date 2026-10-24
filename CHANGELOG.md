@@ -65,6 +65,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.
+- **Breaking:** `--json` names a five-hour limit `session` and a weekly one `weekly_all`, or
+  `weekly_scoped` for one model's, where it named Codex's `five_hour` and `seven_day`. Match
+  `kind` against `session` and `weekly_all` where a script matched `five_hour` and `seven_day`.
 - Clicking one of the app's notifications on macOS opens **Accounts**, or **Settings** on
   **Limits** for what switching or warming up by itself came to, and the Windows app opens the
   same.

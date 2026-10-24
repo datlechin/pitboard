@@ -7,7 +7,7 @@ use crate::api::{Refusal, agent, retry_after, server_time, test_base};
 use crate::context::Context;
 use crate::permit::Permit;
 use crate::provider::{ProviderError, ProviderId};
-use crate::usage::{Snapshot, Source, Window};
+use crate::usage::{LimitKind, Snapshot, Source, Window};
 use serde_json::Value;
 
 /// The client Codex renews as. Its own, not a first-party one: a login issued to this
@@ -345,7 +345,7 @@ fn window(value: &Value, which: &str, scope: Option<&str>) -> Option<Window> {
     }
     let seconds = value.get("limit_window_seconds").and_then(Value::as_i64);
     Some(Window {
-        kind: kind(seconds, which),
+        kind: kind(seconds, which, scope),
         scope: scope.map(str::to_owned),
         percent,
         resets_at: value.get("reset_at").and_then(moment),
@@ -357,21 +357,21 @@ fn window(value: &Value, which: &str, scope: Option<&str>) -> Option<Window> {
     })
 }
 
-/// The same vocabulary the rest of Pitboard already uses where the lengths match, so a
-/// five-hour window reads as one whichever tool it came from. Anything else is named by its
-/// own length rather than forced into a word that would be wrong.
-fn kind(seconds: Option<i64>, which: &str) -> String {
+// Anthropic's kinds where the lengths match, so a five-hour window is one whichever tool it
+// came from. Anything else is named by its own length rather than forced into a wrong kind.
+fn kind(seconds: Option<i64>, which: &str, scope: Option<&str>) -> LimitKind {
     const HOUR: i64 = 3600;
     match seconds {
-        Some(18_000) => "five_hour".into(),
-        Some(604_800) => "seven_day".into(),
-        Some(s) if s % (HOUR * 24) == 0 => format!("{}_day", s / (HOUR * 24)),
-        Some(s) if s % HOUR == 0 => format!("{}_hour", s / HOUR),
-        Some(s) if s % 60 == 0 => format!("{}_minute", s / 60),
-        Some(s) => format!("{s}_second"),
+        Some(18_000) => LimitKind::Session,
+        Some(604_800) if scope.is_some() => LimitKind::WeeklyScoped,
+        Some(604_800) => LimitKind::WeeklyAll,
+        Some(s) if s % (HOUR * 24) == 0 => format!("{}_day", s / (HOUR * 24)).into(),
+        Some(s) if s % HOUR == 0 => format!("{}_hour", s / HOUR).into(),
+        Some(s) if s % 60 == 0 => format!("{}_minute", s / 60).into(),
+        Some(s) => format!("{s}_second").into(),
         // `primary_window` and `secondary_window` say which one it is and nothing about how
         // long it runs, so that is what it is called rather than a guess.
-        None => which.trim_end_matches("_window").to_string(),
+        None => which.trim_end_matches("_window").into(),
     }
 }
 
@@ -456,13 +456,15 @@ mod tests {
 
     #[test]
     fn the_windows_keep_the_vocabulary_the_rest_of_pitboard_uses() {
-        assert_eq!(kind(Some(18_000), "primary_window"), "five_hour");
-        assert_eq!(kind(Some(604_800), "secondary_window"), "seven_day");
-        assert_eq!(kind(Some(86_400), "primary_window"), "1_day");
-        assert_eq!(kind(Some(10_800), "primary_window"), "3_hour");
-        assert_eq!(kind(Some(5_400), "primary_window"), "90_minute");
+        let kind = |seconds, scope| kind(seconds, "primary_window", scope).to_string();
+        assert_eq!(kind(Some(18_000), None), "session");
+        assert_eq!(kind(Some(604_800), None), "weekly_all");
+        assert_eq!(kind(Some(604_800), Some("codex_other")), "weekly_scoped");
+        assert_eq!(kind(Some(86_400), None), "1_day");
+        assert_eq!(kind(Some(10_800), None), "3_hour");
+        assert_eq!(kind(Some(5_400), None), "90_minute");
         assert_eq!(
-            kind(None, "primary_window"),
+            kind(None, None),
             "primary",
             "a window with no length is named by which one it is, not by a guess"
         );
@@ -525,7 +527,7 @@ mod tests {
             "one window is filled in, one is null"
         );
         let window = &snapshot.windows[0];
-        assert_eq!(window.kind, "seven_day");
+        assert_eq!(window.kind, LimitKind::WeeklyAll);
         assert!((window.percent - 45.0).abs() < f64::EPSILON);
         assert_eq!(window.resets_at, Some(1_790_628_078));
         assert_eq!(snapshot.source, Source::Live);
@@ -548,7 +550,7 @@ mod tests {
                 .iter()
                 .map(|w| w.kind.as_str())
                 .collect::<Vec<_>>(),
-            vec!["seven_day", "five_hour"]
+            vec!["weekly_all", "session"]
         );
     }
 
@@ -576,25 +578,18 @@ mod tests {
             },
             {"limit_name": "nothing_measured", "metered_feature": "x", "rate_limit": null}
         ]);
-        let read: Vec<(String, Option<String>, f64)> = snapshot(&body, 0)
+        let read: Vec<(LimitKind, Option<String>, f64)> = snapshot(&body, 0)
             .windows
             .into_iter()
             .map(|w| (w.kind, w.scope, w.percent))
             .collect();
+        let other = || Some("codex_other".to_string());
         assert_eq!(
             read,
             [
-                ("seven_day".to_string(), None, 45.0),
-                (
-                    "five_hour".to_string(),
-                    Some("codex_other".to_string()),
-                    12.0
-                ),
-                (
-                    "seven_day".to_string(),
-                    Some("codex_other".to_string()),
-                    30.5
-                ),
+                (LimitKind::WeeklyAll, None, 45.0),
+                (LimitKind::Session, other(), 12.0),
+                (LimitKind::WeeklyScoped, other(), 30.5),
             ]
         );
     }

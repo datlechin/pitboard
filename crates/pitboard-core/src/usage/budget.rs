@@ -28,23 +28,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// How long a window runs, which is what makes the floor a derivation rather than a
-/// preference.
-///
-/// The reading says, where the service said: OpenAI states every window's length, and
-/// Pitboard derives Anthropic's from its kind when it reads the answer. A reading
-/// remembered from before Pitboard kept the length has only its kind, and Anthropic's
-/// kinds are the only ones that could have been remembered then.
-///
-/// Until this read the length, it knew only `five_hour` and `seven_day`, and Anthropic has
-/// been answering `session` and `weekly_all`. Every account was asked about once a minute,
-/// the unknown-window fallback, against the three minutes this module promises.
-fn window_seconds(window: &crate::usage::Window) -> Option<i64> {
-    window
-        .length_seconds
-        .or_else(|| crate::usage::anthropic_window_length(&window.kind))
-}
-
 /// One percentage point of the tightest window this account has, in seconds. The floor.
 ///
 /// With no reading to derive it from, a minute: enough to collapse a burst of front ends
@@ -56,7 +39,7 @@ pub(crate) fn floor_for(reading: Option<&Snapshot>) -> i64 {
         .map(|s| s.windows.as_slice())
         .unwrap_or_default()
         .iter()
-        .filter_map(window_seconds)
+        .filter_map(crate::usage::Window::length)
         .min();
     shortest.map_or(UNKNOWN_FLOOR, |seconds| (seconds / 100).max(1))
 }
@@ -318,7 +301,7 @@ mod tests {
             windows: kinds
                 .iter()
                 .map(|kind| Window {
-                    kind: (*kind).to_string(),
+                    kind: (*kind).into(),
                     scope: None,
                     percent: 10.0,
                     resets_at: None,

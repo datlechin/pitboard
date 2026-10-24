@@ -15,7 +15,7 @@ use crate::schedule::Job;
 use crate::state::renewal_due;
 use crate::time::{DAY, HOUR, MINUTE, WEEK};
 use crate::usage::pace::{Pace, Standing};
-use crate::usage::whole;
+use crate::usage::{Window, whole};
 use std::fmt::Write as _;
 
 /// A length of time to the precision a person reads: "6d 4h", "2h 05m", "47m", "<1m".
@@ -34,52 +34,34 @@ pub fn span(seconds: i64) -> String {
     }
 }
 
-/// A limit in the column form, beside its bar: "5h", "week", "day", "3d", "30m", "45s", and
-/// "week · Fable" for one scoped to a model.
-///
-/// By how long it runs, where that is known, and otherwise by its kind. The length is what
-/// makes two tools' limits comparable: OpenAI times every window and names none, Anthropic
-/// names every window and times none, and Pitboard knows the length of each either way. A
-/// kind is only the fallback, for a reading remembered from before the length was kept.
-pub fn limit_column(kind: &str, length_seconds: Option<i64>, scope: Option<&str>) -> String {
-    let base = match length_seconds.filter(|s| *s > 0) {
+/// A limit beside its bar: "5h", "week", "day", "3d", "30m", "45s", "week · Fable".
+// By length, which makes two tools' limits comparable: OpenAI names no window, Anthropic times none.
+pub fn limit_column(limit: &Window) -> String {
+    let base = match limit.length() {
         Some(WEEK) => "week".into(),
         Some(DAY) => "day".into(),
         Some(s) if s % DAY == 0 => format!("{}d", s / DAY),
         Some(s) if s % HOUR == 0 => format!("{}h", s / HOUR),
         Some(s) if s % MINUTE == 0 => format!("{}m", s / MINUTE),
         Some(s) => format!("{s}s"),
-        None => match kind {
-            "session" | "five_hour" => "5h".into(),
-            "weekly_all" | "seven_day" | "weekly_scoped" => "week".into(),
-            other => other.into(),
-        },
+        None => limit.kind.to_string(),
     };
-    match scope {
+    match &limit.scope {
         Some(scope) => format!("{base} · {scope}"),
         None => base,
     }
 }
 
-/// A limit in the sentence form: "5-hour", "weekly", "daily", "3-day", "30-minute".
-///
-/// From its length where that is known, as [`limit_column`] is: "session" means nothing to
-/// somebody reading about a Codex account. Without its scope, which the sentence places
-/// itself, as in "weekly Fable 98%".
-pub fn limit_name(kind: &str, length_seconds: Option<i64>) -> String {
-    match length_seconds.filter(|s| *s > 0) {
+/// A limit in a sentence, without its scope: "5-hour", "weekly", "daily", "3-day".
+pub fn limit_name(limit: &Window) -> String {
+    match limit.length() {
         Some(WEEK) => "weekly".into(),
         Some(DAY) => "daily".into(),
         Some(s) if s % DAY == 0 => format!("{}-day", s / DAY),
         Some(s) if s % HOUR == 0 => format!("{}-hour", s / HOUR),
         Some(s) if s % MINUTE == 0 => format!("{}-minute", s / MINUTE),
         Some(s) => format!("{s}-second"),
-        None => match kind {
-            "session" | "five_hour" => "5-hour".into(),
-            "seven_day" => "weekly".into(),
-            weekly if weekly.starts_with("weekly") => "weekly".into(),
-            other => other.replace('_', " "),
-        },
+        None => limit.kind.as_str().replace('_', " "),
     }
 }
 
@@ -89,8 +71,8 @@ pub fn figure(percent: f64) -> String {
 
 /// How much of a limit an account has used, in a sentence about an automatic switch:
 /// "96% of its 5-hour limit", or "97% of its weekly Opus limit" for one limit of a model.
-pub fn share_of_limit(limit: &crate::usage::Window) -> String {
-    let name = scoped_limit_name(&limit.kind, limit.length_seconds, limit.scope.as_deref());
+pub fn share_of_limit(limit: &Window) -> String {
+    let name = scoped_limit_name(limit);
     format!("{} of its {name} limit", figure(limit.percent))
 }
 
@@ -295,7 +277,7 @@ pub fn warm_standing(
         Standing::Held(Hold::NoReading) => "waits for a reading from Anthropic".into(),
         Standing::Held(Hold::NothingToStart) => "has no 5-hour limit to start".into(),
         Standing::Held(Hold::LimitUsedUp { limit }) => {
-            let name = scoped_limit_name(&limit.kind, limit.length_seconds, limit.scope.as_deref());
+            let name = scoped_limit_name(limit);
             match limit.resets_at {
                 Some(at) => format!("has its {name} limit used up until {}", moment(at)),
                 None => format!("has its {name} limit used up"),
@@ -590,11 +572,10 @@ pub fn pace_column(pace: &Pace) -> String {
     }
 }
 
-/// A limit's name in a sentence with its model, where it is scoped to one: "weekly",
-/// "weekly Fable", "5-hour".
-pub fn scoped_limit_name(kind: &str, length_seconds: Option<i64>, scope: Option<&str>) -> String {
-    let name = limit_name(kind, length_seconds);
-    match scope {
+/// A limit in a sentence with its model, where it is scoped to one: "weekly Fable".
+pub fn scoped_limit_name(limit: &Window) -> String {
+    let name = limit_name(limit);
+    match &limit.scope {
         Some(scope) => format!("{name} {scope}"),
         None => name,
     }
@@ -1986,6 +1967,18 @@ mod tests {
         assert_eq!(span(86_400 * 6 + 3600 * 4 + 59), "6d 4h");
     }
 
+    fn limit(kind: &str, length_seconds: Option<i64>, scope: Option<&str>) -> Window {
+        Window {
+            kind: kind.into(),
+            scope: scope.map(str::to_owned),
+            percent: 0.0,
+            resets_at: None,
+            is_active: true,
+            severity: None,
+            length_seconds,
+        }
+    }
+
     /// A limit is named by how long it runs, which both services agree on, so a Codex limit
     /// reads the way a Claude Code one does, in a sentence and in a column alike.
     #[test]
@@ -2000,8 +1993,9 @@ mod tests {
             (1_800, "30m", "30-minute"),
             (45, "45s", "45-second"),
         ] {
-            assert_eq!(limit_column("any", Some(length), None), column, "{length}");
-            assert_eq!(limit_name("any", Some(length)), sentence, "{length}");
+            let any = limit("any", Some(length), None);
+            assert_eq!(limit_column(&any), column, "{length}");
+            assert_eq!(limit_name(&any), sentence, "{length}");
         }
     }
 
@@ -2009,20 +2003,19 @@ mod tests {
     /// and so does one whose length makes no sense.
     #[test]
     fn a_limit_of_unknown_length_is_named_from_its_kind() {
-        assert_eq!(limit_name("session", None), "5-hour");
-        assert_eq!(limit_name("five_hour", Some(0)), "5-hour");
-        assert_eq!(limit_name("weekly_all", None), "weekly");
-        assert_eq!(limit_name("seven_day", None), "weekly");
-        assert_eq!(limit_name("primary_window", None), "primary window");
-        assert_eq!(limit_column("session", None, None), "5h");
-        assert_eq!(limit_column("seven_day", Some(-1), None), "week");
-        assert_eq!(limit_column("primary", None, None), "primary");
+        let name = |kind, length| limit_name(&limit(kind, length, None));
+        assert_eq!(name("session", None), "5-hour");
+        assert_eq!(name("five_hour", Some(0)), "5-hour");
+        assert_eq!(name("weekly_all", None), "weekly");
+        assert_eq!(name("seven_day", None), "weekly");
+        assert_eq!(name("primary_window", None), "primary window");
+        let column = |kind, length, scope| limit_column(&limit(kind, length, scope));
+        assert_eq!(column("session", None, None), "5h");
+        assert_eq!(column("seven_day", Some(-1), None), "week");
+        assert_eq!(column("primary", None, None), "primary");
+        assert_eq!(column("weekly_scoped", None, Some("Fable")), "week · Fable");
         assert_eq!(
-            limit_column("weekly_scoped", None, Some("Fable")),
-            "week · Fable"
-        );
-        assert_eq!(
-            limit_column("weekly_scoped", Some(604_800), Some("Fable")),
+            column("weekly_scoped", Some(604_800), Some("Fable")),
             "week · Fable"
         );
     }
@@ -2063,14 +2056,9 @@ mod tests {
     /// A limit in a sentence about an automatic switch has the figure it is drawn with.
     #[test]
     fn a_share_of_a_limit_is_said_as_it_is_drawn() {
-        let limit = |percent: f64| crate::usage::Window {
-            kind: "session".into(),
-            scope: None,
+        let limit = |percent: f64| Window {
             percent,
-            resets_at: None,
-            is_active: true,
-            severity: None,
-            length_seconds: Some(5 * HOUR),
+            ..limit("session", Some(5 * HOUR), None)
         };
         assert_eq!(share_of_limit(&limit(94.5)), "95% of its 5-hour limit");
         assert_eq!(share_of_limit(&limit(96.4)), "96% of its 5-hour limit");
@@ -2105,7 +2093,7 @@ mod tests {
         );
         assert_eq!(
             runs_out(
-                &scoped_limit_name("weekly_scoped", Some(WEEK), Some("Fable")),
+                &scoped_limit_name(&limit("weekly_scoped", Some(WEEK), Some("Fable"))),
                 2 * DAY
             ),
             "weekly Fable limit runs out in 2d 0h at this pace"

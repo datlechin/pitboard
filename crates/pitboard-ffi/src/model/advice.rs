@@ -39,7 +39,7 @@ pub(crate) struct Advice {
 
 pub(crate) fn window(limit: &Limit) -> usage::Window {
     usage::Window {
-        kind: limit.kind.clone(),
+        kind: limit.kind.as_str().into(),
         scope: limit.scope.clone(),
         percent: limit.percent,
         resets_at: limit.resets_at,
