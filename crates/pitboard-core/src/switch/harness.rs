@@ -296,33 +296,17 @@ pub(crate) fn state_file(m: &Rig) -> (Vec<u8>, std::time::SystemTime) {
     (std::fs::read(&path).expect("a state file"), written)
 }
 
-/// Where OpenAI puts its own claims in a standard token.
-const OPENAI: &str = "https://api.openai.com/auth";
-
 /// A Codex login as `codex login` writes one, for the account `who`.
 ///
 /// The access token is unique to the refresh token so every login has its own, which is
 /// what the scripted usage answers are keyed by.
 pub(crate) fn codex_login(who: &str, refresh: &str) -> Value {
-    json!({
-        "auth_mode": "chatgpt",
-        "OPENAI_API_KEY": null,
-        "tokens": {
-            "id_token": provider::jwt::unsigned(&json!({
-                "email": format!("{who}@example.com"),
-                "exp": NOW + 3600,
-                OPENAI: {
-                    "chatgpt_account_id": who,
-                    "chatgpt_user_id": format!("user-{who}"),
-                    "chatgpt_plan_type": "pro",
-                },
-            })),
-            "access_token": codex_access(refresh),
-            "refresh_token": refresh,
-            "account_id": who,
-        },
-        "last_refresh": "2025-10-09T08:00:00Z",
-    })
+    provider::codex::login_for_a_test(
+        who,
+        &format!("{who}@example.com"),
+        &codex_access(refresh),
+        refresh,
+    )
 }
 
 /// The identity Codex's own claims give the account `who`: the ChatGPT account with the

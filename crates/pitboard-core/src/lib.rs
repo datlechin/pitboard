@@ -130,6 +130,15 @@ pub mod testing {
         crate::context::variables()
     }
 
+    pub fn codex_login(
+        account: &str,
+        email: &str,
+        access: &str,
+        refresh: &str,
+    ) -> serde_json::Value {
+        crate::provider::codex::login_for_a_test(account, email, access, refresh)
+    }
+
     pub fn park_unread(label: &str, path: &std::path::Path, why: &str) -> crate::error::Error {
         crate::store::folder::unread(label, path, why)
     }

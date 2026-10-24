@@ -5,7 +5,7 @@
 //! model ends every thread it started, a drop waiting on none of them.
 
 use super::state::Cadence;
-use super::testing::platform::{Posted, StandInApps};
+use super::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
 use super::testing::records::{CHATGPT, CHATGPT_CODEX};
 use super::testing::world::StandIn;
 use super::testing::world::World;
@@ -18,11 +18,8 @@ use crate::present::testing::Utc;
 use pitboard_core::testing::{Asked, live_service};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
-use std::time::{Duration, Instant};
-
-/// As long as a test waits for another thread, however slow the machine running it.
-const PATIENCE: Duration = Duration::from_secs(20);
+use std::sync::{Arc, OnceLock, Weak};
+use std::time::Duration;
 
 /// Looks every few milliseconds, reads by itself only when started, once, asks whether to
 /// switch by itself only after a read or a change, and gives an app a moment to quit.
@@ -36,89 +33,6 @@ const QUICK: Cadence = Cadence {
     tick_every: Duration::from_secs(3_600),
     arming: Duration::from_millis(10),
 };
-
-/// What a listener does with the model from inside `changed`.
-type Inside = Box<dyn FnOnce(&PitboardModel) + Send>;
-
-/// Keeps every snapshot it is told of, and can call the model back from inside `changed`.
-#[derive(Default)]
-struct Told {
-    snapshots: Mutex<Vec<Snapshot>>,
-    arrived: Condvar,
-    /// The model, for a listener that calls it back.
-    model: OnceLock<Weak<PitboardModel>>,
-    /// Done once, from inside the first `changed` told of a read that has landed, where a
-    /// test says so.
-    once_read: Mutex<Option<Inside>>,
-    /// The revision `snapshot` gave from inside `changed`, each time, beside the one told.
-    asked_inside: Mutex<Vec<(u64, u64)>>,
-    /// Told the revision of each call as it starts, before it is held, where a test says so.
-    entered: Mutex<Option<Sender<u64>>>,
-    /// Holds each call until the test lets it go, where a test says so.
-    hold: Mutex<Option<Receiver<()>>>,
-}
-
-impl ModelListener for Told {
-    fn changed(&self, snapshot: Snapshot) -> Result<(), PlatformError> {
-        if let Some(model) = self.model.get().and_then(Weak::upgrade) {
-            let inside = model.snapshot().revision;
-            self.asked_inside
-                .lock()
-                .expect("a test's own lock")
-                .push((snapshot.revision, inside));
-            if !snapshot.reading
-                && snapshot.status.is_some()
-                && let Some(once) = self.once_read.lock().expect("a test's own lock").take()
-            {
-                once(&model);
-            }
-        }
-        if let Some(entered) = self.entered.lock().expect("a test's own lock").as_ref() {
-            let _ = entered.send(snapshot.revision);
-        }
-        if let Some(hold) = self.hold.lock().expect("a test's own lock").as_ref() {
-            let _ = hold.recv();
-        }
-        self.snapshots
-            .lock()
-            .expect("a test's own lock")
-            .push(snapshot);
-        self.arrived.notify_all();
-        Ok(())
-    }
-}
-
-impl Told {
-    /// Waits until the snapshots told so far satisfy `done`, and says what they were.
-    fn until(&self, what: &str, done: impl Fn(&[Snapshot]) -> bool) -> Vec<Snapshot> {
-        let started = Instant::now();
-        let mut snapshots = self.snapshots.lock().expect("a test's own lock");
-        while !done(&snapshots) {
-            let left = PATIENCE
-                .checked_sub(started.elapsed())
-                .unwrap_or_else(|| panic!("never told {what}: {snapshots:#?}"));
-            snapshots = self
-                .arrived
-                .wait_timeout(snapshots, left)
-                .expect("a test's own lock")
-                .0;
-        }
-        snapshots.clone()
-    }
-
-    fn count(&self) -> usize {
-        self.snapshots.lock().expect("a test's own lock").len()
-    }
-}
-
-/// Waits until `done` says so, checking every few milliseconds.
-fn eventually(what: &str, done: impl Fn() -> bool) {
-    let started = Instant::now();
-    while !done() {
-        assert!(started.elapsed() < PATIENCE, "never {what}");
-        std::thread::sleep(Duration::from_millis(5));
-    }
-}
 
 fn labels(snapshot: &Snapshot) -> Vec<String> {
     snapshot
@@ -1738,13 +1652,6 @@ fn the_apps_preferences_follow_its_pitboard_directory() {
     again.shutdown();
 }
 
-/// The last snapshot told, once `done` holds of it.
-fn last_where(told: &Told, what: &str, done: impl Fn(&Snapshot) -> bool) -> Snapshot {
-    told.until(what, |told| told.last().is_some_and(&done))
-        .pop()
-        .expect("a snapshot")
-}
-
 /// The machine over the real core, as the settings and the window's other panes ask for it:
 /// daily renewal turned on and off through the core's pretend scheduler, which writes its job
 /// into the scratch home and asks no service manager; a renewal and the read after it;
@@ -1766,7 +1673,7 @@ fn the_machine_is_kept_over_the_real_core() {
     told.until("the account read", shows("work"));
 
     model.send(Intent::ReadSchedule);
-    let read = last_where(&told, "the schedule read", |last| {
+    let read = told.last_where("the schedule read", |last| {
         last.machine.schedule.schedule == Some(Schedule::Absent)
     });
     let schedule = &read.machine.schedule;
@@ -1774,7 +1681,7 @@ fn the_machine_is_kept_over_the_real_core() {
     assert_eq!(schedule.note, None, "this copy can schedule it");
 
     model.send(Intent::SetSchedule { on: true });
-    let on = last_where(&told, "daily renewal on", |last| {
+    let on = told.last_where("daily renewal on", |last| {
         let schedule = &last.machine.schedule;
         schedule.on
             && !schedule.changing
@@ -1800,9 +1707,7 @@ fn the_machine_is_kept_over_the_real_core() {
     model.send(Intent::PaneShown {
         pane: Pane::Activity,
     });
-    let logged = last_where(&told, "the log", |last| {
-        !last.machine.activity.lines.is_empty()
-    });
+    let logged = told.last_where("the log", |last| !last.machine.activity.lines.is_empty());
     let lines: Vec<(&str, &str, &str, &str)> = logged
         .machine
         .activity
@@ -1830,20 +1735,20 @@ fn the_machine_is_kept_over_the_real_core() {
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
     });
-    let checked = last_where(&told, "the checks", |last| {
+    let checked = told.last_where("the checks", |last| {
         !last.machine.checks.lines.is_empty() && !last.machine.checks.checking
     });
     assert!(checked.machine.checks.summary.is_some());
     assert!(checked.machine.checks.checked.is_some());
 
     model.send(Intent::SetSchedule { on: false });
-    last_where(&told, "daily renewal off", |last| {
+    told.last_where("daily renewal off", |last| {
         last.machine.schedule.schedule == Some(Schedule::Absent) && !last.machine.schedule.changing
     });
     assert!(!kept.exists(), "taken away");
 
     model.send(Intent::LookForCommandLine);
-    let found = last_where(&told, "the command line looked for", |last| {
+    let found = told.last_where("the command line looked for", |last| {
         last.machine.command_line.found.is_some()
     });
     let command_line = &found.machine.command_line;
@@ -1932,7 +1837,7 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
     );
     let _ = told.model.set(Arc::downgrade(&model));
     model.send(Intent::Start);
-    last_where(&told, "the store nobody has asked for", |last| {
+    told.last_where("the store nobody has asked for", |last| {
         last.account_windows
             .deleting
             .iter()
@@ -1954,7 +1859,7 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
             store: opened.clone(),
         });
     }
-    let shown = last_where(&told, "both windows open", |last| {
+    let shown = told.last_where("both windows open", |last| {
         last.account_windows.open.len() == 2
     });
     let opened = &shown.account_windows.open[0];
@@ -1966,7 +1871,7 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
         store: spare.clone(),
         name: None,
     });
-    last_where(&told, "the download under way", |last| {
+    told.last_where("the download under way", |last| {
         last.account_windows
             .downloads
             .iter()
@@ -1982,7 +1887,7 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
         .forget("spare")
         .expect("forgotten in a terminal");
     world.index_written_later(5);
-    let forgotten = last_where(&told, "the forgotten account's window closing", |last| {
+    let forgotten = told.last_where("the forgotten account's window closing", |last| {
         last.account_windows.closing == [spare.clone()]
             && last
                 .account_windows
@@ -2062,7 +1967,7 @@ fn the_windows_records_are_not_written_where_pitboard_may_change_nothing() {
     );
     let _ = told.model.set(Arc::downgrade(&model));
     model.send(Intent::Start);
-    last_where(&told, "the store nobody has asked for", |last| {
+    told.last_where("the store nobody has asked for", |last| {
         last.account_windows
             .deleting
             .iter()

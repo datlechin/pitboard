@@ -520,28 +520,14 @@ impl Stage {
         let refresh = format!("{}-refresh-{n}", person.id);
         match person.tool {
             ProviderId::Codex => {
-                let id_token = unsigned_token(&json!({
-                    "email": person.email,
-                    "exp": access_until,
-                    "https://api.openai.com/auth": {
-                        "chatgpt_account_id": person.id,
-                        "chatgpt_user_id": format!("user-{}", person.id),
-                        "chatgpt_plan_type": "pro",
-                    },
-                }));
                 let access = unsigned_token(&json!({ "exp": access_until, "for": refresh }));
                 self.answers_for(person, &access);
-                let document = json!({
-                    "auth_mode": "chatgpt",
-                    "OPENAI_API_KEY": null,
-                    "tokens": {
-                        "id_token": id_token,
-                        "access_token": access,
-                        "refresh_token": refresh,
-                        "account_id": person.id,
-                    },
-                    "last_refresh": "2026-10-01T08:00:00Z",
-                });
+                let document = pitboard_core::testing::codex_login(
+                    &person.id,
+                    &person.email,
+                    &access,
+                    &refresh,
+                );
                 Login {
                     document: document.to_string(),
                     access,

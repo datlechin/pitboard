@@ -477,32 +477,26 @@ impl World {
     /// A Codex login of the ChatGPT account `who`, in the shape `codex login` writes one,
     /// with OpenAI scripted to answer for it.
     fn codex_login(&self, who: &str) -> String {
-        let now = NOW;
-        let id_token = unsigned_token(&serde_json::json!({
-            "email": format!("{who}@example.com"),
-            "exp": now + 3_600,
-            "https://api.openai.com/auth": {
-                "chatgpt_account_id": who,
-                "chatgpt_user_id": format!("user-{who}"),
-                "chatgpt_plan_type": "pro",
-            },
-        }));
         let access = unsigned_token(
-            &serde_json::json!({"exp": now + 10 * 86_400, "for": format!("refresh-{who}")}),
+            &serde_json::json!({"exp": NOW + 10 * 86_400, "for": format!("refresh-{who}")}),
         );
         self.api.using(
             &access,
             pitboard_core::usage::Snapshot {
                 windows: Vec::new(),
-                observed_at: Some(now),
-                answered_at: Some(now),
+                observed_at: Some(NOW),
+                answered_at: Some(NOW),
                 lists_every_limit: false,
                 source: pitboard_core::usage::Source::Live,
             },
         );
-        format!(
-            r#"{{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{{"id_token":"{id_token}","access_token":"{access}","refresh_token":"refresh-{who}","account_id":"{who}"}},"last_refresh":"2026-10-01T08:00:00Z"}}"#
+        pitboard_core::testing::codex_login(
+            who,
+            &format!("{who}@example.com"),
+            &access,
+            &format!("refresh-{who}"),
         )
+        .to_string()
     }
 
     /// Pitboard's directory on this machine.

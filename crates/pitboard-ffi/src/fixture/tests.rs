@@ -7,7 +7,7 @@ use super::apps::{CHATGPT, CLAUDE, chatgpt};
 use super::pages;
 use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
-use crate::model::testing::platform::{Posted, StandInApps};
+use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
 use crate::model::{
     AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
     PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,
@@ -18,11 +18,8 @@ use crate::present::{AccountsShown, Footing};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::{self, ProviderId};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-/// As long as a test waits for another thread, however slow the machine running it.
-const PATIENCE: Duration = Duration::from_secs(30);
 
 /// A code as Claude Code's browser page shows one, `<code>#<state>`, which its sign-in takes:
 /// what a UI test types.
@@ -257,7 +254,7 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
             .find(|item| item.title == "personal")
             .and_then(|item| item.warm_note.clone())
     };
-    let shown = told.until("personal warmed up", |shown| {
+    let shown = told.last_where("personal warmed up", |shown| {
         personal(shown).is_some_and(|note| note.starts_with("Warms up again at "))
     });
     let warm = &shown.machine.warm;
@@ -385,7 +382,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
         provider: "claude".into(),
         name: "third".into(),
     });
-    told.until("the code asked for", |snapshot| {
+    told.last_where("the code asked for", |snapshot| {
         snapshot
             .signing_in
             .as_ref()
@@ -394,7 +391,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
     model.send(Intent::PasteCode {
         code: "fixture-code".into(),
     });
-    let refused = told.until("the code refused", |snapshot| {
+    let refused = told.last_where("the code refused", |snapshot| {
         snapshot
             .signing_in
             .as_ref()
@@ -411,7 +408,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
         )
     );
     model.send(Intent::PasteCode { code: CODE.into() });
-    told.until("the account listed", |snapshot| {
+    told.last_where("the account listed", |snapshot| {
         snapshot.signing_in.is_none()
             && read_in(snapshot)
             && snapshot.status.as_ref().is_some_and(|status| {
@@ -615,47 +612,6 @@ fn a_launch_keeps_its_command_line_in_its_own_folder() {
 
 // The model an app launches into a fixture.
 
-/// Keeps every snapshot it is told of.
-#[derive(Default)]
-struct Told {
-    snapshots: Mutex<Vec<Snapshot>>,
-    arrived: Condvar,
-}
-
-impl ModelListener for Told {
-    fn changed(&self, snapshot: Snapshot) -> Result<(), PlatformError> {
-        self.snapshots
-            .lock()
-            .expect("a test's own lock")
-            .push(snapshot);
-        self.arrived.notify_all();
-        Ok(())
-    }
-}
-
-impl Told {
-    /// Waits until the last snapshot told satisfies `done`, and gives it.
-    fn until(&self, what: &str, done: impl Fn(&Snapshot) -> bool) -> Snapshot {
-        let started = Instant::now();
-        let mut snapshots = self.snapshots.lock().expect("a test's own lock");
-        loop {
-            if let Some(last) = snapshots.last()
-                && done(last)
-            {
-                return last.clone();
-            }
-            let left = PATIENCE
-                .checked_sub(started.elapsed())
-                .unwrap_or_else(|| panic!("never told {what}: {:#?}", snapshots.last()));
-            snapshots = self
-                .arrived
-                .wait_timeout(snapshots, left)
-                .expect("a test's own lock")
-                .0;
-        }
-    }
-}
-
 /// Whether the accounts have been read, and nothing is being read.
 fn read_in(snapshot: &Snapshot) -> bool {
     snapshot.status.is_some() && !snapshot.reading && snapshot.updated_at.is_some()
@@ -666,7 +622,7 @@ fn started(launched: &Launched) -> (Arc<PitboardModel>, Arc<Told>) {
     let told = Arc::new(Told::default());
     let model = launched.model(Arc::clone(&told) as Arc<dyn ModelListener>, Arc::new(Utc));
     model.send(Intent::Start);
-    told.until("the accounts read", read_in);
+    told.last_where("the accounts read", read_in);
     (model, told)
 }
 
@@ -679,7 +635,7 @@ fn started(launched: &Launched) -> (Arc<PitboardModel>, Arc<Told>) {
 fn a_launch_reads_without_being_asked() {
     let launched = made(World::TwoTools);
     let (model, told) = started(&launched);
-    let last = told.until("the accounts read", read_in);
+    let last = told.last_where("the accounts read", read_in);
     assert_eq!(
         described(last.status.as_ref().expect("read")),
         described(&read(&launched.core))
@@ -740,7 +696,7 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
     model.send(Intent::SwitchTo {
         qualified: "codex/spare".into(),
     });
-    let asked = told.until("the quit question", |snapshot| {
+    let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
     let question = asked.quit_question.expect("asked");
@@ -748,7 +704,7 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
     model.send(Intent::QuitAndSwitch {
         qualified: question.qualified,
     });
-    told.until("the switch, read back", |snapshot| {
+    told.last_where("the switch, read back", |snapshot| {
         snapshot.switch_under_way.is_none()
             && snapshot
                 .status
@@ -782,7 +738,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
     model.send(Intent::SwitchTo {
         qualified: "desktop/home".into(),
     });
-    let asked = told.until("the quit question", |snapshot| {
+    let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
     let question = asked.quit_question.expect("asked");
@@ -794,7 +750,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
     model.send(Intent::QuitAndSwitch {
         qualified: question.qualified,
     });
-    told.until("the switch, read back", |snapshot| {
+    told.last_where("the switch, read back", |snapshot| {
         snapshot.switch_under_way.is_none()
             && snapshot
                 .status
@@ -869,7 +825,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
         provider: "desktop".into(),
         name: "travel".into(),
     });
-    let asked = told.until("the quit question", |snapshot| {
+    let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
     assert_eq!(
@@ -879,7 +835,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     model.send(Intent::QuitAndSwitch {
         qualified: asked.quit_question.expect("asked").qualified,
     });
-    let waiting = told.until("the wait, with Claude opened for it", |snapshot| {
+    let waiting = told.last_where("the wait, with Claude opened for it", |snapshot| {
         snapshot
             .signing_in_text
             .as_ref()
@@ -891,7 +847,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
         text.undo.map(|undo| undo.title).as_deref(),
         Some("Put work Back")
     );
-    told.until("travel added and in use", |snapshot| {
+    told.last_where("travel added and in use", |snapshot| {
         snapshot.signing_in.is_none()
             && snapshot.sheet.is_none()
             && snapshot
@@ -924,7 +880,7 @@ fn an_add_left_halfway_is_put_back_by_use() {
         provider: "desktop".into(),
         name: "travel".into(),
     });
-    let waiting = told.until("work parked for the sign-in", |snapshot| {
+    let waiting = told.last_where("work parked for the sign-in", |snapshot| {
         snapshot
             .signing_in_text
             .as_ref()
@@ -938,7 +894,7 @@ fn an_add_left_halfway_is_put_back_by_use() {
     assert_eq!(text.cancel.title, "Later");
     assert!(!text.escape_cancels);
     model.send(Intent::CancelSignIn);
-    let left = told.until("the add left halfway", |snapshot| {
+    let left = told.last_where("the add left halfway", |snapshot| {
         snapshot.signing_in.is_none()
             && snapshot
                 .notices
@@ -959,7 +915,7 @@ fn an_add_left_halfway_is_put_back_by_use() {
         ["Finish Adding…", "Put work Back"]
     );
     model.send(notice.actions[1].intent.clone());
-    told.until("work back in use", |snapshot| {
+    told.last_where("work back in use", |snapshot| {
         snapshot.switch_under_way.is_none()
             && !snapshot
                 .notices
@@ -1032,7 +988,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
     machine.claude.reports();
     machine.claude.quits();
     let (model, told) = started(&launched);
-    let waiting = told.until("the move said waiting", |snapshot| {
+    let waiting = told.last_where("the move said waiting", |snapshot| {
         !actions_of(snapshot, "warning/move_waiting/").is_empty()
     });
     assert_eq!(
@@ -1043,7 +999,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
     model.send(Intent::SwitchTo {
         qualified: "desktop/home".into(),
     });
-    let refused = told.until("the switch refused", |snapshot| {
+    let refused = told.last_where("the switch refused", |snapshot| {
         actions_of(snapshot, "warning/move_waiting/").len() == 2
     });
     assert_eq!(
@@ -1061,7 +1017,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
         ["Add the Account Claude Shows…", "Give Up…"]
     );
     model.send(notice.actions[1].intent.clone());
-    let gave_up = told.until("the move given up", |snapshot| {
+    let gave_up = told.last_where("the move given up", |snapshot| {
         snapshot
             .notices
             .iter()
@@ -1093,12 +1049,12 @@ fn a_move_the_give_up_settles_is_said_as_finished() {
         &pitboard_core::state::Key::new(ProviderId::Desktop, "work"),
     );
     let (model, told) = started(&launched);
-    told.until("the move said waiting", |snapshot| {
+    told.last_where("the move said waiting", |snapshot| {
         !actions_of(snapshot, "warning/move_waiting/").is_empty()
     });
     // As the stuck notice's Give Up… asks it: recovery finishes this move.
     model.send(Intent::AbandonStuckSwitch);
-    let settled = told.until("the move said finished", |snapshot| {
+    let settled = told.last_where("the move said finished", |snapshot| {
         (snapshot.notices.iter())
             .any(|notice| notice.id.starts_with("warning/interrupted_move_finished/"))
     });
@@ -1143,7 +1099,7 @@ fn chatgpt_leaves_the_process_list_as_it_quits() {
 fn the_menu_lists_every_account_under_its_tool() {
     let launched = made(World::TwoTools);
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     let sections: Vec<(Option<String>, Vec<String>)> = shown
         .sections
         .iter()
@@ -1191,7 +1147,7 @@ fn the_menu_lists_every_account_under_its_tool() {
 fn a_machine_without_claude_code_says_so_first() {
     let launched = made(World::NoClaudeCode);
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     assert_eq!(shown.footing, Footing::NoClaudeCode);
     assert_eq!(
         shown
@@ -1214,7 +1170,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
     for world in [World::Empty, World::FirstLaunch] {
         let launched = made(world);
         let (model, told) = started(&launched);
-        let shown = told.until("the Codex tip", |snapshot| {
+        let shown = told.last_where("the Codex tip", |snapshot| {
             read_in(snapshot) && snapshot.footing == Footing::CodexUnused
         });
         assert_eq!(
@@ -1224,7 +1180,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
             world.name()
         );
         model.send(Intent::DeclineTip { tip: Tip::UseCodex });
-        let declined = told.until("the Codex tip put away", |snapshot| {
+        let declined = told.last_where("the Codex tip put away", |snapshot| {
             snapshot.footing == Footing::NoOneSignedIn
         });
         assert!(
@@ -1238,7 +1194,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
         // 800 copies of this test run 16 at a time on Linux, firstLaunch's had not yet asked.
         // A machine whose app has been seen never asks, which `keeping.rs` holds.
         if world == World::FirstLaunch {
-            told.until("the window asked for", |snapshot| {
+            told.last_where("the window asked for", |snapshot| {
                 read_in(snapshot) && snapshot.window_request.serial > 0
             });
         } else {
@@ -1254,7 +1210,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
 fn the_login_in_use_is_offered_a_name() {
     let launched = made(World::Unnamed);
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     assert_eq!(
         shown.setup.as_ref().map(|step| step.title.as_str()),
         Some("Give this account a name")
@@ -1263,7 +1219,7 @@ fn the_login_in_use_is_offered_a_name() {
         provider: "claude".into(),
         name: "work".into(),
     });
-    told.until("the account named", |snapshot| {
+    told.last_where("the account named", |snapshot| {
         read_in(snapshot)
             && snapshot.status.as_ref().is_some_and(|status| {
                 status
@@ -1284,12 +1240,12 @@ fn the_login_left_in_a_file_is_put_away_from_its_sheet() {
     let launched = made(World::LeftInFile);
     let (model, told) = started(&launched);
     let put_away = titled(OS, "Put Away…", "Put away…");
-    told.until("the file said, with Put Away…", |snapshot| {
+    told.last_where("the file said, with Put Away…", |snapshot| {
         actions_of(snapshot, "warning/fallback_login/") == [put_away.as_str()]
     });
 
     model.send(Intent::PresentSheet { sheet: Sheet::Stow });
-    let looked = told.until("the look", |snapshot| {
+    let looked = told.last_where("the look", |snapshot| {
         snapshot
             .stow_text
             .as_ref()
@@ -1302,7 +1258,7 @@ fn the_login_left_in_a_file_is_put_away_from_its_sheet() {
     );
     model.send(Intent::Stow);
 
-    told.until("put away, and said", |snapshot| {
+    told.last_where("put away, and said", |snapshot| {
         snapshot.sheet.is_none() && snapshot.notices.iter().any(|notice| notice.id == "stowed")
     });
     assert!(
@@ -1320,7 +1276,7 @@ fn the_login_left_in_a_file_is_put_away_from_its_sheet() {
 fn one_account_is_offered_a_second_until_not_now() {
     let launched = made(World::OnlyOne);
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     assert_eq!(
         shown.setup.as_ref().map(|step| step.title.as_str()),
         Some("Add a second account")
@@ -1328,7 +1284,7 @@ fn one_account_is_offered_a_second_until_not_now() {
     model.send(Intent::DeclineSecondAccount {
         provider: "claude".into(),
     });
-    told.until("the next tip, for Codex", |snapshot| {
+    told.last_where("the next tip, for Codex", |snapshot| {
         snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some("Use Pitboard with Codex")
     });
     let started = Instant::now();
@@ -1355,7 +1311,7 @@ fn activity_lists_every_switch_above_every_enrolment() {
     model.send(Intent::PaneShown {
         pane: Pane::Activity,
     });
-    let shown = told.until("the log read", |snapshot| {
+    let shown = told.last_where("the log read", |snapshot| {
         !snapshot.machine.activity.lines.is_empty()
     });
     assert_eq!(
@@ -1377,7 +1333,7 @@ fn daily_renewal_turns_on() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     model.send(Intent::SetSchedule { on: true });
-    told.until("the schedule on", |snapshot| {
+    told.last_where("the schedule on", |snapshot| {
         snapshot.machine.schedule.on && !snapshot.machine.schedule.changing
     });
     model.shutdown();
@@ -1392,7 +1348,7 @@ fn a_codex_switch_says_sessions_keep_the_old_account() {
     model.send(Intent::SwitchTo {
         qualified: "codex/spare".into(),
     });
-    let shown = told.until("what the switch said", |snapshot| {
+    let shown = told.last_where("what the switch said", |snapshot| {
         snapshot
             .notices
             .iter()
@@ -1425,7 +1381,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
         provider: "claude".into(),
         name: "third".into(),
     });
-    let asking = told.until("the code asked for", |snapshot| {
+    let asking = told.last_where("the code asked for", |snapshot| {
         snapshot
             .signing_in
             .as_ref()
@@ -1436,19 +1392,19 @@ fn accounts_are_added_through_each_tools_sign_in() {
         Some(CLAUDE_ADDRESS)
     );
     model.send(Intent::CancelSignIn);
-    told.until("the sign-in over", |snapshot| snapshot.signing_in.is_none());
+    told.last_where("the sign-in over", |snapshot| snapshot.signing_in.is_none());
     model.send(Intent::SignIn {
         provider: "claude".into(),
         name: "third".into(),
     });
-    told.until("the code asked for", |snapshot| {
+    told.last_where("the code asked for", |snapshot| {
         snapshot
             .signing_in
             .as_ref()
             .is_some_and(|signing| signing.wants_code)
     });
     model.send(Intent::PasteCode { code: CODE.into() });
-    told.until("the account listed", |snapshot| {
+    told.last_where("the account listed", |snapshot| {
         snapshot.signing_in.is_none()
             && read_in(snapshot)
             && snapshot.status.as_ref().is_some_and(|status| {
@@ -1466,7 +1422,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
         provider: "codex".into(),
         name: "third".into(),
     });
-    told.until("the account listed", |snapshot| {
+    told.last_where("the account listed", |snapshot| {
         snapshot.signing_in.is_none()
             && read_in(snapshot)
             && snapshot.status.as_ref().is_some_and(|status| {
@@ -1496,7 +1452,7 @@ fn adding_codex_in_first_launch_reaches_its_sign_in() {
         provider: "codex".into(),
         name: "work".into(),
     });
-    let ended = told.until("the account listed or refused", |snapshot| {
+    let ended = told.last_where("the account listed or refused", |snapshot| {
         snapshot.sheet_failure.is_some()
             || (snapshot.signing_in.is_none()
                 && read_in(snapshot)
@@ -1529,7 +1485,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
         sheet: Sheet::Add { provider: None },
     });
     model.send(sign_in());
-    let first = told.until("the code asked for", |snapshot| {
+    let first = told.last_where("the code asked for", |snapshot| {
         snapshot
             .signing_in
             .as_ref()
@@ -1538,7 +1494,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
     let first = first.signing_in.expect("the first sign-in").id;
     model.send(Intent::CancelSignIn);
     model.send(sign_in());
-    let asking = told.until("the code asked for again, or a refusal", |snapshot| {
+    let asking = told.last_where("the code asked for again, or a refusal", |snapshot| {
         refused(snapshot)
             || snapshot
                 .signing_in
@@ -1551,7 +1507,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
         "the second sign-in refused"
     );
     model.send(Intent::PasteCode { code: CODE.into() });
-    told.until("the account listed", |snapshot| {
+    told.last_where("the account listed", |snapshot| {
         refused(snapshot)
             || (snapshot.signing_in.is_none()
                 && read_in(snapshot)
@@ -1573,7 +1529,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
 fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     // Each row's own menu, by its items' titles, with Forget… last.
     let menus: Vec<(String, Vec<String>)> = shown
         .sections
@@ -1619,7 +1575,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         label: "personal".into(),
         to: "work".into(),
     });
-    let refused = told.until("the rename refused", |snapshot| {
+    let refused = told.last_where("the rename refused", |snapshot| {
         snapshot.sheet_failure.is_some()
     });
     assert_eq!(
@@ -1634,7 +1590,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         label: "personal".into(),
         to: "home".into(),
     });
-    told.until("the account renamed", |snapshot| {
+    told.last_where("the account renamed", |snapshot| {
         read_in(snapshot)
             && snapshot.status.as_ref().is_some_and(|status| {
                 in_use(status) == ["claude/work"]
@@ -1647,7 +1603,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     model.send(Intent::Forget {
         qualified: "claude/home".into(),
     });
-    told.until("the account forgotten", |snapshot| {
+    told.last_where("the account forgotten", |snapshot| {
         read_in(snapshot)
             && snapshot
                 .status
@@ -1672,7 +1628,7 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     let told = Arc::new(Told::default());
     let model = launched.model(Arc::clone(&told) as Arc<dyn ModelListener>, Arc::new(Utc));
     model.send(Intent::Start);
-    let shown = told.until("the read failed", |snapshot| {
+    let shown = told.last_where("the read failed", |snapshot| {
         snapshot.read_failure.is_some() && !snapshot.reading
     });
     let failure = shown.read_failure.expect("failed");
@@ -1746,7 +1702,7 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
     );
 
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     let items: Vec<_> = shown
         .sections
         .iter()
@@ -1778,7 +1734,7 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
 fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     let launched = made(World::Stuck);
     let (model, told) = started(&launched);
-    let shown = told.until("the accounts read", read_in);
+    let shown = told.last_where("the accounts read", read_in);
     assert!(shown.stuck);
     let notice = shown.notices.first().expect("a notice");
     assert_eq!(
@@ -1807,7 +1763,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
     });
-    let checked = told.until("the checks made", |snapshot| {
+    let checked = told.last_where("the checks made", |snapshot| {
         !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
     });
     let interrupted = checked
@@ -1833,7 +1789,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     );
 
     model.send(Intent::AbandonStuckSwitch);
-    let given_up = told.until("what giving up kept", |snapshot| {
+    let given_up = told.last_where("what giving up kept", |snapshot| {
         snapshot
             .notices
             .iter()
@@ -1852,7 +1808,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
             .any(|line| line.contains("2 logins kept")),
         "{notice:?}"
     );
-    told.until("nothing waiting", |snapshot| {
+    told.last_where("nothing waiting", |snapshot| {
         !snapshot.stuck && snapshot.notices.iter().all(|notice| notice.id != "stuck")
     });
     model.shutdown();
@@ -1877,7 +1833,7 @@ fn this_mac_shows_the_cores_checks() {
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
     });
-    let shown = told.until("the checks made", |snapshot| {
+    let shown = told.last_where("the checks made", |snapshot| {
         !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
     });
     let checks = shown.machine.checks;
@@ -1965,11 +1921,11 @@ fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
         Arc::new(Twelve),
     );
     model.send(Intent::Start);
-    told.until("the accounts read", read_in);
+    told.last_where("the accounts read", read_in);
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
     });
-    let shown = told.until("the checks made", |snapshot| {
+    let shown = told.last_where("the checks made", |snapshot| {
         !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
     });
     let in_use = shown
@@ -2008,7 +1964,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
 
     let launched = made(World::TwoTools);
     let (model, told) = started(&launched);
-    let read = told.until("the accounts read", read_in);
+    let read = told.last_where("the accounts read", read_in);
     let spare_row = read
         .sections
         .iter()
@@ -2055,7 +2011,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
     };
     model.send(shared("https://chatgpt.com/c/shared"));
     let picker = told
-        .until("Open answering", |last| {
+        .last_where("Open answering", |last| {
             last.account_windows
                 .picker
                 .as_ref()
@@ -2082,7 +2038,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
         store: spare.clone(),
     });
     let opened = told
-        .until("spare's window", |last| {
+        .last_where("spare's window", |last| {
             last.account_windows.picker.is_none()
                 && last.account_windows.open.iter().any(|w| w.store == spare)
         })
@@ -2100,7 +2056,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
     model.send(Intent::LinkArrived {
         text: "pitboard-debug://open?url=https%3A%2F%2Fexample.com%2Fpage".into(),
     });
-    let refused = told.until("the refusal", |last| {
+    let refused = told.last_where("the refusal", |last| {
         last.account_windows
             .picker
             .as_ref()
@@ -2292,7 +2248,7 @@ fn an_exported_fixture_is_made_in_the_temporary_directory() {
     assert!(pitboard_in(&shared).is_dir());
     assert!(!told.exists(), "what the last launch told is gone");
     model.send(Intent::Start);
-    let shown = listener.until("the accounts read", read_in);
+    let shown = listener.last_where("the accounts read", read_in);
     assert_eq!(
         described(shown.status.as_ref().expect("read")),
         ["claude/work, in use", "claude/personal"]
@@ -2327,7 +2283,7 @@ fn an_exported_fixture_in_a_directory_of_its_own_is_made_there() {
     assert!(pitboard_in(&made).is_dir());
     assert!(!told.exists(), "what the last launch told is gone");
     model.send(Intent::Start);
-    let shown = listener.until("the accounts read", read_in);
+    let shown = listener.last_where("the accounts read", read_in);
     assert_eq!(
         described(shown.status.as_ref().expect("read")),
         ["claude/work, in use", "claude/personal"]
@@ -2362,17 +2318,8 @@ fn started_in(
     )
     .expect("a fixture");
     model.send(Intent::Start);
-    told.until("the accounts read", read_in);
+    told.last_where("the accounts read", read_in);
     (model, told)
-}
-
-// Reopening an app and posting run on lanes of their own, which nothing in a snapshot follows.
-fn eventually(what: &str, done: impl Fn() -> bool) {
-    let started = Instant::now();
-    while !done() {
-        assert!(started.elapsed() < PATIENCE, "never {what}");
-        std::thread::sleep(Duration::from_millis(10));
-    }
 }
 
 fn uses(snapshot: &Snapshot, qualified: &str) -> bool {
@@ -2397,7 +2344,7 @@ fn a_codex_switch_quits_and_reopens_chatgpt_through_the_apps_fixture_in_is_given
     model.send(Intent::SwitchTo {
         qualified: "codex/spare".into(),
     });
-    let asked = told.until("the quit question", |snapshot| {
+    let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
     assert_eq!(
@@ -2412,7 +2359,7 @@ fn a_codex_switch_quits_and_reopens_chatgpt_through_the_apps_fixture_in_is_given
     model.send(Intent::QuitAndSwitch {
         qualified: "codex/spare".into(),
     });
-    told.until("the switch, read back", |snapshot| {
+    told.last_where("the switch, read back", |snapshot| {
         uses(snapshot, "codex/spare")
     });
     eventually("opened ChatGPT again", || apps.asked().len() == 2);
@@ -2439,13 +2386,13 @@ fn a_refusal_to_quit_from_the_apps_fixture_in_is_given_stops_the_switch() {
     model.send(Intent::SwitchTo {
         qualified: "codex/spare".into(),
     });
-    told.until("the quit question", |snapshot| {
+    told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
     model.send(Intent::QuitAndSwitch {
         qualified: "codex/spare".into(),
     });
-    let refused = told.until("the switch stopped", |snapshot| snapshot.failure.is_some());
+    let refused = told.last_where("the switch stopped", |snapshot| snapshot.failure.is_some());
     let failure = refused.failure.as_ref().expect("stopped");
     assert_eq!(failure.title, "Couldn’t switch to spare");
     assert_eq!(
@@ -2468,7 +2415,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
     model.send(Intent::SwitchTo {
         qualified: "claude/personal".into(),
     });
-    let switched = told.until("the switch, read back", |snapshot| {
+    let switched = told.last_where("the switch, read back", |snapshot| {
         uses(snapshot, "claude/personal")
     });
     eventually("posted the run-out", || !posted.posted().is_empty());
@@ -2551,7 +2498,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
     });
-    let checked = told.until("the checks with the refusal", |snapshot| {
+    let checked = told.last_where("the checks with the refusal", |snapshot| {
         snapshot
             .machine
             .checks

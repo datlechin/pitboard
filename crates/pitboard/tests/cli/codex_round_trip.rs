@@ -5,16 +5,12 @@
 //! the private home it is handed, which is all `codex login` leaves behind.
 
 use crate::common;
-use crate::common::{Env, codex_login};
+use crate::common::{Env, codex_login, envelope};
 
 /// The identity a Codex login's own claims give the account `account`: the ChatGPT account
 /// with the person inside it, as the harness's logins carry both.
 fn codex_id(account: &str) -> String {
     format!("{account}_user-{account}")
-}
-
-fn envelope(out: &str) -> serde_json::Value {
-    serde_json::from_str(out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"))
 }
 
 fn account(env: &Env, provider: &str, label: &str) -> serde_json::Value {

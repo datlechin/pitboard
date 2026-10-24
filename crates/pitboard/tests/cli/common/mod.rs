@@ -1,10 +1,11 @@
 //! The harness shared by the integration tests: a synthetic Claude Code installation, a
 //! stand-in for Anthropic, and the guard that keeps every test away from a real login.
 //!
-//! Each `Env` has a root named after its process and the name its test gives `Env::new`,
-//! which refuses a name already used in that process. Claude Code's slot is hashed from the
-//! root. The account ids, and the parks Pitboard names after them, are hashed from the name
-//! alone, so a snapshot is the same on every run and two runs of one test at once share them.
+//! Each `Env` has a root of its own, a scratch folder named after the name its test gives
+//! `Env::new`, and Claude Code's slot is hashed from the root. The account ids, and the parks
+//! Pitboard names after them, are hashed from the name alone, so a snapshot is the same on
+//! every run, two runs of one test at once share them, and `Env::new` refuses a name already
+//! used in that process.
 
 pub(crate) mod os;
 
@@ -84,7 +85,7 @@ pub(crate) fn guard_not_live(name: &str) {
 }
 
 use pitboard_core::testing::desktop::{self, JarAs, Person};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -1109,11 +1110,12 @@ impl Env {
         RunningClaude(running)
     }
 
-    // `pitboard <args>` left running, its standard error read a line at a time.
+    // `pitboard <args>` left running, its standard error read a line at a time and its
+    // standard input open for a line a test types.
     pub(crate) fn running(&self, args: &[&str]) -> Running {
         let mut running = self
             .command(args)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -1195,8 +1197,19 @@ impl Running {
         }
     }
 
-    // What it printed and its exit status, once it has ended, within a minute.
+    pub(crate) fn is_running(&mut self) -> bool {
+        self.running.try_wait().expect("its status").is_none()
+    }
+
+    pub(crate) fn types_a_line(&mut self) {
+        let input = self.running.stdin.as_mut().expect("its standard input");
+        input.write_all(b"\n").expect("a line typed");
+    }
+
+    // What it printed and its exit status, once it has ended, within a minute. Its input is
+    // closed first, which ends a stand-in waiting for a line with nothing stored.
     pub(crate) fn finish(mut self) -> (String, String, i32) {
+        drop(self.running.stdin.take());
         let deadline = Instant::now() + Duration::from_secs(60);
         // Its standard error closes as it exits, and nothing it starts keeps it.
         loop {
@@ -1316,28 +1329,13 @@ impl Drop for Env {
     }
 }
 
-/// A Codex login the way `codex login` writes one, for `account`: an ID token naming it,
-/// signed by nothing, and nothing in Pitboard checks a signature: it reads the claims.
+pub(crate) fn envelope(out: &str) -> serde_json::Value {
+    serde_json::from_str(out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"))
+}
+
+/// A Codex login the way `codex login` writes one, for `account`.
 pub(crate) fn codex_login(account: &str, email: &str, refresh: &str) -> serde_json::Value {
-    let claims = serde_json::json!({
-        "email": email,
-        "https://api.openai.com/auth": {
-            "chatgpt_account_id": account,
-            "chatgpt_user_id": format!("user-{account}"),
-            "chatgpt_plan_type": "pro",
-        },
-    });
-    serde_json::json!({
-        "auth_mode": "chatgpt",
-        "OPENAI_API_KEY": null,
-        "tokens": {
-            "id_token": pitboard_core::testing::unsigned_token(&claims),
-            "access_token": format!("codex-access-{refresh}"),
-            "refresh_token": refresh,
-            "account_id": account,
-        },
-        "last_refresh": "2026-09-15T05:05:11Z",
-    })
+    pitboard_core::testing::codex_login(account, email, &format!("codex-access-{refresh}"), refresh)
 }
 
 /// What a stand-in for `codex login` does once started: store `login` in whichever

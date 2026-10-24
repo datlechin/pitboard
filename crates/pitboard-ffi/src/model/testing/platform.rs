@@ -1,8 +1,11 @@
-use crate::model::{AppControl, Notifications, PlatformError, RunOutNotice};
+use crate::model::{
+    AppControl, ModelListener, Notifications, PitboardModel, PlatformError, RunOutNotice, Snapshot,
+};
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
+use std::time::{Duration, Instant};
 
 /// What else an app quitting does, given the app's id.
 type OnQuit = Box<dyn Fn(&str) + Send>;
@@ -182,5 +185,98 @@ impl Notifications for Posted {
             }),
             None => Ok(()),
         }
+    }
+}
+
+/// As long as a test waits for another thread, however slow the machine running it.
+pub(crate) const PATIENCE: Duration = Duration::from_secs(30);
+
+/// What a listener does with the model from inside `changed`.
+pub(crate) type Inside = Box<dyn FnOnce(&PitboardModel) + Send>;
+
+/// Keeps every snapshot it is told of, and can call the model back from inside `changed`.
+#[derive(Default)]
+pub(crate) struct Told {
+    pub(crate) snapshots: Mutex<Vec<Snapshot>>,
+    pub(crate) arrived: Condvar,
+    /// The model, for a listener that calls it back.
+    pub(crate) model: OnceLock<Weak<PitboardModel>>,
+    /// Done once, from inside the first `changed` told of a read that has landed, where a
+    /// test says so.
+    pub(crate) once_read: Mutex<Option<Inside>>,
+    /// The revision `snapshot` gave from inside `changed`, each time, beside the one told.
+    pub(crate) asked_inside: Mutex<Vec<(u64, u64)>>,
+    /// Told the revision of each call as it starts, before it is held, where a test says so.
+    pub(crate) entered: Mutex<Option<Sender<u64>>>,
+    /// Holds each call until the test lets it go, where a test says so.
+    pub(crate) hold: Mutex<Option<Receiver<()>>>,
+}
+
+impl ModelListener for Told {
+    fn changed(&self, snapshot: Snapshot) -> Result<(), PlatformError> {
+        if let Some(model) = self.model.get().and_then(Weak::upgrade) {
+            let inside = model.snapshot().revision;
+            self.asked_inside
+                .lock()
+                .expect("a test's own lock")
+                .push((snapshot.revision, inside));
+            if !snapshot.reading
+                && snapshot.status.is_some()
+                && let Some(once) = self.once_read.lock().expect("a test's own lock").take()
+            {
+                once(&model);
+            }
+        }
+        if let Some(entered) = self.entered.lock().expect("a test's own lock").as_ref() {
+            let _ = entered.send(snapshot.revision);
+        }
+        if let Some(hold) = self.hold.lock().expect("a test's own lock").as_ref() {
+            let _ = hold.recv();
+        }
+        self.snapshots
+            .lock()
+            .expect("a test's own lock")
+            .push(snapshot);
+        self.arrived.notify_all();
+        Ok(())
+    }
+}
+
+impl Told {
+    /// Waits until the snapshots told so far satisfy `done`, and says what they were.
+    pub(crate) fn until(&self, what: &str, done: impl Fn(&[Snapshot]) -> bool) -> Vec<Snapshot> {
+        let started = Instant::now();
+        let mut snapshots = self.snapshots.lock().expect("a test's own lock");
+        while !done(&snapshots) {
+            let left = PATIENCE
+                .checked_sub(started.elapsed())
+                .unwrap_or_else(|| panic!("never told {what}: {snapshots:#?}"));
+            snapshots = self
+                .arrived
+                .wait_timeout(snapshots, left)
+                .expect("a test's own lock")
+                .0;
+        }
+        snapshots.clone()
+    }
+
+    /// The last snapshot told, once `done` holds of it.
+    pub(crate) fn last_where(&self, what: &str, done: impl Fn(&Snapshot) -> bool) -> Snapshot {
+        self.until(what, |told| told.last().is_some_and(&done))
+            .pop()
+            .expect("a snapshot")
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.snapshots.lock().expect("a test's own lock").len()
+    }
+}
+
+/// Waits until `done` says so, checking every few milliseconds.
+pub(crate) fn eventually(what: &str, done: impl Fn() -> bool) {
+    let started = Instant::now();
+    while !done() {
+        assert!(started.elapsed() < PATIENCE, "never {what}");
+        std::thread::sleep(Duration::from_millis(5));
     }
 }

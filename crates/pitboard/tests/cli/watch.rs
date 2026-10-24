@@ -2,16 +2,12 @@
 //! installation: the numbers Pitboard measured are written where every front end records
 //! them, and the switch it makes by itself is the real one, against a stand-in for Anthropic.
 
-use crate::common::{Env, two_accounts};
+use crate::common::{Env, envelope, two_accounts};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Stdio};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
-
-fn envelope(out: &str) -> Value {
-    serde_json::from_str(out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"))
-}
 
 /// `pitboard watch --json` left running, killed and reaped on drop, panic or not: CI waits on
 /// a process a test leaves behind.
