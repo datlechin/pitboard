@@ -286,7 +286,7 @@ impl Windows {
     /// such read lists every enrolled account, from the account index, so that is a
     /// forgotten account, forgotten in the app or with `pitboard forget`.
     pub(crate) fn read_enrolled(&mut self, status: &Status, jobs: &mut Vec<super::state::Job>) {
-        let keeping: BTreeSet<String> = window_accounts(status.accounts.clone())
+        let keeping: BTreeSet<String> = window_accounts(&status.accounts)
             .into_iter()
             .map(|window| store_key(&window.store))
             .collect();
@@ -453,7 +453,7 @@ impl Windows {
         if self.open.iter().all(|window| window.shown.is_some()) {
             return;
         }
-        let accounts = window_accounts(status.accounts.clone());
+        let accounts = window_accounts(&status.accounts);
         for at in 0..self.open.len() {
             if self.open[at].shown.is_some() {
                 continue;
@@ -640,7 +640,7 @@ impl Windows {
                 Picking::ReadFailed(problem.to_owned())
             }));
         };
-        let accounts: Vec<WindowAccount> = window_accounts(status.accounts.clone())
+        let accounts: Vec<WindowAccount> = window_accounts(&status.accounts)
             .into_iter()
             .filter(|account| account.site.host == link.site.host)
             .collect();
@@ -774,7 +774,7 @@ impl Windows {
 /// The window of the account whose store is `store`, in lower case, among the accounts
 /// `status` lists.
 fn window_of(status: &Status, store: &str) -> Option<WindowAccount> {
-    window_accounts(status.accounts.clone())
+    window_accounts(&status.accounts)
         .into_iter()
         .find(|account| store_key(&account.store) == store)
 }

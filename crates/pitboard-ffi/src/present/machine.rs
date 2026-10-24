@@ -14,6 +14,7 @@ use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
 use crate::{AutoSwitched, Check, FoundCommandLine, Level, Schedule};
 use pitboard_core::duty::autoswitch::Threshold;
+use pitboard_core::host::Os;
 
 /// What the app shows of this machine rather than its accounts. Not called `Machine`, the
 /// name the model's tests give the core they script.
@@ -61,10 +62,8 @@ pub struct WarmShown {
 pub struct WarmAccountShown {
     /// Its label with its tool, which `Intent::SetWarm` takes back.
     pub qualified: String,
-    /// Its name.
+    /// Its name, with the plan its login says it is on: "work · Team 5x".
     pub title: String,
-    /// The plan its login says it is on, where one does.
-    pub plan: Option<String>,
     /// Whether it is warmed up.
     pub on: bool,
     /// Where its warm-up stands, while it is turned on: "Warms up again at 22:50".
@@ -92,6 +91,8 @@ pub struct AtLimitShown {
     pub at_label: String,
     // the control that sets the share
     pub share_label: String,
+    // beside that control, where a system says its range
+    pub share_range: String,
     pub note: Option<String>,
     // under Switch, what switching came to last
     pub standing: Option<String>,
@@ -116,12 +117,8 @@ pub struct TermsShown {
 /// Daily renewal, as the settings show it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ScheduleShown {
-    // as the core last read it
-    pub schedule: Option<Schedule>,
     // what was asked for while a change is under way, so the switch does not snap back
     pub on: bool,
-    // from the moment it is asked for until the schedule is read back after it
-    pub changing: bool,
     // turning renewal off always can, which is how a schedule that cannot work goes
     pub enabled: bool,
     // while the scheduler does not have it: none here, or why this copy cannot schedule
@@ -158,9 +155,6 @@ pub struct CheckLine {
     /// one of a tool's is `parked_login`, or `codex_parked_login`, so a list whose rows
     /// claimed the code would have two or more rows of one identity.
     pub id: u64,
-    /// What kind of check it is, as `pitboard doctor --json` gives a check's `code`. Several
-    /// checks can share one.
-    pub code: String,
     pub name: String,
     pub level: Level,
     /// The level in words, where a symbol shows it: "Passed", "Worth looking at", "Failed".
@@ -227,6 +221,9 @@ pub struct CommandLineShown {
     pub offers_link: bool,
     /// Why it is not offered, where none was found and this copy runs from a temporary place.
     pub cannot_link: Option<String>,
+    /// Where none was found on Windows, whose installer puts the command line on the `PATH`:
+    /// which terminals see it.
+    pub terminal_note: Option<String>,
 }
 
 /// What the app shows of this machine.
@@ -254,16 +251,19 @@ fn warm(seen: &Seen) -> WarmShown {
                 .iter()
                 .map(|choice| WarmAccountShown {
                     qualified: choice.qualified.clone(),
-                    title: choice.account.clone(),
-                    plan: seen
-                        .accounts()
-                        .iter()
-                        .find(|account| account.qualified.as_deref() == Some(&choice.qualified))
-                        .and_then(|account| account.plan.clone()),
+                    title: words::named_in_menu(
+                        seen.os,
+                        &choice.account,
+                        seen.accounts()
+                            .iter()
+                            .find(|account| account.qualified.as_deref() == Some(&choice.qualified))
+                            .and_then(|account| account.plan.as_deref()),
+                        None,
+                    ),
                     on: choice.on,
                     standing: choice.standing.as_ref().map(|standing| {
-                        pitboard_core::words::capitalised(&pitboard_core::words::warm_standing(
-                            standing, &clock,
+                        words::typeset(&pitboard_core::words::capitalised(
+                            &pitboard_core::words::warm_standing(standing, &clock),
                         ))
                     }),
                 })
@@ -280,7 +280,7 @@ fn warm(seen: &Seen) -> WarmShown {
             .filter(|_| state.warm.any_on())
             .and_then(|overview| {
                 if let Some(halt) = &overview.halted {
-                    return Some(pitboard_core::words::warming_halted(halt));
+                    return Some(words::typeset(&pitboard_core::words::warming_halted(halt)));
                 }
                 if let Some(failed) = &state.warm.failed {
                     return Some(format!("The last warm-up came to nothing: {failed}"));
@@ -316,7 +316,7 @@ fn warm(seen: &Seen) -> WarmShown {
 
 fn terms() -> TermsShown {
     TermsShown {
-        sentence: format!("{}.", pitboard_core::words::TERMS_MAY_COVER_THIS),
+        sentence: words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS),
         link_title: "Is this allowed?".into(),
         link: pitboard_core::words::IS_THIS_ALLOWED_URL.into(),
     }
@@ -338,7 +338,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
         format!(
             "While a login file is left behind {}, Claude Code sessions already running {}.",
             pitboard_core::words::store_in_front(seen.os),
-            pitboard_core::words::kept_until_renewed()
+            words::typeset(pitboard_core::words::kept_until_renewed())
         )
     } else {
         format!(
@@ -384,6 +384,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
         heading: AT_LIMIT.into(),
         at_label: format!("{AT_LIMIT} {at}%"),
         share_label: "Share of a limit".into(),
+        share_range: words::share_range(Threshold::LOWEST, Threshold::HIGHEST),
         note,
         standing: state
             .auto_standing
@@ -398,23 +399,23 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
 /// the core's sentences, as `pitboard watch` says them, with clock times as the person's own
 /// clock says them.
 fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
-    match standing {
+    let came = match standing {
         AutoStanding::Came(AutoSwitched::Watching {
             account,
             used,
             as_of,
             held_until,
         }) => pitboard_core::words::watching(
-            account,
+            &words::quoted(account),
             used.as_deref(),
             as_of.map(|at| seen.clock(at)).as_deref(),
             held_until.map(|until| seen.clock(until)).as_deref(),
         ),
         AutoStanding::Came(AutoSwitched::Waiting { from, used, until }) => {
-            pitboard_core::words::auto_waiting(from, used, &seen.clock(*until))
+            pitboard_core::words::auto_waiting(&words::quoted(from), used, &seen.clock(*until))
         }
         AutoStanding::Came(AutoSwitched::Switched { from, to, used, .. }) => {
-            pitboard_core::words::auto_switched(from, to, used)
+            pitboard_core::words::auto_switched(&words::quoted(from), &words::quoted(to), used)
         }
         AutoStanding::Came(AutoSwitched::Skipped {
             from,
@@ -423,7 +424,7 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
             until,
             ..
         }) => pitboard_core::words::auto_skipped(
-            from,
+            &words::quoted(from),
             used,
             why,
             until.map(|until| seen.clock(until)).as_deref(),
@@ -434,18 +435,11 @@ fn auto_standing(seen: &Seen, standing: &AutoStanding) -> String {
                 until.map(|until| seen.clock(until)).as_deref(),
             )
         }
-        AutoStanding::Stopped {
-            message,
-            until: Some(until),
-        } => format!(
-            "Pitboard could not switch Claude Code, and tries again at {}: {message}",
-            seen.clock(*until)
-        ),
-        AutoStanding::Stopped {
-            message,
-            until: None,
-        } => format!("Pitboard cannot tell whether to switch Claude Code: {message}"),
-    }
+        AutoStanding::Stopped { message, until } => {
+            return words::auto_stopped(until.map(|until| seen.clock(until)).as_deref(), message);
+        }
+    };
+    words::typeset(&came)
 }
 
 /// Daily renewal, as SettingsView.swift showed it from MachineModel.swift's `schedule`,
@@ -476,9 +470,7 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         })
         .filter(|failed| note.as_ref() != Some(failed));
     ScheduleShown {
-        schedule: machine.schedule.clone(),
         on: machine.scheduling.unwrap_or(renews_daily),
-        changing: machine.scheduling.is_some(),
         enabled: machine.scheduling.is_none() && (renews_daily || cannot.is_none()),
         note,
         failed,
@@ -503,7 +495,7 @@ fn checks(seen: &Seen) -> ChecksShown {
         .filter(|_| any)
         .map(|refused| Check {
             code: "notification_not_posted".into(),
-            name: "Notifications".into(),
+            name: words::NOTIFICATIONS.into(),
             level: Level::Warn,
             detail: words::not_posted(&refused.title, &seen.clock(refused.at), &refused.reason),
             advice: String::new(),
@@ -514,7 +506,6 @@ fn checks(seen: &Seen) -> ChecksShown {
             .zip(&checks)
             .map(|(id, check)| CheckLine {
                 id,
-                code: check.code.clone(),
                 name: words::check_name(&check.code, &check.name),
                 level: check.level,
                 spoken_level: words::spoken_level(check.level).to_owned(),
@@ -523,7 +514,7 @@ fn checks(seen: &Seen) -> ChecksShown {
                     .then(|| words::check_text(&check.advice)),
             })
             .collect(),
-        summary: any.then(|| crate::doctor_summary(&checks)),
+        summary: any.then(|| words::typeset(&crate::doctor_summary(&checks))),
         level: crate::doctor_level(&checks),
         checking,
         checked: machine
@@ -578,12 +569,13 @@ fn command_line(seen: &Seen) -> CommandLineShown {
         },
         offers_link: nowhere && own.lasting(),
         cannot_link: (nowhere && own.temporary).then(|| words::cannot_link(seen.os)),
+        terminal_note: (nowhere && seen.os == Os::Windows).then(|| words::NEW_TERMINALS.into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CheckLine, ChecksShown};
+    use super::{CheckLine, ChecksShown, words};
     use crate::launch::Check;
     use crate::present::present_on;
     use crate::present::testing::{
@@ -687,7 +679,8 @@ mod tests {
         checks(shown).lines
     }
 
-    // The line over the checks is as bad as the worst of them, in its colour as in its words.
+    // The line over the checks is as bad as the worst of them, in its colour as in doctor's
+    // words.
     #[test]
     fn the_line_over_the_checks_takes_the_worst_level() {
         let level = |levels: &[Level]| {
@@ -696,27 +689,22 @@ mod tests {
                 .map(|&level| ("state", "accounts", level, "", ""))
                 .collect();
             let shown = checks(&shown);
-            (shown.level, shown.summary)
+            let said = (!levels.is_empty()).then(|| {
+                words::typeset(&pitboard_core::words::doctor_summary(levels.iter().map(
+                    |level| match level {
+                        Level::Ok => pitboard_core::doctor::Level::Ok,
+                        Level::Warn => pitboard_core::doctor::Level::Warn,
+                        Level::Fail => pitboard_core::doctor::Level::Fail,
+                    },
+                )))
+            });
+            assert_eq!(shown.summary, said);
+            shown.level
         };
-        assert_eq!(
-            level(&[Level::Ok, Level::Ok]),
-            (
-                Level::Ok,
-                Some("Everything Pitboard checks is in order.".into())
-            )
-        );
-        assert_eq!(
-            level(&[Level::Warn, Level::Ok]),
-            (Level::Warn, Some("One thing is worth looking at.".into()))
-        );
-        assert_eq!(
-            level(&[Level::Ok, Level::Fail, Level::Warn]),
-            (
-                Level::Fail,
-                Some("1 broken: do not switch accounts until fixed.".into())
-            )
-        );
-        assert_eq!(level(&[]), (Level::Ok, None));
+        assert_eq!(level(&[Level::Ok, Level::Ok]), Level::Ok);
+        assert_eq!(level(&[Level::Warn, Level::Ok]), Level::Warn);
+        assert_eq!(level(&[Level::Ok, Level::Fail, Level::Warn]), Level::Fail);
+        assert_eq!(level(&[]), Level::Ok);
     }
 
     fn names(checks: &[(&str, &str)]) -> Vec<String> {
@@ -738,6 +726,7 @@ mod tests {
                 ("claude_version", "Claude Code build"),
                 ("no_argv", "PITBOARD_NO_ARGV"),
                 ("machine_id", "machine id"),
+                ("schedule_proxy", "renewal schedule's proxy"),
             ]),
             [
                 "Config file",
@@ -746,6 +735,7 @@ mod tests {
                 "Claude Code build",
                 "PITBOARD_NO_ARGV",
                 "Machine ID",
+                "Renewal schedule’s proxy",
             ]
         );
     }
@@ -889,10 +879,9 @@ mod tests {
     #[test]
     fn windows_sets_warm_ups_as_macos_does() {
         use pitboard_core::duty::warm::{Choice, Halt, Overview, Range, Standing};
-        let mut state = read(
-            status(vec![account(Some("work")).signed_in().build()], Vec::new()),
-            vec![claude_code()],
-        );
+        let mut work = account(Some("work")).signed_in().build();
+        work.plan = Some("Team 5x".into());
+        let mut state = read(status(vec![work], Vec::new()), vec![claude_code()]);
         let overview = |on: bool| Overview {
             range: Range::DEFAULT,
             halted: Some(Halt::ProgramMissing),
@@ -908,10 +897,9 @@ mod tests {
             (false, None),
             (
                 true,
-                Some(
-                    "Pitboard is not warming up accounts: Claude Code is not installed where \
-                     Pitboard looks.",
-                ),
+                Some(words::typeset(&pitboard_core::words::warming_halted(
+                    &Halt::ProgramMissing,
+                ))),
             ),
         ] {
             state.warm.overview = Some(overview(on));
@@ -919,7 +907,12 @@ mod tests {
             assert_eq!(windows, present_on(Os::MacOs, &state, 0, &Utc).machine.warm);
             assert!(windows.enabled, "{on}");
             assert_eq!(windows.none_enrolled, None);
-            assert_eq!(windows.standing.as_deref(), said, "{on}");
+            assert_eq!(
+                windows.accounts[0].title,
+                words::named_in_menu(Os::Windows, "work", Some("Team 5x"), None),
+                "with its plan, as the menu names it"
+            );
+            assert_eq!(windows.standing, said, "{on}");
             assert_eq!(
                 windows.note,
                 "Pitboard starts each account’s five-hour period as soon as the last one resets, \

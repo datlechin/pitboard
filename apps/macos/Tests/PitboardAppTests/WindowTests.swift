@@ -88,7 +88,7 @@ import Testing
 @Test func theBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid() {
     func width(_ pace: LimitPace?) -> CGFloat {
         let limit = LimitRow(
-            name: "5-hour", short: "5h", percent: 42, figure: "42%", level: .plenty,
+            short: "5h", percent: 42, figure: "42%", level: .plenty,
             resets: "resets in 2h 10m", pace: pace, spoken: "5-hour limit 42% used")
         return NSHostingView(rootView: UsageBars(limits: [limit])).fittingSize.width
     }

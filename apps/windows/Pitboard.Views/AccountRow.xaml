@@ -71,7 +71,7 @@
       </Grid>
       <TextBlock
           x:Name="EmailText"
-          Text="{x:Bind Account.Item.Email, Mode=OneWay}"
+          Text="{x:Bind local:AccountRow.EmailLine(Account.Item), Mode=OneWay}"
           Visibility="{x:Bind local:AccountRow.EmailShown(Account.Item), Mode=OneWay}"
           Style="{StaticResource SecondaryCaptionTextBlockStyle}"
           TextWrapping="NoWrap"
@@ -82,9 +82,9 @@
           x:Name="SwitchingRing"
           Width="16"
           Height="16"
-          IsActive="{x:Bind Account.Item.Switching, Mode=OneWay}"
-          Visibility="{x:Bind Account.Item.Switching, Mode=OneWay}"
-          AutomationProperties.Name="Switching" />
+          IsActive="{x:Bind local:AccountRow.Switching(Account.Item), Mode=OneWay}"
+          Visibility="{x:Bind local:AccountRow.SwitchingShown(Account.Item), Mode=OneWay}"
+          AutomationProperties.Name="{x:Bind local:AccountRow.SwitchingSpoken(Account.Item), Mode=OneWay}" />
       <StackPanel x:Name="InUseLabel" Orientation="Horizontal" Spacing="6" Visibility="{x:Bind local:AccountRow.InUseShown(Account.Item), Mode=OneWay}">
         <FontIcon
             x:Name="InUseCheck"
@@ -93,7 +93,9 @@
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             IsTextScaleFactorEnabled="False"
             AutomationProperties.AccessibilityView="Raw" />
-        <TextBlock Text="In use" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <TextBlock
+            Text="{x:Bind local:AccountRow.InUseTitle(Account.Item), Mode=OneWay}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
       </StackPanel>
       <Button
           x:Name="ActionButton"

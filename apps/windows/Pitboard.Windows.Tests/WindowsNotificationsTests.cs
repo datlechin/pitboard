@@ -19,7 +19,7 @@ public sealed class WindowsNotificationsTests
     // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-ffi/src/model/warming.rs).
     private static readonly RunOutNotice WarmFailed = new(
         Id: "warm-failed/personal/warm_up_not_started",
-        Title: "Pitboard could not warm up an account", Subtitle: null,
+        Title: "Pitboard couldn’t warm up an account", Subtitle: null,
         Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
         Clicked: "limits", Button: null);
 
@@ -258,7 +258,7 @@ public sealed class WindowsNotificationsTests
         using var model = PitboardModel.FixtureIn("oneTool", folder, told, new NoOtherApps(), notifications, new WindowsLocalTime());
 
         model.Send(new Intent.Start());
-        Assert.IsNotNull(told.Until(snapshot => snapshot is { Reading: false, UpdatedAt: not null, Status.Accounts.Length: > 0 }), "no accounts were read");
+        Assert.IsNotNull(told.Until(snapshot => snapshot is { Reading: false, UpdatedWindow.Length: > 0, Sections.Length: > 0 }), "no accounts were read");
         model.Send(new Intent.SwitchTo("claude/personal"));
         var shown = system.Shown.TryTake(out var notification, Patience);
         model.Shutdown();

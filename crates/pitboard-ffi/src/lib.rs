@@ -3,8 +3,8 @@
 //! An app makes one `PitboardModel`, sends it what was asked of it, and shows the snapshots
 //! its listener is told of. Nothing the model exports waits on the core: `launch.rs` makes
 //! the core from what the app was started with, and only the model's own threads call it.
-//! Beside the model and the records its snapshots carry, the bindings export the sites
-//! (`sites.rs`), the account windows' rules (`account_windows`), `check_name` and
+//! Beside the model and the records its snapshots carry, the bindings export the sites'
+//! records (`sites.rs`), the account windows' rules (`account_windows`), `check_name` and
 //! `downloads_quit_question` of `present`, the fixtures' `fixture_names` and `fixture_page`,
 //! and three free functions the macOS app asks of its bundle and its environment,
 //! `app_command_line`, `can_run` and `pitboard_directory`, and the Windows app's
@@ -27,6 +27,7 @@
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
+use pitboard_core::status::{Stale, Standing};
 use pitboard_core::{doctor, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -34,14 +35,14 @@ use std::path::{Path, PathBuf};
 uniffi::setup_scaffolding!();
 
 mod sites;
-pub use sites::{Conjunction, Site, SiteLink, site_names, sites_for};
+pub use sites::{Site, SiteLink};
 
 mod model;
 pub use model::{
-    AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure,
-    Intent, LastSwitch, LocalTime, ModelListener, NotificationButton, NotificationButtonKind,
-    Notifications, Pane, PitboardModel, PlatformError, QuitQuestion, ReadFailure, RestartNeeded,
-    RunOutNotice, RunningSignIn, Sheet, Snapshot, Tip, WindowRequest, WindowsLaunch,
+    AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Intent,
+    LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications, Pane,
+    PitboardModel, PlatformError, ReadFailure, RunOutNotice, RunningSignIn, Sheet, Snapshot, Tip,
+    WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -53,12 +54,13 @@ mod present;
 pub use present::{
     AccountItem, AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown,
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice,
-    CommandLineShown, DownloadShown, DownloadState, EmptyList, Footing, ItemAction, ItemOffer,
-    LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
-    NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount,
-    PickerShown, Question, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
-    SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown,
-    WindowOffer, WindowWaiting, check_name, downloads_quit_question,
+    CommandLineShown, DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction,
+    ItemOffer, LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices,
+    Missing, NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice,
+    PickerAccount, PickerShown, Question, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
+    SheetText, SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown,
+    WarmAccountShown, WarmShown, WindowOffer, WindowQuestion, WindowWaiting, check_name,
+    downloads_quit_question,
 };
 
 mod account_windows;
@@ -68,7 +70,7 @@ pub use account_windows::{
     SignInWindowSize, SiteMenu, WindowAccount, WindowNoteKind, after_content_process_ended,
     decide_navigation, decide_response, dialog_title, download_destination, download_host,
     download_question, frame_asker, opening_note, page_may_close, page_may_use, remove_data_alert,
-    sign_in_window_size, site_menus, window_accounts, window_home, window_note,
+    sign_in_window_size, window_home, window_note,
 };
 
 // The core the model's lanes call, made from what the app was started with, and what it
@@ -82,15 +84,14 @@ pub(crate) use launch::{
 #[cfg(any(test, feature = "fixture"))]
 pub(crate) use launch::{ASK_AGAIN_AFTER, Made};
 
-/// A tool Pitboard handles, as the app names it to a person.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Tool {
-    /// What a label's prefix and every `provider` field say: `claude`, `codex`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Tool {
+    // what a label's prefix and every `provider` field say: `claude`, `codex`
     pub code: String,
-    /// As its own documentation names it: `Claude Code`, `Codex`.
+    // as its own documentation names it: `Claude Code`, `Codex`
     pub name: String,
     pub program: String,
-    /// The company behind it, which is who is asked about its accounts.
+    // the company asked about its accounts
     pub service: String,
 }
 
@@ -207,151 +208,120 @@ pub fn windows_records_key(directory: String) -> String {
     pitboard_core::host::path_key_in_any_case(&directory)
 }
 
-/// Something to know about that did not stop the operation.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Warning {
+// Something to know about that did not stop the operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Warning {
     pub code: String,
     pub message: String,
-    /// The account a warning that stands until it is put right is about, as `Account.id`
-    /// names it, where its words change while it stands: `login_replaced` names whose login
-    /// the tool has stored now, which every switch changes. `None` for every other warning.
+    // as `Account.id` names it, for a warning whose words change while it stands
     pub account: Option<String>,
-    /// What the file a `fallback_login` warning is about holds, which says whether it can be
-    /// put away: one Pitboard cannot read cannot. `None` for every other warning.
+    // what the file a `fallback_login` warning is about holds, so whether it can be put away
     pub held: Option<Held>,
     // the tool it is about, as a `Tool`'s code, where it names one
     pub provider: Option<String>,
 }
 
-/// What a file behind a tool's store holds, as far as Pitboard can read it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Held {
-    /// A login of the tool's, which a session that cannot read that store signs in with.
+// What a file behind a tool's store holds, as far as Pitboard can read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Held {
     Login,
-    /// No login of the tool's.
     NoLogin,
-    /// It is there, and cannot be read.
     Unreadable,
 }
 
-/// An interrupted switch that was given up on, keeping every login it named.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Abandoned {
+// What the core reports, as the model keeps it: the snapshot shows it only as presented.
+
+// An interrupted switch given up on, which kept every login it named.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Abandoned {
     pub from: String,
     pub to: String,
-    /// Copies kept rather than deleted, because which one is live is now unknown.
+    // copies kept rather than deleted, since which one is live is now unknown
     pub logins_kept: u32,
 }
 
-/// Whether anything keeps parked logins alive on this machine without a command being run.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum Schedule {
-    /// The platform's own scheduler runs `pitboard renew` every `every_seconds`.
+// Whether anything keeps parked logins alive on this machine without a command being run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Schedule {
+    // the platform's own scheduler runs `pitboard renew` every `every_seconds`
     Installed { path: String, every_seconds: u32 },
-    /// Nothing does. Parked logins are renewed when Pitboard runs, and otherwise not.
+    // parked logins are renewed when Pitboard runs, and otherwise not
     Absent,
-    /// This platform has no scheduler Pitboard knows how to write.
+    // no scheduler Pitboard knows how to write
     Unsupported,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Source {
-    Live,
-    Remembered,
-}
-
-/// One limit an account is measured against, such as the five-hour session or the week.
-/// Named for what it is rather than `Window`, which SwiftUI and WinUI each have a type of.
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct Limit {
-    /// `session`, `weekly_all`, `weekly_scoped`, or another limit's name, such as `1_day`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Limit {
+    // `session`, `weekly_all`, `weekly_scoped`, or another limit's name, such as `1_day`
     pub kind: String,
-    /// How long the window runs, where that is known. The way to name a window to a person
-    /// whatever its service called it.
     pub length_seconds: Option<i64>,
-    /// The model a scoped limit applies to.
+    // the model a scoped limit applies to
     pub scope: Option<String>,
-    /// Share already used; past 100 once exceeded.
+    // past 100 once exceeded
     pub percent: f64,
     pub resets_at: Option<i64>,
-    /// How Anthropic grades this row, when it grades it.
     pub severity: Option<String>,
-    /// Whether this limit is one the account is working against now.
     pub is_active: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct Usage {
-    pub source: Source,
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Usage {
     pub observed_at: Option<i64>,
     pub windows: Vec<Limit>,
-    /// Whether `windows` are every limit the account has, so a limit they leave out is one
-    /// it does not have.
+    // a limit `windows` leaves out is one the account does not have
     pub lists_every_limit: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Parked {
-    pub parked_at: i64,
-    pub access_expires_at: Option<i64>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Parked {
     pub refresh_expires_at: Option<i64>,
     // when the session cookie a parked app login holds says it lapses
     pub session_expires_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct Account {
-    /// Unique among the accounts of one status, and stable between two: the tool and the
-    /// account, or the tool alone for a login that belongs to no account Pitboard can name.
-    /// Two tools' accounts can share a label, so a label cannot be an identity.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Account {
+    // the tool and the account, since two tools' accounts can share a label
     pub id: String,
-    /// Which tool the account is for, as a `Tool`'s `code`.
+    // a `Tool`'s code
     pub provider: String,
-    /// `None` for an account signed in but not enrolled.
+    // `None` for an account signed in but not enrolled
     pub label: Option<String>,
-    /// The label with its tool, `claude/work` or `codex/work`: what to pass back to switch
-    /// to, forget or rename it, which names exactly one account whatever else is enrolled.
-    /// `None` exactly when `label` is.
+    // `claude/work`: what a switch, a forget or a rename names it by
     pub qualified: Option<String>,
-    /// A login of this tool is there and belongs to no account Pitboard can name: one it
-    /// could not read, or one it cannot switch, such as an API key. Not an account to enrol.
+    // a login of the tool that belongs to no account Pitboard can name
     pub unplaced: bool,
     pub email: String,
-    /// What Pitboard files the account under, which its windows' stores derive from. Empty
-    /// for a login Pitboard cannot place.
+    // what its windows' stores derive from; empty for a login Pitboard cannot place
     pub account_id: String,
     pub signed_in: bool,
-    /// Whether switching to it would work now.
-    pub switchable: bool,
+    pub standing: Standing,
     pub parked: Option<Parked>,
     pub usage: Option<Usage>,
-    /// Why the usage is not live, when it is not.
-    pub stale: Option<String>,
-    /// What to tell a person about `stale`, when it is worth a word.
+    pub stale: Option<Stale>,
     pub stale_explanation: Option<String>,
-    /// The plan its login says it is on, or last said: "Max 20x", "Pro".
     pub plan: Option<String>,
     // when Pitboard last read it in use, for a tool no read asks
     pub read_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct Status {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Status {
     pub now: i64,
-    /// The signed-in account first.
+    // the signed-in account first
     pub accounts: Vec<Account>,
     pub warnings: Vec<Warning>,
     // the sign-ins inside an app left halfway, each with an account parked for it
     pub awaiting: Vec<Awaiting>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Awaiting {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Awaiting {
     pub provider: String,
     pub label: String,
     // the account parked for it, as SwitchTo takes it: desktop/work
     pub put_back: String,
-    pub since: i64,
     // a Sign In Again of `label`, not an add
     pub again: bool,
 }

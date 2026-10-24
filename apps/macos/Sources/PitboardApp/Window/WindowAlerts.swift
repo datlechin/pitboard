@@ -25,47 +25,27 @@ private struct WindowAlerts: ViewModifier {
             } message: { alert in
                 Text(alert.message)
             }
-            // The answer names its account, so the close it also sends may arrive before it.
-            .alert(
-                quitAsked?.question.title ?? "",
-                isPresented: Binding(
-                    get: { shown && quitAsked != nil },
-                    set: { if !$0 { model.send(.keepAppOpen) } }),
-                presenting: quitAsked
-            ) { asked in
-                Button(asked.question.confirm) {
-                    model.send(.quitAndSwitch(qualified: asked.qualified))
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { asked in
-                Text(asked.question.message)
-            }
-            // Answered as the quit question is: the close it also sends may arrive first.
-            .alert(
-                model.replaceQuestion?.question.title ?? "",
-                isPresented: Binding(
-                    get: { shown && model.replaceQuestion != nil },
-                    set: { if !$0 { model.send(.keepLogin) } }),
-                presenting: model.replaceQuestion
-            ) { asked in
-                Button(asked.question.confirm) {
-                    model.send(.replaceAndSwitch(qualified: asked.qualified))
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { asked in
-                Text(asked.question.message)
-            }
-    }
-
-    private var quitAsked: QuitAsked? {
-        guard let question = model.quitConfirmation, let asked = model.quitQuestion else {
-            return nil
-        }
-        return QuitAsked(question: question, qualified: asked.qualified)
+            .question(model.quitQuestion, of: model, shown: shown)
+            .question(model.replaceQuestion, of: model, shown: shown)
     }
 }
 
-private struct QuitAsked: Equatable {
-    let question: Question
-    let qualified: String
+extension View {
+    // The answer names what it answers, so the close it also sends may arrive before it.
+    fileprivate func question(_ asked: WindowQuestion?, of model: AppModel, shown: Bool)
+        -> some View
+    {
+        alert(
+            asked?.question.title ?? "",
+            isPresented: Binding(
+                get: { shown && asked != nil },
+                set: { if !$0, let asked { model.send(asked.declined) } }),
+            presenting: asked
+        ) { asked in
+            Button(asked.question.confirm) { model.send(asked.confirmed) }
+            Button("Cancel", role: .cancel) {}
+        } message: { asked in
+            Text(asked.question.message)
+        }
+    }
 }

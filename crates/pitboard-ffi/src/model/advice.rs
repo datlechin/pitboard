@@ -67,7 +67,7 @@ fn spare(
     let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
     let (spare, room) = usage::preferred(
         mine.iter()
-            .filter(|account| account.switchable && account.qualified.is_some())
+            .filter(|account| account.standing.switchable() && account.qualified.is_some())
             .filter_map(|account| {
                 let theirs = account.usage.as_ref()?;
                 let room = usage::room(
@@ -319,6 +319,7 @@ pub(crate) fn rename_told(told: &mut Told, provider: &str, label: &str, to: &str
 mod tests {
     use super::*;
     use crate::present::testing::{LimitExt, account, both_tools, window};
+    use pitboard_core::status::Standing;
 
     fn status(accounts: Vec<Account>) -> Status {
         Status {
@@ -417,7 +418,7 @@ mod tests {
                 .limits(vec![window("session", 100.0)])
                 .build(),
             account(Some("parked"))
-                .switchable(false)
+                .standing(Standing::LoginExpired)
                 .limits(vec![window("session", 0.0)])
                 .build(),
         ]);

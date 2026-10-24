@@ -15,9 +15,9 @@ public sealed class MachinePageTests
     private static readonly ChecksShown TwoChecks = new(
         Lines:
         [
-            new CheckLine(0, "claude", "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
+            new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
             new CheckLine(
-                1, "home", "Pitboard home", Level.Warn, "Worth looking at",
+                1, "Pitboard home", Level.Warn, "Worth looking at",
                 @"C:\Users\dana\AppData\Local\Temp\pitboard-fixture\home\AppData\Local\Pitboard is readable by others",
                 "Make it yours alone."),
         ],
@@ -38,8 +38,8 @@ public sealed class MachinePageTests
         var checks = new ChecksShown(
             Lines:
             [
-                new CheckLine(0, "claude", "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
-                new CheckLine(1, "parked_login", "account personal", Level.Warn, "Warning", "lapses in 2 days", "Use it to renew it."),
+                new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
+                new CheckLine(1, "account personal", Level.Warn, "Warning", "lapses in 2 days", "Use it to renew it."),
             ],
             Summary: "One thing is worth looking at.", Level: Level.Warn, Checking: false, Checked: "Checked at 09:00", Waiting: null);
         var model = new StandInModel(With(Snapshots.Read(1), checks));

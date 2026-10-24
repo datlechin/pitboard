@@ -5,21 +5,19 @@ import SwiftUI
 /// is already there; or gives an enrolled account a new name, which keeps its parked login
 /// and its place, inside its own tool.
 ///
-/// What it says, its default button's words, whether that can be pressed and what it saves
-/// are the model's: the button offers what `checkName` would save, and the model saves by
-/// the same rule.
+/// What it says, its default button's words, whether that can be pressed and what it sends
+/// are the model's: the button sends what `checkName` returns, and the model saves by the
+/// same rule.
 struct NameSheet: View {
     let model: AppModel
     let sheet: Sheet
-    let saving: (String) -> Intent
     @State private var name: String
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
 
-    init(model: AppModel, sheet: Sheet, saving: @escaping (String) -> Intent) {
+    init(model: AppModel, sheet: Sheet) {
         self.model = model
         self.sheet = sheet
-        self.saving = saving
         _name = State(initialValue: model.sheetText?.name ?? "")
     }
 
@@ -27,7 +25,7 @@ struct NameSheet: View {
         let text = model.sheetText
         // A name being saved cannot be withdrawn, so there is nothing to cancel.
         let busy = text?.saving ?? false
-        let check = checkName(sheet: sheet, typed: name)
+        let check = checkName(sheet: sheet, tool: text?.tool ?? "", typed: name)
         SheetLayout(title: text?.title ?? "", message: text?.message ?? "") {
             Section {
                 TextField("Name", text: $name, prompt: Text(text?.prompt ?? ""))
@@ -48,7 +46,7 @@ struct NameSheet: View {
                 .disabled(busy)
             Button(text?.confirm ?? "", action: save)
                 .keyboardShortcut(.defaultAction)
-                .disabled(check.name == nil || busy)
+                .disabled(check.intent == nil || busy)
         }
         .onAppear { focused = true }
         .onChange(of: name) {
@@ -58,9 +56,9 @@ struct NameSheet: View {
     }
 
     private func save() {
-        guard let name = checkName(sheet: sheet, typed: name).name,
-            model.sheetText?.saving != true
+        guard let text = model.sheetText, !text.saving,
+            let intent = checkName(sheet: sheet, tool: text.tool, typed: name).intent
         else { return }
-        model.send(saving(name))
+        model.send(intent)
     }
 }

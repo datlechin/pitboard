@@ -21,11 +21,9 @@ struct AccountPicker: View {
             if let picker {
                 content(picker)
             } else {
+                let noLink = windows.model.accountWindows.noLink
                 ContentUnavailableView(
-                    "No Link to Open", systemImage: Symbol.site,
-                    description: Text(
-                        "Share a \(siteNames(conjunction: .or)) page with Pitboard from your browser’s "
-                            + "Share menu to open it as one of your accounts."))
+                    noLink.title, systemImage: Symbol.site, description: Text(noLink.detail))
                 HStack {
                     Spacer()
                     Button("Close") { dismissWindow() }

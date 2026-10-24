@@ -72,33 +72,11 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public ulong Revision => Part<ulong>();
 
-    public long Now => Part<long>();
-
     public bool Reading => Part<bool>();
 
-    public long? UpdatedAt => Part<long?>();
+    public WindowQuestion? QuitQuestion => Part<WindowQuestion?>();
 
-    public Status? Status => Part<Status?>();
-
-    public Warning[] Warnings => Part<Warning[]>();
-
-    public ReadFailure? ReadFailure => Part<ReadFailure?>();
-
-    public bool Stuck => Part<bool>();
-
-    public Tool[]? Installed => Part<Tool[]?>();
-
-    public string? SwitchUnderWay => Part<string?>();
-
-    public QuitQuestion? QuitQuestion => Part<QuitQuestion?>();
-
-    public ReplaceQuestion? ReplaceQuestion => Part<ReplaceQuestion?>();
-
-    public LastSwitch[] LastSwitches => Part<LastSwitch[]>();
-
-    public Abandoned? Abandoned => Part<Abandoned?>();
-
-    public Failure? Failure => Part<Failure?>();
+    public WindowQuestion? ReplaceQuestion => Part<WindowQuestion?>();
 
     public WindowRequest WindowRequest => Part<WindowRequest>();
 
@@ -106,15 +84,13 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public Sheet? Sheet => Part<Sheet?>();
 
-    public Failure? SheetFailure => Part<Failure?>();
+    public FailureText? SheetFailure => Part<FailureText?>();
 
     public MenuBarText MenuBar => Part<MenuBarText>();
 
     public AccountSection[] Sections => Part<AccountSection[]>();
 
     public AccountMenuShown AccountMenu => Part<AccountMenuShown>();
-
-    public bool ShowsTools => Part<bool>();
 
     public PanelNotice[] Notices => Part<PanelNotice[]>();
 
@@ -137,8 +113,6 @@ public sealed class AppModel : INotifyPropertyChanged
     public SigningInText? SigningInText => Part<SigningInText?>();
 
     public StowText? StowText => Part<StowText?>();
-
-    public Question? QuitConfirmation => Part<Question?>();
 
     public AlertText? FailureAlert => Part<AlertText?>();
 

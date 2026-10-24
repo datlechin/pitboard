@@ -5,61 +5,48 @@ namespace Pitboard.Windows.Tests;
 // Each call makes every list anew, as the bindings do for every snapshot told.
 internal static class Snapshots
 {
-    private const long At = 1_800_000_000;
-
-    public static Snapshot Read(ulong revision)
-    {
-        var work = new Account(
-            Id: "claude:work", Provider: "claude", Label: "work", Qualified: "claude/work",
-            Unplaced: false, Email: "work@example.com", AccountId: "work", SignedIn: true,
-            Switchable: false, Parked: null,
-            Usage: new Usage(
-                Source.Live, At,
-                [new Limit("session", 18_000, null, 42.0, At + 3_600, null, true)],
-                ListsEveryLimit: true),
-            Stale: null, StaleExplanation: null, Plan: null, ReadAt: null);
-        return new Snapshot(
-            Revision: revision, Now: At, Reading: false, UpdatedAt: At,
-            Status: new Status(At, [work], [], []), Warnings: [], ReadFailure: null, Stuck: false,
-            Installed: [new Tool(Code: "claude", Name: "Claude Code", Program: "claude", Service: "Anthropic")],
-            SwitchUnderWay: null, QuitQuestion: null, ReplaceQuestion: null,
-            LastSwitches: [], Abandoned: null, Failure: null,
+    public static Snapshot Read(ulong revision) =>
+        new(
+            Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Pane: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
                 Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
-            ShowsTools: false, Notices: [],
+            Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
-            SigningInText: null, StowText: null, QuitConfirmation: null, FailureAlert: null,
+            SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
             AccountWindows: new AccountWindowsShown(
                 Accounts: [], Menus: [], Open: [],
                 Waiting: new WindowWaiting(
                     WindowTitle: "Account", Shown: new WaitingShown.Reading(Title: "Reading accounts…")),
-                Closing: [], Deleting: [], Picker: null, Downloads: [], Held: []));
-    }
+                Closing: [], Deleting: [], Picker: null, Downloads: [],
+                NoLink: new EmptyList(
+                    Title: "No link to open",
+                    Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."),
+                Held: []));
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
-            Schedule: null, On: false, Changing: false, Enabled: true, Note: null, Failed: null,
+            On: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
         Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…"),
         Activity: new ActivityShown(
             Lines: [], Empty: new EmptyList(Title: "No activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
-            Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null),
+            Found: null, InTerminal: null, UpdateNote: null, OffersLink: false, CannotLink: null, TerminalNote: null),
         AtLimit: new AtLimitShown(
             Title: "Before an account runs out",
             Choice: AtLimit.Notify,
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
             AtLabel: "When a limit reaches 95%",
-            ShareLabel: "Share of a limit", Note: null, Standing: null, Terms: null),
+            ShareLabel: "Share of a limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
             Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
             NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false, Terms: Terms));
@@ -71,5 +58,5 @@ internal static class Snapshots
     ];
 
     public static readonly TermsShown Terms = new(
-        "Anthropic's terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
+        "Anthropic’s terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 }

@@ -522,14 +522,14 @@ window loads its site, and whatever the site's pages load, as a browser would.
   the macOS app, a dynamic one for the Windows app. An app reaches the core through the
   model alone.
   - `lib.rs` declares what the bindings export beside the model and the account windows'
-    rules: the records a snapshot carries of what the core answered, such as `Status`,
-    `Account` and `Abandoned`, and three free functions, which the macOS app calls, none as
-    it draws: `app_command_line`, for the command line inside its bundle, as it starts and
-    as it links that one; `can_run`, whether that one runs, as it links it; and
-    `pitboard_directory`, for where `app.json` is and the key the account windows' records
-    are kept under, as it starts. The Windows app calls two more as it starts:
-    `launch_refusal`, what the gate every change passes refuses once it has named the app's
-    version to the release gate, the release gate first, then an elevated process, a
+    rules, and the records the model keeps of what the core answered, such as `Status`,
+    `Account` and `Abandoned`, which no snapshot carries. The macOS app calls three of its
+    free functions, none as it draws: `app_command_line`, for the command line inside its
+    bundle, as it starts and as it links that one; `can_run`, whether that one runs, as it
+    links it; and `pitboard_directory`, for where `app.json` is and the key the account
+    windows' records are kept under, as it starts. The Windows app calls two more as it
+    starts: `launch_refusal`, what the gate every change passes refuses once it has named the
+    app's version to the release gate, the release gate first, then an elevated process, a
     Windows build below 26100 and a home that is not a full path, which it shows in place
     of a model; and `windows_records_key`, its records' key. `Pitboard.exe --unregister`
     calls `unschedule_app`, which takes the renewal task away where it runs the command line
@@ -620,7 +620,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
     enrolled of is read only once its step is taken up, `Intent::NameSignedIn`), `sheets.rs` the
     sheets with their default buttons' words, the quit question and a failure's alert, with
     `check_name`, the rule a sheet's default button and the model both save by, which says
-    why what is typed cannot be a name,
+    why what is typed cannot be a name or gives the intent the button sends,
     `machine.rs` what the settings and the window's other panes show of this machine, daily
     renewal, doctor's checks, the activity log and the command line,
     `windows.rs` the account windows, what a window says until it can show its page, what
@@ -628,7 +628,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     downloads an app has under way, and `words.rs` the sentences both apps say and the
     command line does not, each a function of typed values. What the command line says too
     is `pitboard_core::words`', called from there, such as a renewal's note and doctor's
-    summary. A clock time, and a change's date
+    summary, and each such sentence, and each error and warning without words of the app's
+    own, passes `words::typeset`, which curls its apostrophes, contracts the "not"s the apps
+    contract and drops its backticks, as Apple's and Microsoft's style both write an app's
+    text. A clock time, and a change's date
     and time, are the person's to read, so they are asked of the app's `LocalTime`.
     A button the snapshot offers comes with its words beside the intent it sends, and with
     whether it can be pressed now where it can be held back, so a view never words an
@@ -1315,8 +1318,7 @@ window loads its site, and whatever the site's pages load, as a browser would.
   to stop, and the core, a tool's sign-in and the app's `AppControl`, `Notifications` and
   `LocalTime` are called on the model's own threads. The free functions block on nothing,
   and an app may make them where it likes: `check_name` and `downloads_quit_question`,
-  which read only what they are given; `sites_for` and `site_names`, which are
-  `pitboard-sites`' and read only what they are given too;
+  which read only what they are given;
   the account windows' rules, such as `decide_navigation`, `decide_response` and
   `window_note`, which read only what they are given as well, so a web view's delegate asks
   them as it is asked; `download_destination`, which asks the file system whether each name
@@ -1400,6 +1402,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `AppModel.quitAndSwitch` took the question, so an app may close the question with
   `Intent::KeepAppOpen` before or after it sends the answer: a question closed unanswered is
   kept until another switch, sign-in or enrolment is asked for, and an answer is taken once.
+  The snapshot's `WindowQuestion` carries both, the quit question's and the replace
+  question's alike, so neither app words an answer.
 - Changes to a tool whose login is its app's files never overlap. A switch waits until a
   park of the tool for a sign-in has started. No sign-in or recording of it starts while a
   switch of it is claimed. A copy another change quit meanwhile is opened after that
@@ -2250,9 +2254,9 @@ rests on are under [WebKit and SwiftUI](#webkit-and-swiftui) and
 
 - `crates/pitboard-sites`: what a site is, and what a link from outside may be, in the
   [code map](#code-map). The app reaches it through `pitboard-ffi`'s `Site` and `SiteLink`
-  records and `site_names`, and the model reads each Pitboard link with `pitboard-sites`'
-  `read_pitboard_link` and says a refusal in its words. The app tests build a site with
-  `sites_for`. The Share extension reaches it through `pitboard-share-ffi`.
+  records, and the model reads each Pitboard link with `pitboard-sites`' `read_pitboard_link`
+  and says a refusal, and what the Open Link window says with no link, in its words. The app tests build a site record by
+  hand. The Share extension reaches it through `pitboard-share-ffi`.
 - `apps/macos/Sources/PitboardLinkTarget`: where a Pitboard link goes, which the app and the
   Share extension both link. `LinkTarget.swift` names the Info.plist key `PitboardURLScheme`
   that gives each build its scheme, and finds the app an extension is inside.

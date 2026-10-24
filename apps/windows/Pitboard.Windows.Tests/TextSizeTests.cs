@@ -36,7 +36,7 @@ public sealed class TextSizeTests
     {
         var snapshot = Snapshots.Read(1);
         var checks = new ChecksShown(
-            Lines: [new CheckLine(0, "claude", "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null)],
+            Lines: [new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null)],
             Summary: "", Level: Level.Ok, Checking: false, Checked: "Checked at 09:00", Waiting: null);
         FrameworkElement[] views =
         [

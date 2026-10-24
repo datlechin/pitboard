@@ -12,7 +12,7 @@ use super::testing::machine::{Hand, Stub};
 use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
-use crate::present::{CheckLine, MachineShown, present_on};
+use crate::present::{CheckLine, MachineShown, present_on, words};
 use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
 use pitboard_core::host::Os;
 use std::time::Duration;
@@ -25,8 +25,7 @@ fn shown(model: &Hand) -> MachineShown {
 /// Whether the window says something went wrong: a read that did not answer, or something
 /// asked for that did not happen. What is about the schedule is said beside its switch.
 fn window_failure(model: &Hand) -> bool {
-    let snapshot = model.shown();
-    snapshot.read_failure.is_some() || snapshot.failure.is_some()
+    model.state.failure.is_some() || model.state.presented.is_some()
 }
 
 /// A machine with one account and nothing on its scheduler, as the core answers.
@@ -68,7 +67,7 @@ fn daily_renewal_is_on_only_while_the_scheduler_has_it() {
     let mut model = Hand::new();
     let mut machine = machine().with_a_command_line_inside();
     let first = shown(&model).schedule;
-    assert_eq!((first.schedule, first.on), (None, false));
+    assert_eq!((&model.state.machine.schedule, first.on), (&None, false));
     assert_eq!(machine.schedule_reads, 0);
 
     for (scheduled, on) in [
@@ -85,7 +84,11 @@ fn daily_renewal_is_on_only_while_the_scheduler_has_it() {
         );
         model.run(&mut machine);
         let schedule = shown(&model).schedule;
-        assert_eq!(schedule.schedule, Some(scheduled), "{schedule:?}");
+        assert_eq!(
+            model.state.machine.schedule,
+            Some(scheduled),
+            "{schedule:?}"
+        );
         assert_eq!(schedule.on, on);
     }
     assert_eq!(machine.schedule_reads, 3);
@@ -125,15 +128,15 @@ fn turning_daily_renewal_on_and_off_changes_the_scheduler() {
     model.run(&mut machine);
     assert_eq!((machine.installs, machine.schedule_reads), (1, 1));
     let schedule = shown(&model).schedule;
-    assert_eq!(schedule.schedule, Some(installed()));
-    assert!(schedule.on && schedule.enabled && !schedule.changing);
+    assert_eq!(model.state.machine.schedule, Some(installed()));
+    assert!(schedule.on && schedule.enabled && !model.state.machine.scheduling.is_some());
     assert_eq!(schedule.failed, None);
 
     model.send(Intent::SetSchedule { on: false });
     model.run(&mut machine);
     assert_eq!((machine.uninstalls, machine.schedule_reads), (1, 2));
     let schedule = shown(&model).schedule;
-    assert_eq!(schedule.schedule, Some(Schedule::Absent));
+    assert_eq!(model.state.machine.schedule, Some(Schedule::Absent));
     assert!(!schedule.on);
 }
 
@@ -174,7 +177,7 @@ fn daily_renewal_is_refused_where_nothing_would_be_there_to_run() {
         let schedule = shown(&model).schedule;
         assert_eq!(schedule.note.as_deref(), Some(reason));
         assert_eq!(schedule.failed, None, "said once, under the switch");
-        assert!(!schedule.changing && !schedule.enabled);
+        assert!(!model.state.machine.scheduling.is_some() && !schedule.enabled);
         assert!(
             !window_failure(&model),
             "said beside the switch, not in the window"
@@ -184,7 +187,7 @@ fn daily_renewal_is_refused_where_nothing_would_be_there_to_run() {
         model.run(&mut machine);
         assert_eq!(model.state.machine.schedule_failed, None);
         assert_eq!(machine.uninstalls, 1);
-        assert_eq!(shown(&model).schedule.schedule, Some(Schedule::Absent));
+        assert_eq!(model.state.machine.schedule, Some(Schedule::Absent));
     }
 }
 
@@ -297,11 +300,11 @@ fn whether_this_copy_can_schedule_is_read_with_the_schedule() {
 fn daily_renewal_shows_what_was_asked_for_while_it_changes() {
     let mut model = Hand::new();
     let mut machine = machine().with_a_command_line_inside();
-    assert!(!shown(&model).schedule.changing);
+    assert!(!model.state.machine.scheduling.is_some());
 
     model.send(Intent::SetSchedule { on: true });
     let schedule = shown(&model).schedule;
-    assert!(schedule.on && schedule.changing && !schedule.enabled);
+    assert!(schedule.on && model.state.machine.scheduling.is_some() && !schedule.enabled);
     assert_eq!(
         model.send(Intent::SetSchedule { on: false }),
         [],
@@ -311,13 +314,13 @@ fn daily_renewal_shows_what_was_asked_for_while_it_changes() {
     let read_back = model.give(machine.answer(set));
     assert_eq!(read_back, [Job::ReadSchedule { after_change: true }]);
     assert!(
-        shown(&model).schedule.changing,
+        model.state.machine.scheduling.is_some(),
         "until the schedule is read back"
     );
     model.run(&mut machine);
     assert_eq!((machine.installs, machine.uninstalls), (1, 0));
     let schedule = shown(&model).schedule;
-    assert!(schedule.on && !schedule.changing);
+    assert!(schedule.on && !model.state.machine.scheduling.is_some());
 
     model.send(Intent::SetSchedule { on: false });
     assert!(!shown(&model).schedule.on, "what was asked for");
@@ -325,7 +328,7 @@ fn daily_renewal_shows_what_was_asked_for_while_it_changes() {
     model.run(&mut machine);
     assert_eq!((machine.installs, machine.uninstalls), (1, 1));
     let schedule = shown(&model).schedule;
-    assert!(!schedule.on && !schedule.changing);
+    assert!(!schedule.on && !model.state.machine.scheduling.is_some());
 }
 
 /// A read of the schedule that is not the one after a change leaves the change under way:
@@ -339,10 +342,10 @@ fn only_the_read_after_a_change_ends_it() {
     let set = model.next();
     let read = model.next();
     model.give(machine.answer(read));
-    assert!(shown(&model).schedule.changing);
+    assert!(model.state.machine.scheduling.is_some());
     model.give(machine.answer(set));
     model.run(&mut machine);
-    assert!(!shown(&model).schedule.changing);
+    assert!(!model.state.machine.scheduling.is_some());
 }
 
 /// When the scheduler refuses, the core's own words are said beside the switch, and the
@@ -395,7 +398,11 @@ fn an_older_apps_schedule_is_read_again_only_once_it_was_repaired() {
         assert_eq!(machine.repair_asks, 1);
         assert_eq!(machine.schedule_reads, reads);
         let schedule = shown(&model).schedule;
-        assert_eq!(schedule.schedule.is_some(), reads == 1, "{schedule:?}");
+        assert_eq!(
+            model.state.machine.schedule.is_some(),
+            reads == 1,
+            "{schedule:?}"
+        );
         assert_eq!(schedule.on, reads == 1);
         assert_eq!(schedule.failed, None);
 
@@ -449,7 +456,6 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         [
             CheckLine {
                 id: 0,
-                code: "keychain".into(),
                 name: "Keychain".into(),
                 level: Level::Ok,
                 spoken_level: "Passed".into(),
@@ -458,12 +464,13 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
             },
             CheckLine {
                 id: 1,
-                code: "schedule".into(),
                 name: "Daily renewal".into(),
                 level: Level::Warn,
                 spoken_level: "Worth looking at".into(),
                 detail: "Not scheduled".into(),
-                advice: Some("Turn on daily renewal in Pitboard's settings.".into()),
+                advice: Some(words::check_text(
+                    "Turn on daily renewal in Pitboard's settings."
+                )),
             },
         ]
     );
@@ -500,8 +507,10 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         Some("Unlock the login keychain.")
     );
     assert_eq!(
-        checks.summary.as_deref(),
-        Some("1 broken: do not switch accounts until fixed.")
+        checks.summary,
+        Some(words::typeset(&pitboard_core::words::doctor_summary([
+            pitboard_core::doctor::Level::Fail
+        ])))
     );
     assert_eq!(checks.checked.as_deref(), Some("Checked at 08:05"));
     assert_eq!(machine.doctor_asks, 2);
@@ -555,7 +564,8 @@ fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
             (2, "Account codex/main")
         ]
     );
-    assert_eq!(lines[0].code, lines[1].code, "as doctor names them");
+    let checks = &model.state.machine.checks;
+    assert_eq!(checks[0].code, checks[1].code, "as doctor names them");
 }
 
 /// What to do about a check is said only of one that did not pass, and only where doctor
@@ -651,7 +661,10 @@ fn doctor_is_only_read_when_asked_for() {
     });
     model.run(&mut machine);
     let checks = shown(&model).checks;
-    let codes: Vec<&str> = checks.lines.iter().map(|line| line.code.as_str()).collect();
+    assert_eq!(checks.lines.len(), 1);
+    let codes: Vec<&str> = (model.state.machine.checks.iter())
+        .map(|check| check.code.as_str())
+        .collect();
     assert_eq!(codes, ["state"]);
     assert!(checks.checked.is_some());
     assert_eq!(machine.doctor_asks, 1);
@@ -688,7 +701,6 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
         checks.lines[1..],
         [CheckLine {
             id: 1,
-            code: "notification_not_posted".into(),
             name: "Notifications".into(),
             level: Level::Warn,
             spoken_level: "Worth looking at".into(),
@@ -709,8 +721,8 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     model.run(&mut machine);
     assert_eq!(machine.posted.len(), 2);
     let checks = shown(&model).checks;
-    let codes: Vec<&str> = checks.lines.iter().map(|line| line.code.as_str()).collect();
-    assert_eq!(codes, ["keychain"], "gone once one is posted");
+    let names: Vec<&str> = checks.lines.iter().map(|line| line.name.as_str()).collect();
+    assert_eq!(names, ["Keychain"], "gone once one is posted");
     assert_eq!(checks.level, Level::Ok);
 }
 
@@ -895,6 +907,19 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
     assert_eq!(command_line.update_note, None);
     assert!(command_line.offers_link);
     assert_eq!(command_line.cannot_link, None);
+    assert_eq!(
+        command_line.terminal_note, None,
+        "a Mac offers to link it instead"
+    );
+    assert_eq!(
+        present_on(Os::Windows, &model.state, model.now.epoch(), &Utc)
+            .machine
+            .command_line
+            .terminal_note
+            .as_deref(),
+        Some(words::NEW_TERMINALS),
+        "Windows' installer puts it on the PATH"
+    );
 
     for (found, note) in [
         (
@@ -921,6 +946,7 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
         assert_eq!(command_line.in_terminal.as_ref(), Some(path));
         assert_eq!(command_line.update_note.as_deref(), Some(note));
         assert!(!command_line.offers_link, "one is there already");
+        assert_eq!(command_line.terminal_note, None);
     }
     assert_eq!(machine.command_line_asks, 3);
 }
@@ -979,7 +1005,7 @@ fn what_came_to_nothing_holds_nothing_back() {
     );
     let read = model.next();
     model.give(Answer::Lost(read));
-    assert!(!shown(&model).schedule.changing);
+    assert!(!model.state.machine.scheduling.is_some());
     assert_eq!(shown(&model).schedule.failed, None);
 
     model.send(Intent::PaneShown {

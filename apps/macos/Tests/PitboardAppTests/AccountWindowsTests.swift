@@ -110,23 +110,33 @@ private func settled() async {
 // Which windows each account has, which open and close, what each shows first and which
 // stores go are the model's, tested in pitboard-ffi's `model/windowing.rs`.
 
-extension Site {
-    fileprivate static var chatGPT: Site { sitesFor(provider: "codex")[0] }
-}
-
 private let twoTools = [
-    account("work", email: "dana@work.example", signedIn: true),
-    account("personal", email: "dana@home.example"),
-    account("old", email: "dana@old.example"),
-    account("main", of: "codex", email: "dana@work.example", signedIn: true),
-    account("spare", of: "codex", email: "dana@home.example"),
+    window(
+        "work", email: "dana@work.example", inUse: true,
+        store: "7e15c34f-69ec-55b4-9542-f1c1fe3d7085"),
+    window(
+        "personal", email: "dana@home.example", store: "0c1d6a52-3f0e-5d5c-9a51-2f3e8b7c6d10"),
+    window("old", email: "dana@old.example", store: "4b2f7e91-6a3c-5e8d-b1f2-7c9d0e1a2b30"),
+    window(
+        "main", on: .chatGPT, email: "dana@work.example", inUse: true,
+        store: "8ff9e0e6-a7e2-53e2-a594-6e53ddadd38a"),
+    window(
+        "spare", on: .chatGPT, email: "dana@home.example",
+        store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40"),
+]
+
+private let twoToolsMenus = [
+    SiteMenu.several(
+        title: "Open claude.ai", site: .claude, windows: Array(twoTools.prefix(3))),
+    SiteMenu.several(
+        title: "Open chatgpt.com", site: .chatGPT, windows: Array(twoTools.suffix(2))),
 ]
 
 /// The model is a stand-in that reads nothing and keeps what it is sent: a test hands the
 /// app's model each snapshot, as the Rust model would.
 @MainActor
 private func windows(
-    _ accounts: [Account] = twoTools, stores: StandInStores = StandInStores()
+    _ accounts: [WindowAccount] = twoTools, stores: StandInStores = StandInStores()
 ) -> (AccountWindows, StandInModel) {
     let standIn = StandInModel(snapshot(0))
     let model = AppModel(model: standIn)
@@ -137,7 +147,7 @@ private func windows(
     let windows = AccountWindows(
         model: model, environment: environment,
         presence: AppPresence(apply: { _ in }, bringForward: {}, settle: {}))
-    model.apply(snapshot(1, status: status(accounts), windows: windowsShown(accounts)))
+    model.apply(snapshot(1, windows: windowsShown(accounts, menus: twoToolsMenus)))
     return (windows, standIn)
 }
 
@@ -235,24 +245,21 @@ private func settle(until done: () -> Bool) async {
     let ask = StoreDeletion(store: personal.store, ask: 1)
     windows.model.apply(
         snapshot(
-            2, status: status(forgotten),
-            windows: windowsShown(forgotten, closing: [personal.store], deleting: [ask])))
+            2, windows: windowsShown(forgotten, closing: [personal.store], deleting: [ask])))
     #expect(windows.sessions.keys.sorted() == [spare.id])
     #expect(windows.isClosing(personal.id))
     await settle { !standIn.sent.isEmpty }
     #expect(stores.removed == [personal.id])
     #expect(standIn.sent == [.storeDeleted(store: personal.id.uuidString)])
 
-    windows.model.apply(
-        snapshot(
-            3, status: status(forgotten), windows: windowsShown(forgotten, deleting: [ask])))
+    windows.model.apply(snapshot(3, windows: windowsShown(forgotten, deleting: [ask])))
     await settle { false }
     #expect(stores.attempts[personal.id] == 1, "an ask is deleted once")
 
     stores.refusals[spare.id] = 100
     windows.model.apply(
         snapshot(
-            4, status: status(forgotten),
+            4,
             windows: windowsShown(
                 forgotten, deleting: [StoreDeletion(store: spare.store, ask: 2)])))
     await settle { standIn.sent.count > 1 }

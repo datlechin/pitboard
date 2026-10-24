@@ -1,10 +1,19 @@
 //! What the presentation's tests share: accounts and limits as the core reports them, and a
 //! person's clock that a test can read, in UTC.
 
+use super::{AccountItem, RowEnd};
 use crate::model::state::{Cadence, State};
 use crate::model::{LocalTime, PlatformError};
-use crate::{Account, Awaiting, Limit, Parked, Source, Status, Tool, Usage, Warning};
+use crate::{Account, Awaiting, Limit, Parked, Status, Tool, Usage, Warning};
 use pitboard_core::provider::ProviderId;
+use pitboard_core::status::{Stale, Standing};
+
+impl AccountItem {
+    // A switch to it is under way, as its row's end shows.
+    pub(crate) fn switching(&self) -> bool {
+        matches!(self.end, Some(RowEnd::Switching { .. }))
+    }
+}
 
 pub(crate) fn claude_code() -> Tool {
     crate::tool(ProviderId::Claude)
@@ -31,12 +40,11 @@ pub(crate) fn desktop() -> Vec<Tool> {
 pub(crate) fn desktop_account(label: &str, signed_in: bool) -> Account {
     Account {
         email: String::new(),
-        stale: Some("no_usage".into()),
+        stale: Some(Stale::NoUsage),
         stale_explanation: Some("Pitboard reads no usage for Claude Desktop".into()),
         ..account(Some(label))
             .of("desktop")
             .unmeasured()
-            .switchable(!signed_in)
             .signed_in_if(signed_in)
             .build()
     }
@@ -59,7 +67,6 @@ pub(crate) fn awaiting(label: &str, put_back: &str, again: bool) -> Awaiting {
         provider: "desktop".into(),
         label: label.into(),
         put_back: format!("desktop/{put_back}"),
-        since: 0,
         again,
     }
 }
@@ -133,16 +140,26 @@ impl LimitExt for Limit {
     }
 }
 
+// Where a test's account stands unless the test says: ready to switch to, where it is enrolled.
+pub(crate) fn standing_of(signed_in: bool, named: bool) -> Standing {
+    match (signed_in, named) {
+        (true, true) => Standing::InUse,
+        (true, false) => Standing::NotEnrolled,
+        (false, true) => Standing::Ready,
+        (false, false) => Standing::NothingParked,
+    }
+}
+
 /// An account as the core reports one, a Claude Code one not signed in unless a test says
-/// otherwise. `None` is a login signed in and not enrolled. Switchable unless it is the one
-/// signed in, and its numbers every limit it has where its tool is Claude Code, as a real
+/// otherwise. `None` is a login signed in and not enrolled. Ready to switch to unless it is the
+/// one signed in, and its numbers every limit it has where its tool is Claude Code, as a real
 /// one is.
 pub(crate) fn account(label: Option<&str>) -> AccountMade {
     AccountMade {
         label: label.map(str::to_owned),
         provider: "claude".into(),
         signed_in: false,
-        switchable: None,
+        standing: None,
         uuid: None,
         windows: Vec::new(),
         measured: true,
@@ -157,7 +174,7 @@ pub(crate) struct AccountMade {
     label: Option<String>,
     provider: String,
     signed_in: bool,
-    switchable: Option<bool>,
+    standing: Option<Standing>,
     uuid: Option<String>,
     windows: Vec<Limit>,
     measured: bool,
@@ -186,9 +203,9 @@ impl AccountMade {
         AccountMade { signed_in, ..self }
     }
 
-    pub(crate) fn switchable(self, switchable: bool) -> AccountMade {
+    pub(crate) fn standing(self, standing: Standing) -> AccountMade {
         AccountMade {
-            switchable: Some(switchable),
+            standing: Some(standing),
             ..self
         }
     }
@@ -224,8 +241,6 @@ impl AccountMade {
     pub(crate) fn parked_until(self, refresh_expires_at: i64) -> AccountMade {
         AccountMade {
             parked: Some(Parked {
-                parked_at: 0,
-                access_expires_at: None,
                 refresh_expires_at: Some(refresh_expires_at),
                 session_expires_at: None,
             }),
@@ -256,12 +271,11 @@ impl AccountMade {
             email: format!("{}@example.com", self.label.as_deref().unwrap_or(&uuid)),
             account_id: uuid,
             signed_in: self.signed_in,
-            switchable: self
-                .switchable
-                .unwrap_or(!self.signed_in && self.label.is_some()),
+            standing: self
+                .standing
+                .unwrap_or_else(|| standing_of(self.signed_in, self.label.is_some())),
             parked: self.parked,
             usage: self.measured.then_some(Usage {
-                source: Source::Live,
                 observed_at: Some(self.read_at),
                 windows: self.windows,
                 lists_every_limit: self.provider == "claude",
@@ -288,10 +302,10 @@ pub(crate) fn unplaced(provider: &str, signed_in: bool) -> Account {
         email: String::new(),
         account_id: String::new(),
         signed_in,
-        switchable: false,
+        standing: Standing::Unplaced,
         parked: None,
         usage: None,
-        stale: Some("login_unreadable".into()),
+        stale: Some(Stale::LoginUnreadable),
         stale_explanation: Some("Codex's login could not be read; run `pitboard doctor`".into()),
         plan: None,
         read_at: None,

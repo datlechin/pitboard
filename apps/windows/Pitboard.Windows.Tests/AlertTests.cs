@@ -9,8 +9,10 @@ namespace Pitboard.Windows.Tests;
 public sealed class AlertTests
 {
     private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.");
-    private static readonly Question QuitChatGPT = new("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch");
-    private static readonly QuitQuestion Asked = new(Qualified: "codex/spare", AppId: "com.openai.chat", Name: "ChatGPT");
+    private static readonly WindowQuestion QuitChatGPT = new(
+        new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
+        Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+        Declined: new Intent.KeepAppOpen());
 
     // The window's content, with the bar a sheet carries, so a dialog has somewhere to show.
     private static async Task<(DialogHost Dialogs, AlertBar Bar)> Window(AppModel app)
@@ -60,8 +62,7 @@ public sealed class AlertTests
         var model = new StandInModel(Snapshots.Read(1) with
         {
             Sheet = new Sheet.Add(Provider: "codex"),
-            QuitConfirmation = QuitChatGPT,
-            QuitQuestion = Asked,
+            QuitQuestion = QuitChatGPT,
         });
         var (_, bar) = await Window(new AppModel(model));
 
@@ -73,14 +74,14 @@ public sealed class AlertTests
     [UITestMethod]
     public async Task AnAlertTheModelDropsIsTakenDownUnanswered()
     {
-        var first = Snapshots.Read(1) with { QuitConfirmation = QuitChatGPT, QuitQuestion = Asked };
+        var first = Snapshots.Read(1) with { QuitQuestion = QuitChatGPT };
         var model = new StandInModel(first);
         var app = new AppModel(model);
         var (dialogs, _) = await Window(app);
         using var alerts = new WindowAlerts(app, dialogs);
         await Views.Until(() => dialogs.Open is not null, "no dialog for the question");
 
-        app.Apply(first with { Revision = 2, QuitConfirmation = null, QuitQuestion = null });
+        app.Apply(first with { Revision = 2, QuitQuestion = null });
 
         await Views.Until(() => dialogs.Open is null, "the question stayed up");
         Assert.IsFalse(model.Sent.Any(intent => intent is Intent.KeepAppOpen or Intent.QuitAndSwitch), "an answer nobody gave");

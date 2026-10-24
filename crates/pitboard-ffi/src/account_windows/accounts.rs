@@ -41,12 +41,13 @@ pub enum SiteMenu {
     },
 }
 
-/// Every enrolled account's window, in the order `accounts` lists them and then the sites'
-/// order.
+/// Every enrolled account's window, from the accounts a read found, in the order `accounts`
+/// lists them and then the sites' order: what the menus, the Dock's menu and the account
+/// picker offer, so they cannot disagree.
 ///
 /// An account has a window when its tool has a site, it has a label and an account id, and
 /// Pitboard can place it. A login Pitboard has no name for, or a Codex API key, has none.
-pub(crate) fn windows(accounts: &[Account]) -> Vec<WindowAccount> {
+pub(crate) fn window_accounts(accounts: &[Account]) -> Vec<WindowAccount> {
     let placed: Vec<(&pitboard_sites::Site, &Account, &str)> = accounts
         .iter()
         .filter(|account| !account.unplaced && !account.account_id.is_empty())
@@ -82,7 +83,7 @@ pub(crate) fn windows(accounts: &[Account]) -> Vec<WindowAccount> {
 /// its row's own menu offers to open, which the snapshot carries as `AccountItem::windows`.
 /// The site is checked as well as the store: two tools' accounts can share an account id.
 pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec<WindowAccount> {
-    windows(accounts)
+    window_accounts(accounts)
         .into_iter()
         .filter(|window| {
             pitboard_sites::Site::of_provider(&account.provider).any(|site| {
@@ -96,21 +97,9 @@ pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec
         .collect()
 }
 
-/// Every enrolled account's window, from the accounts a read found, in the order `accounts`
-/// lists them and then the sites' order: what the menus, the Dock's menu and the account
-/// picker offer, so they cannot disagree.
-///
-/// An account has a window when its tool has a site, it has a label and an account id, and
-/// Pitboard can place it. A login Pitboard has no name for, or a Codex API key, has none.
-#[uniffi::export]
-pub fn window_accounts(accounts: Vec<Account>) -> Vec<WindowAccount> {
-    windows(&accounts)
-}
-
 /// One menu entry per site that has an account with a window, in the sites' order.
-#[uniffi::export]
-pub fn site_menus(accounts: Vec<Account>) -> Vec<SiteMenu> {
-    let windows = windows(&accounts);
+pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
+    let windows = window_accounts(accounts);
     pitboard_sites::ALL
         .iter()
         .filter_map(|site| {
@@ -172,6 +161,7 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use pitboard_core::status::Standing;
 
     /// An account as the core reports one, as the Swift tests made them. `label` `None` is a
     /// login signed in and not enrolled.
@@ -185,7 +175,11 @@ pub(crate) mod tests {
             email: format!("{}@example.com", label.unwrap_or(uuid)),
             account_id: uuid.into(),
             signed_in: false,
-            switchable: label.is_some(),
+            standing: if label.is_some() {
+                Standing::Ready
+            } else {
+                Standing::NothingParked
+            },
             parked: None,
             usage: None,
             stale: None,
@@ -205,13 +199,13 @@ pub(crate) mod tests {
             unplaced: true,
             email: String::new(),
             account_id: String::new(),
-            switchable: false,
+            standing: Standing::Unplaced,
             ..account(None, provider, "")
         }
     }
 
     fn only(account: Account) -> Option<WindowAccount> {
-        windows(&[account]).into_iter().next()
+        window_accounts(&[account]).into_iter().next()
     }
 
     #[test]
@@ -255,13 +249,13 @@ pub(crate) mod tests {
             None,
             "a tool with no site"
         );
-        assert!(window_accounts(Vec::new()).is_empty());
+        assert!(window_accounts(&[]).is_empty());
     }
 
     /// A list of windows shows each by its title alone, so one label on two sites says which.
     #[test]
     fn a_label_on_two_sites_says_which_site_in_the_title() {
-        let windows = window_accounts(vec![
+        let windows = window_accounts(&[
             account(Some("work"), "claude", "a"),
             account(Some("work"), "codex", "b"),
             account(Some("home"), "claude", "c"),
@@ -274,7 +268,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_site_with_one_account_is_one_item_and_with_several_a_submenu() {
-        let menus = site_menus(vec![
+        let menus = site_menus(&[
             account(Some("work"), "claude", "a"),
             account(Some("main"), "codex", "b"),
             account(Some("spare"), "codex", "c"),
@@ -297,7 +291,7 @@ pub(crate) mod tests {
         assert_eq!(site.host, "chatgpt.com");
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["main", "spare"]);
-        assert!(site_menus(vec![account(None, "claude", "d")]).is_empty());
+        assert!(site_menus(&[account(None, "claude", "d")]).is_empty());
     }
 
     /// An account's own windows, not another tool's account with the same account id.

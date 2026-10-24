@@ -4,41 +4,10 @@ namespace Pitboard.Core.Tests;
 [TestClass]
 public sealed class AccountWindowsTests
 {
-    private static readonly string[] CodexLabels = ["main", "spare"];
-
-    private static Account Enrolled(string label, string provider, string uuid) =>
-        new(
-            Id: $"{provider}:{uuid}", Provider: provider, Label: label,
-            Qualified: $"{provider}/{label}", Unplaced: false, Email: $"{label}@example.com",
-            AccountId: uuid, SignedIn: false, Switchable: true, Parked: null, Usage: null,
-            Stale: null, StaleExplanation: null, Plan: null, ReadAt: null);
-
-    // The store the macOS app keeps the account's data under.
-    [TestMethod]
-    public void EachEnrolledAccountHasAWindowOnItsToolsSite()
-    {
-        Account[] accounts =
-        [
-            Enrolled("work", "claude", "4f3c2a10-8b7e-4d2a-9c1e-5a6b7c8d9e0f"),
-            Enrolled("main", "codex", "team_user-1"),
-            Enrolled("spare", "codex", "team_user-2"),
-        ];
-
-        var windows = PitboardFfiMethods.WindowAccounts(accounts);
-        var menus = PitboardFfiMethods.SiteMenus(accounts);
-
-        Assert.AreEqual("7e15c34f-69ec-55b4-9542-f1c1fe3d7085", windows[0].Store);
-        var one = Assert.IsInstanceOfType<SiteMenu.One>(menus[0]);
-        Assert.AreEqual("Open claude.ai as work", one.Title);
-        var several = Assert.IsInstanceOfType<SiteMenu.Several>(menus[1]);
-        Assert.AreEqual("Open chatgpt.com", several.Title);
-        CollectionAssert.AreEqual(CodexLabels, several.Windows.Select(window => window.Label).ToArray());
-    }
-
     [TestMethod]
     public void APageGoesWhereThePolicySays()
     {
-        var policy = new NavigationPolicy(PitboardFfiMethods.SitesFor("codex").Single(), "https");
+        var policy = new NavigationPolicy(Sites.ChatGpt, "https");
         NavigationDecision Decide(string url, bool clicked) =>
             PitboardFfiMethods.DecideNavigation(
                 policy, PageRole.Window,
@@ -59,7 +28,9 @@ public sealed class AccountWindowsTests
     [TestMethod]
     public void AWindowSaysWhatHappenedAndWhoAsks()
     {
-        var main = PitboardFfiMethods.WindowAccounts([Enrolled("main", "codex", "team_user-1")]).Single();
+        var main = new WindowAccount(
+            Sites.ChatGpt, Label: "main", Email: "main@example.com", Store: "8ff9e0e6-a7e2-53e2-a594-6e53ddadd38a",
+            InUse: false, Title: "main");
 
         StringAssert.StartsWith(
             PitboardFfiMethods.WindowNote(new WindowNoteKind.SignIn(), main),

@@ -28,8 +28,8 @@ public sealed partial class WindowAlerts : IDisposable
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName is nameof(AppModel.FailureAlert) or nameof(AppModel.QuitConfirmation)
-            or nameof(AppModel.QuitQuestion) or nameof(AppModel.ReplaceQuestion) or nameof(AppModel.Sheet))
+        if (args.PropertyName is nameof(AppModel.FailureAlert) or nameof(AppModel.QuitQuestion)
+            or nameof(AppModel.ReplaceQuestion) or nameof(AppModel.Sheet))
         {
             Follow();
         }

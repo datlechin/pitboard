@@ -98,33 +98,6 @@ impl From<pitboard_sites::SiteLink> for SiteLink {
     }
 }
 
-/// How a list of names is joined in a sentence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Conjunction {
-    /// "claude.ai and chatgpt.com".
-    And,
-    /// "claude.ai or chatgpt.com".
-    Or,
-}
-
-/// The sites whose windows the accounts of `provider`, a `Tool`'s `code`, get, in the order
-/// a listing shows them. None for a tool that has no site.
-#[uniffi::export]
-pub fn sites_for(provider: String) -> Vec<Site> {
-    pitboard_sites::Site::of_provider(&provider)
-        .map(Site::from)
-        .collect()
-}
-
-/// The sites' names as a sentence lists them: "claude.ai and chatgpt.com".
-#[uniffi::export]
-pub fn site_names(conjunction: Conjunction) -> String {
-    pitboard_sites::Site::names(match conjunction {
-        Conjunction::And => pitboard_sites::Conjunction::And,
-        Conjunction::Or => pitboard_sites::Conjunction::Or,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,13 +111,9 @@ mod tests {
             let tool = ProviderId::parse(&site.provider).expect("a tool the core knows");
             assert_eq!(tool.code(), site.provider);
         }
-        let claude = sites_for("claude".into());
+        assert_eq!(Site::from(&pitboard_sites::CLAUDE).name, "claude.ai");
         assert_eq!(
-            claude.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
-            ["claude.ai"]
-        );
-        assert_eq!(
-            sites_for("codex".into())[0].hosts,
+            Site::from(&pitboard_sites::CHATGPT).hosts,
             [
                 "chatgpt.com",
                 "chat.openai.com",
@@ -152,8 +121,6 @@ mod tests {
                 "chat.com"
             ]
         );
-        assert!(sites_for("gemini".into()).is_empty());
-        assert_eq!(site_names(Conjunction::Or), "claude.ai or chatgpt.com");
     }
 
     /// The steps chatgpt.com's window gives, as `Site.swift` said them before they were Rust:
@@ -176,7 +143,7 @@ mod tests {
             );
         }
         assert_eq!(
-            sites_for("codex".into())[0].sign_in_steps,
+            Site::from(&pitboard_sites::CHATGPT).sign_in_steps,
             sign_in_steps(OS, &pitboard_sites::CHATGPT)
         );
     }

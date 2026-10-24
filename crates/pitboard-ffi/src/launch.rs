@@ -4,16 +4,15 @@
 //! synchronous and may block on the keychain, a lock, the network or the person's login
 //! shell, so only the model's own threads make one.
 //!
-//! What the core answers is said in records of the bindings where a snapshot shows it, such
-//! as `Status` and `Abandoned`, and in the types here where only the model reads it, such as
-//! what a switch, an enrolment or a renewal came to, doctor's checks, and why something
-//! failed.
+//! What the core answers is said in the model's records, such as `Status` and `Abandoned`,
+//! and in the types here, such as what a switch, an enrolment or a renewal came to, doctor's
+//! checks, and why something failed. Only what `present` makes of them reaches an app.
 
 use crate::model::state::in_its_app;
-use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence};
+use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence, typeset};
 use crate::{
-    Abandoned, Account, Awaiting, FoundCommandLine, Level, Limit, Parked, Schedule, Source, Status,
-    Tool, Usage, Warning, found_command_line, tool,
+    Abandoned, Account, Awaiting, FoundCommandLine, Level, Limit, Parked, Schedule, Status, Tool,
+    Usage, Warning, found_command_line, tool,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
@@ -23,7 +22,7 @@ use pitboard_core::provider::{self, ProviderId};
 use pitboard_core::service::{self, Changing};
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Left, Stowed};
-use pitboard_core::{doctor, status, switch, usage, words};
+use pitboard_core::{doctor, status, switch, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -338,23 +337,17 @@ fn account(row: status::Row, now: i64) -> Account {
         provider: row.provider.code().into(),
         qualified: key.map(|k| k.qualified()),
         unplaced,
-        switchable: row.switchable(now),
-        stale: row.stale.map(|s| s.code().to_string()),
+        standing: row.standing(now),
+        stale: row.stale,
         // In the row's own tool's words: a Codex row is not about Anthropic.
-        stale_explanation: row.explanation(),
+        stale_explanation: row.explanation().map(|said| typeset(&said)),
         plan: row.plan,
         read_at: row.read_at,
         parked: row.parked.map(|p| Parked {
-            parked_at: p.parked_at,
-            access_expires_at: p.access_expires_at,
             refresh_expires_at: p.refresh_expires_at,
             session_expires_at: p.session_expires_at,
         }),
         usage: row.usage.map(|u| Usage {
-            source: match u.source {
-                usage::Source::Live => Source::Live,
-                usage::Source::Remembered => Source::Remembered,
-            },
             observed_at: u.observed_at,
             lists_every_limit: u.lists_every_limit,
             windows: u
@@ -420,7 +413,6 @@ fn status_of(done: service::Done<status::Report>) -> Status {
                 provider: awaited.provider.code().into(),
                 put_back: awaited.put_back.qualified(),
                 label: awaited.label.label,
-                since: awaited.since,
                 again: awaited.again,
             })
             .collect(),
@@ -1289,15 +1281,13 @@ mod tests {
             let PitboardError::Failed { message, .. } = error.into();
             message
         };
-        assert_eq!(
-            said(Error::ScheduleRefused {
-                detail: "access denied".into()
-            }),
-            "The scheduler refused: access denied."
-        );
+        let refused = || Error::ScheduleRefused {
+            detail: "access denied".into(),
+        };
+        assert_eq!(said(refused()), sentence(&refused().to_string()));
         assert_eq!(
             said(Error::SignInIncomplete),
-            "The sign-in did not finish, so nothing was enrolled."
+            sentence(&Error::SignInIncomplete.to_string())
         );
         let PitboardError::Failed {
             message, warnings, ..
@@ -1307,14 +1297,10 @@ mod tests {
             said_first: 0,
         }
         .into();
-        assert_eq!(
-            message,
-            "The sign-in did not finish, so nothing was enrolled."
-        );
+        assert_eq!(message, sentence(&Error::SignInIncomplete.to_string()));
         assert_eq!(
             warnings[0].message,
-            "2 parked login(s) no longer in use could not be removed yet; Pitboard tries again \
-             on its next change."
+            sentence(&service::Warning::ParksPendingRemoval(2).to_string())
         );
     }
 

@@ -5,7 +5,7 @@
 //! stores to delete, the Open Link window's link and accounts, each window's downloads, and
 //! the question asked before quitting stops a download.
 
-use super::{Choice, Question, Seen, words};
+use super::{Choice, EmptyList, Question, Seen, words};
 use crate::SiteLink;
 use crate::account_windows::records::store_key;
 use crate::account_windows::{
@@ -42,6 +42,8 @@ pub struct AccountWindowsShown {
     /// Every download the windows started, the newest first, for each window to list its own.
     /// What to ask before quitting while some are under way is `downloads_quit_question`'s.
     pub downloads: Vec<DownloadShown>,
+    /// What the Open Link window shows while no link waits for an account.
+    pub no_link: EmptyList,
     // On Windows, stores held by their deletion: no window of one opens, and its menu item
     // says why with `WindowNoteKind::StoreHeld`.
     #[uniffi(default)]
@@ -168,8 +170,6 @@ pub struct PickerAccount {
     /// The line under its label: its email, and whether its window is open, where the link
     /// replaces what the window shows.
     pub detail: String,
-    /// Whether its window is open.
-    pub open: bool,
 }
 
 /// A download an account window started.
@@ -208,7 +208,7 @@ pub enum DownloadState {
 pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
     let windows = &seen.state.windows;
     let status = seen.state.status.as_ref();
-    let accounts = window_accounts(seen.accounts().to_vec());
+    let accounts = window_accounts(seen.accounts());
     let open = windows
         .open
         .iter()
@@ -238,7 +238,7 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
         })
         .collect();
     AccountWindowsShown {
-        menus: site_menus(seen.accounts().to_vec()),
+        menus: site_menus(seen.accounts()),
         accounts,
         open,
         waiting: waiting(seen),
@@ -246,6 +246,10 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
         deleting: windows.deleting.clone(),
         picker: picker(seen),
         downloads: windows.downloads.iter().rev().map(download).collect(),
+        no_link: {
+            let (title, detail) = words::no_link(seen.os);
+            EmptyList { title, detail }
+        },
         held: windows.held(),
     }
 }
@@ -257,7 +261,7 @@ fn waiting(seen: &Seen) -> WindowWaiting {
         window_title: "Account".into(),
         shown: match (&seen.state.status, seen.problem()) {
             (None, Some(problem)) => WaitingShown::ReadFailed {
-                title: read_failed(seen.os),
+                title: words::could_not_read_accounts(seen.os),
                 detail: problem.to_owned(),
                 retry: retry(seen.os),
             },
@@ -271,17 +275,12 @@ fn waiting(seen: &Seen) -> WindowWaiting {
 /// What a window and the Open Link window say while the accounts are read for the first time.
 const READING: &str = "Reading accounts…";
 
-/// What they say where the accounts could not be read, and nothing is known.
-fn read_failed(os: Os) -> String {
-    words::titled(os, "Couldn’t Read Accounts", "Couldn’t read accounts")
-}
-
 /// Reading the accounts again, as somebody asked. Offered while a read runs too, as
 /// AccountWindowView.swift and AccountPicker.swift offered it, where the accounts pane holds
 /// its own back.
 fn retry(os: Os) -> Choice {
     Choice {
-        title: words::titled(os, "Try Again", "Try again"),
+        title: words::try_again(os),
         intent: Intent::Refresh { asked: true },
         enabled: true,
     }
@@ -302,12 +301,12 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             title: READING.into(),
         },
         Picking::ReadFailed(problem) => PickerShown::ReadFailed {
-            title: read_failed(seen.os),
+            title: words::could_not_read_accounts(seen.os),
             detail: problem,
             retry: retry(seen.os),
         },
         Picking::Refused(refusal) => PickerShown::Refused {
-            title: words::titled(seen.os, "Can’t Open This Link", "Can’t open this link"),
+            title: words::cannot_open_link(seen.os),
             reason: refusal.to_string(),
         },
         Picking::NoAccount(link) => {
@@ -341,7 +340,7 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             accounts,
             chosen,
         } => PickerShown::Choose {
-            title: format!("Open this {} link as:", link.site.name),
+            title: words::open_link_as(&link.site.name),
             link_text: link_text(&link.url),
             accounts: accounts
                 .into_iter()
@@ -353,7 +352,6 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
                         } else {
                             window.email.clone()
                         },
-                        open,
                         window,
                     }
                 })

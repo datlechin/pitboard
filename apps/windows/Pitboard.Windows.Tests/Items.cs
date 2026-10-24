@@ -6,23 +6,42 @@ namespace Pitboard.Windows.Tests;
 internal static class Items
 {
     public static AccountItem Account(string provider, string label, bool inUse = false) =>
-        new(
-            Id: $"{provider}:{label}", Provider: provider, Qualified: $"{provider}/{label}", Title: label,
-            Email: $"{label}@example.com", Plan: null, MenuTitle: label, SpokenName: label,
-            Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false, Unplaced: false,
-            Switching: false,
-            Action: inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")),
-            Summary: "", Problem: null, StaleNote: null, Pace: null, ParkedNote: null, WarmNote: null, Help: null,
-            Limits: [], Offers: [], Windows: [], Forget: null);
+        Acting(
+            new(
+                Id: $"{provider}:{label}", Qualified: $"{provider}/{label}", Title: label,
+                Email: $"{label}@example.com", EmailLine: $"{label}@example.com", Plan: null, MenuTitle: label,
+                Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false, Unplaced: false,
+                End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Help: null,
+                Limits: [], Offers: [], Windows: [], Forget: null),
+            inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")));
+
+    // What pressing it does, and the button at its row's end that does it.
+    public static AccountItem Acting(AccountItem item, ItemAction? action) =>
+        action is null ? item with { Action = null } : item with { Action = action, End = new RowEnd.Button(action) };
+
+    // pitboard-sites' site for the tool, with the hosts and paths a snapshot carries.
+    public static Site Site(string provider) =>
+        provider == "codex"
+            ? new Site(
+                Host: "chatgpt.com", Name: "chatgpt.com", Provider: "codex",
+                Aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
+                Hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
+                SignInHosts: ["auth.openai.com", "login.live.com", "login.microsoftonline.com", "appleid.apple.com"],
+                BlockedHosts: ["accounts.google.com"], SignInPaths: [["api", "auth"]], StoreName: "codex",
+                SignInSteps: "", BlockedServices: "")
+            : new Site(
+                Host: "claude.ai", Name: "claude.ai", Provider: "claude", Aliases: [], Hosts: ["claude.ai"],
+                SignInHosts: [], BlockedHosts: ["accounts.google.com"], SignInPaths: [["magic-link"]],
+                StoreName: "claude", SignInSteps: "", BlockedServices: "");
 
     public static WindowAccount Window(string provider, string label, bool inUse = false) =>
         new(
-            Site: PitboardFfiMethods.SitesFor(provider).Single(), Label: label, Email: $"{label}@example.com",
+            Site: Site(provider), Label: label, Email: $"{label}@example.com",
             Store: $"{provider}-{label}", InUse: inUse, Title: label);
 
     public static LimitRow Limit(double percent, PaceStanding standing = PaceStanding.Even) =>
         new(
-            Name: "5-hour", Short: "5h", Percent: percent, Figure: $"{percent:0}%",
+            Short: "5h", Percent: percent, Figure: $"{percent:0}%",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
             Resets: "resets in 2h 10m",
             Pace: new LimitPace(Expected: 30, Standing: standing, Said: standing == PaceStanding.Over ? "over pace" : "", Help: "Even use would be at 30% by now"),
@@ -64,8 +83,8 @@ internal static class Items
             Title: $"Rename “{label}”", Message: "The account keeps its parked login.", Tools: [], Tool: "claude",
             Account: null, Name: label, Prompt: label, Confirm: "Rename", Saving: false, Progress: null);
 
-    public static RunningSignIn Running(string provider, string? url = null, bool wantsCode = false) =>
-        new(Id: 1, Provider: provider, Name: "third", Said: "", Url: url, WantsCode: wantsCode, CodeRefused: false);
+    public static RunningSignIn Running(string? url = null, bool wantsCode = false) =>
+        new(Id: 1, Url: url, WantsCode: wantsCode);
 
     public static SigningInText SigningIn(string tool) =>
         new(

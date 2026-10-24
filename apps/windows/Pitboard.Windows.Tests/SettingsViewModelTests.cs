@@ -18,8 +18,8 @@ public sealed class SettingsViewModelTests
         Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
-            new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
-            new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
+            new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
+            new WarmAccountShown("claude/work", "work", On: false, Standing: null),
         ],
         NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
         Enabled: true, Terms: Snapshots.Terms);
@@ -100,14 +100,17 @@ public sealed class SettingsViewModelTests
     }
 
     [TestMethod]
-    public void OnlyACommandLineFoundNowhereSaysWhoPutsItOnThePath()
+    public void TheCommandLineSaysWhoPutsItOnThePathWhereTheModelDoes()
     {
-        static CommandLineShown Found(FoundCommandLine found) =>
-            new(Found: found, InTerminal: "", UpdateNote: null, OffersLink: false, CannotLink: null);
+        const string note = "Pitboard’s installer puts pitboard on your PATH.";
+        var (shown, _, _) = Over(With(1, machine => machine with
+        {
+            CommandLine = machine.CommandLine with { Found = new FoundCommandLine.Nowhere(), TerminalNote = note },
+        }));
 
-        Assert.AreEqual(SettingsViewModel.NewTerminals, SettingsViewModel.TerminalNoteFor(Found(new FoundCommandLine.Nowhere())));
-        Assert.IsNull(SettingsViewModel.TerminalNoteFor(Found(new FoundCommandLine.Bundled(@"C:\Pitboard\bin\pitboard.exe"))));
-        Assert.IsNull(SettingsViewModel.TerminalNoteFor(new CommandLineShown(null, null, null, false, null)), "not looked for yet");
+        Assert.IsTrue(shown.HasTerminalNote);
+        Assert.AreEqual(note, shown.TerminalNote);
+        Assert.IsFalse(Over(Snapshots.Read(1)).Shown.HasTerminalNote, "not looked for yet");
     }
 
     // A control set to what the model says raises its change event as a person's change would; the page's echo guard
@@ -194,7 +197,7 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
         Assert.IsTrue(shown.HasAtLimitTerms);
-        Assert.AreEqual("Anthropic's terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
+        Assert.AreEqual("Anthropic’s terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
 
         app.Apply(With(2, machine => machine with
         {

@@ -20,8 +20,8 @@ mod policy;
 pub(crate) mod records;
 pub(crate) mod stores;
 
-pub use accounts::{SiteMenu, WindowAccount, site_menus, window_accounts};
-pub(crate) use accounts::{forget_message_on, windows_of_account};
+pub use accounts::{SiteMenu, WindowAccount};
+pub(crate) use accounts::{forget_message_on, site_menus, window_accounts, windows_of_account};
 pub use downloads::{download_destination, download_host, download_question};
 pub use notes::{WindowNoteKind, opening_note, remove_data_alert, window_note};
 pub use pages::{

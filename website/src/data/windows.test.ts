@@ -125,7 +125,7 @@ test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the cor
   for (const c of page.commands) assert.ok(xaml.includes(`Label="${c}"`), c);
   assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
   assert.match(page.updated, /^Updated \d\d:\d\d$/);
-  assert.ok(views("AccountRow.xaml").includes('Text="In use"'));
+  assert.ok(present("words.rs").includes('titled(os, "In Use", "In use")'));
   assert.ok(present("accounts.rs").includes('title: "Use".into()'));
   assert.deepEqual(
     page.sections.map((s) => s.name),
@@ -157,8 +157,8 @@ test("an account's notes are the core's, with when it warms up last", () => {
   );
   assert.ok(said.includes('days => format!("Parked login good for {days} more days"),'));
   assert.ok(said.includes('format!("warms up again at {}", moment(*next))'));
-  assert.ok(present("accounts.rs").includes("warm_note: warm_note(seen, account),"));
-  assert.ok(views("AccountRow.xaml.cs").includes("item.Pace, item.ParkedNote, item.WarmNote"));
+  assert.ok(present("accounts.rs").includes(".chain(warm_note(seen, account))"));
+  assert.ok(views("AccountRow.xaml.cs").includes("foreach (var note in item.Notes)"));
   const notes = (moment: "before" | "after") =>
     accountsPage(moment).sections.flatMap((s) => s.rows.flatMap((r) => r.notes));
   assert.deepEqual(notes("before"), [
@@ -186,9 +186,8 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(machine.includes(`const AT_LIMIT: &str = "${s.atLimit.header}";`));
   assert.ok(machine.includes(`"${s.atLimit.choice}",`));
   assert.ok(machine.includes(`share_label: "${s.share.header}".into(),`));
-  assert.ok(
-    shell("SettingsViewModel.cs").includes('$"From {AtLimit.Lowest}% to {AtLimit.Highest}%"'),
-  );
+  assert.ok(present("words.rs").includes('format!("From {lowest}% to {highest}%")'));
+  assert.ok(shell("SettingsViewModel.cs").includes("ShareRange => AtLimit.ShareRange;"));
   const autoswitch = core("duty/autoswitch.rs");
   assert.ok(autoswitch.includes("pub const LOWEST: u8 = 50;"));
   assert.ok(autoswitch.includes("pub const HIGHEST: u8 = 99;"));
@@ -207,9 +206,10 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   );
   assert.ok(core("switch/mod.rs").includes("pub const ADOPTION_CEILING_SECONDS: u32 = 33;"));
   assert.equal(s.atLimit.note, note);
-  assert.ok(core("words.rs").includes(`"${s.atLimit.terms.slice(0, -1)}";`));
+  // The apps curl the core's apostrophe, as words.rs's typeset does.
+  assert.ok(core("words.rs").includes(`"${s.atLimit.terms.slice(0, -1).replace("’", "'")}";`));
   assert.ok(
-    machine.includes('sentence: format!("{}.", pitboard_core::words::TERMS_MAY_COVER_THIS),'),
+    machine.includes("sentence: words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS),"),
   );
   assert.ok(machine.includes(`link_title: "${s.atLimit.link}".into(),`));
 });
@@ -228,7 +228,8 @@ test("Warm up limits says what SettingsPage.xaml, WarmAccountRow.cs and machine.
     present("machine.rs").includes('format!("Next warm-up: {account} at {}.", seen.clock(at))'),
   );
   assert.equal(w.standing, "Next warm-up: personal at 22:00.");
-  assert.ok(shell("WarmAccountRow.cs").includes('$"{_account.Title} · {plan}"'));
+  assert.ok(present("machine.rs").includes("title: words::named_in_menu("));
+  assert.ok(shell("WarmAccountRow.cs").includes("public string Title => _account.Title;"));
   assert.deepEqual(w.accounts, [
     { title: "personal · Max 20x", standing: "Warms up again at 22:00", on: true },
     { title: "work · Max 20x", standing: null, on: false },
@@ -262,7 +263,8 @@ test("the run-out notification says what WindowsNotifications.cs builds from not
   const source = shell("WindowsNotifications.cs");
   assert.ok(source.includes('public const string DisplayName = "Pitboard";'));
   assert.ok(source.includes("new AppNotificationButton(button.Title)"));
-  assert.ok(present("notices.rs").includes('fn switch_button() -> String {\n    "Switch".into()'));
+  assert.ok(present("words.rs").includes('pub(crate) const SWITCH: &str = "Switch";'));
+  assert.ok(present("notices.rs").includes("button(words::SWITCH.into(),"));
   const words = present("words.rs");
   assert.ok(words.includes('format!("{account} has no {limit} limit left")'));
   assert.ok(words.includes('Some(left) => format!("{account} has {left}% of its own left."),'));

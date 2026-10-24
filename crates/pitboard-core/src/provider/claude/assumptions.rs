@@ -467,6 +467,14 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     answers("token_refusals"),
     answers("validate_names_the_login"),
     answers("token_answer_names_the_login"),
+    // Read as bytes on 2026-10-24 from the darwin-arm64, linux-x64, win32-x64 and win32-arm64
+    // builds of 2.1.309.
+    PerSystem {
+        name: "refresh_token_end",
+        macos: Read("2.1.309"),
+        linux: Read("2.1.309"),
+        windows: Read("2.1.309"),
+    },
     read_from_2_1_309("auth_precedence"),
     read_from_2_1_309("anthropic_profiles"),
     PerSystem {
@@ -741,11 +749,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     },
     Assumption {
         name: "oauth_client",
-        fact: "every login Claude Code stores was issued to client 9d1c250a-e61b-44d9-88ed-5944d1962f5e, \
-               and a refresh answer without a refresh-token lifetime keeps the one it had",
+        fact: "every login Claude Code stores was issued to client 9d1c250a-e61b-44d9-88ed-5944d1962f5e",
         read_from: "the OAuth client id and the token refresh path",
         verified_against: VERIFIED_AGAINST,
-        depends: "provider::claude::api::CLIENT_ID and provider::claude::document::renewed, and the renewal `pitboard stow` makes of a \
+        depends: "provider::claude::api::CLIENT_ID, and the renewal `pitboard stow` makes of a \
                   login left in `.credentials.json` whose access token has expired",
         probe: &["9d1c250a-e61b-44d9-88ed-5944d1962f5e"],
         absent: &[],
@@ -2021,6 +2028,29 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         absent: &[],
     },
     Assumption {
+        name: "refresh_token_end",
+        fact: "a sign-in sets `refreshTokenExpiresAt` from its answer's \
+               `refresh_token_expires_in`, or 30 days on where the answer has none. A renewal \
+               sets it from that field only where its answer has one, and otherwise keeps the \
+               date the login had. Within 3 days of that date a claude.ai login is told `Your \
+               login expires in <n> days · run /login to renew`: Claude Code sends its owner to \
+               sign in again, not to a renewal",
+        read_from: "the sign-in's tokens, the token refresh's answer reader and the save that \
+                    merges it into the login stored, and the `oauth-expiry` notice",
+        verified_against: "2.1.309",
+        depends: "provider::claude::document::renewed, which keeps the date as Claude Code does, \
+                  and status::Row::standing's Expiring, from doctor::RENEW_WITHIN's 3 days, \
+                  which `pitboard status`, doctor's parked login check and both apps answer \
+                  with a sign-in",
+        probe: &[
+            "Your login expires in ",
+            "run /login to renew",
+            ".refresh_token_expires_in,!1)",
+            "refreshTokenExpiresAt:n.refreshTokenExpiresAt??e?.refreshTokenExpiresAt",
+        ],
+        absent: &[],
+    },
+    Assumption {
         name: "auth_precedence",
         fact: "a session signs in with the stored claude.ai login only where nothing before it \
                names another way: `ANTHROPIC_API_KEY`, then for a token `ANTHROPIC_AUTH_TOKEN`, \
@@ -2272,6 +2302,7 @@ mod tests {
                 "token_refusals",
                 "validate_names_the_login",
                 "token_answer_names_the_login",
+                "refresh_token_end",
                 "auth_precedence",
                 "anthropic_profiles",
                 "windows_profile_folder",

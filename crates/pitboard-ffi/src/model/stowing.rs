@@ -4,15 +4,23 @@
 
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{claude, refusal, titled, warned, warning};
+use super::testing::records::{claude, refusal, warned, warning};
 use super::{Intent, Sheet};
 use crate::Held;
 use crate::present::Severity;
+use crate::present::words;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
+use pitboard_core::words as said;
 use std::path::PathBuf;
 
 const FILE: &str = "/Users/dana/.claude/.credentials.json";
+
+// The core's lines, as the app writes them.
+fn typeset(lines: Vec<String>) -> Vec<String> {
+    lines.iter().map(|line| words::typeset(line)).collect()
+}
 
 /// The warning every read gives while the file is behind the keychain, holding `held`.
 fn fallback_login(held: Held) -> crate::Warning {
@@ -93,7 +101,7 @@ fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
             continue;
         }
         assert_eq!(notice.actions.len(), 1, "{held:?}: {:?}", notice.actions);
-        assert_eq!(notice.actions[0].title, titled("Put Away…", "Put away…"));
+        assert_eq!(notice.actions[0].title, words::put_away(OS, true));
         assert_eq!(notice.actions[0].intent, stow_sheet());
         assert!(notice.actions[0].enabled);
         assert_eq!(notice.actions[0].confirm, None, "the sheet asks");
@@ -112,53 +120,29 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
 
     assert_eq!(model.count(a_look_left), 1);
     let looking = model.shown().stow_text.expect("the sheet's words");
-    assert_eq!(
-        looking.looking.as_deref(),
-        Some("Finding out whose login it is…")
-    );
+    assert_eq!(looking.looking.as_deref(), Some(words::FINDING_OUT_WHOSE));
     assert!(looking.lines.is_empty());
     assert!(!looking.can_confirm);
 
     model.run(&mut machine);
 
     let text = model.on_a_mac().stow_text.expect("the sheet's words");
-    assert_eq!(text.title, "Put Away the Login Left in a File");
-    assert_eq!(text.confirm, "Put Away");
+    assert_eq!(text.title, words::stow_title(Os::MacOs));
+    assert_eq!(text.confirm, words::put_away(Os::MacOs, false));
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
     assert!(!text.saving);
-    assert_eq!(
-        text.lines,
-        [
-            format!(
-                "{FILE} holds `work`'s login, and Pitboard holds no parked login of `work` to \
-                 keep in its place. Putting it away parks this one for `work`, then deletes \
-                 the file."
-            ),
-            "It also holds 1 other key, `mcpOAuth`, which goes with the file: Pitboard does not \
-             move it, and Claude Code's document in the keychain keeps its own."
-                .to_string(),
-            "Once the file is gone, Claude Code sessions already running follow a switch \
-             within 33 seconds again, and one that signed in with its login, such as one over \
-             SSH, is signed out."
-                .to_string(),
-        ]
-    );
-    assert!(text.message.contains("in a file behind the keychain"));
+    let lines = |os| {
+        typeset(said::left_lines(
+            os,
+            &left(Foreseen::Kept(parked_now("work"))),
+        ))
+    };
+    assert_eq!(text.lines, lines(Os::MacOs));
+    assert_eq!(text.message, words::stow_message(Os::MacOs));
     let text = model.on_windows().stow_text.expect("the sheet's words");
-    assert!(
-        text.message.starts_with(
-            "Claude Code left a login in a file behind Credential Manager, which keeps"
-        ),
-        "{}",
-        text.message
-    );
-    assert!(
-        text.lines[1].ends_with("Claude Code's document in Credential Manager keeps its own.")
-            && text.lines[2].contains("such as one in a sign-in over SSH with a key"),
-        "{:?}",
-        text.lines
-    );
+    assert_eq!(text.message, words::stow_message(Os::Windows));
+    assert_eq!(text.lines, lines(Os::Windows));
 }
 
 /// Put Away sends what the sheet showed, which is put away only while the file still holds
@@ -172,11 +156,12 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
     model.send(stow_sheet());
     model.run(&mut machine);
     machine.answer = Ok(warned(vec![claude("work", true, 10.0)], Vec::new()));
-    machine.stowing = Ok(Stowed {
+    let stowed = Stowed {
         path: PathBuf::from(FILE),
         kept: parked_now("work"),
         dropped: vec!["mcpOAuth".into()],
-    });
+    };
+    machine.stowing = Ok(stowed.clone());
 
     model.send(Intent::Stow);
     assert!(model.shown().stow_text.expect("still up").saving);
@@ -193,11 +178,8 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
         .find(|notice| notice.id == "stowed")
         .expect("what it did");
     assert_eq!(notice.severity, Severity::Info);
-    assert_eq!(notice.title, "Put away the login left in a file");
-    assert_eq!(
-        notice.lines[0],
-        format!("Parked the login {FILE} held for `work`, then deleted the file.")
-    );
+    assert_eq!(notice.title, words::STOWED);
+    assert_eq!(notice.lines, typeset(said::stowed_lines(OS, &stowed)));
     assert!(
         shown
             .notices
@@ -276,7 +258,7 @@ fn what_stops_it_is_said_in_the_sheet() {
     assert_eq!(shown.sheet, Some(Sheet::Stow));
     let failure = shown.sheet_failure.expect("said in the sheet");
     assert_eq!(failure.title, "Couldn’t put the login away");
-    assert_eq!(failure.code.as_deref(), Some("left_login_changed"));
+    assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     assert!(!shown.stow_text.expect("still up").saving);
 }
 
@@ -301,14 +283,8 @@ fn a_refused_put_away_looks_again() {
 
     assert_eq!(model.count(a_look_left), 2);
     let shown = model.shown();
-    assert_eq!(
-        shown
-            .sheet_failure
-            .expect("said in the sheet")
-            .code
-            .as_deref(),
-        Some("left_login_changed")
-    );
+    assert!(shown.sheet_failure.is_some(), "said in the sheet");
+    assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     let looking = shown.stow_text.expect("still up");
     assert!(looking.looking.is_some());
     assert!(!looking.can_confirm);

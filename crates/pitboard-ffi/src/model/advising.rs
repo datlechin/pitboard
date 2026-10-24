@@ -5,10 +5,13 @@
 use super::advice::{Advice, Told};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{already_active, refusal, status, switched, titled, warned, warning};
+use super::testing::records::{already_active, refusal, status, switched, warned, warning};
 use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
+use crate::present::words;
+use pitboard_core::host::OS;
+use pitboard_core::status::Standing;
 
 /// `work`, in use, its five-hour limit `percent` used until `resets`.
 fn work(percent: f64, resets: i64) -> Account {
@@ -154,7 +157,11 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     let spent = || work(100.0, 7_200);
     let other = |label: &str, percent: f64, switchable: bool| {
         account(Some(label))
-            .switchable(switchable)
+            .standing(if switchable {
+                Standing::Ready
+            } else {
+                Standing::LoginExpired
+            })
             .limits(vec![window("session", percent).resets(Some(9_000))])
             .build()
     };
@@ -280,7 +287,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
             body: "personal has 90% of its own left.".into(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: "Switch".into(),
+                title: words::SWITCH.into(),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -404,7 +411,7 @@ fn what_stands_in_for_a_failed_read_is_not_advised_on() {
     let kept = model.take(|job| matches!(job, super::state::Job::LoadKept));
     model.run(&mut machine);
     assert!(
-        model.shown().status.is_some(),
+        model.state.status.is_some(),
         "the last numbers measured are shown"
     );
     let answer = machine.answer(kept);
@@ -450,7 +457,7 @@ fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
     machine.offline = Ok(status(vec![work(100.0, 7_200), personal()]));
     machine.changed += 1;
     model.notice(&mut machine);
-    assert!(model.shown().status.is_some(), "the change is shown");
+    assert!(model.state.status.is_some(), "the change is shown");
     assert!(model.state.advice.is_empty(), "and not advised on yet");
 
     let answer = machine.answer(kept);
@@ -497,9 +504,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
         .notices
         .into_iter()
         .flat_map(|notice| notice.actions)
-        .find(|action| {
-            action.title == titled("Update Claude Code’s Config", "Update Claude Code’s config")
-        })
+        .find(|action| action.title == words::update_config(OS))
         .expect("offered");
 
     machine.answer = Ok(status(vec![work(100.0, 7_200), personal()]));
@@ -650,7 +655,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
             body: "personal has 90% of its own left.".into(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: "Switch".into(),
+                title: words::SWITCH.into(),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -788,6 +793,10 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         )
     );
     assert!(shown.at_limit.share_enabled);
+    assert_eq!(
+        shown.at_limit.share_range,
+        words::share_range(shown.at_limit.lowest, shown.at_limit.highest)
+    );
     assert_eq!(shown.at_limit.terms, None);
     assert_eq!(
         shown.warm.terms.link,
@@ -806,7 +815,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         .expect("beside switching");
     assert_eq!(
         terms.sentence,
-        "Anthropic's terms may cover automatic switching and warm-ups."
+        words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS)
     );
     assert_eq!(terms.link_title, "Is this allowed?");
 

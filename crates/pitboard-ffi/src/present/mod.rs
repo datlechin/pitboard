@@ -16,11 +16,13 @@
 //! called from here.
 //!
 //! A button the snapshot offers comes with its words and what it sends, and with whether it
-//! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`
-//! or a `NoticeAction`, so a view never words an intent or decides whether to offer one, and
-//! both apps label and hold back one offer alike: a row's "Use", "Sign In Again…" or "Name…",
-//! what an account's own menu offers, the setup step's "Add Account…" and "Not Now", an empty
-//! pane's "Try Again", a window's "Clear" and a sheet's default button. A control an app always
+//! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`,
+//! a `NoticeAction` or a `WindowQuestion`'s answers, so a view never words an intent or
+//! decides whether to offer one, and both apps label and hold back one offer alike: a row's
+//! "Use", "Sign In Again…" or "Name…", what an account's own menu offers, the setup step's
+//! "Add Account…" and "Not Now", an empty pane's "Try Again", a window's "Clear", the quit
+//! question's "Quit Claude and Switch" and a sheet's default button, whose intent
+//! `check_name` gives. A control an app always
 //! has, such as its toolbar's and its menu's "Add Account…", "Refresh", "Settings…" or "Quit
 //! Pitboard", is the app's own, in its own catalog, held back where the snapshot says what it
 //! waits for is under way, and so is what is about the app's own system or done by the app
@@ -44,6 +46,7 @@ pub use machine::{
     WarmShown,
 };
 pub use sheets::check_name;
+pub(crate) use sheets::saved_name;
 pub use windows::{
     AccountWindowsShown, DownloadShown, DownloadState, LinkPicker, OpenWindow, PageLoad,
     PickerAccount, PickerShown, StoreDeletion, WaitingShown, WindowWaiting,
@@ -82,6 +85,19 @@ pub struct MenuBarText {
     pub tip: String,
 }
 
+/// What went wrong in the sheet that is up: an alert's words, said inside it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FailureText {
+    /// One higher for each failure said, so an app tells a new one from one it has shown.
+    pub id: u64,
+    /// What was being done: "Couldn’t sign in to work".
+    pub title: String,
+    /// What went wrong. Pitboard's errors already say what to do, so it is shown as it is.
+    pub message: String,
+    /// Everything else it warned about, a sentence each.
+    pub warnings: Vec<String>,
+}
+
 /// One tool's accounts, under its name: one section, unheaded, while every account shown is
 /// one tool's, so a machine with one tool looks as it always did.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -98,8 +114,6 @@ pub struct AccountSection {
 pub struct AccountItem {
     /// The account's `id`, unique among the accounts shown.
     pub id: String,
-    /// The tool, as a `Tool`'s code.
-    pub provider: String,
     /// Its label with its tool, for what is asked of it. `None` for a login not enrolled.
     pub qualified: Option<String>,
     /// Its name, or its email address while it has none, or what is wrong with a login
@@ -107,14 +121,14 @@ pub struct AccountItem {
     pub title: String,
     /// Its email address; empty for a login Pitboard cannot read.
     pub email: String,
+    /// The line under its name in the window: its email address, where its name is not that
+    /// already.
+    pub email_line: Option<String>,
     /// The plan its login says it is on, as the window's tag beside its name: "Team 5x".
     pub plan: Option<String>,
     /// Its title as the menu says it, with its plan: "work · Team 5x", and on Windows the
     /// figure the menu bar would show of it: "work · Team 5x · 64%".
     pub menu_title: String,
-    /// Its name where nothing around it says which tool it is for, as VoiceOver reads a row
-    /// apart from its heading: "work", or "work (Codex)" beside another tool's accounts.
-    pub spoken_name: String,
     /// The row as VoiceOver reads it as one thing: "work (Codex), in use".
     pub spoken: String,
     pub in_use: bool,
@@ -122,25 +136,20 @@ pub struct AccountItem {
     pub needs_sign_in: bool,
     /// A login of its tool that belongs to no account Pitboard can name.
     pub unplaced: bool,
-    /// A switch to it is under way.
-    pub switching: bool,
+    /// What the far end of its row in the window shows, where anything.
+    pub end: Option<RowEnd>,
     /// What pressing it does, decided once: switch to it, sign in to it again, or name it.
     /// `None` where nothing can be done: it is the one in use, a switch is under way, or
     /// Pitboard cannot use it.
     pub action: Option<ItemAction>,
     /// The one line under its name in the menu: its limits, or what stands in their way.
     pub summary: String,
-    /// Why it cannot be used, in full, when that is so.
-    pub problem: Option<String>,
-    /// Why its numbers are not new, where it can be used all the same.
-    pub stale_note: Option<String>,
-    /// Which limit of the account in use runs out first at its pace, where one runs out
-    /// before it resets: "Weekly limit runs out in 20h 18m at this pace".
-    pub pace: Option<String>,
-    /// How long its parked login stays usable, for an account not in use.
-    pub parked_note: Option<String>,
-    /// Where its warm-up stands, for an account turned on for one: "Warms up again at 22:50".
-    pub warm_note: Option<String>,
+    /// The lines under its limits in the window, in this order: why it cannot be used, in
+    /// full; why its numbers are not new, where it can be used all the same; which limit of
+    /// the account in use runs out first at its pace, "Weekly limit runs out in 20h 18m at
+    /// this pace"; how long its parked login stays usable, for an account not in use; and
+    /// where its warm-up stands, "Warms up again at 22:50".
+    pub notes: Vec<String>,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
@@ -154,6 +163,17 @@ pub struct AccountItem {
     // for an enrolled account, dimmed for the one in use, whose record is the only one of who
     // is signed in; what its own menu offers last, and what deleting its row does
     pub forget: Option<ItemOffer>,
+}
+
+/// What the far end of an account's row in the window shows.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum RowEnd {
+    /// A switch to it is under way: a spinner, which VoiceOver and Narrator name `spoken`.
+    Switching { spoken: String },
+    /// It is the one in use, said beside a checkmark.
+    InUse { title: String },
+    /// Its action's button.
+    Button { action: ItemAction },
 }
 
 // The Account menu's items, dimmed, while no account is selected.
@@ -197,8 +217,6 @@ pub struct WindowOffer {
 /// One limit of an account, as a row of its bars.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct LimitRow {
-    /// As a sentence names it, with its scope: "5-hour", "weekly Fable".
-    pub name: String,
     /// As the column beside its bar names it: "5h", "week · Fable".
     pub short: String,
     /// The share used, as the service said it, for the bar. Past 100 once exceeded.
@@ -249,6 +267,18 @@ pub struct Question {
     pub message: String,
     /// What the button that does it says: "Forget", "Give Up".
     pub confirm: String,
+}
+
+/// A question the window asks by itself, with what each answer sends. The model takes either
+/// before or after the other, so an alert that sends its close before its button's answer
+/// loses neither.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WindowQuestion {
+    pub question: Question,
+    /// Sent by its button.
+    pub confirmed: Intent,
+    /// Sent by Cancel, Escape, or its going any other way.
+    pub declined: Intent,
 }
 
 /// How pressing a notice is.
@@ -438,7 +468,7 @@ pub struct SheetText {
     /// What the empty name field shows.
     pub prompt: String,
     /// What its default button says, which does what the sheet is for: "Sign In", "Save",
-    /// "Rename". It can be pressed once `check_name` gives a name, the tool picked is not
+    /// "Rename". It can be pressed once `check_name` gives an intent, the tool picked is not
     /// missing, and nothing is being saved.
     pub confirm: String,
     /// A name typed in it is being saved, which cannot be withdrawn: nothing in it can be
@@ -492,11 +522,12 @@ pub struct Missing {
     pub link: String,
 }
 
-/// A name typed in a sheet: the name it would save, or why it cannot be one.
+/// A name typed in a sheet: why it cannot be one, or what the sheet's default button sends
+/// with it, `None` while there is nothing to save.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NameCheck {
-    pub name: Option<String>,
     pub problem: Option<String>,
+    pub intent: Option<Intent>,
 }
 
 /// What a sign-in under way says, in the sheet it was started from.
@@ -728,30 +759,20 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     let menu_notices = notices::menu_notices(&seen, &footing, &notices);
     Snapshot {
         revision: 0,
-        now,
         reading: state.reads > 0,
-        updated_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
-        status: state.status.clone(),
-        warnings: state.warnings.clone(),
-        read_failure: state.failure.clone(),
-        stuck: state.stuck,
-        installed: state.installed.clone(),
-        switch_under_way: state.switch_under_way().map(str::to_owned),
-        quit_question: state.asking().cloned(),
+        quit_question: state
+            .asking_for()
+            .map(|(question, then)| sheets::quit_question(&seen, question, then)),
         replace_question: state
             .replace_asked()
             .map(|(qualified, why)| sheets::replace_question(&seen, qualified, why)),
-        last_switches: state.last_switches.clone(),
-        abandoned: state.abandoned.clone(),
-        failure: state.presented.clone(),
         window_request: state.window,
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
-        sheet_failure: state.sheet_failure.clone(),
+        sheet_failure: state.sheet_failure.as_ref().map(sheets::failure_text),
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
         account_menu: accounts::account_menu(seen.os),
-        shows_tools: seen.shows_tools(),
         menu_notices,
         notices,
         setup: setup::step(&seen, &footing),
@@ -763,9 +784,6 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         sheet_text: sheets::sheet_text(&seen),
         signing_in_text: sheets::signing_in_text(&seen),
         stow_text: sheets::stow_text(&seen),
-        quit_confirmation: state
-            .asking_for()
-            .map(|(question, then)| sheets::quit_confirmation(&seen, question, then)),
         failure_alert: state.presented.as_ref().map(sheets::failure_alert),
         machine: machine::machine(&seen),
         account_windows: windows::account_windows(&seen),
@@ -823,21 +841,21 @@ mod tests {
         assert_eq!(
             words(Os::MacOs),
             [
-                "No Accounts",
-                "Add Account…",
-                "Add Account",
-                "Sign In",
-                "No Activity"
+                "No Accounts".into(),
+                "Add Account…".into(),
+                words::add_account(Os::MacOs),
+                words::sign_in(Os::MacOs),
+                "No Activity".into()
             ]
         );
         assert_eq!(
             words(Os::Windows),
             [
-                "No accounts",
-                "Add account…",
-                "Add account",
-                "Sign in",
-                "No activity"
+                "No accounts".into(),
+                "Add account…".into(),
+                words::add_account(Os::Windows),
+                words::sign_in(Os::Windows),
+                "No activity".into()
             ]
         );
     }

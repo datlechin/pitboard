@@ -255,11 +255,44 @@ impl Row {
         }
     }
 
-    // A parked login its service refused would fail a switch: it needs signing in again.
     pub fn switchable(&self, now: i64) -> bool {
-        !self.signed_in
-            && self.stale != Some(Stale::LoginRefused)
-            && self.parked.as_ref().is_some_and(|p| p.restorable_at(now))
+        self.standing(now).switchable()
+    }
+
+    pub fn standing(&self, now: i64) -> Standing {
+        if self.unplaced() {
+            return Standing::Unplaced;
+        }
+        if self.signed_in {
+            return match self.label {
+                Some(_) => Standing::InUse,
+                None => Standing::NotEnrolled,
+            };
+        }
+        let Some(park) = &self.parked else {
+            return match self.stale {
+                Some(Stale::LoginUnreadable) => Standing::LoginUnread,
+                Some(Stale::LoginReplaced) => Standing::LoginReplaced,
+                _ => Standing::NothingParked,
+            };
+        };
+        if self.stale == Some(Stale::LoginRefused) {
+            return Standing::LoginRefused;
+        }
+        if !park.restorable_at(now) {
+            return Standing::LoginExpired;
+        }
+        // A session cookie's date, which nothing renews, only once it has passed.
+        let expiring = match (park.refresh_expires_at, park.session_expires_at) {
+            (Some(at), _) => crate::state::renewal_due(at, now),
+            (None, Some(at)) => at <= now,
+            (None, None) => false,
+        };
+        if expiring {
+            Standing::Expiring
+        } else {
+            Standing::Ready
+        }
     }
 
     /// The account, the way Pitboard tells accounts apart. `None` for a row nothing has
@@ -308,6 +341,45 @@ impl Row {
     /// showing it as an account nobody has enrolled.
     pub fn unplaced(&self) -> bool {
         self.label.is_none() && !self.signed_in && self.account_uuid.is_empty()
+    }
+}
+
+/// Where a row's account stands: whether it can be switched to, and what puts it right where
+/// it cannot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    /// A login pinned on no account; [`Row::stale`] says why.
+    Unplaced,
+    InUse,
+    NotEnrolled,
+    /// Nothing parked, and its login may be the one in use that could not be read, which no
+    /// sign-in would fix.
+    LoginUnread,
+    /// Nothing parked, since a sign-in outside Pitboard replaced its only login.
+    LoginReplaced,
+    NothingParked,
+    LoginRefused,
+    LoginExpired,
+    Ready,
+    /// Ready for now: its parked login is due to expire, or the sign-in it holds may have
+    /// lapsed.
+    Expiring,
+}
+
+impl Standing {
+    pub fn switchable(self) -> bool {
+        matches!(self, Standing::Ready | Standing::Expiring)
+    }
+
+    // Usable no more: only a sign-in brings it back.
+    pub fn needs_sign_in(self) -> bool {
+        matches!(
+            self,
+            Standing::LoginReplaced
+                | Standing::NothingParked
+                | Standing::LoginRefused
+                | Standing::LoginExpired
+        )
     }
 }
 
@@ -1634,6 +1706,57 @@ mod tests {
         assert_eq!(personal.stale, Some(Stale::LoginRefused));
         assert!(personal.parked.is_some(), "kept, as the service refused it");
         assert!(!personal.switchable(NOW));
+    }
+
+    #[test]
+    fn a_rows_standing_says_whether_it_switches_and_what_puts_it_right() {
+        let row = |label: Option<&str>, signed_in: bool, parked: Option<Park>| Row {
+            provider: ProviderId::Claude,
+            label: label.map(str::to_owned),
+            email: String::new(),
+            id: String::new(),
+            account_uuid: label.map_or_else(String::new, |l| format!("{l}-uuid")),
+            organization_uuid: None,
+            signed_in,
+            parked,
+            usage: None,
+            stale: None,
+            plan: None,
+            read_at: None,
+            reason: None,
+            spelling: Spelling::Bare,
+        };
+        let parked_as = |park: Park| row(Some("work"), false, Some(park));
+        let stale = |stale: Stale, parked: Option<Park>| Row {
+            stale: Some(stale),
+            ..row(Some("work"), false, parked)
+        };
+        let session = |at: i64| Park {
+            refresh_expires_at: None,
+            session_expires_at: Some(at),
+            ..parked(NOW + 20 * 86_400)
+        };
+        let due = crate::state::RENEW_WITHIN - 1;
+        for (row, standing) in [
+            (row(None, false, None), Standing::Unplaced),
+            (row(Some("work"), true, None), Standing::InUse),
+            (row(None, true, None), Standing::NotEnrolled),
+            (stale(Stale::LoginUnreadable, None), Standing::LoginUnread),
+            (stale(Stale::LoginReplaced, None), Standing::LoginReplaced),
+            (row(Some("work"), false, None), Standing::NothingParked),
+            (
+                stale(Stale::LoginRefused, Some(parked(NOW + 20 * 86_400))),
+                Standing::LoginRefused,
+            ),
+            (parked_as(parked(NOW)), Standing::LoginExpired),
+            (parked_as(parked(NOW + 20 * 86_400)), Standing::Ready),
+            (parked_as(parked(NOW + due)), Standing::Expiring),
+            (parked_as(session(NOW + 1)), Standing::Ready),
+            (parked_as(session(NOW)), Standing::Expiring),
+        ] {
+            assert_eq!(row.standing(NOW), standing, "{row:?}");
+            assert_eq!(row.switchable(NOW), standing.switchable(), "{row:?}");
+        }
     }
 
     /// What a read saw wins over the record, even a login that says no plan.

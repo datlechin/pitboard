@@ -824,6 +824,11 @@ impl Hand {
     pub(crate) fn pending(&self) -> usize {
         self.pending.len()
     }
+
+    // The code behind what the sheet that is up says went wrong, which no snapshot carries.
+    pub(crate) fn sheet_failure_code(&self) -> Option<&str> {
+        self.state.sheet_failure.as_ref()?.code.as_deref()
+    }
 }
 
 pub(crate) fn fresh_read(job: &Job) -> bool {

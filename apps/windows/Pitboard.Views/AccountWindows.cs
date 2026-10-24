@@ -132,7 +132,7 @@ public sealed class AccountWindows
         if (_picker is null)
         {
             // A fixture's Open in browser opens nothing, as its pages send nothing elsewhere.
-            var window = new OpenLinkWindow(_model.Send, Open, _web.OpenElsewhere);
+            var window = new OpenLinkWindow(_model.AccountWindows.NoLink, _model.Send, Open, _web.OpenElsewhere);
             window.Closed += (_, _) =>
             {
                 if (ReferenceEquals(_picker, window))

@@ -5,13 +5,15 @@
 
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{Refusal, refusal, status, titled};
+use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
+use crate::present::words;
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
+use pitboard_core::host::OS;
 use pitboard_core::switch::warm::{Apart, WarmUp, told_apart};
 use pitboard_core::testing::{Ran, Started, WarmScript};
 use std::sync::Arc;
@@ -159,7 +161,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
         machine.posted,
         [RunOutNotice {
             id: "warm-failed/personal/warm_up_not_started".into(),
-            title: "Pitboard could not warm up an account".into(),
+            title: words::COULD_NOT_WARM_ITSELF.into(),
             subtitle: None,
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
                    still has no period running."
@@ -294,7 +296,7 @@ fn asked_for_now_what_went_wrong_is_said_in_the_window() {
     model.run(&mut machine);
     assert_eq!(machine.warmed, [Some("claude/personal".to_owned())]);
     let shown = model.shown();
-    let failure = shown.failure.expect("said");
+    let failure = model.state.presented.clone().expect("said");
     assert_eq!(failure.title, "Couldn’t warm up personal");
     assert_eq!(failure.code.as_deref(), Some("warm_up_not_started"));
     assert!(machine.posted.is_empty());
@@ -360,18 +362,15 @@ fn a_setting_that_cannot_be_read_is_said_and_a_change_to_it_refused() {
     machine.warm_refused = Some(refusal("warm_setting_corrupt", message, Vec::new()));
     let mut model = started(&mut machine);
     assert_eq!(
-        model.shown().machine.warm.standing.as_deref(),
-        Some(
-            "Which accounts Pitboard warms up, at /home/warm.json, cannot be read (expected \
-             value). Delete it, then turn warm-up on again for each account you want it for."
-        )
+        model.shown().machine.warm.standing,
+        Some(pitboard_core::words::capitalised(message))
     );
     model.send(Intent::SetWarm {
         qualified: "claude/personal".into(),
         on: true,
     });
     model.run(&mut machine);
-    let failure = model.shown().failure.expect("refused");
+    let failure = model.state.presented.clone().expect("refused");
     assert_eq!(
         failure.title,
         "Couldn’t change which accounts are warmed up"
@@ -428,7 +427,10 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         .flat_map(|section| &section.accounts)
         .find(|item| item.title == "personal")
         .expect("personal");
-    assert_eq!(item.warm_note.as_deref(), Some("Warms up again at 10:00"));
+    assert_eq!(
+        item.notes.last().map(String::as_str),
+        Some("Warms up again at 10:00")
+    );
     let warm: Vec<(String, bool)> = item
         .offers
         .iter()
@@ -437,7 +439,7 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         .collect();
     assert_eq!(
         warm,
-        [(titled("Warm Up Now", "Warm up now"), false)],
+        [(words::warm_up_now(OS), false)],
         "its period runs, so nothing to start now"
     );
 }
@@ -451,9 +453,9 @@ fn a_halt_is_said_under_the_setting() {
     machine.warming = Ok(WarmUp::Stands(Box::new(halted)));
     let model = started(&mut machine);
     assert_eq!(
-        model.shown().machine.warm.standing.as_deref(),
-        Some(
-            "Pitboard is not warming up accounts: Claude Code is not installed where Pitboard looks."
-        )
+        model.shown().machine.warm.standing,
+        Some(words::typeset(&pitboard_core::words::warming_halted(
+            &Halt::ProgramMissing
+        )))
     );
 }

@@ -23,11 +23,13 @@ public sealed class SettingsPageTests
         Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
-            new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
-            new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
+            new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
+            new WarmAccountShown("claude/work", "work", On: false, Standing: null),
         ],
         NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
         Enabled: true, Terms: Snapshots.Terms);
+
+    private const string NewTerminals = "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {
@@ -340,16 +342,14 @@ public sealed class SettingsPageTests
     [UITestMethod]
     public async Task RenewalIsTheSwitchAlone()
     {
-        const string task = @"\Pitboard\Renew S-1-5-21-1004";
         var model = new StandInModel(With(1, machine => machine with
         {
-            Schedule = machine.Schedule with { Schedule = new Schedule.Installed(task, 86_400), On = true },
+            Schedule = machine.Schedule with { On = true },
         }));
         var page = await Shown(new AppModel(model));
         var texts = Views.Texts(page);
 
         Assert.DoesNotContain("Every day", texts);
-        Assert.DoesNotContain(task, texts);
         Assert.IsFalse(Views.Visible<Button>(page).Any(button => button.Content is "Renew now" or "Copy"));
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsOn);
 
@@ -363,7 +363,7 @@ public sealed class SettingsPageTests
         const string none = "This PC has no scheduler Pitboard knows how to write to.";
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with
         {
-            Schedule = machine.Schedule with { Schedule = new Schedule.Unsupported(), Enabled = false, Note = none },
+            Schedule = machine.Schedule with { Enabled = false, Note = none },
         }))));
 
         Assert.Contains(none, Views.Texts(page));
@@ -379,13 +379,13 @@ public sealed class SettingsPageTests
         {
             CommandLine = new CommandLineShown(
                 new FoundCommandLine.Bundled(bundled), bundled, "The one inside this app, so it updates with the app.", OffersLink: true,
-                CannotLink: null),
+                CannotLink: null, TerminalNote: null),
         }))));
         var texts = Views.Texts(page);
 
         Assert.Contains(bundled, texts);
         Assert.Contains("The one inside this app, so it updates with the app.", texts);
-        Assert.DoesNotContain(SettingsViewModel.NewTerminals, texts);
+        Assert.DoesNotContain(NewTerminals, texts);
         Assert.IsFalse(Views.Visible<Button>(page).Any(button => button.Content is string said && said.StartsWith("Install", StringComparison.Ordinal)));
     }
 
@@ -394,12 +394,13 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with
         {
-            CommandLine = new CommandLineShown(new FoundCommandLine.Nowhere(), "Not installed", null, OffersLink: true, CannotLink: null),
+            CommandLine = new CommandLineShown(
+                new FoundCommandLine.Nowhere(), "Not installed", null, OffersLink: true, CannotLink: null, TerminalNote: NewTerminals),
         }))));
         var texts = Views.Texts(page);
 
         Assert.Contains("Not installed", texts);
-        Assert.Contains(SettingsViewModel.NewTerminals, texts);
+        Assert.Contains(NewTerminals, texts);
     }
 
     [UITestMethod]

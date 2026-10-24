@@ -5,13 +5,14 @@
 use super::words;
 use super::{
     AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow,
-    MenuBarText, MenuNotices, PaceStanding, Question, Seen, WindowOffer,
+    MenuBarText, MenuNotices, PaceStanding, Question, RowEnd, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::advice::window;
 use crate::model::{Intent, Sheet};
 use crate::{Account, Limit, Tool};
 use pitboard_core::host::Os;
+use pitboard_core::status::{self, Stale};
 use pitboard_core::usage::pace::{self, Pace, Standing};
 use pitboard_core::words as said;
 use std::cmp::Ordering;
@@ -198,8 +199,8 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let needs_sign_in = needs_sign_in(account);
     let switching = account.qualified.is_some() && account.qualified.as_deref() == switching_for;
     let title = if account.unplaced {
-        match account.stale.as_deref() {
-            Some("login_unreadable" | "login_unusable") => "Login Pitboard can’t use",
+        match account.stale {
+            Some(Stale::LoginUnreadable | Stale::LoginUnusable) => "Login Pitboard can’t use",
             // Read, and not one Anthropic or OpenAI named, whether or not it could be asked.
             _ => "Login Pitboard can’t identify",
         }
@@ -218,7 +219,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         busy,
         &spoken_name,
     );
-    let problem = if account.unplaced || (!account.switchable && !account.signed_in) {
+    let problem = if account.unplaced || (!account.standing.switchable() && !account.signed_in) {
         account.stale_explanation.clone()
     } else {
         None
@@ -231,19 +232,31 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             said::span(seen.now - read_at),
             seen.program_of(&account.provider)
         )),
-        _ if problem.is_some() || account.stale.as_deref() == Some("no_usage") => None,
+        _ if problem.is_some() || account.stale == Some(Stale::NoUsage) => None,
         _ => account.stale_explanation.clone(),
     };
     let parked_note = if account.signed_in {
         None
     } else {
         let parked = account.parked.as_ref();
-        said::parked_life(parked.and_then(|p| p.refresh_expires_at), seen.now)
+        let renewable = parked.and_then(|p| p.refresh_expires_at);
+        let life = said::parked_life(renewable, seen.now)
             .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
+            .map(|life| words::typeset(&life));
+        match account.standing {
+            // Without a refresh token's date, it is a Claude Desktop session's that has passed.
+            status::Standing::Expiring => {
+                life.map(|life| words::sign_in_hint(&life, renewable.is_none()))
+            }
+            _ => life,
+        }
     };
     let pace = runs_out_first(account, seen.now).map(|(limit, in_seconds)| {
         let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-        said::capitalised(&said::runs_out(&scoped_name(&windows[limit]), in_seconds))
+        words::typeset(&said::capitalised(&said::runs_out(
+            &scoped_name(&windows[limit]),
+            in_seconds,
+        )))
     });
     let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
@@ -261,11 +274,29 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     if needs_sign_in {
         spoken.push("needs signing in again".into());
     }
+    let end = if switching {
+        Some(RowEnd::Switching {
+            spoken: words::SWITCHING.into(),
+        })
+    } else if in_use {
+        Some(RowEnd::InUse {
+            title: words::in_use(seen.os),
+        })
+    } else {
+        action.clone().map(|action| RowEnd::Button { action })
+    };
+    let notes = [&problem, &stale_note, &pace, &parked_note]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .chain(warm_note(seen, account))
+        .collect();
     AccountItem {
         id: account.id.clone(),
-        provider: account.provider.clone(),
         qualified: account.qualified.clone(),
         summary: summary(seen, account),
+        email_line: (!account.email.is_empty() && account.email != title)
+            .then(|| account.email.clone()),
         title,
         email: account.email.clone(),
         plan: account.plan.clone(),
@@ -274,12 +305,11 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         in_use,
         needs_sign_in,
         unplaced: account.unplaced,
-        switching,
+        end,
         offers: offers(seen.os, account, action.as_ref(), busy)
             .into_iter()
             .chain(warm_offer(seen, account))
             .collect(),
-        warm_note: warm_note(seen, account),
         windows: windows_of_account(account, seen.accounts())
             .into_iter()
             .map(|window| WindowOffer {
@@ -289,11 +319,8 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             .collect(),
         forget: forget(seen, account, &spoken_name),
         action,
-        help: problem.clone().or_else(|| stale_note.clone()),
-        problem,
-        stale_note,
-        pace,
-        parked_note,
+        help: problem.or(stale_note),
+        notes,
         limits: account
             .usage
             .as_ref()
@@ -306,7 +333,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
                     .collect()
             })
             .unwrap_or_default(),
-        spoken_name,
     }
 }
 
@@ -342,7 +368,7 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
                     switches,
                 ),
                 offer(
-                    words::titled(os, "Sign In Again…", "Sign in again…"),
+                    words::sign_in_again(os, true),
                     Intent::PresentSheet {
                         sheet: Sheet::SignInAgain {
                             provider: provider.clone(),
@@ -388,7 +414,7 @@ fn warm_offer(seen: &Seen, account: &Account) -> Option<ItemOffer> {
         .as_ref()
         .is_some_and(|overview| overview.halted.is_some());
     Some(ItemOffer {
-        title: words::titled(seen.os, "Warm Up Now", "Warm up now"),
+        title: words::warm_up_now(seen.os),
         intent: Intent::WarmNow {
             qualified: choice.qualified.clone(),
         },
@@ -413,8 +439,8 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     }
     let standing = choice.standing.as_ref()?;
     let clock = |at| seen.clock(at);
-    Some(said::capitalised(&pitboard_core::words::warm_standing(
-        standing, &clock,
+    Some(words::typeset(&said::capitalised(
+        &pitboard_core::words::warm_standing(standing, &clock),
     )))
 }
 
@@ -445,7 +471,7 @@ pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
     AccountMenuShown {
         offers: vec![
             "Use".into(),
-            words::titled(os, "Sign In Again…", "Sign in again…"),
+            words::sign_in_again(os, true),
             "Rename…".into(),
         ],
         forget: FORGET.into(),
@@ -482,7 +508,7 @@ fn action(
     if account.signed_in {
         return None;
     }
-    if account.switchable
+    if account.standing.switchable()
         && let Some(qualified) = &account.qualified
     {
         return Some(ItemAction {
@@ -494,7 +520,7 @@ fn action(
         });
     }
     (!busy).then(|| ItemAction {
-        title: words::titled(os, "Sign In Again…", "Sign in again…"),
+        title: words::sign_in_again(os, true),
         spoken: words::titled(
             os,
             &format!("Sign In to {spoken} Again…"),
@@ -544,17 +570,7 @@ fn runs_out_first(account: &Account, now: i64) -> Option<(usize, i64)> {
 }
 
 pub(crate) fn needs_sign_in(account: &Account) -> bool {
-    !account.unplaced
-        && account.label.is_some()
-        && !account.signed_in
-        && !account.switchable
-        && !login_unread(account)
-}
-
-/// An account not in use whose login may be the one in use that could not be read, which no
-/// sign-in would fix.
-fn login_unread(account: &Account) -> bool {
-    !account.signed_in && account.stale.as_deref() == Some("login_unreadable")
+    account.label.is_some() && account.standing.needs_sign_in()
 }
 
 // The line under an account in the menu: its limits, or what stands in their way.
@@ -567,7 +583,7 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
     {
         return Some("Switching…".into());
     }
-    if account.unplaced || login_unread(account) {
+    if account.unplaced || account.standing == status::Standing::LoginUnread {
         return Some(
             account
                 .stale_explanation
@@ -582,7 +598,7 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
         return Some("Needs signing in again".into());
     }
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-    if windows.is_empty() && account.stale.as_deref() == Some("no_usage") {
+    if windows.is_empty() && account.stale == Some(Stale::NoUsage) {
         return Some(words::NO_USAGE_READ.into());
     }
     windows.is_empty().then(|| account.email.clone())
@@ -642,7 +658,6 @@ pub(crate) fn limit_row(limit: &Limit, read_at: i64, now: i64) -> LimitRow {
             said: said::pace_column(pace),
             help: words::pace_help(pace),
         }),
-        name,
     }
 }
 
@@ -1084,7 +1099,6 @@ mod tests {
             now,
             now,
         );
-        assert_eq!(row.name, "weekly Fable");
         assert_eq!(row.short, "week · Fable");
         assert_eq!(row.figure, "72%");
         assert_eq!(row.level, crate::UsageLevel::Low);
@@ -1144,8 +1158,6 @@ mod tests {
     fn a_claude_desktop_row_says_no_usage_once_and_when_its_sign_in_may_lapse() {
         let home = Account {
             parked: Some(crate::Parked {
-                parked_at: NOW - 86_400,
-                access_expires_at: None,
                 refresh_expires_at: None,
                 session_expires_at: Some(NOW + 25 * 86_400 + 3_600),
             }),
@@ -1154,23 +1166,57 @@ mod tests {
         let rows = desktop_rows(vec![desktop_account("work", true), home]);
         assert_eq!(rows[0].summary, "No usage read");
         assert_eq!(rows[1].summary, "No usage read");
-        assert_eq!(rows[1].stale_note, None, "said once, in the menu's line");
         assert_eq!(
-            rows[1].parked_note.as_deref(),
-            Some("Its sign-in may lapse in 25 days")
+            rows[1].notes,
+            [said::session_life(Some(NOW + 25 * 86_400 + 3_600), NOW).expect("a date")],
+            "no usage said once, in the menu's line"
         );
         let lapsed = Account {
             parked: Some(crate::Parked {
-                parked_at: 0,
-                access_expires_at: None,
                 refresh_expires_at: None,
                 session_expires_at: Some(NOW - 1),
             }),
+            standing: status::Standing::Expiring,
             ..desktop_account("home", false)
         };
+        let life = said::session_life(Some(NOW - 1), NOW).expect("a date");
         assert_eq!(
-            desktop_rows(vec![lapsed])[0].parked_note.as_deref(),
-            Some("Its sign-in may have lapsed")
+            desktop_rows(vec![lapsed])[0].notes,
+            [words::sign_in_hint(&life, true)],
+            "as `pitboard status` hints a sign-in for it"
+        );
+    }
+
+    // As `pitboard status` hints a sign-in for it; it still switches until it expires.
+    #[test]
+    fn a_row_says_to_sign_in_again_to_a_parked_login_due_to_expire() {
+        let row = |account: Account| {
+            let state = read(status(vec![account], Vec::new()), vec![claude_code()]);
+            present_on(Os::MacOs, &state, NOW, &Utc)
+                .sections
+                .into_iter()
+                .flat_map(|section| section.accounts)
+                .next()
+                .expect("a row")
+        };
+        let due = NOW + 2 * 86_400;
+        let expiring = row(account(Some("work"))
+            .parked_until(due)
+            .standing(status::Standing::Expiring)
+            .build());
+        let life = said::parked_life(Some(due), NOW).expect("a date");
+        assert_eq!(expiring.notes, [words::sign_in_hint(&life, false)]);
+        assert!(!expiring.needs_sign_in);
+        assert!(matches!(
+            expiring.action.map(|action| action.intent),
+            Some(Intent::SwitchTo { .. })
+        ));
+
+        let lasting = NOW + 20 * 86_400;
+        let ready = row(account(Some("work")).parked_until(lasting).build());
+        assert_eq!(
+            ready.notes,
+            [said::parked_life(Some(lasting), NOW).expect("a date")]
         );
     }
 
@@ -1199,7 +1245,7 @@ mod tests {
                 .build(),
             account(Some("spare")).build(),
             account(Some("old"))
-                .switchable(false)
+                .standing(status::Standing::LoginExpired)
                 .limits(vec![window("session", 3.0)])
                 .build(),
         ];
@@ -1221,9 +1267,6 @@ mod tests {
             ..desktop_account("work", true)
         };
         let rows = desktop_rows(vec![work]);
-        assert_eq!(
-            rows[0].stale_note.as_deref(),
-            Some("Read 2h 00m ago, with Claude closed")
-        );
+        assert_eq!(rows[0].notes, ["Read 2h 00m ago, with Claude closed"]);
     }
 }

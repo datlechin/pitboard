@@ -39,20 +39,21 @@ private final class Told: @unchecked Sendable {
 @Test func aSnapshotThatIsNotNewerIsDropped() {
     let model = AppModel(model: StandInModel(snapshot(0)))
     #expect(model.revision == 0)
-    #expect(model.status == nil)
+    #expect(model.updatedMenu == "")
 
-    model.apply(snapshot(3, status: status("work")))
+    model.apply(snapshot(3, updated: "Updated 14:05"))
     #expect(model.revision == 3)
-    #expect(model.status == status("work"))
+    #expect(model.updatedMenu == "Updated 14:05")
 
-    model.apply(snapshot(2, status: status("personal")))
-    model.apply(snapshot(3, status: status("personal")))
+    model.apply(snapshot(2, updated: "Updated 14:10"))
+    model.apply(snapshot(3, updated: "Updated 14:10"))
     #expect(model.revision == 3)
-    #expect(model.status == status("work"), "neither older nor the same revision is shown")
+    #expect(
+        model.updatedMenu == "Updated 14:05", "neither older nor the same revision is shown")
 
-    model.apply(snapshot(5, status: status("personal")))
+    model.apply(snapshot(5, updated: "Updated 14:10"))
     #expect(model.revision == 5)
-    #expect(model.status == status("personal"))
+    #expect(model.updatedMenu == "Updated 14:10")
 }
 
 /// Each part is assigned only where it changed, so a view reading a part that stayed the
@@ -61,24 +62,24 @@ private final class Told: @unchecked Sendable {
 /// assigned again, so what is drawn again is the same with the comparison or without it.
 @MainActor
 @Test func onlyThePartsThatChangedAreAssigned() {
-    let model = AppModel(model: StandInModel(snapshot(1, status: status("work"))))
-    let reading: [PartialKeyPath<AppModel>] = [\.revision, \.now, \.reading]
-    #expect(model.apply(snapshot(2, status: status("work"), reading: true)) == reading)
+    let model = AppModel(model: StandInModel(snapshot(1, updated: "Updated 14:05")))
+    let reading: [PartialKeyPath<AppModel>] = [\.revision, \.reading]
+    #expect(model.apply(snapshot(2, updated: "Updated 14:05", reading: true)) == reading)
     let read = changes(model, \.reading) {
-        #expect(model.apply(snapshot(3, status: status("work"))) == reading)
+        #expect(model.apply(snapshot(3, updated: "Updated 14:05")) == reading)
     }
     #expect(read, "a read is no longer under way")
-    let more = changes(model, \.status) {
+    let more = changes(model, \.updatedMenu) {
         #expect(
-            model.apply(snapshot(4, status: status("work", "spare")))
-                == [\.revision, \.now, \.status])
+            model.apply(snapshot(4, updated: "Updated 14:10"))
+                == [\.revision, \.updatedMenu, \.updatedWindow])
     }
     #expect(more)
     let rows = changes(model, \.sections) {
-        model.apply(snapshot(5, status: status("work")))
+        model.apply(snapshot(5, updated: "Updated 14:05"))
     }
     #expect(!rows, "nothing about the rows moved")
-    #expect(model.apply(snapshot(5, status: status("personal"))).isEmpty, "dropped")
+    #expect(model.apply(snapshot(5, updated: "Updated 14:15")).isEmpty, "dropped")
 }
 
 /// The account windows are told of their part each time a snapshot shown changes it, once:
@@ -93,15 +94,15 @@ private final class Told: @unchecked Sendable {
     let deleting = windowsShown(
         deleting: [StoreDeletion(store: "7e15c34f-69ec-55b4-9542-f1c1fe3d7085", ask: 1)])
 
-    model.apply(snapshot(1, status: status("work")))
+    model.apply(snapshot(1, updated: "Updated 14:05"))
     #expect(told.isEmpty)
-    model.apply(snapshot(2, status: status("work"), windows: deleting))
+    model.apply(snapshot(2, updated: "Updated 14:05", windows: deleting))
     #expect(told == [deleting])
-    model.apply(snapshot(3, status: status("work", "spare"), windows: deleting))
+    model.apply(snapshot(3, updated: "Updated 14:10", windows: deleting))
     #expect(told == [deleting], "only something else moved")
-    model.apply(snapshot(3, status: status("work")))
+    model.apply(snapshot(3, updated: "Updated 14:05"))
     #expect(told == [deleting], "dropped")
-    model.apply(snapshot(4, status: status("work")))
+    model.apply(snapshot(4, updated: "Updated 14:05"))
     #expect(told == [deleting, windowsShown()])
     #expect(model.accountWindows == windowsShown())
 }
@@ -182,14 +183,14 @@ func aFixturesModelPublishesItsAccounts() async throws {
             name: "twoTools", temporaryDirectory: own.path, listener: listener,
             apps: NoOtherApps(), notifications: Unposted(), localTime: Utc())
     }
-    #expect(model.status == nil, "nothing is read before it is started")
+    #expect(model.sections.isEmpty, "nothing is read before it is started")
     model.send(.start)
     let deadline = Date().addingTimeInterval(30)
-    while model.status == nil || model.reading, Date() < deadline {
+    while model.updatedWindow.isEmpty || model.reading, Date() < deadline {
         try await Task.sleep(for: .milliseconds(20))
     }
     model.shutdown()
-    let labels = model.status?.accounts.compactMap(\.qualified) ?? []
+    let labels = model.sections.flatMap(\.accounts).compactMap(\.qualified)
     #expect(
         Set(labels) == [
             "claude/work", "claude/personal", "claude/old", "codex/main", "codex/spare",

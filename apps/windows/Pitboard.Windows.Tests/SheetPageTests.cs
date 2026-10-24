@@ -103,7 +103,7 @@ public sealed class SheetPageTests
     [TestMethod]
     public void ASignInUnderWayShowsInPlaceOfTheForm()
     {
-        var running = Items.Running("claude", "https://claude.com/cai/oauth/authorize?code=true", wantsCode: true);
+        var running = Items.Running("https://claude.com/cai/oauth/authorize?code=true", wantsCode: true);
         var shown = Shown(Snapshots.Read(1) with
         {
             Sheet = Add,
@@ -124,7 +124,7 @@ public sealed class SheetPageTests
     [TestMethod]
     public void ASignInThatStopsWhileTheSheetStaysGoesBackToTheForm()
     {
-        var signingIn = new SheetPage.SigningIn(Items.Running("claude"), Items.SigningIn("Claude Code"));
+        var signingIn = new SheetPage.SigningIn(Items.Running(), Items.SigningIn("Claude Code"));
 
         var shown = Shown(Snapshots.Read(1) with { Sheet = Add, SheetText = Items.AddAccount() }, signingIn);
 
@@ -134,7 +134,7 @@ public sealed class SheetPageTests
     [TestMethod]
     public void ASheetOnItsWayOutKeepsWhatItShowed()
     {
-        var signingIn = new SheetPage.SigningIn(Items.Running("claude"), Items.SigningIn("Claude Code"));
+        var signingIn = new SheetPage.SigningIn(Items.Running(), Items.SigningIn("Claude Code"));
 
         Assert.AreSame(signingIn, Shown(Snapshots.Read(1), signingIn));
         Assert.IsNull(Shown(Snapshots.Read(1)));
@@ -162,7 +162,7 @@ public sealed class SheetPageTests
     [TestMethod]
     public void ClosingASignInStopsItThenClosesTheSheet()
     {
-        var signingIn = new SheetPage.SigningIn(Items.Running("codex"), Items.SigningIn("Codex"));
+        var signingIn = new SheetPage.SigningIn(Items.Running(), Items.SigningIn("Codex"));
 
         CollectionAssert.AreEqual(new Intent[] { new Intent.CancelSignIn(), new Intent.CloseSheet() }, signingIn.Closed().ToArray());
         CollectionAssert.AreEqual(new Intent[] { new Intent.CloseSheet() }, new SheetPage.Stowing(Items.Stow()).Closed().ToArray());
@@ -173,7 +173,7 @@ public sealed class SheetPageTests
     public void WhatIsBeingSavedKeepsItsSheetUp()
     {
         var form = new SheetPage.Form(Add, Items.AddAccount(), Running: false);
-        var signingIn = new SheetPage.SigningIn(Items.Running("claude"), Items.SigningIn("Claude Code"));
+        var signingIn = new SheetPage.SigningIn(Items.Running(), Items.SigningIn("Claude Code"));
 
         Assert.IsTrue(form.Closable);
         Assert.IsFalse((form with { Text = form.Text with { Saving = true } }).Closable);

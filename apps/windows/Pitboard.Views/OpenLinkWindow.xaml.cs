@@ -15,6 +15,7 @@ public sealed partial class OpenLinkWindow : Window
 {
     private const double ContentWidth = 440;
 
+    private readonly EmptyList _noLink;
     private readonly Action<Intent> _send;
     private readonly Action<WindowAccount> _open;
     private readonly Action<string> _inBrowser;
@@ -22,8 +23,9 @@ public sealed partial class OpenLinkWindow : Window
     private Action? _primary;
     private Action? _secondary;
 
-    public OpenLinkWindow(Action<Intent> send, Action<WindowAccount> open, Action<string> inBrowser)
+    public OpenLinkWindow(EmptyList noLink, Action<Intent> send, Action<WindowAccount> open, Action<string> inBrowser)
     {
+        _noLink = noLink;
         _send = send;
         _open = open;
         _inBrowser = inBrowser;
@@ -87,8 +89,8 @@ public sealed partial class OpenLinkWindow : Window
         switch (shown)
         {
             case null:
-                Unavailable.Detail =
-                    $"Share a {PitboardFfiMethods.SiteNames(Conjunction.Or)} page with Pitboard from your browser’s Share menu to open it as one of your accounts.";
+                Unavailable.Title = _noLink.Title;
+                Unavailable.Detail = _noLink.Detail;
                 Primary("Close", Close);
                 break;
             case PickerShown.Reading reading:

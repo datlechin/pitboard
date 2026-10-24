@@ -339,7 +339,7 @@ fn no_tool_is_nudged_while_the_preferences_are_read() {
     let mut model = Hand::new();
     model.send(Intent::Start);
     model.run_but(&mut machine, |job| matches!(job, Job::LoadKept));
-    assert!(model.shown().status.is_some(), "the read has landed");
+    assert!(model.state.status.is_some(), "the read has landed");
     assert_eq!(
         model.shown().footing,
         Footing::Ready,

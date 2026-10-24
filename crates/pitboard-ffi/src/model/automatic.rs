@@ -10,7 +10,9 @@ use super::testing::machine::{Hand, Stub, any_read, offline_read};
 use super::testing::records::{Refusal, refusal, status, watching};
 use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
+use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
+use pitboard_core::words as said;
 use std::time::Duration;
 
 /// `work`, in use, its five-hour limit `percent` used.
@@ -232,19 +234,27 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
     };
     machine.look = watching(None);
     model.refresh(&mut machine);
+    let used = "62% of its 5-hour limit";
     assert_eq!(
-        standing(&model).as_deref(),
-        Some("Watching work: 62% of its 5-hour limit, as of 07:40.")
+        standing(&model),
+        Some(words::typeset(&said::watching(
+            "work",
+            Some(used),
+            Some("07:40"),
+            None
+        )))
     );
 
     machine.look = watching(Some(now + 3_600));
     model.refresh(&mut machine);
     assert_eq!(
-        standing(&model).as_deref(),
-        Some(
-            "Watching work: 62% of its 5-hour limit, as of 07:40. Anthropic holds Pitboard off \
-             asking again until 09:00."
-        )
+        standing(&model),
+        Some(words::typeset(&said::watching(
+            "work",
+            Some(used),
+            Some("07:40"),
+            Some("09:00")
+        )))
     );
 
     model.send(Intent::SetAtLimit {
@@ -252,6 +262,23 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
         at: 95,
     });
     assert_eq!(standing(&model), None);
+}
+
+// A label is the person's, as they typed it.
+#[test]
+fn the_settings_name_the_account_as_it_was_typed() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    turned_on(&mut model, &mut machine);
+    machine.look = Ok(AutoLooked::Stands(AutoSwitched::Watching {
+        account: "dana's".into(),
+        used: None,
+        as_of: None,
+        held_until: None,
+    }));
+    model.refresh(&mut machine);
+    let said = standing(&model).expect("something said");
+    assert!(said.contains("dana's"), "{said}");
 }
 
 /// Where it does not switch, the settings say why, with when it acts again where the core
@@ -277,7 +304,11 @@ fn the_settings_say_why_it_is_not_switching() {
                 until: now + 60,
             }
         ),
-        "work has used 97% of its 5-hour limit. Pitboard tries again at 08:01."
+        words::typeset(&said::auto_waiting(
+            "work",
+            "97% of its 5-hour limit",
+            "08:01"
+        ))
     );
     assert_eq!(
         says(
@@ -291,8 +322,12 @@ fn the_settings_say_why_it_is_not_switching() {
                 until: Some(now + 300),
             }
         ),
-        "work has used 97% of its 5-hour limit. Pitboard is not switching: the account was put \
-         in use less than 5 minutes ago. It decides again at 08:05."
+        words::typeset(&said::auto_skipped(
+            "work",
+            "97% of its 5-hour limit",
+            "the account was put in use less than 5 minutes ago",
+            Some("08:05")
+        ))
     );
     assert_eq!(
         says(
@@ -306,8 +341,10 @@ fn the_settings_say_why_it_is_not_switching() {
                 until: Some(now + 60),
             }
         ),
-        "Pitboard is not switching Claude Code: whose login Claude Code has stored could not be \
-         told (could not reach Anthropic). It asks again at 08:01."
+        words::typeset(&said::auto_not_watching(
+            "whose login Claude Code has stored could not be told (could not reach Anthropic)",
+            Some("08:01")
+        ))
     );
     assert_eq!(
         says(
@@ -321,7 +358,11 @@ fn the_settings_say_why_it_is_not_switching() {
                 used: "97% of its 5-hour limit".into(),
             }
         ),
-        "Switched Claude Code from work to personal: work has used 97% of its 5-hour limit.",
+        words::typeset(&said::auto_switched(
+            "work",
+            "personal",
+            "97% of its 5-hour limit"
+        )),
         "as `pitboard watch` says it"
     );
 
@@ -329,11 +370,11 @@ fn the_settings_say_why_it_is_not_switching() {
     machine.auto = Err(unwritable());
     model.refresh(&mut machine);
     assert_eq!(
-        standing(&model).as_deref(),
-        Some(
-            "Pitboard could not switch Claude Code, and tries again at 08:01: could not write \
-             to Pitboard's directory at /Users/x/.pitboard: read-only"
-        )
+        standing(&model),
+        Some(words::auto_stopped(
+            Some("08:01"),
+            "could not write to Pitboard's directory at /Users/x/.pitboard: read-only"
+        ))
     );
 
     machine.look = Err(refusal(
@@ -343,11 +384,11 @@ fn the_settings_say_why_it_is_not_switching() {
     ));
     model.refresh(&mut machine);
     assert_eq!(
-        standing(&model).as_deref(),
-        Some(
-            "Pitboard cannot tell whether to switch Claude Code: Pitboard's account list at \
-             /Users/x/.pitboard/state.json is damaged"
-        ),
+        standing(&model),
+        Some(words::auto_stopped(
+            None,
+            "Pitboard's account list at /Users/x/.pitboard/state.json is damaged"
+        )),
         "files the core could not read"
     );
 }
@@ -378,7 +419,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
             button: None,
         }]
     );
-    let last = &model.shown().last_switches;
+    let last = &model.state.last_switches;
     assert_eq!(
         last.iter()
             .map(|s| (s.provider.as_str(), s.to.as_str()))
@@ -473,7 +514,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
         "the look stands on what was recorded"
     );
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, "Claude Code was not switched");
+    assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
     assert_eq!(
         machine.posted[0].body,
         "work has used 97% of its 5-hour limit. Claude Code signs in another way, set by \
@@ -510,7 +551,7 @@ fn a_reason_it_is_not_watching_is_said_once() {
         machine.posted,
         [RunOutNotice {
             id: "auto-not-watching/switch_interrupted".into(),
-            title: "Pitboard is not switching Claude Code".into(),
+            title: words::NOT_SWITCHING.into(),
             subtitle: None,
             body: "A switch was interrupted, and the next change you make finishes it.".into(),
             clicked: "limits".into(),
@@ -551,12 +592,9 @@ fn a_refusal_is_said_once_and_lets_go() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1);
-    assert_eq!(
-        machine.posted[0].title,
-        "Pitboard could not switch Claude Code"
-    );
+    assert_eq!(machine.posted[0].title, words::COULD_NOT_SWITCH_ITSELF);
     assert!(model.state.switch_under_way().is_none());
-    assert!(model.shown().failure.is_none(), "nobody asked, so no alert");
+    assert!(model.state.presented.is_none(), "nobody asked, so no alert");
 }
 
 /// After a refusal it asks again no sooner than the core asks again after an attempt that
@@ -773,7 +811,7 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
     );
     assert_eq!(
         model
-            .shown()
+            .state
             .last_switches
             .iter()
             .map(|s| s.to.as_str())
@@ -867,7 +905,7 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, "Claude Code was not switched");
+    assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
     assert_eq!(
         machine.posted[0].body,
         "work has used 97% of its 5-hour limit. No other Claude Code account has room below \

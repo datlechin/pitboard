@@ -73,11 +73,11 @@ mod windowing;
 
 use crate::account_windows::AlertText;
 use crate::present::{
-    AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, Footing, MachineShown,
-    MenuBarText, MenuNotices, PanelNotice, Question, SetupStep, SheetText, SigningInText, StowText,
-    present,
+    AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
+    MachineShown, MenuBarText, MenuNotices, PanelNotice, SetupStep, SheetText, SigningInText,
+    StowText, WindowQuestion, present,
 };
-use crate::{Abandoned, AppCore, Status, Tool, Warning};
+use crate::{AppCore, Warning};
 use lanes::Lanes;
 use state::{Cadence, Msg, Now, State};
 use std::collections::HashMap;
@@ -444,18 +444,12 @@ pub enum Sheet {
     Stow,
 }
 
-/// A sign-in under way, and what its tool has said so far.
+/// A sign-in under way, as far as its tool has said.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RunningSignIn {
     /// Tells this sign-in from any other, where the Swift model compared objects: one higher
     /// for each sign-in asked for.
     pub id: u64,
-    /// The tool, as a `Tool`'s code.
-    pub provider: String,
-    /// The name the account is to be enrolled under, bare, as it was asked for.
-    pub name: String,
-    /// Everything the tool has said so far, as it said it.
-    pub said: String,
     /// The address the tool printed for a person to open when the browser did not open by
     /// itself, as printed, for the app to open or to copy into another browser. Read by the
     /// tool's own module.
@@ -463,79 +457,53 @@ pub struct RunningSignIn {
     /// Whether to offer a field for the code the browser shows, which the tool is waiting to
     /// have typed back. Read by the tool's own module.
     pub wants_code: bool,
-    /// Whether the tool refused the last code typed back, and reads another in its place:
-    /// the field is offered again, and the sheet can say why.
-    pub code_refused: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct QuitQuestion {
-    pub qualified: String,
-    /// The app, as the core's holder detection names it and `AppControl` takes it: on macOS
-    /// its bundle id, on Windows its Application User Model ID.
-    pub app_id: String,
-    /// The app as a person knows it: "ChatGPT".
-    pub name: String,
+// The app a quit question asks to quit, for the account `qualified` names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QuitQuestion {
+    pub(crate) qualified: String,
+    // as the core's holder detection names it and `AppControl` takes it: on macOS its bundle
+    // id, on Windows its Application User Model ID
+    pub(crate) app_id: String,
+    // as a person knows it: "ChatGPT"
+    pub(crate) name: String,
 }
 
-/// What a switch asks before it puts an account's login in place of a login in use its
-/// service refuses for good, which cannot be parked.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ReplaceQuestion {
-    pub qualified: String,
-    pub question: Question,
-}
-
-/// What a switch means for a tool's running sessions, for a tool whose sessions never pick
-/// a switch up: they keep the account they started with until they are started again.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RestartNeeded {
-    /// The command a person quits and starts again: `codex`.
+// For a tool whose running sessions keep the account they started with until started again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RestartNeeded {
+    // the command a person quits and starts again: `codex`
     pub program: String,
-    /// The account they keep using, by its label alone, since the tool is named already.
+    // by its label alone, since the tool is named already
     pub from: String,
 }
 
-/// What a tool's last switch said that the read after it does not say again, until the
-/// tool no longer has the account it switched to signed in, or somebody puts it away. One
-/// per tool: a switch of one tool says nothing about another's sessions.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct LastSwitch {
-    /// The tool, as a `Tool`'s code.
+// What a tool's last switch said that the reads after it do not say again, until the tool no
+// longer has that account signed in or somebody puts it away.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LastSwitch {
     pub provider: String,
-    /// The account switched to, as the core types it: bare for Claude Code, `codex/work`
-    /// for any other tool.
+    // as the core types it: bare for Claude Code, `codex/work` for any other tool
     pub to: String,
-    /// When sessions already open will have picked it up, in epoch seconds, for a tool that
-    /// follows a switch by itself.
+    // when sessions already open will have picked it up, for a tool that follows by itself
     pub follows_at: Option<i64>,
-    /// For a tool whose running sessions never pick a switch up.
     pub restart: Option<RestartNeeded>,
-    /// What a sign-in that put a new login in use in place of the account's old one said it
-    /// did, where that is what this is: sessions already running are left on the old login
-    /// exactly as a switch leaves them on the old account. Kept beside what the tool's last
-    /// switch said, which it leaves as it was, since the tool did not switch.
+    // what a sign-in that replaced the account's login in use said, since no switch did
     pub said: Option<String>,
-    /// What the switch warned about, every warning of it.
     pub warnings: Vec<Warning>,
     // For a tool whose app holds the login from when it is next opened: that, as a sentence.
-    #[uniffi(default)]
     pub opens: Option<String>,
 }
 
-/// Something a person asked for that did not happen, for the window to say: an alert's
-/// title and its message.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Failure {
-    /// One higher for each failure said, so an app tells a new one from one it has shown.
+// Something a person asked for that did not happen, numbered one higher for each said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Failure {
     pub id: u64,
-    /// What was being done, as an alert's title says it: "Couldn’t switch to personal".
+    // what was being done, as an alert's title says it: "Couldn’t switch to personal"
     pub title: String,
-    /// What went wrong. Pitboard's errors already say what to do, so it is shown as it is.
     pub message: String,
-    /// The stable code behind it, for deciding what to offer, where the core gave one.
     pub code: Option<String>,
-    /// Everything else it warned about.
     pub warnings: Vec<Warning>,
 }
 
@@ -577,49 +545,13 @@ pub struct Snapshot {
     /// those waiting, and `snapshot` can give one it was never told, so an app can see 3 and
     /// then 5. It keeps the snapshot with the highest it has seen and drops any other.
     pub revision: u64,
-    /// When this snapshot was made, in epoch seconds: the moment anything in it that depends
-    /// on the time was worked out at. Not every passing second makes a new snapshot.
-    pub now: i64,
     /// Whether a read of the accounts is under way, so a Refresh button can say so.
     pub reading: bool,
-    /// When the accounts were last read, in epoch seconds. `None` before the first read
-    /// that answered.
-    pub updated_at: Option<i64>,
-    /// The accounts, as the last read gave them or with newer numbers some session has
-    /// recorded since, or the last numbers measured where no read has answered yet. `None`
-    /// before anything is known, which is not a machine without accounts.
-    pub status: Option<Status>,
-    /// Everything the last read warned about, or what its failure did, and before those what
-    /// a switch that failed since warned about.
-    pub warnings: Vec<Warning>,
-    /// Why the last read did not answer, when it did not. `status` is then the last
-    /// numbers measured.
-    pub read_failure: Option<ReadFailure>,
-    /// An interrupted switch nothing can finish, which the app offers a way out of.
-    pub stuck: bool,
-    /// The tools whose program was found, in the order a listing shows them, once the
-    /// first read has asked. A tool missing here may still be on some `PATH`, so this
-    /// narrows what is offered and never forbids anything.
-    pub installed: Option<Vec<Tool>>,
-    /// The account a switch is under way for, or waiting on the quit question for, as its
-    /// label with its tool, from the moment it is asked for until the read after it has
-    /// landed. Nothing else is switched meanwhile, so the menu and the rows hold back.
-    pub switch_under_way: Option<String>,
-    pub quit_question: Option<QuitQuestion>,
+    /// The question asked before Pitboard quits an app that holds a tool's login, for a
+    /// switch, a sign-in or the account it shows, while it is asked.
+    pub quit_question: Option<WindowQuestion>,
     /// The question a switch asks before it replaces a login its service refuses for good.
-    pub replace_question: Option<ReplaceQuestion>,
-    /// What each tool's last switch said that is still true, one per tool at most: a tool's
-    /// newer switch takes the place of what its last said, and one kept once the last was put
-    /// away goes after every other tool's. Apart from `warnings`, which the read after every
-    /// switch replaces: these are about the switch, and stay true until the tool no longer
-    /// has the account it switched to signed in, or somebody puts them away.
-    pub last_switches: Vec<LastSwitch>,
-    /// What giving up on an interrupted switch kept, until somebody has read it.
-    pub abandoned: Option<Abandoned>,
-    /// The last thing asked for that did not happen, which an app says once: a newer one
-    /// has a higher `id`. It stays here until somebody has read it, `Intent::DismissFailure`,
-    /// or another takes its place.
-    pub failure: Option<Failure>,
+    pub replace_question: Option<WindowQuestion>,
     /// What the model wants of the main window.
     pub window_request: WindowRequest,
     /// The sign-in under way, from the moment it is asked for until it has finished, failed
@@ -629,16 +561,14 @@ pub struct Snapshot {
     pub sheet: Option<Sheet>,
     /// What went wrong in the sheet that is up, said inside it, where what was typed is still
     /// there to correct: a sign-in started from it that could not start or finish, or a name
-    /// it could not save. Numbered with `failure`, and gone with the sheet.
-    pub sheet_failure: Option<Failure>,
+    /// it could not save. Numbered with the failures said in the window, and gone with the
+    /// sheet.
+    pub sheet_failure: Option<FailureText>,
     /// What the menu bar item says beside its mark.
     pub menu_bar: MenuBarText,
     /// The accounts, a section per tool once there is more than one, each as its row.
     pub sections: Vec<AccountSection>,
     pub account_menu: AccountMenuShown,
-    /// Whether accounts of more than one tool are shown, which is when anything says which
-    /// tool an account is for.
-    pub shows_tools: bool,
     /// Everything to tell somebody that is not an account, the most pressing first.
     pub notices: Vec<PanelNotice>,
     /// What the menu says of the notices.
@@ -661,9 +591,7 @@ pub struct Snapshot {
     pub signing_in_text: Option<SigningInText>,
     /// What the sheet for putting away the login left in a file says, while it is up.
     pub stow_text: Option<StowText>,
-    /// What the quit question asks, while it is asked.
-    pub quit_confirmation: Option<Question>,
-    /// The alert for `failure`, while there is one to say.
+    /// The alert for something asked for that did not happen, until somebody has read it.
     pub failure_alert: Option<AlertText>,
     /// What the settings and the window's other panes show of this machine rather than its
     /// accounts: daily renewal, doctor's checks, the activity log and the command line a
@@ -1023,18 +951,16 @@ impl Actor {
         }
     }
 
-    /// Hands the listener a snapshot where anything in it changed. Compared with the last
-    /// one under its revision and time, so neither moving alone makes a new one, and made
-    /// before the lock is taken: making it asks the app's `LocalTime`, and the model never
-    /// holds a lock while it calls out.
+    // Made before the lock is taken: making it asks the app's `LocalTime`, and the model never
+    // holds a lock while it calls out.
     fn publish(&self, now: Now) {
         let mut made = present(&self.state, now.epoch(), self.local_time.as_ref());
         let mut shown = lock(&self.shown);
-        (made.revision, made.now) = (shown.revision, shown.now);
+        made.revision = shown.revision;
         if made == *shown {
             return;
         }
-        (made.revision, made.now) = (shown.revision + 1, now.epoch());
+        made.revision = shown.revision + 1;
         *shown = made.clone();
         drop(shown);
         let _ = self.tell.send(made);

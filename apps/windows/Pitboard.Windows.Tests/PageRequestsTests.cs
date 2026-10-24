@@ -5,7 +5,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class PageRequestsTests
 {
-    private static readonly NavigationPolicy ChatGPT = new(PitboardFfiMethods.SitesFor("codex").Single(), "https");
+    private static readonly NavigationPolicy ChatGPT = new(Items.Site("codex"), "https");
 
     private static readonly NavigationPolicy Fixture = ChatGPT with { Scheme = WebEnvironment.FixtureScheme };
 
@@ -66,7 +66,7 @@ public sealed class PageRequestsTests
     [TestMethod]
     public void AFixturesPagesAreItsSitesOnItsScheme()
     {
-        var signIn = PitboardFfiMethods.SitesFor("codex").Single().SignInHosts[0];
+        var signIn = ChatGPT.Site.SignInHosts[0];
         var request = PageRequests.NewWindow(
             Fixture, PageRole.Window, $"pitboard-fixture://{signIn}/sign-in", false, "pitboard-fixture://chatgpt.com/", mainFrame: true);
 

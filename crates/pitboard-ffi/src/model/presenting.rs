@@ -3,7 +3,7 @@
 //! UTC.
 
 use super::signing::{add, adding_in_claude, signs_in, travel};
-use super::state::{Answer, Job};
+use super::state::{Answer, Job, Recording};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub, desktop_machine};
 use super::testing::platform::StandInApps;
@@ -17,11 +17,12 @@ use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
 use crate::present::{
     AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
-    NoticeAction, PaceStanding, PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer,
-    present,
+    NoticeAction, PaceStanding, PanelNotice, Question, RowEnd, SetupLink, SetupStep, Severity,
+    WindowOffer, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
-use pitboard_core::host::OS;
+use pitboard_core::host::{OS, Os};
+use pitboard_core::status::{Stale, Standing};
 use std::time::Duration;
 
 /// 12:00 UTC on Wednesday 14 January 2026, a day far from any change of clocks.
@@ -119,22 +120,22 @@ fn ids(shown: &Snapshot) -> Vec<String> {
 
 fn give_up() -> NoticeAction {
     NoticeAction {
-        title: titled("Give Up…", "Give up…"),
+        title: words::give_up(OS, true),
         intent: Intent::AbandonStuckSwitch,
         dismisses: false,
         switches: false,
         enabled: true,
         confirm: Some(Question {
-            title: "Give up on the interrupted switch?".into(),
+            title: words::GIVE_UP_ON_SWITCH.into(),
             message: words::give_up_stuck(&[]),
-            confirm: titled("Give Up", "Give up"),
+            confirm: words::give_up(OS, false),
         }),
     }
 }
 
 fn dismiss(intent: Intent) -> NoticeAction {
     NoticeAction {
-        title: "Dismiss".into(),
+        title: words::DISMISS.into(),
         intent,
         dismisses: true,
         switches: false,
@@ -194,7 +195,6 @@ fn an_account_carries_the_plan_its_login_says() {
     assert_eq!(team.plan.as_deref(), Some("Team 5x"));
     assert_eq!(team.menu_title, "work · Team 5x");
     assert_eq!(team.spoken, "work, Team 5x, in use");
-    assert_eq!(team.spoken_name, "work");
     let spare = described(account(Some("spare")).build());
     assert_eq!((spare.plan, spare.menu_title.as_str()), (None, "spare"));
 }
@@ -255,7 +255,11 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         None,
         "already in use"
     );
-    let stale = described(account(Some("stale")).switchable(false).build());
+    let stale = described(
+        account(Some("stale"))
+            .standing(Standing::LoginExpired)
+            .build(),
+    );
     assert_eq!(
         sends(&stale),
         Some(present_sheet(Sheet::SignInAgain {
@@ -299,7 +303,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             .build(),
         switching(running),
     );
-    assert!(spare.switching);
+    assert!(spare.switching());
     assert_eq!(spare.summary, "Switching…");
     assert_eq!(spare.action, None);
 
@@ -309,12 +313,12 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             .build(),
         switching(running),
     );
-    assert!(!other.switching);
+    assert!(!other.switching());
     assert_eq!(other.summary, "5-hour 5%");
     assert_eq!(other.action, None);
     // Its own menu holds its switch back too, and what else it offers it offers as the Swift
     // menu did, which held nothing else back for a switch.
-    let again = titled("Sign In Again…", "Sign in again…");
+    let again = words::sign_in_again(OS, true);
     assert_eq!(
         offered(&other),
         [
@@ -331,10 +335,36 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             account(Some("spare")).of("codex").build(),
             switching(running)
         )
-        .switching,
+        .switching(),
         "Codex's spare is another account"
     );
-    assert!(!described_while(unnamed(), switching(running)).switching);
+    assert!(!described_while(unnamed(), switching(running)).switching());
+}
+
+/// What both apps draw of a row: its email under its name where its name is not that already,
+/// and at its far end a switch's spinner, the account in use, or its action's button.
+#[test]
+fn a_row_says_its_email_line_and_what_ends_it() {
+    let work = described(account(Some("work")).signed_in().build());
+    assert_eq!(work.email_line, Some(work.email.clone()));
+    assert_eq!(
+        work.end,
+        Some(RowEnd::InUse {
+            title: words::in_use(OS)
+        })
+    );
+    let spare = described(account(Some("spare")).build());
+    let action = spare.action.clone().expect("it switches");
+    assert_eq!(spare.end, Some(RowEnd::Button { action }));
+    assert_eq!(
+        described_while(account(Some("spare")).build(), switching("claude/spare")).end,
+        Some(RowEnd::Switching {
+            spoken: words::SWITCHING.into()
+        })
+    );
+    let unnamed = described(account(None).signed_in().uuid("u").build());
+    assert_eq!(unnamed.title, unnamed.email);
+    assert_eq!(unnamed.email_line, None, "its name is its email");
 }
 
 /// A sign-in waits on somebody in a browser. It holds back another sign-in and nothing else:
@@ -349,7 +379,7 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
         })
     );
     // Its own menu shows signing in again, held back, beside what can still be done.
-    let again = titled("Sign In Again…", "Sign in again…");
+    let again = words::sign_in_again(OS, true);
     assert_eq!(
         offered(&spare),
         [
@@ -369,7 +399,12 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
             email: "u@example.com".into()
         }))
     );
-    let stale = described_while(account(Some("stale")).switchable(false).build(), signing_in);
+    let stale = described_while(
+        account(Some("stale"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        signing_in,
+    );
     assert_eq!(sends(&stale), None);
     assert_eq!(
         offered(&stale),
@@ -406,7 +441,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
             label: label.into(),
         })
     };
-    let sign_in_again = titled("Sign In Again…", "Sign in again…");
+    let sign_in_again = words::sign_in_again(OS, true);
     let offer = |title: &str, intent: Intent| ItemOffer {
         title: title.into(),
         intent,
@@ -424,7 +459,9 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     let accounts = vec![
         account(Some("work")).signed_in().build(),
         spare.clone(),
-        account(Some("stale")).switchable(false).build(),
+        account(Some("stale"))
+            .standing(Standing::LoginExpired)
+            .build(),
     ];
     let (model, _) = reading(accounts.clone());
     let [work, spare_row, stale] = &rows(&model)[..] else {
@@ -518,11 +555,18 @@ fn the_account_menu_with_nothing_selected_keeps_its_items() {
     assert_eq!(
         model.on_a_mac().account_menu,
         AccountMenuShown {
-            offers: vec!["Use".into(), "Sign In Again…".into(), "Rename…".into()],
+            offers: vec![
+                "Use".into(),
+                words::sign_in_again(Os::MacOs, true),
+                "Rename…".into()
+            ],
             forget: "Forget…".into(),
         }
     );
-    assert_eq!(model.on_windows().account_menu.offers[1], "Sign in again…");
+    assert_eq!(
+        model.on_windows().account_menu.offers[1],
+        words::sign_in_again(Os::Windows, true)
+    );
 }
 
 /// An account's own menu opens each of its windows, one per site of its tool, named by the
@@ -543,7 +587,7 @@ fn an_accounts_own_menu_opens_its_windows() {
             .build(),
     ];
     let (model, _) = reading(accounts.clone());
-    let listed = crate::window_accounts(accounts);
+    let listed = crate::account_windows::window_accounts(&accounts);
     let [work, main] = &rows(&model)[..] else {
         panic!("two rows");
     };
@@ -576,7 +620,7 @@ fn an_accounts_own_menu_opens_its_windows() {
 fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
     let stale = || {
         account(Some("stale"))
-            .switchable(false)
+            .standing(Standing::LoginExpired)
             .limits(vec![window("session", 12.0)])
             .build()
     };
@@ -596,9 +640,9 @@ fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
 fn an_account_whose_login_could_not_be_read_is_not_said_to_need_signing_in() {
     let why = "Claude Code's login could not be read; run `pitboard doctor`";
     let unread = Account {
-        stale: Some("login_unreadable".into()),
+        stale: Some(Stale::LoginUnreadable),
         ..account(Some("beta"))
-            .switchable(false)
+            .standing(Standing::LoginUnread)
             .unmeasured()
             .explained(why)
             .build()
@@ -631,7 +675,7 @@ fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
     assert_eq!(
         described(
             account(Some("stale"))
-                .switchable(false)
+                .standing(Standing::LoginExpired)
                 .limits(limits())
                 .build()
         )
@@ -744,92 +788,48 @@ fn a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all() {
     );
 }
 
-/// Why an account cannot be used is said in full only where it cannot be: a login Pitboard
-/// cannot use, or an account that cannot be switched to. Numbers that are merely not live do
-/// not stop anybody choosing an account, and the account in use needs no switch.
+/// Why an account cannot be used, where it cannot be, or else why its numbers are not new,
+/// where it can be used all the same, is said once under its limits, and the menu's help says
+/// it too. Numbers that are merely not live do not stop anybody choosing an account. An
+/// account with nothing wrong, or nothing to say, says nothing.
 #[test]
-fn only_an_account_that_cannot_be_used_says_why() {
+fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
     let refused_login = "Its parked login was refused. Sign in to it again.";
     let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
+    let said = |account: Account| {
+        let item = described(account);
+        (item.notes, item.help)
+    };
+    let told = |why: &str| (vec![why.to_owned()], Some(why.to_owned()));
     let login = unplaced("codex", false);
-    assert_eq!(described(login.clone()).problem, login.stale_explanation);
+    let unusable = login.stale_explanation.clone().expect("why");
+    assert_eq!(said(login), told(&unusable));
+    let stale = || account(Some("stale")).standing(Standing::LoginExpired);
     assert_eq!(
-        described(
-            account(Some("stale"))
-                .switchable(false)
-                .explained(refused_login)
-                .build()
-        )
-        .problem
-        .as_deref(),
-        Some(refused_login)
+        said(stale().explained(refused_login).build()),
+        told(refused_login)
     );
+    assert_eq!(said(stale().build()), (Vec::new(), None), "nothing to say");
     assert_eq!(
-        described(account(Some("stale")).switchable(false).build()).problem,
-        None,
-        "nothing to say"
-    );
-    assert_eq!(
-        described(account(Some("spare")).explained(old_numbers).build()).problem,
-        None,
+        said(account(Some("spare")).explained(old_numbers).build()),
+        told(old_numbers),
         "it can still be switched to"
     );
     assert_eq!(
-        described(
+        said(
             account(Some("work"))
                 .signed_in()
-                .switchable(false)
                 .explained(old_numbers)
                 .build()
-        )
-        .problem,
-        None,
-        "it is the one in use"
+        ),
+        told(old_numbers),
+        "the one in use"
     );
-}
-
-/// Numbers that are not new are worth knowing about where the account can still be used:
-/// its service could not be reached or is rate limiting, or its session has expired. That is
-/// said beside the numbers of the account in use and of one that can be switched to, and not
-/// a second time where the account cannot be used and why is said already. The menu's help
-/// says whichever there is.
-#[test]
-fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
-    let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
-    let refused_login = "Its parked login was refused. Sign in to it again.";
-    let spare = described(account(Some("spare")).explained(old_numbers).build());
-    assert_eq!(spare.stale_note.as_deref(), Some(old_numbers));
-    assert_eq!(spare.problem, None);
-    assert_eq!(spare.help.as_deref(), Some(old_numbers));
-    let in_use = described(
-        account(Some("work"))
-            .signed_in()
-            .switchable(false)
-            .explained(old_numbers)
-            .build(),
-    );
-    assert_eq!(in_use.stale_note.as_deref(), Some(old_numbers));
-    assert_eq!(in_use.problem, None);
-
-    let expired = described(
-        account(Some("stale"))
-            .switchable(false)
-            .explained(refused_login)
-            .build(),
-    );
-    assert_eq!(expired.problem.as_deref(), Some(refused_login));
     assert_eq!(
-        expired.stale_note, None,
-        "said once, as why it cannot be used"
-    );
-    assert_eq!(expired.help.as_deref(), Some(refused_login));
-    assert_eq!(described(unplaced("codex", false)).stale_note, None);
-    assert_eq!(
-        described(account(Some("spare")).build()).stale_note,
-        None,
+        said(account(Some("spare")).build()),
+        (Vec::new(), None),
         "numbers that are new"
     );
-    assert_eq!(described(account(Some("spare")).build()).help, None);
 }
 
 /// How long a parked login stays usable is about a switch to it, so it is said of every
@@ -838,22 +838,22 @@ fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
 fn a_parked_logins_life_is_said_only_of_an_account_not_in_use() {
     let parking = NOON + 3 * 86_400 + 60;
     assert_eq!(
-        described(account(Some("spare")).parked_until(parking).build())
-            .parked_note
-            .as_deref(),
-        Some("Parked login good for 3 more days")
+        described(account(Some("spare")).parked_until(parking).build()).notes,
+        [words::typeset(
+            &pitboard_core::words::parked_life(Some(parking), NOON).expect("a life")
+        )]
     );
-    assert_eq!(
+    assert!(
         described(
             account(Some("work"))
                 .signed_in()
                 .parked_until(parking)
                 .build()
         )
-        .parked_note,
-        None
+        .notes
+        .is_empty()
     );
-    assert_eq!(described(account(Some("spare")).build()).parked_note, None);
+    assert!(described(account(Some("spare")).build()).notes.is_empty());
 }
 
 const HOUR: i64 = 3_600;
@@ -920,8 +920,8 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .build(),
     );
     assert_eq!(
-        in_use.pace.as_deref(),
-        Some("Weekly limit runs out in 20h 18m at this pace")
+        in_use.notes,
+        ["Weekly limit runs out in 20h 18m at this pace"]
     );
     assert_eq!(
         in_use.summary,
@@ -933,7 +933,7 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .read_at(NOON)
             .build(),
     );
-    assert_eq!(parked.pace, None);
+    assert!(parked.notes.is_empty());
     assert_eq!(parked.summary, "5-hour 30%, weekly 33%");
     let calm = described(
         account(Some("work"))
@@ -942,7 +942,7 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .read_at(NOON)
             .build(),
     );
-    assert_eq!(calm.pace, None);
+    assert!(calm.notes.is_empty());
 }
 
 /// Only an enrolled account that is not the one in use may be forgotten: forgetting that one
@@ -997,8 +997,13 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
 fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() {
     let (model, _) = reading(vec![
         account(Some("personal")).of("codex").signed_in().build(),
-        account(Some("work")).of("codex").switchable(false).build(),
-        account(Some("spare")).switchable(false).build(),
+        account(Some("work"))
+            .of("codex")
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("spare"))
+            .standing(Standing::LoginExpired)
+            .build(),
     ]);
     let shown = rows(&model);
     let again = |provider: &str, label: &str| {
@@ -1094,7 +1099,6 @@ fn one_tool_looks_as_it_always_did() {
         assert_eq!(shown.sections[0].heading, None);
         assert_eq!(shown.sections[0].accounts.len(), 2);
         assert_eq!(shown.menu_bar.name_and_usage, "unnamed 80%");
-        assert!(!shown.shows_tools);
     }
     assert!(reading(Vec::new()).0.shown().sections.is_empty());
 }
@@ -1109,7 +1113,6 @@ fn accounts_of_two_tools_are_grouped_by_tool() {
         account(Some("side")).of("codex").signed_in().build(),
     ]);
     let shown = model.shown();
-    assert!(shown.shows_tools);
     let headings: Vec<Option<&str>> = shown
         .sections
         .iter()
@@ -1210,10 +1213,10 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
         notice(
             "stuck",
             Severity::Error,
-            "An interrupted switch is waiting",
+            words::SWITCH_WAITING,
             &[
                 &words::switch_waits_for("Anthropic or OpenAI"),
-                "Giving up on it keeps every login. Nothing is deleted.",
+                words::GIVING_UP_KEEPS_LOGINS,
             ],
             vec![give_up()],
         )
@@ -1247,11 +1250,8 @@ fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
         [notice(
             "stuck",
             Severity::Error,
-            "An interrupted switch is waiting",
-            &[
-                reason,
-                "Giving up on it keeps every login. Nothing is deleted."
-            ],
+            words::SWITCH_WAITING,
+            &[reason, words::GIVING_UP_KEEPS_LOGINS],
             vec![give_up()],
         )]
     );
@@ -1281,7 +1281,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     assert_eq!(
         titles,
         [
-            "Couldn’t read usage",
+            words::COULD_NOT_READ_USAGE,
             "An environment variable overrides the login"
         ]
     );
@@ -1290,8 +1290,8 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
         notice(
             "read",
             Severity::Error,
-            "Couldn’t read usage",
-            &[reason, "The numbers shown are the last ones measured."],
+            words::COULD_NOT_READ_USAGE,
+            &[reason, words::LAST_MEASURED],
             Vec::new(),
         )
     );
@@ -1332,10 +1332,10 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let reason = "/Users/dana/.pitboard/state.json was written on another Mac.";
     let failed = || Err(refusal("state_wrong_machine", reason, Vec::new()));
     let read_failed = AccountsShown::ReadFailed {
-        title: titled("Couldn’t Read Accounts", "Couldn’t read accounts"),
+        title: words::could_not_read_accounts(OS),
         detail: reason.into(),
         retry: Choice {
-            title: titled("Try Again", "Try again"),
+            title: words::try_again(OS),
             intent: Intent::Refresh { asked: true },
             enabled: true,
         },
@@ -1346,7 +1346,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     nothing.offline = failed();
     unknown.refresh(&mut nothing);
     let shown = unknown.shown();
-    assert_eq!(shown.status, None);
+    assert_eq!(unknown.state.status, None);
     assert_eq!(
         shown.footing,
         Footing::Ready,
@@ -1357,7 +1357,10 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let mut empty = at_noon();
     empty.refresh(&mut Stub::reading(failed()));
     let shown = empty.shown();
-    assert_eq!(shown.status.map(|s| s.accounts.len()), Some(0));
+    assert_eq!(
+        empty.state.status.clone().map(|s| s.accounts.len()),
+        Some(0)
+    );
     assert_eq!(
         shown.footing,
         Footing::NoOneSignedIn,
@@ -1413,7 +1416,7 @@ fn the_panes_try_again_is_held_back_while_the_accounts_are_read() {
     assert_eq!(
         retry(&model),
         Choice {
-            title: titled("Try Again", "Try again"),
+            title: words::try_again(OS),
             intent: Intent::Refresh { asked: true },
             enabled: false,
         }
@@ -1486,7 +1489,7 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
         model.shown().notices
     );
     assert_eq!(
-        model.shown().last_switches.len(),
+        model.state.last_switches.len(),
         1,
         "the switch is still kept"
     );
@@ -1553,8 +1556,8 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     switch(&mut model, &mut machine, "claude/work");
 
     let shown = model.shown();
-    assert_eq!(shown.last_switches[0].follows_at, None);
-    assert_eq!(shown.last_switches[0].restart, None);
+    assert_eq!(model.state.last_switches[0].follows_at, None);
+    assert_eq!(model.state.last_switches[0].restart, None);
     let [left_behind] = shown.notices.as_slice() else {
         panic!("no bare switch notice beside it: {:?}", shown.notices);
     };
@@ -1658,7 +1661,7 @@ fn a_switch_warning_the_read_repeats_is_said_once() {
     machine.switched = switched("claude", "a", "b", vec![overridden()]);
     switch(&mut model, &mut machine, "claude/b");
     let shown = model.shown();
-    assert_eq!(shown.warnings, [overridden()]);
+    assert_eq!(model.state.warnings, [overridden()]);
     let switched_notice = shown
         .notices
         .iter()
@@ -1869,7 +1872,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
         [notice(
             "abandoned",
             Severity::Info,
-            "Gave up on the interrupted switch",
+            words::GAVE_UP_ON_SWITCH,
             &[&words::gave_up("personal", "work", 2)],
             vec![dismiss(Intent::DismissAbandoned)],
         )]
@@ -2148,7 +2151,7 @@ fn the_config_names_another_notice_offers_to_update_it() {
     assert_eq!(
         shown.notices[0].actions,
         [NoticeAction {
-            title: titled("Update Claude Code’s Config", "Update Claude Code’s config"),
+            title: words::update_config(OS),
             intent: Intent::UpdateConfig {
                 qualified: "claude/work".into()
             },
@@ -2209,11 +2212,15 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
         .into_iter()
         .flat_map(|notice| notice.actions)
         .collect();
-    let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
-    let give_up = titled("Give Up…", "Give up…");
+    let titles: Vec<String> = actions.iter().map(|a| a.title.clone()).collect();
     assert_eq!(
         titles,
-        [give_up.as_str(), "Switch to spare", "Dismiss", "Dismiss"]
+        [
+            words::give_up(OS, true),
+            words::switch_to("spare"),
+            words::DISMISS.into(),
+            words::DISMISS.into()
+        ]
     );
     let dismisses: Vec<bool> = actions.iter().map(|a| a.dismisses).collect();
     assert_eq!(dismisses, [false, false, true, true]);
@@ -2241,7 +2248,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
         menu.others,
         Some(MenuEntry {
             title: "An environment variable overrides the login".into(),
-            subtitle: Some("Show in Pitboard".into()),
+            subtitle: Some(words::SHOW_IN_PITBOARD.into()),
             help: Some("ANTHROPIC_API_KEY is set".into()),
             severity: Some(Severity::Warning),
             intent: Some(Intent::ShowWindow {
@@ -2259,10 +2266,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     model.refresh(&mut machine);
     let others = model.shown().menu_notices.others.expect("one item");
     assert_eq!(others.title, words::things_to_look_at(2));
-    assert_eq!(
-        others.subtitle.as_deref(),
-        Some("An interrupted switch is waiting")
-    );
+    assert_eq!(others.subtitle.as_deref(), Some(words::SWITCH_WAITING));
     assert_eq!(others.help, None);
     assert_eq!(others.severity, Some(Severity::Error));
 
@@ -2286,8 +2290,8 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     nothing.found = Vec::new();
     bare.refresh(&mut nothing);
     let install = bare.shown().menu_notices.install.expect("how to install");
-    assert_eq!(install.title, "Claude Code isn’t installed");
-    assert_eq!(install.subtitle.as_deref(), Some("Learn how to install it"));
+    assert_eq!(install.title, words::CLAUDE_CODE_MISSING);
+    assert_eq!(install.subtitle.as_deref(), Some(words::LEARN_TO_INSTALL));
     assert_eq!(
         install.link.as_deref(),
         Some("https://docs.claude.com/en/docs/claude-code/setup")
@@ -2361,7 +2365,7 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     unknown.refresh(&mut machine);
     assert_eq!(
         unknown.shown().menu_accounts_note.as_deref(),
-        Some("No accounts to show")
+        Some(words::NO_ACCOUNTS_TO_SHOW)
     );
 
     let (empty, _) = reading(Vec::new());
@@ -2489,11 +2493,14 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
             email: "a@example.com".into()
         }
     );
-    assert_eq!(shown.sections[0].accounts[0].spoken_name, "a@example.com");
+    assert_eq!(
+        shown.sections[0].accounts[0].spoken,
+        "a@example.com, in use"
+    );
     assert_eq!(
         shown.setup,
         Some(SetupStep {
-            title: "Give this account a name".into(),
+            title: words::GIVE_IT_A_NAME.into(),
             detail: "a@example.com is signed in. Pitboard parks logins under a name you \
                      choose, and can’t park this one until it has one."
                 .into(),
@@ -2531,7 +2538,7 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
     assert_eq!(
         shown.setup,
         Some(SetupStep {
-            title: "Add a second account".into(),
+            title: words::add_a_second(None),
             detail: "work is the only account Pitboard knows, so there’s nothing to switch to. \
                      Adding another signs in to it and parks its login beside this one."
                 .into(),
@@ -2831,7 +2838,7 @@ fn only_one_account_is_counted_per_tool() {
         }
     );
     let step = shown.setup.expect("a step");
-    assert_eq!(step.title, "Add a second Codex account");
+    assert_eq!(step.title, words::add_a_second(Some("Codex")));
     assert!(
         step.detail
             .starts_with("job is the only Codex account Pitboard knows"),
@@ -2871,7 +2878,7 @@ fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
 #[test]
 fn a_login_whose_account_cannot_be_told_is_shown_from_the_first_run() {
     let mut untold = unplaced("claude", false);
-    untold.stale = Some("refused".into());
+    untold.stale = Some(Stale::Refused);
     untold.stale_explanation = Some(
         "Pitboard could not tell which account Claude Code's login is (Anthropic answered 400)"
             .into(),
@@ -3065,51 +3072,35 @@ fn each_sheet_says_what_it_is_for() {
         model.shown().sheet_text.expect("the sheet")
     };
     let add = shown(Sheet::Add { provider: None });
-    assert_eq!(add.title, titled("Add Account", "Add account"));
+    assert_eq!(add.title, words::add_account(OS));
+    assert_eq!(add.message, words::sign_in_message("Claude Code", None));
     assert_eq!(
-        add.message,
-        "Pitboard opens Claude Code’s own sign-in in your browser. Sign in as the account \
-         you’re adding, and Pitboard parks its login beside the one in use."
+        (add.name.as_str(), add.prompt.as_str()),
+        ("", words::NAME_PROMPT)
     );
-    assert_eq!((add.name.as_str(), add.prompt.as_str()), ("", "work"));
     assert_eq!(add.account, None);
 
     let again = shown(Sheet::SignInAgain {
         provider: "codex".into(),
         label: "work".into(),
     });
-    assert_eq!(
-        again.title,
-        titled("Sign In to work Again", "Sign in to work again")
-    );
-    assert_eq!(
-        again.message,
-        "Pitboard opens Codex’s own sign-in in your browser. Sign in as work to give Pitboard \
-         a new login for it."
-    );
+    assert_eq!(again.title, words::sign_in_to_again(OS, "work"));
+    assert_eq!(again.message, words::sign_in_message("Codex", Some("work")));
     assert_eq!(again.account.as_deref(), Some("work"));
 
     let name = shown(Sheet::Name {
         provider: "codex".into(),
         email: "c@example.com".into(),
     });
-    assert_eq!(name.title, titled("Name This Account", "Name this account"));
-    assert_eq!(
-        name.message,
-        "c@example.com is signed in to Codex. Pitboard parks its login under this name \
-         whenever you switch to another account."
-    );
+    assert_eq!(name.title, words::name_this_account(OS));
+    assert_eq!(name.message, words::naming("c@example.com", "Codex"));
 
     let rename = shown(Sheet::Rename {
         provider: "claude".into(),
         label: "work".into(),
     });
-    assert_eq!(rename.title, "Rename “work”");
-    assert_eq!(
-        rename.message,
-        "The account keeps its parked login. Only the name you switch to it by changes, here \
-         and in the command line."
-    );
+    assert_eq!(rename.title, words::rename_title("work"));
+    assert_eq!(rename.message, words::RENAMING);
     assert_eq!(
         (rename.name.as_str(), rename.prompt.as_str()),
         ("work", "work")
@@ -3175,7 +3166,7 @@ fn each_sheets_default_button_says_what_it_does() {
         model.send(present_sheet(sheet));
         model.shown().sheet_text.expect("the sheet").confirm
     };
-    let sign_in = titled("Sign In", "Sign in");
+    let sign_in = words::sign_in(OS);
     assert_eq!(confirm(Sheet::Add { provider: None }), sign_in);
     assert_eq!(
         confirm(Sheet::SignInAgain {
@@ -3189,14 +3180,14 @@ fn each_sheets_default_button_says_what_it_does() {
             provider: "codex".into(),
             email: "c@example.com".into(),
         }),
-        "Save"
+        words::SAVE
     );
     assert_eq!(
         confirm(Sheet::Rename {
             provider: "claude".into(),
             label: "work".into(),
         }),
-        "Rename"
+        words::RENAME
     );
 }
 
@@ -3221,21 +3212,13 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
         put_back: None,
     });
     let text = model.shown().signing_in_text.expect("what it says");
-    assert_eq!(
-        text.title,
-        titled("Signing In to Claude Code", "Signing in to Claude Code")
-    );
+    assert_eq!(text.title, words::signing_in_to(OS, "Claude Code"));
     assert!(text.offers_link, "a browser sign-in offers its page");
     assert_eq!(
         text.message,
-        "Finish signing in as travel in your browser. This closes once Claude Code says \
-         you’re in."
+        words::finish_in_browser("travel", "Claude Code")
     );
-    assert_eq!(
-        text.code_note,
-        "Claude Code takes the code shown after you sign in, whether or not your browser came \
-         back to it."
-    );
+    assert_eq!(text.code_note, words::code_note("Claude Code"));
     assert_eq!(text.refused, None);
 
     model.give(Answer::SignInSaid {
@@ -3253,11 +3236,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     });
     assert_eq!(
         model.shown().signing_in_text.and_then(|text| text.refused),
-        Some(
-            "Claude Code didn’t take that code. Copy the whole code your browser shows, and \
-             paste it again."
-                .into()
-        )
+        Some(words::code_refused("Claude Code"))
     );
 }
 
@@ -3272,14 +3251,14 @@ fn the_question_about_quitting_an_app_is_asked_in_its_name() {
     machine.held.insert("codex".into(), vec![chatgpt_holding()]);
     machine.apps = StandInApps::new(&[CHATGPT], true);
     switch(&mut model, &mut machine, "codex/spare");
-    let asked = model.shown().quit_confirmation.expect("the question");
-    assert_eq!(asked.title, "Quit ChatGPT to switch?");
+    let asked = model.shown().quit_question.expect("the question");
+    assert_eq!(asked.question.title, words::quit_to_switch("ChatGPT"));
     assert_eq!(
-        asked.confirm,
-        titled("Quit ChatGPT and Switch", "Quit ChatGPT and switch")
+        asked.question.confirm,
+        words::quit_and_switch(OS, "ChatGPT")
     );
-    model.send(Intent::KeepAppOpen);
-    assert_eq!(model.shown().quit_confirmation, None);
+    model.send(asked.declined);
+    assert_eq!(model.shown().quit_question, None);
 }
 
 // The window.
@@ -3372,7 +3351,7 @@ fn a_failure_away_from_the_window_is_said_in_it() {
     });
     model.run(&mut machine);
     let shown = model.shown();
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.failure_alert, None);
     assert_eq!(shown.window_request.serial, 0);
 
@@ -3396,7 +3375,7 @@ fn a_failure_away_from_the_window_is_said_in_it() {
 
     model.send(Intent::DismissFailure);
     let shown = model.shown();
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.failure_alert, None);
     assert_eq!(
         shown.window_request.serial, 1,
@@ -3416,7 +3395,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     machine.switched = switched("claude", "work", "personal", Vec::new());
     switch(&mut model, &mut machine, "claude/personal");
     let shown = model.shown();
-    assert_eq!(shown.failure, None);
+    assert_eq!(model.state.presented, None);
     assert_eq!(shown.window_request.serial, 0);
 
     machine.switched = Err(refusal(
@@ -3426,7 +3405,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     ));
     switch(&mut model, &mut machine, "claude/nobody");
     let shown = model.shown();
-    let failure = shown.failure.expect("said in the window");
+    let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(failure.title, "Couldn’t switch to nobody");
     assert_eq!(failure.message, "There is no account called claude/nobody.");
     assert_eq!(shown.window_request.serial, 1);
@@ -3481,7 +3460,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
         shown.notices[0].lines[0],
         words::switch_waits_for("Anthropic")
     );
-    assert!(!shown.shows_tools);
+    assert_eq!(shown.sections.len(), 1);
 
     machine.answer = Ok(warned(
         vec![
@@ -3496,7 +3475,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
         shown.notices[0].lines[0],
         words::switch_waits_for("Anthropic or OpenAI")
     );
-    assert!(shown.shows_tools);
+    assert_eq!(shown.sections.len(), 2);
 }
 
 // What a sign-in or a recording inside Claude says in its sheet, driven through the model.
@@ -3508,10 +3487,9 @@ fn the_quit_question_is_carried_with_the_sheet_it_was_asked_from() {
     model.run(&mut machine);
     let shown = model.on_a_mac();
     assert_eq!(shown.sheet, Some(add(Some("desktop"))));
-    assert!(shown.quit_question.is_some());
     assert_eq!(
-        shown.quit_confirmation.expect("asked").confirm,
-        "Quit Claude and Park work"
+        shown.quit_question.expect("asked").question.confirm,
+        words::quit_and_park(Os::MacOs, "Claude", "work")
     );
     assert!(
         shown.sheet_text.expect("the form").saving,
@@ -3533,13 +3511,11 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
     model.send(present_sheet(add(Some("desktop"))));
     model.run(&mut machine);
     let form = model.on_a_mac().sheet_text.expect("the form");
-    assert_eq!(form.confirm, "Add the Account Claude Shows");
     assert_eq!(
-        form.message,
-        "Pitboard can’t identify the login Claude holds. Open Claude, check which account it \
-         shows, and quit it. Pitboard records that account under this name: one you added, or \
-         a new one."
+        form.confirm,
+        words::add_account_shown(Os::MacOs, "Claude", false)
     );
+    assert_eq!(form.message, words::record_unidentified("Claude"));
 }
 
 #[test]
@@ -3549,20 +3525,18 @@ fn escape_never_leaves_an_add_with_its_account_parked() {
     model.send(travel());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     let quitting = model.on_a_mac().signing_in_text.expect("the page");
-    assert_eq!(quitting.waiting, "Quitting Claude");
+    assert_eq!(quitting.waiting, words::quitting("Claude").1);
     assert!(!quitting.escape_cancels);
     assert!(!quitting.cancel.enabled);
     model.run(&mut machine);
     let waiting = model.on_a_mac().signing_in_text.expect("the page");
     assert!(!waiting.escape_cancels, "Escape would leave work parked");
-    assert_eq!(waiting.cancel.title, "Later");
+    assert_eq!(waiting.cancel.title, words::LATER);
     assert_eq!(
-        waiting.undo.map(|undo| undo.title).as_deref(),
-        Some("Put work Back")
+        waiting.undo.map(|undo| undo.title),
+        Some(words::put_back(Os::MacOs, "work"))
     );
 }
 
@@ -3590,30 +3564,18 @@ fn the_sheet_says_claude_is_quitting_and_its_account_is_read() {
             "nothing yet while asked"
         );
         let question = model.shown().quit_question.expect("asked");
-        model.send(Intent::QuitAndSwitch {
-            qualified: question.qualified,
-        });
+        model.send(question.confirmed);
         assert_eq!(
-            model
-                .on_a_mac()
-                .sheet_text
-                .expect("the form")
-                .progress
-                .as_deref(),
-            Some("Quitting Claude…"),
+            model.on_a_mac().sheet_text.expect("the form").progress,
+            Some(words::recording("Claude", Recording::Quitting)),
             "opened on {opened_on:?}"
         );
         let quit = model.next();
         let answer = machine.answer(quit);
         model.give(answer);
         assert_eq!(
-            model
-                .on_a_mac()
-                .sheet_text
-                .expect("the form")
-                .progress
-                .as_deref(),
-            Some("Reading Claude’s account…"),
+            model.on_a_mac().sheet_text.expect("the form").progress,
+            Some(words::recording("Claude", Recording::Reading)),
             "opened on {opened_on:?}"
         );
         model.run(&mut machine);

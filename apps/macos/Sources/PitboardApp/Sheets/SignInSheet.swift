@@ -70,7 +70,7 @@ struct SignInSheet: View {
         let tools = text?.tools ?? []
         let chosen = tools.first { $0.code == provider }
         let busy = text?.saving ?? false
-        let check = checkName(sheet: sheet, typed: name)
+        let check = checkName(sheet: sheet, tool: provider, typed: name)
         SheetLayout(
             title: text?.title ?? "",
             message: chosen?.message ?? text?.message ?? ""
@@ -116,7 +116,7 @@ struct SignInSheet: View {
             Button(chosen?.confirm ?? text?.confirm ?? "", action: start)
                 .keyboardShortcut(.defaultAction)
                 .disabled(
-                    check.name == nil || chosen?.missing != nil || model.signingIn != nil
+                    check.intent == nil || chosen?.missing != nil || model.signingIn != nil
                         || busy)
         }
         .onAppear { nameFocused = text?.account == nil }
@@ -135,10 +135,11 @@ struct SignInSheet: View {
 
     private func start() {
         let chosen = model.sheetText?.tools.first { $0.code == provider }
-        guard let name = checkName(sheet: sheet, typed: name).name, chosen?.missing == nil,
-            model.signingIn == nil, shown == nil, model.sheetText?.saving != true
+        guard let intent = checkName(sheet: sheet, tool: provider, typed: name).intent,
+            chosen?.missing == nil, model.signingIn == nil, shown == nil,
+            model.sheetText?.saving != true
         else { return }
-        model.send(.signIn(provider: provider, name: name))
+        model.send(intent)
     }
 
     // MARK: - While it runs
