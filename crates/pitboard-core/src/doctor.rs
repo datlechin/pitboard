@@ -9424,4 +9424,334 @@ mod tests {
             format!("`here`, as Anthropic said {}", time::moment(NOW, NOW))
         );
     }
+
+    // Every check doctor makes on `os`, each where it has something to say.
+    fn everything_said(os: Os) -> Facts {
+        let claude = crate::state::Account {
+            label: "work".into(),
+            id: "claude_work".into(),
+            account_uuid: "work-uuid".into(),
+            email: "work@example.com".into(),
+            parked: None,
+            last_used_at: None,
+            replaced_at: None,
+            plan: None,
+            detail: crate::state::Detail::Claude {
+                organization_uuid: "org".into(),
+                oauth_account: json!({}),
+            },
+        };
+        let codex = crate::state::Account {
+            id: "codex_work".into(),
+            detail: crate::state::Detail::Codex { workspace_id: None },
+            ..claude.clone()
+        };
+        let mut state = State::default();
+        state.accounts.push(claude);
+        state.accounts.push(codex);
+        state.accounts.push(desktop_account("work", None));
+        state.accounts.push(desktop_account(
+            "home",
+            Some(folder_park("home-1", Some(NOW + 90_000))),
+        ));
+        state.discarded.push(crate::state::Dropped {
+            service: "pitboard-park-x-1".into(),
+            kind: crate::state::ParkKind::Vault,
+            forgotten: false,
+        });
+        let awaited = crate::state::Awaited {
+            since: NOW - 120,
+            label: "new".into(),
+            account: None,
+            put_back: "desktop_home".into(),
+        };
+        state.awaiting.insert("desktop".into(), awaited);
+        state.moving.insert(
+            "desktop".into(),
+            crate::state::Moving {
+                half: crate::state::Half::Leave,
+                started_at: NOW - 300,
+                id: "desktop_work".into(),
+                label: "work".into(),
+                park: "pitboard-park-desktop_work-1".into(),
+                login: "f0".into(),
+                items: vec!["Cookies".into()],
+                keys: std::collections::BTreeMap::new(),
+                asides: std::collections::BTreeMap::new(),
+                slot: String::new(),
+                awaited: None,
+            },
+        );
+        state.aside.push(crate::state::Aside {
+            name: "pitboard-aside-1".into(),
+            tool: ProviderId::Desktop,
+            at: NOW - 3_600,
+            why: crate::state::SetAside::Orphan,
+            account: None,
+            login: Some("d".into()),
+        });
+        let dormant = |mut park: ParkFact| {
+            park.last_used_at = Some(NOW - 400 * 86_400);
+            park
+        };
+        let desktop_park = |label: &str, active: bool, park: Option<Park>| ParkFact {
+            provider: ProviderId::Desktop,
+            name: format!("desktop/{label}"),
+            active,
+            last_used_at: None,
+            park,
+            unreadable: None,
+        };
+        let work = crate::in_use::InUse {
+            owner: Some(state.accounts[2].owner()),
+            login: "f0".into(),
+            known_at: NOW - 60,
+            named: Some("desktop_work".into()),
+        };
+        let mut desktop = desktop();
+        desktop.known = Some(crate::in_use::Known {
+            last: Some(work),
+            doubt: None,
+            own_record: Some(state.accounts[2].owner()),
+        });
+        desktop.parked_here = vec![("home-1".into(), Ok(true))];
+        let mut f = facts();
+        f.os = os;
+        f.floor = crate::host::Floor::Below { build: 22631 };
+        f.elevation = crate::host::Elevation::Elevated { why: "with sudo" };
+        f.no_argv = true;
+        f.fallback_login = Some(FallbackLogin {
+            path: PathBuf::from("/home/x/.claude/.credentials.json"),
+            fingerprint: Ok(None),
+        });
+        f.machine_id_known = os == Os::Windows;
+        f.interrupted = true;
+        f.pending_parks = vec!["pitboard-park-y-1".into()];
+        f.schedule = Some(scheduled(by(through(None, &[])), true));
+        f.watch_service = Some(WatchServiceFact {
+            location: Location::File(PathBuf::from("/home/x/watch.plist")),
+            program: Some(PathBuf::from("/usr/local/bin/pitboard")),
+            program_found: true,
+            at: None,
+            task: None,
+        });
+        f.organisation_pins = vec!["`forceLoginOrgUUID` set to `org` in managed settings".into()];
+        f.parks = vec![
+            dormant(parked("old", Some(NOW + 20 * 86_400))),
+            dormant(codex_parked("old", Some(NOW + 20 * 86_400))),
+            desktop_park("work", true, None),
+            desktop_park("home", false, state.accounts[3].parked.clone()),
+        ];
+        f.state = Ok(state);
+        f.codex = CodexFacts {
+            enrolled: 1,
+            restrictions: vec!["`forced_login_method` set to `chatgpt` in config.toml".into()],
+            ..with_codex()
+        };
+        f.desktop = Some(desktop);
+        match os {
+            Os::Windows => {
+                f.backend = Ok(store::Backend::CredentialManager);
+                f.vault = store::Backend::SealedFile;
+                f.codex.stored_elsewhere = (1, 1);
+                f.windows = Some(WindowsHomes {
+                    home: PathBuf::from(r"C:\Users\dana"),
+                    default_pitboard_home: PathBuf::from(r"C:\Users\dana\AppData\Local\Pitboard"),
+                    local_app_data: Some(PathBuf::from(r"D:\AppData\Local")),
+                    profile: Some(PathBuf::from(r"D:\Users\dana")),
+                    codex_home_set: false,
+                    roams: true,
+                });
+                f.windows_settings = Some(crate::host::WindowsSettings {
+                    wsl: vec!["Ubuntu".into()],
+                    proxy: Some("proxy.example.com:3128".into()),
+                    admin_approval: Some(true),
+                });
+                f.pitboards = vec![
+                    PathBuf::from(r"C:\a\pitboard.exe"),
+                    PathBuf::from(r"C:\b\pitboard.exe"),
+                ];
+                f.status_line = Some(StatusLineFact {
+                    git_bash: claude::GitBash {
+                        found: None,
+                        passed_over: None,
+                    },
+                    powershell: None,
+                    pitboard: None,
+                    runs_pitboard: true,
+                });
+            }
+            Os::Linux => {
+                f.wsl = Some(WslFact {
+                    distribution: Some("Ubuntu".into()),
+                    codex_home_on_windows: None,
+                });
+                f.desktop = None;
+            }
+            Os::MacOs => {}
+        }
+        f
+    }
+
+    // `pitboard doctor` prints its checks in this order: the command line heads each tool's
+    // section where its codes start.
+    #[test]
+    fn the_checks_come_in_the_order_each_system_prints_them() {
+        let codes = |os| -> Vec<&'static str> {
+            evaluate(&everything_said(os))
+                .iter()
+                .map(|c| c.code)
+                .collect()
+        };
+        assert_eq!(
+            codes(Os::MacOs),
+            [
+                "system_too_old",
+                "elevated",
+                "security_tool",
+                "config_file",
+                "identity",
+                "in_use",
+                "slot",
+                "credential_size",
+                "credential_store",
+                "credential",
+                "fallback_login",
+                "home",
+                "private_on_disk",
+                "state",
+                "parked_login",
+                "interrupted_switch",
+                "discarded",
+                "machine_id",
+                "storage_v5",
+                "claude_daemon",
+                "pending_parks",
+                "schedule",
+                "schedule_proxy",
+                "watch_service",
+                "claude_version",
+                "auth_source",
+                "login_restrictions",
+                "asking",
+                "network",
+                "dormant_account",
+                "codex_backend",
+                "codex_login_restrictions",
+                "codex_auth_file",
+                "codex_login",
+                "codex_parked_login",
+                "codex_dormant_account",
+                "codex_version",
+                "codex_running",
+                "desktop_data_folder",
+                "desktop_settings",
+                "desktop_layout",
+                "desktop_login",
+                "desktop_parked_login",
+                "desktop_parked_login",
+                "desktop_move",
+                "desktop_awaiting",
+                "desktop_parks_folder",
+                "desktop_set_aside",
+                "desktop_build",
+            ]
+        );
+        assert_eq!(
+            codes(Os::Windows),
+            [
+                "system_too_old",
+                "elevated",
+                "config_file",
+                "identity",
+                "in_use",
+                "slot",
+                "credential_size",
+                "no_argv",
+                "credential_store",
+                "credential",
+                "fallback_login",
+                "home",
+                "private_on_disk",
+                "vault",
+                "state",
+                "parked_login",
+                "interrupted_switch",
+                "discarded",
+                "machine_id",
+                "local_app_data",
+                "roaming_profile",
+                "wsl",
+                "pitboard_copies",
+                "system_proxy",
+                "storage_v5",
+                "claude_daemon",
+                "pending_parks",
+                "schedule",
+                "schedule_proxy",
+                "watch_service",
+                "claude_version",
+                "status_line",
+                "auth_source",
+                "login_restrictions",
+                "asking",
+                "network",
+                "dormant_account",
+                "codex_installer_home",
+                "codex_backend",
+                "codex_login_restrictions",
+                "codex_auth_file",
+                "codex_login",
+                "codex_credential_manager",
+                "codex_parked_login",
+                "codex_dormant_account",
+                "codex_version",
+                "codex_running",
+                "desktop_data_folder",
+            ]
+        );
+        assert_eq!(
+            codes(Os::Linux),
+            [
+                "system_too_old",
+                "elevated",
+                "config_file",
+                "identity",
+                "in_use",
+                "slot",
+                "credential_size",
+                "credential_store",
+                "credential",
+                "fallback_login",
+                "home",
+                "private_on_disk",
+                "state",
+                "parked_login",
+                "interrupted_switch",
+                "discarded",
+                "machine_id",
+                "wsl",
+                "storage_v5",
+                "claude_daemon",
+                "pending_parks",
+                "schedule",
+                "schedule_proxy",
+                "watch_service",
+                "claude_version",
+                "auth_source",
+                "login_restrictions",
+                "asking",
+                "network",
+                "dormant_account",
+                "codex_backend",
+                "codex_login_restrictions",
+                "codex_auth_file",
+                "codex_login",
+                "codex_parked_login",
+                "codex_dormant_account",
+                "codex_version",
+                "codex_running",
+            ]
+        );
+    }
 }
