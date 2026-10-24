@@ -25,6 +25,16 @@ fn as_bun_writes(item: &Item, user: &str) {
     assert_eq!(item.attributes, 0, "{user}");
 }
 
+// Credential Manager can still show an item just after its delete (docs/facts/windows-runners.md).
+fn gone(name: &str) -> bool {
+    (0..6).any(|again| {
+        if again > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        credman::item(name).expect("read").is_none()
+    })
+}
+
 // Taken away by name however the test ends: the leak check after the run finds none.
 struct Discarded(pitboard_core::context::Context, String);
 
@@ -71,23 +81,14 @@ fn writing_leaves_each_item_as_bun_writes_one() {
             .unwrap_or_else(|| panic!("{piece} is there"));
         as_bun_writes(&item, &user);
     }
-    for gone in ["", "#5", "#p"] {
-        assert!(
-            credman::item(&format!("{whole}{gone}"))
-                .expect("read")
-                .is_none(),
-            "{gone:?} is not left"
-        );
+    for piece in ["", "#5", "#p"] {
+        assert!(gone(&format!("{whole}{piece}")), "{piece:?} is not left");
     }
     assert_eq!(credman::read(&ctx, &svc).expect("read"), Some(large));
 
     credman::discard(&ctx, &svc).expect("deleted");
-    for left in ["", "#0", "#4", "#m", "#p"] {
-        assert!(
-            credman::item(&format!("{whole}{left}"))
-                .expect("read")
-                .is_none()
-        );
+    for piece in ["", "#0", "#4", "#m", "#p"] {
+        assert!(gone(&format!("{whole}{piece}")), "{piece:?} is discarded");
     }
 }
 
