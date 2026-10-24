@@ -218,6 +218,8 @@ fn a_codex_sign_in_without_codex_says_so_first() {
         .output()
         .expect("Pitboard runs");
     assert!(!out.status.success());
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(!said.contains("Opening Codex's sign-in"), "{said}");
     let error = &envelope(&String::from_utf8_lossy(&out.stdout))["error"];
     assert_eq!(error["code"], "codex_program_missing", "{error}");
     assert!(

@@ -488,6 +488,9 @@ fn enroll_signing_in(pitboard: &Pitboard, label: &str) -> Report {
     );
     let signed_in = match tool.signs_in() {
         SignsIn::ByItsProgram => {
+            if let Err(refused) = pitboard.ready_to_sign_in(label) {
+                return Report::refused("enroll", refused);
+            }
             eprintln!(
                 "Opening {}'s sign-in. Sign in as {who}; the account in use now stays signed in.",
                 tool.name()

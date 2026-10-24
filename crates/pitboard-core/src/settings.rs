@@ -171,6 +171,18 @@ fn managed(ctx: &Context) -> Vec<Layer> {
 // managed preferences, over the folder unless it merges them, `HKCU` where neither holds a
 // policy. Err names one Pitboard cannot read that may be taken.
 fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
+    let (mut taken, merged) = managed_tiers(ctx)?;
+    taken.extend(merged);
+    Ok(taken)
+}
+
+// Merged in, the folder keeps no login pin (managed_login_pins).
+fn managed_pins(ctx: &Context) -> Result<Vec<Layer>, String> {
+    managed_tiers(ctx).map(|(taken, _)| taken)
+}
+
+// What a session takes whole, then the folder the first merges in.
+fn managed_tiers(ctx: &Context) -> Result<(Vec<Layer>, Vec<Layer>), String> {
     let host = ctx.host();
     let mut folder = Vec::new();
     let mut unread = None;
@@ -204,17 +216,14 @@ fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
             .ok()
             .and_then(|json| Some(json.get("managedSourcesBehavior")?.as_str()? == "merge"))
             .unwrap_or(false);
-        let mut taken = vec![first];
-        if merges {
-            taken.extend(folder()?);
-        }
-        return Ok(taken);
+        let merged = if merges { folder()? } else { Vec::new() };
+        return Ok((vec![first], merged));
     }
     let folder = folder()?;
     if ctx.os != Os::Windows || folder.iter().any(|layer| holds_policy(&layer.text)) {
-        return Ok(folder);
+        return Ok((folder, Vec::new()));
     }
-    Ok(policy(Hive::User)?.into_iter().collect())
+    Ok((policy(Hive::User)?.into_iter().collect(), Vec::new()))
 }
 
 // What keeps `HKCU` out: one Claude Code cannot read, or one that sets more than composition.
@@ -319,9 +328,7 @@ fn gateway_in(layer: &Layer) -> Vec<Override> {
     };
     let required = [
         json.get("forceLoginMethod").and_then(Value::as_str) == Some("gateway"),
-        json.get("forceLoginGatewayUrl")
-            .and_then(Value::as_str)
-            .is_some_and(|url| !url.is_empty()),
+        names_a_gateway(&json),
     ];
     ["forceLoginMethod", "forceLoginGatewayUrl"]
         .into_iter()
@@ -332,6 +339,12 @@ fn gateway_in(layer: &Layer) -> Vec<Override> {
             key: key.into(),
         })
         .collect()
+}
+
+fn names_a_gateway(json: &Value) -> bool {
+    json.get("forceLoginGatewayUrl")
+        .and_then(Value::as_str)
+        .is_some_and(|url| !url.is_empty())
 }
 
 fn layered(ctx: &Context, settings: &Path) -> Vec<Override> {
@@ -494,10 +507,10 @@ fn profile(ctx: &Context) -> Vec<Override> {
         .collect()
 }
 
-// Each managed source a session takes that sets `forceLoginOrgUUID`, with the organisations it
-// names (organisation_pin). None where one cannot be read: Claude Code then refuses every login.
+// Each managed source a session takes `forceLoginOrgUUID` from, with the organisations it names
+// (organisation_pin). None where one cannot be read: Claude Code then refuses every login.
 pub(crate) fn organisation_pins(ctx: &Context) -> Vec<(String, Vec<String>)> {
-    managed_taken(ctx)
+    managed_pins(ctx)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|layer| {
@@ -515,17 +528,36 @@ pub(crate) fn organisation_pins(ctx: &Context) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
-// A managed source that sets `forceLoginMethod` to `console` (login_method_pin): any a session may
-// take, since Claude Code takes one of several, and any readable where one is unreadable.
+// As Claude Code's settings schema takes it: another value is dropped.
+fn login_method(layer: &Layer) -> Option<String> {
+    let json = serde_json::from_str::<Value>(&layer.text).ok()?;
+    let method = json.get("forceLoginMethod")?.as_str()?;
+    ["claudeai", "console", "gateway"]
+        .contains(&method)
+        .then(|| method.to_owned())
+}
+
+// The managed source whose `forceLoginMethod` `console` a sign-in takes (login_method_pin):
+// where one cannot be read, any readable one.
 pub(crate) fn console_pin(ctx: &Context) -> Option<String> {
-    managed_taken(ctx)
-        .unwrap_or_else(|_| managed(ctx))
+    let console = |layer: &Layer| login_method(layer).as_deref() == Some("console");
+    let Ok(taken) = managed_pins(ctx) else {
+        return managed(ctx)
+            .into_iter()
+            .find(console)
+            .map(|layer| layer.name);
+    };
+    // A gateway named is taken first, and in the folder a later file overrides an earlier one.
+    if taken.iter().any(|layer| {
+        serde_json::from_str::<Value>(&layer.text).is_ok_and(|json| names_a_gateway(&json))
+    }) {
+        return None;
+    }
+    taken
         .into_iter()
-        .find(|layer| {
-            serde_json::from_str::<Value>(&layer.text).is_ok_and(|json| {
-                json.get("forceLoginMethod").and_then(Value::as_str) == Some("console")
-            })
-        })
+        .rev()
+        .find(|layer| login_method(layer).is_some())
+        .filter(console)
         .map(|layer| layer.name)
 }
 
@@ -1127,15 +1159,17 @@ mod managed_tests {
         );
     }
 
-    // Read in 2.1.310 (login_method_pin): `console` alone, from the managed sources a session
-    // takes.
+    // Read in 2.1.310 (login_method_pin, managed_login_pins): `console` alone, from the managed
+    // sources a sign-in takes it from.
     #[test]
     fn a_managed_console_pin_is_read_from_the_sources_a_session_takes() {
         let memory = MemoryHost::new();
         let (ctx, _scratch) = on(Os::MacOs, &memory);
-        let drop_in = PathBuf::from("/Library/Application Support/ClaudeCode")
-            .join("managed-settings.d")
-            .join("10-login.json");
+        let dir = PathBuf::from("/Library/Application Support/ClaudeCode");
+        let (file, drop_in) = (
+            dir.join("managed-settings.json"),
+            dir.join("managed-settings.d").join("10-login.json"),
+        );
         assert_eq!(console_pin(&ctx), None);
         for method in ["claudeai", "gateway"] {
             memory.administers(&drop_in, &json!({"forceLoginMethod": method}).to_string());
@@ -1147,6 +1181,30 @@ mod managed_tests {
             &json!({"forceLoginMethod": "console"}).to_string(),
         );
         assert_eq!(console_pin(&ctx), Some(drop_in.display().to_string()));
+        memory.administers(&file, &json!({"forceLoginMethod": "gateway"}).to_string());
+        assert_eq!(console_pin(&ctx), Some(drop_in.display().to_string()));
+        memory.administers(
+            &file,
+            &json!({"forceLoginGatewayUrl": "https://gw.example"}).to_string(),
+        );
+        assert_eq!(console_pin(&ctx), None, "a gateway named is taken first");
+
+        memory.administers(&file, &json!({"forceLoginMethod": "console"}).to_string());
+        memory.administers(
+            &drop_in,
+            &json!({"forceLoginMethod": "claudeai"}).to_string(),
+        );
+        assert_eq!(
+            console_pin(&ctx),
+            None,
+            "a later file overrides an earlier one"
+        );
+        memory.administers(&drop_in, &json!({"forceLoginMethod": "x"}).to_string());
+        assert_eq!(
+            console_pin(&ctx),
+            Some(file.display().to_string()),
+            "a method Claude Code does not know is dropped"
+        );
 
         let plist =
             PathBuf::from("/Library/Managed Preferences").join("com.anthropic.claudecode.plist");
@@ -1156,6 +1214,29 @@ mod managed_tests {
             None,
             "the plist is taken over the folder"
         );
+        memory.administers(
+            &plist,
+            &json!({"managedSourcesBehavior": "merge", "model": "x"}).to_string(),
+        );
+        assert_eq!(
+            console_pin(&ctx),
+            None,
+            "merged in, the folder keeps no login pin"
+        );
+    }
+
+    #[test]
+    fn where_a_managed_source_is_unreadable_any_readable_console_pin_is_taken() {
+        let memory = MemoryHost::new();
+        let (ctx, _scratch) = on(Os::MacOs, &memory);
+        let dir = PathBuf::from("/Library/Application Support/ClaudeCode");
+        let file = dir.join("managed-settings.json");
+        memory.administers_unreadably(
+            dir.join("managed-settings.d").join("10-login.json"),
+            "permission denied",
+        );
+        memory.administers(&file, &json!({"forceLoginMethod": "console"}).to_string());
+        assert_eq!(console_pin(&ctx), Some(file.display().to_string()));
     }
 
     // Read in 2.1.309 (macos_managed_preferences): a configuration profile's plist goes where
@@ -1193,7 +1274,8 @@ mod managed_tests {
         );
         assert_eq!(
             pins(&mac),
-            [plist.display().to_string(), file.display().to_string()]
+            [plist.display().to_string()],
+            "merged in, the folder keeps no login pin (managed_login_pins)"
         );
 
         memory.administers(

@@ -501,6 +501,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
         windows: Read("2.1.310"),
     },
     PerSystem {
+        name: "managed_login_pins",
+        macos: Read("2.1.310"),
+        linux: Read("2.1.310"),
+        windows: Read("2.1.310"),
+    },
+    PerSystem {
         name: "macos_managed_preferences",
         macos: Read("2.1.309"),
         linux: NotRead("Linux has no managed preferences, and its managed folder is settings.rs's"),
@@ -2170,12 +2176,12 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     sign-in runs, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
                     builds of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
-        depends: "settings::organisation_pins, through the managed sources settings::managed_taken \
-                  takes, the profile's plist on macOS (macos_managed_preferences) among them, and \
-                  Claude's Provider::refuses, so a switch and a \
-                  sign-in that would replace the login in use refuse with `login_restricted` an \
-                  account of an organisation no managed source names, and doctor's \
-                  login_restrictions names the setting and those accounts",
+        depends: "settings::organisation_pins, through the managed sources settings::managed_pins \
+                  takes it from (managed_login_pins), the profile's plist on macOS \
+                  (macos_managed_preferences) among them, and Claude's Provider::refuses, so a \
+                  switch and a sign-in that would replace the login in use refuse with \
+                  `login_restricted` an account of an organisation no managed source names, and \
+                  doctor's login_restrictions names the setting and those accounts",
         probe: &[
             "Organization UUID to require for OAuth login. Accepts a single UUID string or an \
              array of UUIDs (any one is permitted).",
@@ -2186,30 +2192,33 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "login_method_pin",
         fact: "`forceLoginMethod` `claudeai` or `console`, from the highest settings source \
-               that sets it, a managed one, the person's own, a project's or the command line's, \
-               pins only how Claude Code signs in: `/login` and `claude auth login` sign in that \
-               way whatever `--claudeai` or `--console` asks, and under `console` a claude.ai \
-               sign-in from the SDK, `setup-token`, Claude Desktop or a cloud session is refused. \
-               A Console sign-in stores no claude.ai login: it makes an API key with \
-               `create_api_key` and keeps it, on macOS in a keychain item named as \
-               credential_service_name's without `-credentials`, elsewhere as `primaryApiKey` in \
-               the config file, and says `Login successful.` A session that starts with a \
-               claude.ai login stored takes it whatever the setting says, and renews it unchecked",
-        read_from: "the method pin's reader, which takes the merged settings, and its check; \
-                    `/login`'s and `claude auth login`'s choice of sign-in, and the SDK's \
-                    `claude_authenticate`, `setup-token`, the desktop app's sign-in and a cloud \
-                    session's sign-in, which refuse under it; the sign-in's token save, which \
-                    keeps only a login with `user:inference`, and the API key it makes and saves \
-                    for any other; the person's settings file, `settings.json` in the config \
-                    folder `CLAUDE_CONFIG_DIR` names; and the session's start, its token source \
-                    and its renewal, none of which reads it, in the darwin-arm64, linux-x64, \
-                    win32-x64 and win32-arm64 builds of 2.1.310, read as bytes on 2026-10-24",
+               that sets it, a managed one (managed_login_pins), the person's own, a project's \
+               or the command line's, pins only how Claude Code signs in, after a gateway \
+               sign-in that managed settings require (auth_precedence), which comes first: \
+               `/login` and `claude auth login` sign in that way whatever `--claudeai` or \
+               `--console` asks, and under `console` a claude.ai sign-in from the SDK, \
+               `setup-token`, Claude Desktop or a cloud session is refused. A Console sign-in \
+               stores no claude.ai login: it makes an API key with `create_api_key` and keeps \
+               it, on macOS in a keychain item named as credential_service_name's without \
+               `-credentials`, elsewhere as `primaryApiKey` in the config file, and says \
+               `Login successful.` A session that starts with a claude.ai login stored takes it \
+               whatever the setting says, and renews it unchecked",
+        read_from: "the method pin's reader, which asks the managed gateway check first and then \
+                    takes the merged settings, and its check; `/login`'s and `claude auth \
+                    login`'s choice of sign-in, and the SDK's `claude_authenticate`, \
+                    `setup-token`, the desktop app's sign-in and a cloud session's sign-in, which \
+                    refuse under it; the sign-in's token save, which keeps only a login with \
+                    `user:inference`, and the API key it makes and saves for any other; the \
+                    person's settings file, `settings.json` in the config folder \
+                    `CLAUDE_CONFIG_DIR` names; and the session's start, its token source and its \
+                    renewal, none of which reads it, in the darwin-arm64, linux-x64, win32-x64 \
+                    and win32-arm64 builds of 2.1.310, read as bytes on 2026-10-24",
         verified_against: "2.1.310",
         depends: "settings::overrides, which leaves `forceLoginMethod` out where it is not \
                   `gateway`, so a switch under `console` warns of nothing and the automatic \
                   switch goes on: a session takes the login a switch puts in place. \
-                  settings::console_pin, so a sign-in under a managed `console`, which would make \
-                  an API key and leave nothing to enrol, refuses with \
+                  settings::console_pin, so a sign-in under a managed `console` and no managed \
+                  gateway, which would make an API key and leave nothing to enrol, refuses with \
                   `sign_in_pinned_to_console` before `claude auth login` starts. The person's \
                   own settings do not reach a sign-in in Pitboard's private folder; a project's \
                   in the folder Pitboard runs from does, and is not looked for",
@@ -2220,6 +2229,35 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
              forceLoginMethod setting on this machine requires a different sign-in method.",
             "tengu_oauth_tokens_not_claude_ai",
             "Unable to create API key. The server accepted the request but did not return a key.",
+            r#"?.forceLoginMethod;return e==="gateway"?void 0:e}"#,
+        ],
+        absent: &[],
+    },
+    Assumption {
+        name: "managed_login_pins",
+        fact: "Claude Code takes `forceLoginOrgUUID`, `forceLoginMethod` and \
+               `forceLoginGatewayUrl` from the managed settings it composes. Where \
+               `managedSourcesBehavior` merges the managed folder into the configuration \
+               profile's plist on macOS or `HKLM` on Windows, it takes them from that first \
+               source alone and drops the folder's. In the folder a later file's value overrides \
+               an earlier one's. Its schema drops a `forceLoginMethod` other than `claudeai`, \
+               `console` or `gateway`, and a `forceLoginGatewayUrl` that is not a string or is \
+               empty",
+        read_from: "the keys the managed sources' merge takes from the first source alone and \
+                    drops from the others, the merge, the folder's merge of \
+                    `managed-settings.json` and `managed-settings.d`, the machine's login pins \
+                    and gateway check, which read the composed managed settings, and the \
+                    settings schema, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
+                    builds of 2.1.310, read as bytes on 2026-10-24. The merge's list is the same \
+                    in the darwin-arm64 build of 2.1.309",
+        verified_against: "2.1.310",
+        depends: "settings::managed_pins, so organisation_pins and console_pin leave out a \
+                  folder the first source merges, and console_pin, which takes the folder's last \
+                  `forceLoginMethod` its schema keeps",
+        probe: &[
+            "WINNER_ONLY_UNDER_MERGE",
+            r#""forceLoginOrgUUID","forceLoginMethod","forceLoginGatewayUrl","gatewayInternalNetworks""#,
+            r#"["claudeai","console","gateway"]).optional().catch(void 0)"#,
         ],
         absent: &[],
     },
@@ -2238,8 +2276,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     sources' order, whose second tier is the plist on macOS and `HKLM` on \
                     Windows, in the darwin-arm64 build of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
-        depends: "settings::overrides, custom_oauth, env_settings and organisation_pins, through \
-                  host::Host::managed_plist and settings::managed_taken",
+        depends: "settings::overrides, custom_oauth, env_settings, organisation_pins and \
+                  console_pin, through host::Host::managed_plist and settings::managed_taken and \
+                  managed_pins",
         probe: &[
             "/Library/Managed Preferences/",
             "per-user managed preferences",
@@ -2325,6 +2364,7 @@ mod tests {
                 "windows_profile_folder",
                 "organisation_pin",
                 "login_method_pin",
+                "managed_login_pins",
             ]
         );
         for name in [
