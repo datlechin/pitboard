@@ -946,7 +946,7 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     let path = file(ctx);
     home::check_absolute(ctx)?;
     home::check_location(ctx, &home::dir(ctx))?;
-    let raw = match std::fs::read_to_string(&path) {
+    let raw = match atomic::read(&path, |path| std::fs::read_to_string(path)) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((State::default(), true)),
         Err(source) => return Err(Error::StateUnreadable { path, source }),

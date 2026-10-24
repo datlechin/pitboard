@@ -1400,8 +1400,8 @@ mod tests {
     }
 
     // RF-C4's 10,000 replaces, through Pitboard's own write, beside another process reading the
-    // file again and again as std opens one, sharing its deletion; then beside one holding it
-    // without sharing that.
+    // file again and again through Pitboard's own read; then beside one holding it without
+    // sharing its deletion.
     #[test]
     fn ten_thousand_replaces_never_leave_a_reader_without_the_whole_file() {
         use crate::atomic::{Perms, write};

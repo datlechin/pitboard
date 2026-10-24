@@ -175,6 +175,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - On Windows, a switch to a Claude Code login too large for one Credential Manager item goes
   through while another program reads Credential Manager, where it could be undone as
   unfinished.
+- On Windows, the app, the status line and `pitboard status` no longer show no accounts for a
+  moment while another Pitboard run saves its list of accounts.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

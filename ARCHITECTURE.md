@@ -2824,7 +2824,10 @@ Replacing a file:
   runs the probe reader in a process of its own did too, `CreateFileW` failing 2: in 5658 of
   208735 opens on windows-2025 (run 39320680285) and 2323 of 186195 on windows-11-arm (run
   40030964166). In run 38878569423 no reader found it missing on either image, and on ReFS
-  none ever has.
+  none ever has. Every writer of `state.json` loads it under Pitboard's lock, so a read
+  without the lock, the app's, the status line's or `pitboard status`'s, could take it for
+  missing and show no accounts. On Windows `atomic::read`, which `state.json`'s load uses,
+  looks again five times, 2 ms apart, before it takes a file it replaces for missing.
 - Beside readers that reopen the file without a pause, one not sharing delete,
   `MoveFileExW` fails 5 most of the time. In 180 s it replaced the file 154 times on
   windows-2025, 30 rounds running out of 50 retries, and 2439 times on windows-11-arm, in up

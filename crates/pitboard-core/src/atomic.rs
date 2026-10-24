@@ -67,6 +67,22 @@ pub(crate) fn write_at(
     Ok(())
 }
 
+// Any reader can find a file missing while NTFS replaces it (ARCHITECTURE.md).
+pub(crate) fn read<T>(path: &Path, read: impl Fn(&Path) -> io::Result<T>) -> io::Result<T> {
+    let mut again = 0;
+    loop {
+        match read(path) {
+            Err(missing)
+                if cfg!(windows) && missing.kind() == io::ErrorKind::NotFound && again < 5 =>
+            {
+                again += 1;
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            read => return read,
+        }
+    }
+}
+
 /// Numbers every temporary this process creates, so writers on different threads never
 /// share one.
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
@@ -151,6 +167,23 @@ mod tests {
         let path = dir.join("state.json");
         write(Permit::for_a_test(), &path, b"{}", Perms::Secret).unwrap();
         assert!(private(&path));
+    }
+
+    #[test]
+    fn a_read_looks_again_where_windows_shows_a_file_being_replaced_missing() {
+        let misses = std::cell::Cell::new(2);
+        let found = read(Path::new("state.json"), |_| match misses.get() {
+            0 => Ok("whole"),
+            left => {
+                misses.set(left - 1);
+                Err(io::Error::from(io::ErrorKind::NotFound))
+            }
+        });
+        assert_eq!(found.is_ok(), cfg!(windows), "{found:?}");
+        let gone = read(Path::new("state.json"), |_| {
+            Err::<(), _>(io::Error::from(io::ErrorKind::NotFound))
+        });
+        assert_eq!(gone.unwrap_err().kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
