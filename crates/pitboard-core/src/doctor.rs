@@ -591,8 +591,6 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     }
 }
 
-// Each managed `forceLoginOrgUUID`, as said, and the enrolled Claude Code accounts a switch to
-// would refuse for it.
 fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, Vec<String>) {
     let said = crate::settings::organisation_pins(ctx)
         .into_iter()
