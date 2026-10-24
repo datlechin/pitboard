@@ -1571,7 +1571,7 @@ mod tests {
     #[test]
     fn stow_refuses_a_login_of_an_account_not_enrolled_as_the_look_found_it() {
         use pitboard_core::provider::Owner;
-        use pitboard_core::testing::{FixedClock, MemoryHost, ScriptedApi, live_service};
+        use pitboard_core::testing::{FixedClock, ScratchMachine, live_service};
         use std::sync::Arc;
         const NOW: i64 = 1_760_000_000;
         let home = std::env::temp_dir().join(format!(
@@ -1580,12 +1580,14 @@ mod tests {
             std::thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&home);
-        let (mem, api) = (MemoryHost::new(), ScriptedApi::new());
-        let ctx = Context::new(home.clone())
-            .with_pitboard_home(home.join(".pitboard"))
-            .with_memory_stores(Arc::clone(&mem))
-            .with_scripted_api(Arc::clone(&api))
-            .with_clock(Arc::new(FixedClock::at(NOW)));
+        let ScratchMachine {
+            ctx,
+            host: mem,
+            api,
+        } = ScratchMachine::at(&home, |ctx| {
+            ctx.with_pitboard_home(home.join(".pitboard"))
+                .with_clock(Arc::new(FixedClock::at(NOW)))
+        });
         let service = live_service(&ctx);
         let login = |who: &str| {
             api.owned_by(

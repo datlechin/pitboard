@@ -649,7 +649,7 @@ pub(crate) fn write_down(ctx: &Context, permit: Permit, noticed: &[Noticed]) {
 mod tests {
     use super::super::Settled;
     use super::super::harness::{
-        Machine, NOW, Session, audit_lines, codex_id, codex_login, codex_machine, config_names,
+        NOW, Rig, Session, audit_lines, codex_id, codex_login, codex_machine, config_names,
         document, hold, lapsed, lets_go_of_the_write_lock, lock_dir, login_of, machine, oauth,
         owner, record_in_use, recover, renews, renews_meanwhile, saves, signed_in_outside,
         state_file, takes_the_write_lock, window, write_target,
@@ -729,7 +729,7 @@ mod tests {
     }
 
     /// The plan `label`'s record keeps.
-    fn recorded_plan(m: &Machine, label: &str) -> Option<String> {
+    fn recorded_plan(m: &Rig, label: &str) -> Option<String> {
         state::load(&m.ctx)
             .expect("state")
             .get(&m.key(label))
@@ -769,7 +769,7 @@ mod tests {
     }
 
     /// Enrols `login` under `label` again, the way `pitboard add` does.
-    fn enrolled_again(m: &Machine, label: &str, login: Value) {
+    fn enrolled_again(m: &Rig, label: &str, login: Value) {
         let settled = super::super::settle(&m.ctx, Permit::for_a_test(), Some(m.which))
             .expect("nothing to recover")
             .0;
@@ -784,7 +784,7 @@ mod tests {
     }
 
     /// A login of `who` on Max 20x.
-    fn on_max(m: &Machine, who: &str, refresh: &str) -> Value {
+    fn on_max(m: &Rig, who: &str, refresh: &str) -> Value {
         let mut login = login_of(m, who, refresh);
         login["claudeAiOauth"]["subscriptionType"] = "max".into();
         login["claudeAiOauth"]["rateLimitTier"] = "default_claude_max_20x".into();
@@ -973,7 +973,7 @@ mod tests {
     /// `here`'s login renewed since Anthropic last named it, and lapsed since, as Claude Code
     /// leaves it where every session signed in with a file behind the keychain: nobody renews
     /// the keychain's. Anthropic renews it to `here-again`.
-    fn lapsed_stored(name: &str) -> Machine {
+    fn lapsed_stored(name: &str) -> Rig {
         let m = machine(name);
         m.sign_in(&lapsed("here-renewed"));
         renews(&m, "here-renewed", "here-again");
@@ -982,7 +982,7 @@ mod tests {
     }
 
     /// Whose login Claude Code has stored, told as a change tells it, under Pitboard's lock.
-    fn told_now(m: &Machine) -> Result<Live> {
+    fn told_now(m: &Rig) -> Result<Live> {
         told_in(&m.ctx)
     }
 
@@ -1003,14 +1003,14 @@ mod tests {
 
     /// Killed once Anthropic has answered a renewal of `here`'s lapsed login, which spends
     /// the refresh token the keychain still holds.
-    fn killed_once_answered(m: &Machine) {
+    fn killed_once_answered(m: &Rig) {
         let died = fault::killing("refresh.exchanged", || told_now(m).map(|_| ()));
         assert_eq!(died.err().as_deref(), Some("refresh.exchanged"));
         m.api.renew_trouble("here-renewed", Trouble::InvalidGrant);
     }
 
     /// The vault items holding a login on `refresh`.
-    fn copies_of(m: &Machine, refresh: &str) -> Vec<String> {
+    fn copies_of(m: &Rig, refresh: &str) -> Vec<String> {
         let held = format!("\"refreshToken\":\"{refresh}\"");
         m.mem
             .vault()
@@ -1027,7 +1027,7 @@ mod tests {
 
     /// Puts something in the place of Claude Code's write lock at the moment it is called,
     /// which taking the lock over fails on at once, as a file there does.
-    fn jams_the_write_lock(m: &Machine) -> impl FnOnce() + 'static {
+    fn jams_the_write_lock(m: &Rig) -> impl FnOnce() + 'static {
         let stuck = lock_dir(&write_target(m));
         move || {
             let parent = stuck.parent().expect("the storage directory");
@@ -1041,7 +1041,7 @@ mod tests {
 
     /// Locks the login keychain at the moment it is called, which on macOS holds Claude Code's
     /// login and Pitboard's vault both.
-    fn locks_the_keychain(m: &Machine) -> impl FnOnce() + Send + 'static {
+    fn locks_the_keychain(m: &Rig) -> impl FnOnce() + Send + 'static {
         let mem = Arc::clone(&m.mem);
         move || mem.lock_keychain()
     }
@@ -1053,14 +1053,14 @@ mod tests {
         }
     }
 
-    fn stored_refresh(m: &Machine) -> Option<String> {
+    fn stored_refresh(m: &Rig) -> Option<String> {
         m.live()?
             .pointer("/claudeAiOauth/refreshToken")?
             .as_str()
             .map(str::to_owned)
     }
 
-    fn renewals(m: &Machine) -> Vec<Asked> {
+    fn renewals(m: &Rig) -> Vec<Asked> {
         m.api
             .asked()
             .into_iter()
@@ -1418,7 +1418,7 @@ mod tests {
         m.mem
             .vault()
             .fault(&copy, Fault::Unreadable("damaged".into()));
-        let parked = |m: &Machine| {
+        let parked = |m: &Rig| {
             state::load(&m.ctx)
                 .expect("state")
                 .get(&m.key("here"))

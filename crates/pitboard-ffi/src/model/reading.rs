@@ -7,7 +7,7 @@ use super::advice::Told;
 use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
-    Hand, Machine, account, any_read, claude, claude_code, codex, codex_account, fresh_read,
+    Hand, Stub, account, any_read, claude, claude_code, codex, codex_account, fresh_read,
     installed_ask, offline_read, percent, refusal, status, titled, warned, warning,
 };
 use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
@@ -19,7 +19,7 @@ use std::time::Duration;
 #[test]
 fn a_read_fills_in_the_rows() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 42.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 42.0)])));
     model.refresh(&mut machine);
     let shown = model.shown();
     assert_eq!(shown.status.as_ref().map(|s| s.accounts.len()), Some(1));
@@ -31,7 +31,7 @@ fn a_read_fills_in_the_rows() {
 #[test]
 fn a_failed_read_is_shown_as_its_own_message() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "state_wrong_machine",
         "was written on another computer",
         Vec::new(),
@@ -57,7 +57,7 @@ fn a_failed_read_is_shown_as_its_own_message() {
 #[test]
 fn only_asking_for_a_reading_asks_anthropic_again() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
 
     model.refresh(&mut machine);
     assert_eq!(
@@ -77,7 +77,7 @@ fn only_asking_for_a_reading_asks_anthropic_again() {
 #[test]
 fn a_change_made_somewhere_else_is_noticed_without_asking_anthropic() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.offline = Ok(status(vec![claude("work", true, 5.0)]));
 
     // A read establishes where things stand, and costs one offline read at most.
@@ -107,7 +107,7 @@ fn a_change_made_somewhere_else_is_noticed_without_asking_anthropic() {
 #[test]
 fn numbers_a_session_recorded_reach_the_menu_bar_without_asking_anyone() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 20.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 20.0)])));
     model.refresh(&mut machine);
     assert_eq!(percent(&model.shown(), 0), Some(20.0));
 
@@ -130,7 +130,7 @@ fn numbers_a_session_recorded_reach_the_menu_bar_without_asking_anyone() {
 #[test]
 fn the_apps_own_read_costs_one_look_at_the_readings_at_most() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 20.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 20.0)])));
     machine.offline = machine.answer.clone();
     model.notice(&mut machine);
     model.refresh(&mut machine);
@@ -148,7 +148,7 @@ fn the_apps_own_read_costs_one_look_at_the_readings_at_most() {
 #[test]
 fn numbers_a_session_recorded_during_the_apps_own_read_are_shown_on_the_next_look() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 21.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 21.0)])));
     model.notice(&mut machine);
     machine.offline = Ok(status(vec![claude("work", true, 22.0)]));
     model.refresh(&mut machine);
@@ -163,7 +163,7 @@ fn numbers_a_session_recorded_during_the_apps_own_read_are_shown_on_the_next_loo
 #[test]
 fn a_failed_first_read_falls_back_to_what_is_already_known() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "unreachable",
         "could not reach Anthropic",
         Vec::new(),
@@ -191,7 +191,7 @@ fn a_failed_first_read_falls_back_to_what_is_already_known() {
 #[test]
 fn every_warning_is_kept_not_only_the_first() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         Vec::new(),
         vec![
             warning("auth_overridden", "ANTHROPIC_API_KEY is set"),
@@ -210,7 +210,7 @@ fn every_warning_is_kept_not_only_the_first() {
 #[test]
 fn a_failed_read_shows_its_own_warnings_rather_than_the_last_ones() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         Vec::new(),
         vec![warning(
             "state_on_synced_drive",
@@ -263,7 +263,7 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     let replaced = replaced("work", "home");
     let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced.clone()])));
+    let mut machine = Stub::reading(Ok(warned(accounts(), vec![replaced.clone()])));
 
     model.refresh(&mut machine);
     assert_eq!(
@@ -299,7 +299,7 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
 #[test]
 fn a_login_replaced_outside_offers_to_sign_in_again() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![claude("home", true, 5.0), claude("work", false, 0.0)],
         vec![replaced("work", "home")],
     )));
@@ -349,7 +349,7 @@ fn a_login_replaced_outside_is_posted_once_whatever_is_stored_since() {
         ]
     };
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced("work", "home")])));
+    let mut machine = Stub::reading(Ok(warned(accounts(), vec![replaced("work", "home")])));
     model.refresh(&mut machine);
     assert_eq!(machine.posted.len(), 1);
 
@@ -393,7 +393,7 @@ fn expired(label: &str) -> Account {
 #[test]
 fn a_parked_login_that_stops_being_usable_is_posted_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("home", true, 5.0),
         claude("work", false, 0.0),
     ])));
@@ -438,8 +438,7 @@ fn a_parked_login_that_stops_being_usable_is_posted_once() {
 #[test]
 fn a_parked_login_posted_before_a_relaunch_is_not_posted_again() {
     let mut model = Hand::new();
-    let mut machine =
-        Machine::reading(Ok(status(vec![claude("home", true, 5.0), expired("work")])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("home", true, 5.0), expired("work")])));
     machine.told_before = Told::from([("unusable/claude:work".to_owned(), 0)]);
     model.send(Intent::Start);
     model.run(&mut machine);
@@ -462,7 +461,7 @@ fn a_refused_parked_login_needs_signing_in_again() {
         ..expired("side")
     };
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![claude("home", true, 5.0), refused, replaced_away],
         vec![replaced("side", "home")],
     )));
@@ -501,7 +500,7 @@ fn a_refusal_stands_through_reads_that_did_not_ask() {
         ..claude("work", false, 0.0)
     };
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("home", true, 5.0),
         parked("login_refused"),
     ])));
@@ -535,7 +534,7 @@ fn a_refusal_stands_through_reads_that_did_not_ask() {
     assert!(!model.shown().sections[0].accounts[1].needs_sign_in);
 }
 
-fn bodies(machine: &Machine) -> Vec<&str> {
+fn bodies(machine: &Stub) -> Vec<&str> {
     machine
         .posted
         .iter()
@@ -556,7 +555,7 @@ fn a_login_replaced_a_failed_read_says_is_posted_once_while_it_stands() {
         ))
     };
     let mut model = Hand::new();
-    let mut machine = Machine::reading(unreachable(vec![replaced.clone()]));
+    let mut machine = Stub::reading(unreachable(vec![replaced.clone()]));
     machine.offline = Ok(warned(accounts(), vec![replaced.clone()]));
 
     model.refresh(&mut machine);
@@ -586,7 +585,7 @@ fn a_login_replaced_a_failed_read_says_is_posted_once_while_it_stands() {
 fn a_login_replaced_a_refused_switch_says_is_posted() {
     let replaced = replaced("work", "home");
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         claude("home", true, 5.0),
         claude("work", false, 0.0),
     ])));
@@ -625,7 +624,7 @@ fn unconfirmed(named: &str) -> Warning {
 fn an_offline_read_in_doubt_asks_one_read_per_config_value() {
     let accounts = || vec![claude("work", true, 5.0)];
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(accounts())));
+    let mut machine = Stub::reading(Ok(status(accounts())));
     model.refresh(&mut machine);
     let asked = model.count(any_read);
 
@@ -661,7 +660,7 @@ fn an_offline_read_in_doubt_asks_one_read_per_config_value() {
 #[test]
 fn what_is_installed_is_asked_again_while_nothing_is_found() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = Vec::new();
     model.refresh(&mut machine);
     assert_eq!(model.shown().installed, Some(Vec::new()));
@@ -683,7 +682,7 @@ fn what_is_installed_is_asked_again_while_nothing_is_found() {
 #[test]
 fn what_is_installed_is_asked_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = vec![claude_code(), codex()];
     assert_eq!(model.count(installed_ask), 0);
     assert_eq!(
@@ -721,7 +720,7 @@ fn a_read_that_started_before_a_change_is_dropped_when_it_lands() {
         codex_account("work", true),
     ]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(before.clone())));
+    let mut machine = Stub::reading(Ok(status(before.clone())));
     model.refresh(&mut machine);
 
     // What the held read finds when it starts, with a warning nothing after it carries.
@@ -760,7 +759,7 @@ fn a_read_that_started_before_a_change_is_dropped_when_it_lands() {
 #[test]
 fn a_failed_read_that_started_before_a_change_says_nothing_once_it_lands() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         codex_account("personal", true),
         codex_account("work", false),
     ])));
@@ -805,7 +804,7 @@ fn a_change_made_during_a_read_is_noticed_on_the_next_look() {
         claude("personal", true, 0.0),
     ]);
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(before.clone()));
+    let mut machine = Stub::reading(Ok(before.clone()));
     model.send(Intent::Refresh { asked: false });
     let ask = model.next();
     model.give(machine.answer(ask));
@@ -831,7 +830,7 @@ fn a_change_noticed_keeps_the_plan_shown_for_a_login_nobody_enrolled() {
     };
     let stranger = || account(None, "claude", true, Vec::new());
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         with(Some("Pro"), stranger()),
         with(Some("Pro"), claude("work", false, 10.0)),
     ])));
@@ -858,7 +857,7 @@ fn a_change_noticed_keeps_the_plan_shown_for_a_login_nobody_enrolled() {
 #[test]
 fn a_read_is_running_while_either_of_two_is() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 0.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 0.0)])));
     assert!(!model.shown().reading);
     model.send(Intent::Refresh { asked: false });
     model.send(Intent::Refresh { asked: true });
@@ -882,7 +881,7 @@ fn a_read_is_running_while_either_of_two_is() {
 #[test]
 fn opening_a_menu_reads_only_numbers_a_minute_old() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 10.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 10.0)])));
     assert_eq!(
         super::state::Cadence::APP.stale_after,
         Duration::from_secs(60)
@@ -908,7 +907,7 @@ fn opening_a_menu_reads_only_numbers_a_minute_old() {
 #[test]
 fn reads_waiting_for_what_is_installed_ask_it_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     assert_eq!(
         model.send(Intent::Refresh { asked: false }),
         [Job::AskInstalled]
@@ -925,7 +924,7 @@ fn reads_waiting_for_what_is_installed_ask_it_once() {
 #[test]
 fn what_is_known_fills_in_only_where_nothing_is_shown_yet() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Err(refusal("unreachable", "unreachable", Vec::new())));
+    let mut machine = Stub::reading(Err(refusal("unreachable", "unreachable", Vec::new())));
     machine.offline = Ok(status(vec![claude("work", true, 5.0)]));
     model.send(Intent::Refresh { asked: false });
     model.send(Intent::Refresh { asked: true });
@@ -950,7 +949,7 @@ fn what_is_known_fills_in_only_where_nothing_is_shown_yet() {
 #[test]
 fn a_read_landing_while_a_failed_one_falls_back_keeps_what_it_says_of_a_stuck_switch() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "recovery_undetermined",
         "an interrupted switch cannot be finished",
         Vec::new(),
@@ -981,7 +980,7 @@ fn a_read_landing_while_a_failed_one_falls_back_keeps_what_it_says_of_a_stuck_sw
 #[test]
 fn numbers_land_on_a_read_that_landed_while_they_were_read() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![claude("work", true, 20.0)])));
+    let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 20.0)])));
     model.refresh(&mut machine);
 
     machine.readings += 1;
@@ -1021,7 +1020,7 @@ fn numbers_land_on_a_read_that_landed_while_they_were_read() {
 #[test]
 fn a_read_lost_to_a_panic_is_over() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.send(Intent::Refresh { asked: false });
     let ask = model.next();
     model.give(machine.answer(ask));
@@ -1039,7 +1038,7 @@ fn a_read_lost_to_a_panic_is_over() {
 #[test]
 fn only_a_change_the_poll_notices_counts_as_one() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.notice(&mut machine);
     model.notice(&mut machine);
     machine.readings += 1;

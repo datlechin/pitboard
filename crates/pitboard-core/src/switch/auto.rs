@@ -242,7 +242,7 @@ fn over_the_account_switched_to(error: &Error) -> bool {
 )]
 mod tests {
     use super::super::harness::{
-        Machine, NOW, cache_usage, config_names, document, hold, machine, owner, state_file,
+        NOW, Rig, cache_usage, config_names, document, hold, machine, owner, state_file,
         usage_answer, window,
     };
     use super::super::*;
@@ -256,7 +256,7 @@ mod tests {
     use std::sync::Arc;
 
     /// What Anthropic has just answered of `uuid`'s five-hour and weekly limits.
-    fn measured(m: &Machine, uuid: &str, session: f64, weekly: f64) {
+    fn measured(m: &Rig, uuid: &str, session: f64, weekly: f64) {
         crate::usage::readings::answered(
             &m.ctx,
             Permit::for_a_test(),
@@ -264,7 +264,7 @@ mod tests {
         );
     }
 
-    fn answer(m: &Machine, session: f64, weekly: f64) -> Snapshot {
+    fn answer(m: &Rig, session: f64, weekly: f64) -> Snapshot {
         Snapshot {
             windows: vec![window("session", session), window("weekly_all", weekly)],
             observed_at: Some(m.ctx.now()),
@@ -275,7 +275,7 @@ mod tests {
     }
 
     /// `here` in use at `session` of its five-hour limit, `there` parked with room.
-    fn nearly_out(name: &str, session: f64) -> (Machine, Arc<FixedClock>) {
+    fn nearly_out(name: &str, session: f64) -> (Rig, Arc<FixedClock>) {
         let mut m = machine(name);
         let clock = Arc::new(FixedClock::at(NOW));
         m.ctx = m
@@ -287,12 +287,12 @@ mod tests {
         (m, clock)
     }
 
-    fn auto(m: &Machine) -> crate::service::Changing<Auto> {
+    fn auto(m: &Rig) -> crate::service::Changing<Auto> {
         Pitboard::new(m.ctx.clone()).auto_switch(Threshold::DEFAULT)
     }
 
     /// What the look at the files alone comes to, where it ends there and takes no lock.
-    fn stands(m: &Machine) -> Auto {
+    fn stands(m: &Rig) -> Auto {
         let state = state::load(&m.ctx).expect("state");
         match crate::duty::autoswitch::look(&m.ctx, &state, Threshold::DEFAULT) {
             Look::Stands(stands) => *stands,
@@ -309,11 +309,11 @@ mod tests {
     }
 
     /// The reasons not to switch the audit log records, and of which account.
-    fn stays(m: &Machine) -> Vec<(String, String)> {
+    fn stays(m: &Rig) -> Vec<(String, String)> {
         harness::audit_lines(m, "auto-stay")
     }
 
-    fn live_refresh(m: &Machine) -> Option<String> {
+    fn live_refresh(m: &Rig) -> Option<String> {
         m.live()?
             .pointer("/claudeAiOauth/refreshToken")?
             .as_str()
@@ -321,7 +321,7 @@ mod tests {
     }
 
     /// The automatic switches the audit log records, and what each came to.
-    fn logged(m: &Machine) -> Vec<(String, String, String)> {
+    fn logged(m: &Rig) -> Vec<(String, String, String)> {
         crate::audit::read(&m.ctx, 100)
             .into_iter()
             .filter(|entry| entry.verb == "auto-switch")
@@ -1424,7 +1424,7 @@ mod tests {
     #[test]
     fn a_read_that_tells_whose_the_login_is_ends_the_failures_in_a_row() {
         let (m, clock) = nearly_out("auto-told-by-a-read", 96.0);
-        let waits_until = |m: &Machine| match auto(m).expect("no failure").value {
+        let waits_until = |m: &Rig| match auto(m).expect("no failure").value {
             Auto::NotWatching {
                 why: Blind::Unidentified { until, .. },
             } => until,

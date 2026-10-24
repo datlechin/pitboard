@@ -9,9 +9,7 @@
 
 use super::machine::ScheduleFailure;
 use super::state::Job;
-use super::testing::{
-    Hand, Machine, PLIST, change, check, claude, refusal, status, warned, warning,
-};
+use super::testing::{Hand, PLIST, Stub, change, check, claude, refusal, status, warned, warning};
 use super::{Intent, Pane};
 use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, present_on};
@@ -32,8 +30,8 @@ fn window_failure(model: &Hand) -> bool {
 }
 
 /// A machine with one account and nothing on its scheduler, as the core answers.
-fn machine() -> Machine {
-    Machine::reading(Ok(status(vec![claude("work", true, 10.0)])))
+fn machine() -> Stub {
+    Stub::reading(Ok(status(vec![claude("work", true, 10.0)])))
 }
 
 fn installed() -> Schedule {
@@ -689,7 +687,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     };
     let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(accounts(), vec![replaced("work")])));
+    let mut machine = Stub::reading(Ok(warned(accounts(), vec![replaced("work")])));
     machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
     machine.post_refused = Some("COMException 0x80070490".into());
 

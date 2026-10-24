@@ -1,5 +1,5 @@
 use super::super::harness::{
-    HOME, Machine, NOW, STRANGER, WORK, as_a_dead_runs, audit_lines, data, desktop_machine,
+    HOME, NOW, Rig, STRANGER, WORK, as_a_dead_runs, audit_lines, data, desktop_machine,
     desktop_pair, hold, hold_where_deleted, hold_where_twice, recover, rested, settled,
     sign_in_inside, snapshot, tree, unchanged, whereabouts,
 };
@@ -21,19 +21,19 @@ const WORK_BEFORE: Person = Person {
     session: "work-session-before",
 };
 
-fn enrol(m: &Machine, label: &str) -> crate::error::Result<(super::Enrolled, Vec<Warning>)> {
+fn enrol(m: &Rig, label: &str) -> crate::error::Result<(super::Enrolled, Vec<Warning>)> {
     enroll(settled(m), &m.key(label), None)
 }
 
-fn use_(m: &Machine, label: &str) -> crate::error::Result<Outcome> {
+fn use_(m: &Rig, label: &str) -> crate::error::Result<Outcome> {
     switch(settled(m), &m.key(label)).map(|(outcome, _)| outcome)
 }
 
-fn forget_(m: &Machine, label: &str) -> crate::error::Result<String> {
+fn forget_(m: &Rig, label: &str) -> crate::error::Result<String> {
     forget(settled(m), &m.key(label)).map(|(email, _)| email)
 }
 
-fn confirm_(m: &Machine, label: &str) -> crate::error::Result<Outcome> {
+fn confirm_(m: &Rig, label: &str) -> crate::error::Result<Outcome> {
     update_config(settled(m), &m.key(label)).map(|(outcome, _)| outcome)
 }
 
@@ -42,7 +42,7 @@ fn code<T: std::fmt::Debug>(result: crate::error::Result<T>) -> &'static str {
 }
 
 // Claude's settings with `key` set to `value`, or taken out, in place.
-fn set(m: &Machine, key: &str, value: Option<Value>) {
+fn set(m: &Rig, key: &str, value: Option<Value>) {
     let path = data(m).join("config.json");
     let mut settings: Map<String, Value> =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("settings")).expect("JSON");
@@ -61,7 +61,7 @@ fn set(m: &Machine, key: &str, value: Option<Value>) {
     .expect("set");
 }
 
-fn names(m: &Machine, who: &Person) {
+fn names(m: &Rig, who: &Person) {
     set(m, "lastKnownAccountUuid", Some(json!(who.uuid)));
 }
 
@@ -78,12 +78,12 @@ fn session_of(who: Option<&Person>) -> Vec<Cookie> {
 }
 
 // The jar holding `who`'s session, or none.
-fn jar(m: &Machine, who: Option<&Person>) {
+fn jar(m: &Rig, who: Option<&Person>) {
     write_stand_in_jar(&data(m).join("Cookies"), 24, &session_of(who));
 }
 
 // `work` and `home` enrolled, `work` in use: what two enrolments over one Claude leave.
-fn two_accounts(name: &str) -> Machine {
+fn two_accounts(name: &str) -> Rig {
     let m = desktop_machine(name);
     jar(&m, Some(&HOME));
     names(&m, &HOME);
@@ -102,7 +102,7 @@ fn items() -> &'static [&'static str] {
 }
 
 // Claude's folder with no jar and none of an account's other items.
-fn without_items(m: &Machine) {
+fn without_items(m: &Rig) {
     for item in items() {
         let path = data(m).join(item);
         match std::fs::symlink_metadata(&path) {
@@ -113,7 +113,7 @@ fn without_items(m: &Machine) {
     }
 }
 
-fn in_use(m: &Machine) -> Option<String> {
+fn in_use(m: &Rig) -> Option<String> {
     let state = state::load(&m.ctx).expect("state");
     state
         .account_in_use(ProviderId::Desktop)
@@ -121,7 +121,7 @@ fn in_use(m: &Machine) -> Option<String> {
 }
 
 // No mover exists yet to make a folder park.
-fn park_by_hand(m: &Machine, key: Option<&Key>, name: &str, who: &Person) -> Park {
+fn park_by_hand(m: &Rig, key: Option<&Key>, name: &str, who: &Person) -> Park {
     let folder = crate::store::folder::at(&m.ctx, name);
     std::fs::create_dir_all(folder.join("items")).expect("a park");
     write_stand_in_jar(&folder.join("items/Cookies"), 24, &session_of(Some(who)));
@@ -825,7 +825,7 @@ fn a_sidecar_pitboard_cannot_read_refuses_every_change() {
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
 fn repair_gives_a_folder_back_where_its_manifest_its_keys_and_its_jar_agree() {
-    let given = |name: &str, spoil: &dyn Fn(&Machine, &str)| {
+    let given = |name: &str, spoil: &dyn Fn(&Rig, &str)| {
         let m = two_accounts(name);
         let homes = park_name(&HOME);
         park_by_hand(&m, None, &homes, &HOME);
@@ -985,7 +985,7 @@ fn repair_gives_an_account_its_park_back_where_the_one_recorded_is_gone() {
         std::fs::write(&file, backup).expect("restored");
         (m, recorded, again)
     };
-    let given_back = |m: &Machine, recorded: &str, again: &str, why: &str| {
+    let given_back = |m: &Rig, recorded: &str, again: &str, why: &str| {
         let state = state_of(m);
         assert_eq!(
             park_of(m, "home").map(|p| p.service).as_deref(),
@@ -1096,7 +1096,7 @@ fn a_name_that_is_no_account_id_is_never_enrolled() {
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
 fn a_data_folder_pitboard_moves_no_login_in_refuses_every_change() {
-    let refuses = |name: &str, spoil: &dyn Fn(&Machine), words: &str| {
+    let refuses = |name: &str, spoil: &dyn Fn(&Rig), words: &str| {
         let m = two_accounts(&format!("row-4-{name}"));
         spoil(&m);
         let before = snapshot(&m);
@@ -1284,22 +1284,22 @@ fn the_desktop_provider_reaches_no_keychain_and_no_service() {
 }
 
 // Without printing two indexes and two folders where they differ.
-fn used(m: &Machine, label: &str) -> (Outcome, Vec<Warning>) {
+fn used(m: &Rig, label: &str) -> (Outcome, Vec<Warning>) {
     switch(settled(m), &m.key(label)).unwrap_or_else(|e| panic!("use {label}: {e}"))
 }
 
-fn park_of(m: &Machine, label: &str) -> Option<Park> {
+fn park_of(m: &Rig, label: &str) -> Option<Park> {
     state::load(&m.ctx)
         .expect("state")
         .get(&m.key(label))
         .and_then(|a| a.parked.clone())
 }
 
-fn named_in_settings(m: &Machine) -> Option<String> {
+fn named_in_settings(m: &Rig) -> Option<String> {
     setting(m, "lastKnownAccountUuid").and_then(|name| name.as_str().map(str::to_string))
 }
 
-fn setting(m: &Machine, key: &str) -> Option<Value> {
+fn setting(m: &Rig, key: &str) -> Option<Value> {
     let mut settings: Map<String, Value> = serde_json::from_str(
         &std::fs::read_to_string(data(m).join("config.json")).expect("settings"),
     )
@@ -1628,11 +1628,11 @@ fn a_sign_in_parks_the_account_in_use_and_enrols_whoever_signs_in() {
     rested(&m, "a sign-in inside Claude");
 }
 
-fn refused(m: &Machine, label: &str) -> Error {
+fn refused(m: &Rig, label: &str) -> Error {
     switch(settled(m), &m.key(label)).expect_err("refused")
 }
 
-fn state_of(m: &Machine) -> state::State {
+fn state_of(m: &Rig) -> state::State {
     state::load(&m.ctx).expect("state")
 }
 
@@ -1902,7 +1902,7 @@ fn a_leave_is_refused_where_this_mac_cannot_be_identified() {
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
 fn nothing_is_set_aside_where_this_mac_cannot_be_identified() {
-    let blind = |m: &mut Machine| {
+    let blind = |m: &mut Rig| {
         m.ctx = m.ctx.clone().with_unknown_machine();
         recover(m).expect("swept");
         snapshot(m)
@@ -2218,8 +2218,8 @@ fn moving_is_true_only_while_a_move_waits_or_the_index_does_not_read() {
 }
 
 // Every read, which opens no jar, lists no process and records nothing.
-fn reads_only(m: &Machine, pitboard: &crate::service::Pitboard, why: &str) {
-    let asked = |m: &Machine| {
+fn reads_only(m: &Rig, pitboard: &crate::service::Pitboard, why: &str) {
+    let asked = |m: &Rig| {
         let state = std::fs::read(crate::home::dir(&m.ctx).join("state.json")).expect("state");
         (m.mem.jars_asked().len(), m.mem.listings(), state)
     };
@@ -2236,13 +2236,13 @@ fn reads_only(m: &Machine, pitboard: &crate::service::Pitboard, why: &str) {
     assert!(after.2 == before.2, "{why}: nothing was recorded");
 }
 
-fn killed(m: &Machine, at: &'static str, label: &str) {
+fn killed(m: &Rig, at: &'static str, label: &str) {
     let died = crate::fault::killing(at, || switch(settled(m), &m.key(label)));
     assert_eq!(died.expect_err("killed"), at);
     as_a_dead_runs(m);
 }
 
-fn watched(m: &Machine, label: &str) -> crate::error::Result<super::super::WatchedSignIn> {
+fn watched(m: &Rig, label: &str) -> crate::error::Result<super::super::WatchedSignIn> {
     crate::service::Pitboard::new(m.ctx.clone())
         .sign_in_watched(&format!("desktop/{label}"))
         .map_err(|failed| failed.error)
@@ -2772,7 +2772,7 @@ fn forgetting_the_account_an_add_would_put_back_leaves_no_dangling_put_back() {
     );
 }
 
-fn gave_up(m: &Machine) -> crate::error::Result<super::super::GaveUp> {
+fn gave_up(m: &Rig) -> crate::error::Result<super::super::GaveUp> {
     super::super::abandon(&m.ctx, Permit::for_a_test())
 }
 
@@ -2880,7 +2880,7 @@ fn abandon_gives_up_whatever_the_settings_and_says_why_a_jar_or_an_item_stops_it
         .clone();
     let items = crate::store::folder::at(&m.ctx, &park).join("items");
     let jar = items.join("Cookies");
-    let refused_twice = |m: &Machine| {
+    let refused_twice = |m: &Rig| {
         let stopped = gave_up(m).expect_err("refused");
         let before = snapshot(m);
         let again = gave_up(m).expect_err("refused again");
@@ -2990,7 +2990,7 @@ fn giving_up_indexes_every_folder_moves_nothing_and_deletes_nothing() {
 }
 
 // `work` half parked, then Claude signed in to an account nobody enrolled.
-fn mixed(name: &str) -> Machine {
+fn mixed(name: &str) -> Rig {
     let m = desktop_pair(name);
     killed(&m, "leave.item_out", "home");
     let claude = m.claude();
@@ -3266,7 +3266,7 @@ fn a_give_up_never_points_a_manifest_at_a_session_it_did_not_park() {
 }
 
 // `work`'s leave given up with its items left in Claude's folder.
-fn left_by_a_give_up(name: &str) -> Machine {
+fn left_by_a_give_up(name: &str) -> Rig {
     let m = desktop_pair(name);
     tokens_beside_no_session(&m);
     let gave = gave_up(&m).expect("given up");
@@ -3276,7 +3276,7 @@ fn left_by_a_give_up(name: &str) -> Machine {
 
 // Whose each folder set aside as in the way is, oldest first, as the index and its manifest
 // file it.
-fn in_the_way(m: &Machine) -> Vec<Option<String>> {
+fn in_the_way(m: &Rig) -> Vec<Option<String>> {
     state_of(m)
         .aside
         .iter()
@@ -3292,7 +3292,7 @@ fn in_the_way(m: &Machine) -> Vec<Option<String>> {
 }
 
 // What the manifest of `label`'s park lists as left in Claude's folder.
-fn listed_left(m: &Machine, label: &str) -> Vec<String> {
+fn listed_left(m: &Rig, label: &str) -> Vec<String> {
     let park = park_of(m, label).expect("parked").service;
     crate::store::folder::manifest(&m.ctx, &park)
         .expect("reads")
@@ -3301,7 +3301,7 @@ fn listed_left(m: &Machine, label: &str) -> Vec<String> {
 }
 
 // A listing a give-up wrote, which nothing took since.
-fn list_left(m: &Machine, label: &str) {
+fn list_left(m: &Rig, label: &str) {
     let park = park_of(m, label).expect("parked").service;
     let mut manifest = crate::store::folder::manifest(&m.ctx, &park)
         .expect("reads")
@@ -3556,7 +3556,7 @@ fn giving_up_a_move_elsewhere_reads_no_claude_folder() {
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
 fn uninstall_refuses_where_claude_is_signed_out_whatever_the_record_says() {
-    let uninstalled = |m: &Machine| {
+    let uninstalled = |m: &Rig| {
         super::super::uninstall(
             settle(&m.ctx, Permit::for_a_test(), None)
                 .expect("settled")
@@ -3903,7 +3903,7 @@ fn a_give_up_that_stops_partway_never_says_nothing_has_changed() {
 )]
 fn a_leave_that_fails_partway_is_undone_and_its_account_stays_in_use() {
     let m = desktop_pair("leave-undone");
-    let keys = |m: &Machine| {
+    let keys = |m: &Rig| {
         let path = data(m).join("config.json");
         let settings: Map<String, Value> =
             serde_json::from_str(&std::fs::read_to_string(path).expect("settings")).expect("JSON");
@@ -4022,12 +4022,12 @@ fn a_flush_that_fails_after_a_rename_is_a_move_made() {
 }
 
 // Claude Code's `here` in use and `there` parked, with Claude Desktop's pair beside them.
-fn three_tools(name: &str) -> Machine {
+fn three_tools(name: &str) -> Rig {
     beside_desktop(super::super::harness::machine(name))
 }
 
 // `m`'s own tool's `here` in use and `there` parked, with Claude Desktop's pair beside them.
-fn beside_desktop(mut m: Machine) -> Machine {
+fn beside_desktop(mut m: Rig) -> Rig {
     m.ctx = m
         .ctx
         .clone()
@@ -4042,7 +4042,7 @@ fn beside_desktop(mut m: Machine) -> Machine {
 }
 
 // A switch of `tool` to `there` killed after its record, before anything moved.
-fn interrupted(m: &Machine, tool: ProviderId) {
+fn interrupted(m: &Rig, tool: ProviderId) {
     let (settled, _) = settle(&m.ctx, Permit::for_a_test(), Some(tool)).expect("nothing waits");
     let died = crate::fault::killing("switch.journal_written", || {
         switch(settled, &Key::new(tool, "there"))
@@ -4057,7 +4057,7 @@ type Claudes = (
     Vec<(PathBuf, Option<Vec<u8>>)>,
 );
 
-fn claudes(m: &Machine) -> Claudes {
+fn claudes(m: &Rig) -> Claudes {
     (
         tree(&data(m)),
         tree(&crate::store::folder::parks_dir(&m.ctx)),
@@ -4065,7 +4065,7 @@ fn claudes(m: &Machine) -> Claudes {
 }
 
 // The switch given up and said, and the move still waiting, said with why.
-fn switch_given_up_beside(m: &Machine, gave: &super::super::GaveUp, why: &str) {
+fn switch_given_up_beside(m: &Rig, gave: &super::super::GaveUp, why: &str) {
     assert!(gave.switch.is_some(), "{gave:?}");
     assert!(!super::super::journal::pending(&m.ctx));
     assert!(gave.moves.is_empty(), "{gave:?}");
@@ -4172,7 +4172,7 @@ fn a_codex_switch_is_given_up_beside_a_move_that_cannot_be() {
 // The change settles the move and refuses. Run again, it refuses alone and changes nothing,
 // so the first refusal changed nothing past the settle.
 fn settled_then_refused(
-    m: &Machine,
+    m: &Rig,
     code: &str,
     settled: &str,
     change: impl Fn(&crate::service::Pitboard) -> crate::service::Failed,
@@ -4345,7 +4345,7 @@ fn a_failure_after_a_settled_move_still_says_it_settled() {
 }
 
 // Claude ran as whoever its folder held and renewed that account's tokens.
-fn renewed(m: &Machine) {
+fn renewed(m: &Rig) {
     let path = data(m).join("config.json");
     let written = std::fs::read_to_string(&path).expect("settings");
     let renewed = [WORK, HOME].iter().fold(written.clone(), |held, who| {
@@ -4396,7 +4396,7 @@ fn a_refusal_after_a_settled_move_says_all_it_did_first() {
     );
 }
 
-fn superseded(m: &Machine) -> PathBuf {
+fn superseded(m: &Rig) -> PathBuf {
     state_of(m)
         .aside
         .iter()
@@ -4877,7 +4877,7 @@ fn no_folder_name_reaches_the_vault() {
     ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
 )]
 fn uninstall_and_repair_read_nothing_of_claude_where_nothing_of_it_is_parked() {
-    let settled_all = |m: &Machine| {
+    let settled_all = |m: &Rig| {
         settle(&m.ctx, Permit::for_a_test(), None)
             .expect("settled")
             .0
@@ -5040,7 +5040,7 @@ fn the_start_of_a_sign_in_writes_a_manifest_before_it_sets_keys_aside() {
 }
 
 // Until the process list has been asked `n` times in all: a wait that stops asking fails.
-fn listed(m: &Machine, n: usize) {
+fn listed(m: &Rig, n: usize) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while m.mem.listings() < n {
         assert!(
@@ -5204,11 +5204,11 @@ fn an_item_or_its_folder_on_another_volume_refuses_before_anything_moves() {
 // A refusal and what it is refused over: set up, then asked.
 struct Refusal {
     code: &'static str,
-    set_up: fn(&Machine),
-    asked: fn(&Machine) -> Error,
+    set_up: fn(&Rig),
+    asked: fn(&Rig) -> Error,
 }
 
-fn tokens_beside_no_session(m: &Machine) {
+fn tokens_beside_no_session(m: &Rig) {
     killed(m, "leave.jar_out", "home");
     let park = state_of(m)
         .moving(ProviderId::Desktop)
@@ -5352,7 +5352,7 @@ fn every_refusal_leaves_the_folder_and_the_index_as_they_were() {
             },
         },
     ];
-    let parks = |m: &Machine| crate::store::folder::parks_dir(&m.ctx);
+    let parks = |m: &Rig| crate::store::folder::parks_dir(&m.ctx);
     for (n, refusal) in refusals.iter().enumerate() {
         let m = desktop_pair(&format!("refusal-{n}"));
         (refusal.set_up)(&m);

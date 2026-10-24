@@ -3,7 +3,7 @@
 //! then puts it away once somebody confirms what it says, as `pitboard stow` asks first.
 
 use super::state::{Answer, Job};
-use super::testing::{Hand, Machine, claude, refusal, titled, warned, warning};
+use super::testing::{Hand, Stub, claude, refusal, titled, warned, warning};
 use super::{Intent, Sheet};
 use crate::Held;
 use crate::present::Severity;
@@ -44,12 +44,12 @@ pub(super) fn parked_now(label: &str) -> Kept {
 }
 
 /// A model that has read `work` in use, with the file behind the keychain holding a login.
-fn with_a_file_left(machine: &mut Machine) -> Hand {
+fn with_a_file_left(machine: &mut Stub) -> Hand {
     with_a_file_holding(machine, Held::Login)
 }
 
 /// A model that has read `work` in use, with the file behind the keychain holding `held`.
-fn with_a_file_holding(machine: &mut Machine, held: Held) -> Hand {
+fn with_a_file_holding(machine: &mut Stub, held: Held) -> Hand {
     machine.answer = Ok(warned(
         vec![claude("work", true, 10.0)],
         vec![fallback_login(held)],
@@ -78,7 +78,7 @@ fn a_stow(job: &Job) -> bool {
 #[test]
 fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
     for held in [Held::Login, Held::NoLogin, Held::Unreadable] {
-        let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+        let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
         let model = with_a_file_holding(&mut machine, held);
 
         let shown = model.shown();
@@ -103,7 +103,7 @@ fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
 /// says it is finding out, and Put Away waits.
 #[test]
 fn the_sheet_says_whose_the_login_is_once_it_is_known() {
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
 
@@ -165,7 +165,7 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
 /// are read again.
 #[test]
 fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
     model.send(stow_sheet());
@@ -219,7 +219,7 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
 /// what to do first, holds Put Away back, and sends nothing if it is pressed.
 #[test]
 fn a_login_of_an_account_not_enrolled_is_not_offered_to_put_away() {
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::NotEnrolled(Owner {
         account_uuid: "stranger".into(),
@@ -243,7 +243,7 @@ fn a_login_of_an_account_not_enrolled_is_not_offered_to_put_away() {
 /// is cannot be told, or the file changed since the sheet said what it holds.
 #[test]
 fn what_stops_it_is_said_in_the_sheet() {
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Err(refusal(
         "left_login_unidentified",
@@ -284,7 +284,7 @@ fn what_stops_it_is_said_in_the_sheet() {
 /// for that look, and then sends what it found, not what was refused.
 #[test]
 fn a_refused_put_away_looks_again() {
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
     model.send(stow_sheet());
@@ -335,7 +335,7 @@ fn a_refused_put_away_looks_again() {
 /// Putting away that came to nothing is said in its sheet: what it did is not known.
 #[test]
 fn putting_away_that_came_to_nothing_is_said_in_its_sheet() {
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), Vec::new())));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), Vec::new())));
     let mut model = with_a_file_left(&mut machine);
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
     model.send(stow_sheet());

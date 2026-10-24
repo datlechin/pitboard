@@ -7,7 +7,7 @@
 use super::advice::{Advice, Told};
 use super::switching::switch;
 use super::testing::{
-    Hand, Machine, already_active, refusal, status, switched, titled, warned, warning,
+    Hand, Stub, already_active, refusal, status, switched, titled, warned, warning,
 };
 use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
 use crate::Account;
@@ -49,7 +49,7 @@ fn told_work() -> String {
 #[test]
 fn numbers_that_run_an_account_out_advise_at_once_and_tell_it_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert!(model.state.advice.is_empty());
 
@@ -86,7 +86,7 @@ fn numbers_that_run_an_account_out_advise_at_once_and_tell_it_once() {
 #[test]
 fn advice_the_numbers_no_longer_bear_out_is_put_away() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.state.advice.len(), 1);
 
@@ -104,7 +104,7 @@ fn advice_the_numbers_no_longer_bear_out_is_put_away() {
 #[test]
 fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(90.0, 7_200), personal()])));
     model.refresh(&mut machine);
     machine.offline = Ok(status(vec![work(100.0, 7_200), personal()]));
     machine.readings += 1;
@@ -124,7 +124,7 @@ fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
 #[test]
 fn advice_told_by_a_read_outlasts_the_next_read_and_is_told_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.state.advice.len(), 1);
 
@@ -147,7 +147,7 @@ fn advice_told_by_a_read_outlasts_the_next_read_and_is_told_once() {
 #[test]
 fn the_account_index_changing_elsewhere_is_advised_on_at_once() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(20.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(20.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert!(model.state.advice.is_empty());
 
@@ -182,7 +182,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
             .collect()
     }
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         spent(),
         other("personal", 10.0, true),
         other("side", 40.0, true),
@@ -255,7 +255,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
 #[test]
 fn a_switch_puts_away_the_advice_about_its_own_tool() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         work(100.0, 7_200),
         personal(),
         account(Some("side"))
@@ -288,7 +288,7 @@ fn a_switch_puts_away_the_advice_about_its_own_tool() {
 #[test]
 fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted,
@@ -309,7 +309,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     assert_eq!(notice.lines, [machine.posted[0].body.clone()]);
 
     let mut both = Hand::new();
-    let mut beside = Machine::reading(Ok(status(vec![
+    let mut beside = Stub::reading(Ok(status(vec![
         work(100.0, 7_200),
         personal(),
         account(Some("job")).of("codex").signed_in().build(),
@@ -335,7 +335,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
 #[test]
 fn a_run_out_notified_before_a_relaunch_is_not_notified_again() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_201), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_201), personal()])));
     machine.told_before = Told::from([(told_work(), 7_200)]);
     model.send(Intent::Start);
     model.run(&mut machine);
@@ -368,7 +368,7 @@ fn a_run_out_notified_before_a_relaunch_is_not_notified_again() {
 #[test]
 fn nothing_is_told_before_what_was_told_is_in() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     machine.told_before = Told::from([(told_work(), 7_200)]);
     model.send(Intent::Start);
     model.run_but(&mut machine, |job| {
@@ -394,7 +394,7 @@ fn nothing_is_told_before_what_was_told_is_in() {
 #[test]
 fn a_record_that_came_to_nothing_is_nothing_told() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.send(Intent::Start);
     let kept = model.take(|job| matches!(job, super::state::Job::LoadKept));
     model.run(&mut machine);
@@ -413,7 +413,7 @@ fn a_record_that_came_to_nothing_is_nothing_told() {
 #[test]
 fn what_stands_in_for_a_failed_read_is_not_advised_on() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "unreachable",
         "could not be reached",
         Vec::new(),
@@ -447,7 +447,7 @@ fn what_stands_in_for_a_failed_read_is_not_advised_on() {
 #[test]
 fn advice_goes_once_the_account_is_back_under_its_limit() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(model.state.advice.len(), 1);
     machine.answer = Ok(status(vec![work(97.0, 7_200), personal()]));
@@ -461,7 +461,7 @@ fn advice_goes_once_the_account_is_back_under_its_limit() {
 #[test]
 fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     machine.told_before = Told::from([(told_work(), 7_200)]);
     model.send(Intent::Start);
     let kept = model.take(|job| matches!(job, super::state::Job::LoadKept));
@@ -485,7 +485,7 @@ fn a_change_noticed_before_what_was_told_is_in_is_advised_on_after() {
 #[test]
 fn a_switch_to_the_account_in_use_keeps_the_advice_about_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert_eq!(switches_to(&model), ["claude/personal"]);
 
@@ -506,7 +506,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
          `work`’s.",
     );
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![work(100.0, 7_200), personal()],
         vec![names_another],
     )));
@@ -536,7 +536,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
 #[test]
 fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     model.refresh(&mut machine);
     let posted = machine.posted[0].clone();
 
@@ -637,7 +637,7 @@ fn model_clicked(argument: &str, then: impl FnOnce(&Hand)) {
 // What happens once a limit reaches the share chosen.
 
 /// The app's preferences read from their file, with `choice` made at the default share.
-fn chose(model: &mut Hand, machine: &mut Machine, choice: AtLimit) {
+fn chose(model: &mut Hand, machine: &mut Stub, choice: AtLimit) {
     let mut preferences = super::preferences::Preferences::default();
     preferences.choose(choice);
     model.give(super::state::Answer::Kept {
@@ -654,7 +654,7 @@ fn chose(model: &mut Hand, machine: &mut Machine, choice: AtLimit) {
 #[test]
 fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(94.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(94.0, 7_200), personal()])));
     model.refresh(&mut machine);
     assert!(machine.posted.is_empty(), "below the share");
 
@@ -692,7 +692,7 @@ fn a_limit_past_its_reset_is_neither_notified_nor_advised_on() {
         let mut model = Hand::new();
         let mut read = status(vec![work(percent, 1_800_000_000), personal()]);
         read.now = 1_800_000_000;
-        let mut machine = Machine::reading(Ok(read));
+        let mut machine = Stub::reading(Ok(read));
         model.refresh(&mut machine);
         assert!(machine.posted.is_empty(), "{percent}");
         assert!(switches_to(&model).is_empty(), "{percent}");
@@ -705,7 +705,7 @@ fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
     let mut model = Hand::new();
     let mut read = status(vec![work(97.0, 1_800_003_900)]);
     read.now = 1_800_000_000;
-    let mut machine = Machine::reading(Ok(read));
+    let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
     assert_eq!(notice.title, "work has used 97% of its 5-hour limit");
@@ -723,7 +723,7 @@ fn an_account_past_the_share_is_not_offered_at_the_share() {
         .build();
     let mut read = status(vec![work(96.0, 1_800_003_900), past]);
     read.now = 1_800_000_000;
-    let mut machine = Machine::reading(Ok(read));
+    let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
     assert_eq!(notice.body, "Resets in 1h 05m.");
@@ -734,7 +734,7 @@ fn an_account_past_the_share_is_not_offered_at_the_share() {
 #[test]
 fn do_nothing_notifies_nothing() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(100.0, 7_200), personal()])));
     chose(&mut model, &mut machine, AtLimit::Nothing);
     model.refresh(&mut machine);
     assert!(machine.posted.is_empty());
@@ -754,7 +754,7 @@ fn switch_notifies_of_codex_alone() {
         if signed_in { made.signed_in() } else { made }.build()
     };
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         work(97.0, 7_200),
         personal(),
         codex("job", 97.0, true),
@@ -779,7 +779,7 @@ fn switch_notifies_of_codex_alone() {
 #[test]
 fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
+    let mut machine = Stub::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
     chose(&mut model, &mut machine, AtLimit::Notify);
     let shown = model.on_a_mac().machine;
     let titles: Vec<String> = shown

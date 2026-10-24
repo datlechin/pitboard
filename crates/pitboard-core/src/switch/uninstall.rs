@@ -438,7 +438,7 @@ mod tests {
         let pitboard = crate::service::Pitboard::new(m.ctx.clone());
         let died = crate::fault::killing("refresh.exchanged", || pitboard.switch_to("there"));
         assert_eq!(died.err().as_deref(), Some("refresh.exchanged"));
-        let copies = |m: &super::super::harness::Machine| -> Vec<String> {
+        let copies = |m: &super::super::harness::Rig| -> Vec<String> {
             m.mem
                 .vault()
                 .services()

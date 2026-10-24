@@ -1174,6 +1174,7 @@ fn assemble(
 mod tests {
     use super::*;
     use crate::api::scripted::{Asked as Question, ScriptedApi, Trouble};
+    use crate::context::ScratchMachine;
     use crate::host::memory::MemoryHost;
     use crate::in_use::InUse;
     use crate::service::Permit;
@@ -2923,23 +2924,22 @@ mod tests {
         assert_eq!(with_spellings(&ctx, Vec::new()).1, Spelling::Cmd);
     }
 
-    /// A machine of this test's own: stores in memory, services from a script, a clock
-    /// that stands still, every tool's home inside `root`, and Claude Code's config naming
-    /// `recorded` as signed in where it names anybody.
+    // Claude Code's config names `recorded` as signed in where it names anybody.
     fn machine(
         root: &std::path::Path,
         recorded: Option<&str>,
     ) -> (Context, Arc<MemoryHost>, Arc<ScriptedApi>) {
-        let mem = MemoryHost::new();
-        let api = ScriptedApi::new();
-        let ctx = Context::new(root.to_path_buf())
-            .with_pitboard_home(root.join(".pitboard"))
-            .with_codex_home(root.join("codex").to_string_lossy().into())
-            // Named, so nothing here looks up this machine's own `codex` on `PATH`.
-            .with_codex_program(root.join("bin").join("codex"))
-            .with_memory_stores(Arc::clone(&mem))
-            .with_scripted_api(Arc::clone(&api))
-            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>);
+        let ScratchMachine {
+            ctx,
+            host: mem,
+            api,
+        } = ScratchMachine::at(root, |ctx| {
+            ctx.with_pitboard_home(root.join(".pitboard"))
+                .with_codex_home(root.join("codex").to_string_lossy().into())
+                // Named, so nothing here looks up this machine's own `codex` on `PATH`.
+                .with_codex_program(root.join("bin").join("codex"))
+                .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
+        });
         crate::home::ensure(&ctx, Permit::for_a_test()).expect("a Pitboard home");
         // Codex does not start on Windows where `CODEX_HOME` names no folder.
         std::fs::create_dir_all(root.join("codex")).expect("a Codex home");

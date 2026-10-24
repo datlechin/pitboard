@@ -21,7 +21,9 @@ use pitboard_core::state::Key;
 use pitboard_core::switch::warm::Apart;
 use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::testing::desktop::{self, FakeClaude, JarAs};
-use pitboard_core::testing::{MemoryHost, ScriptedApi, live_service, stand_in, unsigned_token};
+use pitboard_core::testing::{
+    MemoryHost, ScratchMachine, ScriptedApi, live_service, stand_in, unsigned_token,
+};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -79,8 +81,8 @@ pub(super) fn claude_holding() -> Holding {
 }
 
 // Claude Desktop with work in use and home parked, Claude open where `open`.
-pub(super) fn desktop_machine(open: bool) -> Machine {
-    let mut machine = Machine::reading(Ok(status(vec![
+pub(super) fn desktop_machine(open: bool) -> Stub {
+    let mut machine = Stub::reading(Ok(status(vec![
         desktop_account("work", true),
         desktop_account("home", false),
     ])));
@@ -490,7 +492,7 @@ pub(super) fn percent(snapshot: &Snapshot, index: usize) -> Option<f64> {
 }
 
 /// What the core answers, as a test says, the way the Swift tests' stub answered.
-pub(super) struct Machine {
+pub(super) struct Stub {
     /// What a read gives.
     pub answer: Result<Status, Refusal>,
     /// What reading what is already known gives.
@@ -642,9 +644,9 @@ pub(super) fn no_warm() -> pitboard_core::duty::warm::Overview {
     }
 }
 
-impl Machine {
-    pub(super) fn reading(answer: Result<Status, Refusal>) -> Machine {
-        Machine {
+impl Stub {
+    pub(super) fn reading(answer: Result<Status, Refusal>) -> Stub {
+        Stub {
             answer,
             offline: Ok(status(Vec::new())),
             changed: 0,
@@ -726,7 +728,7 @@ impl Machine {
 
     /// A copy of the app with a command line inside it that a schedule and a link would keep
     /// reaching.
-    pub(super) fn with_a_command_line_inside(mut self) -> Machine {
+    pub(super) fn with_a_command_line_inside(mut self) -> Stub {
         self.own = OwnCommandLine {
             inside: true,
             temporary: false,
@@ -1234,7 +1236,7 @@ impl Hand {
 
     /// Answers every job waiting from `machine`, except those that are `which`, and every
     /// job those answers lead to.
-    pub(super) fn run_but(&mut self, machine: &mut Machine, which: fn(&Job) -> bool) {
+    pub(super) fn run_but(&mut self, machine: &mut Stub, which: fn(&Job) -> bool) {
         let mut kept = VecDeque::new();
         while let Some(job) = self.pending.pop_front() {
             if which(&job) {
@@ -1248,7 +1250,7 @@ impl Hand {
     }
 
     /// Answers every job from `machine`, and every job those answers lead to, oldest first.
-    pub(super) fn run(&mut self, machine: &mut Machine) {
+    pub(super) fn run(&mut self, machine: &mut Stub) {
         while let Some(job) = self.pending.pop_front() {
             let answer = machine.answer(job);
             self.give(answer);
@@ -1256,13 +1258,13 @@ impl Hand {
     }
 
     /// A read, as the timer's would be, and everything it leads to.
-    pub(super) fn refresh(&mut self, machine: &mut Machine) {
+    pub(super) fn refresh(&mut self, machine: &mut Stub) {
         self.send(Intent::Refresh { asked: false });
         self.run(machine);
     }
 
     /// The change poll, and everything it leads to.
-    pub(super) fn notice(&mut self, machine: &mut Machine) {
+    pub(super) fn notice(&mut self, machine: &mut Stub) {
         self.look();
         self.run(machine);
     }
@@ -1374,8 +1376,6 @@ impl World {
         ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("a scratch home");
-        let host = MemoryHost::new();
-        let api = ScriptedApi::new();
         let claude = root.join("bin").join(program_name("claude"));
         std::fs::create_dir_all(root.join("bin")).expect("a scratch bin");
         stand_in::install(
@@ -1383,18 +1383,17 @@ impl World {
             &stand_in::Script::refusing("a test's Claude Code, never meant to run\n"),
         )
         .expect("a Claude Code to find");
-        let ctx = Context::new(root.clone())
-            .with_pitboard_home(root.join(".pitboard"))
-            .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
-            .with_user("tester".into())
-            .with_search_path(String::new())
-            .with_claude_program(claude)
-            .with_memory_stores(Arc::clone(&host))
-            .with_scripted_api(Arc::clone(&api))
-            .with_scratch_claude(root.join("claude"))
-            .with_awaited_every(Duration::from_millis(2))
-            .with_caller("app".into())
-            .with_lock_waiting(2_000, Duration::from_millis(10));
+        let ScratchMachine { ctx, host, api } = ScratchMachine::at(&root, |ctx| {
+            ctx.with_pitboard_home(root.join(".pitboard"))
+                .with_codex_home(root.join(".codex").to_string_lossy().into_owned())
+                .with_user("tester".into())
+                .with_search_path(String::new())
+                .with_claude_program(claude)
+                .with_scratch_claude(root.join("claude"))
+                .with_awaited_every(Duration::from_millis(2))
+                .with_caller("app".into())
+                .with_lock_waiting(2_000, Duration::from_millis(10))
+        });
         let (cores, cores_gone) = channel();
         World {
             pitboard: root.join(".pitboard"),

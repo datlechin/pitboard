@@ -5,15 +5,15 @@
 
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
-use super::testing::{Hand, Machine, status};
+use super::testing::{Hand, Stub, status};
 use super::{AtLimit, EarlierPreferences, Intent, Tip, WindowRequest};
 use crate::Footing;
 use crate::present::testing::account;
 use std::collections::BTreeSet;
 
 /// Both tools with one account each, each in use.
-fn one_of_each() -> Machine {
-    Machine::reading(Ok(status(vec![
+fn one_of_each() -> Stub {
+    Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
         account(Some("job")).of("codex").signed_in().build(),
     ])))
@@ -33,7 +33,7 @@ fn decline(provider: &str) -> Intent {
 }
 
 /// A model as the app starts it, what it keeps read from `machine` and its first read in.
-fn started(machine: &mut Machine) -> Hand {
+fn started(machine: &mut Stub) -> Hand {
     let mut model = Hand::new();
     model.send(Intent::Start);
     model.run(machine);
@@ -81,7 +81,7 @@ fn a_second_account_is_declined_per_tool() {
 /// and nobody chose. Not Now puts each away for good, and doing what it asks ends it too.
 #[test]
 fn setup_goes_on_to_opening_at_login_then_to_what_happens_at_a_limit() {
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ])));
@@ -122,7 +122,7 @@ fn setup_goes_on_to_opening_at_login_then_to_what_happens_at_a_limit() {
     later.run(&mut machine);
     assert_eq!(later.shown().footing, Footing::Ready);
 
-    let mut chose = started(&mut Machine::reading(Ok(status(vec![
+    let mut chose = started(&mut Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ]))));
@@ -137,7 +137,7 @@ fn setup_goes_on_to_opening_at_login_then_to_what_happens_at_a_limit() {
 /// changes: keeping Notify Me writes nothing of its own.
 #[test]
 fn opening_the_settings_from_the_tip_ends_it() {
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ])));

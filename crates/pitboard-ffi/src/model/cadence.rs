@@ -6,11 +6,11 @@
 
 use super::Intent;
 use super::state::{Cadence, Job};
-use super::testing::{Hand, Machine, any_read, claude, fresh_read, status};
+use super::testing::{Hand, Stub, any_read, claude, fresh_read, status};
 use std::time::Duration;
 
-fn machine() -> Machine {
-    Machine::reading(Ok(status(vec![claude("work", true, 10.0)])))
+fn machine() -> Stub {
+    Stub::reading(Ok(status(vec![claude("work", true, 10.0)])))
 }
 
 fn looks(jobs: &[Job]) -> usize {

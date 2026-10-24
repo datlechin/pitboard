@@ -8,7 +8,7 @@ use super::signing::{add, adding_in_claude, signs_in, travel};
 use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
-    CHATGPT, Hand, Machine, StandInApps, awaiting, chatgpt_holding, claude_code, codex,
+    CHATGPT, Hand, StandInApps, Stub, awaiting, chatgpt_holding, claude_code, codex,
     desktop_account, desktop_machine, desktop_warning, enrolled_as, refusal, status, switched,
     titled, warned, warning,
 };
@@ -34,9 +34,9 @@ fn at_noon() -> Hand {
 }
 
 /// The model at noon, having read `accounts`.
-fn reading(accounts: Vec<Account>) -> (Hand, Machine) {
+fn reading(accounts: Vec<Account>) -> (Hand, Stub) {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(accounts)));
+    let mut machine = Stub::reading(Ok(status(accounts)));
     model.refresh(&mut machine);
     (model, machine)
 }
@@ -1183,7 +1183,7 @@ fn a_read_fills_in_the_title() {
 fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
     let mut model = at_noon();
     assert_eq!(model.shown().menu_bar.spoken, "Pitboard");
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work"))
             .signed_in()
             .limits(vec![window("session", 42.0)])
@@ -1216,7 +1216,7 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
 fn a_machine_with_nothing_wrong_has_no_notices() {
     let mut model = at_noon();
     assert!(model.shown().notices.is_empty());
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work"))
             .signed_in()
             .limits(vec![window("session", 10.0)])
@@ -1235,7 +1235,7 @@ fn a_machine_with_nothing_wrong_has_no_notices() {
 #[test]
 fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![
             account(Some("work")).signed_in().build(),
             account(Some("job")).of("codex").signed_in().build(),
@@ -1278,7 +1278,7 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
 fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
     let reason = "Anthropic could not be reached to finish the switch to work.";
     let mut model = at_noon();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "recovery_undetermined",
         reason,
         vec![interrupted()],
@@ -1308,7 +1308,7 @@ fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
 fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     let reason = "Anthropic could not be reached";
     let mut model = at_noon();
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "unreachable",
         reason,
         vec![warning("unreachable", reason), overridden()],
@@ -1363,7 +1363,7 @@ fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
         )),
     ] {
         let mut model = at_noon();
-        let mut machine = Machine::reading(Err(refusal("unreachable", reason, Vec::new())));
+        let mut machine = Stub::reading(Err(refusal("unreachable", reason, Vec::new())));
         machine.offline = known;
         model.refresh(&mut machine);
         assert_eq!(model.shown().notices[0].lines, [reason]);
@@ -1391,7 +1391,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     };
 
     let mut unknown = at_noon();
-    let mut nothing = Machine::reading(failed());
+    let mut nothing = Stub::reading(failed());
     nothing.offline = failed();
     unknown.refresh(&mut nothing);
     let shown = unknown.shown();
@@ -1404,7 +1404,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     assert_eq!(shown.accounts_shown, read_failed);
 
     let mut empty = at_noon();
-    empty.refresh(&mut Machine::reading(failed()));
+    empty.refresh(&mut Stub::reading(failed()));
     let shown = empty.shown();
     assert_eq!(shown.status.map(|s| s.accounts.len()), Some(0));
     assert_eq!(
@@ -1415,7 +1415,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     assert_eq!(shown.accounts_shown, read_failed);
 
     let mut some = at_noon();
-    let mut listed = Machine::reading(failed());
+    let mut listed = Stub::reading(failed());
     listed.offline = Ok(status(vec![
         account(Some("work"))
             .signed_in()
@@ -1428,7 +1428,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     assert_eq!(shown.accounts_shown, AccountsShown::List);
 
     let mut missing = at_noon();
-    let mut bare = Machine::reading(failed());
+    let mut bare = Stub::reading(failed());
     bare.found = Vec::new();
     missing.refresh(&mut bare);
     let shown = missing.shown();
@@ -1449,7 +1449,7 @@ fn the_panes_try_again_is_held_back_while_the_accounts_are_read() {
         ))
     };
     let mut model = at_noon();
-    let mut machine = Machine::reading(failed());
+    let mut machine = Stub::reading(failed());
     machine.offline = failed();
     model.refresh(&mut machine);
     let retry = |model: &Hand| match model.shown().accounts_shown {
@@ -1479,7 +1479,7 @@ fn the_panes_try_again_is_held_back_while_the_accounts_are_read() {
 #[test]
 fn a_machine_without_claude_code_is_not_told_its_read_failed() {
     let missing = || {
-        let mut machine = Machine::reading(Err(refusal(
+        let mut machine = Stub::reading(Err(refusal(
             "unreachable",
             "Anthropic could not be reached",
             Vec::new(),
@@ -1585,7 +1585,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
         &format!("{path} is there with no Claude Code login in it."),
     );
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![
             account(Some("work")).signed_in().build(),
             account(Some("personal")).build(),
@@ -1712,7 +1712,7 @@ fn a_restart_is_explained_when_no_sessions_were_counted() {
 #[test]
 fn a_switch_warning_the_read_repeats_is_said_once() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("b")).signed_in().build()],
         vec![overridden()],
     )));
@@ -1825,7 +1825,7 @@ fn each_warning_a_read_carries_is_a_notice_headed_from_its_code() {
     let novel = warning("something_new", "Something Pitboard does not know yet");
     let warnings = vec![overridden(), novel, second];
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
         warnings.clone(),
     )));
@@ -1861,7 +1861,7 @@ fn each_warning_a_read_carries_is_a_notice_headed_from_its_code() {
 #[test]
 fn two_warnings_alike_are_two_notices() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
         vec![overridden(), overridden()],
     )));
@@ -1884,7 +1884,7 @@ fn a_warning_about_an_account_is_its_notice_by_that_account() {
         )
     };
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
         vec![
             replaced("claude:here2", "work"),
@@ -1917,7 +1917,7 @@ fn a_warning_about_an_account_is_its_notice_by_that_account() {
 #[test]
 fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
         vec![interrupted()],
     )));
@@ -1990,7 +1990,7 @@ fn notices_come_the_most_pressing_first() {
         ]
     };
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(accounts(), vec![interrupted()])));
+    let mut machine = Stub::reading(Ok(warned(accounts(), vec![interrupted()])));
     model.refresh(&mut machine);
 
     machine.answer = Ok(status(accounts()));
@@ -2218,7 +2218,7 @@ fn the_config_names_another_notice_offers_to_update_it() {
         ]
     };
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         accounts(account(Some("work")).signed_in().build()),
         vec![names_another.clone()],
     )));
@@ -2268,7 +2268,7 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
         ]
     };
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(accounts(10.0), vec![interrupted()])));
+    let mut machine = Stub::reading(Ok(warned(accounts(10.0), vec![interrupted()])));
     model.refresh(&mut machine);
     machine.switched = switched("codex", "codex/side", "codex/work", Vec::new());
     switch(&mut model, &mut machine, "codex/work");
@@ -2311,7 +2311,7 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
 #[test]
 fn the_menu_says_what_needs_attention_in_one_item() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
         vec![overridden()],
     )));
@@ -2364,7 +2364,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     assert_eq!(model.shown().menu_notices.others, None);
 
     let mut bare = at_noon();
-    let mut nothing = Machine::reading(Ok(status(Vec::new())));
+    let mut nothing = Stub::reading(Ok(status(Vec::new())));
     nothing.found = Vec::new();
     bare.refresh(&mut nothing);
     let install = bare.shown().menu_notices.install.expect("how to install");
@@ -2390,7 +2390,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),
         ("Not read yet", "")
     );
-    let mut machine = Machine::reading(Ok(status(vec![account(Some("work")).signed_in().build()])));
+    let mut machine = Stub::reading(Ok(status(vec![account(Some("work")).signed_in().build()])));
     model.send(Intent::Refresh { asked: false });
     model.run_but(&mut machine, super::testing::any_read);
     let shown = model.shown();
@@ -2406,7 +2406,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
     );
 
     let mut failed = at_noon();
-    failed.refresh(&mut Machine::reading(Err(refusal(
+    failed.refresh(&mut Stub::reading(Err(refusal(
         "unreachable",
         "Anthropic could not be reached",
         Vec::new(),
@@ -2438,7 +2438,7 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     );
 
     let mut unknown = at_noon();
-    let mut machine = Machine::reading(Err(refusal("unreachable", "x", Vec::new())));
+    let mut machine = Stub::reading(Err(refusal("unreachable", "x", Vec::new())));
     machine.offline = Err(refusal("state_unreadable", "y", Vec::new()));
     unknown.refresh(&mut machine);
     assert_eq!(
@@ -2465,7 +2465,7 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     );
 
     let mut bare = at_noon();
-    let mut nothing = Machine::reading(Ok(status(Vec::new())));
+    let mut nothing = Stub::reading(Ok(status(Vec::new())));
     nothing.found = Vec::new();
     bare.refresh(&mut nothing);
     let shown = bare.on_a_mac();
@@ -2513,7 +2513,7 @@ fn nothing_is_asked_of_anyone_before_the_first_read() {
 #[test]
 fn a_machine_without_claude_code_is_told_that_first() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = Vec::new();
     assert_eq!(
         model.shown().footing,
@@ -2531,13 +2531,13 @@ fn a_machine_without_claude_code_is_told_that_first() {
 #[test]
 fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
     let mut found = Hand::new();
-    let mut codex_only = Machine::reading(Ok(status(Vec::new())));
+    let mut codex_only = Stub::reading(Ok(status(Vec::new())));
     codex_only.found = vec![codex()];
     found.refresh(&mut codex_only);
     assert_eq!(found.shown().footing, Footing::CodexUnused);
 
     let mut unfound = Hand::new();
-    let mut signed_in = Machine::reading(Ok(status(vec![
+    let mut signed_in = Stub::reading(Ok(status(vec![
         account(Some("job")).of("codex").signed_in().build(),
     ])));
     signed_in.found = Vec::new();
@@ -2550,7 +2550,7 @@ fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
 #[test]
 fn what_is_installed_is_asked_again_while_nothing_is_found() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = Vec::new();
     model.refresh(&mut machine);
     assert_eq!(model.shown().footing, Footing::NoClaudeCode);
@@ -2711,9 +2711,9 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
 
 /// The model at noon, having read `accounts` on a machine where Claude Code and Codex were
 /// found.
-fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Machine) {
+fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Stub) {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(accounts)));
+    let mut machine = Stub::reading(Ok(status(accounts)));
     machine.found = vec![claude_code(), codex()];
     model.refresh(&mut machine);
     (model, machine)
@@ -2758,7 +2758,7 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
 
     let (alone, _) = {
         let mut model = at_noon();
-        let mut machine = Machine::reading(Ok(status(Vec::new())));
+        let mut machine = Stub::reading(Ok(status(Vec::new())));
         machine.found = vec![codex()];
         model.refresh(&mut machine);
         (model, machine)
@@ -2999,7 +2999,7 @@ fn a_login_whose_account_cannot_be_told_is_shown_from_the_first_run() {
 /// `accounts` are shown, as a Mac's app has it.
 fn adding(found: Vec<crate::Tool>, accounts: Vec<Account>) -> Snapshot {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(accounts)));
+    let mut machine = Stub::reading(Ok(status(accounts)));
     machine.found = found;
     model.refresh(&mut machine);
     model.send(present_sheet(Sheet::Add { provider: None }));
@@ -3076,7 +3076,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
     );
 
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(Vec::new(), vec![interrupted()])));
+    let mut machine = Stub::reading(Ok(warned(Vec::new(), vec![interrupted()])));
     machine.found = Vec::new();
     model.refresh(&mut machine);
     assert_eq!(
@@ -3090,7 +3090,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
 #[test]
 fn what_is_installed_is_asked_once() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = vec![claude_code(), codex()];
     model.refresh(&mut machine);
     model.send(present_sheet(Sheet::Add { provider: None }));
@@ -3105,7 +3105,7 @@ fn what_is_installed_is_asked_once() {
 #[test]
 fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.refresh(&mut machine);
     machine.found = vec![claude_code(), codex()];
     model.send(present_sheet(Sheet::Add { provider: None }));
@@ -3377,7 +3377,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
 #[test]
 fn the_question_about_quitting_an_app_is_asked_in_its_name() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.held.insert("codex".into(), vec![chatgpt_holding()]);
     machine.apps = StandInApps::new(&[CHATGPT], true);
     switch(&mut model, &mut machine, "codex/spare");
@@ -3455,7 +3455,7 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
     model.send(Intent::ShowWindow { pane: None });
     assert_eq!(model.shown().window_request.pane, None);
 
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.forgetting = Err(refusal("account_unknown", "Nothing is parked.", Vec::new()));
     model.send(Intent::Forget {
         qualified: "claude/personal".into(),
@@ -3480,7 +3480,7 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
 #[test]
 fn a_failure_away_from_the_window_is_said_in_it() {
     let mut model = Hand::new();
-    let mut machine = Machine::reading(Ok(status(Vec::new())));
+    let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.send(Intent::Forget {
         qualified: "claude/alpha".into(),
     });
@@ -3555,7 +3555,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
 #[test]
 fn what_depends_on_the_time_is_made_again_every_minute() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(status(vec![
+    let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work"))
             .signed_in()
             .limits(vec![
@@ -3590,7 +3590,7 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
 #[test]
 fn the_service_asked_is_named_for_the_tools_shown() {
     let mut model = at_noon();
-    let mut machine = Machine::reading(Ok(warned(
+    let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
         vec![interrupted()],
     )));

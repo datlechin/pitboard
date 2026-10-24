@@ -6,7 +6,7 @@
 //! asks while downloads run.
 
 use super::state::Job;
-use super::testing::{DANA, Hand, Machine, refusal, status, titled};
+use super::testing::{DANA, Hand, Stub, refusal, status, titled};
 use super::windows::{LINK_SCHEME, WEB_SCHEME};
 use super::{DownloadEnd, EarlierWindowRecords, Intent};
 use crate::account_windows::records::{Entry, Records};
@@ -65,7 +65,7 @@ fn shared(link: &str, scheme: &str) -> Intent {
 }
 
 /// A model as the app starts it over `machine`, what it keeps read and its first read in.
-fn started(machine: &mut Machine) -> Hand {
+fn started(machine: &mut Stub) -> Hand {
     let mut model = Hand::new();
     model.send(Intent::Start);
     model.run(machine);
@@ -73,7 +73,7 @@ fn started(machine: &mut Machine) -> Hand {
 }
 
 /// The same, its windows on a fixture's stand-in pages, as the Swift tests' were.
-fn started_on_stand_ins(machine: &mut Machine) -> Hand {
+fn started_on_stand_ins(machine: &mut Stub) -> Hand {
     let mut model = Hand::new();
     model
         .state
@@ -84,7 +84,7 @@ fn started_on_stand_ins(machine: &mut Machine) -> Hand {
     model
 }
 
-fn started_on(os: Os, machine: &mut Machine) -> Hand {
+fn started_on(os: Os, machine: &mut Stub) -> Hand {
     let mut model = Hand::new();
     model.state.windows.on(os, LINK_SCHEME, WEB_SCHEME);
     model.send(Intent::Start);
@@ -92,8 +92,8 @@ fn started_on(os: Os, machine: &mut Machine) -> Hand {
     model
 }
 
-fn machine() -> Machine {
-    Machine::reading(Ok(status(two_tools())))
+fn machine() -> Stub {
+    Stub::reading(Ok(status(two_tools())))
 }
 
 fn picker(model: &Hand) -> LinkPicker {
@@ -114,7 +114,7 @@ fn open_window(model: &Hand, store: &str) -> Option<OpenWindow> {
 }
 
 /// Opens the window of `store`, as the app does once it has, and everything that leads to.
-fn open(model: &mut Hand, machine: &mut Machine, store: &str) -> OpenWindow {
+fn open(model: &mut Hand, machine: &mut Stub, store: &str) -> OpenWindow {
     model.send(Intent::WindowOpened {
         store: store.into(),
     });
@@ -255,7 +255,7 @@ fn the_picker_says_what_stands_in_the_way() {
         }
     );
 
-    let mut failing = Machine::reading(Err(refusal("unreachable", "No network.", Vec::new())));
+    let mut failing = Stub::reading(Err(refusal("unreachable", "No network.", Vec::new())));
     failing.offline = Err(refusal("state_unreadable", "No network.", Vec::new()));
     let mut failed = started(&mut failing);
     failed.send(shared("https://claude.ai/", "pitboard"));
@@ -275,8 +275,7 @@ fn the_picker_says_what_stands_in_the_way() {
     assert_eq!(retry.title, titled("Try Again", "Try again"));
     assert_eq!(retry.intent, Intent::Refresh { asked: true });
 
-    let mut codex_only =
-        Machine::reading(Ok(status(vec![account(Some("main")).of("codex").build()])));
+    let mut codex_only = Stub::reading(Ok(status(vec![account(Some("main")).of("codex").build()])));
     let mut model = started(&mut codex_only);
     model.send(shared("https://claude.ai/", "pitboard"));
     let PickerShown::NoAccount {
@@ -472,7 +471,7 @@ fn a_window_that_cannot_show_its_page_says_why_in_the_models_words() {
             Vec::new(),
         ))
     };
-    let mut machine = Machine::reading(unreadable());
+    let mut machine = Stub::reading(unreadable());
     machine.offline = unreadable();
     let mut model = started(&mut machine);
     assert_eq!(
@@ -762,7 +761,7 @@ fn forgetting_an_account_closes_its_window_and_deletes_its_store() {
 #[test]
 fn a_failed_read_deletes_nothing() {
     let orphan = "00000000-0000-4000-8000-000000000001";
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "unreachable",
         "Anthropic could not be reached",
         Vec::new(),
@@ -818,7 +817,7 @@ fn forgetting_on_the_command_line_while_reads_fail_closes_the_window() {
 #[test]
 fn forgetting_on_the_command_line_while_every_read_has_failed_closes_the_window() {
     let personal = claude("p");
-    let mut machine = Machine::reading(Err(refusal(
+    let mut machine = Stub::reading(Err(refusal(
         "unreachable",
         "Anthropic could not be reached",
         Vec::new(),
@@ -876,7 +875,7 @@ fn the_polls_read_says_who_is_enrolled_where_nothing_was_shown_before_it() {
             Vec::new(),
         ))
     };
-    let mut machine = Machine::reading(unreadable());
+    let mut machine = Stub::reading(unreadable());
     machine.offline = unreadable();
     machine.windows_file = Some(file(&[(DANA, &[&claude("w"), &gone])]));
     let mut model = started(&mut machine);
@@ -1309,7 +1308,7 @@ fn records_that_do_not_read_as_records_are_never_written_and_delete_nothing() {
 }
 
 /// An app that names nowhere to keep the records.
-fn machine_kept_nowhere() -> Machine {
+fn machine_kept_nowhere() -> Stub {
     let mut machine = machine();
     machine.windows_nowhere = true;
     machine

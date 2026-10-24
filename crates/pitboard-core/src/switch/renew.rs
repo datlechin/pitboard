@@ -324,6 +324,7 @@ fn apply(
 mod tests {
     use super::*;
     use crate::api::scripted::{Asked as Question, ScriptedApi, Trouble};
+    use crate::context::ScratchMachine;
     use crate::host::memory::MemoryHost;
     use crate::provider::claude::api::Renewed;
     use crate::state::Account;
@@ -334,21 +335,21 @@ mod tests {
 
     const NOW: i64 = 1_760_000_000;
 
-    struct Machine {
+    struct Scratch {
         ctx: Context,
         mem: Arc<MemoryHost>,
         api: Arc<ScriptedApi>,
         home: std::path::PathBuf,
     }
 
-    impl Drop for Machine {
+    impl Drop for Scratch {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.home);
         }
     }
 
-    /// A machine with no keychain, no network and a clock that stands still.
-    fn machine(name: &str) -> Machine {
+    // A clock that stands still.
+    fn machine(name: &str) -> Scratch {
         let home = std::env::temp_dir().join(format!(
             "pitboard-renew-{name}-{}-{:?}",
             std::process::id(),
@@ -356,14 +357,15 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(&home).expect("a scratch home");
-        let mem = MemoryHost::new();
-        let api = ScriptedApi::new();
-        let ctx = Context::new(home.clone())
-            .with_pitboard_home(home.clone())
-            .with_memory_stores(Arc::clone(&mem))
-            .with_scripted_api(Arc::clone(&api))
-            .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn crate::time::Clock>);
-        Machine {
+        let ScratchMachine {
+            ctx,
+            host: mem,
+            api,
+        } = ScratchMachine::at(&home, |ctx| {
+            ctx.with_pitboard_home(home.clone())
+                .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn crate::time::Clock>)
+        });
+        Scratch {
             ctx,
             mem,
             api,
@@ -381,7 +383,7 @@ mod tests {
     }
 
     /// One account holding one park, written the way a switch would have written it.
-    fn with_park(m: &Machine, label: &str, refresh: &str, access_expires_at: i64) -> Park {
+    fn with_park(m: &Scratch, label: &str, refresh: &str, access_expires_at: i64) -> Park {
         park_in(&m.ctx, label, refresh, access_expires_at)
     }
 

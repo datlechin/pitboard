@@ -103,6 +103,7 @@ pub(crate) mod store;
 #[doc(hidden)]
 pub mod testing {
     pub use crate::api::scripted::{Answer, Asked, ScriptedApi, Trouble};
+    pub use crate::context::ScratchMachine;
     pub use crate::desktop_testing as desktop;
     pub use crate::duty::warm::run::{Started, WarmScript};
     pub use crate::host::Ran;

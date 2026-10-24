@@ -2,8 +2,8 @@
 // next change, then recovered by that change's first step.
 
 use super::super::harness::{
-    FOLDER_POINTS, HOME, Machine, STRANGER, WORK, as_a_dead_runs, data, desktop_pair, hold,
-    recover, rested, settled, snapshot, unchanged,
+    FOLDER_POINTS, HOME, Rig, STRANGER, WORK, as_a_dead_runs, data, desktop_pair, hold, recover,
+    rested, settled, snapshot, unchanged,
 };
 use super::super::{abandon, enroll, switch, update_config};
 use crate::desktop_testing::{EMPTIED, Person};
@@ -49,16 +49,16 @@ enum Claude {
 }
 
 // Whose session the jar in Claude's folder holds, of the two accounts.
-fn in_the_folder(m: &Machine) -> Option<Person> {
+fn in_the_folder(m: &Rig) -> Option<Person> {
     let raw = std::fs::read_to_string(data(m).join("Cookies")).ok()?;
     [WORK, HOME]
         .into_iter()
         .find(|who| raw.contains(&hex::encode(format!("v10{}", who.session))))
 }
 
-fn machine(change: Change, name: &str) -> Machine {
+fn machine(change: Change, name: &str) -> Rig {
     let m = desktop_pair(&format!("crash-{change:?}-{name}"));
-    let signed_out = |m: &Machine| {
+    let signed_out = |m: &Rig| {
         let died = fault::killing("leave.done", || switch(settled(m), &m.key("home")));
         assert_eq!(died.expect_err("killed"), "leave.done");
     };
@@ -85,7 +85,7 @@ fn machine(change: Change, name: &str) -> Machine {
     m
 }
 
-fn run(m: &Machine, change: Change) -> Result<(), Error> {
+fn run(m: &Rig, change: Change) -> Result<(), Error> {
     match change {
         Change::Switch | Change::ArriveOver | Change::ArriveEmpty => {
             switch(settled(m), &m.key("home")).map(drop)
@@ -99,7 +99,7 @@ fn run(m: &Machine, change: Change) -> Result<(), Error> {
 
 // The next change's first step: `begin`, which settles, and for the start of a sign-in the
 // sweep, since it leaves no record but its `pending` line.
-fn recovery(m: &Machine) -> Result<(), Error> {
+fn recovery(m: &Rig) -> Result<(), Error> {
     match update_config(settled(m), &m.key("work")) {
         Ok(_) => Ok(()),
         // By its code: where settling did anything, the refusal comes with what it said.
@@ -110,7 +110,7 @@ fn recovery(m: &Machine) -> Result<(), Error> {
 
 // What any next command sweeps first, `pending`'s lines and Pitboard's own temporaries, taken
 // before a snapshot so the snapshot compares what recovery's row did.
-fn swept(m: &Machine) {
+fn swept(m: &Rig) {
     recover(m).expect("swept");
     crate::atomic::sweep(Permit::for_a_test(), &data(m));
 }
@@ -137,7 +137,7 @@ fn inode(path: PathBuf) -> Option<u64> {
 }
 
 // By inode, which a rename keeps; not the settings, which each write of them makes anew.
-fn entries(m: &Machine) -> BTreeSet<(String, Option<u64>)> {
+fn entries(m: &Rig) -> BTreeSet<(String, Option<u64>)> {
     walk(&data(m))
         .into_iter()
         .filter(|path| !path.ends_with("/config.json"))
@@ -155,14 +155,14 @@ fn app() -> &'static dyn crate::provider::folder::Folder {
     }
 }
 
-fn keys(m: &Machine) -> BTreeMap<String, String> {
+fn keys(m: &Rig) -> BTreeMap<String, String> {
     app()
         .settings(&data(m))
         .map(|settings| settings.account_keys(app()).digests())
         .unwrap_or_default()
 }
 
-fn kept_keys(m: &Machine) -> Vec<BTreeMap<String, String>> {
+fn kept_keys(m: &Rig) -> Vec<BTreeMap<String, String>> {
     let names = crate::store::folder::list(&m.ctx)
         .ok()
         .flatten()
@@ -181,7 +181,7 @@ struct Inside {
     kept: Vec<BTreeMap<String, String>>,
 }
 
-fn inside(m: &Machine) -> Inside {
+fn inside(m: &Rig) -> Inside {
     Inside {
         entries: entries(m),
         keys: keys(m),
@@ -190,7 +190,7 @@ fn inside(m: &Machine) -> Inside {
 }
 
 // Keys are cleared only once a folder under `parks` kept them, and put only where none were.
-fn took_nothing_in(m: &Machine, at: &str, before: &Inside) {
+fn took_nothing_in(m: &Rig, at: &str, before: &Inside) {
     let now = entries(m);
     let came = now.difference(&before.entries).collect::<Vec<_>>();
     assert!(
@@ -233,7 +233,7 @@ fn reached(change: Change) -> Vec<(&'static str, usize)> {
     points
 }
 
-fn played(m: &Machine, claude: Claude) {
+fn played(m: &Rig, claude: Claude) {
     let app = m.claude();
     let there = in_the_folder(m);
     match (claude, there) {
@@ -369,7 +369,7 @@ fn cell(change: Change, point: &'static str, nth: usize, claude: Claude) -> Opti
 
 // Where a give-up without the person's word refuses: the park holds the record's jar, and an
 // item of the account's other than the jar's is in Claude's folder and not in the park.
-fn mixed(m: &Machine) -> bool {
+fn mixed(m: &Rig) -> bool {
     let state = crate::state::load(&m.ctx).expect("state");
     let Some(moving) = state.moving(ProviderId::Desktop) else {
         return false;
@@ -500,7 +500,7 @@ enum Since {
     Emptied,
 }
 
-fn set(m: &Machine, key: &str, value: &str) {
+fn set(m: &Rig, key: &str, value: &str) {
     let path = data(m).join("config.json");
     let mut settings: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("settings")).expect("JSON");
@@ -510,7 +510,7 @@ fn set(m: &Machine, key: &str, value: &str) {
 }
 
 // A change killed at `point` and not yet recovered, Claude never run since.
-fn killed(change: Change, point: &'static str, since: Since, name: &str) -> Machine {
+fn killed(change: Change, point: &'static str, since: Since, name: &str) -> Rig {
     let m = machine(change, &format!("{point}-{since:?}-{name}"));
     let died = fault::killing(point, || run(&m, change));
     assert_eq!(died.expect_err("killed"), point);
@@ -684,7 +684,7 @@ fn claude_opened_during_recovery_keeps_the_record() {
         "give-up-meanwhile",
     );
     played(&m, Claude::Stranger);
-    let third = |m: &Machine| enroll(settled(m), &m.key("third"), None);
+    let third = |m: &Rig| enroll(settled(m), &m.key("third"), None);
     let app = m.claude();
     let midway = fault::meanwhile("give_up.item_aside", move || app.opens(), || third(&m));
     let midway = midway.expect_err("Claude opened while a give-up set things aside");
@@ -820,7 +820,7 @@ fn a_give_up_killed_partway_is_taken_up_by_enroll_again() {
         .map(|(_, nth)| nth)
         .max()
         .expect("items arrive");
-    let third = |m: &Machine| enroll(settled(m), &m.key("third"), None);
+    let third = |m: &Rig| enroll(settled(m), &m.key("third"), None);
     for (point, nth) in [("leave.item_out", 1), ("arrive.item_in", last)] {
         for (given, given_nth) in [
             ("give_up.aside_named", 1),

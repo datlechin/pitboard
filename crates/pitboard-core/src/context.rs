@@ -1035,14 +1035,8 @@ impl Context {
         self.warm_script.as_ref()
     }
 
-    /// Whether this context reaches no machine but `memory` and no service but `api`. A
-    /// fixture asks it of the context it made before it puts a login anywhere, so that an
-    /// edit leaving either out of the builder fails there, rather than writing Claude Code's
-    /// login to this machine's keychain under the real one's service name, or asking
-    /// Anthropic.
     #[cfg(any(test, feature = "test-support"))]
-    #[doc(hidden)]
-    pub fn reaches_only(
+    fn reaches_only(
         &self,
         memory: &Arc<crate::host::memory::MemoryHost>,
         api: &Arc<crate::api::scripted::ScriptedApi>,
@@ -1050,6 +1044,34 @@ impl Context {
         std::ptr::addr_eq(Arc::as_ptr(&self.host), Arc::as_ptr(memory))
             && std::ptr::addr_eq(Arc::as_ptr(&self.api), Arc::as_ptr(api))
             && std::ptr::addr_eq(Arc::as_ptr(&self.openai), Arc::as_ptr(api))
+    }
+}
+
+// A test's or a fixture's machine: its home, the stores in memory and every service scripted.
+#[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
+pub struct ScratchMachine {
+    pub ctx: Context,
+    pub host: Arc<crate::host::memory::MemoryHost>,
+    pub api: Arc<crate::api::scripted::ScriptedApi>,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl ScratchMachine {
+    // Panics where `more` put back this machine's keychain or the network, before any write.
+    pub fn at(home: &std::path::Path, more: impl FnOnce(Context) -> Context) -> ScratchMachine {
+        let host = crate::host::memory::MemoryHost::new();
+        let api = crate::api::scripted::ScriptedApi::new();
+        let ctx = more(
+            Context::new(home.to_path_buf())
+                .with_memory_stores(Arc::clone(&host))
+                .with_scripted_api(Arc::clone(&api)),
+        );
+        assert!(
+            ctx.reaches_only(&host, &api),
+            "a scratch machine reaches this one's keychain or the network"
+        );
+        ScratchMachine { ctx, host, api }
     }
 }
 
@@ -1331,9 +1353,24 @@ mod tests {
         }
     }
 
-    /// What a fixture asks of the context it made: whether it reaches nothing but the machine
-    /// in memory and the scripted services it was given, which leaving out either, or giving
-    /// another, makes false.
+    #[test]
+    fn a_scratch_machine_whose_context_reaches_another_host_or_api_panics() {
+        use crate::api::scripted::ScriptedApi;
+        use crate::host::memory::MemoryHost;
+        let home = Path::new("/home/x");
+        let made = ScratchMachine::at(home, |ctx| ctx.with_caller("app".into()));
+        assert_eq!(made.ctx.home(), home);
+        let another_machine = std::panic::catch_unwind(|| {
+            ScratchMachine::at(home, |ctx| ctx.with_memory_stores(MemoryHost::new()))
+        });
+        assert!(another_machine.is_err());
+        let other_services = std::panic::catch_unwind(|| {
+            ScratchMachine::at(home, |ctx| ctx.with_scripted_api(ScriptedApi::new()))
+        });
+        assert!(other_services.is_err());
+    }
+
+    // Leaving out either, or giving another, makes it false.
     #[test]
     fn a_context_says_whether_it_reaches_only_the_machine_and_services_it_was_given() {
         use crate::api::scripted::ScriptedApi;

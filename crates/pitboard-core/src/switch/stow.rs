@@ -663,7 +663,7 @@ fn not_identified(path: &Path, error: &ProviderError) -> Error {
 )]
 mod tests {
     use super::super::harness::{
-        Machine, NOW, Session, account, audit_lines, document, lapsed, lets_go_of_the_write_lock,
+        NOW, Rig, Session, account, audit_lines, document, lapsed, lets_go_of_the_write_lock,
         lock_dir, machine, oauth, owner, renews, renews_meanwhile, saves, state_file,
         takes_the_write_lock, write_target,
     };
@@ -676,29 +676,29 @@ mod tests {
 
     /// `contents` left in `.credentials.json` behind the keychain, as a sign-in where the
     /// keychain could not be read leaves it.
-    fn leave(m: &Machine, contents: &Value) {
+    fn leave(m: &Rig, contents: &Value) {
         left_file(m).plant(&m.service, &contents.to_string());
     }
 
-    fn left_file(m: &Machine) -> std::sync::Arc<store::memory::MemoryStore> {
+    fn left_file(m: &Rig) -> std::sync::Arc<store::memory::MemoryStore> {
         m.mem.file_at(live::credential_file(&m.ctx))
     }
 
     /// What the file holds now, as its fingerprint, or `None` where it is gone.
-    fn in_the_file(m: &Machine) -> Option<String> {
+    fn in_the_file(m: &Rig) -> Option<String> {
         let held = left_file(m).peek(&m.service)?;
         let document: Value = serde_json::from_str(&held).expect("JSON");
         Some(provider::document(TOOL).fingerprint(&document))
     }
 
     /// `label`, enrolled with nothing parked.
-    fn enrolled(m: &Machine, label: &str) {
+    fn enrolled(m: &Rig, label: &str) {
         let mut state = state::load(&m.ctx).expect("state");
         state.accounts.push(account(label, label, None));
         state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
     }
 
-    fn found(m: &Machine) -> Left {
+    fn found(m: &Rig) -> Left {
         let state = state::load(&m.ctx).expect("state");
         find(&m.ctx, &state)
             .expect("a look")
@@ -706,12 +706,12 @@ mod tests {
     }
 
     /// Putting away what is in the file now, confirmed as the look found it.
-    fn stow_now(m: &Machine) -> Result<(Stowed, Vec<Warning>)> {
+    fn stow_now(m: &Rig) -> Result<(Stowed, Vec<Warning>)> {
         let seen = found(m).seen;
         stow_seen(m, &seen)
     }
 
-    fn stow_seen(m: &Machine, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
+    fn stow_seen(m: &Rig, seen: &str) -> Result<(Stowed, Vec<Warning>)> {
         let settled = settle(&m.ctx, Permit::for_a_test(), Some(TOOL))?.0;
         stow(settled, seen)
     }
@@ -719,7 +719,7 @@ mod tests {
     /// [`stow_now`], with `elsewhere` writing at `point`, as another program writing at that
     /// moment would.
     fn stow_while(
-        m: &Machine,
+        m: &Rig,
         point: &'static str,
         elsewhere: impl FnOnce() + 'static,
     ) -> Result<(Stowed, Vec<Warning>)> {
@@ -728,20 +728,20 @@ mod tests {
     }
 
     /// Plants `contents` in the file at the moment it is called, as Claude Code writes it.
-    fn rewrites_the_file(m: &Machine, contents: &Value) -> impl FnOnce() + 'static {
+    fn rewrites_the_file(m: &Rig, contents: &Value) -> impl FnOnce() + 'static {
         let (file, service, contents) = (left_file(m), m.service.clone(), contents.to_string());
         move || file.plant(&service, &contents)
     }
 
     /// Locks the keychain at the moment it is called, as one locks under a session started
     /// over SSH.
-    fn locks_the_keychain(m: &Machine) -> impl FnOnce() + 'static {
+    fn locks_the_keychain(m: &Rig) -> impl FnOnce() + 'static {
         let (keychain, service) = m.live_store();
         move || keychain.fault(&service, Fault::Locked)
     }
 
     /// Plants `document` in the keychain at the moment it is called, as a sign-in writes it.
-    fn signs_in(m: &Machine, document: &Value) -> impl FnOnce() + 'static {
+    fn signs_in(m: &Rig, document: &Value) -> impl FnOnce() + 'static {
         let (keychain, service) = (std::sync::Arc::clone(m.mem.live()), m.service.clone());
         let document = document.to_string();
         move || keychain.plant(&service, &document)
@@ -755,7 +755,7 @@ mod tests {
         login
     }
 
-    fn parked_fingerprint(m: &Machine, label: &str) -> Option<String> {
+    fn parked_fingerprint(m: &Rig, label: &str) -> Option<String> {
         let state = state::load(&m.ctx).expect("state");
         let parked = state.get(&m.key(label))?.parked.clone()?;
         Some(parked.login)
@@ -1442,7 +1442,7 @@ mod tests {
 
     /// `elsewhere` enrolled with nothing parked, and its login left in the file with its
     /// access token expired, which Anthropic renews.
-    fn lapsed_login_left(name: &str) -> Machine {
+    fn lapsed_login_left(name: &str) -> Rig {
         let m = machine(name);
         enrolled(&m, "elsewhere");
         renews(&m, "left-refresh", "left-renewed");
@@ -1451,7 +1451,7 @@ mod tests {
         m
     }
 
-    fn renewed(m: &Machine) -> bool {
+    fn renewed(m: &Rig) -> bool {
         m.api.asked().contains(&Asked::Renew("left-refresh".into()))
     }
 

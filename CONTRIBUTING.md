@@ -91,7 +91,10 @@ build it first, with the `--release` or `--target` the tests use:
 cargo build --locked -p pitboard --example stand-in
 ```
 
-Unit tests run on `MemoryHost` and `Context::for_unit_test`, which reach no real home.
+Unit tests run on `MemoryHost` and `Context::for_unit_test`, which reach no real home. A
+test that needs a machine of its own with its services scripted builds it with
+`pitboard_core::testing::ScratchMachine`, which panics where its context still reaches this
+machine's keychain or the network.
 Integration tests use the harness in `crates/pitboard/tests/common`.
 
 A build for tests finds Claude Desktop only in a scratch folder a test names, with

@@ -1537,9 +1537,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
   finalizer thread ([The C# bindings](#the-c-bindings)); `shutdown` waits for the actor and
   the sign-ins under way, neither of which waits on the listener.
 - No test makes the app model over the machine's own environment. Its Rust tests run the
-  real core over a context of their own, with `MemoryHost` and `ScriptedApi` and a home in a
-  scratch directory, and so does a fixture. The C# tests make one only as `ModelTests.cs`
-  does: every home a fresh folder, and never started or sent an intent, so it reads nothing,
+  real core over a `pitboard_core::testing::ScratchMachine`, a home in a scratch directory
+  with `MemoryHost` and `ScriptedApi`, and so does a fixture. The C# tests make one only as
+  `ModelTests.cs` does: every home a fresh folder, and never started or sent an intent, so
+  it reads nothing,
   or a fixture's, which reads no machine and may be started. The Swift tests make one only
   as a fixture's, in `PitboardKitTests`, started from Swift; every other Swift test hands
   `AppModel` snapshots from a stand-in for `PitboardModelProtocol`, which keeps what it is

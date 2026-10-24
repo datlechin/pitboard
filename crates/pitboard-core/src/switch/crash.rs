@@ -29,7 +29,7 @@ use crate::store::memory::Fault;
 use serde_json::json;
 use std::sync::Arc;
 
-type Make = fn(&str) -> harness::Machine;
+type Make = fn(&str) -> harness::Rig;
 
 /// One test of `check` for each tool and each step a switch can be killed at, named
 /// `<tool>_<step>`.
@@ -249,7 +249,7 @@ fn a_switch_between_two_organisations_is_settled_by_the_organisation_anthropic_n
 
 /// How a machine is left after a switch was killed, before anything reads it: what reading
 /// it asks, and the service it asks.
-type Leave = fn(&harness::Machine) -> (Context, Arc<ScriptedApi>);
+type Leave = fn(&harness::Rig) -> (Context, Arc<ScriptedApi>);
 
 /// Every way a machine is found after a switch was killed: as it was; signed out of the
 /// tool; with a login the tool renewed since, which matches neither side the record kept;
@@ -302,7 +302,7 @@ const AFTERWARDS: [(&str, Leave); 9] = [
 ];
 
 /// The copy the switch parked, where it reserved one, cannot be read.
-fn unreadable(m: &harness::Machine) {
+fn unreadable(m: &harness::Rig) {
     if let Some(park) = recorded(m, "park_service") {
         m.mem
             .vault()
@@ -311,7 +311,7 @@ fn unreadable(m: &harness::Machine) {
 }
 
 /// The machine with its service out of reach for every login it has held.
-fn unreachable(m: &harness::Machine) -> (Context, Arc<ScriptedApi>) {
+fn unreachable(m: &harness::Rig) -> (Context, Arc<ScriptedApi>) {
     let offline = ScriptedApi::new();
     for refresh in ["here-refresh", "there-refresh", "renewed-since"] {
         offline.token_trouble(&format!("access-{refresh}"), Trouble::Offline);
@@ -321,7 +321,7 @@ fn unreachable(m: &harness::Machine) -> (Context, Arc<ScriptedApi>) {
 }
 
 /// A field of the record of the interrupted switch, where there is one.
-fn recorded(m: &harness::Machine, field: &str) -> Option<String> {
+fn recorded(m: &harness::Rig, field: &str) -> Option<String> {
     let raw = std::fs::read_to_string(home::dir(&m.ctx).join("journal.json")).ok()?;
     let record: Value = serde_json::from_str(&raw).ok()?;
     record[field].as_str().map(str::to_owned)
@@ -334,7 +334,7 @@ type Everything = (
     Option<String>,
 );
 
-fn everything(m: &harness::Machine) -> Everything {
+fn everything(m: &harness::Rig) -> Everything {
     let mut files: Vec<(String, Vec<u8>)> = std::fs::read_dir(home::dir(&m.ctx))
         .expect("a Pitboard home")
         .map(|entry| {
@@ -573,7 +573,7 @@ fn a_switch_that_cannot_read_the_store_back_keeps_every_copy_and_its_record() {
 
 // A write of a login in pieces killed after its manifest where the live store keeps pieces, and
 // a fault that reads the same where it does not.
-fn leave_unfinished(m: &harness::Machine) {
+fn leave_unfinished(m: &harness::Rig) {
     if cfg!(windows) {
         let mut login = document("here-refresh");
         login["mcpOAuth"]["some-server"]["token"] = json!("t".repeat(3000));

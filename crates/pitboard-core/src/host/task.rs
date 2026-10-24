@@ -729,15 +729,15 @@ mod tests {
     }
 
     // A scratch home on a machine that schedules as Windows does, through a pretend.
-    struct Machine(tempfile::TempDir, Arc<MemoryHost>);
+    struct TaskHome(tempfile::TempDir, Arc<MemoryHost>);
 
-    impl Machine {
-        fn new() -> Machine {
+    impl TaskHome {
+        fn new() -> TaskHome {
             let scratch = tempfile::tempdir().expect("a scratch home");
             let program = scratch.path().join("bin").join("pitboard.exe");
             std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
             std::fs::write(&program, "").expect("a program");
-            Machine(scratch, MemoryHost::scheduling_tasks(SID))
+            TaskHome(scratch, MemoryHost::scheduling_tasks(SID))
         }
 
         fn program(&self) -> PathBuf {
@@ -829,7 +829,7 @@ mod tests {
     // Ending renewal's run could land between Anthropic's answer and the park it renews.
     #[test]
     fn only_the_watch_services_run_is_ended_when_its_task_is_taken_away() {
-        let machine = Machine::new();
+        let machine = TaskHome::new();
         let ctx = machine.ctx(&[]);
         let asked = Asked::new();
         let tasks = Tasks::new(SID.into(), asked.clone());
@@ -867,7 +867,7 @@ mod tests {
     // again as it was.
     #[test]
     fn a_watch_task_that_will_not_run_is_taken_away_or_put_back() {
-        let machine = Machine::new();
+        let machine = TaskHome::new();
         let ctx = machine.ctx(&[]);
         let asked = Asked::new();
         let tasks = Tasks::new(SID.into(), asked.clone());
@@ -934,7 +934,7 @@ mod tests {
     // The run under way is ended only once nothing is left to fail before the new one starts.
     #[test]
     fn a_watch_environment_that_cannot_be_written_leaves_the_run_under_way() {
-        let machine = Machine::new();
+        let machine = TaskHome::new();
         let ctx = machine.ctx(&[]);
         let asked = Asked::new();
         let tasks = Tasks::new(SID.into(), asked.clone());
@@ -978,7 +978,7 @@ mod tests {
 
     #[test]
     fn the_task_keeps_its_proxy_beside_the_parked_logins_and_takes_it_away() {
-        let machine = Machine::new();
+        let machine = TaskHome::new();
         let proxied = machine.ctx(&PROXIED);
         let task = Location::Task(format!(r"\Pitboard\Renew {SID}"));
 
@@ -1059,7 +1059,7 @@ mod tests {
 
     #[test]
     fn a_task_task_scheduler_cannot_read_stops_its_removal() {
-        let machine = Machine::new();
+        let machine = TaskHome::new();
         let proxied = machine.ctx(&PROXIED);
         schedule::install(&proxied, Permit::for_a_test()).expect("installed");
         let task = schedule::path(&proxied).expect("the task");
@@ -1081,7 +1081,7 @@ mod tests {
 
     #[test]
     fn a_task_the_system_refuses_leaves_the_one_before_and_its_proxy() {
-        let machine = Machine::new();
+        let machine = TaskHome::new();
         let proxied = machine.ctx(&PROXIED);
         machine.1.refuse_next_start();
         let refused = schedule::install(&proxied, Permit::for_a_test()).expect_err("refused");

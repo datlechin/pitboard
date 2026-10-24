@@ -15,7 +15,7 @@ use crate::provider::codex::api::Fresh;
 use crate::provider::{Adoption, Credential};
 use crate::service::Permit;
 
-fn whose(m: &harness::Machine) -> Option<String> {
+fn whose(m: &harness::Rig) -> Option<String> {
     let live = m.live()?;
     provider::document(m.which)
         .identify(&m.ctx, &Credential::new(m.which, live))
@@ -575,7 +575,7 @@ fn an_interrupted_switch_is_recovered_only_where_it_ran() {
 }
 
 // Plants `document` in place of the park `label` holds, under the same refresh token.
-fn replant(m: &harness::Machine, label: &str, document: &Value) {
+fn replant(m: &harness::Rig, label: &str, document: &Value) {
     let state = state::load(&m.ctx).expect("state");
     let park = state
         .get(&m.key(label))
