@@ -39,8 +39,9 @@ pub(crate) mod words;
 pub(crate) mod testing;
 
 pub use machine::{
-    ActivityLine, ActivityShown, AutoSwitchShown, CheckLine, ChecksShown, CommandLineShown,
-    EmptyList, MachineShown, RenewalShown, ScheduleShown, WarmAccountShown, WarmShown,
+    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
+    CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
+    WarmShown,
 };
 pub use sheets::check_name;
 pub use windows::{
@@ -49,10 +50,11 @@ pub use windows::{
     downloads_quit_question,
 };
 
-pub(crate) use accounts::in_order;
+pub(crate) use accounts::{in_order, needs_sign_in, usable};
 pub(crate) use notices::{
-    auto_not_watching_notice, auto_refused_notice, auto_skipped_notice, auto_switched_notice,
-    run_out_notice, standing_notice, warm_failed_notice,
+    Clicked, UNUSABLE, at_limit_notice, auto_not_watching_notice, auto_refused_notice,
+    auto_skipped_notice, auto_switched_notice, notification_buttons, standing_notice,
+    unusable_notice, warm_failed_notice,
 };
 
 use crate::account_windows::{AlertText, WindowAccount};
@@ -62,21 +64,22 @@ use crate::{Account, Tool, UsageLevel};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 
-/// What the menu bar item says beside its mark, in each of the forms an app's setting can
-/// choose: the name and the figure, the figure alone, or nothing beside the mark. Not called
-/// `MenuBar`, which WinUI 3 has a control of, so that a C# file using both namespaces would
-/// find the name ambiguous.
+// Not `MenuBar`, which WinUI 3 has a control of: a C# file using both namespaces would find it
+// ambiguous.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct MenuBarText {
-    /// "work 42%": the account the bar is about and its headline limit, a name past twelve
-    /// characters cut to eleven and an ellipsis. Empty before anything is known and while
-    /// nobody is signed in.
+    // "work 42%", a name past twelve characters cut to eleven and an ellipsis; empty while
+    // nobody is signed in
     pub name_and_usage: String,
-    /// "42%", or empty until a figure is measured.
+    // "42%", empty until measured
     pub usage: String,
-    /// What VoiceOver says of the item, whatever it shows: "Pitboard, work 42%", and the
-    /// tool too once there is more than one, "Pitboard, work 80%, Codex".
+    // "Pitboard, work 80%, Codex, needs attention", whatever the bar shows
     pub spoken: String,
+    pub level: Option<UsageLevel>,
+    // the menu opens on something to look at
+    pub attention: bool,
+    // Windows' notification area tooltip: "Pitboard", then a line for each account in use
+    pub tip: String,
 }
 
 /// One tool's accounts, under its name: one section, unheaded, while every account shown is
@@ -142,17 +145,22 @@ pub struct AccountItem {
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
     pub limits: Vec<LimitRow>,
-    /// What its own menu offers to do to it, in order: switching to it, or naming it, where
-    /// pressing it does that; then, for an account Pitboard has a name for, signing in to it
-    /// again and renaming it. Signing in again is offered once, here, and held back while
-    /// another sign-in runs.
+    // in order: naming it, where pressing it does that, or for an account Pitboard has a name
+    // for, switching to it, signing in to it again and renaming it, each dimmed while it
+    // cannot be chosen, which a shortcut menu leaves out
     pub offers: Vec<ItemOffer>,
     /// Its windows, one for each site of its tool, as its own menu offers to open them.
     pub windows: Vec<WindowOffer>,
-    /// Forgetting it, with the question asked first, where it may be forgotten: enrolled,
-    /// and not the one in use, whose record is the only one of who is signed in, and which
-    /// the core refuses. What its own menu offers last, and what deleting its row does.
+    // for an enrolled account, dimmed for the one in use, whose record is the only one of who
+    // is signed in; what its own menu offers last, and what deleting its row does
     pub forget: Option<ItemOffer>,
+}
+
+// The Account menu's items, dimmed, while no account is selected.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountMenuShown {
+    pub offers: Vec<String>,
+    pub forget: String,
 }
 
 /// What pressing an account does.
@@ -166,21 +174,14 @@ pub struct ItemAction {
     pub intent: Intent,
 }
 
-/// Something an account's own menu offers to do to it.
+// Something an account's own menu offers to do to it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ItemOffer {
-    /// What its item says: "Use work", "Name…", "Sign In Again…", "Rename…", "Forget…".
     pub title: String,
-    /// What to send, once any question has been answered.
+    // sent once any question has been answered
     pub intent: Intent,
-    /// Whether it can be chosen now. One held back is shown all the same, and cannot be
-    /// chosen.
     pub enabled: bool,
-    /// The question asked first, where there is one.
     pub confirm: Option<Question>,
-    /// Whether it shows a check mark, for an item that turns something on and off; `None`
-    /// for one that does something once.
-    pub checked: Option<bool>,
 }
 
 /// One of an account's windows, as its own menu offers to open it. Opening a window is the
@@ -351,6 +352,13 @@ pub enum Footing {
     Unnamed { provider: String, email: String },
     /// A tool has one account, so there is nothing yet to switch to in it.
     OnlyOne { provider: String, label: String },
+    /// Codex is installed and nothing of it is enrolled, so nothing of it is read.
+    CodexUnused,
+    /// The app's system says it does not open the app at login, where nothing it does runs.
+    NotOpenedAtLogin,
+    /// Claude Code has two accounts, and nobody chose what happens once a limit reaches the
+    /// share.
+    AtLimitUnchosen,
     /// Set up, or too early to say.
     Ready,
 }
@@ -363,6 +371,15 @@ pub struct SetupStep {
     pub detail: String,
     /// What can be pressed, the one to press first first.
     pub actions: Vec<Choice>,
+    // a page of the system's own settings, which the app opens
+    #[uniffi(default)]
+    pub link: Option<SetupLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SetupLink {
+    pub title: String,
+    pub link: String,
 }
 
 /// A button, what pressing it sends, and whether it can be pressed now.
@@ -708,6 +725,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     let seen = Seen::new(state, now, local, os);
     let footing = setup::footing(&seen);
     let notices = notices::notices(&seen, &footing);
+    let menu_notices = notices::menu_notices(&seen, &footing, &notices);
     Snapshot {
         revision: 0,
         now,
@@ -730,10 +748,11 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
         sheet_failure: state.sheet_failure.clone(),
-        menu_bar: accounts::menu_bar(&seen),
+        menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
+        account_menu: accounts::account_menu(seen.os),
         shows_tools: seen.shows_tools(),
-        menu_notices: notices::menu_notices(&seen, &footing, &notices),
+        menu_notices,
         notices,
         setup: setup::step(&seen, &footing),
         accounts_shown: setup::accounts_shown(&seen, &footing),
@@ -789,8 +808,8 @@ mod tests {
     #[test]
     fn windows_says_its_controls_in_sentence_case() {
         use crate::model::Sheet;
-        use crate::present::testing::{both_tools, read, status};
-        let mut state = read(status(Vec::new(), Vec::new()), both_tools());
+        use crate::present::testing::{claude_code, read, status};
+        let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
         state.sheet = Some(Sheet::Add { provider: None });
         let words = |os| {
             let shown = present_on(os, &state, MIDDAY, &Utc);

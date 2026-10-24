@@ -27,12 +27,12 @@ Daily renewal runs `pitboard renew` once a day, from the system's own scheduler.
 
 <Tabs>
   <Tab title="macOS">
-    Click Pitboard's item in the menu bar, choose **Settings**, then click **Renewal**. Turn on **Renew parked logins daily**.
+    Click Pitboard's item in the menu bar, choose **Settings**, then click **Advanced**. Turn on **Renew parked logins daily**.
 
     The app must be in your Applications folder: until you move it there, macOS runs a temporary copy, and the setting cannot be turned on.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Renewal**, turn on **Renew parked logins daily**.
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Advanced**, turn on **Renew parked logins daily**.
   </Tab>
 </Tabs>
 
@@ -57,7 +57,7 @@ It renews only the parked logins in Pitboard's own directory: `~/.pitboard`, or 
 
 ## Check or turn off daily renewal
 
-In the app, **Renew parked logins daily** in the **Renewal** settings shows whether it is on. Turn it off to stop daily renewal.
+In the app, **Renew parked logins daily** in **Settings** > **Advanced** shows whether it is on. Turn it off to stop daily renewal.
 
 On the command line:
 
@@ -82,7 +82,7 @@ If `pitboard doctor` reports a problem with its `renewal schedule` check, see [D
 
 A parked login that `pitboard` shows as `expires in 2d 3h` needs only a renewal, not a sign-in.
 
-In the app's **Renewal** settings, **Renew Now** renews them, and the line beside it shows the result `pitboard renew` would print. On Windows, the button is **Renew now**. On the command line:
+While the app is open, it renews parked logins as it reads usage. On the command line:
 
 ```sh
 pitboard renew

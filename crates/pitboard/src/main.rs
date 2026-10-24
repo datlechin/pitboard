@@ -140,7 +140,7 @@ enum Command {
         yes: bool,
     },
     /// Switch Claude Code before the account in use runs out, and warm up accounts
-    #[command(after_help = pitboard_core::words::IS_THIS_ALLOWED)]
+    #[command(after_help = watch::terms())]
     Watch {
         #[command(flatten)]
         share: watch::Share,

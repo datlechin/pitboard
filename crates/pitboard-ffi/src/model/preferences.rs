@@ -1,13 +1,26 @@
 //! The app's own preferences, which the model keeps in `app.json` in Pitboard's directory:
 //! the tools somebody said "Not Now" to a second account for, whether the app has ever shown
-//! anybody anything, and whether it switches Claude Code by itself, and at what share. The macOS app kept them in UserDefaults, and hands them over once,
-//! as `AppLaunch::earlier_preferences`: where the file is there, it wins.
+//! anybody anything, and what it does once a limit reaches what share. The macOS app kept
+//! them in UserDefaults, and hands them over once, as `AppLaunch::earlier_preferences`: where
+//! the file is there, it wins.
 
-use super::EarlierPreferences;
+use super::{AtLimit, EarlierPreferences, Tip};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::provider::ProviderId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+
+const NOTHING: &str = "nothing";
+const NOTIFY: &str = "notify";
+const SWITCH: &str = "switch";
+
+fn tip_code(tip: Tip) -> &'static str {
+    match tip {
+        Tip::UseCodex => "use_codex",
+        Tip::OpenAtLogin => "open_at_login",
+        Tip::AtLimit => "at_limit",
+    }
+}
 
 /// What `app.json` holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,16 +34,19 @@ pub(crate) struct Preferences {
     /// nothing at all, so the first launch opens the window, once.
     #[serde(default)]
     pub(crate) has_been_seen: bool,
-    /// Whether the app switches Claude Code by itself before the account in use runs out,
-    /// which somebody turns on in the settings: off unless they did. Left out of the file
-    /// while off, so a file nobody turned it on in reads as it always did.
+    // Written beside `at_limit` too, for a version before it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) auto_switch: bool,
-    /// The share of a limit it switches at, a whole percentage, where somebody chose one;
-    /// read through [`Preferences::threshold`]. Any whole number reads, so one no version
-    /// would write leaves the rest of the file readable, and is taken as the nearest share.
+    // The share it notifies or switches at. Any whole number reads, so one no version would
+    // write leaves the rest of the file readable, and is taken as the nearest share.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) auto_switch_at: Option<i64>,
+    // Text, so a choice a later version adds leaves the rest of the file readable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) at_limit: Option<String>,
+    // Text, as `at_limit` is, for a tip a later version adds.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub(crate) tips_declined: BTreeSet<String>,
 }
 
 impl Preferences {
@@ -63,11 +79,45 @@ impl Preferences {
         )
     }
 
-    /// The share of a limit the app switches Claude Code at: the one chosen, as near as there
-    /// can be one to what another version kept, or the default.
     pub(crate) fn threshold(&self) -> Threshold {
         self.auto_switch_at
             .map_or_else(Threshold::default, Threshold::clamped)
+    }
+
+    // Before anybody chose, switching by itself on reads as Switch and off as Notify.
+    pub(crate) fn at_limit(&self) -> AtLimit {
+        match self.at_limit.as_deref() {
+            Some(NOTHING) => AtLimit::Nothing,
+            Some(NOTIFY) => AtLimit::Notify,
+            Some(SWITCH) => AtLimit::Switch,
+            _ if self.auto_switch => AtLimit::Switch,
+            _ => AtLimit::Notify,
+        }
+    }
+
+    pub(crate) fn at_limit_chosen(&self) -> bool {
+        self.at_limit.is_some() || self.auto_switch
+    }
+
+    pub(crate) fn declined(&self, tip: Tip) -> bool {
+        self.tips_declined.contains(tip_code(tip))
+    }
+
+    // Whether it was not declined already.
+    pub(crate) fn decline(&mut self, tip: Tip) -> bool {
+        self.tips_declined.insert(tip_code(tip).to_owned())
+    }
+
+    pub(crate) fn choose(&mut self, choice: AtLimit) {
+        self.auto_switch = choice == AtLimit::Switch;
+        self.at_limit = Some(
+            match choice {
+                AtLimit::Nothing => NOTHING,
+                AtLimit::Notify => NOTIFY,
+                AtLimit::Switch => SWITCH,
+            }
+            .to_owned(),
+        );
     }
 
     /// `app.json`'s text for these preferences.
@@ -180,6 +230,42 @@ mod tests {
         let (odd, _) =
             Preferences::kept(Some(r#"{"auto_switch":true,"auto_switch_at":120}"#), None);
         assert_eq!(odd.threshold().percent(), 99);
+    }
+
+    /// Before anybody chose what happens at the share, switching by itself turned on reads as
+    /// Switch, and off, or a fresh install, as Notify. A choice is written beside whether it
+    /// switches, for a version before the choice, and one a later version wrote that this one
+    /// does not know reads as though none were made.
+    #[test]
+    fn what_happens_at_a_limit_follows_switching_by_itself_until_chosen() {
+        let read = |text: &str| Preferences::kept(Some(text), None).0.at_limit();
+        assert_eq!(Preferences::default().at_limit(), AtLimit::Notify);
+        assert_eq!(read(r#"{"auto_switch":true}"#), AtLimit::Switch);
+        assert_eq!(read(r#"{"has_been_seen":true}"#), AtLimit::Notify);
+        assert_eq!(
+            read(r#"{"auto_switch":true,"at_limit":"nothing"}"#),
+            AtLimit::Nothing
+        );
+        assert_eq!(
+            read(r#"{"auto_switch":true,"at_limit":"later"}"#),
+            AtLimit::Switch
+        );
+
+        let mut chosen = Preferences::default();
+        chosen.choose(AtLimit::Switch);
+        assert_eq!(
+            chosen.text().as_deref(),
+            Some(
+                r#"{"second_account_declined":[],"has_been_seen":false,"auto_switch":true,"at_limit":"switch"}"#
+            )
+        );
+        chosen.choose(AtLimit::Nothing);
+        assert_eq!(
+            chosen.text().as_deref(),
+            Some(r#"{"second_account_declined":[],"has_been_seen":false,"at_limit":"nothing"}"#)
+        );
+        let text = chosen.text().expect("text");
+        assert_eq!(Preferences::kept(Some(&text), None), (chosen, true));
     }
 
     /// A share no version would keep, written by hand or by a later version, is read as the

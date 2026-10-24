@@ -3,38 +3,68 @@ import SwiftUI
 
 struct LimitsSettings: View {
     let model: AppModel
+    @ScaledMetric(relativeTo: .body) private var shareWidth: CGFloat = 56
+
+    nonisolated static func share(_ typed: Int, of atLimit: AtLimitShown) -> UInt8 {
+        UInt8(min(max(typed, Int(atLimit.lowest)), Int(atLimit.highest)))
+    }
 
     var body: some View {
-        let auto = model.machine.autoSwitch
+        let atLimit = model.machine.atLimit
         let warm = model.machine.warm
+        let share = Binding(
+            get: { Int(atLimit.at) },
+            set: {
+                model.send(.setAtLimit(choice: atLimit.choice, at: Self.share($0, of: atLimit)))
+            })
         Form {
             Section {
-                Toggle(
-                    "Switch Claude Code automatically",
-                    isOn: Binding(
-                        get: { auto.on },
-                        set: { model.send(.setAutoSwitch(on: $0, at: auto.at)) })
-                )
-                .accessibilityIdentifier("settings.autoSwitch")
-                .disabled(!auto.enabled)
-                Stepper(
-                    auto.atLabel,
-                    value: Binding(
-                        get: { Int(auto.at) },
-                        set: { model.send(.setAutoSwitch(on: auto.on, at: UInt8($0))) }),
-                    in: Int(auto.lowest)...Int(auto.highest)
-                )
-                .accessibilityIdentifier("settings.autoSwitchAt")
-                .disabled(!auto.enabled || !auto.on)
-                if let standing = auto.standing {
+                // Read as the sentence it is: when a limit reaches the share, do what is chosen.
+                LabeledContent(atLimit.heading) {
+                    HStack {
+                        // The HIG pairs a stepper with a field where large changes are likely.
+                        TextField(atLimit.shareLabel, value: share, format: .percent)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: shareWidth)
+                            .disabled(!atLimit.shareEnabled)
+                            .accessibilityIdentifier("settings.atLimitShareField")
+                        Stepper(
+                            atLimit.shareLabel, value: share,
+                            in: Int(atLimit.lowest)...Int(atLimit.highest)
+                        )
+                        .labelsHidden()
+                        .disabled(!atLimit.shareEnabled)
+                        .accessibilityIdentifier("settings.atLimitShare")
+                        Picker(
+                            atLimit.atLabel,
+                            selection: Binding(
+                                get: { atLimit.choice },
+                                set: { model.send(.setAtLimit(choice: $0, at: atLimit.at)) })
+                        ) {
+                            ForEach(atLimit.choices, id: \.choice) { choice in
+                                Text(choice.title).tag(choice.choice)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .accessibilityIdentifier("settings.atLimit")
+                    }
+                }
+                .disabled(!atLimit.enabled)
+                if let standing = atLimit.standing {
                     Text(standing)
                         .explanatory()
                         .accessibilityIdentifier("settings.autoSwitchStanding")
                 }
             } header: {
-                Text("Before an account runs out")
+                Text(atLimit.title)
             } footer: {
-                Text(auto.note).footnote()
+                VStack(alignment: .leading, spacing: 4) {
+                    if let note = atLimit.note { Text(note).footnote() }
+                    if let terms = atLimit.terms { TermsText(terms: terms) }
+                }
             }
 
             Section {
@@ -54,8 +84,8 @@ struct LimitsSettings: View {
                     displayedComponents: .hourAndMinute
                 )
                 .accessibilityIdentifier("settings.warmTo")
-                if warm.accounts.isEmpty {
-                    Text("No Claude Code account is enrolled yet.").explanatory()
+                if let none = warm.noneEnrolled {
+                    Text(none).explanatory()
                 }
                 ForEach(warm.accounts, id: \.qualified) { account in
                     Toggle(
@@ -76,13 +106,27 @@ struct LimitsSettings: View {
                         .accessibilityIdentifier("settings.warmStanding")
                 }
             } header: {
-                Text("Warm up limits")
+                Text(warm.title)
             } footer: {
-                Text(warm.note).footnote()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(warm.note).footnote()
+                    TermsText(terms: warm.terms)
+                }
             }
             .disabled(!warm.enabled)
         }
         .formStyle(.grouped)
+    }
+}
+
+// The sentence, then the page that says whether the terms allow it, as one text that wraps.
+private struct TermsText: View {
+    let terms: TermsShown
+
+    var body: some View {
+        var link = AttributedString(terms.linkTitle)
+        link.link = URL(string: terms.link)
+        return Text(AttributedString("\(terms.sentence) ") + link).footnote()
     }
 }
 

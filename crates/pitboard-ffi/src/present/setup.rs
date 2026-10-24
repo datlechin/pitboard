@@ -4,9 +4,11 @@
 use super::accounts::in_order;
 use super::notices::INSTALL_CLAUDE_CODE;
 use super::words;
-use super::{AccountsShown, Choice, Footing, Seen, SetupStep};
+use super::{AccountsShown, Choice, Footing, Seen, SetupLink, SetupStep};
 use crate::model::state::in_its_app;
-use crate::model::{Intent, Sheet};
+use crate::model::{Intent, Sheet, Tip};
+use pitboard_core::host::Os;
+use pitboard_core::provider::ProviderId;
 
 /// How far along setting Pitboard up this machine is, worked out across every tool.
 pub(crate) fn footing(seen: &Seen) -> Footing {
@@ -22,13 +24,16 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
     if accounts.is_empty() && seen.state.installed.as_ref().is_some_and(Vec::is_empty) {
         return Footing::NoClaudeCode;
     }
+    let codex = codex_unused(seen);
     if !accounts.iter().any(|account| account.signed_in) {
         // Enrolled accounts with nobody signed in is a machine mid-switch or one whose login
         // was signed out from elsewhere, not a machine that needs setting up.
-        return if accounts.is_empty() {
-            Footing::NoOneSignedIn
-        } else {
+        return if !accounts.is_empty() {
             Footing::Ready
+        } else if codex {
+            Footing::CodexUnused
+        } else {
+            Footing::NoOneSignedIn
         };
     }
     if let Some(login) = seen.unnamed().next() {
@@ -63,7 +68,36 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
             };
         }
     }
+    if codex {
+        return Footing::CodexUnused;
+    }
+    let preferences = &seen.state.preferences;
+    if seen.state.opens_at_login == Some(false) && !preferences.declined(Tip::OpenAtLogin) {
+        return Footing::NotOpenedAtLogin;
+    }
+    let switching = accounts
+        .iter()
+        .filter(|account| account.provider == ProviderId::Claude.code() && account.label.is_some())
+        .count();
+    if switching > 1 && !preferences.at_limit_chosen() && !preferences.declined(Tip::AtLimit) {
+        return Footing::AtLimitUnchosen;
+    }
     Footing::Ready
+}
+
+fn found(seen: &Seen, tool: ProviderId) -> bool {
+    (seen.state.installed.as_ref())
+        .is_some_and(|found| found.iter().any(|here| here.code == tool.code()))
+}
+
+// Whose login Codex stores is read only once the tip is taken up.
+fn codex_unused(seen: &Seen) -> bool {
+    let codex = ProviderId::Codex.code();
+    !seen.state.reading_preferences()
+        && !seen.state.preferences.declined(Tip::UseCodex)
+        && found(seen, ProviderId::Codex)
+        && !(seen.accounts().iter())
+            .any(|account| account.provider == codex && account.label.is_some())
 }
 
 /// The one next thing to do on a machine that is not set up yet. Somebody who opens the app
@@ -91,6 +125,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                     },
                     enabled: true,
                 }],
+                link: None,
             })
         }
         Footing::OnlyOne { provider, label } => {
@@ -135,9 +170,82 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                         enabled: true,
                     },
                 ],
+                link: None,
             })
         }
+        Footing::CodexUnused => Some(SetupStep {
+            title: "Use Pitboard with Codex".into(),
+            detail: "Codex is installed. Pitboard reads nothing of it until you add the account \
+                     it’s signed in to."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: words::titled(seen.os, "Add Codex Account…", "Add Codex account…"),
+                    intent: Intent::NameSignedIn {
+                        provider: ProviderId::Codex.code().into(),
+                    },
+                    enabled: true,
+                },
+                not_now(seen, Tip::UseCodex),
+            ],
+            link: None,
+        }),
+        Footing::NotOpenedAtLogin => Some(SetupStep {
+            title: match seen.os {
+                Os::Windows => "Start when you sign in to Windows",
+                Os::MacOs | Os::Linux => "Open Pitboard at login",
+            }
+            .into(),
+            detail: match seen.os {
+                Os::Windows => "Pitboard watches your limits only while it’s running. Its icon \
+                                starts behind the arrow at the end of the taskbar, and Taskbar \
+                                settings can keep it in view."
+                    .into(),
+                Os::MacOs | Os::Linux => {
+                    "Pitboard watches your limits only while it’s open.".into()
+                }
+            },
+            actions: vec![
+                Choice {
+                    title: words::titled(seen.os, "Open at Login", "Turn on"),
+                    intent: Intent::OpensAtLogin { on: true },
+                    enabled: true,
+                },
+                not_now(seen, Tip::OpenAtLogin),
+            ],
+            // The app cannot bring its own icon out of the overflow.
+            link: (seen.os == Os::Windows).then(|| SetupLink {
+                title: "Taskbar settings".into(),
+                link: "ms-settings:taskbar".into(),
+            }),
+        }),
+        Footing::AtLimitUnchosen => Some(SetupStep {
+            title: "Switch before a limit runs out".into(),
+            detail: format!(
+                "Pitboard notifies you once a limit of the account in use reaches {}%. It can \
+                 switch Claude Code to another of your accounts instead.",
+                seen.state.preferences.threshold().percent()
+            ),
+            // The settings say what the plans' terms may say of switching by itself.
+            actions: vec![
+                Choice {
+                    title: words::titled(seen.os, "Open Settings…", "Open settings"),
+                    intent: Intent::ShowLimits,
+                    enabled: true,
+                },
+                not_now(seen, Tip::AtLimit),
+            ],
+            link: None,
+        }),
         Footing::NoClaudeCode | Footing::NoOneSignedIn | Footing::Ready => None,
+    }
+}
+
+fn not_now(seen: &Seen, tip: Tip) -> Choice {
+    Choice {
+        title: words::titled(seen.os, "Not Now", "Not now"),
+        intent: Intent::DeclineTip { tip },
+        enabled: true,
     }
 }
 

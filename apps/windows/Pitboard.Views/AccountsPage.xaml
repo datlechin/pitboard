@@ -84,7 +84,7 @@
               Message="{x:Bind ViewModel.SetupDetail, Mode=OneWay}"
               AutomationProperties.AutomationId="setup">
             <InfoBar.IconSource>
-              <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupNames), Mode=OneWay}" />
+              <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupFooting), Mode=OneWay}" />
             </InfoBar.IconSource>
             <InfoBar.Content>
               <StackPanel x:Name="SetupChoices" Margin="0,0,0,12" Orientation="Horizontal" Spacing="8" />

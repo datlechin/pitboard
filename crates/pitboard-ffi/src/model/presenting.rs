@@ -5,18 +5,20 @@
 //! `State::apply` by hand and read as `present` makes it, its clock times in UTC.
 
 use super::signing::{add, adding_in_claude, signs_in, travel};
+use super::state::{Answer, Job};
 use super::switching::switch;
 use super::testing::{
     CHATGPT, Hand, Machine, StandInApps, awaiting, chatgpt_holding, claude_code, codex,
     desktop_account, desktop_machine, desktop_warning, enrolled_as, refusal, status, switched,
     titled, warned, warning,
 };
-use super::{Intent, Pane, Sheet, Snapshot, WindowRequest};
+use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::{
-    AccountItem, AccountsShown, Choice, Footing, ItemOffer, MenuEntry, NoticeAction, PaceStanding,
-    PanelNotice, Question, SetupStep, Severity, WindowOffer, present,
+    AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
+    NoticeAction, PaceStanding, PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer,
+    present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::OS;
@@ -320,10 +322,17 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
     assert!(!other.switching);
     assert_eq!(other.summary, "5-hour 5%");
     assert_eq!(other.action, None);
-    // Its own menu offers no switch either, and what else it offers it offers as the Swift
+    // Its own menu holds its switch back too, and what else it offers it offers as the Swift
     // menu did, which held nothing else back for a switch.
     let again = titled("Sign In Again…", "Sign in again…");
-    assert_eq!(offered(&other), [(again.as_str(), true), ("Rename…", true)]);
+    assert_eq!(
+        offered(&other),
+        [
+            ("Use other", false),
+            (again.as_str(), true),
+            ("Rename…", true)
+        ]
+    );
     assert!(other.forget.as_ref().is_some_and(|forget| forget.enabled));
     let unnamed = || account(None).signed_in().uuid("u").build();
     assert_eq!(described_while(unnamed(), switching(running)).action, None);
@@ -376,16 +385,21 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
     assert_eq!(sends(&stale), None);
     assert_eq!(
         offered(&stale),
-        [(again.as_str(), false), ("Rename…", true)]
+        [
+            ("Use stale", false),
+            (again.as_str(), false),
+            ("Rename…", true)
+        ]
     );
 }
 
 /// What an account's own menu offers, each with its words, what it sends, and whether it can
-/// be chosen now: switching to it or naming it, where pressing the account does that, then,
-/// for an account Pitboard has a name for, signing in to it again and renaming it; each of
-/// its windows; and forgetting it, asked first, where it may be. Signing in again is offered
-/// once, not again as the account's own action, and a login Pitboard cannot use offers
-/// nothing.
+/// be chosen now: naming it, where pressing the account does that, or, for an account
+/// Pitboard has a name for, switching to it, signing in to it again and renaming it; each of
+/// its windows; and forgetting it, asked first. Every enrolled account has the same items,
+/// dimmed where they cannot be chosen now, as the menu bar's menu keeps them. Signing in
+/// again is offered once, not again as the account's own action, and a login Pitboard cannot
+/// use offers nothing.
 ///
 /// AccountsPane.swift's shortcut menu, as it was at c1be7c3, which the Swift tested nowhere,
 /// and which AccountsWindowTests.swift's testRenamingAnAccount, testForgettingAsksFirst and
@@ -406,11 +420,17 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     };
     let sign_in_again = titled("Sign In Again…", "Sign in again…");
     let offer = |title: &str, intent: Intent| ItemOffer {
-        checked: None,
         title: title.into(),
         intent,
         enabled: true,
         confirm: None,
+    };
+    let dimmed = |title: &str, intent: Intent| ItemOffer {
+        enabled: false,
+        ..offer(title, intent)
+    };
+    let switch = |label: &str| Intent::SwitchTo {
+        qualified: format!("claude/{label}"),
     };
     let spare = account(Some("spare")).build();
     let accounts = vec![
@@ -426,13 +446,15 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         work.offers,
         [
+            dimmed("Use work", switch("work")),
             offer(&sign_in_again, again("work")),
             offer("Rename…", rename("work"))
         ],
         "nothing to switch to: it is the one in use"
     );
     assert_eq!(
-        work.forget, None,
+        work.forget.as_ref().map(|forget| forget.enabled),
+        Some(false),
         "the core refuses to forget the one in use"
     );
 
@@ -452,7 +474,6 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         spare_row.forget,
         Some(ItemOffer {
-            checked: None,
             title: "Forget…".into(),
             intent: Intent::Forget {
                 qualified: "claude/spare".into()
@@ -469,6 +490,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         stale.offers,
         [
+            dimmed("Use stale", switch("stale")),
             offer(&sign_in_again, again("stale")),
             offer("Rename…", rename("stale"))
         ],
@@ -498,6 +520,21 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         assert!(cannot.windows.is_empty());
         assert_eq!(cannot.forget, None);
     }
+}
+
+/// With no account selected, the menu bar's Account menu keeps the items an enrolled account
+/// has, dimmed, in the system's case.
+#[test]
+fn the_account_menu_with_nothing_selected_keeps_its_items() {
+    let (model, _) = reading(vec![account(Some("work")).signed_in().build()]);
+    assert_eq!(
+        model.on_a_mac().account_menu,
+        AccountMenuShown {
+            offers: vec!["Use".into(), "Sign In Again…".into(), "Rename…".into()],
+            forget: "Forget…".into(),
+        }
+    );
+    assert_eq!(model.on_windows().account_menu.offers[1], "Sign in again…");
 }
 
 /// An account's own menu opens each of its windows, one per site of its tool, named by the
@@ -949,7 +986,18 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
     let accounts = vec![account(Some("work")).signed_in().build(), spare.clone()];
     let (model, _) = reading(accounts.clone());
     let shown = rows(&model);
-    assert_eq!(shown[0].forget, None);
+    assert!(
+        shown[0]
+            .forget
+            .as_ref()
+            .is_some_and(|forget| !forget.enabled)
+    );
+    assert!(
+        shown[1]
+            .forget
+            .as_ref()
+            .is_some_and(|forget| forget.enabled)
+    );
     let forget = shown[1].forget.as_ref().expect("spare may be forgotten");
     assert_eq!(
         forget.intent,
@@ -1458,8 +1506,8 @@ fn a_machine_without_claude_code_is_not_told_its_read_failed() {
 }
 
 /// Sessions of a tool that follows a switch by itself pick it up within a moment, and the
-/// notice counts down to it. Once that moment has passed a countdown would count to
-/// something already over, so there is none. Dismissing the notice puts it away.
+/// notice counts down to it. Once that moment has passed, the notice has nothing left to say
+/// that the row's In Use does not, so it goes. Dismissing it puts it away before then.
 ///
 /// PresentationTests.swift's aSwitchCountsDownOnlyUntilOpenSessionsHaveFollowed.
 #[test]
@@ -1472,27 +1520,35 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
     switch(&mut model, &mut machine, "claude/work");
     let follows = NOON + 33;
 
-    let followed = notice(
-        "switch/claude",
-        Severity::Info,
-        "Switched to work",
-        &[],
-        vec![dismiss(Intent::DismissSwitch {
-            provider: "claude".into(),
-        })],
-    );
     let counting = PanelNotice {
         until: Some(follows),
         until_label: Some("Sessions already open follow in".into()),
-        ..followed.clone()
+        ..notice(
+            "switch/claude",
+            Severity::Info,
+            "Switched to work",
+            &[],
+            vec![dismiss(Intent::DismissSwitch {
+                provider: "claude".into(),
+            })],
+        )
     };
     model.later(Duration::from_secs(23));
-    assert_eq!(model.shown().notices, [counting]);
+    assert_eq!(model.shown().notices, std::slice::from_ref(&counting));
     model.later(Duration::from_secs(10));
-    assert_eq!(model.shown().notices, std::slice::from_ref(&followed));
-    model.later(Duration::from_secs(60));
-    assert_eq!(model.shown().notices, [followed]);
+    assert!(
+        model.shown().notices.is_empty(),
+        "{:?}",
+        model.shown().notices
+    );
+    assert_eq!(
+        model.shown().last_switches.len(),
+        1,
+        "the switch is still kept"
+    );
 
+    switch(&mut model, &mut machine, "claude/work");
+    assert_eq!(ids(&model.shown()), ["switch/claude"]);
     model.send(Intent::DismissSwitch {
         provider: "claude".into(),
     });
@@ -1554,24 +1610,12 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     let shown = model.shown();
     assert_eq!(shown.last_switches[0].follows_at, None);
     assert_eq!(shown.last_switches[0].restart, None);
-    let [switched, left_behind] = shown.notices.as_slice() else {
-        panic!("{:?}", shown.notices);
+    let [left_behind] = shown.notices.as_slice() else {
+        panic!("no bare switch notice beside it: {:?}", shown.notices);
     };
-    assert_eq!(
-        *switched,
-        notice(
-            "switch/claude",
-            Severity::Info,
-            "Switched to work",
-            &[],
-            vec![dismiss(Intent::DismissSwitch {
-                provider: "claude".into(),
-            })],
-        )
-    );
     assert_eq!(left_behind.severity, Severity::Warning);
     assert_eq!(
-        [model.on_a_mac(), model.on_windows()].map(|shown| shown.notices[1].title.clone()),
+        [model.on_a_mac(), model.on_windows()].map(|shown| shown.notices[0].title.clone()),
         [
             "A login file is left behind the keychain",
             "A login file is left behind Credential Manager"
@@ -2493,7 +2537,7 @@ fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
     let mut codex_only = Machine::reading(Ok(status(Vec::new())));
     codex_only.found = vec![codex()];
     found.refresh(&mut codex_only);
-    assert_eq!(found.shown().footing, Footing::NoOneSignedIn);
+    assert_eq!(found.shown().footing, Footing::CodexUnused);
 
     let mut unfound = Hand::new();
     let mut signed_in = Machine::reading(Ok(status(vec![
@@ -2556,6 +2600,7 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
                 }),
                 enabled: true,
             }],
+            link: None,
         })
     );
 }
@@ -2601,19 +2646,246 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
                     enabled: true,
                 },
             ],
+            link: None,
         })
     );
 }
 
-/// AppModelTests.swift's twoAccountsAreAskedNothing.
+/// Two Claude Code accounts are asked what happens at a limit, until somebody chooses in the
+/// settings, where the sentence on the plans' terms sits beside switching by itself.
+///
+/// AppModelTests.swift's twoAccountsAreAskedNothing, before there was the choice.
 #[test]
-fn two_accounts_are_asked_nothing() {
+fn two_accounts_are_asked_what_happens_at_a_limit() {
+    let (model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+    let [mac, windows] = [model.on_a_mac(), model.on_windows()].map(|shown| shown.setup);
     assert_eq!(
-        footing(vec![
-            account(Some("work")).signed_in().build(),
-            account(Some("personal")).build(),
-        ]),
-        Footing::Ready
+        mac,
+        Some(SetupStep {
+            title: "Switch before a limit runs out".into(),
+            detail: "Pitboard notifies you once a limit of the account in use reaches 95%. It \
+                     can switch Claude Code to another of your accounts instead."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: "Open Settings…".into(),
+                    intent: Intent::ShowLimits,
+                    enabled: true,
+                },
+                Choice {
+                    title: "Not Now".into(),
+                    intent: Intent::DeclineTip { tip: Tip::AtLimit },
+                    enabled: true,
+                },
+            ],
+            link: None,
+        })
+    );
+    let windows = windows.expect("a step");
+    assert_eq!(
+        windows
+            .actions
+            .iter()
+            .map(|choice| choice.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Open settings", "Not now"]
+    );
+
+    let (mut chose, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    chose.state.preferences.choose(super::AtLimit::Switch);
+    assert_eq!(chose.shown().footing, Footing::Ready);
+    let codex_pair = footing(vec![
+        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("side")).of("codex").build(),
+    ]);
+    assert_eq!(
+        codex_pair,
+        Footing::Ready,
+        "only Claude Code switches by itself"
+    );
+}
+
+/// The model at noon, having read `accounts` on a machine where Claude Code and Codex were
+/// found.
+fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Machine) {
+    let mut model = at_noon();
+    let mut machine = Machine::reading(Ok(status(accounts)));
+    machine.found = vec![claude_code(), codex()];
+    model.refresh(&mut machine);
+    (model, machine)
+}
+
+/// Codex found with nothing of it enrolled is a tool Pitboard reads nothing of, so it cannot
+/// say whether Codex is signed in. It offers to use Pitboard with it after Claude Code's own
+/// steps, and in place of No Accounts where Claude Code is signed in to nothing, which said
+/// nobody was signed in while Codex was.
+#[test]
+fn codex_found_with_nothing_of_it_enrolled_is_offered() {
+    let (model, _) = reading_with_codex(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    let shown = model.on_a_mac();
+    assert_eq!(shown.footing, Footing::CodexUnused);
+    assert_eq!(
+        shown.setup,
+        Some(SetupStep {
+            title: "Use Pitboard with Codex".into(),
+            detail: "Codex is installed. Pitboard reads nothing of it until you add the account \
+                     it’s signed in to."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: "Add Codex Account…".into(),
+                    intent: Intent::NameSignedIn {
+                        provider: "codex".into()
+                    },
+                    enabled: true,
+                },
+                Choice {
+                    title: "Not Now".into(),
+                    intent: Intent::DeclineTip { tip: Tip::UseCodex },
+                    enabled: true,
+                },
+            ],
+            link: None,
+        })
+    );
+
+    let (alone, _) = {
+        let mut model = at_noon();
+        let mut machine = Machine::reading(Ok(status(Vec::new())));
+        machine.found = vec![codex()];
+        model.refresh(&mut machine);
+        (model, machine)
+    };
+    assert_eq!(alone.shown().footing, Footing::CodexUnused);
+    assert_eq!(alone.shown().accounts_shown, AccountsShown::List);
+    let (both, _) = reading_with_codex(Vec::new());
+    assert_eq!(both.shown().footing, Footing::CodexUnused);
+    assert_eq!(both.shown().accounts_shown, AccountsShown::List);
+
+    let (enrolled, _) = reading_with_codex(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("side")).of("codex").build(),
+    ]);
+    assert_eq!(enrolled.shown().footing, Footing::AtLimitUnchosen);
+}
+
+/// Asked to use Pitboard with Codex, the model reads whose login Codex stores, and not before:
+/// Name This Account for it, or Add Account set to Codex where nobody is signed in to it.
+#[test]
+fn using_codex_names_the_login_it_stores_read_only_once_asked() {
+    let (mut model, _) = reading_with_codex(vec![account(Some("work")).signed_in().build()]);
+    assert!(
+        !model
+            .asked
+            .iter()
+            .any(|job| matches!(job, Job::ReadSignedIn { .. })),
+        "nothing read of Codex before the click"
+    );
+    let codex = || Intent::NameSignedIn {
+        provider: "codex".into(),
+    };
+    assert_eq!(
+        model.send(codex()),
+        [Job::ReadSignedIn {
+            provider: "codex".into()
+        }]
+    );
+    model.give(Answer::SignedIn {
+        provider: "codex".into(),
+        email: Some("dana@acme.io".into()),
+    });
+    let shown = model.shown();
+    assert_eq!(
+        shown.sheet,
+        Some(Sheet::Name {
+            provider: "codex".into(),
+            email: "dana@acme.io".into()
+        })
+    );
+    assert_eq!(shown.sheet_text.expect("the sheet").name, "acme");
+
+    model.send(Intent::CloseSheet);
+    model.send(codex());
+    model.give(Answer::SignedIn {
+        provider: "codex".into(),
+        email: None,
+    });
+    assert_eq!(
+        model.shown().sheet,
+        Some(Sheet::Add {
+            provider: Some("codex".into())
+        })
+    );
+}
+
+/// The app opens at login only where somebody turned that on, and switches, notifies and
+/// warms up only while it is open, so the step after a second account asks, in each system's
+/// words. Windows puts a new icon behind the taskbar's arrow and lets nothing bring it out but
+/// its own settings, so its step says so and links them.
+#[test]
+fn an_app_that_does_not_open_at_login_is_asked_to() {
+    let (mut model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("personal")).build(),
+    ]);
+    model.send(Intent::OpensAtLogin { on: false });
+    assert_eq!(model.shown().footing, Footing::NotOpenedAtLogin);
+    let not_now = |title: &str| Choice {
+        title: title.into(),
+        intent: Intent::DeclineTip {
+            tip: Tip::OpenAtLogin,
+        },
+        enabled: true,
+    };
+    assert_eq!(
+        model.on_a_mac().setup,
+        Some(SetupStep {
+            title: "Open Pitboard at login".into(),
+            detail: "Pitboard watches your limits only while it’s open.".into(),
+            actions: vec![
+                Choice {
+                    title: "Open at Login".into(),
+                    intent: Intent::OpensAtLogin { on: true },
+                    enabled: true,
+                },
+                not_now("Not Now"),
+            ],
+            link: None,
+        })
+    );
+    assert_eq!(
+        model.on_windows().setup,
+        Some(SetupStep {
+            title: "Start when you sign in to Windows".into(),
+            detail: "Pitboard watches your limits only while it’s running. Its icon starts \
+                     behind the arrow at the end of the taskbar, and Taskbar settings can keep \
+                     it in view."
+                .into(),
+            actions: vec![
+                Choice {
+                    title: "Turn on".into(),
+                    intent: Intent::OpensAtLogin { on: true },
+                    enabled: true,
+                },
+                not_now("Not now"),
+            ],
+            link: Some(SetupLink {
+                title: "Taskbar settings".into(),
+                link: "ms-settings:taskbar".into(),
+            }),
+        })
     );
 }
 
@@ -2686,8 +2958,7 @@ fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
             row,
         ]);
         let shown = model.shown();
-        assert_eq!(shown.footing, Footing::Ready);
-        assert_eq!(shown.setup, None);
+        assert_eq!(shown.footing, Footing::AtLimitUnchosen, "nothing to name");
         assert!(
             rows(&model).iter().all(|row| !matches!(
                 row.action.as_ref().map(|a| &a.intent),
@@ -2958,6 +3229,51 @@ fn each_sheet_says_what_it_is_for() {
     assert!(!rename.saving);
 }
 
+/// Name This Account starts on a name from the email address: the domain's first label for a
+/// work address, and the part before any `+` for one at a mail service. A name another
+/// account of the tool already has is passed over for the other, and with both taken the
+/// field starts empty. An account of another tool takes no name from this one's.
+#[test]
+fn name_this_account_starts_on_a_name_from_the_email() {
+    let named = |taken: Vec<Account>, provider: &str, email: &str| {
+        let (mut model, _) = reading(taken);
+        model.send(present_sheet(Sheet::Name {
+            provider: provider.into(),
+            email: email.into(),
+        }));
+        model.shown().sheet_text.expect("the sheet").name
+    };
+    assert_eq!(named(Vec::new(), "claude", "dana@acme.io"), "acme");
+    assert_eq!(named(Vec::new(), "claude", "dana@eng.acme.io"), "eng");
+    assert_eq!(
+        named(Vec::new(), "codex", "Dana.Lee+pitboard@Gmail.com"),
+        "dana.lee"
+    );
+    assert_eq!(named(Vec::new(), "claude", "dana@icloud.com"), "dana");
+    for abroad in ["dana@yahoo.co.uk", "dana@hotmail.fr", "dana@web.de"] {
+        assert_eq!(named(Vec::new(), "claude", abroad), "dana", "{abroad}");
+    }
+    let acme = || account(Some("acme")).signed_in().build();
+    assert_eq!(named(vec![acme()], "claude", "dana@acme.io"), "dana");
+    assert_eq!(
+        named(
+            vec![acme(), account(Some("dana")).build()],
+            "claude",
+            "dana@acme.io"
+        ),
+        ""
+    );
+    assert_eq!(
+        named(
+            vec![account(Some("acme")).of("codex").signed_in().build()],
+            "claude",
+            "dana@acme.io"
+        ),
+        "acme"
+    );
+    assert_eq!(named(Vec::new(), "claude", ""), "");
+}
+
 /// Each sheet's default button says what pressing it does: a sheet that signs in says Sign
 /// In, one that names a login signed in now says Save, and a rename says Rename.
 ///
@@ -3008,10 +3324,10 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
         provider: "claude".into(),
         name: "travel".into(),
     });
-    let [super::state::Job::SignIn { id, .. }] = jobs[..] else {
+    let [Job::SignIn { id, .. }] = jobs[..] else {
         panic!("a sign-in: {jobs:?}");
     };
-    model.give(super::state::Answer::SignInStarted {
+    model.give(Answer::SignInStarted {
         id,
         started: Ok(()),
         put_back: None,
@@ -3034,7 +3350,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     );
     assert_eq!(text.refused, None);
 
-    model.give(super::state::Answer::SignInSaid {
+    model.give(Answer::SignInSaid {
         id,
         text: "Paste code here if prompted > ".into(),
         step: None,
@@ -3042,7 +3358,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     model.send(Intent::PasteCode {
         code: "half".into(),
     });
-    model.give(super::state::Answer::SignInSaid {
+    model.give(Answer::SignInSaid {
         id,
         text: "Invalid code. Please make sure the full code was copied.\n".into(),
         step: None,
@@ -3100,7 +3416,8 @@ fn opening_the_window_by_itself_leaves_the_sheet_up() {
         shown.window_request,
         WindowRequest {
             serial: 2,
-            pane: None
+            pane: None,
+            settings: false,
         }
     );
     assert_eq!(shown.sheet, Some(rename));
@@ -3123,7 +3440,8 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
         model.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: Some(Pane::Machine)
+            pane: Some(Pane::Machine),
+            settings: false,
         }
     );
     model.send(Intent::ShowWindow {
@@ -3133,7 +3451,8 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
         model.shown().window_request,
         WindowRequest {
             serial: 2,
-            pane: Some(Pane::Accounts)
+            pane: Some(Pane::Accounts),
+            settings: false,
         }
     );
     model.send(Intent::ShowWindow { pane: None });
@@ -3149,7 +3468,8 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
         model.shown().window_request,
         WindowRequest {
             serial: 4,
-            pane: None
+            pane: None,
+            settings: false,
         },
         "an alert is over every pane"
     );
@@ -3258,12 +3578,7 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
     assert!(due <= model.now.running + Duration::from_secs(60));
 
     model.later(Duration::from_secs(60));
-    assert!(
-        model
-            .tick()
-            .iter()
-            .all(|job| matches!(job, super::state::Job::Look))
-    );
+    assert!(model.tick().iter().all(|job| matches!(job, Job::Look)));
     assert_eq!(resets(&model), "resets in 2h 04m");
     assert!(
         model.state.next_due().expect("a timer") <= model.now.running + Duration::from_secs(60),

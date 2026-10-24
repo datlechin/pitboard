@@ -3,11 +3,11 @@ import PitboardKit
 import PitboardTestSupport
 import SwiftUI
 import Testing
+import UserNotifications
 
 @testable import PitboardApp
 
-// Daily renewal, Renew Now and which `pitboard` a terminal runs are the model's, tested in
-// `pitboard-ffi`.
+// Daily renewal and which `pitboard` a terminal runs are the model's, tested in `pitboard-ffi`.
 
 /// Answers the way macOS can: a registration may wait for approval or be refused, and the
 /// person may change it in System Settings while the app is running.
@@ -55,6 +55,24 @@ private final class ScriptedLoginItem: LoginItem {
     #expect(openAtLogin.state == .disabled)
 }
 
+/// The model's setup tip asks to open at login only while macOS says the app does not, so
+/// each read and each change says what macOS has: a login item waiting for approval is not
+/// one to ask about again.
+@MainActor
+@Test func openingAtLoginIsSaidToTheModelAsMacOSHasIt() {
+    let item = ScriptedLoginItem()
+    var said: [Bool] = []
+    let openAtLogin = OpenAtLogin(item) { said.append($0) }
+    #expect(said.isEmpty, "nothing said before anything asks")
+
+    openAtLogin.read()
+    item.needsApproval = true
+    openAtLogin.set(true)
+    item.state = .disabled
+    openAtLogin.read()
+    #expect(said == [false, true, false])
+}
+
 /// macOS can hold a new login item until the person allows it, and until then the app does
 /// not open at login. That is not a failure.
 @MainActor
@@ -97,6 +115,34 @@ private final class ScriptedLoginItem: LoginItem {
     #expect(openAtLogin.state == .disabled)
 }
 
+// MARK: - Notifications turned off
+
+/// What macOS has is read on each visit and as the app comes forward, since the person turns
+/// notifications on and off in System Settings. Only a refusal is said: not asked yet, or a
+/// build that posts nothing, is nothing to say.
+@MainActor
+private final class Authorization {
+    var status: UNAuthorizationStatus? = .denied
+}
+
+@MainActor
+@Test func notificationsTurnedOffAreSaidUntilTurnedOnAgain() async {
+    let macOS = Authorization()
+    let notifications = NotificationsAllowed(status: { macOS.status })
+    #expect(!notifications.off, "not before it is read")
+
+    await notifications.read()
+    #expect(notifications.off)
+    for allowed in [UNAuthorizationStatus.authorized, .provisional, .notDetermined] {
+        macOS.status = allowed
+        await notifications.read()
+        #expect(!notifications.off, "\(allowed)")
+    }
+    macOS.status = nil
+    await notifications.read()
+    #expect(!notifications.off)
+}
+
 // MARK: - Fitting the screen
 
 @MainActor
@@ -110,6 +156,7 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
     let model = AppModel(model: StandInModel(snapshot(0, warming: accounts)))
     let settings = SettingsView(
         model: model, openAtLogin: OpenAtLogin(ScriptedLoginItem()),
+        notifications: NotificationsAllowed(status: { nil }),
         commandLineLink: CommandLineLink(
             CommandLineTool(helper: nil, link: "/nowhere/pitboard", execute: { _ in nil }),
             model: model),
@@ -127,10 +174,26 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
     }
 }
 
-@Test func aPaneKeptByAnEarlierVersionStillOpens() {
+// Renewal and Command Line went to Advanced, and Updates to General.
+@Test func aPaneKeptByAnEarlierVersionOpensThePaneThatHoldsItNow() {
+    #expect(SettingsView.Tab.allCases == [.general, .limits, .advanced])
     #expect(SettingsView.Tab(rawValue: "general") == .general)
-    #expect(SettingsView.Tab(rawValue: "commandLine") == .commandLine)
-    #expect(SettingsView.Tab(rawValue: "updates") == .updates)
+    #expect(SettingsView.Tab(rawValue: "limits") == .limits)
+    #expect(SettingsView.Tab(rawValue: "renewal") == .advanced)
+    #expect(SettingsView.Tab(rawValue: "commandLine") == .advanced)
+    #expect(SettingsView.Tab(rawValue: "updates") == .general)
+    #expect(
+        SettingsView.Tab.allCases.allSatisfy { SettingsView.Tab(rawValue: $0.rawValue) == $0 })
+}
+
+// MARK: - The share a limit is reached at
+
+// Typed past either end, the share is taken at that end, where the stepper stops.
+@Test func aShareTypedIsKeptWithinTheStepsRange() {
+    let atLimit = snapshot(0).machine.atLimit
+    #expect(LimitsSettings.share(80, of: atLimit) == 80)
+    #expect(LimitsSettings.share(10, of: atLimit) == 50)
+    #expect(LimitsSettings.share(120, of: atLimit) == 99)
 }
 
 // MARK: - Linking the command line

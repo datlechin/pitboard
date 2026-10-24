@@ -1,15 +1,17 @@
-import AppKit
 import PitboardKit
 import SwiftUI
 
 struct AccountsPane: View {
     let model: AppModel
     let windows: AccountWindows
+    let openAtLogin: OpenAtLogin
     @State private var selection: String?
     /// A question the model asks before something that cannot be undone, and what to send
     /// once it is answered.
     @State private var asking: Asking?
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
+    @AppStorage(DefaultsKey.settingsTab) private var settingsTab = SettingsView.Tab.general
 
     var body: some View {
         content
@@ -38,6 +40,11 @@ struct AccountsPane: View {
                 RefreshCommand(title: "Refresh", disabled: model.reading) {
                     model.send(.refresh(asked: true))
                 }
+            )
+            // Command-Delete in a sheet's text field deletes to the start of the line.
+            .focusedSceneValue(
+                \.account,
+                model.sheet == nil ? selection.flatMap(model.item).map(command(for:)) : nil
             )
             .task { model.send(.paneShown(pane: .accounts)) }
             .alert(
@@ -102,7 +109,19 @@ struct AccountsPane: View {
                     .selectionDisabled()
             }
             if let step = model.setup {
-                SetupTip(step: step, footing: model.footing) { model.send($0) }
+                SetupTip(step: step, footing: model.footing) { intent in
+                    // The login item is macOS's: the app turns it on, and says what macOS has,
+                    // and why it refused, in General.
+                    if case .opensAtLogin(let on) = intent {
+                        openAtLogin.set(on)
+                        if openAtLogin.failed != nil {
+                            settingsTab = .general
+                            openSettings()
+                        }
+                    } else {
+                        model.send(intent)
+                    }
+                }
             }
             ForEach(model.sections, id: \.id) { section in
                 // A heading per tool once there is more than one, and no section at all
@@ -117,7 +136,7 @@ struct AccountsPane: View {
         .listStyle(.inset)
         .contextMenu(forSelectionType: String.self) { ids in
             if let item = ids.first.flatMap(model.item) {
-                menu(for: item)
+                AccountMenuItems(command: command(for: item), place: .shortcutMenu)
             }
         } primaryAction: { ids in
             if let action = ids.first.flatMap(model.item)?.action {
@@ -127,6 +146,14 @@ struct AccountsPane: View {
         .onDeleteCommand {
             if let item = selection.flatMap(model.item) { forget(item) }
         }
+        .copyable(selectedEmail)
+    }
+
+    private var selectedEmail: [String] {
+        guard let email = selection.flatMap(model.item)?.email, !email.isEmpty else {
+            return []
+        }
+        return [email]
     }
 
     private func rows(of section: AccountSection) -> some View {
@@ -138,45 +165,20 @@ struct AccountsPane: View {
 
     // MARK: - What can be done to an account
 
-    @ViewBuilder private func menu(for item: AccountItem) -> some View {
-        ForEach(item.offers, id: \.title) { offer in
-            if let checked = offer.checked {
-                // A check mark beside it, as a menu shows one setting that is on.
-                Toggle(
-                    offer.title,
-                    isOn: Binding(
-                        get: { checked },
-                        set: { _ in send(offer.intent, askingFirst: offer.confirm) })
-                )
-                .disabled(!offer.enabled)
-            } else {
-                Button(offer.title) { send(offer.intent, askingFirst: offer.confirm) }
-                    .disabled(!offer.enabled)
-            }
-        }
-        if !item.windows.isEmpty {
-            Divider()
-            ForEach(item.windows, id: \.window.store) { offer in
-                Button(offer.title) {
-                    windows.presence.activate()
-                    openWindow(id: AccountWindowScene.id, value: offer.window.id)
+    private func command(for item: AccountItem) -> AccountCommand {
+        AccountCommand(
+            item: item,
+            choose: { [$asking, model] offer in
+                if let question = offer.confirm {
+                    $asking.wrappedValue = Asking(question: question, intent: offer.intent)
+                } else {
+                    model.send(offer.intent)
                 }
-            }
-        }
-        if !item.email.isEmpty {
-            Divider()
-            Button("Copy Email Address") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(item.email, forType: .string)
-            }
-        }
-        if let forget = item.forget {
-            Divider()
-            Button(forget.title, role: .destructive) {
-                send(forget.intent, askingFirst: forget.confirm)
-            }
-            .disabled(!forget.enabled)
-        }
+            },
+            open: { [windows, openWindow] offer in
+                windows.presence.activate()
+                openWindow(id: AccountWindowScene.id, value: offer.window.id)
+            })
     }
 
     private func forget(_ item: AccountItem) {
@@ -223,6 +225,9 @@ private struct SetupTip: View {
                                 .disabled(!choice.enabled)
                         }
                     }
+                    if let link = step.link, let url = URL(string: link.link) {
+                        Link(link.title, destination: url)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -232,7 +237,11 @@ private struct SetupTip: View {
     }
 
     private var symbol: String {
-        if case .unnamed = footing { return "tag" }
-        return Symbol.switchAccount
+        switch footing {
+        case .unnamed: "tag"
+        case .notOpenedAtLogin: "power"
+        case .atLimitUnchosen: Symbol.limits
+        default: Symbol.switchAccount
+        }
     }
 }

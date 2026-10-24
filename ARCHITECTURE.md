@@ -509,10 +509,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     of a model; and `windows_records_key`, its records' key. `Pitboard.exe --unregister`
     calls `unschedule_app`, which takes the renewal task away where it runs the command line
     beside the app. The snapshot carries what an app shows of the tools, a sign-in, the
-    command line a terminal runs, a limit and its pace, a parked login, a renewal run and
-    doctor's checks, made by `present/` and the model's lanes, so no free function says it
-    again. The helpers `present/` makes it with here, `tools`, `usage_level`, `renewal_note`
-    and `doctor_summary`, are the crate's own.
+    command line a terminal runs, a limit and its pace, a parked login and doctor's checks,
+    made by `present/` and the model's lanes, so no free function says it again. The
+    helpers `present/` makes it with here, `tools`, `usage_level` and `doctor_summary`, are
+    the crate's own.
   - `launch.rs` is the core the model's lanes call, `AppCore`, which nothing exports. It is
     made from the `AppLaunch` the app was started with, read as `AppContext::discover`
     reads it, the first time a lane needs it, and made once more a while after a login
@@ -540,18 +540,22 @@ window loads its site, and whatever the site's pages load, as a browser would.
   - `model/` is the app model the macOS app shows and the Windows app is to show. An app
     makes a `PitboardModel`, sends it an `Intent` for each thing asked of it, and its
     `ModelListener` is told of each numbered `Snapshot`; its `AppControl` quits and opens
-    other apps, and its `Notifications` posts what has run out and a login replaced outside
-    Pitboard. `state.rs` holds what the model knows and decides what follows each message.
-    What follows an answer to the quit question is `After`, private to the model: a switch,
-    a sign-in inside an app, or recording the account an app is signed in to. `advice.rs`
-    says which account to offer once the one in use has run out, `preferences.rs` what the
-    app's own preferences are, `machine.rs` what the model knows of this machine rather than
-    its accounts, and `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it
+    other apps, and its `Notifications` posts a limit at the share chosen, a login to sign
+    in to again and what switching or warming up by itself came to. Each notice carries the
+    text a click on it, or on its one button, hands back as `Intent::NotificationClicked`,
+    which the model reads as one of four requests and nothing else. `state.rs` holds what
+    the model knows and decides what follows each message. What follows an answer to the
+    quit question is `After`, private to the model: a switch, a sign-in inside an app, or
+    recording the account an app is signed in to. `advice.rs` says which account to offer
+    once the one in use has run out, `preferences.rs` what the app's own preferences are,
+    `machine.rs` what the model knows of this machine rather than its accounts, and
+    `windows.rs` the account windows' bookkeeping; `lanes.rs` runs what it
     decides, on a lane of reads, which reads the schedule, doctor's checks and the log too
     and asks the core's look whether to switch Claude Code by itself, a lane of changes, one
-    at a time, which also repairs and changes the schedule and renews, a lane that lists
-    processes and asks the app's `AppControl` about other apps, a lane that asks what is
-    installed and looks for the `pitboard` a terminal runs, a thread of its own for each
+    at a time, which also repairs and changes the schedule, a lane that lists processes and
+    asks the app's `AppControl` about other apps, a lane that asks what is installed, reads
+    whose login a tool stores once somebody asks (`Job::ReadSignedIn`) and looks for the
+    `pitboard` a terminal runs, a thread of its own for each
     sign-in, a lane that types a code back to one or stops it, a lane that reads and writes
     what the model keeps, in Pitboard's directory and the windows' records in the app's own,
     and one that posts through the app's `Notifications`, and tells the listener on a thread
@@ -564,14 +568,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     quit signed in, enrols the login signed in now, renames and forgets, writes the account
     in use into Claude Code's config, puts away a login left in a file behind the keychain
     or Credential Manager from a sheet that looks first, keeps the sheet over the main
-    window, says which account to switch to once the one in use has run out, notified once
-    for each reset, switches Claude Code by itself with its setting on, asking the core's
-    look after every read and every 30 seconds and saying under the setting what it came to,
-    warms up the accounts turned on on a lane of its own, asking after every read and every
-    30 seconds, with every read's `Overview` of them, or why it cannot be read, and a
-    notification once for the words of a warm-up by itself that came to nothing, keeps the
-    app's own preferences, and keeps the daily renewal schedule, renews now, makes doctor's
-    checks, reads the activity log and finds the `pitboard` a terminal runs. It keeps the
+    window, says which account to switch to once the one in use has run out, notifies once
+    for each limit and reset at the share chosen, switches Claude Code by itself where that
+    is chosen, asking the core's look after every read and every 30 seconds and saying under
+    the setting what it came to, warms up the accounts turned on on a lane of its own,
+    asking after every read and every 30 seconds, with every read's `Overview` of them, or
+    why it cannot be read, and a notification once for the words of a warm-up by itself
+    that came to nothing, keeps the app's own preferences, and keeps the daily renewal
+    schedule, makes doctor's checks, reads the activity log and finds the `pitboard` a
+    terminal runs. It keeps the
     account windows' books too: which store is whose and each window's last page, which
     windows close and which stores go after a read, the link waiting for an account, with
     the wait before it can be opened, and the downloads. Its tests are files of their own
@@ -584,13 +589,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     the moment, and builds every sentence and row the menu bar, the menu and the window
     show, so a view decides nothing. `accounts.rs` is the menu bar's words and the
     accounts' sections and rows, with their limits and what each one's own menu offers,
-    `notices.rs` the notices, their order and what the menu says of them, `setup.rs` the
-    footing, the step it asks for and what stands in for an empty list, `sheets.rs` the
+    dimmed where it cannot be chosen now, which a shortcut menu leaves out, and the macOS
+    Account menu's items while no account is selected, `notices.rs` the notices, their order and what the menu says of them, `setup.rs` the
+    footing, the step it asks for and what stands in for an empty list (a tool nothing is
+    enrolled of is read only once its step is taken up, `Intent::NameSignedIn`), `sheets.rs` the
     sheets with their default buttons' words, the quit question and a failure's alert, with
     `check_name`, the rule a sheet's default button and the model both save by, which says
     why what is typed cannot be a name,
     `machine.rs` what the settings and the window's other panes show of this machine, daily
-    renewal, Renew Now, doctor's checks, the activity log and the command line,
+    renewal, doctor's checks, the activity log and the command line,
     `windows.rs` the account windows, what a window says until it can show its page, what
     the **Open Link** window says, and the question asked before quitting stops the
     downloads an app has under way, and `words.rs` the sentences both apps say and the
@@ -699,13 +706,15 @@ window loads its site, and whatever the site's pages load, as a browser would.
     folder, the AppUserModelID, the app's icon and the refusal's message box. `NotifyIcon`
     keeps the icon in the notification area through `INotificationArea`, which
     `ShellNotificationArea` sends to `Shell_NotifyIconW` and tests replace, at the size
-    `IconImage` loads it at for the primary display's scale, and `IconMenu`
+    `IconImage` loads it at for the primary display's scale and in the look the menu bar's
+    level and attention give it, and `IconMenu`
     lists what the icon's menu offers, in the macOS menu's order. `WindowsNotifications`
     posts the model's notifications through `IAppNotifications`, which
     `SystemAppNotifications` sends to `AppNotificationManager` and tests replace, and refuses
     one Windows did not show by the exception's type and HRESULT alone; only a
-    Release build registers, and a click comes back as the intent the Switch button or the
-    notification itself asks for. Its `Read` is why Windows shows none of them, from the
+    Release build registers, and a click comes back as `Intent::NotificationClicked` with the
+    text the button or the notification itself carries. Its `Read` is why Windows shows none
+    of them, from the
     manager's `Setting` at each settings visit, as a `NotificationsBlocked`. `WindowsApps` is the model's `AppControl`: through
     `PackagedApps` it finds the process of a Store app's package that owns a top-level
     window, asks Restart Manager to end it, never forced, through `IRestartManager`, which
@@ -724,7 +733,10 @@ window loads its site, and whatever the site's pages load, as a browser would.
     off. It reads `StartupApproved\Run`, which only Settings > Apps > Startup writes: where
     that turned the `Run` value off, the switch is off and held back, its note says to turn it
     on there, and a link opens `ms-settings:startupapps`. The settings read it again at each
-    visit and as `MainWindow` is activated while they show. `SettingsViewModel` is what the settings page shows and sends,
+    visit and as `MainWindow` is activated while they show. Each read and change is said to
+    the model as `Intent::OpensAtLogin`, on where Settings turned it off too, for its setup
+    tip, whose button `AccountsPage` turns into a change of its own, or into Settings where
+    Windows refuses it. `SettingsViewModel` is what the settings page shows and sends,
     beyond the model's words its own, each warm-up account a `WarmAccountRow`, and
     `Versions` the app's own version. `AccountsViewModel`, `ActivityViewModel` and `MachineViewModel` are what
     the accounts, activity and This PC pages bind to, told part by part as `AppModel` tells
@@ -852,10 +864,20 @@ window loads its site, and whatever the site's pages load, as a browser would.
     UserDefaults held before `app.json` and `windows.json`, once.
   - `PitboardApp/System/MacPlatform.swift` is what the model asks of macOS:
     `MacAppControl` (`NSRunningApplication` and `NSWorkspace`), `MacNotifications`
-    (Notification Center, the category with its Switch button, and permission asked at the
-    first post) and `MacLocalTime` (the person's locale, calendar and 12 or 24 hours).
+    (Notification Center, a category for each button `notification_buttons` names, brought
+    forward by the system where it opens a window, and permission asked at the first post),
+    `NotificationsAllowed` (whether macOS turned them off, for the settings) and
+    `MacLocalTime` (the person's locale, calendar and 12 or 24 hours). The settings' **Open
+    Notification Settings** opens
+    `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=` and the app's
+    bundle identifier, which Apple does not document. Read on macOS 27.0.1 (26A434): that
+    extension takes the scheme (`allowsXAppleSystemPreferencesURLScheme`) and reveals an app
+    by its bundle identifier; nobody has opened the URL to see it land on Pitboard's page.
     `LoginItem.swift` is opening at login (`SMAppService`) and `CommandLineTool.swift`
     linking the command line with an administrator's password, which stay the app's own.
+    The model is told what macOS says of the login item, `Intent::OpensAtLogin`, at launch,
+    on each change and as the app comes forward, for its setup tip, whose button the
+    accounts pane turns into a change of the login item and not a message to the model.
   - `PitboardApp/MenuBar`, `Window`, `Sheets`, `Settings` and `Design` are the views. They
     show the snapshot's parts and send its intents, and decide only what is the platform's:
     symbols, tints, layout and which pane the window shows.
@@ -1476,8 +1498,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   file on the lanes, with the schedule, a change to it, the repair and the command line
   found, never as a snapshot is made. A schedule an older app wrote, or on Windows a task
   whose Pitboard is gone, is repaired once a launch, as the model starts, and read again only
-  where it was. Renew Now runs one renewal at a time, and is over once the read after it,
-  asking every service, is. Doctor's checks and the activity log are read each time their
+  where it was. The app has no Renew Now: its reads renew parked logins, and `pitboard renew`
+  renews what is due. Doctor's checks and the activity log are read each time their
   pane is shown, the checks counted while they run, as reads are. Opening at login and
   linking the command line onto the `PATH` with an administrator's password are each app's
   own, and once an app has linked it, it sends `Intent::LookForCommandLine` for the model to
@@ -4774,6 +4796,20 @@ Microsoft's documentation.
   is destroyed (`IconImageTests`, `NotifyIconTests.ANewImageModifiesTheIconAddedAlready`,
   `HiddenWindowTests.AChangeOfTheDisplaysReachesTheApp`). Which of the three a scale change
   sends a hidden window, and how the icon looks after one, are measured by hand.
+- Microsoft's notification area guidance (`winenv-notification`) asks for icon variations to
+  show changes in quantities, overlays to show a status, and no swaths of pure red, yellow or
+  green in a base icon; the icon shows no title, where the macOS menu bar item shows the
+  figure. So the model's `MenuBarText` carries the step of the limit the bar names and
+  whether the menu opens on something to look at, and its tooltip as whether it does, which
+  Narrator reads with the icon, then a line for each account in use. `Tray/Plenty.ico`,
+  `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16, 20, 24, 32, 40 and 48 px, the
+  sizes `NotificationIconSize` gives up to 300%, light the mark's row in a neutral tone as
+  long as what is left, `None.ico` lights none before a reading, and attention draws the
+  shell's stock `SIID_WARNING` over the bottom right at five eighths of the icon.
+  `DrawIconEx` blends into a 32-bit DIB premultiplied, and an icon's pixels are
+  straight, so `Shell.NotificationIcon` straightens them before `CreateIconIndirect`
+  (`IconImageTests.AttentionPutsTheStandardWarningOverTheBottomRight`, which compares the
+  icon's top third with the plain one's at 20 px, where its edges are partly covered).
 - Microsoft's app icon guidance (updated 14 July and 5 August 2026) asks for a transparent
   icon drawn straight on, half of it at 3:1 against light and dark backgrounds, at 16, 24,
   32, 48 and 256 px at least, and the notification area draws it at 16 px at 100% up to 64
@@ -5052,11 +5088,9 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
     where the Swift fixture said 45.
   - Doctor's checks are the core's: none is called "Keychain", and none warns of a schedule
     that is not there, which was the Swift fixture's one thing worth looking at. oneTool's
-    one thing is the world's own instead: personal's parked login lapses in two days, so
-    that Renew Now renews it, where the Swift fixture's lasted eleven. Renew Now finds a
-    parked login due that the read before it left alone only while its refresh token lapses
-    within three days, and that is when doctor warns of it, since both ask
-    `doctor::renewal_due`. So oneTool says "One thing is worth looking at." as before, of
+    one thing is the world's own instead: personal's parked login lapses in two days, where
+    the Swift fixture's lasted eleven, and doctor warns of a parked login whose refresh token
+    lapses within three days. So oneTool says "One thing is worth looking at." as before, of
     personal's parked login rather than of daily renewal. stuck has doctor's "interrupted
     switch" worth looking at besides, so it says "2 things are worth looking at.".
   - A read lists the account in use first, and the read of what is known lists only

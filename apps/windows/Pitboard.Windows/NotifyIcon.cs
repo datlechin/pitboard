@@ -33,12 +33,12 @@ public sealed class NotifyIcon(INotificationArea area, nint window, nint image, 
     private string _tip = "Pitboard";
     private bool _added;
 
-    public static string Tip(string spoken) =>
-        spoken.Length <= TipLength ? spoken : spoken[..(char.IsHighSurrogate(spoken[TipLength - 1]) ? TipLength - 1 : TipLength)];
+    public static string Tip(string tip) =>
+        tip.Length <= TipLength ? tip : tip[..(char.IsHighSurrogate(tip[TipLength - 1]) ? TipLength - 1 : TipLength)];
 
-    public void Show(string spoken)
+    public void Show(string tip)
     {
-        _tip = Tip(spoken);
+        _tip = Tip(tip);
         if (!_added)
         {
             Add();

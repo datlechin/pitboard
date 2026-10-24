@@ -29,7 +29,7 @@
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
-use pitboard_core::{doctor, switch, words};
+use pitboard_core::{doctor, words};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -40,10 +40,10 @@ pub use sites::{Conjunction, Site, SiteLink, site_names, sites_for};
 
 mod model;
 pub use model::{
-    AppControl, AppLaunch, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure, Intent,
-    LastSwitch, LocalTime, ModelListener, Notifications, Pane, PitboardModel, PlatformError,
-    QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice, RunningSignIn, Sheet, Snapshot,
-    WindowRequest, WindowsLaunch,
+    AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Failure,
+    Intent, LastSwitch, LocalTime, ModelListener, NotificationButton, NotificationButtonKind,
+    Notifications, Pane, PitboardModel, PlatformError, QuitQuestion, ReadFailure, RestartNeeded,
+    RunOutNotice, RunningSignIn, Sheet, Snapshot, Tip, WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -53,14 +53,14 @@ pub use fixture::{FixtureError, fixture_names, fixture_page};
 
 mod present;
 pub use present::{
-    AccountItem, AccountSection, AccountWindowsShown, AccountsShown, ActivityLine, ActivityShown,
-    AutoSwitchShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
-    DownloadState, EmptyList, Footing, ItemAction, ItemOffer, LimitPace, LimitRow, LinkPicker,
-    MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing, NameCheck, NoticeAction,
-    OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount, PickerShown, Question,
-    RenewalShown, ScheduleShown, SetupStep, Severity, SheetText, SheetTool, SigningInText,
-    StoreDeletion, StowText, WaitingShown, WarmAccountShown, WarmShown, WindowOffer, WindowWaiting,
-    check_name, downloads_quit_question,
+    AccountItem, AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown,
+    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice,
+    CommandLineShown, DownloadShown, DownloadState, EmptyList, Footing, ItemAction, ItemOffer,
+    LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
+    NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice, PickerAccount,
+    PickerShown, Question, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
+    SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown,
+    WindowOffer, WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;
@@ -78,7 +78,7 @@ pub use account_windows::{
 mod launch;
 pub(crate) use launch::{
     Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Remedy, Renewed, SignInSession, Switch, Switched,
+    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]
@@ -171,6 +171,17 @@ pub fn can_run(path: String) -> bool {
 pub fn pitboard_directory(environment: HashMap<String, String>) -> String {
     let environment: Environment = environment.into_iter().collect();
     environment.pitboard_home().to_string_lossy().into_owned()
+}
+
+#[uniffi::export]
+pub fn no_update_key() -> String {
+    present::words::NO_UPDATE_KEY.into()
+}
+
+// macOS shows a notification's buttons from categories registered at launch, by their titles.
+#[uniffi::export]
+pub fn notification_buttons() -> Vec<NotificationButtonKind> {
+    present::notification_buttons()
 }
 
 // What stops the Windows app before it makes a model, which then shows this alone.
@@ -382,16 +393,6 @@ pub(crate) fn usage_level(percent: f64) -> UsageLevel {
     }
 }
 
-/// What a renewal run did, from what renewing each due login came to: "No parked login was
-/// due.", "Renewed one.", "Renewed 1 of 2; the rest are tried again next time.".
-pub(crate) fn renewal_note(renewals: &[Renewed]) -> String {
-    let renewed = renewals
-        .iter()
-        .filter(|r| r.outcome == switch::Renewal::Renewed.code())
-        .count();
-    words::renewal_note(renewals.len(), renewed)
-}
-
 /// The line over a diagnosis's checks: what is worth looking at while checks only warn,
 /// and not to switch accounts while one fails.
 pub(crate) fn doctor_summary(checks: &[Check]) -> String {
@@ -417,26 +418,6 @@ pub(crate) fn doctor_level(checks: &[Check]) -> Level {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Only a renewal that renewed counts as one: a deferred or refused one was due and
-    /// was not renewed.
-    #[test]
-    fn a_renewal_note_counts_what_was_renewed() {
-        let renewed = |outcome: &str| Renewed {
-            label: "work".into(),
-            provider: "claude".into(),
-            outcome: outcome.into(),
-        };
-        assert_eq!(renewal_note(&[]), "No parked login was due.");
-        assert_eq!(
-            renewal_note(&[renewed("renewed"), renewed("renewal_deferred")]),
-            "Renewed 1 of 2; the rest are tried again next time."
-        );
-        assert_eq!(
-            renewal_note(&[renewed("parked_login_refused")]),
-            "1 due; none could be renewed this time."
-        );
-    }
 
     /// A check that warns is worth looking at, and one that fails outweighs every warning.
     #[test]

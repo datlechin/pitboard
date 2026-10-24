@@ -12,6 +12,8 @@ final class ScreenshotTests: FixtureTestCase {
         app.openWindow()
         let window = app.windows["main"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))
+        // The pictures show the accounts.
+        app.putTheTipsAway()
 
         // The menu is see-through, so it is shown over this window, not over the Mac's screen.
         app.openMenu()

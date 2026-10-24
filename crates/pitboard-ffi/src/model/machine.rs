@@ -1,13 +1,13 @@
 //! What the model knows of this machine rather than its accounts, as MachineModel.swift held
-//! it: the daily renewal schedule and the one change to it under way, what the last renewal
-//! came to, doctor's checks, what Pitboard has changed, and the `pitboard` a terminal would
-//! run. `State` takes each intent and answer about them, and `present` says them.
+//! it: the daily renewal schedule and the one change to it under way, doctor's checks, what
+//! Pitboard has changed, and the `pitboard` a terminal would run. `State` takes each intent
+//! and answer about them, and `present` says them.
 //!
 //! Opening at login and linking the command line onto the `PATH` with an administrator's
 //! password are the app's own, as its system's: once it has linked it, the app sends
 //! `Intent::LookForCommandLine`, and the model looks for the command line again.
 
-use crate::{Change, Check, FoundCommandLine, OwnCommandLine, PitboardError, Renewed, Schedule};
+use crate::{Change, Check, FoundCommandLine, OwnCommandLine, PitboardError, Schedule};
 
 /// How many changes the activity pane reads, the newest of them, as ActivityPane.swift
 /// asked MachineModel.swift's `readChanges` for them.
@@ -28,11 +28,6 @@ pub(crate) struct MachineState {
     /// The command line inside this copy of the app, as last read with the schedule, a
     /// change to it, the repair at launch or the command line found.
     pub(crate) own: Option<OwnCommandLine>,
-    /// What the last renewal came to, or why it was refused.
-    pub(crate) renewals: Option<Result<Vec<Renewed>, PitboardError>>,
-    /// A renewal under way, from the moment it is asked for until the read after it is
-    /// over, as MachineModel.swift's `renewing` stayed set until its `renewed` had read.
-    pub(crate) renewing: bool,
     /// Doctor's checks, the last ones made.
     pub(crate) checks: Vec<Check>,
     /// Checks under way. Counted, as reads are: one asked for while another runs answers

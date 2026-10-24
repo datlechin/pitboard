@@ -37,17 +37,18 @@
 //! A test hands `apply` answers in whatever order it likes, which is how the interleavings
 //! the Swift model's tests reached with gates are reached here without a thread.
 
-use super::advice::{Advice, Told, rename_told};
+use super::advice::{Advice, HeadsUp, Told, rename_told};
 use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
-use super::{Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
-use super::{RunOutNotice, RunningSignIn, Sheet, WindowRequest};
+use super::{AtLimit, Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
+use super::{RunOutNotice, RunningSignIn, Sheet, Tip, WindowRequest};
 use crate::account_windows::records::{Entry, Loaded};
+use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
-    FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Renewed, Schedule, Status, Switch,
-    Switched, Tool, Usage, Warning,
+    FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
+    Tool, Usage, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, Refusals};
@@ -56,7 +57,6 @@ use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Foreseen, Left, Stowed, WaitStep};
-use pitboard_core::usage::same_reset;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
 
@@ -159,6 +159,8 @@ pub(crate) enum Job {
     /// Which tools' programs were found. Its own lane, so it never waits behind a read on
     /// the network, and a read can wait for it.
     AskInstalled,
+    /// Whose login `provider`'s tool stores, from the login alone.
+    ReadSignedIn { provider: String },
     /// Whether a running app holds the login of the tool `qualified` is of, which the core
     /// answers from the process list and the app from what is running.
     Holding { qualified: String, then: After },
@@ -261,8 +263,6 @@ pub(crate) enum Job {
     /// on is not asked of the scheduler where this copy of the app has no command line a
     /// schedule would keep reaching.
     SetSchedule { on: bool },
-    /// Renew every parked login that is due.
-    Renew,
     /// Make every check `pitboard doctor` makes.
     Check,
     /// Read the newest `limit` changes Pitboard made.
@@ -286,8 +286,6 @@ pub(crate) struct Ticket {
     /// What the change it is the read after warned of, by its number in `said_after_read`,
     /// which is said once it has landed.
     saying: Option<u64>,
-    /// Whether it is the read after a renewal, whose landing ends the renewal.
-    after_renewal: bool,
     /// Whether it is the read after a change of this app's own to the account index other
     /// than a switch, whose landing ends that change's hold on the index.
     after_change: bool,
@@ -377,6 +375,10 @@ pub(crate) enum Answer {
         changed: i64,
         /// When the usage readings were last written, in epoch milliseconds.
         measured: i64,
+    },
+    SignedIn {
+        provider: String,
+        email: Option<String>,
     },
     Installed {
         tools: Vec<Tool>,
@@ -533,10 +535,6 @@ pub(crate) enum Answer {
         own: OwnCommandLine,
         outcome: Scheduled,
     },
-    /// What renewing every parked login that was due came to, or why it was refused.
-    Renewed {
-        renewals: Result<Vec<Renewed>, PitboardError>,
-    },
     /// Doctor's checks, or `None` where this build makes none.
     Checked {
         checks: Option<Vec<Check>>,
@@ -637,8 +635,6 @@ struct Asked {
     /// What the change that asked warned of, by its number in `said_after_read`, which is
     /// said once this read lands.
     saying: Option<u64>,
-    /// Whether a renewal asked, which is over once this read is.
-    after_renewal: bool,
     /// Whether a change of this app's own to the account index asked, other than a switch,
     /// which holds the index until this read is over.
     after_change: bool,
@@ -1056,6 +1052,8 @@ pub(crate) struct State {
     auto_refusals: Refusals,
     /// The app's own preferences, kept in Pitboard's directory.
     pub(crate) preferences: Preferences,
+    // as the app's system last said, which nothing guesses at before
+    pub(crate) opens_at_login: Option<bool>,
     /// Whether the preferences have been read. Until they are, and for good where they
     /// could not be, nothing is written over what may be in their file.
     preferences_read: bool,
@@ -1114,6 +1112,7 @@ impl State {
             window: WindowRequest {
                 serial: 0,
                 pane: None,
+                settings: false,
             },
             signing_in: None,
             sign_in_holding: None,
@@ -1135,6 +1134,7 @@ impl State {
             warm: Warming::default(),
             told: Told::new(),
             preferences: Preferences::default(),
+            opens_at_login: None,
             preferences_read: false,
             loading_kept: false,
             standing_in: false,
@@ -1357,7 +1357,15 @@ impl State {
                     });
                 }
             }
-            Intent::SetAutoSwitch { on, at } => self.auto_switch_set(on, at, jobs),
+            Intent::SetAtLimit { choice, at } => self.at_limit_set(choice, at, jobs),
+            Intent::DeclineTip { tip } => self.put_away(tip, jobs),
+            Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
+            // Keeping the choice shown there writes nothing, and the tip has done its work.
+            Intent::ShowLimits => {
+                self.show_settings();
+                self.put_away(Tip::AtLimit, jobs);
+            }
+            Intent::NameSignedIn { provider } => jobs.push(Job::ReadSignedIn { provider }),
             Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
             Intent::SetWarmRange { from, to } => jobs.push(Job::SetWarmRange { from, to }),
             Intent::WarmNow { qualified } => {
@@ -1405,6 +1413,21 @@ impl State {
                 self.left = None;
             }
             Intent::ShowWindow { pane } => self.show_window(pane),
+            Intent::NotificationClicked { argument } => match Clicked::read(&argument) {
+                Clicked::Accounts => self.show_window(Some(Pane::Accounts)),
+                Clicked::Limits => self.show_settings(),
+                Clicked::Switch(qualified) => {
+                    self.intent(Intent::SwitchTo { qualified }, now, jobs);
+                }
+                Clicked::SignInAgain(qualified) => {
+                    let (provider, label) = split(&qualified);
+                    let sheet = Sheet::SignInAgain {
+                        provider: provider.to_owned(),
+                        label: label.to_owned(),
+                    };
+                    self.present_sheet(sheet, jobs);
+                }
+            },
             Intent::DismissFailure => self.presented = None,
             Intent::DismissSheetFailure => self.sheet_failure = None,
             Intent::LookForTools => {
@@ -1478,13 +1501,6 @@ impl State {
             Intent::SetSchedule { on } => {
                 if self.machine.schedule(on) {
                     jobs.push(Job::SetSchedule { on });
-                }
-            }
-            // Its button holds back while one runs, as the Swift settings' did.
-            Intent::RenewNow => {
-                if !self.machine.renewing {
-                    self.machine.renewing = true;
-                    self.change(Job::Renew, jobs);
                 }
             }
             Intent::LookForCommandLine => jobs.push(Job::FindCommandLine),
@@ -2059,31 +2075,20 @@ impl State {
     /// read, seconds after it was said, with the account still out. One per tool, the newer
     /// first. Nothing while what was told is still being read.
     ///
-    /// What is new this launch is notified only where no launch has notified it at the same
-    /// reset, by the core's rule for one reset, and the record of that is kept.
+    /// What reached the share chosen is notified only where no launch has notified it at the
+    /// same reset, by the core's rule for one reset, and the record of that is kept.
     fn advise(&mut self, read: &Status, jobs: &mut Vec<Job>) {
         if self.loading_kept {
             return;
         }
         let tools = crate::tools_on(pitboard_core::host::OS);
         let new = Advice::about(read, &tools, &self.told_this_launch);
-        let mut kept = false;
         for advice in &new {
-            let (key, at) = (advice.key_of(), advice.window.resets_at.unwrap_or(0));
-            self.told_this_launch.insert(key.clone(), at);
-            if self
-                .told
-                .get(&key)
-                .is_some_and(|&told| same_reset(told, at))
-            {
-                continue;
-            }
-            self.told.insert(key, at);
-            kept = true;
-            jobs.push(Job::Post {
-                notice: crate::present::run_out_notice(advice),
-            });
+            self.told_this_launch
+                .insert(advice.key_of(), advice.window.resets_at.unwrap_or(0));
         }
+        let mut kept = self.notify_at_limit(read, &tools, jobs);
+        kept |= self.tell_unusable(read, jobs);
         if kept {
             jobs.push(Job::KeepTold {
                 told: self.told.clone(),
@@ -2101,29 +2106,93 @@ impl State {
             .collect();
     }
 
-    /// The settings' switch for switching Claude Code by itself, with its share. Taken only
-    /// once the preferences have been read, so it is never kept over a file that could not
-    /// be, and never lost under what the file says once it is. Turned on, or at another
-    /// share, the core looks at once. Turned off, nothing is said under it, and a refusal's
-    /// wait is over: turned on again, it is somebody asking.
-    fn auto_switch_set(&mut self, on: bool, at: u8, jobs: &mut Vec<Job>) {
+    // Under Switch, Claude Code's own notices say what switching came to.
+    fn notify_at_limit(&mut self, read: &Status, tools: &[Tool], jobs: &mut Vec<Job>) -> bool {
+        let choice = self.preferences.at_limit();
+        if choice == AtLimit::Nothing {
+            return false;
+        }
+        let at = self.preferences.threshold().percent();
+        let mut kept = false;
+        for heads_up in HeadsUp::about(read, tools, &self.told, at) {
+            if choice == AtLimit::Switch && heads_up.provider == ProviderId::Claude.code() {
+                continue;
+            }
+            self.told
+                .insert(heads_up.key_of(), heads_up.window.resets_at.unwrap_or(0));
+            kept = true;
+            jobs.push(Job::Post {
+                notice: crate::present::at_limit_notice(&heads_up, read.now),
+            });
+        }
+        kept
+    }
+
+    // Kept with what was told, so it is posted once for each account across launches, until
+    // its login can be used again. One replaced outside Pitboard has a notice of its own.
+    fn tell_unusable(&mut self, read: &Status, jobs: &mut Vec<Job>) -> bool {
+        let unusable: BTreeMap<String, &Account> = read
+            .accounts
+            .iter()
+            .filter(|account| {
+                crate::present::needs_sign_in(account)
+                    && account.stale.as_deref() != Some("login_replaced")
+            })
+            .map(|account| (format!("{UNUSABLE}{}", account.id), account))
+            .collect();
+        let before = self.told.len();
+        self.told
+            .retain(|key, _| !key.starts_with(UNUSABLE) || unusable.contains_key(key));
+        let mut kept = self.told.len() != before;
+        let tools: BTreeSet<&str> = read
+            .accounts
+            .iter()
+            .map(|account| account.provider.as_str())
+            .collect();
+        for (key, account) in unusable {
+            if self.told.insert(key, 0).is_none() {
+                kept = true;
+                let tool = (tools.len() > 1).then(|| {
+                    ProviderId::parse(&account.provider)
+                        .map_or_else(|| account.provider.clone(), |tool| tool.name().into())
+                });
+                jobs.push(Job::Post {
+                    notice: crate::present::unusable_notice(account, tool),
+                });
+            }
+        }
+        kept
+    }
+
+    // Taken only once the preferences have been read, so never kept over a file that could
+    // not be, nor lost under what the file says. Leaving Switch ends what it said and its wait.
+    fn at_limit_set(&mut self, choice: AtLimit, at: u8, jobs: &mut Vec<Job>) {
         if !self.preferences_read {
             return;
         }
         let at = Some(i64::from(Threshold::clamped(i64::from(at)).percent()));
-        if self.preferences.auto_switch == on && self.preferences.auto_switch_at == at {
+        if self.preferences.at_limit() == choice && self.preferences.auto_switch_at == at {
             return;
         }
-        self.preferences.auto_switch = on;
+        self.preferences.choose(choice);
         self.preferences.auto_switch_at = at;
         jobs.push(Job::KeepPreferences {
             preferences: self.preferences.clone(),
         });
-        if !on {
+        if choice != AtLimit::Switch {
             self.auto_standing = None;
             self.auto_refusals.ended();
         }
+        if let Some(status) = self.status.clone()
+            && !self.standing_in
+        {
+            self.advise(&status, jobs);
+        }
         self.look_to_switch(jobs);
+    }
+
+    fn switches(&self) -> bool {
+        self.preferences.at_limit() == AtLimit::Switch
     }
 
     /// Asks the core's look whether to switch Claude Code by itself, where somebody turned
@@ -2131,7 +2200,7 @@ impl State {
     /// on, and every `decide_every`. The look reads files alone and claims nothing, so it is
     /// asked whatever else is under way.
     fn look_to_switch(&mut self, jobs: &mut Vec<Job>) {
-        if !self.preferences_read || !self.preferences.auto_switch {
+        if !self.preferences_read || !self.switches() {
             self.decide = Timer::Off;
             return;
         }
@@ -2144,7 +2213,7 @@ impl State {
     /// The core's look is next due `decide_every` from now, or as a refusal's wait ends where
     /// that comes first, while switching by itself is on and the model runs by itself.
     fn decide_later(&mut self, now: Now) {
-        self.decide = if self.started && self.preferences.auto_switch {
+        self.decide = if self.started && self.switches() {
             Timer::Due(
                 self.auto_refusals
                     .due(now.running, self.cadence.decide_every),
@@ -2164,7 +2233,7 @@ impl State {
         jobs: &mut Vec<Job>,
     ) {
         self.decide_later(now);
-        if !self.preferences.auto_switch {
+        if !self.switches() {
             return;
         }
         match looked {
@@ -2248,7 +2317,7 @@ impl State {
                 }));
                 self.switched(&qualified, None, Ok(switched), now, jobs);
             }
-            _ if !self.preferences.auto_switch => self.switching = None,
+            _ if !self.switches() => self.switching = None,
             Ok(outcome) => {
                 self.switching = None;
                 self.auto_stands(outcome, jobs);
@@ -2419,7 +2488,6 @@ impl State {
             timed: asked.timed,
             after_switch: asked.after_switch,
             saying: asked.saying,
-            after_renewal: asked.after_renewal,
             after_change: asked.after_change,
         };
         if let Some(at) = self.updated_ms
@@ -2458,9 +2526,6 @@ impl State {
         }
         if ticket.after_change {
             self.change_over();
-        }
-        if ticket.after_renewal {
-            self.machine.renewing = false;
         }
         if let Some(number) = ticket.saying
             && let Some(at) = self
@@ -2504,6 +2569,15 @@ impl State {
             Answer::WarmedUp { asked, done } => self.warmed_up(asked, done, now, jobs),
             Answer::WarmSet { done } => self.warm_set(done, now, jobs),
             Answer::Looked { changed, measured } => self.looked(changed, measured, now, jobs),
+            Answer::SignedIn { provider, email } => {
+                let sheet = match email {
+                    Some(email) => Sheet::Name { provider, email },
+                    None => Sheet::Add {
+                        provider: Some(provider),
+                    },
+                };
+                self.present_sheet(sheet, jobs);
+            }
             Answer::Installed { mut tools } => {
                 let gone = self.gone_since_asked.take();
                 if let Some(gone) = &gone {
@@ -2657,10 +2731,6 @@ impl State {
                     jobs.push(Job::ReadSchedule { after_change: true });
                 }
             }
-            Answer::Renewed { renewals } => {
-                self.machine.renewals = Some(renewals);
-                self.read_after_renewal(now, jobs);
-            }
             Answer::Checked { checks } => self.machine.checked(checks, now.epoch()),
             Answer::Logged { changes } => self.machine.logged(changes),
             Answer::CommandLineFound { found, own } => {
@@ -2672,6 +2742,13 @@ impl State {
                 Job::ReadOffline { why } => self.known(why, None, now, jobs),
                 Job::Look => self.look_over(now),
                 Job::AskInstalled => self.installed_over(now, jobs),
+                // The tool's own sign-in names the account in its place.
+                Job::ReadSignedIn { provider } => self.present_sheet(
+                    Sheet::Add {
+                        provider: Some(provider),
+                    },
+                    jobs,
+                ),
                 // As the Swift model took a holding it could not read: nothing holds it.
                 Job::Holding { qualified, then } => self.held(qualified, None, then, jobs),
                 // Nothing is switched under an app nobody saw go.
@@ -2765,28 +2842,10 @@ impl State {
                 }
                 // What it did is not known: the schedule is read back to show where it is.
                 Job::SetSchedule { .. } => jobs.push(Job::ReadSchedule { after_change: true }),
-                // What it renewed is not known, and is not said; the accounts are read all
-                // the same, to show where things stand.
-                Job::Renew => self.read_after_renewal(now, jobs),
                 Job::Check => self.machine.checked(None, now.epoch()),
                 Job::ReadLog { .. } | Job::FindCommandLine => {}
             },
         }
-    }
-
-    /// The read after a renewal, asking every service, as MachineModel.swift's `renewed` had
-    /// the accounts read as somebody asking: the renewal is over once it is.
-    fn read_after_renewal(&mut self, now: Now, jobs: &mut Vec<Job>) {
-        self.refresh(
-            Asked {
-                fresh: true,
-                after_renewal: true,
-                after_change: true,
-                ..Asked::default()
-            },
-            now,
-            jobs,
-        );
     }
 
     /// The tool of the sign-in `id` has started, or could not be. `Err(None)` is a start
@@ -3014,12 +3073,16 @@ impl State {
         }
         match read {
             Ok(read) => {
+                let read = match &self.status {
+                    Some(shown) => refusals_kept(read, shown),
+                    None => read,
+                };
                 self.stuck = read
                     .warnings
                     .iter()
                     .any(|w| w.code == "recovery_undetermined");
                 self.forget_switches_undone(&read);
-                self.tell_replaced(&read.warnings, jobs);
+                self.tell_replaced(&read, jobs);
                 self.warnings = read.warnings.clone();
                 self.advise(&read, jobs);
                 self.windows.read_enrolled(&read, jobs);
@@ -3069,17 +3132,26 @@ impl State {
     /// posted once for its account while it stands, since nobody may have the window open to
     /// see it: again only once a read no longer says it and a later one does. Its words name
     /// whose login is stored now, which every switch changes, so it is known by its account.
-    fn tell_replaced(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
-        self.replaced_told = self.post_replaced(warnings, jobs);
+    fn tell_replaced(&mut self, read: &Status, jobs: &mut Vec<Job>) {
+        self.replaced_told = self.post_replaced(&read.warnings, &read.accounts, jobs);
     }
 
     // A failed read or a refused change says what it found, and nothing of what it leaves out.
     fn tell_replaced_found(&mut self, warnings: &[Warning], jobs: &mut Vec<Job>) {
-        let found = self.post_replaced(warnings, jobs);
+        let accounts = self
+            .status
+            .as_ref()
+            .map_or(&[][..], |status| &status.accounts);
+        let found = self.post_replaced(warnings, accounts, jobs);
         self.replaced_told.extend(found);
     }
 
-    fn post_replaced(&self, warnings: &[Warning], jobs: &mut Vec<Job>) -> BTreeSet<String> {
+    fn post_replaced(
+        &self,
+        warnings: &[Warning],
+        accounts: &[Account],
+        jobs: &mut Vec<Job>,
+    ) -> BTreeSet<String> {
         let mut replaced = BTreeSet::new();
         for warning in warnings
             .iter()
@@ -3089,8 +3161,12 @@ impl State {
                 continue;
             };
             if replaced.insert(account.to_owned()) && !self.replaced_told.contains(account) {
+                let again = accounts
+                    .iter()
+                    .find(|enrolled| enrolled.id == account)
+                    .and_then(|enrolled| enrolled.qualified.as_deref());
                 jobs.push(Job::Post {
-                    notice: crate::present::standing_notice(warning),
+                    notice: crate::present::standing_notice(warning, again),
                 });
             }
         }
@@ -3134,7 +3210,7 @@ impl State {
                 if let Some(read) = read {
                     // A read that asks nobody knows no plan for a login nobody enrolled.
                     let read = match &self.status {
-                        Some(shown) => plans_kept(read, shown),
+                        Some(shown) => plans_kept(refusals_kept(read, shown), shown),
                         None => read,
                     };
                     // A read that asks nobody says a switch is stuck wherever that can be
@@ -3994,8 +4070,27 @@ impl State {
 
     /// Asks for the main window, on `pane` when it matters which.
     fn show_window(&mut self, pane: Option<Pane>) {
-        self.window.serial += 1;
-        self.window.pane = pane;
+        self.window = WindowRequest {
+            serial: self.window.serial + 1,
+            pane,
+            settings: false,
+        };
+    }
+
+    fn put_away(&mut self, tip: Tip, jobs: &mut Vec<Job>) {
+        if self.preferences.decline(tip) && self.preferences_read {
+            jobs.push(Job::KeepPreferences {
+                preferences: self.preferences.clone(),
+            });
+        }
+    }
+
+    fn show_settings(&mut self) {
+        self.window = WindowRequest {
+            serial: self.window.serial + 1,
+            pane: None,
+            settings: true,
+        };
     }
 
     /// A look now, as the timer's would be, for a test that must not wait for the timer.
@@ -4025,6 +4120,41 @@ fn plans_kept(mut read: Status, shown: &Status) -> Status {
             .iter()
             .find(|a| a.provider == account.provider && a.id == account.id)
             .and_then(|a| a.plan.clone());
+    }
+    read
+}
+
+// What a read says of a login it did not ask its service about.
+const UNASKED: [&str; 7] = [
+    "not_asked",
+    "asked_recently",
+    "unreachable",
+    "rate_limited",
+    "server_error",
+    "interrupted",
+    "parked_access_expired",
+];
+
+// `read`, where a parked login `shown` says its service refused, and `read` did not ask about
+// again, is still refused. Parked again, it is another login.
+fn refusals_kept(mut read: Status, shown: &Status) -> Status {
+    for account in read.accounts.iter_mut().filter(|account| {
+        !account.signed_in
+            && account
+                .stale
+                .as_deref()
+                .is_some_and(|stale| UNASKED.contains(&stale))
+    }) {
+        if let Some(refused) = shown.accounts.iter().find(|refused| {
+            refused.id == account.id
+                && refused.parked == account.parked
+                && refused.stale.as_deref() == Some("login_refused")
+        }) {
+            account.stale.clone_from(&refused.stale);
+            account
+                .stale_explanation
+                .clone_from(&refused.stale_explanation);
+        }
     }
     read
 }

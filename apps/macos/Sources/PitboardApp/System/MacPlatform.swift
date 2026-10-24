@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import PitboardKit
 // Its types are not marked Sendable, though Notification Center is meant to be asked from
 // any thread, as the model asks it from a thread of its own.
@@ -75,41 +76,43 @@ final class MacAppControl: AppControl, @unchecked Sendable {
 
 // MARK: - Notifications
 
-/// Notification Center, for the model's notice that an account in use has run out, with a
-/// Switch button that asks the model to switch, and for what came of switching Claude Code by
-/// itself, where somebody turned that on, which has no button. Switching from a run-out is the
-/// button's, never the notification's.
+// A click on a notice, or on its button, hands the model back the text it gave.
 final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterDelegate,
     @unchecked Sendable
 {
-    // Unchecked because `centre` is set once, and `onSwitch` is the main actor's.
-    nonisolated static let category = "limit"
-    nonisolated static let action = "switch"
+    // Unchecked because `centre` is set once, and `onClick` is the main actor's.
+    nonisolated static let action = "button"
+    nonisolated static let clicked = "clicked"
 
-    /// Nil where nothing is posted. Notification Center belongs to an app bundle: asked for
-    /// anywhere else, including a test bundle, it stops the process.
+    // Nil outside an app bundle, where Notification Center stops the process.
     private let centre: UNUserNotificationCenter?
-    /// Asked to switch to the account a Switch button names, its label with its tool.
-    @MainActor var onSwitch: ((String) -> Void)?
+    @MainActor var onClick: ((String) -> Void)?
 
-    /// Claims the delegate and the category with its Switch button, which asks nothing of
-    /// anyone and has to happen at launch: a notification left in Notification Center and
-    /// clicked later, including right after an update relaunches the app, is delivered the
-    /// moment there is someone to deliver it to.
+    // At launch: a notification clicked later, after an update relaunches the app too, is
+    // delivered as soon as there is a delegate, and shows its button by a category registered
+    // already.
     init(delivering: Bool) {
         centre = delivering ? .current() : nil
         super.init()
         guard let centre else { return }
         centre.delegate = self
-        centre.setNotificationCategories([
-            UNNotificationCategory(
-                identifier: Self.category,
-                actions: [
-                    UNNotificationAction(
-                        identifier: Self.action, title: "Switch", options: [.foreground])
-                ],
-                intentIdentifiers: [])
-        ])
+        centre.setNotificationCategories(Self.categories(notificationButtons()))
+    }
+
+    // macOS refuses Pitboard's own activation from the background, so a button whose window
+    // always opens asks the system to bring the app forward.
+    static func categories(_ buttons: [NotificationButtonKind]) -> Set<UNNotificationCategory> {
+        Set(
+            buttons.map { button in
+                UNNotificationCategory(
+                    identifier: button.title,
+                    actions: [
+                        UNNotificationAction(
+                            identifier: action, title: button.title,
+                            options: button.opensWindow ? [.foreground] : [])
+                    ],
+                    intentIdentifiers: [])
+            })
     }
 
     static func content(of notice: RunOutNotice) -> UNNotificationContent {
@@ -117,16 +120,24 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         content.title = notice.title
         if let subtitle = notice.subtitle { content.subtitle = subtitle }
         content.body = notice.body
-        if let switchTo = notice.switchTo {
-            content.categoryIdentifier = category
-            content.userInfo = ["label": switchTo]
+        content.userInfo = [clicked: notice.clicked]
+        if let button = notice.button {
+            content.categoryIdentifier = button.title
+            content.userInfo[action] = button.clicked
         }
         return content
     }
 
-    /// Permission is asked for when there is finally something to say, not at launch, where
-    /// a prompt arrives before the app has shown what it is for. Refused is not an error: the
-    /// window says the same either way.
+    // An older Pitboard's notification has no click of its own, which the model reads as Accounts.
+    static func argument(of response: String, in userInfo: [AnyHashable: Any]) -> String? {
+        switch response {
+        case action: userInfo[action] as? String
+        case UNNotificationDefaultActionIdentifier: userInfo[clicked] as? String ?? ""
+        default: nil
+        }
+    }
+
+    // Permission is asked at the first notice, not at launch; a refusal is no error.
     func post(notice: RunOutNotice) throws {
         guard let centre else { return }
         let request = UNNotificationRequest(
@@ -136,13 +147,48 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         }
     }
 
+    // Nil where nothing is posted.
+    func authorization() async -> UNAuthorizationStatus? {
+        guard let centre else { return nil }
+        return await centre.notificationSettings().authorizationStatus
+    }
+
     func userNotificationCenter(
         _ centre: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
-        guard response.actionIdentifier == Self.action,
-            let label = response.notification.request.content.userInfo["label"] as? String
+        guard
+            let argument = Self.argument(
+                of: response.actionIdentifier,
+                in: response.notification.request.content.userInfo)
         else { return }
-        await MainActor.run { onSwitch?(label) }
+        await MainActor.run { onClick?(argument) }
+    }
+}
+
+// Read on each visit and on activation: notifications are turned on in System Settings.
+@MainActor
+@Observable
+final class NotificationsAllowed {
+    @ObservationIgnored private let status: @MainActor () async -> UNAuthorizationStatus?
+    private(set) var off = false
+
+    init(status: @escaping @MainActor () async -> UNAuthorizationStatus?) {
+        self.status = status
+    }
+
+    func read() async {
+        off = await status() == .denied
+    }
+
+    func openSystemSettings() {
+        let id = Bundle.main.bundleIdentifier ?? ""
+        guard
+            let settings = URL(
+                string:
+                    "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)"
+            )
+        else { return }
+        NSWorkspace.shared.open(settings)
     }
 }
 

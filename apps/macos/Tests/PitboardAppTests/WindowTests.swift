@@ -1,5 +1,6 @@
 import AppKit
 import PitboardKit
+import SwiftUI
 import Testing
 
 @testable import PitboardApp
@@ -55,7 +56,9 @@ import Testing
         MenuBarShows.allCases.map(\.title) == ["Account and usage", "Usage only", "Icon only"])
     #expect(MenuBarShows.allCases.map(\.rawValue) == ["nameAndUsage", "usage", "icon"])
     #expect(MenuBarShows.allCases.allSatisfy { $0.id == $0.rawValue })
-    let bar = MenuBarText(nameAndUsage: "work 42%", usage: "42%", spoken: "Pitboard, work 42%")
+    let bar = MenuBarText(
+        nameAndUsage: "work 42%", usage: "42%", spoken: "Pitboard, work 42%", level: .plenty,
+        attention: false, tip: "Pitboard\nwork: 5-hour 42%")
     #expect(MenuBarShows.allCases.map { $0.text(of: bar) } == ["work 42%", "42%", ""])
 }
 
@@ -66,6 +69,31 @@ import Testing
     #expect(Set(levels.map(\.symbol)).count == levels.count)
     let severities: [Severity] = [.info, .warning, .error]
     #expect(Set(severities.map(\.symbol)).count == severities.count)
+}
+
+@Test func aShortcutMenuHidesWhatCannotBeChosenAndTheMenuBarDimsIt() {
+    let now = ItemOffer(
+        title: "Warm Up Now", intent: .warmNow(qualified: "claude/work"), enabled: false,
+        confirm: nil)
+    let rename = ItemOffer(
+        title: "Rename…",
+        intent: .presentSheet(sheet: .rename(provider: "claude", label: "work")),
+        enabled: true, confirm: nil)
+    #expect(AccountMenuItems.shown([rename, now], in: .shortcutMenu) == [rename])
+    #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])
+}
+
+// Each row has a grid of its own, so an empty pace column widened its bars past another row's.
+@MainActor
+@Test func theBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid() {
+    func width(_ pace: LimitPace?) -> CGFloat {
+        let limit = LimitRow(
+            name: "5-hour", short: "5h", percent: 42, figure: "42%", level: .plenty,
+            resets: "resets in 2h 10m", pace: pace, spoken: "5-hour limit 42% used")
+        return NSHostingView(rootView: UsageBars(limits: [limit])).fittingSize.width
+    }
+    let over = LimitPace(expected: 30, standing: .over, said: "27% over pace", help: "")
+    #expect(width(nil) == width(over))
 }
 
 /// A sheet put up in place of another is told apart from it, so the window puts it up

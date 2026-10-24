@@ -1,5 +1,6 @@
 using System.Net;
 using System.Runtime.InteropServices;
+using Pitboard.Core;
 
 namespace Pitboard.Windows.Tests;
 
@@ -75,7 +76,7 @@ public sealed class SparkleUpdatesTests
             var updates = Made(sparkle, build, key);
 
             Assert.IsFalse(updates.Available);
-            Assert.AreEqual(NoUpdates.NoKey, updates.Refusal);
+            Assert.AreEqual(PitboardFfiMethods.NoUpdateKey(), updates.Refusal);
             Assert.IsNull(sparkle.Key, "WinSparkle was handed a key");
         }
     }

@@ -19,15 +19,15 @@ public sealed class WindowRequests
         return true;
     }
 
-    // Null is the settings page, which no request asks for.
-    public Pane? PaneFor(WindowRequest request, Pane? pane)
+    // Null is the settings page, which one long page scrolls to Limits for, as macOS opens its Limits pane.
+    public (Pane? Pane, bool Limits) PaneFor(WindowRequest request, Pane? pane)
     {
         if (request.Serial <= _shown)
         {
-            return pane;
+            return (pane, false);
         }
 
         _shown = request.Serial;
-        return request.Pane ?? pane;
+        return request.Settings ? (null, true) : (request.Pane ?? pane, false);
     }
 }

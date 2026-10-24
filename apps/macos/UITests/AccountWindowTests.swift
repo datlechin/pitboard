@@ -162,13 +162,7 @@ final class AccountWindowTests: FixtureTestCase {
         let row = app.accountRow("codex/spare")
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.rightClick()
-        // The File menu has an Open chatgpt.com submenu too; the shortcut menu is the one
-        // with the account's own items.
-        let menu = app.menus.containing(
-            NSPredicate(format: "title == %@", "Copy Email Address")
-        )
-        .firstMatch
-        menu.menuItems["Open chatgpt.com"].click()
+        app.shortcutMenu.menuItems["Open chatgpt.com"].click()
         XCTAssertTrue(app.accountWindow("spare").waitForExistence(timeout: 10))
     }
 

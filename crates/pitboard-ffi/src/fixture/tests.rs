@@ -9,8 +9,8 @@ use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
 use crate::model::testing::{Posted, StandInApps};
 use crate::model::{
-    AppControl, Intent, LocalTime, ModelListener, Notifications, Pane, PitboardModel,
-    PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot,
+    AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
+    PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
 use crate::present::words::titled;
@@ -1660,34 +1660,34 @@ fn a_machine_without_claude_code_says_so_first() {
     model.shutdown();
 }
 
-/// A machine nobody is signed in on offers an account, as AccountsWindowTests.swift's
-/// testAnEmptyMachineOffersAnAccount reads it, and only the first launch ever opens the
-/// window by itself, as its testTheFirstLaunchOpensTheWindow reads it.
+/// A machine nobody is signed in on, with Codex installed, offers to use Pitboard with it, and
+/// once that is declined, an account, as AccountsWindowTests.swift's
+/// testAnEmptyMachineOffersAnAccount reads it. Only the first launch ever opens the window by
+/// itself, as its testTheFirstLaunchOpensTheWindow reads it.
 #[test]
 fn a_machine_nobody_is_signed_in_on_offers_an_account() {
     for world in [World::Empty, World::FirstLaunch] {
         let launched = made(world);
         let (model, told) = started(&launched);
-        let shown = told.until("the accounts read", read_in);
-        match world {
-            World::NoClaudeCode => {
-                assert_eq!(shown.footing, Footing::NoClaudeCode);
-                assert_eq!(
-                    shown
-                        .menu_notices
-                        .install
-                        .as_ref()
-                        .map(|item| item.title.as_str()),
-                    Some("Claude Code isn’t installed")
-                );
-            }
-            _ => assert!(
-                matches!(&shown.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == titled(OS, "No Accounts", "No accounts")),
-                "{}: {:?}",
-                world.name(),
-                shown.accounts_shown
-            ),
-        }
+        let shown = told.until("the Codex tip", |snapshot| {
+            read_in(snapshot) && snapshot.footing == Footing::CodexUnused
+        });
+        assert_eq!(
+            shown.accounts_shown,
+            AccountsShown::List,
+            "{}",
+            world.name()
+        );
+        model.send(Intent::DeclineTip { tip: Tip::UseCodex });
+        let declined = told.until("the Codex tip put away", |snapshot| {
+            snapshot.footing == Footing::NoOneSignedIn
+        });
+        assert!(
+            matches!(&declined.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == titled(OS, "No Accounts", "No accounts")),
+            "{}: {:?}",
+            world.name(),
+            declined.accounts_shown
+        );
         // The window is asked for once the preferences say the app has never been seen, and
         // they are read on a lane of their own, so the accounts can be read first: in 2 of
         // 800 copies of this test run 16 at a time on Linux, firstLaunch's had not yet asked.
@@ -1783,7 +1783,9 @@ fn one_account_is_offered_a_second_until_not_now() {
     model.send(Intent::DeclineSecondAccount {
         provider: "claude".into(),
     });
-    told.until("the nudge put away", |snapshot| snapshot.setup.is_none());
+    told.until("the next tip, for Codex", |snapshot| {
+        snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some("Use Pitboard with Codex")
+    });
     let started = Instant::now();
     while !launched
         .core
@@ -1824,20 +1826,14 @@ fn activity_lists_every_switch_above_every_enrolment() {
     model.shutdown();
 }
 
-/// Daily renewal turns on, says how often it runs, and Renew Now renews the one parked login
-/// that is due, as PanesAndSettingsTests.swift's testDailyRenewal reads it.
+// As PanesAndSettingsTests.swift's testDailyRenewal reads it.
 #[test]
-fn daily_renewal_turns_on_and_renew_now_says_what_it_did() {
+fn daily_renewal_turns_on() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     model.send(Intent::SetSchedule { on: true });
-    let on = told.until("the schedule on", |snapshot| {
+    told.until("the schedule on", |snapshot| {
         snapshot.machine.schedule.on && !snapshot.machine.schedule.changing
-    });
-    assert_eq!(on.machine.schedule.runs.as_deref(), Some("Every day"));
-    model.send(Intent::RenewNow);
-    told.until("the renewal said", |snapshot| {
-        snapshot.machine.renewal.note == "Renewed one." && !snapshot.machine.renewal.renewing
     });
     model.shutdown();
 }
@@ -2026,14 +2022,14 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
 
 /// A rename to a name another account has is refused in its sheet, and a free name is
 /// taken, as AccountsWindowTests.swift's testRenamingAnAccount reads it; the account in use
-/// offers no Forget, and any other is forgotten, as its testTheAccountInUseOffersNoForget
-/// and testForgettingAsksFirst read it.
+/// offers Forget dimmed, which its shortcut menu leaves out, and any other is forgotten, as
+/// its testTheAccountInUseOffersNoForget and testForgettingAsksFirst read it.
 #[test]
 fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     let shown = told.until("the accounts read", read_in);
-    // Each row's own menu, by its items' titles, with Forget… last where it is offered.
+    // Each row's own menu, by its items' titles, with Forget… last.
     let menus: Vec<(String, Vec<String>)> = shown
         .sections
         .iter()
@@ -2051,27 +2047,21 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let titles = |titles: &[&str]| titles.iter().map(|&title| title.to_owned()).collect();
     let again = titled(OS, "Sign In Again…", "Sign in again…");
     let now = titled(OS, "Warm Up Now", "Warm up now");
-    let automatically = titled(OS, "Warm Up Automatically", "Warm up automatically");
     assert_eq!(
         menus,
         [
             (
                 "work".into(),
-                titles(&[&again, "Rename…", &now, &automatically])
+                titles(&["Use work", &again, "Rename…", &now, "Forget…"])
             ),
             (
                 "personal".into(),
-                titles(&[
-                    "Use personal",
-                    &again,
-                    "Rename…",
-                    &now,
-                    &automatically,
-                    "Forget…"
-                ])
+                titles(&["Use personal", &again, "Rename…", &now, "Forget…"])
             ),
         ]
     );
+    let work = &shown.sections[0].accounts[0];
+    assert!(!work.offers[0].enabled && work.forget.as_ref().is_some_and(|f| !f.enabled));
 
     model.send(Intent::PresentSheet {
         sheet: Sheet::Rename {
@@ -2328,10 +2318,8 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
 /// check called "Keychain" and warned that daily renewal was off, which made "One thing is
 /// worth looking at.". The core has no check called "Keychain", and says nothing of a
 /// schedule that is not there. oneTool's one thing is personal's parked login instead, which
-/// is the world's own doing: it lasts two days more, so that Renew Now renews it, where the
-/// Swift fixture's lasted eleven. Renew Now finds a parked login due that the read before it
-/// left alone only while its refresh token lapses within three days, which is when doctor
-/// warns of it, since both ask `doctor::renewal_due`.
+/// is the world's own doing: it lasts two days more, where the Swift fixture's lasted eleven,
+/// and doctor warns of a parked login whose refresh token lapses within three days.
 ///
 /// So in PR 10 that test reads what the core's doctor says: the sentence is the same, of
 /// personal's parked login rather than of daily renewal, and it waits for one of the core's
@@ -2956,7 +2944,11 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
             title: "personal has no 5-hour limit left".into(),
             subtitle: None,
             body: "work has 58% of its own left.".into(),
-            switch_to: Some("claude/work".into()),
+            clicked: "accounts".into(),
+            button: Some(NotificationButton {
+                title: "Switch".into(),
+                clicked: "switch/claude/work".into(),
+            }),
         }]
     );
     model.shutdown();
@@ -2976,22 +2968,24 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
     eventually("posted the login replaced", || !posted.posted().is_empty());
     model.shutdown();
 
-    let said: Vec<(String, String, Option<String>)> = posted
+    // The account in use has run out too, which is posted after it.
+    let said: Vec<(String, String, Option<NotificationButton>)> = posted
         .posted()
         .into_iter()
-        .map(|notice| (notice.title, notice.body, notice.switch_to))
+        .filter(|notice| notice.id.starts_with("warning/login_replaced/"))
+        .map(|notice| (notice.title, notice.body, notice.button))
         .collect();
     assert_eq!(
         said,
         [(
             "A login was replaced outside Pitboard".into(),
-            format!(
-                "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
-                 personal’s login stored, and Pitboard holds no login for work. Choose {} on \
-                 its row.",
-                titled(OS, "Sign In Again…", "Sign in again…")
-            ),
-            None
+            "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has \
+             personal’s login stored, and Pitboard holds no login for work."
+                .into(),
+            Some(NotificationButton {
+                title: titled(OS, "Sign In Again", "Sign in again"),
+                clicked: "sign-in-again/claude/work".into(),
+            })
         )]
     );
 }
@@ -3006,7 +3000,8 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
         &StandInApps::new(&[], true),
         &posted,
     );
-    eventually("posted the login replaced", || !posted.posted().is_empty());
+    // The login replaced, then the run-out of the account in use, the last refused.
+    eventually("posted both", || posted.posted().len() == 2);
 
     model.send(Intent::PaneShown {
         pane: Pane::Machine,
@@ -3025,7 +3020,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     assert_eq!(line.level, crate::Level::Warn);
     assert!(
         line.detail
-            .starts_with("“A login was replaced outside Pitboard” not posted at "),
+            .starts_with("“personal has no 5-hour limit left” not posted at "),
         "{}",
         line.detail
     );

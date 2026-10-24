@@ -20,8 +20,9 @@ struct NoticeRow: View {
                 if let until = notice.until, let label = notice.untilLabel {
                     // Counts down by itself, and stops at zero once the moment has passed.
                     let follows = Date(timeIntervalSince1970: TimeInterval(until))
-                    (Text("\(label) ")
-                        + Text(timerInterval: Date()...max(follows, Date()), countsDown: true))
+                    let timer = Text(
+                        timerInterval: Date()...max(follows, Date()), countsDown: true)
+                    Text("\(label) \(timer)")
                         .explanatory()
                         .monospacedDigit()
                 }

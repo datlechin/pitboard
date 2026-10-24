@@ -190,7 +190,7 @@ public sealed class AccountsWindowTests
 
         launched.Named("Give this account a name");
         launched.Invoke("Name…");
-        Launched.Type(launched.Field("sheet.name"), "work");
+        Assert.AreEqual("work", launched.Field("sheet.name").Text, "the name dana@work.example suggests");
         launched.Invoke("Save");
 
         launched.Row("claude/work");
@@ -211,11 +211,14 @@ public sealed class AccountsWindowTests
         Assert.IsTrue(launched.Gone(found => found.ByName("Put away…")), "the file is still said to be there");
     }
 
+    // With Codex installed, after the tip to use Pitboard with it.
     [TestMethod]
     public void AnEmptyMachineOffersAnAccount()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         launched.OpenWindow();
+        launched.Named("Use Pitboard with Codex");
+        launched.Invoke("Not now");
 
         launched.Named("No accounts");
         launched.Invoke("Add account…");
@@ -233,7 +236,7 @@ public sealed class AccountsWindowTests
         launched.Invoke("Give up");
         var notice = launched.Find(found => found.ByAutomationId("notice.abandoned"), "notice abandoned");
 
-        Assert.Contains("Gave up on the interrupted switch", Launched.Lines(notice));
+        Launched.Shows(notice, "Gave up on the interrupted switch");
         Assert.Contains("2 logins kept", Launched.Said(notice));
     }
 
@@ -282,6 +285,6 @@ public sealed class AccountsWindowTests
 
         launched.Window("Pitboard");
 
-        launched.Named("No accounts");
+        launched.Named("Use Pitboard with Codex");
     }
 }

@@ -200,6 +200,36 @@ public sealed class AccountsPageTests
         Assert.Contains(notNow.Intent, model.Sent);
     }
 
+    // Settings says why Windows refused, where the tip would stay with no word.
+    [UITestMethod]
+    public async Task ATurnOnWindowsRefusesOpensTheSettings()
+    {
+        var turnOn = new Choice("Turn on", new Intent.OpensAtLogin(On: true), Enabled: true);
+        var app = new AppModel(new StandInModel(Snapshots.Read(1) with
+        {
+            Setup = new SetupStep("Start when you sign in to Windows", "Pitboard watches your limits only while it’s running.", [turnOn]),
+        }));
+        var shown = 0;
+        var start = new StartAtSignIn(new Refusing());
+        var page = await Views.Navigated<AccountsPage>(Views.Context(app, start) with { ShowSettings = () => shown++ });
+
+        Views.Press(Views.Button(page, "Turn on"));
+
+        Assert.IsNotNull(start.Failed);
+        Assert.AreEqual(1, shown);
+    }
+
+    private sealed class Refusing : IStartupItem
+    {
+        public string? Refusal => null;
+
+        public bool Read() => false;
+
+        public bool TurnedOff() => false;
+
+        public void Write(bool starts) => throw new UnauthorizedAccessException("Access is denied.");
+    }
+
     // Narrator's H goes from the page's title to each tool's accounts.
     [UITestMethod]
     public async Task EachToolsHeadingIsALevel2Heading()

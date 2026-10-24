@@ -46,7 +46,12 @@ package func snapshot(
         abandoned: nil, failure: nil,
         windowRequest: WindowRequest(serial: 0, pane: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
-        menuBar: MenuBarText(nameAndUsage: "", usage: "", spoken: "Pitboard"), sections: [],
+        menuBar: MenuBarText(
+            nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
+            tip: "Pitboard"),
+        sections: [],
+        accountMenu: AccountMenuShown(
+            offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
         showsTools: false, notices: [],
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
@@ -54,9 +59,9 @@ package func snapshot(
         signingInText: nil, stowText: nil, quitConfirmation: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
-                schedule: nil, on: false, changing: false, enabled: true, runs: nil,
-                scheduledIn: nil, note: nil, failed: nil),
-            renewal: RenewalShown(renewing: false, note: "", about: ""),
+                schedule: nil, on: false, changing: false, enabled: true, note: nil,
+                failed: nil,
+                about: ""),
             checks: ChecksShown(
                 lines: [], summary: nil, level: .ok, checking: false, checked: nil,
                 waiting: nil),
@@ -64,11 +69,24 @@ package func snapshot(
             commandLine: CommandLineShown(
                 found: nil, inTerminal: nil, updateNote: nil, offersLink: false,
                 cannotLink: nil),
-            autoSwitch: AutoSwitchShown(
-                on: false, at: 95, lowest: 50, highest: 99, enabled: true,
-                atLabel: "Switch when a limit reaches 95%", note: "", standing: nil),
+            atLimit: AtLimitShown(
+                title: "Before an account runs out", choice: .notify,
+                choices: [
+                    AtLimitChoice(choice: .nothing, title: "Do Nothing"),
+                    AtLimitChoice(choice: .notify, title: "Notify Me"),
+                    AtLimitChoice(choice: .switch, title: "Switch Automatically"),
+                ], at: 95, lowest: 50, highest: 99, enabled: true, shareEnabled: true,
+                heading: "When a limit reaches", atLabel: "When a limit reaches 95%",
+                shareLabel: "Share of a limit", note: nil,
+                standing: nil, terms: nil),
             warm: WarmShown(
-                from: 360, to: 1320, rangeLabel: "06:00 to 22:00", accounts: warming,
-                standing: nil, note: "", enabled: false)),
+                title: "Warm up limits", from: 360, to: 1320, rangeLabel: "06:00 to 22:00",
+                accounts: warming,
+                noneEnrolled: warming.isEmpty ? "No Claude Code account is enrolled yet." : nil,
+                standing: nil, note: "", enabled: false,
+                terms: TermsShown(
+                    sentence: "Anthropic's terms may cover automatic switching and warm-ups.",
+                    linkTitle: "Is this allowed?",
+                    link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"))),
         accountWindows: windows)
 }

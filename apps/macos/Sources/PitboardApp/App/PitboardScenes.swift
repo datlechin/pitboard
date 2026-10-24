@@ -8,6 +8,7 @@ public struct PitboardScenes: Scene {
     let windows: AccountWindows
     let requests: WindowRequests
     let openAtLogin: OpenAtLogin
+    let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
     let defaults: UserDefaults
     let updates: any Updates
@@ -17,6 +18,7 @@ public struct PitboardScenes: Scene {
         windows = delegate.windows
         requests = delegate.windowRequests
         openAtLogin = delegate.openAtLogin
+        notificationsAllowed = delegate.notificationsAllowed
         commandLineLink = delegate.commandLineLink
         defaults = delegate.defaults
         self.updates = updates
@@ -35,13 +37,17 @@ public struct PitboardScenes: Scene {
         .menuBarExtraStyle(.menu)
 
         Window("Pitboard", id: MainWindow.id) {
-            MainWindow(model: model, windows: windows, requests: requests)
+            MainWindow(
+                model: model, windows: windows, requests: requests, openAtLogin: openAtLogin)
         }
         .defaultSize(width: 760, height: 560)
         .commands {
             // The standard item shows a beta's CFBundleShortVersionString, its X.Y.Z alone.
             CommandGroup(replacing: .appInfo) {
                 Button("About Pitboard") { AppVersion.showAboutPanel() }
+                if updates.available {
+                    Button("Check for Updates…") { updates.check() }
+                }
             }
             // Nothing here makes a document: what is new here is an account, from any pane.
             CommandGroup(replacing: .newItem) {
@@ -49,6 +55,7 @@ public struct PitboardScenes: Scene {
                     .keyboardShortcut("n")
             }
             AccountWindowCommands(windows: windows)
+            AccountCommands(model: model)
             RefreshCommands()
             // Pitboard's help is its documentation site; the app has no help book.
             CommandGroup(replacing: .help) {
@@ -71,7 +78,8 @@ public struct PitboardScenes: Scene {
 
         Settings {
             SettingsView(
-                model: model, openAtLogin: openAtLogin, commandLineLink: commandLineLink,
+                model: model, openAtLogin: openAtLogin, notifications: notificationsAllowed,
+                commandLineLink: commandLineLink,
                 presence: windows.presence, updates: updates
             )
         }

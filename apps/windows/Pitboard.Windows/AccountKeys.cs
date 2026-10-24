@@ -13,6 +13,9 @@ public static class AccountKeys
         _ => null,
     };
 
-    private static bool Renames(ItemOffer offer) =>
+    public static string? Copied(VirtualKey key, bool control, AccountItem item) =>
+        key == VirtualKey.C && control && item.Email.Length > 0 ? item.Email : null;
+
+    public static bool Renames(ItemOffer offer) =>
         offer is { Enabled: true, Intent: Intent.PresentSheet { Sheet: Sheet.Rename } };
 }

@@ -22,6 +22,35 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   automatic switching and warm-ups, and link to what they say.
 - The install script ends with the command to run next and, where your login shell is zsh and
   it installs into your home, the lines that make zsh load Pitboard's completions.
+- The app's notification that a login was replaced outside Pitboard, and its notice in the
+  window, offer **Sign In Again**.
+- The app posts a notification once for each account whose parked login can no longer be used,
+  with **Sign In Again**.
+- The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
+  at first, before it runs out, with **Switch** where another account has room.
+- The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
+- The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
+  Notification Settings**.
+- The app's **Name This Account** starts with a name from the account's email address.
+- The macOS menu bar mark has a dot while the menu opens on something that needs attention.
+- The Windows app's icon shows how much of its limit the account in use has left, none before it
+  has a reading, and Windows' warning symbol while its menu opens on something that needs
+  attention.
+- The app's setup tips go on past a second account: opening Pitboard at login, then what
+  happens when a limit reaches 95%, each with **Not Now**.
+- The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
+  enrolled, and names the account Codex is signed in to once you choose it, where a machine with
+  Claude Code signed in to nothing said **No Accounts**.
+- The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
+  to Taskbar settings.
+- The macOS app's **Settings** take the share a limit is reached at in a field beside its
+  stepper.
+- The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
+- The macOS app has an **Account** menu with what an account's shortcut menu offers, for the
+  account selected, dimming what cannot be chosen now, and **Forget** on Command-Delete.
+- The macOS app's **Edit** > **Copy** copies the email address of the account selected.
+- The Windows app copies an account's email address with Ctrl+C on its row, and its shortcut
+  menu shows F2, Del and Ctrl+C beside the items they do.
 
 ### Changed
 
@@ -34,6 +63,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.
+- Clicking one of the app's notifications on macOS opens **Accounts**, or **Settings** on
+  **Limits** for what switching or warming up by itself came to, and the Windows app opens the
+  same.
+- The app's **Switch** button on a notification no longer brings Pitboard to the front on
+  macOS.
+- The app's **Switch Claude Code automatically** is now **Switch Automatically**, one of three
+  choices in **When a limit reaches** beside **Do Nothing** and **Notify Me**, and the app keeps
+  switching where it switched before.
+- Under **Switch Automatically**, the app notifies you of Codex at the share, since it never
+  switches Codex.
+- Under **Switch Automatically**, the app's notifications about Claude Code say only what
+  switching came to, without the one at 100% that offered **Switch**.
+- The app's **Switched to work** notice with nothing under its title goes once open Claude Code
+  sessions have followed the switch.
+- The Windows app's icon tooltip lists each account in use with its limits, after **Needs
+  attention** while its menu opens on something to look at.
+- The app's **Settings** say what switching, warm-up and daily renewal do in one or two
+  sentences.
+- An account's shortcut menu leaves out **Warm Up Now** and **Sign In Again** while they cannot
+  be chosen, where the Windows app dimmed them.
+- **Open Pitboard** in the macOS app's menu no longer takes Command-0, which is **Actual Size**
+  for an account's window.
+- The macOS app's **Settings** has three panes, **General**, **Limits** and **Advanced**, and
+  the Windows app's **Settings** the same three sections before **About**.
+
+### Removed
+
+- The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**
+  turns each account's warm-up on and off.
+- The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app
+  renews parked logins as it reads usage, and `pitboard renew` and `pitboard schedule status`
+  keep both.
 
 ### Fixed
 
@@ -64,6 +125,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schedule runs.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
+- The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
+  again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
+- The app lines up the usage bars of every account, where a row that said no pace had wider
+  bars.
 - On Windows, an update of the app leaves a file in use to be replaced at your next restart,
   instead of restarting Windows by itself.
 - While the app or `pitboard watch` switches Claude Code by itself, the other waits for that

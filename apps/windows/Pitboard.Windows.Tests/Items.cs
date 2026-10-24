@@ -31,7 +31,7 @@ internal static class Items
     public static ItemOffer Forget(string qualified) =>
         new(
             Title: "Forget…", Intent: new Intent.Forget(qualified), Enabled: true,
-            Confirm: new Question("Forget this account?", "Its parked login is deleted.", "Forget"), Checked: null);
+            Confirm: new Question("Forget this account?", "Its parked login is deleted.", "Forget"));
 
     public static PanelNotice Notice(string id, params NoticeAction[] actions) =>
         new(

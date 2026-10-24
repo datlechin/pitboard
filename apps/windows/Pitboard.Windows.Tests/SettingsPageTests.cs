@@ -17,14 +17,17 @@ public sealed class SettingsPageTests
 {
     private const string Watching = "Pitboard watches work: 42% used at 09:00.";
 
+    private static readonly string[] Sections = ["General", "Limits", "Advanced", "About"];
+
     private static readonly WarmShown TwoWarmed = new(
-        From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal", "Max", On: true, Standing: "Warms up again at 22:50"),
             new WarmAccountShown("claude/work", "work", Plan: null, On: false, Standing: null),
         ],
-        Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.", Enabled: true);
+        NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
+        Enabled: true, Terms: Snapshots.Terms);
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {
@@ -34,12 +37,13 @@ public sealed class SettingsPageTests
 
     private static Task<SettingsPage> Shown(
         AppModel model, StartAtSignIn? start = null, IUpdates? updates = null, string version = "0.0.0", Action<Uri>? open = null,
-        Action<string>? copy = null, Func<NotificationsBlocked?>? notifications = null) =>
-        Views.Navigated<SettingsPage>(Views.Context(model, start, updates, version, open, copy: copy, notifications: notifications));
+        Func<NotificationsBlocked?>? notifications = null) =>
+        Views.Navigated<SettingsPage>(Views.Context(model, start, updates, version, open, notifications: notifications));
 
     private static bool Shows(SettingsPage page, string automationId) =>
         Views.Visible<TextBlock>(page).Any(text => AutomationProperties.GetAutomationId(text) == automationId);
 
+    // The expander's repeater makes its rows over more than one layout, so a test waits on the last row it needs.
     private static async Task Expand(SettingsPage page, string automationId, string inside)
     {
         Views.Element<SettingsExpander>(page, automationId).IsExpanded = true;
@@ -58,6 +62,34 @@ public sealed class SettingsPageTests
     private static TextBlock Said(SettingsPage page, string text) =>
         Views.Visible<TextBlock>(page).SingleOrDefault(shown => shown.Text == text)
         ?? throw new AssertFailedException($"'{text}' is not among: {string.Join(", ", Views.Texts(page))}");
+
+    // A notice about a limit, or the tip about one, opens the page on Limits, wherever it was scrolled to.
+    [UITestMethod]
+    public async Task ShowingTheLimitsBringsTheirSectionToTheTop()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
+        page.Height = 300;
+        page.UpdateLayout();
+        var scroller = Views.Descendants(page).OfType<ScrollViewer>().First();
+        var limits = Said(page, "Limits");
+
+        page.ShowLimits();
+
+        await Views.Until(
+            () => scroller.VerticalOffset > 0 && Bounds(limits, scroller).Top is > -1 and < 60,
+            () => $"Limits at {Bounds(limits, scroller).Top}, scrolled {scroller.VerticalOffset}");
+    }
+
+    // The macOS Settings' three panes, then About.
+    [UITestMethod]
+    public async Task ThePageHasTheSectionsOfTheMacOSPanes()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
+        var heading = (Style)Application.Current.Resources["SettingsSectionHeaderTextBlockStyle"];
+
+        CollectionAssert.AreEqual(
+            Sections, Views.Visible<TextBlock>(page).Where(text => text.Style == heading).Select(text => text.Text).ToArray());
+    }
 
     [UITestMethod]
     public async Task ShowingThePageReadsTheScheduleAndLooksForTheCommandLine()
@@ -78,7 +110,7 @@ public sealed class SettingsPageTests
         var toggle = Views.Element<ToggleSwitch>(page, "settings.startAtSignIn");
 
         Assert.IsFalse(toggle.IsOn);
-        Assert.Contains(SettingsViewModel.SignInNote, Views.Texts(page));
+        Assert.DoesNotContain("Settings > Apps > Startup can turn it off too.", Views.Texts(page));
 
         toggle.IsOn = true;
         Assert.IsTrue(start.On);
@@ -121,7 +153,6 @@ public sealed class SettingsPageTests
 
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn").IsEnabled);
         Assert.Contains("A Debug build never starts when you sign in to Windows.", Views.Texts(page));
-        Assert.DoesNotContain(SettingsViewModel.SignInNote, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -150,42 +181,59 @@ public sealed class SettingsPageTests
     }
 
     [UITestMethod]
-    public async Task SwitchingAutomaticallySendsTheSwitchAndTheShare()
+    public async Task ChoosingWhatHappensAtALimitSendsTheChoiceAndTheShare()
     {
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        var toggle = Views.Element<ToggleSwitch>(page, "settings.autoSwitch");
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
-        var share = Views.Element<NumberBox>(page, "settings.autoSwitchAt");
+        var choice = Views.Element<ComboBox>(page, "settings.atLimit");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
 
-        Assert.IsTrue(toggle.IsEnabled);
-        Assert.IsFalse(toggle.IsOn);
-        Assert.IsFalse(share.IsEnabled, "no share to change while it is off");
-        Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it is off");
-        Assert.AreEqual("Switch when a limit reaches 95%", AutomationProperties.GetName(share));
-
-        toggle.IsOn = true;
-        Assert.Contains(new Intent.SetAutoSwitch(true, 95), model.Sent);
-
-        app.Apply(With(2, machine => machine with { AutoSwitch = machine.AutoSwitch with { On = true, Standing = Watching } }));
+        Assert.IsTrue(choice.IsEnabled);
+        CollectionAssert.AreEqual(new object[] { "Do nothing", "Notify me", "Switch automatically" }, choice.Items.ToArray());
+        Assert.AreEqual(1, choice.SelectedIndex, "a fresh install notifies");
+        Assert.AreEqual("When a limit reaches 95%", AutomationProperties.GetName(choice));
+        Assert.AreEqual("When a limit reaches", Views.Element<SettingsExpander>(page, "settings.atLimitGroup").Header);
         Assert.IsTrue(share.IsEnabled);
+        Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it does not switch");
+
+        choice.SelectedIndex = 2;
+        Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 95), model.Sent);
+
+        app.Apply(With(2, machine => machine with
+        {
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, Standing = Watching, Terms = Snapshots.Terms },
+        }));
         Assert.IsTrue(Shows(page, "settings.autoSwitchStanding"));
         Assert.Contains(Watching, Views.Texts(page));
+        Assert.Contains(Snapshots.Terms.Sentence, Views.Texts(page));
 
         share.Value = 96;
-        Assert.Contains(new Intent.SetAutoSwitch(true, 96), model.Sent);
+        Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 96), model.Sent);
     }
 
     [UITestMethod]
-    public async Task TheModelHeldBackSwitchesUntilItHasReadThePreferences()
+    public async Task TheModelHeldBackTheChoiceUntilItHasReadThePreferences()
     {
-        var unread = With(1, machine => machine with { AutoSwitch = machine.AutoSwitch with { Enabled = false } });
+        var unread = With(1, machine => machine with { AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false } });
         var page = await Shown(new AppModel(new StandInModel(unread)));
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
 
-        Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.autoSwitch").IsEnabled);
-        Assert.IsFalse(Views.Element<NumberBox>(page, "settings.autoSwitchAt").IsEnabled);
+        Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
+        Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
+    }
+
+    [UITestMethod]
+    public async Task TheTermsLinkOpensWhetherThisIsAllowed()
+    {
+        var opened = new List<Uri>();
+        var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))), open: opened.Add);
+        await Expand(page, "settings.warm", Snapshots.Terms.Sentence);
+
+        new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(page, "settings.warmTerms")).Invoke();
+
+        Assert.AreEqual(new Uri(Snapshots.Terms.Link), opened.Single());
     }
 
     // Each control raises its change event when the page sets it to what the model says.
@@ -196,21 +244,22 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         await Expand(page, "settings.warm", "No Claude Code account is enrolled yet.");
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
         var sent = model.Sent.Count;
 
         app.Apply(With(2, machine => machine with
         {
-            AutoSwitch = machine.AutoSwitch with { On = true, At = 90, AtLabel = "Switch when a limit reaches 90%" },
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, At = 90, AtLabel = "When a limit reaches 90%" },
             Warm = TwoWarmed with { From = 420, To = 1260 },
-            Schedule = machine.Schedule with { On = true, Runs = "Every day" },
+            Schedule = machine.Schedule with { On = true },
         }));
         // The expander's repeater makes a card for each account on its next layout.
         await Views.Until(
             () => Views.Descendants(page).OfType<ToggleSwitch>().Any(on => AutomationProperties.GetAutomationId(on) == "settings.warm.claude/personal"),
             "the warm-up's accounts did not show");
 
-        Assert.AreEqual(90.0, Views.Element<NumberBox>(page, "settings.autoSwitchAt").Value);
+        Assert.AreEqual(90.0, Views.Element<NumberBox>(page, "settings.atLimitShare").Value);
+        Assert.AreEqual(2, Views.Element<ComboBox>(page, "settings.atLimit").SelectedIndex);
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
         Assert.AreEqual(new TimeSpan(7, 0, 0), Views.Element<TimePicker>(page, "settings.warmFrom").SelectedTime);
         Assert.AreEqual(sent, model.Sent.Count, string.Join(", ", model.Sent.Skip(sent)));
@@ -223,7 +272,7 @@ public sealed class SettingsPageTests
         var page = await Shown(new AppModel(model));
 
         Assert.IsTrue(Shows(page, "settings.warmStanding"), "what comes next shows while it is closed");
-        await Expand(page, "settings.warm", "personal · Max");
+        await Expand(page, "settings.warm", "work");
 
         var texts = Views.Texts(page);
         Assert.Contains("Warms up again at 22:50", texts);
@@ -287,46 +336,38 @@ public sealed class SettingsPageTests
         }
     }
 
+    // The app renews due logins as it reads them, and pitboard schedule status says where the task is.
     [UITestMethod]
-    public async Task RenewalSaysHowOftenAndWhereAndRenewsNow()
+    public async Task RenewalIsTheSwitchAlone()
     {
         const string task = @"\Pitboard\Renew S-1-5-21-1004";
         var model = new StandInModel(With(1, machine => machine with
         {
-            Schedule = new ScheduleShown(
-                Schedule: new Schedule.Installed(task, 86_400), On: true, Changing: false, Enabled: true, Runs: "Every day",
-                ScheduledIn: task, Note: null, Failed: null),
+            Schedule = machine.Schedule with { Schedule = new Schedule.Installed(task, 86_400), On = true },
         }));
         var page = await Shown(new AppModel(model));
         var texts = Views.Texts(page);
 
-        Assert.Contains("Every day", texts);
-        Assert.Contains(task, texts);
+        Assert.DoesNotContain("Every day", texts);
+        Assert.DoesNotContain(task, texts);
+        Assert.IsFalse(Views.Visible<Button>(page).Any(button => button.Content is "Renew now" or "Copy"));
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsOn);
-
-        Views.Press(Views.Button(page, "Renew now"));
-        Assert.Contains(new Intent.RenewNow(), model.Sent);
 
         Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsOn = false;
         Assert.Contains(new Intent.SetSchedule(false), model.Sent);
     }
 
     [UITestMethod]
-    public async Task RenewalWithNoSchedulerSaysWhyAndHoldsRenewNowWhileItRuns()
+    public async Task RenewalWithNoSchedulerSaysWhy()
     {
         const string none = "This PC has no scheduler Pitboard knows how to write to.";
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with
         {
             Schedule = machine.Schedule with { Schedule = new Schedule.Unsupported(), Enabled = false, Note = none },
-            Renewal = machine.Renewal with { Renewing = true },
         }))));
-        var texts = Views.Texts(page);
 
-        Assert.Contains(none, texts);
-        Assert.DoesNotContain("Runs", texts);
-        Assert.DoesNotContain("Scheduled in", texts);
+        Assert.Contains(none, Views.Texts(page));
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.renewDaily").IsEnabled);
-        Assert.IsFalse(Views.Button(page, "Renew now").IsEnabled);
     }
 
     // The installer owns the PATH entry, so the section offers no link even where the model would.
@@ -479,10 +520,10 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(
             new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))), updates: new StandInUpdates());
-        await Expand(page, "settings.warm", "personal · Max");
+        await Expand(page, "settings.warm", "work");
 
         var toggles = Views.Visible<ToggleSwitch>(page).ToArray();
-        Assert.HasCount(6, toggles, "start at sign-in, the automatic switch, two warm-ups, daily renewal and automatic checks");
+        Assert.HasCount(5, toggles, "start at sign-in, two warm-ups, daily renewal and automatic checks");
         foreach (var toggle in toggles)
         {
             var card = Card(toggle);
@@ -504,35 +545,39 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
-        var card = Card(Views.Element<NumberBox>(page, "settings.autoSwitchAt"));
-
-        Assert.IsFalse(card.IsEnabled);
-
-        app.Apply(With(2, machine => machine with { AutoSwitch = machine.AutoSwitch with { On = true } }));
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        var card = Card(Views.Element<NumberBox>(page, "settings.atLimitShare"));
 
         Assert.IsTrue(card.IsEnabled);
+
+        app.Apply(With(2, machine => machine with
+        {
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Nothing, ShareEnabled = false },
+        }));
+
+        Assert.IsFalse(card.IsEnabled);
     }
 
-    // The header repeated the share the box beside it held; the box's name says it for Narrator.
+    // The header repeated the share the box beside it held; the choice's name says it for Narrator.
     [UITestMethod]
     public async Task TheShareCardKeepsItsHeaderAsTheShareChanges()
     {
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.autoSwitchGroup", "Switch when a limit reaches");
-        var share = Views.Element<NumberBox>(page, "settings.autoSwitchAt");
+        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
         app.Apply(With(2, machine => machine with
         {
-            AutoSwitch = machine.AutoSwitch with { On = true, At = 90, AtLabel = "Switch when a limit reaches 90%" },
+            AtLimit = machine.AtLimit with { At = 90, AtLabel = "When a limit reaches 90%" },
         }));
 
-        Assert.AreEqual("Switch when a limit reaches", card.Header);
+        Assert.AreEqual("Share of a limit", card.Header);
         Assert.AreEqual("From 50% to 99%", card.Description);
-        Assert.AreEqual("Switch when a limit reaches 90%", AutomationProperties.GetName(share));
+        Assert.AreEqual("Share of a limit", AutomationProperties.GetName(share));
+        Assert.AreEqual("When a limit reaches 90%", AutomationProperties.GetName(Views.Element<ComboBox>(page, "settings.atLimit")));
         Assert.AreEqual(90.0, share.Value);
     }
 
@@ -549,26 +594,6 @@ public sealed class SettingsPageTests
         var critical = ((SolidColorBrush)Application.Current.Resources["SystemFillColorCriticalBrush"]).Color;
         Assert.AreSame(Card(toggle), Card(failed));
         Assert.AreEqual(critical, ((SolidColorBrush)failed.Foreground).Color);
-    }
-
-    [UITestMethod]
-    public async Task TheScheduledInPathIsCopied()
-    {
-        const string task = @"\Pitboard\Renew S-1-5-21-1004";
-        var copied = new List<string>();
-        var page = await Shown(
-            new AppModel(new StandInModel(With(1, machine => machine with
-            {
-                Schedule = new ScheduleShown(
-                    Schedule: new Schedule.Installed(task, 86_400), On: true, Changing: false, Enabled: true, Runs: "Every day",
-                    ScheduledIn: task, Note: null, Failed: null),
-            }))),
-            copy: copied.Add);
-
-        Views.Press(Views.Element<Button>(page, "settings.copyScheduledIn"));
-
-        Assert.AreEqual(task, copied.Single());
-        Assert.IsTrue(Said(page, task).IsTextSelectionEnabled);
     }
 
     // A Debug build's own off would be said in the docs' pictures, so only a Release build's refusal is said.

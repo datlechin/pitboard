@@ -145,8 +145,22 @@ public sealed class AccountsViewModelTests
         Assert.IsTrue(shown.HasSetup);
         Assert.AreEqual("Name this account", shown.SetupTitle);
         Assert.AreEqual("Pitboard switches between named accounts.", shown.SetupDetail);
-        Assert.IsTrue(shown.SetupNames);
+        Assert.IsInstanceOfType<Footing.Unnamed>(shown.SetupFooting);
         Assert.Contains(nameof(AccountsViewModel.HasSetup), told);
+    }
+
+    // Windows' own settings page, which only Windows opens.
+    [TestMethod]
+    public void TheSetupStepsLinkOpensWhereItPoints()
+    {
+        var opened = new List<Uri>();
+        var step = new SetupStep(
+            "Start when you sign in to Windows", "Its icon starts behind the arrow.", [Add], new SetupLink("Taskbar settings", "ms-settings:taskbar"));
+        var (shown, _, _, _) = Over(Snapshots.Read(1) with { Setup = step, Footing = new Footing.NotOpenedAtLogin() }, opened.Add);
+
+        shown.OpenSetupLink();
+
+        Assert.AreEqual(new Uri("ms-settings:taskbar"), opened.Single());
     }
 
     [TestMethod]

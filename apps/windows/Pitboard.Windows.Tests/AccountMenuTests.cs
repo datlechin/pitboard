@@ -9,13 +9,14 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountMenuTests
 {
-    private static readonly ItemOffer Use = new("Use spare", new Intent.SwitchTo("claude/spare"), true, null, null);
-    private static readonly ItemOffer SignInAgain = new("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), false, null, null);
-    private static readonly ItemOffer Rename = new("Rename…", new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), true, null, null);
+    private static readonly ItemOffer Use = new("Use spare", new Intent.SwitchTo("claude/spare"), true, null);
+    private static readonly ItemOffer SignInAgain = new("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), false, null);
+    private static readonly ItemOffer Rename = new("Rename…", new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), true, null);
 
     private static string[] Said(MenuFlyout menu) =>
         [.. menu.Items.Select(entry => entry is MenuFlyoutItem item ? item.Text : "-")];
 
+    // Microsoft's menu guidance removes a context menu's items that do not apply now, as the HIG does.
     [UITestMethod]
     public void TheMenuOffersWhatTheModelOffersThenCopyingThenForgetting()
     {
@@ -27,26 +28,34 @@ public sealed class AccountMenuTests
 
         var menu = AccountMenu.For(item, (_, _) => { });
 
-        Assert.AreEqual("Use spare, Sign in again…, Rename…, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
-        Assert.IsFalse(((MenuFlyoutItem)menu.Items[1]).IsEnabled, "a sign-in held back");
+        Assert.AreEqual("Use spare, Rename…, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
     }
 
+    // The keys AccountKeys takes on the row, shown beside the items that do the same.
     [UITestMethod]
-    public void AnOfferThatIsOnShowsACheckMark()
+    public void TheMenuShowsTheRowsKeys()
     {
-        var warm = new ItemOffer("Warm up automatically", new Intent.SwitchTo("claude/spare"), true, null, Checked: true);
+        var item = Items.Account("claude", "spare") with { Offers = [Use, Rename], Forget = Items.Forget("claude/spare") };
 
-        var menu = AccountMenu.For(Items.Account("claude", "spare") with { Offers = [warm] }, (_, _) => { });
+        var shown = AccountMenu.For(item, (_, _) => { }).Items.OfType<MenuFlyoutItem>()
+            .ToDictionary(entry => entry.Text, entry => entry.KeyboardAcceleratorTextOverride);
 
-        Assert.IsTrue(((ToggleMenuFlyoutItem)menu.Items[0]).IsChecked);
+        Assert.AreEqual("F2", shown["Rename…"]);
+        Assert.AreEqual("Ctrl+C", shown["Copy email address"]);
+        Assert.AreEqual("Del", shown["Forget…"]);
+        Assert.AreEqual("", shown["Use spare"]);
     }
 
     [UITestMethod]
     public void TheAccountInUseOffersNoForget()
     {
-        var item = Items.Account("claude", "work", inUse: true) with { Offers = [Rename], Forget = null };
+        var item = Items.Account("claude", "work", inUse: true) with
+        {
+            Offers = [Use with { Enabled = false }, Rename],
+            Forget = Items.Forget("claude/work") with { Enabled = false },
+        };
 
-        Assert.DoesNotContain("Forget…", Said(AccountMenu.For(item, (_, _) => { })));
+        Assert.AreEqual("Rename…, -, Copy email address", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
     }
 
     [UITestMethod]

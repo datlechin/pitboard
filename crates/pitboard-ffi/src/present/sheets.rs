@@ -301,9 +301,9 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
                 seen.tool_name(&tool)
             ),
             tools: Vec::new(),
-            tool,
             account: None,
-            name: String::new(),
+            name: suggested_name(seen, &tool, email),
+            tool,
             prompt: "work".into(),
             confirm: "Save".into(),
             saving,
@@ -326,6 +326,59 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         Sheet::Stow => return None,
     };
     Some(text)
+}
+
+// Anyone can have an address at one of these, in any country, so the domain says nothing of
+// whose account it is.
+const MAIL_SERVICES: &[&str] = &[
+    "163",
+    "aol",
+    "fastmail",
+    "gmail",
+    "gmx",
+    "googlemail",
+    "hey",
+    "hotmail",
+    "icloud",
+    "live",
+    "mac",
+    "mail",
+    "me",
+    "msn",
+    "naver",
+    "outlook",
+    "pm",
+    "proton",
+    "protonmail",
+    "qq",
+    "web",
+    "yahoo",
+    "yandex",
+    "zoho",
+];
+
+fn suggested_name(seen: &Seen, provider: &str, email: &str) -> String {
+    let email = email.to_lowercase();
+    let Some((local, domain)) = email.rsplit_once('@') else {
+        return String::new();
+    };
+    let mailbox = local.split('+').next().unwrap_or_default();
+    let company = domain.split('.').next().unwrap_or_default();
+    let candidates = if MAIL_SERVICES.contains(&company) {
+        vec![mailbox]
+    } else {
+        vec![company, mailbox]
+    };
+    let taken = |name: &str| {
+        seen.accounts()
+            .iter()
+            .any(|account| account.provider == provider && account.label.as_deref() == Some(name))
+    };
+    candidates
+        .into_iter()
+        .find(|name| label::check(name).is_ok() && !taken(name))
+        .unwrap_or_default()
+        .to_owned()
 }
 
 pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {

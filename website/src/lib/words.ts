@@ -77,10 +77,16 @@ export function menuBarTitle(moment: Moment): string {
   return `${shown.label} ${fullest(shown)}%`;
 }
 
-// The icon's tooltip in the notification area: the menu bar's words, and the tool once two are shown
-// (present/accounts.rs `menu_bar`).
+// The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
+// the line the menu shows under it (present/accounts.rs `menu_bar`).
 export const trayTip = (moment: Moment) =>
-  `Pitboard, ${menuBarTitle(moment)}, ${toolName(titled(moment).tool)}`;
+  [
+    "Pitboard",
+    ...(["claude", "codex"] as Tool[]).map((tool) => {
+      const a = accounts.find((a) => a.tool === tool && isInUse(a, moment))!;
+      return `${a.label} (${toolName(tool)}): ${menuLine(a, moment)}`;
+    }),
+  ].join("\n");
 
 export function runsOutNote(a: Account, moment: Moment): string | null {
   const l = isInUse(a, moment) ? a.limits.find((l) => l.runsOut) : undefined;

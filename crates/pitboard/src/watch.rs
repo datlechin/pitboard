@@ -103,7 +103,7 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                         } else {
                             ""
                         },
-                        words::IS_THIS_ALLOWED
+                        terms()
                     ),
                 ),
             }
@@ -170,6 +170,14 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
             ),
         },
     }
+}
+
+pub(crate) fn terms() -> String {
+    format!(
+        "{}: {}",
+        words::TERMS_MAY_COVER_THIS,
+        words::IS_THIS_ALLOWED_URL
+    )
 }
 
 /// Decides once from the usage Pitboard last measured, and says what it came to. Nobody is
@@ -768,9 +776,7 @@ mod tests {
             installed.human
         );
         assert!(
-            installed
-                .human
-                .ends_with(&format!("\n\n{}\n", words::IS_THIS_ALLOWED)),
+            installed.human.ends_with(&format!("\n\n{}\n", terms())),
             "{}",
             installed.human
         );

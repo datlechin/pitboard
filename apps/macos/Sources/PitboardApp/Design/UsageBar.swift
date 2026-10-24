@@ -27,6 +27,8 @@ struct UsageBar: View {
     let limit: LimitRow
     @ScaledMetric(relativeTo: .callout) private var percentWidth: CGFloat = 38
     @ScaledMetric(relativeTo: .callout) private var resetsWidth: CGFloat = 110
+    // As wide as "27% over pace", so a row with no pace has bars as wide as one with.
+    @ScaledMetric(relativeTo: .callout) private var paceWidth: CGFloat = 100
 
     var body: some View {
         GridRow {
@@ -57,6 +59,7 @@ struct UsageBar: View {
                 .foregroundStyle(limit.pace?.standing.wordsStyle ?? AnyShapeStyle(.secondary))
                 .monospacedDigit()
                 .lineLimit(1)
+                .frame(minWidth: paceWidth, alignment: .leading)
                 .accessibilityHidden(true)
         }
     }
