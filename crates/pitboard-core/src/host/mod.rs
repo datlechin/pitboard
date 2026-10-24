@@ -338,9 +338,27 @@ fn drive_absolute(path: &str) -> bool {
     matches!(path.as_bytes(), [drive, b':', b'\\' | b'/', ..] if drive.is_ascii_alphabetic())
 }
 
-// A full path as Windows takes one, on any system: from a drive's root, or a share's.
+// A full path as Rust's `Path::is_absolute` reads one on Windows, on any system: from a drive's
+// root, `\\server\share`, or a `\\?\` or `\\.\` path, `/` taken for `\`.
 pub(crate) fn windows_absolute(path: &str) -> bool {
-    drive_absolute(path) || path.starts_with(r"\\")
+    let separator = |c: char| c == '\\' || c == '/';
+    let Some(rest) = path
+        .strip_prefix(separator)
+        .and_then(|rest| rest.strip_prefix(separator))
+    else {
+        return drive_absolute(path);
+    };
+    // With a `/` in it, `\\?\` is no verbatim path but a server named `?`.
+    if path.starts_with(r"\\?\")
+        || rest
+            .strip_prefix('.')
+            .is_some_and(|device| device.starts_with(separator))
+    {
+        return true;
+    }
+    let mut names = rest.split(separator);
+    names.next().is_some_and(|server| !server.is_empty())
+        && names.next().is_some_and(|share| !share.is_empty())
 }
 
 // Claude Desktop's on Windows, which no test reads (AGENTS.md). Its `Claude-3p` there is named

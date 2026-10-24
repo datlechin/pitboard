@@ -1855,7 +1855,26 @@ mod tests {
             named(r"\\?\D:\codex.toml"),
             Ok(PathBuf::from(r"D:\codex.toml"))
         );
-        for relative in ["", "codex.toml", r"C:codex.toml", r"\codex.toml"] {
+        for full in [
+            r"\\server\share\codex.toml",
+            "//server/share/codex.toml",
+            r"/\server\share",
+            r"\\.\D:\codex.toml",
+            r"\\?\Volume{0}\codex.toml",
+            "//?/D:/codex.toml",
+        ] {
+            assert_eq!(named(full), Ok(PathBuf::from(full)), "{full}");
+        }
+        for relative in [
+            "",
+            "codex.toml",
+            r"C:codex.toml",
+            r"\codex.toml",
+            r"\\server",
+            r"\\server\",
+            r"\\.",
+            r"\\?/",
+        ] {
             assert_eq!(named(relative), Err(relative.to_owned()), "{relative}");
         }
 
@@ -1897,7 +1916,7 @@ mod tests {
     fn codex_on_windows_takes_its_requirements_from_the_file_the_policy_names() {
         let host = crate::host::memory::MemoryHost::new();
         let ctx = Context::for_unit_test().with_memory_stores(host.clone());
-        let named = std::env::temp_dir().join("pitboard-policy-requirements.toml");
+        let named = PathBuf::from(r"D:\Policy\codex.toml");
         host.sets_policy(
             Hive::Machine,
             r"SOFTWARE\Policies\OpenAI\Codex",

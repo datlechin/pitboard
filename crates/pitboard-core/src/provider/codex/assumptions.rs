@@ -834,7 +834,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                Where the policy value `RequirementsPath` of \
                `HKLM\\SOFTWARE\\Policies\\OpenAI\\Codex`, 64-bit view, can be read, Codex reads \
                its requirements from the file it names instead, a leading `~` its profile \
-               folder, and does not start where that is no full path. There are no managed \
+               folder, and does not start where that is no full path as Rust's \
+               `Path::is_absolute` reads one there, `/` taken for `\\`. There are no managed \
                preferences and no registry layer of configuration, and Codex skips a \
                `managed_config.toml` in its home with a warning at startup. \
                `secret_auth_storage` is read from the same layers and is on by default, so \
@@ -860,8 +861,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     holds `/etc/codex`",
         verified_against: "0.164.0",
         depends: "provider::codex::layers on Windows, which reads the requirements from the \
-                  file the policy names, and so every read and write of the live Codex login \
-                  there and every refusal of a store",
+                  file the policy names where host::windows_absolute takes it for a full path, \
+                  and so every read and write of the live Codex login there and every refusal \
+                  of a store",
         probe: &[
             "OpenAI\\Codex",
             r"SOFTWARE\Policies\OpenAI\Codex",
