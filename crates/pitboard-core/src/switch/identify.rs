@@ -1191,7 +1191,8 @@ mod tests {
         let mut login = m.live().expect("a login stored");
         login["mcpOAuth"]["large"] =
             serde_json::json!("x".repeat(provider::claude::pieces::MOST_BYTES));
-        m.mem.live().plant(&m.service, &login.to_string());
+        let planted = login.to_string();
+        m.mem.live().plant(&m.service, &planted);
         let stored = m.live();
 
         let refused = told_now(&m).err().expect("refused");
@@ -1200,7 +1201,10 @@ mod tests {
         assert!(
             refused
                 .to_string()
-                .contains("past the 460800 Claude Code keeps in Credential Manager"),
+                .contains(&crate::words::past_credential_manager(
+                    planted.len(),
+                    provider::claude::pieces::MOST_BYTES
+                )),
             "{refused}"
         );
         assert_eq!(renewals(&m), []);

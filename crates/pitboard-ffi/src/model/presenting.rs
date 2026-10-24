@@ -14,6 +14,7 @@ use super::testing::records::{
 use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
+use crate::present::words;
 use crate::present::{
     AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
     NoticeAction, PaceStanding, PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer,
@@ -125,9 +126,7 @@ fn give_up() -> NoticeAction {
         enabled: true,
         confirm: Some(Question {
             title: "Give up on the interrupted switch?".into(),
-            message: "Every login is kept, and nothing is deleted. Pitboard stops trying to \
-                      finish it."
-                .into(),
+            message: words::give_up_stuck(&[]),
             confirm: titled("Give Up", "Give up"),
         }),
     }
@@ -1213,7 +1212,7 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
             Severity::Error,
             "An interrupted switch is waiting",
             &[
-                "An interrupted switch can’t be finished until Anthropic or OpenAI answers.",
+                &words::switch_waits_for("Anthropic or OpenAI"),
                 "Giving up on it keeps every login. Nothing is deleted.",
             ],
             vec![give_up()],
@@ -1467,11 +1466,11 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
 
     let counting = PanelNotice {
         until: Some(follows),
-        until_label: Some("Sessions already open follow in".into()),
+        until_label: Some(words::sessions_follow_in(None)),
         ..notice(
             "switch/claude",
             Severity::Info,
-            "Switched to work",
+            &words::switched_to(None, "work"),
             &[],
             vec![dismiss(Intent::DismissSwitch {
                 provider: "claude".into(),
@@ -1511,10 +1510,13 @@ fn a_switch_names_its_tool_only_beside_another() {
     machine.switched = switched("claude", "personal", "work", Vec::new());
     switch(&mut model, &mut machine, "claude/work");
     let notice = model.shown().notices.remove(0);
-    assert_eq!(notice.title, "Switched Claude Code to work");
     assert_eq!(
-        notice.until_label.as_deref(),
-        Some("Claude Code sessions already open follow in")
+        notice.title,
+        words::switched_to(Some("Claude Code"), "work")
+    );
+    assert_eq!(
+        notice.until_label,
+        Some(words::sessions_follow_in(Some("Claude Code")))
     );
 }
 
@@ -1599,11 +1601,8 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
         [notice(
             "switch/codex",
             Severity::Warning,
-            "Switched to work",
-            &[
-                "Any codex session started before this switch keeps using personal until it \
-               is quit and started again."
-            ],
+            &words::switched_to(None, "work"),
+            &[&words::restart_notice("codex", "personal")],
             vec![dismiss(Intent::DismissSwitch {
                 provider: "codex".into()
             })],
@@ -1700,8 +1699,8 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
         [notice(
             "switch/claude",
             Severity::Info,
-            "work has a new login",
-            &["Signed in to work again. Its new login is the one in use now."],
+            &words::has_a_new_login(None, "work"),
+            &[&words::signed_in_now("work", true, None)],
             vec![dismiss(Intent::DismissSwitch {
                 provider: "claude".into()
             })],
@@ -1721,9 +1720,9 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
         [notice(
             "switch/codex",
             Severity::Warning,
-            "work has a new login",
+            &words::has_a_new_login(None, "work"),
             &[
-                "Enrolled work, the account signed in now. Its new login is the one in use.",
+                &words::signed_in_now("work", false, None),
                 &old_login.message,
             ],
             vec![dismiss(Intent::DismissSwitch {
@@ -1745,7 +1744,7 @@ fn a_sign_in_notice_names_its_tool_beside_another() {
     signs_in(&mut model, &mut machine, "codex", "work", &[]);
     let notice = model.shown().notices.remove(0);
     assert_eq!(notice.id, "switch/codex");
-    assert_eq!(notice.title, "work in Codex has a new login");
+    assert_eq!(notice.title, words::has_a_new_login(Some("Codex"), "work"));
 }
 
 /// Every warning a read carries is a notice of its own, headed from its code so the menu can
@@ -1871,10 +1870,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
             "abandoned",
             Severity::Info,
             "Gave up on the interrupted switch",
-            &[
-                "The switch from personal to work was given up. 2 logins kept, and nothing \
-               was deleted."
-            ],
+            &[&words::gave_up("personal", "work", 2)],
             vec![dismiss(Intent::DismissAbandoned)],
         )]
     );
@@ -1891,10 +1887,7 @@ fn giving_up_on_a_switch_says_what_was_kept_until_put_away() {
     model.run(&mut machine);
     assert_eq!(
         model.shown().notices[0].lines,
-        [
-            "The switch from personal to work was given up. 1 login kept, and nothing was \
-          deleted."
-        ]
+        [words::gave_up("personal", "work", 1)]
     );
 
     model.send(Intent::DismissAbandoned);
@@ -1996,8 +1989,8 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
         [notice(
             "advice/claude/work/session/",
             Severity::Warning,
-            "work has no 5-hour limit left",
-            &["spare has 80% of its own left."],
+            &words::ran_out("work", "5-hour"),
+            &[&words::room_left("spare", Some(80))],
             vec![NoticeAction {
                 title: "Switch to spare".into(),
                 intent: Intent::SwitchTo {
@@ -2020,7 +2013,13 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
         .into_iter()
         .map(|n| n.title)
         .collect();
-    assert_eq!(titles, ["Claude Code: work has no 5-hour limit left"]);
+    assert_eq!(
+        titles,
+        [words::of_tool(
+            Some("Claude Code"),
+            &words::ran_out("work", "5-hour")
+        )]
+    );
 }
 
 /// An account offered on a plan without the limit that ran out is said to have no such
@@ -2038,8 +2037,8 @@ fn an_account_offered_without_the_limit_that_ran_out_is_said_to_have_no_such_lim
     ]);
     let notices = model.shown().notices;
     assert_eq!(notices.len(), 1);
-    assert_eq!(notices[0].title, "work has no weekly limit left");
-    assert_eq!(notices[0].lines, ["seat has no such limit."]);
+    assert_eq!(notices[0].title, words::ran_out("work", "weekly"));
+    assert_eq!(notices[0].lines, [words::room_left("seat", None)]);
 }
 
 /// A switch of one tool leaves another tool's accounts as they were. Advice about a Claude
@@ -2098,7 +2097,7 @@ fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
         menu.switches,
         [MenuEntry {
             title: "Switch to spare".into(),
-            subtitle: Some("work has no 5-hour limit left".into()),
+            subtitle: Some(words::ran_out("work", "5-hour")),
             help: None,
             severity: None,
             intent: Some(Intent::SwitchTo {
@@ -2259,7 +2258,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     ));
     model.refresh(&mut machine);
     let others = model.shown().menu_notices.others.expect("one item");
-    assert_eq!(others.title, "2 things to look at");
+    assert_eq!(others.title, words::things_to_look_at(2));
     assert_eq!(
         others.subtitle.as_deref(),
         Some("An interrupted switch is waiting")
@@ -2978,7 +2977,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
     model.refresh(&mut machine);
     assert_eq!(
         model.shown().notices[0].lines[0],
-        "An interrupted switch can’t be finished until Anthropic answers."
+        words::switch_waits_for("Anthropic")
     );
 }
 
@@ -3480,7 +3479,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
     let shown = model.shown();
     assert_eq!(
         shown.notices[0].lines[0],
-        "An interrupted switch can’t be finished until Anthropic answers."
+        words::switch_waits_for("Anthropic")
     );
     assert!(!shown.shows_tools);
 
@@ -3495,7 +3494,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
     let shown = model.shown();
     assert_eq!(
         shown.notices[0].lines[0],
-        "An interrupted switch can’t be finished until Anthropic or OpenAI answers."
+        words::switch_waits_for("Anthropic or OpenAI")
     );
     assert!(shown.shows_tools);
 }

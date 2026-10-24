@@ -1987,6 +1987,78 @@ mod tests {
         assert_eq!(change_outcome("second_sign_in"), "Second sign-in");
     }
 
+    // The notices' sentences, pinned once: the panel's tests compare with these functions.
+    #[test]
+    fn a_notice_says_what_happened_in_these_words() {
+        assert_eq!(switched_to(None, "work"), "Switched to work");
+        assert_eq!(
+            switched_to(Some("Claude Code"), "work"),
+            "Switched Claude Code to work"
+        );
+        assert_eq!(sessions_follow_in(None), "Sessions already open follow in");
+        assert_eq!(
+            sessions_follow_in(Some("Claude Code")),
+            "Claude Code sessions already open follow in"
+        );
+        assert_eq!(
+            restart_notice("codex", "personal"),
+            "Any codex session started before this switch keeps using personal until it is quit \
+             and started again."
+        );
+        assert_eq!(has_a_new_login(None, "work"), "work has a new login");
+        assert_eq!(
+            has_a_new_login(Some("Codex"), "work"),
+            "work in Codex has a new login"
+        );
+        assert_eq!(
+            signed_in_now("work", true, None),
+            "Signed in to work again. Its new login is the one in use now."
+        );
+        assert_eq!(
+            signed_in_now("work", false, None),
+            "Enrolled work, the account signed in now. Its new login is the one in use."
+        );
+        assert_eq!(
+            gave_up("personal", "work", 2),
+            "The switch from personal to work was given up. 2 logins kept, and nothing was \
+             deleted."
+        );
+        assert_eq!(
+            gave_up("personal", "work", 1),
+            "The switch from personal to work was given up. 1 login kept, and nothing was \
+             deleted."
+        );
+        assert_eq!(ran_out("work", "5-hour"), "work has no 5-hour limit left");
+        assert_eq!(
+            room_left("spare", Some(80)),
+            "spare has 80% of its own left."
+        );
+        assert_eq!(room_left("seat", None), "seat has no such limit.");
+        assert_eq!(
+            of_tool(Some("Claude Code"), "work has no 5-hour limit left"),
+            "Claude Code: work has no 5-hour limit left"
+        );
+        assert_eq!(things_to_look_at(2), "2 things to look at");
+        assert_eq!(
+            switch_waits_for("Anthropic or OpenAI"),
+            "An interrupted switch can’t be finished until Anthropic or OpenAI answers."
+        );
+        assert_eq!(
+            give_up_stuck(&[]),
+            "Every login is kept, and nothing is deleted. Pitboard stops trying to finish it."
+        );
+        assert_eq!(
+            give_up_stuck(&[("Claude Desktop".into(), "Claude")]),
+            "Every login is kept, and nothing is deleted. Pitboard stops trying to finish it and, \
+             with Claude quit, settles or gives up the interrupted Claude Desktop move too."
+        );
+        assert_eq!(
+            move_waits_too("Claude Desktop", "Claude"),
+            "A Claude Desktop move was interrupted too. With Claude quit, Give Up… settles it or \
+             gives it up as well, and keeps every folder."
+        );
+    }
+
     /// A change that worked says so in a word, and one that did not says what stopped it,
     /// from the code the log keeps.
     #[test]

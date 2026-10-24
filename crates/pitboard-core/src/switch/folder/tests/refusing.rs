@@ -4,10 +4,11 @@ use super::{
 };
 use super::{data, rested, snapshot, unchanged};
 use crate::desktop_testing::EMPTIED;
-use crate::error::Error;
+use crate::error::{Error, Then};
 use crate::provider::ProviderId;
+use crate::provider::folder::Unfit;
 use crate::service::Permit;
-use crate::state::{self};
+use crate::state;
 use crate::switch::harness::{Rig, STRANGER, desktop_machine, desktop_pair, hold, recover};
 use crate::switch::{Outcome, settle};
 use serde_json::Value;
@@ -145,11 +146,6 @@ fn a_refusal_names_what_of_claude_still_runs() {
     };
     assert_eq!(still.len(), 1);
     assert!(still[0].starts_with("ShipIt (pid "), "{still:?}");
-    assert!(refused.to_string().contains("ShipIt (pid"), "{refused}");
-    assert!(
-        refused.to_string().contains("Activity Monitor"),
-        "{refused}"
-    );
     assert_eq!(refused.exit_code(), 1);
 
     // A Claude that is not the test's own never counts.
@@ -267,13 +263,11 @@ fn a_reset_waiting_stops_the_recovery_of_a_move_as_it_stops_a_move() {
     recover(&m).expect("swept");
     let before = snapshot(&m);
     let stopped = refused(&m, "home");
-    assert_eq!(stopped.code(), "login_folder_unknown", "{stopped}");
-    let said = stopped.to_string();
-    assert!(said.contains("is waiting for Reset App Data"), "{said}");
-    assert!(
-        said.contains("Open Claude, quit it with Command-Q"),
-        "{said}"
-    );
+    let Error::LoginFolderUnknown { what, then, .. } = &stopped else {
+        panic!("{stopped:?}");
+    };
+    assert_eq!(what, &Unfit::ResetWaits.to_string());
+    assert_eq!(*then, Then::OpenAndQuit);
     unchanged(&m, &before, "a reset waiting");
     assert!(
         !state_of(&m).moving.is_empty(),

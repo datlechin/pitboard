@@ -1041,22 +1041,17 @@ mod tests {
         assert_eq!(
             stuck.lines,
             [
-                "An interrupted switch can’t be finished until Anthropic answers.",
-                "Giving up on it keeps every login. Nothing is deleted.",
-                "A Claude Desktop move was interrupted too. With Claude quit, Give Up… settles it \
-                 or gives it up as well, and keeps every folder.",
+                words::switch_waits_for("Anthropic"),
+                "Giving up on it keeps every login. Nothing is deleted.".into(),
+                words::move_waits_too("Claude Desktop", "Claude"),
             ]
         );
         assert_eq!(
             stuck.actions[0]
                 .confirm
                 .as_ref()
-                .map(|asked| asked.message.as_str()),
-            Some(
-                "Every login is kept, and nothing is deleted. Pitboard stops trying to finish it \
-                 and, with Claude quit, settles or gives up the interrupted Claude Desktop move \
-                 too."
-            )
+                .map(|asked| asked.message.clone()),
+            Some(words::give_up_stuck(&[("Claude Desktop".into(), "Claude")]))
         );
         let alone = stuck_beside(Vec::new());
         assert_eq!(alone.lines.len(), 2);
@@ -1064,10 +1059,8 @@ mod tests {
             alone.actions[0]
                 .confirm
                 .as_ref()
-                .map(|asked| asked.message.as_str()),
-            Some(
-                "Every login is kept, and nothing is deleted. Pitboard stops trying to finish it."
-            )
+                .map(|asked| asked.message.clone()),
+            Some(words::give_up_stuck(&[]))
         );
     }
 

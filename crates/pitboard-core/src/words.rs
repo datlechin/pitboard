@@ -1931,6 +1931,25 @@ mod tests {
         );
     }
 
+    // Doctor's and a refusal's tests check which of these they say, and of what.
+    #[test]
+    fn a_login_too_large_and_claudes_settings_naming_somebody_are_said_in_these_words() {
+        assert_eq!(
+            past_credential_manager(460_801, 460_800),
+            "460801 bytes, past the 460800 Claude Code keeps in Credential Manager"
+        );
+        use crate::service::Stored;
+        assert_eq!(
+            desktop_named(
+                &Stored::Account("desktop/work".into()),
+                &Stored::Nothing,
+                |stored| stored.said("nobody")
+            ),
+            "Claude's settings have named `desktop/work` since Pitboard last read Claude signed \
+             out, so somebody may have signed in"
+        );
+    }
+
     #[test]
     fn an_old_windows_is_told_which_it_needs() {
         let old = too_old(Some(22631));

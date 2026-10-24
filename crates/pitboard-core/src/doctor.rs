@@ -4732,8 +4732,11 @@ mod tests {
         .to_string();
         assert_eq!(
             login[0].1,
-            "Claude's settings have named `desktop/work` since Pitboard last read Claude signed \
-             out, so somebody may have signed in"
+            words::desktop_named(
+                &Stored::Account("desktop/work".into()),
+                &Stored::Nothing,
+                |stored| stored.said("nobody")
+            )
         );
         assert!(warned.starts_with(&login[0].1), "{warned}");
     }
@@ -5718,7 +5721,7 @@ mod tests {
         assert_eq!(past.level, Level::Fail);
         assert_eq!(
             past.detail,
-            "460801 bytes, past the 460800 Claude Code keeps in Credential Manager"
+            words::past_credential_manager(460_801, 460_800)
         );
     }
 
@@ -9166,9 +9169,7 @@ mod tests {
             [
                 (
                     "system_too_old",
-                    "Pitboard runs on Windows build 22631, older than Windows 11 24H2 (build \
-                     26100)"
-                        .to_string(),
+                    words::too_old(Some(22631)).because,
                     "Pitboard changes nothing here: it reads, and renews and writes nothing. It \
                      changes things on Windows 11 24H2 and later, and on Windows Server 2025: \
                      update Windows to use it here."

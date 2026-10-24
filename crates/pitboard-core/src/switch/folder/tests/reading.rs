@@ -7,7 +7,7 @@ use crate::desktop_testing::{EMPTIED, write_stand_in_jar};
 use crate::host::Cookie;
 use crate::provider::ProviderId;
 use crate::service::{Permit, Warning};
-use crate::state::{self};
+use crate::state;
 use crate::switch::harness::{
     HOME, STRANGER, WORK, desktop_machine, desktop_pair, hold, hold_where_deleted, hold_where_twice,
 };
@@ -38,10 +38,9 @@ fn no_data_folder_and_an_empty_one_hold_nobody() {
     let before = snapshot(&m);
     assert_eq!(code(enrol(&m, "work")), "live_credential_absent");
     let refused = use_(&m, "home").expect_err("refused");
-    assert_eq!(refused.code(), "login_folder_unknown");
     assert!(
-        refused.to_string().contains("does not exist yet"),
-        "{refused}"
+        matches!(&refused, crate::error::Error::LoginFolderUnknown { what, .. } if what == "does not exist yet"),
+        "{refused:?}"
     );
     assert_eq!(snapshot(&m), before);
     assert!(!data(&m).exists(), "nothing made it");

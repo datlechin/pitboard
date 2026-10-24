@@ -2058,6 +2058,47 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_names_the_account_or_what_still_runs() {
+        assert_eq!(
+            Error::CannotForgetActiveAccount {
+                label: "alpha".into()
+            }
+            .to_string(),
+            "`alpha` is signed in; switch to another account before forgetting it."
+        );
+        assert_eq!(
+            Error::AccountUnknown {
+                label: "nobody".into(),
+                enrolled: Enrolled(vec!["alpha".into(), "beta".into()]),
+            }
+            .to_string(),
+            "no account is enrolled as `nobody`. Enrolled: `alpha`, `beta`. Run `pitboard \
+             enroll nobody --sign-in` to add it."
+        );
+        assert_eq!(
+            Error::AppOpen {
+                app: "Claude",
+                still: Vec::new()
+            }
+            .to_string(),
+            "Claude is open, and Pitboard changes its login only while it is closed. Quit \
+             Claude with Command-Q, then run this again. Nothing has changed."
+        );
+        assert_eq!(
+            Error::AppOpen {
+                app: "Claude",
+                still: vec!["ShipIt (pid 812)".into()]
+            }
+            .to_string(),
+            format!(
+                "Claude has quit, and ShipIt (pid 812) from it is still running, and Pitboard \
+                 changes Claude's login only while all of it is closed. {} Nothing has changed.",
+                crate::words::wait_for_still(crate::host::OS, "run this again")
+            )
+        );
+    }
+
+    #[test]
     fn a_moves_refusals_say_their_code_their_exit_and_what_to_do() {
         let said = |error: Error| (error.code(), error.exit_code(), error.to_string());
         let label = || "desktop/work".to_string();
