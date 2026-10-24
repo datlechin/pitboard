@@ -6,12 +6,12 @@
 use super::words;
 use super::{
     Choice, FailureText, Missing, NameCheck, Question, Seen, SheetText, SheetTool, SigningInText,
-    StowText, alert_of,
+    StowText, WindowQuestion, alert_of,
 };
 use crate::Tool;
 use crate::account_windows::AlertText;
 use crate::model::state::{After, InAppAdd, Leftover, in_its_app, trimmed};
-use crate::model::{Failure, Intent, QuitQuestion, ReplaceQuestion, Sheet};
+use crate::model::{Failure, Intent, QuitQuestion, Sheet};
 use pitboard_core::label;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -445,19 +445,33 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
 
 /// What a switch to `qualified` asks before it puts that account's login in place of a login
 /// its tool has in use, which its service refuses for good, for `why`.
-pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> ReplaceQuestion {
+pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> WindowQuestion {
     let tool = seen.tool_name(Key::parse(qualified).provider.code());
-    ReplaceQuestion {
-        qualified: qualified.to_owned(),
+    WindowQuestion {
         question: Question {
             title: words::replace_title(seen.os, &tool),
             message: why.to_owned(),
             confirm: words::REPLACE.into(),
         },
+        confirmed: Intent::ReplaceAndSwitch {
+            qualified: qualified.to_owned(),
+        },
+        declined: Intent::KeepLogin,
     }
 }
 
-pub(crate) fn quit_confirmation(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
+/// What the quit question asks, while it is asked, with its answers.
+pub(crate) fn quit_question(seen: &Seen, question: &QuitQuestion, then: &After) -> WindowQuestion {
+    WindowQuestion {
+        question: quit_asks(seen, question, then),
+        confirmed: Intent::QuitAndSwitch {
+            qualified: question.qualified.clone(),
+        },
+        declined: Intent::KeepAppOpen,
+    }
+}
+
+fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     let name = &question.name;
     let Key { provider, label } = Key::parse(&question.qualified);
     let tool = provider.code();
@@ -700,7 +714,7 @@ mod tests {
     fn chatgpt_is_asked_to_quit_in_its_own_words() {
         let state = State::new(Cadence::APP);
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
-        let asked = quit_confirmation(
+        let asked = quit_asks(
             &seen,
             &asked("codex/work", "com.openai.codex", "ChatGPT"),
             &After::Switch,
@@ -823,7 +837,7 @@ mod tests {
             words::start_sign_in(Os::MacOs)
         );
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
-        let question = quit_confirmation(
+        let question = quit_asks(
             &seen,
             &asked("desktop/travel", CLAUDE, "Claude"),
             &After::SignIn {
@@ -853,7 +867,7 @@ mod tests {
         assert_eq!(text.confirm, words::record_as("home"));
         let state = State::new(Cadence::APP);
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
-        let question = quit_confirmation(
+        let question = quit_asks(
             &seen,
             &asked("desktop/home", CLAUDE, "Claude"),
             &After::Enrol {
@@ -880,7 +894,7 @@ mod tests {
         );
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let said = |qualified: &str, then: After| {
-            quit_confirmation(&seen, &asked(qualified, CLAUDE, "Claude"), &then)
+            quit_asks(&seen, &asked(qualified, CLAUDE, "Claude"), &then)
         };
         assert_eq!(
             said("desktop/home", After::Switch),
@@ -958,6 +972,38 @@ mod tests {
         assert_eq!(
             alert.message,
             "Nothing is parked.\n\nANTHROPIC_API_KEY is set"
+        );
+    }
+
+    // Each answer the window's questions take back is said with the question, so neither app
+    // maps a button to an intent.
+    #[test]
+    fn the_windows_questions_come_with_their_answers() {
+        let state = State::new(Cadence::APP);
+        let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
+        let quit = quit_question(
+            &seen,
+            &asked("codex/work", "com.openai.codex", "ChatGPT"),
+            &After::Switch,
+        );
+        assert_eq!(
+            (quit.confirmed, quit.declined),
+            (
+                Intent::QuitAndSwitch {
+                    qualified: "codex/work".into()
+                },
+                Intent::KeepAppOpen
+            )
+        );
+        let replace = replace_question(&seen, "claude/work", "why");
+        assert_eq!(
+            (replace.confirmed, replace.declined),
+            (
+                Intent::ReplaceAndSwitch {
+                    qualified: "claude/work".into()
+                },
+                Intent::KeepLogin
+            )
         );
     }
 

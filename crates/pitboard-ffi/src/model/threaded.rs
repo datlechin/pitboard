@@ -477,8 +477,8 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     let asked = asked.last().expect("a snapshot");
     let question = asked.quit_question.as_ref().expect("a question");
     assert_eq!(
-        (question.app_id.as_str(), question.name.as_str()),
-        (CHATGPT, "ChatGPT")
+        question.question.title,
+        crate::present::words::quit_to_switch("ChatGPT")
     );
     assert_eq!(switching(asked), Some("codex/work"));
     assert_eq!(asked.window_request.pane, Some(super::Pane::Accounts));

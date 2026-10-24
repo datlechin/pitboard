@@ -74,9 +74,9 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public bool Reading => Part<bool>();
 
-    public QuitQuestion? QuitQuestion => Part<QuitQuestion?>();
+    public WindowQuestion? QuitQuestion => Part<WindowQuestion?>();
 
-    public ReplaceQuestion? ReplaceQuestion => Part<ReplaceQuestion?>();
+    public WindowQuestion? ReplaceQuestion => Part<WindowQuestion?>();
 
     public WindowRequest WindowRequest => Part<WindowRequest>();
 
@@ -113,8 +113,6 @@ public sealed class AppModel : INotifyPropertyChanged
     public SigningInText? SigningInText => Part<SigningInText?>();
 
     public StowText? StowText => Part<StowText?>();
-
-    public Question? QuitConfirmation => Part<Question?>();
 
     public AlertText? FailureAlert => Part<AlertText?>();
 

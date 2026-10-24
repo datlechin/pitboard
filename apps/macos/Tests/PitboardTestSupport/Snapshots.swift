@@ -52,7 +52,7 @@ package func snapshot(
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
         menuAccountsNote: nil, updatedMenu: updated, updatedWindow: updated, sheetText: nil,
-        signingInText: nil, stowText: nil, quitConfirmation: nil, failureAlert: nil,
+        signingInText: nil, stowText: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
                 on: false, enabled: true, note: nil, failed: nil, about: ""),

@@ -1586,9 +1586,7 @@ fn quit_for_it(model: &mut Hand, machine: &mut Stub) {
     model.send(travel());
     model.run(machine);
     let question = model.shown().quit_question.expect("asked first");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     model.run(machine);
 }
 
@@ -1613,17 +1611,17 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
     );
     assert!(model.on_a_mac().sheet_text.expect("the form").saving);
     model.run(&mut machine);
-    let shown = model.on_a_mac();
     assert_eq!(
-        shown.quit_question,
-        Some(QuitQuestion {
+        model.state.asking(),
+        Some(&QuitQuestion {
             qualified: "desktop/travel".into(),
             app_id: CLAUDE.into(),
             name: "Claude".into(),
         })
     );
+    let shown = model.on_a_mac();
     assert_eq!(
-        shown.quit_confirmation.expect("asked").title,
+        shown.quit_question.expect("asked").question.title,
         words::quit_to_sign_in("Claude", None)
     );
     assert_eq!(shown.signing_in, None, "nothing parked before the answer");
@@ -1697,9 +1695,7 @@ fn cancelling_while_parking_stops_what_started_and_opens_claude_behind() {
     model.send(travel());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     let quit = model.next();
     let answer = machine.answer(quit);
     model.give(answer);
@@ -1766,9 +1762,7 @@ fn a_park_cancelled_in_flight_and_asked_again_keeps_each_hold_its_own() {
         if open {
             model.run(&mut machine);
             let question = model.shown().quit_question.expect("asked");
-            model.send(Intent::QuitAndSwitch {
-                qualified: question.qualified,
-            });
+            model.send(question.confirmed);
         }
         let held = model.next();
         let answer = machine.answer(held);
@@ -1833,9 +1827,7 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
         model.send(travel());
         model.run(&mut machine);
         let question = model.shown().quit_question.expect("asked");
-        model.send(Intent::QuitAndSwitch {
-            qualified: question.qualified,
-        });
+        model.send(question.confirmed);
         if lost {
             let quit = model.take(a_quit);
             model.give(Answer::Lost(quit));
@@ -2059,9 +2051,7 @@ fn cancelling_while_claude_quits_parks_nothing_and_opens_it_again() {
     model.send(travel());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     assert!(!page(&model).cancel.enabled, "held back while Claude quits");
     assert_eq!(model.send(Intent::CancelSignIn), []);
     model.run(&mut machine);
@@ -2150,9 +2140,7 @@ fn a_sheet_held_for_the_quit_question_stays_up_until_it_is_answered() {
             assert_eq!(model.shown().sheet.as_ref(), Some(sheet), "{asked}");
             model.run(&mut machine);
             let question = model.shown().quit_question.expect("asked");
-            model.send(Intent::QuitAndSwitch {
-                qualified: question.qualified,
-            });
+            model.send(question.confirmed);
             model.send(present(name.clone()));
             assert_eq!(
                 model.shown().sheet.as_ref(),
@@ -2174,9 +2162,7 @@ fn a_sheet_held_for_the_quit_question_stays_up_until_it_is_answered() {
     model.send(travel());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     model.run(&mut machine);
     let shown = model.on_a_mac();
     assert_eq!(shown.sheet, Some(add(Some("desktop"))));
@@ -2193,9 +2179,7 @@ fn a_late_answer_beside_another_sign_in_quits_nothing() {
     model.send(Intent::KeepAppOpen);
     put_up(&mut model, &mut machine, add(None));
     starts(&mut model, &mut machine, "claude", "one");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     model.send(Intent::CancelSignIn);
     model.run(&mut machine);
     assert_eq!(model.count(a_quit), 0);

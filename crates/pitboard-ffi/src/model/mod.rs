@@ -74,8 +74,8 @@ mod windowing;
 use crate::account_windows::AlertText;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
-    MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, SetupStep, SheetText,
-    SigningInText, StowText, present,
+    MachineShown, MenuBarText, MenuNotices, PanelNotice, SetupStep, SheetText, SigningInText,
+    StowText, WindowQuestion, present,
 };
 use crate::{AppCore, Warning};
 use lanes::Lanes;
@@ -459,22 +459,15 @@ pub struct RunningSignIn {
     pub wants_code: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct QuitQuestion {
-    pub qualified: String,
-    /// The app, as the core's holder detection names it and `AppControl` takes it: on macOS
-    /// its bundle id, on Windows its Application User Model ID.
-    pub app_id: String,
-    /// The app as a person knows it: "ChatGPT".
-    pub name: String,
-}
-
-/// What a switch asks before it puts an account's login in place of a login in use its
-/// service refuses for good, which cannot be parked.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ReplaceQuestion {
-    pub qualified: String,
-    pub question: Question,
+// The app a quit question asks to quit, for the account `qualified` names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QuitQuestion {
+    pub(crate) qualified: String,
+    // as the core's holder detection names it and `AppControl` takes it: on macOS its bundle
+    // id, on Windows its Application User Model ID
+    pub(crate) app_id: String,
+    // as a person knows it: "ChatGPT"
+    pub(crate) name: String,
 }
 
 /// What a switch means for a tool's running sessions, for a tool whose sessions never pick
@@ -564,9 +557,11 @@ pub struct Snapshot {
     pub revision: u64,
     /// Whether a read of the accounts is under way, so a Refresh button can say so.
     pub reading: bool,
-    pub quit_question: Option<QuitQuestion>,
+    /// The question asked before Pitboard quits an app that holds a tool's login, for a
+    /// switch, a sign-in or the account it shows, while it is asked.
+    pub quit_question: Option<WindowQuestion>,
     /// The question a switch asks before it replaces a login its service refuses for good.
-    pub replace_question: Option<ReplaceQuestion>,
+    pub replace_question: Option<WindowQuestion>,
     /// What the model wants of the main window.
     pub window_request: WindowRequest,
     /// The sign-in under way, from the moment it is asked for until it has finished, failed
@@ -606,8 +601,6 @@ pub struct Snapshot {
     pub signing_in_text: Option<SigningInText>,
     /// What the sheet for putting away the login left in a file says, while it is up.
     pub stow_text: Option<StowText>,
-    /// What the quit question asks, while it is asked.
-    pub quit_confirmation: Option<Question>,
     /// The alert for something asked for that did not happen, until somebody has read it.
     pub failure_alert: Option<AlertText>,
     /// What the settings and the window's other panes show of this machine rather than its

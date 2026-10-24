@@ -3272,11 +3272,14 @@ fn the_question_about_quitting_an_app_is_asked_in_its_name() {
     machine.held.insert("codex".into(), vec![chatgpt_holding()]);
     machine.apps = StandInApps::new(&[CHATGPT], true);
     switch(&mut model, &mut machine, "codex/spare");
-    let asked = model.shown().quit_confirmation.expect("the question");
-    assert_eq!(asked.title, words::quit_to_switch("ChatGPT"));
-    assert_eq!(asked.confirm, words::quit_and_switch(OS, "ChatGPT"));
-    model.send(Intent::KeepAppOpen);
-    assert_eq!(model.shown().quit_confirmation, None);
+    let asked = model.shown().quit_question.expect("the question");
+    assert_eq!(asked.question.title, words::quit_to_switch("ChatGPT"));
+    assert_eq!(
+        asked.question.confirm,
+        words::quit_and_switch(OS, "ChatGPT")
+    );
+    model.send(asked.declined);
+    assert_eq!(model.shown().quit_question, None);
 }
 
 // The window.
@@ -3505,9 +3508,8 @@ fn the_quit_question_is_carried_with_the_sheet_it_was_asked_from() {
     model.run(&mut machine);
     let shown = model.on_a_mac();
     assert_eq!(shown.sheet, Some(add(Some("desktop"))));
-    assert!(shown.quit_question.is_some());
     assert_eq!(
-        shown.quit_confirmation.expect("asked").confirm,
+        shown.quit_question.expect("asked").question.confirm,
         words::quit_and_park(Os::MacOs, "Claude", "work")
     );
     assert!(
@@ -3544,9 +3546,7 @@ fn escape_never_leaves_an_add_with_its_account_parked() {
     model.send(travel());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     let quitting = model.on_a_mac().signing_in_text.expect("the page");
     assert_eq!(quitting.waiting, words::quitting("Claude").1);
     assert!(!quitting.escape_cancels);
@@ -3585,9 +3585,7 @@ fn the_sheet_says_claude_is_quitting_and_its_account_is_read() {
             "nothing yet while asked"
         );
         let question = model.shown().quit_question.expect("asked");
-        model.send(Intent::QuitAndSwitch {
-            qualified: question.qualified,
-        });
+        model.send(question.confirmed);
         assert_eq!(
             model.on_a_mac().sheet_text.expect("the form").progress,
             Some(words::recording("Claude", Recording::Quitting)),

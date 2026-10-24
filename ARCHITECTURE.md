@@ -1390,6 +1390,8 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `AppModel.quitAndSwitch` took the question, so an app may close the question with
   `Intent::KeepAppOpen` before or after it sends the answer: a question closed unanswered is
   kept until another switch, sign-in or enrolment is asked for, and an answer is taken once.
+  The snapshot's `WindowQuestion` carries both, the quit question's and the replace
+  question's alike, so neither app words an answer.
 - Changes to a tool whose login is its app's files never overlap. A switch waits until a
   park of the tool for a sign-in has started. No sign-in or recording of it starts while a
   switch of it is claimed. A copy another change quit meanwhile is opened after that

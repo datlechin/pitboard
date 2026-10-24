@@ -19,7 +19,7 @@ internal static class Snapshots
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
-            SigningInText: null, StowText: null, QuitConfirmation: null, FailureAlert: null,
+            SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
             AccountWindows: new AccountWindowsShown(
                 Accounts: [], Menus: [], Open: [],

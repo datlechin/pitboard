@@ -18,7 +18,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     [
         nameof(AppModel.Sheet), nameof(AppModel.SheetText), nameof(AppModel.SigningIn), nameof(AppModel.SigningInText),
         nameof(AppModel.StowText), nameof(AppModel.SheetFailure), nameof(AppModel.FailureAlert),
-        nameof(AppModel.QuitConfirmation), nameof(AppModel.QuitQuestion),
+        nameof(AppModel.QuitQuestion),
     ];
 
     private readonly AppModel _model;

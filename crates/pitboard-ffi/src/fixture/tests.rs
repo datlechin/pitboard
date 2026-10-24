@@ -11,7 +11,7 @@ use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, event
 use crate::model::testing::records::read_in;
 use crate::model::{
     AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
-    PitboardModel, PlatformError, QuitQuestion, RunOutNotice, Sheet, Snapshot, Tip,
+    PitboardModel, PlatformError, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
 use crate::present::words::{self, titled};
@@ -687,10 +687,8 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
         snapshot.quit_question.is_some()
     });
     let question = asked.quit_question.expect("asked");
-    assert_eq!(question.name, "ChatGPT");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    assert_eq!(question.question.title, words::quit_to_switch("ChatGPT"));
+    model.send(question.confirmed);
     told.last_where("the switch, read back", |snapshot| {
         shows_in_use(snapshot).contains(&"codex/spare".into())
     });
@@ -725,14 +723,8 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
         snapshot.quit_question.is_some()
     });
     let question = asked.quit_question.expect("asked");
-    assert_eq!(question.name, "Claude");
-    assert_eq!(
-        asked.quit_confirmation.expect("its words").title,
-        words::quit_to_switch("Claude")
-    );
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    assert_eq!(question.question.title, words::quit_to_switch("Claude"));
+    model.send(question.confirmed);
     told.last_where("the switch, read back", |snapshot| {
         shows_in_use(snapshot).contains(&"desktop/home".into())
     });
@@ -807,13 +799,12 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
+    let question = asked.quit_question.expect("asked");
     assert_eq!(
-        asked.quit_confirmation.expect("its words").confirm,
+        question.question.confirm,
         words::quit_and_park(OS, "Claude", "work")
     );
-    model.send(Intent::QuitAndSwitch {
-        qualified: asked.quit_question.expect("asked").qualified,
-    });
+    model.send(question.confirmed);
     let waiting = told.last_where("the wait, with Claude opened for it", |snapshot| {
         snapshot.signing_in_text.as_ref().is_some_and(|text| {
             text.message == words::in_app_waiting("Claude", "travel", false, None, true)
@@ -2283,18 +2274,18 @@ fn a_codex_switch_quits_and_reopens_chatgpt_through_the_apps_fixture_in_is_given
     let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
+    let question = asked.quit_question.expect("asked");
     assert_eq!(
-        asked.quit_question,
-        Some(QuitQuestion {
-            qualified: "codex/spare".into(),
-            app_id: CHATGPT.into(),
-            name: "ChatGPT".into(),
-        })
+        (question.question.title, &question.confirmed),
+        (
+            words::quit_to_switch("ChatGPT"),
+            &Intent::QuitAndSwitch {
+                qualified: "codex/spare".into()
+            }
+        )
     );
     assert_eq!(apps.running_calls(), 1);
-    model.send(Intent::QuitAndSwitch {
-        qualified: "codex/spare".into(),
-    });
+    model.send(question.confirmed);
     told.last_where("the switch, read back", |snapshot| {
         uses(snapshot, "codex/spare")
     });

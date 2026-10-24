@@ -23,9 +23,9 @@ public final class AppModel {
     /// Whether a read of the accounts is under way, so a Refresh button can say so.
     public private(set) var reading: Bool
     /// A switch waiting for the person to let Pitboard quit an app first.
-    public private(set) var quitQuestion: QuitQuestion?
+    public private(set) var quitQuestion: WindowQuestion?
     /// A switch waiting for the person to let Pitboard replace a login its service refuses.
-    public private(set) var replaceQuestion: ReplaceQuestion?
+    public private(set) var replaceQuestion: WindowQuestion?
     /// What the model wants of the main window: it opens each time the serial moves.
     public private(set) var windowRequest: WindowRequest
     /// The sign-in under way, and everything its tool has said.
@@ -62,8 +62,6 @@ public final class AppModel {
     public private(set) var signingInText: SigningInText?
     /// What the sheet for putting away a login left in a file says, while it is up.
     public private(set) var stowText: StowText?
-    /// What the quit question asks, while it is asked.
-    public private(set) var quitConfirmation: Question?
     /// The alert for `failure`, while there is one to say.
     public private(set) var failureAlert: AlertText?
     /// What the settings and the window's other panes show of this machine.
@@ -105,7 +103,6 @@ public final class AppModel {
         sheetText = first.sheetText
         signingInText = first.signingInText
         stowText = first.stowText
-        quitConfirmation = first.quitConfirmation
         failureAlert = first.failureAlert
         machine = first.machine
         accountWindows = first.accountWindows
@@ -171,7 +168,6 @@ public final class AppModel {
         update(\.sheetText, snapshot.sheetText)
         update(\.signingInText, snapshot.signingInText)
         update(\.stowText, snapshot.stowText)
-        update(\.quitConfirmation, snapshot.quitConfirmation)
         update(\.failureAlert, snapshot.failureAlert)
         update(\.machine, snapshot.machine)
         let windowsMoved = accountWindows != snapshot.accountWindows

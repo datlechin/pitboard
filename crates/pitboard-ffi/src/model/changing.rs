@@ -946,9 +946,7 @@ fn recording_travel(model: &mut Hand, machine: &mut Stub) {
     model.send(enrol("desktop", "travel"));
     model.run(machine);
     let question = model.shown().quit_question.expect("asked first");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     model.run(machine);
 }
 
@@ -977,8 +975,9 @@ fn recording_the_account_an_app_shows_asks_before_it_quits_the_app() {
     assert_eq!(
         model
             .on_a_mac()
-            .quit_confirmation
+            .quit_question
             .expect("asked first")
+            .question
             .title,
         words::quit_to_record("Claude", "travel", false)
     );
@@ -1012,9 +1011,7 @@ fn a_recording_whose_app_does_not_quit_reads_nothing_and_lets_its_sheet_go() {
         });
         model.run(&mut machine);
         let question = model.shown().quit_question.expect("asked");
-        model.send(Intent::QuitAndSwitch {
-            qualified: question.qualified,
-        });
+        model.send(question.confirmed);
         if lost {
             let quit = model.take(|job| matches!(job, Job::Quit { .. }));
             model.give(Answer::Lost(quit));
@@ -1047,9 +1044,7 @@ fn the_app_quit_to_record_an_account_is_opened_only_after_a_switch_asked_meanwhi
     model.send(enrol("desktop", "travel"));
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked first");
-    model.send(Intent::QuitAndSwitch {
-        qualified: question.qualified,
-    });
+    model.send(question.confirmed);
     let quit = model.next();
     let answer = machine.answer(quit);
     model.give(answer);

@@ -103,7 +103,7 @@ public sealed class ModelTests
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
-            SigningInText: null, StowText: null, QuitConfirmation: null, FailureAlert: null,
+            SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
             AccountWindows: NoWindows());
 
@@ -278,13 +278,16 @@ public sealed class ModelTests
     {
         var snapshot = Read(4) with
         {
-            QuitQuestion = new QuitQuestion(Qualified: "codex/spare", AppId: "com.openai.codex", Name: "ChatGPT"),
+            QuitQuestion = new WindowQuestion(
+                new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
+                Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+                Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
                 Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed."),
             WindowRequest = new WindowRequest(Serial: 3, Pane: Pane.Accounts),
         };
 
-        Assert.AreEqual("ChatGPT", snapshot.QuitQuestion?.Name);
+        Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), snapshot.QuitQuestion?.Confirmed);
         Assert.AreEqual("Couldn’t switch to spare", snapshot.FailureAlert?.Title);
         Assert.AreEqual(Pane.Accounts, snapshot.WindowRequest.Pane);
         Assert.AreEqual(new WindowRequest(3, Pane.Accounts), snapshot.WindowRequest);
@@ -810,8 +813,8 @@ public sealed class ModelTests
         model.Send(new Intent.SwitchTo("codex/spare"));
         var asked = waiting.Until(snapshot => snapshot.QuitQuestion is not null, Patience);
         Assert.IsNotNull(asked, "never asked about quitting ChatGPT");
-        Assert.AreEqual(new QuitQuestion("codex/spare", StandInApps.ChatGpt, "ChatGPT"), asked.QuitQuestion);
-        model.Send(new Intent.QuitAndSwitch("codex/spare"));
+        Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), asked.QuitQuestion?.Confirmed);
+        model.Send(asked.QuitQuestion!.Confirmed);
         var switched = waiting.Until(snapshot => Uses(snapshot, "codex/spare"), Patience);
         var calls = apps.Asked.Until(5, Patience);
         model.Shutdown();

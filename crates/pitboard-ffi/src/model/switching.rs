@@ -824,15 +824,15 @@ fn chatgpt_open(quits: bool) -> (Hand, Stub) {
 fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
     let (mut model, mut machine) = chatgpt_open(true);
     switch(&mut model, &mut machine, "codex/spare");
-    let shown = model.shown();
     assert_eq!(
-        shown.quit_question,
-        Some(QuitQuestion {
+        model.state.asking(),
+        Some(&QuitQuestion {
             qualified: "codex/spare".into(),
             app_id: CHATGPT.into(),
             name: "ChatGPT".into(),
         })
     );
+    let shown = model.shown();
     assert!(machine.switched_to.is_empty());
     assert!(
         machine.apps.asked().is_empty(),
@@ -1372,8 +1372,10 @@ fn a_switch_reopens_the_app_behind_naming_its_tool() {
     machine.switched = desktop_switched();
     model.refresh(&mut machine);
     switch(&mut model, &mut machine, "desktop/home");
-    let question = model.shown().quit_question.expect("asked first");
-    assert_eq!(question.name, "Claude");
+    assert_eq!(
+        model.state.asking().map(|asked| asked.name.as_str()),
+        Some("Claude")
+    );
     model.send(quit_and_switch("desktop/home"));
     model.run(&mut machine);
     assert!(model.asked.contains(&Job::Open {
@@ -2045,7 +2047,12 @@ fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
     let shown = model.shown();
     assert_eq!(model.state.presented, None, "asked, not failed");
     let asked = shown.replace_question.expect("asked");
-    assert_eq!(asked.qualified, "work");
+    assert_eq!(
+        asked.confirmed,
+        Intent::ReplaceAndSwitch {
+            qualified: "work".into()
+        }
+    );
     assert_eq!(asked.question.message, REFUSED_FOR_GOOD);
     assert_eq!(asked.question.confirm, words::REPLACE);
     assert_eq!(model.state.switch_under_way(), Some("work"));

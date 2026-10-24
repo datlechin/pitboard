@@ -258,6 +258,18 @@ pub struct Question {
     pub confirm: String,
 }
 
+/// A question the window asks by itself, with what each answer sends. The model takes either
+/// before or after the other, so an alert that sends its close before its button's answer
+/// loses neither.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WindowQuestion {
+    pub question: Question,
+    /// Sent by its button.
+    pub confirmed: Intent,
+    /// Sent by Cancel, Escape, or its going any other way.
+    pub declined: Intent,
+}
+
 /// How pressing a notice is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, uniffi::Enum)]
 pub enum Severity {
@@ -737,7 +749,9 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     Snapshot {
         revision: 0,
         reading: state.reads > 0,
-        quit_question: state.asking().cloned(),
+        quit_question: state
+            .asking_for()
+            .map(|(question, then)| sheets::quit_question(&seen, question, then)),
         replace_question: state
             .replace_asked()
             .map(|(qualified, why)| sheets::replace_question(&seen, qualified, why)),
@@ -759,9 +773,6 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         sheet_text: sheets::sheet_text(&seen),
         signing_in_text: sheets::signing_in_text(&seen),
         stow_text: sheets::stow_text(&seen),
-        quit_confirmation: state
-            .asking_for()
-            .map(|(question, then)| sheets::quit_confirmation(&seen, question, then)),
         failure_alert: state.presented.as_ref().map(sheets::failure_alert),
         machine: machine::machine(&seen),
         account_windows: windows::account_windows(&seen),

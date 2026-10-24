@@ -41,8 +41,8 @@ mod model;
 pub use model::{
     AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Intent,
     LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications, Pane,
-    PitboardModel, PlatformError, QuitQuestion, ReadFailure, RunOutNotice, RunningSignIn, Sheet,
-    Snapshot, Tip, WindowRequest, WindowsLaunch,
+    PitboardModel, PlatformError, ReadFailure, RunOutNotice, RunningSignIn, Sheet, Snapshot, Tip,
+    WindowRequest, WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -59,7 +59,7 @@ pub use present::{
     Missing, NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice,
     PickerAccount, PickerShown, Question, ScheduleShown, SetupLink, SetupStep, Severity, SheetText,
     SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown,
-    WarmShown, WindowOffer, WindowWaiting, check_name, downloads_quit_question,
+    WarmShown, WindowOffer, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;
