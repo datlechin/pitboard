@@ -176,7 +176,7 @@ fn managed_taken(ctx: &Context) -> Result<Vec<Layer>, String> {
     Ok(taken)
 }
 
-// Merged in, the folder keeps no login pin (merged_login_pins).
+// Merged in, the folder keeps no login pin (managed_login_pins).
 fn managed_pins(ctx: &Context) -> Result<Vec<Layer>, String> {
     managed_tiers(ctx).map(|(taken, _)| taken)
 }
@@ -507,10 +507,10 @@ fn profile(ctx: &Context) -> Vec<Override> {
         .collect()
 }
 
-// Each managed source a session takes that sets `forceLoginOrgUUID`, with the organisations it
-// names (organisation_pin). None where one cannot be read: Claude Code then refuses every login.
+// Each managed source a session takes `forceLoginOrgUUID` from, with the organisations it names
+// (organisation_pin). None where one cannot be read: Claude Code then refuses every login.
 pub(crate) fn organisation_pins(ctx: &Context) -> Vec<(String, Vec<String>)> {
-    managed_taken(ctx)
+    managed_pins(ctx)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|layer| {
@@ -1159,7 +1159,7 @@ mod managed_tests {
         );
     }
 
-    // Read in 2.1.310 (login_method_pin, merged_login_pins): `console` alone, from the managed
+    // Read in 2.1.310 (login_method_pin, managed_login_pins): `console` alone, from the managed
     // sources a sign-in takes it from.
     #[test]
     fn a_managed_console_pin_is_read_from_the_sources_a_session_takes() {
@@ -1274,7 +1274,8 @@ mod managed_tests {
         );
         assert_eq!(
             pins(&mac),
-            [plist.display().to_string(), file.display().to_string()]
+            [plist.display().to_string()],
+            "merged in, the folder keeps no login pin (managed_login_pins)"
         );
 
         memory.administers(

@@ -2176,12 +2176,12 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     sign-in runs, in the darwin-arm64, linux-x64, win32-x64 and win32-arm64 \
                     builds of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
-        depends: "settings::organisation_pins, through the managed sources settings::managed_taken \
-                  takes, the profile's plist on macOS (macos_managed_preferences) among them, and \
-                  Claude's Provider::refuses, so a switch and a \
-                  sign-in that would replace the login in use refuse with `login_restricted` an \
-                  account of an organisation no managed source names, and doctor's \
-                  login_restrictions names the setting and those accounts",
+        depends: "settings::organisation_pins, through the managed sources settings::managed_pins \
+                  takes it from (managed_login_pins), the profile's plist on macOS \
+                  (macos_managed_preferences) among them, and Claude's Provider::refuses, so a \
+                  switch and a sign-in that would replace the login in use refuse with \
+                  `login_restricted` an account of an organisation no managed source names, and \
+                  doctor's login_restrictions names the setting and those accounts",
         probe: &[
             "Organization UUID to require for OAuth login. Accepts a single UUID string or an \
              array of UUIDs (any one is permitted).",
@@ -2251,9 +2251,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     builds of 2.1.310, read as bytes on 2026-10-24. The merge's list is the same \
                     in the darwin-arm64 build of 2.1.309",
         verified_against: "2.1.310",
-        depends: "settings::managed_pins, so console_pin leaves out a folder the first source \
-                  merges, and console_pin, which takes the folder's last `forceLoginMethod` its \
-                  schema keeps",
+        depends: "settings::managed_pins, so organisation_pins and console_pin leave out a \
+                  folder the first source merges, and console_pin, which takes the folder's last \
+                  `forceLoginMethod` its schema keeps",
         probe: &[
             "WINNER_ONLY_UNDER_MERGE",
             r#""forceLoginOrgUUID","forceLoginMethod","forceLoginGatewayUrl","gatewayInternalNetworks""#,
@@ -2277,7 +2277,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     Windows, in the darwin-arm64 build of 2.1.309, read as bytes on 2026-10-23",
         verified_against: "2.1.309",
         depends: "settings::overrides, custom_oauth, env_settings, organisation_pins and \
-                  console_pin, through host::Host::managed_plist and settings::managed_taken",
+                  console_pin, through host::Host::managed_plist and settings::managed_taken and \
+                  managed_pins",
         probe: &[
             "/Library/Managed Preferences/",
             "per-user managed preferences",
