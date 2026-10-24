@@ -523,96 +523,6 @@ fn a_codex_whose_version_cannot_be_read_is_not_called_missing() {
     assert!(version.starts_with("not found here"), "{version}");
 }
 
-/// Each way Codex is installed, laid out in a scratch directory, and a shim that names
-/// nothing. Only the two directories above the program are looked at, names first, so a
-/// standalone install is named without opening any file inside it.
-#[test]
-fn a_version_is_read_out_of_each_way_codex_is_installed() {
-    use crate::host::fs::testing;
-
-    let scratch = tempfile::tempdir().expect("a scratch home");
-    let root = scratch.path().to_path_buf();
-    let place = |at: &str| {
-        let path = root.join(at);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, "").unwrap();
-        path
-    };
-
-    let standalone =
-        place("codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex");
-    // A package.json beside it that would say otherwise, to show it is never opened.
-    std::fs::write(
-        standalone.with_file_name("package.json"),
-        r#"{"name": "@openai/codex", "version": "9.9.9"}"#,
-    )
-    .unwrap();
-    let link = root.join("bin/codex");
-    std::fs::create_dir_all(link.parent().unwrap()).unwrap();
-    testing::link(&standalone, &link).expect("a link");
-    assert_eq!(codex_version(&link).as_deref(), Some("0.154.0"));
-
-    let cask = place("Caskroom/codex/0.153.2/codex-aarch64-apple-darwin");
-    assert_eq!(codex_version(&cask).as_deref(), Some("0.153.2"));
-
-    let npm = place("lib/node_modules/@openai/codex/bin/codex.js");
-    std::fs::write(
-        root.join("lib/node_modules/@openai/codex/package.json"),
-        r#"{"name": "@openai/codex", "version": "0.150.1"}"#,
-    )
-    .unwrap();
-    assert_eq!(codex_version(&npm).as_deref(), Some("0.150.1"));
-
-    // Three levels up is too far: nothing further than two directories is read.
-    let shim = place("volta/bin/volta-shim");
-    std::fs::write(
-        root.join("package.json"),
-        r#"{"name": "@openai/codex", "version": "1.2.3"}"#,
-    )
-    .unwrap();
-    assert_eq!(codex_version(&shim), None);
-}
-
-// `codex.exe` has no version resource in 0.162.1.
-#[test]
-fn a_version_is_read_where_codex_is_installed_on_windows() {
-    let scratch = tempfile::tempdir().expect("a scratch home");
-    let root = scratch.path().to_path_buf();
-    let place = |at: &str| {
-        let path = root.join(at);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, "").unwrap();
-        path
-    };
-    let layout = |version: &str, variant: &str| {
-        format!(
-            r#"{{"layoutVersion": 1, "version": "{version}", "target": "x86_64-pc-windows-msvc", "variant": "{variant}", "entrypoint": "bin/codex.exe"}}"#
-        )
-    };
-
-    let vendored = place("codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe");
-    let package = root.join("codex-win32-x64/vendor/x86_64-pc-windows-msvc/codex-package.json");
-    std::fs::write(&package, layout("0.162.1", "codex")).unwrap();
-    assert_eq!(codex_version(&vendored).as_deref(), Some("0.162.1"));
-    std::fs::write(&package, layout("0.162.1", "something-else")).unwrap();
-    assert_eq!(codex_version(&vendored), None, "only Codex's own package");
-
-    place("npm/node_modules/@openai/codex/bin/codex.js");
-    std::fs::write(
-        root.join("npm/node_modules/@openai/codex/package.json"),
-        r#"{"name": "@openai/codex", "version": "0.161.0"}"#,
-    )
-    .unwrap();
-    let shim = root.join("npm/codex.cmd");
-    std::fs::write(
-        &shim,
-        "@ECHO off\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n)\r\n\
-         \"%_prog%\"  \"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n",
-    )
-    .unwrap();
-    assert_eq!(codex_version(&shim).as_deref(), Some("0.161.0"));
-}
-
 #[test]
 fn a_codex_login_anybody_can_read_or_nobody_can_parse_is_said() {
     let mut codex = with_codex();
@@ -944,14 +854,6 @@ fn codex_facts_are_read_off_the_disk() {
             config.display()
         )
     );
-}
-
-#[test]
-fn a_version_is_read_out_of_the_path_codex_is_installed_at() {
-    assert!(looks_like_a_version("0.154.0"));
-    assert!(!looks_like_a_version("releases"));
-    assert!(!looks_like_a_version("0.154"));
-    assert!(!looks_like_a_version("v0.154.0"));
 }
 
 // The command line heads a tool's checks where they start, so each tool's come together.

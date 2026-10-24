@@ -6,7 +6,6 @@ use crate::provider::ProviderId;
 use crate::provider::codex::paths as codex;
 use crate::state::State;
 use crate::words;
-use serde_json::Value;
 use std::path::PathBuf;
 
 /// What is read about Codex CLI on this machine.
@@ -139,7 +138,7 @@ pub(super) fn codex_facts(ctx: &Context, state: Option<&State>) -> CodexFacts {
         } else {
             Ok(None)
         },
-        version: program.as_deref().and_then(codex_version),
+        version: program.as_deref().and_then(codex::installed_version),
         program,
         running: running_codex(ctx),
         stored_elsewhere: if backend == codex::Backend::File {
@@ -201,46 +200,6 @@ pub(super) fn codex_login(ctx: &Context) -> Result<Option<CodexLogin>, CodexLogi
         account_id: found.account_uuid,
         fingerprint: tool.fingerprint(&credential.raw),
     }))
-}
-
-// Never by running it, and no further than two folders up: names before any file is opened.
-pub(super) fn codex_version(program: &std::path::Path) -> Option<String> {
-    let program =
-        crate::host::program::npm_shim_target(program).unwrap_or_else(|| program.to_path_buf());
-    let resolved = std::fs::canonicalize(program).ok()?;
-    let near: Vec<&std::path::Path> = resolved.ancestors().skip(1).take(2).collect();
-    near.iter()
-        .find_map(|dir| {
-            dir.file_name()
-                .and_then(|n| n.to_str())
-                .and_then(|name| name.split('-').next())
-                .filter(|leading| looks_like_a_version(leading))
-                .map(str::to_owned)
-        })
-        .or_else(|| {
-            near.iter().find_map(|dir| {
-                version_where(&dir.join("package.json"), "name", "@openai/codex")
-                    .or_else(|| version_where(&dir.join("codex-package.json"), "variant", "codex"))
-            })
-        })
-}
-
-pub(super) fn looks_like_a_version(name: &str) -> bool {
-    let parts: Vec<&str> = name.split('.').collect();
-    parts.len() == 3
-        && parts
-            .iter()
-            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-}
-
-// The `version` of a JSON file whose `key` reads `expected`: `package.json`'s name
-// `@openai/codex`, or `codex-package.json`'s variant `codex`.
-pub(super) fn version_where(path: &std::path::Path, key: &str, expected: &str) -> Option<String> {
-    let json: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
-    if json.get(key)?.as_str()? != expected {
-        return None;
-    }
-    Some(json.get("version")?.as_str()?.to_string())
 }
 
 /// Every `codex` running as this user, by kind, asked the way a switch asks so the two
