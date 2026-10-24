@@ -821,7 +821,9 @@ impl Context {
 
     /// The command line's context, from this process's own environment.
     pub fn from_env() -> Context {
-        Context::for_command_line(&Environment::of_this_process())
+        let env = Environment::of_this_process();
+        crate::timing::mark("c_env");
+        Context::for_command_line(&env)
     }
 
     /// The command line's context, from the environment it was started with: a shell's, so
@@ -865,7 +867,7 @@ impl Context {
     /// to look is all a front end adds: an app has no shell's `PATH`, and finds the
     /// programs before it runs anything.
     pub(crate) fn read(env: &Environment, caller: &str) -> Context {
-        let home = env.home();
+        let home = crate::timing::timed("c_home", || env.home());
         let owned = |name: &str| env.text(name).map(str::to_owned);
         let program = |tool: ProviderId, cli: crate::provider::Cli| {
             env.path(cli.program_variable)
@@ -874,7 +876,7 @@ impl Context {
         };
         let read = Context {
             os: env.os(),
-            pitboard_home: env.pitboard_home(),
+            pitboard_home: crate::timing::timed("c_pitboard_home", || env.pitboard_home()),
             home,
             claude_config_dir: owned("CLAUDE_CONFIG_DIR"),
             secure_storage_dir: owned("CLAUDE_SECURESTORAGE_CONFIG_DIR"),
@@ -886,18 +888,20 @@ impl Context {
                 .filter(|name| env.set(name))
                 .map(|name| (*name).to_string())
                 .collect(),
-            anthropic: crate::settings::Profiles::read(env),
+            anthropic: crate::timing::timed("c_profiles", || crate::settings::Profiles::read(env)),
             caller: caller.into(),
-            programs: programs(program),
+            programs: crate::timing::timed("c_programs", || programs(program)),
             api_base: owned("PITBOARD_API_BASE"),
-            proxy: crate::proxy::Proxies::read(env),
+            proxy: crate::timing::timed("c_proxy", || crate::proxy::Proxies::read(env)),
             agent: crate::api::Agents::default(),
             hover_rest: matches!(env.text("CLAUDE_CODE_HOVER_REST"), Some("1" | "true")),
             credential_manager_forced: env.text("CLAUDE_CODE_FORCE_WINDOWS_CREDMAN") == Some("1"),
             codex_home: owned("CODEX_HOME").filter(|v| !v.is_empty()),
-            profile: (env.os() == Os::Windows)
-                .then(crate::host::user::profile)
-                .flatten(),
+            profile: crate::timing::timed("c_profile", || {
+                (env.os() == Os::Windows)
+                    .then(crate::host::user::profile)
+                    .flatten()
+            }),
             local_app_data: env
                 .path("LOCALAPPDATA")
                 .filter(|_| env.os() == Os::Windows)
@@ -908,9 +912,11 @@ impl Context {
             system_root: env
                 .named_folder("SystemRoot")
                 .filter(|_| env.os() == Os::Windows),
-            sid: (env.os() == Os::Windows)
-                .then(crate::host::user::sid)
-                .flatten(),
+            sid: crate::timing::timed("c_sid", || {
+                (env.os() == Os::Windows)
+                    .then(crate::host::user::sid)
+                    .flatten()
+            }),
             one_drive: ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"]
                 .into_iter()
                 .filter(|_| env.os() == Os::Windows)
@@ -935,8 +941,8 @@ impl Context {
             sudo: env.set("SUDO_UID"),
             clock: Arc::new(SystemClock),
             locks: crate::lock::Locks::CLAUDE_CODE,
-            host: crate::host::current(),
-            api: Arc::new(Anthropic),
+            host: crate::timing::timed("c_host", crate::host::current),
+            api: crate::timing::timed("c_after_host", || Arc::new(Anthropic)),
             openai: Arc::new(OpenAiNetwork),
             #[cfg(any(test, feature = "test-support"))]
             sign_in_script: None,
@@ -949,9 +955,12 @@ impl Context {
             #[cfg(any(test, feature = "test-support"))]
             warm_script: None,
         };
+        crate::timing::mark("c_built");
         #[cfg(any(test, feature = "test-support"))]
         if let Some(folder) = env.path(TEST_CLAUDE_DESKTOP).filter(|f| !f.is_empty()) {
-            return read.with_scratch_claude(PathBuf::from(folder));
+            let scratch = read.with_scratch_claude(PathBuf::from(folder));
+            crate::timing::mark("c_scratch");
+            return scratch;
         }
         read
     }

@@ -15,6 +15,12 @@ pub fn mark(label: &'static str) {
     }
 }
 
+pub fn timed<T>(label: &'static str, f: impl FnOnce() -> T) -> T {
+    let value = f();
+    mark(label);
+    value
+}
+
 pub fn on() -> bool {
     std::env::var_os("PITBOARD_J2").is_some()
 }
