@@ -93,7 +93,7 @@ struct LimitsSettings: View {
                             get: { account.on },
                             set: { model.send(.setWarm(qualified: account.qualified, on: $0)) })
                     ) {
-                        Text(account.plan.map { "\(account.title) · \($0)" } ?? account.title)
+                        Text(account.title)
                         if let standing = account.standing {
                             Text(standing)
                         }

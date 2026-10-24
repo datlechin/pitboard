@@ -469,6 +469,13 @@ pub(crate) const UNUSABLE_LOGIN: &str =
 
 pub(crate) const SHOW_IN_PITBOARD: &str = "Show in Pitboard";
 
+/// What VoiceOver and Narrator call the spinner of a row a switch is under way to.
+pub(crate) const SWITCHING: &str = "Switching";
+
+pub(crate) fn in_use(os: Os) -> String {
+    titled(os, "In Use", "In use")
+}
+
 pub(crate) const CLAUDE_CODE_MISSING: &str = "Claude Code isn’t installed";
 
 pub(crate) const LEARN_TO_INSTALL: &str = "Learn how to install it";

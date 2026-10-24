@@ -119,6 +119,9 @@ pub struct AccountItem {
     pub title: String,
     /// Its email address; empty for a login Pitboard cannot read.
     pub email: String,
+    /// The line under its name in the window: its email address, where its name is not that
+    /// already.
+    pub email_line: Option<String>,
     /// The plan its login says it is on, as the window's tag beside its name: "Team 5x".
     pub plan: Option<String>,
     /// Its title as the menu says it, with its plan: "work · Team 5x", and on Windows the
@@ -131,25 +134,20 @@ pub struct AccountItem {
     pub needs_sign_in: bool,
     /// A login of its tool that belongs to no account Pitboard can name.
     pub unplaced: bool,
-    /// A switch to it is under way.
-    pub switching: bool,
+    /// What the far end of its row in the window shows, where anything.
+    pub end: Option<RowEnd>,
     /// What pressing it does, decided once: switch to it, sign in to it again, or name it.
     /// `None` where nothing can be done: it is the one in use, a switch is under way, or
     /// Pitboard cannot use it.
     pub action: Option<ItemAction>,
     /// The one line under its name in the menu: its limits, or what stands in their way.
     pub summary: String,
-    /// Why it cannot be used, in full, when that is so.
-    pub problem: Option<String>,
-    /// Why its numbers are not new, where it can be used all the same.
-    pub stale_note: Option<String>,
-    /// Which limit of the account in use runs out first at its pace, where one runs out
-    /// before it resets: "Weekly limit runs out in 20h 18m at this pace".
-    pub pace: Option<String>,
-    /// How long its parked login stays usable, for an account not in use.
-    pub parked_note: Option<String>,
-    /// Where its warm-up stands, for an account turned on for one: "Warms up again at 22:50".
-    pub warm_note: Option<String>,
+    /// The lines under its limits in the window, in this order: why it cannot be used, in
+    /// full; why its numbers are not new, where it can be used all the same; which limit of
+    /// the account in use runs out first at its pace, "Weekly limit runs out in 20h 18m at
+    /// this pace"; how long its parked login stays usable, for an account not in use; and
+    /// where its warm-up stands, "Warms up again at 22:50".
+    pub notes: Vec<String>,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
@@ -163,6 +161,17 @@ pub struct AccountItem {
     // for an enrolled account, dimmed for the one in use, whose record is the only one of who
     // is signed in; what its own menu offers last, and what deleting its row does
     pub forget: Option<ItemOffer>,
+}
+
+/// What the far end of an account's row in the window shows.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum RowEnd {
+    /// A switch to it is under way: a spinner, which VoiceOver and Narrator name `spoken`.
+    Switching { spoken: String },
+    /// It is the one in use, said beside a checkmark.
+    InUse { title: String },
+    /// Its action's button.
+    Button { action: ItemAction },
 }
 
 // The Account menu's items, dimmed, while no account is selected.

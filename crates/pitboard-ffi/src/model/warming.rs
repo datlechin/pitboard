@@ -426,7 +426,10 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         .flat_map(|section| &section.accounts)
         .find(|item| item.title == "personal")
         .expect("personal");
-    assert_eq!(item.warm_note.as_deref(), Some("Warms up again at 10:00"));
+    assert_eq!(
+        item.notes.last().map(String::as_str),
+        Some("Warms up again at 10:00")
+    );
     let warm: Vec<(String, bool)> = item
         .offers
         .iter()

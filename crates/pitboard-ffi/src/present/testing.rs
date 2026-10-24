@@ -1,11 +1,19 @@
 //! What the presentation's tests share: accounts and limits as the core reports them, and a
 //! person's clock that a test can read, in UTC.
 
+use super::{AccountItem, RowEnd};
 use crate::model::state::{Cadence, State};
 use crate::model::{LocalTime, PlatformError};
 use crate::{Account, Awaiting, Limit, Parked, Status, Tool, Usage, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::{Stale, Standing};
+
+impl AccountItem {
+    // A switch to it is under way, as its row's end shows.
+    pub(crate) fn switching(&self) -> bool {
+        matches!(self.end, Some(RowEnd::Switching { .. }))
+    }
+}
 
 pub(crate) fn claude_code() -> Tool {
     crate::tool(ProviderId::Claude)

@@ -25,13 +25,14 @@ public sealed class AccountRowTests
     public async Task AnAccountNotInUseSaysItsLimitsAndOffersItsAction()
     {
         var sent = new List<Intent>();
-        var item = Items.Account("codex", "spare") with
-        {
-            Plan = "Plus",
-            Limits = [Items.Limit(42, PaceStanding.Over)],
-            ParkedNote = "Its parked login lasts 6 more days",
-            Action = new ItemAction("Use", "Use spare (Codex)", new Intent.SwitchTo("codex/spare")),
-        };
+        var item = Items.Acting(
+            Items.Account("codex", "spare") with
+            {
+                Plan = "Plus",
+                Limits = [Items.Limit(42, PaceStanding.Over)],
+                Notes = ["Its parked login lasts 6 more days"],
+            },
+            new ItemAction("Use", "Use spare (Codex)", new Intent.SwitchTo("codex/spare")));
         var row = await Shown(item, sent.Add);
 
         var texts = Views.Texts(row);

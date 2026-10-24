@@ -53,7 +53,7 @@ fn labels(snapshot: &Snapshot) -> Vec<String> {
 // The account a switch is under way for, as its row says.
 fn switching(snapshot: &Snapshot) -> Option<&str> {
     rows(snapshot)
-        .find(|row| row.switching)
+        .find(|row| row.switching())
         .and_then(|row| row.qualified.as_deref())
 }
 

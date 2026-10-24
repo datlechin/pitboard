@@ -17,8 +17,8 @@ use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
 use crate::present::{
     AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
-    NoticeAction, PaceStanding, PanelNotice, Question, SetupLink, SetupStep, Severity, WindowOffer,
-    present,
+    NoticeAction, PaceStanding, PanelNotice, Question, RowEnd, SetupLink, SetupStep, Severity,
+    WindowOffer, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::{OS, Os};
@@ -303,7 +303,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             .build(),
         switching(running),
     );
-    assert!(spare.switching);
+    assert!(spare.switching());
     assert_eq!(spare.summary, "Switching…");
     assert_eq!(spare.action, None);
 
@@ -313,7 +313,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             .build(),
         switching(running),
     );
-    assert!(!other.switching);
+    assert!(!other.switching());
     assert_eq!(other.summary, "5-hour 5%");
     assert_eq!(other.action, None);
     // Its own menu holds its switch back too, and what else it offers it offers as the Swift
@@ -335,10 +335,36 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             account(Some("spare")).of("codex").build(),
             switching(running)
         )
-        .switching,
+        .switching(),
         "Codex's spare is another account"
     );
-    assert!(!described_while(unnamed(), switching(running)).switching);
+    assert!(!described_while(unnamed(), switching(running)).switching());
+}
+
+/// What both apps draw of a row: its email under its name where its name is not that already,
+/// and at its far end a switch's spinner, the account in use, or its action's button.
+#[test]
+fn a_row_says_its_email_line_and_what_ends_it() {
+    let work = described(account(Some("work")).signed_in().build());
+    assert_eq!(work.email_line, Some(work.email.clone()));
+    assert_eq!(
+        work.end,
+        Some(RowEnd::InUse {
+            title: words::in_use(OS)
+        })
+    );
+    let spare = described(account(Some("spare")).build());
+    let action = spare.action.clone().expect("it switches");
+    assert_eq!(spare.end, Some(RowEnd::Button { action }));
+    assert_eq!(
+        described_while(account(Some("spare")).build(), switching("claude/spare")).end,
+        Some(RowEnd::Switching {
+            spoken: words::SWITCHING.into()
+        })
+    );
+    let unnamed = described(account(None).signed_in().uuid("u").build());
+    assert_eq!(unnamed.title, unnamed.email);
+    assert_eq!(unnamed.email_line, None, "its name is its email");
 }
 
 /// A sign-in waits on somebody in a browser. It holds back another sign-in and nothing else:
@@ -762,95 +788,48 @@ fn a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all() {
     );
 }
 
-/// Why an account cannot be used is said in full only where it cannot be: a login Pitboard
-/// cannot use, or an account that cannot be switched to. Numbers that are merely not live do
-/// not stop anybody choosing an account, and the account in use needs no switch.
+/// Why an account cannot be used, where it cannot be, or else why its numbers are not new,
+/// where it can be used all the same, is said once under its limits, and the menu's help says
+/// it too. Numbers that are merely not live do not stop anybody choosing an account. An
+/// account with nothing wrong, or nothing to say, says nothing.
 #[test]
-fn only_an_account_that_cannot_be_used_says_why() {
+fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
     let refused_login = "Its parked login was refused. Sign in to it again.";
     let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
+    let said = |account: Account| {
+        let item = described(account);
+        (item.notes, item.help)
+    };
+    let told = |why: &str| (vec![why.to_owned()], Some(why.to_owned()));
     let login = unplaced("codex", false);
-    assert_eq!(described(login.clone()).problem, login.stale_explanation);
+    let unusable = login.stale_explanation.clone().expect("why");
+    assert_eq!(said(login), told(&unusable));
+    let stale = || account(Some("stale")).standing(Standing::LoginExpired);
     assert_eq!(
-        described(
-            account(Some("stale"))
-                .standing(Standing::LoginExpired)
-                .explained(refused_login)
-                .build()
-        )
-        .problem
-        .as_deref(),
-        Some(refused_login)
+        said(stale().explained(refused_login).build()),
+        told(refused_login)
     );
+    assert_eq!(said(stale().build()), (Vec::new(), None), "nothing to say");
     assert_eq!(
-        described(
-            account(Some("stale"))
-                .standing(Standing::LoginExpired)
-                .build()
-        )
-        .problem,
-        None,
-        "nothing to say"
-    );
-    assert_eq!(
-        described(account(Some("spare")).explained(old_numbers).build()).problem,
-        None,
+        said(account(Some("spare")).explained(old_numbers).build()),
+        told(old_numbers),
         "it can still be switched to"
     );
     assert_eq!(
-        described(
+        said(
             account(Some("work"))
                 .signed_in()
                 .explained(old_numbers)
                 .build()
-        )
-        .problem,
-        None,
-        "it is the one in use"
+        ),
+        told(old_numbers),
+        "the one in use"
     );
-}
-
-/// Numbers that are not new are worth knowing about where the account can still be used:
-/// its service could not be reached or is rate limiting, or its session has expired. That is
-/// said beside the numbers of the account in use and of one that can be switched to, and not
-/// a second time where the account cannot be used and why is said already. The menu's help
-/// says whichever there is.
-#[test]
-fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
-    let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
-    let refused_login = "Its parked login was refused. Sign in to it again.";
-    let spare = described(account(Some("spare")).explained(old_numbers).build());
-    assert_eq!(spare.stale_note.as_deref(), Some(old_numbers));
-    assert_eq!(spare.problem, None);
-    assert_eq!(spare.help.as_deref(), Some(old_numbers));
-    let in_use = described(
-        account(Some("work"))
-            .signed_in()
-            .explained(old_numbers)
-            .build(),
-    );
-    assert_eq!(in_use.stale_note.as_deref(), Some(old_numbers));
-    assert_eq!(in_use.problem, None);
-
-    let expired = described(
-        account(Some("stale"))
-            .standing(Standing::LoginExpired)
-            .explained(refused_login)
-            .build(),
-    );
-    assert_eq!(expired.problem.as_deref(), Some(refused_login));
     assert_eq!(
-        expired.stale_note, None,
-        "said once, as why it cannot be used"
-    );
-    assert_eq!(expired.help.as_deref(), Some(refused_login));
-    assert_eq!(described(unplaced("codex", false)).stale_note, None);
-    assert_eq!(
-        described(account(Some("spare")).build()).stale_note,
-        None,
+        said(account(Some("spare")).build()),
+        (Vec::new(), None),
         "numbers that are new"
     );
-    assert_eq!(described(account(Some("spare")).build()).help, None);
 }
 
 /// How long a parked login stays usable is about a switch to it, so it is said of every
@@ -859,22 +838,22 @@ fn why_a_usable_accounts_numbers_are_old_is_said_beside_them() {
 fn a_parked_logins_life_is_said_only_of_an_account_not_in_use() {
     let parking = NOON + 3 * 86_400 + 60;
     assert_eq!(
-        described(account(Some("spare")).parked_until(parking).build())
-            .parked_note
-            .as_deref(),
-        Some("Parked login good for 3 more days")
+        described(account(Some("spare")).parked_until(parking).build()).notes,
+        [words::typeset(
+            &pitboard_core::words::parked_life(Some(parking), NOON).expect("a life")
+        )]
     );
-    assert_eq!(
+    assert!(
         described(
             account(Some("work"))
                 .signed_in()
                 .parked_until(parking)
                 .build()
         )
-        .parked_note,
-        None
+        .notes
+        .is_empty()
     );
-    assert_eq!(described(account(Some("spare")).build()).parked_note, None);
+    assert!(described(account(Some("spare")).build()).notes.is_empty());
 }
 
 const HOUR: i64 = 3_600;
@@ -941,8 +920,8 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .build(),
     );
     assert_eq!(
-        in_use.pace.as_deref(),
-        Some("Weekly limit runs out in 20h 18m at this pace")
+        in_use.notes,
+        ["Weekly limit runs out in 20h 18m at this pace"]
     );
     assert_eq!(
         in_use.summary,
@@ -954,7 +933,7 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .read_at(NOON)
             .build(),
     );
-    assert_eq!(parked.pace, None);
+    assert!(parked.notes.is_empty());
     assert_eq!(parked.summary, "5-hour 30%, weekly 33%");
     let calm = described(
         account(Some("work"))
@@ -963,7 +942,7 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .read_at(NOON)
             .build(),
     );
-    assert_eq!(calm.pace, None);
+    assert!(calm.notes.is_empty());
 }
 
 /// Only an enrolled account that is not the one in use may be forgotten: forgetting that one

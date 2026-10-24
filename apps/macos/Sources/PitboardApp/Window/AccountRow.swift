@@ -26,8 +26,8 @@ struct AccountRow: View {
                             PlanTag(plan: plan)
                         }
                     }
-                    if !item.email.isEmpty, item.email != item.title {
-                        Text(item.email)
+                    if let line = item.emailLine {
+                        Text(line)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -41,7 +41,7 @@ struct AccountRow: View {
                 if !item.limits.isEmpty {
                     UsageBars(limits: item.limits)
                 }
-                ForEach(notes, id: \.self) { note in
+                ForEach(item.notes, id: \.self) { note in
                     Text(note).explanatory()
                 }
             }
@@ -65,22 +65,20 @@ struct AccountRow: View {
         return item.inUse ? "person.crop.circle.fill" : Symbol.account
     }
 
-    private var notes: [String] {
-        [item.problem, item.staleNote, item.pace, item.parkedNote, item.warmNote]
-            .compactMap { $0 }
-    }
-
     @ViewBuilder private var trailing: some View {
-        if item.switching {
+        switch item.end {
+        case .switching(let spoken)?:
             ProgressView().controlSize(.small)
-                .accessibilityLabel("Switching")
-        } else if item.inUse {
-            Label("In Use", systemImage: "checkmark")
+                .accessibilityLabel(spoken)
+        case .inUse(let title)?:
+            Label(title, systemImage: "checkmark")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-        } else if let action = item.action {
+        case .button(let action)?:
             Button(action.title) { perform(action.intent) }
                 .accessibilityLabel(action.spoken)
+        case nil:
+            EmptyView()
         }
     }
 }

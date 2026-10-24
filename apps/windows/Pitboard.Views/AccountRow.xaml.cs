@@ -38,17 +38,28 @@ public sealed partial class AccountRow : UserControl
         string.IsNullOrEmpty(item.Plan) ? Visibility.Collapsed : Visibility.Visible;
 
     public static Visibility EmailShown(AccountItem item) =>
-        item.Email.Length > 0 && item.Email != item.Title ? Visibility.Visible : Visibility.Collapsed;
+        item.EmailLine is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public static string EmailLine(AccountItem item) => item.EmailLine ?? "";
+
+    public static bool Switching(AccountItem item) => item.End is RowEnd.Switching;
+
+    public static Visibility SwitchingShown(AccountItem item) =>
+        Switching(item) ? Visibility.Visible : Visibility.Collapsed;
+
+    public static string SwitchingSpoken(AccountItem item) => (item.End as RowEnd.Switching)?.Spoken ?? "";
 
     public static Visibility InUseShown(AccountItem item) =>
-        !item.Switching && item.InUse ? Visibility.Visible : Visibility.Collapsed;
+        item.End is RowEnd.InUse ? Visibility.Visible : Visibility.Collapsed;
+
+    public static string InUseTitle(AccountItem item) => (item.End as RowEnd.InUse)?.Title ?? "";
 
     public static Visibility ActionShown(AccountItem item) =>
-        !item.Switching && !item.InUse && item.Action is not null ? Visibility.Visible : Visibility.Collapsed;
+        item.End is RowEnd.Button ? Visibility.Visible : Visibility.Collapsed;
 
-    public static string ActionTitle(AccountItem item) => item.Action?.Title ?? "";
+    public static string ActionTitle(AccountItem item) => (item.End as RowEnd.Button)?.Action.Title ?? "";
 
-    public static string ActionSpoken(AccountItem item) => item.Action?.Spoken ?? "";
+    public static string ActionSpoken(AccountItem item) => (item.End as RowEnd.Button)?.Action.Spoken ?? "";
 
     private static Style Shared(string key) => (Style)Application.Current.Resources[key];
 
@@ -85,13 +96,10 @@ public sealed partial class AccountRow : UserControl
     {
         ShowLimits(item.Limits);
         Notes.Children.Clear();
-        foreach (var note in new[] { item.Problem, item.StaleNote, item.Pace, item.ParkedNote, item.WarmNote })
+        foreach (var note in item.Notes)
         {
-            if (note is not null)
-            {
-                Notes.Children.Add(
-                    new TextBlock { Text = note, Style = Shared("SecondaryCaptionTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
-            }
+            Notes.Children.Add(
+                new TextBlock { Text = note, Style = Shared("SecondaryCaptionTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
         }
     }
 

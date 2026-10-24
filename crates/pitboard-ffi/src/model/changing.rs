@@ -862,7 +862,7 @@ fn updating_claude_codes_config_is_no_switch() {
         .sections
         .into_iter()
         .flat_map(|section| section.accounts)
-        .map(|row| (row.summary, row.switching))
+        .map(|row| (row.summary.clone(), row.switching()))
         .collect();
     assert!(
         rows.iter()

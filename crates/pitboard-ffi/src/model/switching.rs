@@ -1741,7 +1741,7 @@ fn rows_enabled(model: &Hand) -> bool {
         .sections
         .iter()
         .flat_map(|section| &section.accounts)
-        .all(|row| !row.switching)
+        .all(|row| !row.switching())
 }
 
 #[test]

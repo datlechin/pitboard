@@ -505,11 +505,10 @@ public sealed class ModelTests
             InUse: false, Title: "spare");
         var spare = new AccountItem(
             Id: "codex:spare", Qualified: "codex/spare", Title: "spare",
-            Email: "spare@example.com", Plan: null, MenuTitle: "spare",
+            Email: "spare@example.com", EmailLine: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
-            NeedsSignIn: false, Unplaced: false, Switching: false, Action: use,
-            Summary: "5-hour 72%", Problem: null, StaleNote: null, Pace: null,
-            ParkedNote: "Parked login good for 3 more days", WarmNote: null, Help: null, Limits: [limit],
+            NeedsSignIn: false, Unplaced: false, End: new RowEnd.Button(use), Action: use,
+            Summary: "5-hour 72%", Notes: ["Parked login good for 3 more days"], Help: null, Limits: [limit],
             Offers:
             [
                 new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null),
@@ -766,7 +765,7 @@ public sealed class ModelTests
         snapshot.Sections.SelectMany(section => section.Accounts);
 
     private static bool Uses(Snapshot snapshot, string qualified) =>
-        !Rows(snapshot).Any(row => row.Switching) && Rows(snapshot).Any(row => row.InUse && row.Qualified == qualified);
+        !Rows(snapshot).Any(row => row.End is RowEnd.Switching) && Rows(snapshot).Any(row => row.InUse && row.Qualified == qualified);
 
     private static Snapshot Start(PitboardModel model, Waiting waiting)
     {

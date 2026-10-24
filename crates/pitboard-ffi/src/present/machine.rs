@@ -61,10 +61,8 @@ pub struct WarmShown {
 pub struct WarmAccountShown {
     /// Its label with its tool, which `Intent::SetWarm` takes back.
     pub qualified: String,
-    /// Its name.
+    /// Its name, with the plan its login says it is on: "work · Team 5x".
     pub title: String,
-    /// The plan its login says it is on, where one does.
-    pub plan: Option<String>,
     /// Whether it is warmed up.
     pub on: bool,
     /// Where its warm-up stands, while it is turned on: "Warms up again at 22:50".
@@ -247,12 +245,15 @@ fn warm(seen: &Seen) -> WarmShown {
                 .iter()
                 .map(|choice| WarmAccountShown {
                     qualified: choice.qualified.clone(),
-                    title: choice.account.clone(),
-                    plan: seen
-                        .accounts()
-                        .iter()
-                        .find(|account| account.qualified.as_deref() == Some(&choice.qualified))
-                        .and_then(|account| account.plan.clone()),
+                    title: words::named_in_menu(
+                        seen.os,
+                        &choice.account,
+                        seen.accounts()
+                            .iter()
+                            .find(|account| account.qualified.as_deref() == Some(&choice.qualified))
+                            .and_then(|account| account.plan.as_deref()),
+                        None,
+                    ),
                     on: choice.on,
                     standing: choice.standing.as_ref().map(|standing| {
                         words::typeset(&pitboard_core::words::capitalised(
@@ -878,10 +879,9 @@ mod tests {
     #[test]
     fn windows_sets_warm_ups_as_macos_does() {
         use pitboard_core::duty::warm::{Choice, Halt, Overview, Range, Standing};
-        let mut state = read(
-            status(vec![account(Some("work")).signed_in().build()], Vec::new()),
-            vec![claude_code()],
-        );
+        let mut work = account(Some("work")).signed_in().build();
+        work.plan = Some("Team 5x".into());
+        let mut state = read(status(vec![work], Vec::new()), vec![claude_code()]);
         let overview = |on: bool| Overview {
             range: Range::DEFAULT,
             halted: Some(Halt::ProgramMissing),
@@ -907,6 +907,11 @@ mod tests {
             assert_eq!(windows, present_on(Os::MacOs, &state, 0, &Utc).machine.warm);
             assert!(windows.enabled, "{on}");
             assert_eq!(windows.none_enrolled, None);
+            assert_eq!(
+                windows.accounts[0].title,
+                words::named_in_menu(Os::Windows, "work", Some("Team 5x"), None),
+                "with its plan, as the menu names it"
+            );
             assert_eq!(windows.standing, said, "{on}");
             assert_eq!(
                 windows.note,

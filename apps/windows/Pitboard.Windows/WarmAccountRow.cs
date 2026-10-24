@@ -14,7 +14,7 @@ public sealed partial class WarmAccountRow(WarmAccountShown account, bool enable
 
     public string AutomationId => $"settings.warm.{Qualified}";
 
-    public string Title => _account.Plan is { } plan ? $"{_account.Title} · {plan}" : _account.Title;
+    public string Title => _account.Title;
 
     public string Standing => _account.Standing ?? "";
 

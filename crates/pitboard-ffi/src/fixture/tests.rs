@@ -239,7 +239,7 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
             .iter()
             .flat_map(|section| &section.accounts)
             .find(|item| item.title == "personal")
-            .and_then(|item| item.warm_note.clone())
+            .and_then(|item| item.notes.last().cloned())
     };
     let shown = told.last_where("personal warmed up", |shown| {
         personal(shown).is_some_and(|note| note.starts_with("Warms up again at "))
@@ -602,7 +602,7 @@ fn lists(snapshot: &Snapshot, qualified: &str) -> bool {
 
 /// The accounts in use a snapshot shows, with no switch under way.
 fn shows_in_use(snapshot: &Snapshot) -> Vec<String> {
-    if rows(snapshot).any(|row| row.switching) {
+    if rows(snapshot).any(AccountItem::switching) {
         return Vec::new();
     }
     listed(snapshot)
@@ -1638,7 +1638,8 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
     assert_eq!(items.len(), 2);
     for item in items {
         assert_eq!(
-            item.stale_note, fresh.accounts[0].stale_explanation,
+            item.notes.first(),
+            fresh.accounts[0].stale_explanation.as_ref(),
             "{item:?}"
         );
         assert!(!item.limits.is_empty(), "the last numbers measured");

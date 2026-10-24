@@ -6,14 +6,18 @@ namespace Pitboard.Windows.Tests;
 internal static class Items
 {
     public static AccountItem Account(string provider, string label, bool inUse = false) =>
-        new(
-            Id: $"{provider}:{label}", Qualified: $"{provider}/{label}", Title: label,
-            Email: $"{label}@example.com", Plan: null, MenuTitle: label,
-            Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false, Unplaced: false,
-            Switching: false,
-            Action: inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")),
-            Summary: "", Problem: null, StaleNote: null, Pace: null, ParkedNote: null, WarmNote: null, Help: null,
-            Limits: [], Offers: [], Windows: [], Forget: null);
+        Acting(
+            new(
+                Id: $"{provider}:{label}", Qualified: $"{provider}/{label}", Title: label,
+                Email: $"{label}@example.com", EmailLine: $"{label}@example.com", Plan: null, MenuTitle: label,
+                Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false, Unplaced: false,
+                End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Help: null,
+                Limits: [], Offers: [], Windows: [], Forget: null),
+            inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")));
+
+    // What pressing it does, and the button at its row's end that does it.
+    public static AccountItem Acting(AccountItem item, ItemAction? action) =>
+        action is null ? item with { Action = null } : item with { Action = action, End = new RowEnd.Button(action) };
 
     // A site as a snapshot carries one, chatgpt.com's with the sign-in host its window loads.
     public static Site Site(string provider) =>

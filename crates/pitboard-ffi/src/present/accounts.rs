@@ -5,7 +5,7 @@
 use super::words;
 use super::{
     AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow,
-    MenuBarText, MenuNotices, PaceStanding, Question, Seen, WindowOffer,
+    MenuBarText, MenuNotices, PaceStanding, Question, RowEnd, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::{Intent, Sheet};
@@ -269,10 +269,29 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     if needs_sign_in {
         spoken.push("needs signing in again".into());
     }
+    let end = if switching {
+        Some(RowEnd::Switching {
+            spoken: words::SWITCHING.into(),
+        })
+    } else if in_use {
+        Some(RowEnd::InUse {
+            title: words::in_use(seen.os),
+        })
+    } else {
+        action.clone().map(|action| RowEnd::Button { action })
+    };
+    let notes = [&problem, &stale_note, &pace, &parked_note]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .chain(warm_note(seen, account))
+        .collect();
     AccountItem {
         id: account.id.clone(),
         qualified: account.qualified.clone(),
         summary: summary(seen, account),
+        email_line: (!account.email.is_empty() && account.email != title)
+            .then(|| account.email.clone()),
         title,
         email: account.email.clone(),
         plan: account.plan.clone(),
@@ -281,12 +300,11 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         in_use,
         needs_sign_in,
         unplaced: account.unplaced,
-        switching,
+        end,
         offers: offers(seen.os, account, action.as_ref(), busy)
             .into_iter()
             .chain(warm_offer(seen, account))
             .collect(),
-        warm_note: warm_note(seen, account),
         windows: windows_of_account(account, seen.accounts())
             .into_iter()
             .map(|window| WindowOffer {
@@ -296,11 +314,8 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             .collect(),
         forget: forget(seen, account, &spoken_name),
         action,
-        help: problem.clone().or_else(|| stale_note.clone()),
-        problem,
-        stale_note,
-        pace,
-        parked_note,
+        help: problem.or(stale_note),
+        notes,
         limits: account
             .usage
             .as_ref()
@@ -1146,10 +1161,10 @@ mod tests {
         let rows = desktop_rows(vec![desktop_account("work", true), home]);
         assert_eq!(rows[0].summary, "No usage read");
         assert_eq!(rows[1].summary, "No usage read");
-        assert_eq!(rows[1].stale_note, None, "said once, in the menu's line");
         assert_eq!(
-            rows[1].parked_note.as_deref(),
-            Some("Its sign-in may lapse in 25 days")
+            rows[1].notes,
+            [said::session_life(Some(NOW + 25 * 86_400 + 3_600), NOW).expect("a date")],
+            "no usage said once, in the menu's line"
         );
         let lapsed = Account {
             parked: Some(crate::Parked {
@@ -1161,8 +1176,8 @@ mod tests {
         };
         let life = said::session_life(Some(NOW - 1), NOW).expect("a date");
         assert_eq!(
-            desktop_rows(vec![lapsed])[0].parked_note,
-            Some(words::sign_in_to_keep(&life)),
+            desktop_rows(vec![lapsed])[0].notes,
+            [words::sign_in_to_keep(&life)],
             "as `pitboard status` hints a sign-in for it"
         );
     }
@@ -1185,7 +1200,7 @@ mod tests {
             .standing(status::Standing::Expiring)
             .build());
         let life = said::parked_life(Some(due), NOW).expect("a date");
-        assert_eq!(expiring.parked_note, Some(words::sign_in_to_keep(&life)));
+        assert_eq!(expiring.notes, [words::sign_in_to_keep(&life)]);
         assert!(!expiring.needs_sign_in);
         assert!(matches!(
             expiring.action.map(|action| action.intent),
@@ -1194,7 +1209,10 @@ mod tests {
 
         let lasting = NOW + 20 * 86_400;
         let ready = row(account(Some("work")).parked_until(lasting).build());
-        assert_eq!(ready.parked_note, said::parked_life(Some(lasting), NOW));
+        assert_eq!(
+            ready.notes,
+            [said::parked_life(Some(lasting), NOW).expect("a date")]
+        );
     }
 
     fn menu_titles(os: Os, accounts: Vec<Account>) -> Vec<String> {
@@ -1244,9 +1262,6 @@ mod tests {
             ..desktop_account("work", true)
         };
         let rows = desktop_rows(vec![work]);
-        assert_eq!(
-            rows[0].stale_note.as_deref(),
-            Some("Read 2h 00m ago, with Claude closed")
-        );
+        assert_eq!(rows[0].notes, ["Read 2h 00m ago, with Claude closed"]);
     }
 }
