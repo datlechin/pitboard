@@ -697,7 +697,7 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     of a local package, read on 2026-10-15, and the same of 0.164.0 on \
                     2026-10-24",
         verified_against: "0.164.0",
-        depends: "doctor's codex_version, which reads the release there on Windows",
+        depends: "codex::paths::installed_version, which reads the release there on Windows",
         probe: &["codex-package.json"],
         absent: &[],
     },

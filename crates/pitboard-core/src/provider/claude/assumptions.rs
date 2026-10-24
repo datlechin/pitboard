@@ -527,7 +527,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                backend in, which an ordinary `claude` does not",
         read_from: "the keychain-with-plaintext-fallback store and `getSecureStorage`",
         verified_against: VERIFIED_AGAINST,
-        depends: "store::resolve and everything that reads or writes through it",
+        depends: "claude::live::chain, store::holder, read_raw and write_raw, and everything \
+                  that reads or writes through them",
         probe: &[".credentials.json", "-with-", "-fallback"],
         absent: &[],
     },
