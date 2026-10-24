@@ -13,6 +13,7 @@ use crate::assumptions::OnSystem::{NotRead, Pending, Read};
 use crate::assumptions::{Assumption, PerSystem};
 
 /// The build every entry below was read from on macOS and Linux, unless it names its own.
+// The checker goes red on 0.99.0 (2026-10-06).
 pub(crate) const VERIFIED_AGAINST: &str = "0.164.0";
 
 // Both Windows builds of 0.164.0, read as bytes on 2026-10-24 with the source at `rust-v0.164.0`

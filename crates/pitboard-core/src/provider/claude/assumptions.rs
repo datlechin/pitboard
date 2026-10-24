@@ -29,12 +29,12 @@ pub(crate) const WINDOWS_VERIFIED_AGAINST: &str = "2.1.303";
 const NO_KEYCHAIN_ON_LINUX: OnSystem =
     NotRead("Linux has no keychain, and Claude Code's Linux build has no keychain backend");
 
-/// Nor has the Windows build. Both Windows builds of 2.1.289 keep code they share with the
-/// macOS one: the fallback wrapper's `keychain_locked_skip_fallback` and
-/// `primary_transient_skip_fallback`, and a device key store that names
-/// `find-generic-password`. What they lack is the backend itself: none holds `exceeds
-/// security -i stdin limit; using argv`, `show-keychain-info` or `[keychain] readAsync
-/// failed`, which the macOS build holds twice each.
+// Nor has the Windows build. Both Windows builds of 2.1.289, from commit 736d26e as its macOS and
+// Linux builds are, keep code they share with the macOS one: the fallback wrapper's
+// `keychain_locked_skip_fallback` and `primary_transient_skip_fallback`, and a device key store
+// that names `find-generic-password`. What they lack is the backend itself: none holds `exceeds
+// security -i stdin limit; using argv`, `show-keychain-info` or `[keychain] readAsync failed`,
+// which the macOS build holds twice each.
 const NO_KEYCHAIN_ON_WINDOWS: OnSystem =
     NotRead("Windows has no keychain, and Claude Code's Windows build has no keychain backend");
 
@@ -452,8 +452,8 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     },
     PerSystem {
         name: "statusline_run_timing",
-        macos: NotRead("read in the Windows builds alone, for a status line run's budget there"),
-        linux: NotRead("read in the Windows builds alone, for a status line run's budget there"),
+        macos: Read("2.1.302"),
+        linux: Read("2.1.302"),
         windows: Read("2.1.302"),
     },
     PerSystem {
@@ -671,8 +671,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     the storage write wrapper, and the dead holder takeover, which reads the \
                     owner record",
         // Read on 2026-10-09 from the macOS, Linux x64, Windows x64 and Windows arm64 builds of
-        // 2.1.294, whose code here is the same, and again on 2026-10-23 from the four builds of
-        // 2.1.309.
+        // 2.1.294, all from commit 8f033c6, whose code here is the same, and again on 2026-10-23
+        // from the four builds of 2.1.309.
         verified_against: "2.1.309",
         depends: "lock::REFRESH, a switch, which holds it from before it reads the outgoing login \
                   a last time until it has recorded the login installed, so no session spends the \
@@ -1066,10 +1066,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     again at most every 30 seconds for one that is not; the renewal check 5 \
                     minutes before expiry, which reads the store first and takes its login \
                     where it differs; and the 401 handlers",
-        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
-        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same, and
-        // again on 2026-10-16 from both Windows builds of 2.1.301. On Linux the file is the
-        // only store, and on Windows it is unless Credential Manager is turned on
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64, Windows x64
+        // and Windows arm64 builds of 2.1.294, all from commit 8f033c6, whose code here is the
+        // same, and again on 2026-10-16 from both Windows builds of 2.1.301. On Linux the file is
+        // the only store, and on Windows it is unless Credential Manager is turned on
         // (`windows_backend_choice`).
         verified_against: "2.1.294",
         depends: "Claude's adoption, by which a switch says that running sessions take it at \
@@ -1136,9 +1136,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     a sign-in and a logout both run. Of five caches captured on one machine on \
                     2026-10-08, four held the numbers of another login than the account they \
                     named, one with no switch near it",
-        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
-        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same, and
-        // again on 2026-10-23 from the four builds of 2.1.309.
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64, Windows x64
+        // and Windows arm64 builds of 2.1.294, all from commit 8f033c6, whose code here is the
+        // same, and again on 2026-10-23 from the four builds of 2.1.309.
         verified_against: "2.1.309",
         depends: "status, which takes no usage from it, and the automatic switch, which \
                   decides from status's offline rows",
@@ -1163,9 +1163,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     config's freshness watch and its 1000 ms poll; the `/usage` screen, which \
                     seeds itself from the session's header snapshot or the cache, and the \
                     usage read it starts",
-        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
-        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same, and
-        // again on 2026-10-23 from the four builds of 2.1.309.
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64, Windows x64
+        // and Windows arm64 builds of 2.1.294, all from commit 8f033c6, whose code here is the
+        // same, and again on 2026-10-23 from the four builds of 2.1.309.
         verified_against: "2.1.309",
         depends: "what a switch says of sessions already running while a file is behind the \
                   keychain, which names the file and no account: `/status` in one of them \
@@ -1190,9 +1190,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     and its 24 hour check, the bootstrap merge into `oauthAccount`, and the \
                     refresh's profile update. On 2026-10-08 one machine's config named another \
                     account than the keychain's login for three hours",
-        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
-        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same, and
-        // again on 2026-10-23 from the four builds of 2.1.309.
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64, Windows x64
+        // and Windows arm64 builds of 2.1.294, all from commit 8f033c6, whose code here is the
+        // same, and again on 2026-10-23 from the four builds of 2.1.309.
         verified_against: "2.1.309",
         depends: "in_use::known, which takes the config naming another account than when \
                   Anthropic last named the login stored as a sign that something signed in, \
@@ -1221,8 +1221,9 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     response; `resetCurrentLimits` and both its callers; and the header \
                     reader, which drops a response from before an account change and empties \
                     the snapshot without a claude.ai login",
-        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64,
-        // Windows x64 and Windows arm64 builds of 2.1.294, whose code here is the same.
+        // Read on 2026-10-08 from the macOS build and on 2026-10-09 from the Linux x64, Windows x64
+        // and Windows arm64 builds of 2.1.294, all from commit 8f033c6, whose code here is the
+        // same.
         verified_against: "2.1.294",
         depends: "statusline::read, which takes a session's numbers to be the account's whose \
                   reading, as Anthropic answered it, holds their windows, never the account \
@@ -1864,7 +1865,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                starts cancels one still going, so only a run within that keeps the line up to \
                date",
         read_from: "the status line's runner in the win32-x64 and win32-arm64 builds of \
-                    2.1.301, read as bytes on 2026-10-16, and of 2.1.302 on 2026-10-17",
+                    2.1.301, read as bytes on 2026-10-16, and of 2.1.302 on 2026-10-17, and in \
+                    the darwin-arm64 and linux-x64 builds of 2.1.302, read as bytes on \
+                    2026-10-25: the same 300 ms timer before a run, and the same abort of the \
+                    run before",
         verified_against: "2.1.302",
         depends: "the 300 ms the Windows tests hold a warm `pitboard statusline` run to, and \
                   atomic::write_unsynced, by which what the status line writes is not flushed",
