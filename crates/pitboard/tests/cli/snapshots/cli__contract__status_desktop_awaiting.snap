@@ -1,6 +1,5 @@
 ---
 source: crates/pitboard/tests/cli/contract.rs
-assertion_line: 457
 expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
 ---
 {
@@ -168,7 +167,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [
       {
         "code": "sign_in_awaited",
-        "message": "Claude is signed out so you can sign in to another account, and `desktop/work` is parked. Sign in inside Claude, quit it, then run `pitboard enroll desktop/travel`. To go back, run `pitboard use desktop/work`."
+        "message": "[message]"
       }
     ],
     "error": null

@@ -12,7 +12,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "usage",
-      "message": "error: the following required arguments were not provided:\n  <LABEL>\n\nUsage: pitboard use --json <LABEL>\n\nFor more information, try '--help'.",
+      "message": "[message]",
       "cause": null
     }
   }

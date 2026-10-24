@@ -111,7 +111,7 @@ modes, some tests fail and say why.
 
 The snapshots in `crates/pitboard/tests/cli/snapshots` pin the `--json` contract, which changes
 only on purpose. Review a changed one with `cargo insta review`, and say in the pull request
-why the contract moved.
+why the contract moved. They hold each message as `[message]`: its code is the contract.
 
 A test of what Pitboard does checks codes and fields, and compares a sentence with the
 function that makes it. Each sentence is pinned once, in the tests of the module that makes

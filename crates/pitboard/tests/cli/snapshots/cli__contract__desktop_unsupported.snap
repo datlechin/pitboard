@@ -12,7 +12,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "live_store_unsupported",
-      "message": "this build is for tests and was given no Claude data folder.",
+      "message": "[message]",
       "cause": null
     }
   }

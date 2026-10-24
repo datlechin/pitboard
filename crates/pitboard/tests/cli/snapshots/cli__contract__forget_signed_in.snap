@@ -12,7 +12,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "cannot_forget_active_account",
-      "message": "`alpha` is signed in; switch to another account before forgetting it.",
+      "message": "[message]",
       "cause": null
     }
   }

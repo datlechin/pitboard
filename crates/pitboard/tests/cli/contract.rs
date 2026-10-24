@@ -55,6 +55,9 @@ macro_rules! contract {
             ".envelope.data.slot.service" => "[slot]",
             // In the test's own scratch home.
             ".envelope.data.path" => "[path]",
+            // Words for a person, which a copy edit changes: the code beside each is the contract.
+            ".envelope.error.message" => "[message]",
+            ".envelope.warnings[].message" => "[message]",
         });
     };
 }

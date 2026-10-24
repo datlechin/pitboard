@@ -12,7 +12,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "confirmation_needed",
-      "message": "`pitboard uninstall` asks before it deletes anything, and can ask only in a terminal without `--json`. Nothing was changed. Run it in a terminal, or add `--yes`.",
+      "message": "[message]",
       "cause": null
     }
   }

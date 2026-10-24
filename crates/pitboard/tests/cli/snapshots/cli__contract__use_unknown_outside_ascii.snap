@@ -12,7 +12,7 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
     "warnings": [],
     "error": {
       "code": "account_unknown",
-      "message": "no account is enrolled as `Đạt2`. Enrolled: `Đạt`, `🏁`. Run `pitboard enroll Đạt2 --sign-in` to add it.",
+      "message": "[message]",
       "cause": null
     }
   }
