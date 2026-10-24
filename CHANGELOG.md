@@ -181,8 +181,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unfinished.
 - On Windows, the app, the status line and `pitboard status` no longer show no accounts for a
   moment while another Pitboard run saves its list of accounts.
-- The status line records what a session passed without waiting for the disk, where a busy
-  Windows disk slowed it enough for Claude Code to cancel it.
+- The status line no longer waits for the disk after each response, which took it past half a
+  second on a busy Windows disk.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
