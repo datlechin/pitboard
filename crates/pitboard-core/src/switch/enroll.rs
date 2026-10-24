@@ -307,7 +307,9 @@ fn signed_in_document(
     tool: &'static dyn Provider,
     dir: &std::path::Path,
 ) -> Result<Value> {
-    let raw = tool.read_signin(ctx, dir)?.ok_or(Error::SignInIncomplete)?;
+    let raw = tool
+        .login_from_sign_in(ctx, dir)?
+        .ok_or(Error::SignInIncomplete)?;
     serde_json::from_str(&raw).map_err(|e| Error::LiveCredentialShapeUnexpected {
         tool: tool.id(),
         detail: e.to_string(),

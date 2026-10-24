@@ -1,9 +1,7 @@
 //! A machine in memory, where a test can make anything fail.
 //!
 //! It fakes what a real host offers and nothing above it, so the code under test is the
-//! real one. Before this it faked `read_signin` with a map keyed by directory, which meant
-//! no test ever ran Claude Code's own slot hashing on the sign-in path: the double answered
-//! the question the code was supposed to answer.
+//! real one, Claude Code's own slot hashing on the sign-in path included.
 
 use super::{
     Administered, Cookie, Elevation, Floor, Host, Jar, JarError, Listed, Process, Scheduler,

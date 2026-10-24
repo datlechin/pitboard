@@ -567,7 +567,8 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     2026-10-07",
         // Read again at tag rust-v0.164.0 on 2026-10-23.
         verified_against: "0.164.0",
-        depends: "provider::codex::engine's sign_in and read_signin, and Isolation for Codex",
+        depends: "provider::codex::engine's sign_in and login_from_sign_in, and Isolation for \
+                  Codex",
         probe: &["CODEX_HOME", "cli_auth_credentials_store"],
         absent: &[],
     },

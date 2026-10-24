@@ -1,10 +1,6 @@
-//! Where Claude Code's live credential is, and how a private sign-in's is read back.
-//!
-//! This is the half of the old `Platform` trait that was never about the operating system.
-//! `MacOs::read_signin` called `slot::service_for_dir` from inside the trait impl, so a
-//! trait whose name said "which machine" decided which keychain item Claude Code reads. The
-//! machine still answers "is there a keychain here"; which item, and which file behind it,
-//! is answered here.
+//! Where Claude Code's live credential is, and how a private sign-in's is read back. The
+//! machine answers whether there is a keychain; which item, and which file behind it, is
+//! answered here.
 
 use super::{credman, paths as claude, slot};
 use crate::context::Context;
@@ -102,7 +98,7 @@ pub(crate) fn login_behind(ctx: &Context) -> Option<Result<Option<Value>, Error>
 // What a private sign-in left: the keychain item its own hashing names, or the file inside the
 // folder where there is no keychain. On Windows the item its hashing names in Credential Manager,
 // where something turned that store on for it, then the file.
-pub(crate) fn read_signin(ctx: &Context, dir: &Path) -> Result<Option<String>, Error> {
+pub(crate) fn login_from_sign_in(ctx: &Context, dir: &Path) -> Result<Option<String>, Error> {
     let service = slot::service_for_dir(&dir.to_string_lossy());
     let file = ctx.host().file(dir.join(slot::CRED_FILE));
     match OS {

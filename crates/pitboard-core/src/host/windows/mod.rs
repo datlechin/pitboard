@@ -326,7 +326,7 @@ mod tests {
         std::fs::write(signin.join(".credentials.json"), r#"{"claudeAiOauth":{}}"#)
             .expect("a sign-in's login");
         assert_eq!(
-            crate::provider::claude::live::read_signin(&ctx, &signin)
+            crate::provider::claude::live::login_from_sign_in(&ctx, &signin)
                 .expect("readable")
                 .as_deref(),
             Some(r#"{"claudeAiOauth":{}}"#)
