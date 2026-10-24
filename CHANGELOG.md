@@ -58,8 +58,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documentation](https://docs.rs/pitboard-core/0.17.0/pitboard_core/) shows the new one.
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Codex to a login that Codex's
   `forced_login_method`, `forced_chatgpt_workspace_id`, `allowed_login_methods` or
-  `allowed_chatgpt_workspaces` rules out, since Codex would sign out of it and delete it. Switch
-  to an account those settings allow, or change them.
+  `allowed_chatgpt_workspaces` rules out, since Codex would sign out of it and delete it, or leave
+  it unused. Switch to an account those settings allow, or change them.
 - **Breaking:** Pitboard refuses with `login_restricted` to switch Claude Code to an account of an
   organisation that a managed `forceLoginOrgUUID` leaves out, since Claude Code would refuse its
   login. Switch to an account of an organisation the setting names.
@@ -104,8 +104,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Codex login it asked about.
 - Pitboard keeps a parked Codex login that OpenAI refuses to renew as another client than its
   own, and says why, instead of dropping it.
-- A Codex switch names Codex's background app server where it runs from the standalone package an
-  older Codex left, and says to restart it, instead of counting it as a `codex` session.
+- On macOS, a Codex switch names Codex's background app server where it runs from the standalone
+  package an older Codex left, and says to restart it, instead of counting it as a `codex`
+  session.
 - Pitboard warns with `auth_overridden`, and the automatic switch holds back, while
   `CLAUDE_CODE_USE_MANTLE`, an Anthropic profile or managed settings that require the Cloud
   gateway make Claude Code sign in another way.
