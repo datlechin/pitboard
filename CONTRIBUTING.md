@@ -47,6 +47,13 @@ and later, the `rust-version` in `Cargo.toml`.
    Codex ship several times a week. A claim about any of them needs an experiment or a
    reading of a named build, recorded in a test, the tool's register or the commit message.
    [Tool registers](#tool-registers) says how.
+4. Comment what the code cannot say. A `//` line says why, where the code does not show it,
+   and no comment repeats the code. A doc comment on an item is one line, and only where its
+   name does not say it: UniFFI copies `///` on what the bindings export into Swift and C#,
+   and docs.rs shows `pitboard-core`'s. A module's header says the rule it keeps, cut to the
+   rule. A comment that rests on a tool names the fact in the tool's register, and one that
+   rests on a system, a library or a site names its page in [docs/facts](docs/facts/README.md),
+   never a build, a run or "measured" alone. Trim the comments of the code you change to this.
 
 ## Check a change
 
