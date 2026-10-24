@@ -2160,7 +2160,10 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
         verified_against: "2.1.309",
         depends: "settings::overrides, which leaves `forceLoginMethod` out where it is not \
                   `gateway`, so a switch under `console` warns of nothing and the automatic \
-                  switch goes on: a session takes the login a switch puts in place",
+                  switch goes on: a session takes the login a switch puts in place. \
+                  provider::claude::engine's sign_in runs `claude auth login`, which under \
+                  `console` signs in to Console whatever its flags say, and Pitboard does not \
+                  look for the setting first",
         probe: &[
             "forceLoginMethod is 'console' in ",
             "; log in with an Anthropic Console account instead.",
