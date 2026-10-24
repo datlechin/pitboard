@@ -15,6 +15,14 @@ filter = "binary_id(pitboard-core) & test(=provider::claude::credman::tests::cla
 threads-required = "num-test-threads"
 priority = 100
 
+# Beside the other tests' reads of Credential Manager, with no other writer, its read after a
+# write in pieces twice found the `#p` that write had just deleted (runs 39137503718 and
+# 39909919492), as the round trip above once did before it ran alone (run 38862457415).
+[[profile.default.overrides]]
+filter = "binary_id(pitboard::credman_write_is_harmless) & test(=writing_leaves_each_item_as_bun_writes_one)"
+threads-required = "num-test-threads"
+priority = 100
+
 # These time status lines, which other tests' programs and files slow down. In run 39000408726
 # twenty warm runs took 114 ms to 1.19 s, and the test of eight side by side 7.2 s, 1.6 s in a
 # median job.

@@ -1145,7 +1145,9 @@ window loads its site, and whatever the site's pages load, as a browser would.
   `pitboard-citest-*` is in its Credential Manager, that Task Scheduler's `\Pitboard\` is
   empty, and that no real login folder appeared. A test that writes Credential Manager's
   items is in nextest's `credential-manager` group, which runs one at a time: two writers at
-  once in one logon session can leave an item deleted for the next logon to find.
+  once in one logon session can leave an item deleted for the next logon to find. The two
+  that write a login in pieces run alone: beside other tests' reads, a read can still find
+  an item just deleted (runs 39137503718 and 39909919492).
 - Every program the command line's tests and `pitboard-ffi`'s tests start in place of a
   tool, or put where one is looked for, is one compiled program, the `pitboard` crate's
   example `stand-in`, playing the script written beside its copy
