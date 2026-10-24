@@ -1,8 +1,8 @@
 use super::Facts;
-use super::windows::system_proxies;
 use crate::context::Context;
 use crate::provider::ProviderId;
 use crate::provider::claude::slot;
+use crate::proxy::system_proxies;
 
 /// Everything in a diagnosis that names a person or an account.
 ///

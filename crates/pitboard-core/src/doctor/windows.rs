@@ -3,6 +3,7 @@ use crate::context::Context;
 use crate::host::Os;
 use crate::provider::claude::paths as claude;
 use crate::provider::codex::paths as codex;
+use crate::proxy::{SystemProxy, system_proxies};
 use crate::words;
 use std::path::PathBuf;
 
@@ -198,65 +199,6 @@ pub(super) fn way(variable: Option<&str>) -> String {
         Some(variable) => format!("through the one {variable} names"),
         None => "out directly".to_string(),
     }
-}
-
-// One entry of `ProxyServer`: `[protocol=][scheme://][user[:password]@]host:port`. Internet
-// Options writes one entry for every protocol, or one a protocol, apart by `;`.
-pub(super) struct SystemProxy<'a> {
-    pub(super) protocol: Option<&'a str>,
-    pub(super) scheme: Option<&'a str>,
-    pub(super) signed_in: Option<bool>,
-    pub(super) server: &'a str,
-}
-
-impl SystemProxy<'_> {
-    // As `proxy::shown` shows a variable's: `***` for a user name and a password.
-    pub(super) fn masked(&self) -> String {
-        let protocol = self.protocol.map_or_else(String::new, |p| format!("{p}="));
-        let scheme = self.scheme.map_or_else(String::new, |s| format!("{s}://"));
-        let hidden = match self.signed_in {
-            Some(true) => "***:***@",
-            Some(false) => "***@",
-            None => "",
-        };
-        format!("{protocol}{scheme}{hidden}{}", self.server)
-    }
-}
-
-// Only a protocol Internet Options names, so a user name holding `=` stays hidden.
-pub(super) const PROTOCOLS: [&str; 4] = ["http", "https", "ftp", "socks"];
-
-pub(super) fn system_proxies(value: &str) -> Vec<SystemProxy<'_>> {
-    let word = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric());
-    value
-        .split(';')
-        .map(str::trim)
-        .filter(|entry| !entry.is_empty())
-        .map(|entry| {
-            let (protocol, rest) = match entry.split_once('=') {
-                Some((protocol, rest))
-                    if PROTOCOLS.iter().any(|p| p.eq_ignore_ascii_case(protocol)) =>
-                {
-                    (Some(protocol), rest)
-                }
-                _ => (None, entry),
-            };
-            let (scheme, rest) = match rest.split_once("://") {
-                Some((scheme, rest)) if word(scheme) => (Some(scheme), rest),
-                _ => (None, rest),
-            };
-            let (signed_in, server) = match rest.rsplit_once('@') {
-                Some((user, server)) => (Some(user.contains(':')), server),
-                None => (None, rest),
-            };
-            SystemProxy {
-                protocol,
-                scheme,
-                signed_in,
-                server,
-            }
-        })
-        .collect()
 }
 
 pub(super) fn judge_wsl(wsl: Option<&WslFact>) -> Option<Check> {
