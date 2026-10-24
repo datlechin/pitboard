@@ -264,8 +264,7 @@ pub enum Source {
 /// Named for what it is rather than `Window`, which SwiftUI and WinUI each have a type of.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct Limit {
-    /// The service's own name for it: Anthropic's `session`, `weekly_all` or
-    /// `weekly_scoped`, or one named after its length for OpenAI.
+    /// `session`, `weekly_all`, `weekly_scoped`, or another limit's name, such as `1_day`.
     pub kind: String,
     /// How long the window runs, where that is known. The way to name a window to a person
     /// whatever its service called it.
