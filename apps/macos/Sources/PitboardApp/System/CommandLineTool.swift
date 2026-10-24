@@ -53,11 +53,11 @@ struct CommandLineTool: Sendable {
     /// a link is somebody's own, and is left where it is.
     func install() async -> Linked {
         guard let helper, linkable else {
-            return .failed("This copy of Pitboard cannot link the command line inside it.")
+            return .failed("This copy of Pitboard can’t link the command line inside it.")
         }
         let type = try? FileManager.default.attributesOfItem(atPath: link)[.type]
         if let type, type as? FileAttributeType != .typeSymbolicLink {
-            return .failed("\(link) is already there and is not a link, so it was kept.")
+            return .failed("\(link) is already there and isn’t a link, so it was kept.")
         }
         let (source, execute) = (Self.script(linking: helper, at: link), execute)
         return await Task.detached(priority: .userInitiated) {
@@ -89,7 +89,7 @@ struct CommandLineTool: Sendable {
 
     static func execute(script source: String) -> NSDictionary? {
         guard let script = NSAppleScript(source: source) else {
-            return [NSAppleScript.errorMessage: "The link could not be made."]
+            return [NSAppleScript.errorMessage: "The link couldn’t be made."]
         }
         var error: NSDictionary?
         script.executeAndReturnError(&error)
@@ -102,7 +102,7 @@ struct CommandLineTool: Sendable {
         guard let error else { return .linked }
         if error[NSAppleScript.errorNumber] as? Int == userCanceledErr { return .cancelled }
         return .failed(
-            error[NSAppleScript.errorMessage] as? String ?? "The link could not be made.")
+            error[NSAppleScript.errorMessage] as? String ?? "The link couldn’t be made.")
     }
 }
 

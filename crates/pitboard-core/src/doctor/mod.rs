@@ -93,8 +93,8 @@ pub(crate) struct Facts {
     pub(crate) claude_program: Option<PathBuf>,
     // From settings files as well as this process's environment.
     pub(crate) auth_overrides: Vec<crate::settings::Override>,
-    // Each managed `forceLoginOrgUUID`, and where.
-    pub(crate) organisation_pins: Vec<String>,
+    // Each managed `forceLoginOrgUUID` and `console` `forceLoginMethod`, and where.
+    pub(crate) login_pins: Vec<String>,
     // The enrolled accounts those leave out.
     pub(crate) pinned_out: Vec<String>,
     // (uuid, seconds) of each account not asked about yet.
@@ -141,7 +141,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
     let service = claude_paths::live_service(ctx);
     let home = home::dir(ctx);
     let config_account = config.as_ref().ok().and_then(claude_paths::config_account);
-    let (organisation_pins, pinned_out) = claude::login_pins(ctx, state.as_ref().ok());
+    let (login_pins, pinned_out) = claude::login_pins(ctx, state.as_ref().ok());
     let found = claude::found(ctx, &service);
     let claude_build = desktop::desktop_build(ctx);
     let desktop = state
@@ -187,7 +187,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         claude_version: claude_paths::installed_version(ctx),
         claude_program: claude_paths::program(ctx),
         auth_overrides: crate::settings::overrides(ctx),
-        organisation_pins,
+        login_pins,
         pinned_out,
         asking_held: crate::usage::budget::holds(ctx),
         in_use: state

@@ -101,7 +101,7 @@ import Testing
 
     #expect(
         await tool.install()
-            == .failed("\(link) is already there and is not a link, so it was kept."))
+            == .failed("\(link) is already there and isn’t a link, so it was kept."))
     #expect(try String(contentsOfFile: link, encoding: .utf8) == "mine")
     try FileManager.default.removeItem(atPath: link)
     try FileManager.default.createDirectory(atPath: link, withIntermediateDirectories: false)
@@ -123,7 +123,7 @@ import Testing
         execute: scripts.run)
     #expect(
         await gone.install()
-            == .failed("This copy of Pitboard cannot link the command line inside it."))
+            == .failed("This copy of Pitboard can’t link the command line inside it."))
     #expect(scripts.ran.count == 3)
 }
 
@@ -140,5 +140,5 @@ import Testing
     #expect(
         CommandLineTool.outcome(of: error(1, "ln: /usr/local/bin/pitboard: Permission denied"))
             == .failed("ln: /usr/local/bin/pitboard: Permission denied"))
-    #expect(CommandLineTool.outcome(of: error(1)) == .failed("The link could not be made."))
+    #expect(CommandLineTool.outcome(of: error(1)) == .failed("The link couldn’t be made."))
 }

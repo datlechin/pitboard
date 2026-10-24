@@ -865,7 +865,7 @@ mod tests {
         assert_eq!(
             claude_code_alone,
             "Your Mac’s own scheduler renews your parked logins once a day, so one you leave \
-             alone does not expire."
+             alone doesn’t expire."
         );
         assert_eq!(
             about(vec![

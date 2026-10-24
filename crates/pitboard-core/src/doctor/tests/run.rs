@@ -158,7 +158,7 @@ fn a_machine_with_only_codex_is_not_judged_on_claude_code() {
         pitboard: None,
         runs_pitboard: false,
     });
-    windows.organisation_pins = vec!["`forceLoginOrgUUID` set to `org` there".into()];
+    windows.login_pins = vec!["`forceLoginOrgUUID` set to `org` there".into()];
     let made: Vec<&str> = evaluate(&windows).iter().map(|c| c.code).collect();
     // A name no check makes hides nothing, and the loop under it would pass over it.
     for own in CLAUDE_CODES_OWN {

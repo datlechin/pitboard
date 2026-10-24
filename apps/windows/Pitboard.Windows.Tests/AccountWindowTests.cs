@@ -419,7 +419,7 @@ public sealed partial class AccountWindowTests
 
             await Views.Until(() => opened.Count == 2, () => $"the bar went {string.Join(", ", opened)}", Webs.Patience);
             Assert.AreEqual("closed", opened[0]);
-            StringAssert.StartsWith(opened[1], "opened: Google does not allow");
+            StringAssert.StartsWith(opened[1], "opened: Google doesn’t allow");
         }
         finally
         {

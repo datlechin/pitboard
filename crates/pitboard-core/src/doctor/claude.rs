@@ -22,6 +22,7 @@ pub(super) fn login_pins(ctx: &Context, state: Option<&State>) -> (Vec<String>, 
     let said = crate::settings::organisation_pins(ctx)
         .into_iter()
         .map(|(layer, ids)| words::org_pinned(&said::listed_values(&ids), layer))
+        .chain(crate::settings::console_pin(ctx).map(words::console_pinned))
         .collect();
     let LoginKind::Document(claude) = crate::provider::of(ProviderId::Claude) else {
         return (said, Vec::new());
@@ -524,11 +525,11 @@ pub(super) fn judge_pieces(price: store::Cost, parts: &[(String, usize)]) -> Che
 }
 
 pub(super) fn judge_login_restrictions(facts: &Facts) -> Option<Check> {
-    if facts.organisation_pins.is_empty() {
+    if facts.login_pins.is_empty() {
         return None;
     }
     let name = "login restrictions";
-    let pins = facts.organisation_pins.join("; ");
+    let pins = facts.login_pins.join("; ");
     Some(if facts.pinned_out.is_empty() {
         ok("login_restrictions", name, pins)
     } else {
