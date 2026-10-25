@@ -21,7 +21,7 @@ It switches early because open Claude Code sessions take up to about 33 seconds 
 
 The app switches only while it is open, and posts a notification for each switch.
 
-On the command line, run `pitboard watch` and leave the terminal open. It switches whatever the app's **When a limit reaches** setting says, at its own share: `--at`, 95 by default.
+On the command line, run `pitboard watch` and leave the terminal open. It switches at its own share, `--at`, 95 by default, and never reads the app's **When a limit reaches**.
 
 ```sh
 pitboard watch --at 90
@@ -33,15 +33,23 @@ Watching Claude Code. Pitboard switches to another of your accounts once a limit
 14:02:11 Switched Claude Code from work to personal: work has used 91% of its 5-hour limit. Claude Code sessions already running follow within 33 seconds.
 ```
 
-[`watch`](/reference/account-commands#watch) lists every line. To keep it running without a terminal, install it as a background service, which starts at each sign-in at the share you give it. `pitboard watch uninstall` stops it, and [The watch service](/reference/account-commands#the-watch-service) says what each system runs.
+[`watch`](/reference/account-commands#watch) lists every line.
+
+The app, `pitboard watch` and `pitboard use` can run at once and never make two switches from one reading. [What a switch does](/concepts/switching#what-a-switch-does) explains why.
+
+Anthropic's terms may cover automatic switching: see [Is this allowed](/concepts/limits#is-this-allowed).
+
+## Run it in the background
+
+`pitboard watch install` starts `pitboard watch` in the background, and again at each sign-in, at the share you give it. On Linux, which has no app, it is how Pitboard switches and warms up with no terminal open.
 
 ```sh
 pitboard watch install --at 90
 ```
 
-The app, `pitboard watch` and `pitboard use` can run at once and never make two switches from one reading. [What a switch does](/concepts/switching#what-a-switch-does) explains why.
+`pitboard watch uninstall` stops it. [The watch service](/reference/account-commands#the-watch-service) says what each system runs.
 
-Anthropic's terms may cover automatic switching: see [Is this allowed](/concepts/limits#is-this-allowed).
+On Linux, where systemd did not start the system, as in many containers, it refuses with [`schedule_unsupported`](/reference/errors#renewal-schedule). Leave `pitboard watch` running in a terminal instead.
 
 ## Which account it switches to
 
