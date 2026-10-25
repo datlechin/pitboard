@@ -10,9 +10,13 @@ internal static class Items
             new(
                 Id: $"{provider}:{label}", Qualified: $"{provider}/{label}", Title: label,
                 Email: $"{label}@example.com", EmailLine: $"{label}@example.com", Plan: null, MenuTitle: label,
-                Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false, Unplaced: false,
-                End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Help: null,
-                Limits: [], Offers: [], Windows: [], Forget: null),
+                Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false,
+                Standing: inUse ? AccountStanding.InUse : AccountStanding.Ready, Unplaced: false,
+                End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Lines: [],
+                Detail: new AccountDetail(
+                    Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
+                    ReadAt: null, Read: null),
+                Help: null, Limits: [], Offers: [], Windows: [], Forget: null, Actions: []),
             inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")));
 
     // What pressing it does, and the button at its row's end that does it.
@@ -41,9 +45,9 @@ internal static class Items
 
     public static LimitRow Limit(double percent) =>
         new(
-            Short: "5h", Percent: percent, Figure: $"{percent:0}%",
+            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5h", Percent: percent, Figure: $"{percent:0}%",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
-            Resets: "resets in 2h 10m",
+            ResetsAt: 1_800_007_800, Resets: "resets in 2h 10m",
             Spoken: $"5-hour limit {percent:0}% used, resets in 2 hours 10 minutes");
 
     public static ItemOffer Forget(string qualified) =>

@@ -239,7 +239,7 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
             .iter()
             .flat_map(|section| &section.accounts)
             .find(|item| item.title == "personal")
-            .and_then(|item| item.notes.last().cloned())
+            .and_then(|item| item.detail.warm.as_ref().map(|warm| warm.said.clone()))
     };
     // What the row says while a period runs, up to the clock time it says.
     let running = words::typeset(&pitboard_core::words::capitalised(
@@ -1668,8 +1668,12 @@ fn a_service_out_of_reach_leaves_the_last_numbers_and_says_why_on_each_account()
         .collect();
     assert_eq!(items.len(), 2);
     for item in items {
+        let stale = item
+            .notes
+            .iter()
+            .find(|note| note.kind == crate::present::NoteKind::Stale);
         assert_eq!(
-            item.notes.first(),
+            stale.map(|note| &note.text),
             fresh.accounts[0].stale_explanation.as_ref(),
             "{item:?}"
         );

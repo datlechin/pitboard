@@ -93,10 +93,10 @@ public sealed partial class AccountRow : UserControl
     {
         ShowLimits(item.Limits);
         Notes.Children.Clear();
-        foreach (var note in item.Notes)
+        foreach (var line in item.Lines)
         {
             Notes.Children.Add(
-                new TextBlock { Text = note, Style = Shared("SecondaryCaptionTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
+                new TextBlock { Text = line, Style = Shared("SecondaryCaptionTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
         }
     }
 

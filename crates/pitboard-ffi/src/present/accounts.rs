@@ -4,15 +4,18 @@
 
 use super::words;
 use super::{
-    AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitRow, MenuBarText,
-    MenuNotices, Question, RowEnd, Seen, WindowOffer,
+    AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
+    AccountStanding, ActionKind, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
+    MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::advice::window;
 use crate::model::{Intent, Sheet};
 use crate::{Account, Limit, Tool};
+use pitboard_core::duty::warm;
 use pitboard_core::host::Os;
 use pitboard_core::status::{self, Stale};
+use pitboard_core::time::{HOUR, WEEK};
 use pitboard_core::words as said;
 use std::cmp::Ordering;
 
@@ -215,30 +218,32 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     };
     // No usage is read for an app's login: the menu's line says so once.
     let in_its_app = crate::model::state::in_its_app(&account.provider);
-    let stale_note = match account.read_at {
-        Some(read_at) if in_its_app && account.signed_in => Some(words::read_ago(
+    let read_ago = account.read_at.filter(|_| in_its_app).map(|read_at| {
+        words::read_ago(
             &said::span(seen.now - read_at),
             seen.program_of(&account.provider),
-        )),
-        _ if problem.is_some() || account.stale == Some(Stale::NoUsage) => None,
-        _ => account.stale_explanation.clone(),
-    };
-    let parked_note = if account.signed_in {
+        )
+    });
+    let stale = if problem.is_some() || account.stale == Some(Stale::NoUsage) {
         None
     } else {
-        let parked = account.parked.as_ref();
-        let renewable = parked.and_then(|p| p.refresh_expires_at);
-        let life = said::parked_life(renewable, seen.now)
-            .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
-            .map(|life| words::typeset(&life));
-        match account.standing {
-            // Without a refresh token's date, it is a Claude Desktop session's that has passed.
-            status::Standing::Expiring => {
-                life.map(|life| words::sign_in_hint(&life, renewable.is_none()))
-            }
-            _ => life,
-        }
+        account.stale_explanation.clone()
     };
+    let stale_note = read_ago
+        .clone()
+        .filter(|_| account.signed_in)
+        .or_else(|| stale.clone());
+    let parked = account.parked.as_ref().filter(|_| !account.signed_in);
+    let renewable = parked.and_then(|p| p.refresh_expires_at);
+    let life = said::parked_life(renewable, seen.now)
+        .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
+        .map(|life| words::typeset(&life));
+    // Without a refresh token's date, it is a Claude Desktop session's that has passed.
+    let expiring = life
+        .as_ref()
+        .filter(|_| account.standing == status::Standing::Expiring)
+        .map(|life| words::sign_in_hint(life, renewable.is_none()));
+    let parked_note = expiring.clone().or_else(|| life.clone());
     let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
@@ -257,12 +262,64 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     } else {
         action.clone().map(|action| RowEnd::Button { action })
     };
-    let notes = [&problem, &stale_note, &parked_note]
+    let warm_note = warm_note(seen, account);
+    let lines = [&problem, &stale_note, &parked_note, &warm_note]
         .into_iter()
         .flatten()
         .cloned()
-        .chain(warm_note(seen, account))
         .collect();
+    let actions = actions(seen, account, action.as_ref(), busy, &spoken_name);
+    let unnamed = account.label.is_none() && account.signed_in && !account.unplaced;
+    let acting = |kind| actions.iter().find(|action| action.kind == kind).cloned();
+    let note = |kind, text, action| AccountNote { kind, text, action };
+    let problem_note = if needs_sign_in {
+        let why = (problem.clone()).unwrap_or_else(|| words::NEEDS_SIGNING_IN_AGAIN.into());
+        Some(note(
+            NoteKind::Problem,
+            why,
+            acting(ActionKind::SignInAgain),
+        ))
+    } else if account.unplaced || account.standing == status::Standing::LoginUnread {
+        let why = (account.stale_explanation.clone())
+            .unwrap_or_else(|| words::CANNOT_READ_OR_SWITCH.into());
+        Some(note(NoteKind::Problem, why, None))
+    } else {
+        problem
+            .clone()
+            .map(|why| note(NoteKind::Problem, why, None))
+    };
+    let notes = [
+        problem_note,
+        unnamed.then(|| {
+            let add = acting(ActionKind::Add);
+            note(NoteKind::Unfinished, words::NOT_NAMED_YET.into(), add)
+        }),
+        expiring.map(|life| note(NoteKind::Expiring, life, acting(ActionKind::SignInAgain))),
+        stale.map(|why| note(NoteKind::Stale, why, None)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let read_at = account
+        .read_at
+        .or_else(|| account.usage.as_ref().and_then(|usage| usage.observed_at));
+    let detail = AccountDetail {
+        email: Some(account.email.clone()).filter(|email| !email.is_empty()),
+        plan: account.plan.clone(),
+        signed_in_until: parked.and_then(|p| p.refresh_expires_at.or(p.session_expires_at)),
+        sign_in: if unnamed {
+            Some(words::NOT_NAMED_YET.into())
+        } else if in_use && account.label.is_some() {
+            Some(words::in_use(seen.os))
+        } else if needs_sign_in {
+            Some(words::NEEDS_SIGNING_IN_AGAIN.into())
+        } else {
+            life
+        },
+        warm: warm_choice(seen, account).map(|choice| warm_detail(choice, warm_note)),
+        read_at,
+        read: read_ago.or_else(|| read_at.map(|at| words::updated(&seen.clock(at)))),
+    };
     AccountItem {
         id: account.id.clone(),
         qualified: account.qualified.clone(),
@@ -276,23 +333,33 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         spoken,
         in_use,
         needs_sign_in,
+        standing: standing_of(account, switching),
         unplaced: account.unplaced,
         end,
-        offers: offers(seen.os, account, action.as_ref(), busy)
-            .into_iter()
-            .chain(warm_offer(seen, account))
+        offers: actions
+            .iter()
+            .filter(|action| !matches!(action.kind, ActionKind::OpenWindow | ActionKind::Remove))
+            .filter_map(offer_of)
             .collect(),
-        windows: windows_of_account(account, seen.accounts())
-            .into_iter()
-            .map(|window| WindowOffer {
-                title: words::open_site(&window.site.name),
-                window,
+        windows: actions
+            .iter()
+            .filter_map(|action| {
+                Some(WindowOffer {
+                    title: action.title.clone(),
+                    window: action.window.clone()?,
+                })
             })
             .collect(),
-        forget: forget(seen, account, &spoken_name),
+        forget: actions
+            .iter()
+            .find(|action| action.kind == ActionKind::Remove)
+            .and_then(offer_of),
+        actions,
         action,
         help: problem.or(stale_note),
         notes,
+        lines,
+        detail,
         limits: account
             .usage
             .as_ref()
@@ -307,18 +374,60 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     }
 }
 
-// Signing in again is offered here for every named account, so never as its own action too.
-fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) -> Vec<ItemOffer> {
-    let offer = |title: String, intent: Intent, enabled: bool| ItemOffer {
+fn standing_of(account: &Account, switching: bool) -> AccountStanding {
+    use status::Standing;
+    match account.standing {
+        _ if switching => AccountStanding::Switching,
+        _ if account.unplaced => AccountStanding::Unusable,
+        Standing::Unplaced | Standing::LoginUnread => AccountStanding::Unusable,
+        _ if account.label.is_none() && account.signed_in => AccountStanding::NotAdded,
+        _ if account.signed_in => AccountStanding::InUse,
+        Standing::Expiring => AccountStanding::Expiring,
+        Standing::Ready => AccountStanding::Ready,
+        Standing::InUse => AccountStanding::InUse,
+        Standing::NotEnrolled => AccountStanding::NotAdded,
+        Standing::LoginReplaced
+        | Standing::NothingParked
+        | Standing::LoginRefused
+        | Standing::LoginExpired => AccountStanding::NeedsSignIn,
+    }
+}
+
+fn offer_of(action: &AccountAction) -> Option<ItemOffer> {
+    Some(ItemOffer {
+        title: action.title.clone(),
+        intent: action.intent.clone()?,
+        enabled: action.enabled,
+        confirm: action.confirm.clone(),
+    })
+}
+
+// In its menu's order: adding it or switching, signing in again and renaming; then the rest.
+fn actions(
+    seen: &Seen,
+    account: &Account,
+    action: Option<&ItemAction>,
+    busy: bool,
+    spoken_name: &str,
+) -> Vec<AccountAction> {
+    let does = |kind: ActionKind, title: String, intent: Intent, enabled: bool| AccountAction {
+        kind,
         title,
-        intent,
+        intent: Some(intent),
+        window: None,
         enabled,
         confirm: None,
     };
-    let own = action.and_then(|action| match &action.intent {
-        Intent::Enrol { .. } => Some(offer(action.title.clone(), action.intent.clone(), true)),
+    let add = action.and_then(|action| match &action.intent {
+        Intent::Enrol { .. } => Some(does(
+            ActionKind::Add,
+            action.title.clone(),
+            action.intent.clone(),
+            true,
+        )),
         _ => None,
     });
+    // Signing in again is offered here for every named account, so never as its own action too.
     let switches = action.is_some_and(|action| matches!(action.intent, Intent::SwitchTo { .. }));
     let named = account
         .label
@@ -329,15 +438,17 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
             let provider = account.provider.clone();
             let label = label.to_owned();
             [
-                offer(
+                does(
+                    ActionKind::Switch,
                     words::use_account(Some(&label)),
                     Intent::SwitchTo {
                         qualified: qualified.clone(),
                     },
                     switches,
                 ),
-                offer(
-                    words::sign_in_again(os, true),
+                does(
+                    ActionKind::SignInAgain,
+                    words::sign_in_again(seen.os, true),
                     Intent::PresentSheet {
                         sheet: Sheet::SignInAgain {
                             provider: provider.clone(),
@@ -346,7 +457,8 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
                     },
                     !busy,
                 ),
-                offer(
+                does(
+                    ActionKind::Rename,
                     words::rename(true).into(),
                     Intent::PresentSheet {
                         sheet: Sheet::Rename { provider, label },
@@ -355,15 +467,27 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
                 ),
             ]
         });
-    own.into_iter().chain(named.into_iter().flatten()).collect()
+    let windows = windows_of_account(account, seen.accounts())
+        .into_iter()
+        .map(|window| AccountAction {
+            kind: ActionKind::OpenWindow,
+            title: words::open_site(&window.site.name),
+            intent: None,
+            window: Some(window),
+            enabled: true,
+            confirm: None,
+        });
+    add.into_iter()
+        .chain(named.into_iter().flatten())
+        .chain(warm_up_now(seen, account))
+        .chain(windows)
+        .chain(forget(seen, account, spoken_name))
+        .collect()
 }
 
 /// What warming up an account is, as the core's last word on it says, where it can be warmed
 /// up: a Claude Code account enrolled under a name.
-fn warm_choice<'a>(
-    seen: &'a Seen,
-    account: &Account,
-) -> Option<&'a pitboard_core::duty::warm::Choice> {
+fn warm_choice<'a>(seen: &'a Seen, account: &Account) -> Option<&'a warm::Choice> {
     let qualified = account.qualified.as_deref()?;
     seen.state
         .warm
@@ -375,21 +499,21 @@ fn warm_choice<'a>(
 }
 
 // Turning warm-ups on and off is Settings' alone, where the hours and every account show.
-fn warm_offer(seen: &Seen, account: &Account) -> Option<ItemOffer> {
+fn warm_up_now(seen: &Seen, account: &Account) -> Option<AccountAction> {
     let choice = warm_choice(seen, account)?;
     let warm = &seen.state.warm;
     let halted = warm
         .overview
         .as_ref()
         .is_some_and(|overview| overview.halted.is_some());
-    Some(ItemOffer {
+    Some(AccountAction {
+        kind: ActionKind::WarmUpNow,
         title: words::warm_up_now(seen.os),
-        intent: Intent::WarmNow {
+        intent: Some(Intent::WarmNow {
             qualified: choice.qualified.clone(),
-        },
-        enabled: !halted
-            && warm.running.is_none()
-            && choice.now == pitboard_core::duty::warm::Standing::Due,
+        }),
+        window: None,
+        enabled: !halted && warm.running.is_none() && choice.now == warm::Standing::Due,
         confirm: None,
     })
 }
@@ -400,7 +524,7 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     let choice = warm_choice(seen, account)?;
     let warming = match seen.state.warm.running.as_ref() {
         Some(Some(asked)) => *asked == choice.qualified,
-        Some(None) => choice.standing == Some(pitboard_core::duty::warm::Standing::Due),
+        Some(None) => choice.standing == Some(warm::Standing::Due),
         None => false,
     };
     if warming {
@@ -408,22 +532,41 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     }
     let standing = choice.standing.as_ref()?;
     let clock = |at| seen.clock(at);
-    Some(words::typeset(&said::capitalised(
-        &pitboard_core::words::warm_standing(standing, &clock),
-    )))
+    Some(words::typeset(&said::capitalised(&said::warm_standing(
+        standing, &clock,
+    ))))
+}
+
+// `note` is what its line says, where it says anything.
+fn warm_detail(choice: &warm::Choice, note: Option<String>) -> WarmDetail {
+    let (next_at, running_until) = match &choice.standing {
+        Some(warm::Standing::Running { until, next }) => (*next, Some(*until)),
+        Some(warm::Standing::Resting { at }) => (Some(*at), None),
+        Some(warm::Standing::Waiting { until }) => (Some(*until), None),
+        Some(warm::Standing::Held(hold)) => (hold.until(), None),
+        Some(warm::Standing::Due) | None => (None, None),
+    };
+    WarmDetail {
+        on: choice.on,
+        said: note.unwrap_or_else(|| words::WARM_UP_OFF.into()),
+        next_at,
+        running_until,
+    }
 }
 
 // The question names it, and says what forgetting it deletes in the account windows' words.
-fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<ItemOffer> {
+fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAction> {
     let qualified = account
         .qualified
         .as_ref()
         .filter(|_| account.label.is_some())?;
-    Some(ItemOffer {
+    Some(AccountAction {
+        kind: ActionKind::Remove,
         title: words::forget(true).into(),
-        intent: Intent::Forget {
+        intent: Some(Intent::Forget {
             qualified: qualified.clone(),
-        },
+        }),
+        window: None,
         // The core refuses it.
         enabled: !account.signed_in,
         confirm: Some(Question {
@@ -553,10 +696,25 @@ fn limits_said(seen: &Seen, account: &Account) -> String {
     words::limits_line(&limits)
 }
 
+fn kind_of(limit: &Limit) -> LimitKind {
+    const FIVE_HOURS: i64 = 5 * HOUR;
+    match (window(limit).length(), &limit.scope) {
+        (Some(FIVE_HOURS), None) => LimitKind::FiveHour,
+        (Some(WEEK), None) => LimitKind::Weekly,
+        (Some(WEEK), Some(model)) => LimitKind::WeeklyModel {
+            model: model.clone(),
+        },
+        (length_seconds, _) => LimitKind::Other { length_seconds },
+    }
+}
+
 /// One limit as a row of its account's bars, as of `now`.
 pub(crate) fn limit_row(limit: &Limit, now: i64) -> LimitRow {
     let name = scoped_name(limit);
     LimitRow {
+        kind: kind_of(limit),
+        name: words::limit_title(&said::limit_name(&window(limit)), limit.scope.as_deref()),
+        resets_at: limit.resets_at,
         short: said::limit_column(&window(limit)),
         percent: limit.percent,
         figure: said::figure(limit.percent),
@@ -1123,7 +1281,7 @@ mod tests {
         assert_eq!(rows[0].summary, words::NO_USAGE_READ);
         assert_eq!(rows[1].summary, words::NO_USAGE_READ);
         assert_eq!(
-            rows[1].notes,
+            rows[1].lines,
             [said::session_life(Some(NOW + 25 * 86_400 + 3_600), NOW).expect("a date")],
             "no usage said once, in the menu's line"
         );
@@ -1137,7 +1295,7 @@ mod tests {
         };
         let life = said::session_life(Some(NOW - 1), NOW).expect("a date");
         assert_eq!(
-            desktop_rows(vec![lapsed])[0].notes,
+            desktop_rows(vec![lapsed])[0].lines,
             [words::sign_in_hint(&life, true)],
             "as `pitboard status` hints a sign-in for it"
         );
@@ -1161,7 +1319,7 @@ mod tests {
             .standing(status::Standing::Expiring)
             .build());
         let life = said::parked_life(Some(due), NOW).expect("a date");
-        assert_eq!(expiring.notes, [words::sign_in_hint(&life, false)]);
+        assert_eq!(expiring.lines, [words::sign_in_hint(&life, false)]);
         assert!(!expiring.needs_sign_in);
         assert!(matches!(
             expiring.action.map(|action| action.intent),
@@ -1171,7 +1329,7 @@ mod tests {
         let lasting = NOW + 20 * 86_400;
         let ready = row(account(Some("work")).parked_until(lasting).build());
         assert_eq!(
-            ready.notes,
+            ready.lines,
             [said::parked_life(Some(lasting), NOW).expect("a date")]
         );
     }
@@ -1234,9 +1392,16 @@ mod tests {
             ..desktop_account("work", true)
         };
         let rows = desktop_rows(vec![work]);
+        let read = words::read_ago(&said::span(2 * 3_600), "Claude");
+        assert_eq!(rows[0].lines, [read.as_str()]);
+        assert!(rows[0].notes.is_empty(), "nothing to do");
         assert_eq!(
-            rows[0].notes,
-            [words::read_ago(&said::span(2 * 3_600), "Claude")]
+            (rows[0].detail.read_at, rows[0].detail.read.as_ref()),
+            (Some(NOW - 2 * 3_600), Some(&read))
+        );
+        assert_eq!(
+            rows[0].detail.email, None,
+            "nobody tells Pitboard its address"
         );
     }
 }

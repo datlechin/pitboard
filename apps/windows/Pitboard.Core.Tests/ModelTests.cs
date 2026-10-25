@@ -101,7 +101,7 @@ public sealed class ModelTests
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
-            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
+            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
@@ -501,8 +501,8 @@ public sealed class ModelTests
     public void ASnapshotSaysWhatTheMenuAndTheWindowShow()
     {
         var limit = new LimitRow(
-            Short: "5h", Percent: 72.4, Figure: "72%", Level: UsageLevel.Low,
-            Resets: "resets in 1h 05m",
+            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5h", Percent: 72.4, Figure: "72%",
+            Level: UsageLevel.Low, ResetsAt: 1_800_003_900, Resets: "resets in 1h 05m",
             Spoken: "5-hour limit, 72 percent used, resets in 1 hour, 5 minutes");
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
         var window = new WindowAccount(
@@ -512,8 +512,19 @@ public sealed class ModelTests
             Id: "codex:spare", Qualified: "codex/spare", Title: "spare",
             Email: "spare@example.com", EmailLine: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
-            NeedsSignIn: false, Unplaced: false, End: new RowEnd.Button(use), Action: use,
-            Summary: "5-hour 72%", Notes: ["Parked login good for 3 more days"], Help: null, Limits: [limit],
+            NeedsSignIn: false, Standing: AccountStanding.Ready, Unplaced: false, End: new RowEnd.Button(use), Action: use,
+            Summary: "5-hour 72%",
+            Notes:
+            [
+                new AccountNote(
+                    Kind: NoteKind.Expiring, Text: "Parked login good for 3 more days: sign in again to keep it",
+                    Action: null),
+            ],
+            Lines: ["Parked login good for 3 more days: sign in again to keep it"],
+            Detail: new AccountDetail(
+                Email: "spare@example.com", Plan: null, SignedInUntil: 1_800_259_200,
+                SignIn: "Parked login good for 3 more days", Warm: null, ReadAt: 1_800_000_000, Read: "Updated 08:00"),
+            Help: null, Limits: [limit],
             Offers:
             [
                 new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null),
@@ -529,7 +540,13 @@ public sealed class ModelTests
                 Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
                 Confirm: new Question(
                     Title: "Forget “spare (Codex)”?",
-                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")));
+                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")),
+            Actions:
+            [
+                new AccountAction(
+                    Kind: ActionKind.OpenWindow, Title: "Open chatgpt.com", Intent: null, Window: window, Enabled: true,
+                    Confirm: null),
+            ]);
         var giveUp = new NoticeAction(
             Title: "Give Up…", Intent: new Intent.AbandonStuckSwitch(), Dismisses: false, Switches: false,
             Enabled: true,
@@ -559,6 +576,13 @@ public sealed class ModelTests
         var row = snapshot.Sections[0].Accounts[0];
         Assert.AreEqual<Intent>(new Intent.SwitchTo("codex/spare"), row.Action?.Intent);
         Assert.AreEqual(UsageLevel.Low, row.Limits[0].Level);
+        Assert.IsInstanceOfType<LimitKind.FiveHour>(row.Limits[0].Kind);
+        Assert.AreEqual(1_800_003_900L, row.Limits[0].ResetsAt);
+        Assert.AreEqual(NoteKind.Expiring, row.Notes[0].Kind);
+        Assert.AreEqual(1_800_259_200L, row.Detail.SignedInUntil);
+        Assert.AreEqual(ActionKind.OpenWindow, row.Actions[0].Kind);
+        Assert.AreEqual("chatgpt.com", row.Actions[0].Window?.Site.Host);
+        Assert.AreEqual(1_800_000_000L, snapshot.UpdatedAt);
         Assert.AreEqual<Intent>(row.Action!.Intent, row.Offers[0].Intent);
         Assert.IsFalse(row.Offers[1].Enabled);
         Assert.AreEqual("chatgpt.com", row.Windows[0].Window.Site.Host);

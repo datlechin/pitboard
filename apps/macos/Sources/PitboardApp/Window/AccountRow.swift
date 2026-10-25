@@ -41,8 +41,8 @@ struct AccountRow: View {
                 if !item.limits.isEmpty {
                     UsageBars(limits: item.limits)
                 }
-                ForEach(item.notes, id: \.self) { note in
-                    Text(note).explanatory()
+                ForEach(item.lines, id: \.self) { line in
+                    Text(line).explanatory()
                 }
             }
             .padding(.leading, textInset)

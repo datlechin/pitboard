@@ -134,6 +134,7 @@ pub struct AccountItem {
     pub in_use: bool,
     /// Its parked login can no longer be used, whatever else is running.
     pub needs_sign_in: bool,
+    pub standing: AccountStanding,
     /// A login of its tool that belongs to no account Pitboard can name.
     pub unplaced: bool,
     /// What the far end of its row in the window shows, where anything.
@@ -144,11 +145,11 @@ pub struct AccountItem {
     pub action: Option<ItemAction>,
     /// The one line under its name in the menu: its limits, or what stands in their way.
     pub summary: String,
-    /// The lines under its limits in the window, in this order: why it cannot be used, in
-    /// full; why its numbers are not new, where it can be used all the same; how long its
-    /// parked login stays usable, for an account not in use; and where its warm-up stands,
-    /// "Warms up again at 22:50".
-    pub notes: Vec<String>,
+    // what needs doing about it, the most pressing first
+    pub notes: Vec<AccountNote>,
+    // the window's lines under its limits: its notes, its parked login's life and its warm-up
+    pub lines: Vec<String>,
+    pub detail: AccountDetail,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
@@ -162,6 +163,96 @@ pub struct AccountItem {
     // for an enrolled account, dimmed for the one in use, whose record is the only one of who
     // is signed in; what its own menu offers last, and what deleting its row does
     pub forget: Option<ItemOffer>,
+    // everything its own menu offers, in its order: offers, windows and forget, by kind
+    pub actions: Vec<AccountAction>,
+}
+
+// For a view that marks or orders accounts by where each stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum AccountStanding {
+    InUse,
+    Ready,
+    // ready, with its parked login due to expire or its Claude Desktop sign-in that may lapse
+    Expiring,
+    NeedsSignIn,
+    // signed in, and not added
+    NotAdded,
+    // a login Pitboard cannot read, identify or switch
+    Unusable,
+    Switching,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountNote {
+    pub kind: NoteKind,
+    pub text: String,
+    // what does something about it, where anything does
+    pub action: Option<AccountAction>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NoteKind {
+    // why it cannot be used
+    Problem,
+    // its parked login is due to expire, or its Claude Desktop sign-in may lapse
+    Expiring,
+    // why its numbers are not new
+    Stale,
+    // a login signed in and not added yet
+    Unfinished,
+}
+
+// The inspector's on macOS, an expanded row's on Windows: each value beside its sentence.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountDetail {
+    pub email: Option<String>,
+    pub plan: Option<String>,
+    // when its parked login stops working, for an account not in use
+    pub signed_in_until: Option<i64>,
+    // "In Use", "Parked login good for 26 more days", "Needs signing in again"
+    pub sign_in: Option<String>,
+    // for a Claude Code account Pitboard can warm up
+    pub warm: Option<WarmDetail>,
+    pub read_at: Option<i64>,
+    // "Updated 14:05", and for Claude Desktop "Read 2h 05m ago, with Claude closed"
+    pub read: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WarmDetail {
+    pub on: bool,
+    // "Warms up again at 22:50", "Warming up…", "Off"
+    pub said: String,
+    pub next_at: Option<i64>,
+    // when its five-hour period ends, while one runs
+    pub running_until: Option<i64>,
+}
+
+// From an account's menu, its detail or one of its notes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountAction {
+    pub kind: ActionKind,
+    pub title: String,
+    // sent once any question is answered; none for a window, which the app opens itself
+    pub intent: Option<Intent>,
+    // what OpenWindow opens
+    pub window: Option<WindowAccount>,
+    // a shortcut menu leaves out one that cannot be chosen now
+    pub enabled: bool,
+    pub confirm: Option<Question>,
+}
+
+// A view picks an action's symbol and place by this, never by its title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ActionKind {
+    Switch,
+    SignInAgain,
+    // the login signed in now
+    Add,
+    Rename,
+    WarmUpNow,
+    OpenWindow,
+    Remove,
 }
 
 /// What the far end of an account's row in the window shows.
@@ -216,6 +307,9 @@ pub struct WindowOffer {
 /// One limit of an account, as a row of its bars.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct LimitRow {
+    pub kind: LimitKind,
+    /// As a heading names it: "5-hour limit", "Weekly limit (Fable)".
+    pub name: String,
     /// As the column beside its bar names it: "5h", "week · Fable".
     pub short: String,
     /// The share used, as the service said it, for the bar. Past 100 once exceeded.
@@ -224,10 +318,22 @@ pub struct LimitRow {
     pub figure: String,
     /// The step it is at, which its tint follows.
     pub level: UsageLevel,
+    /// When it resets, in epoch seconds, where its service says.
+    pub resets_at: Option<i64>,
     /// When it resets: "resets in 2h 05m", "resetting now", or empty where nothing says.
     pub resets: String,
     /// The whole row as VoiceOver says it: "5-hour limit, 42 percent used, resets in 3 hours".
     pub spoken: String,
+}
+
+// By its length, for a view that tells limits apart by more than their words.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum LimitKind {
+    FiveHour,
+    Weekly,
+    // a weekly limit of one model's
+    WeeklyModel { model: String },
+    Other { length_seconds: Option<i64> },
 }
 
 /// A question asked before something is done that cannot be undone. Not called
@@ -749,6 +855,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         setup: setup::step(&seen, &footing),
         accounts_shown: setup::accounts_shown(&seen, &footing),
         menu_accounts_note: setup::menu_accounts_note(&seen, &footing),
+        updated_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
         updated_menu: setup::updated_menu(&seen),
         updated_window: setup::updated_window(&seen),
         footing,

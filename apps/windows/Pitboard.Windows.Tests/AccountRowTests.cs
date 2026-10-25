@@ -30,7 +30,7 @@ public sealed class AccountRowTests
             {
                 Plan = "Plus",
                 Limits = [Items.Limit(42)],
-                Notes = ["Its parked login lasts 6 more days"],
+                Lines = ["Its parked login lasts 6 more days"],
             },
             new ItemAction("Use", "Use spare (Codex)", new Intent.SwitchTo("codex/spare")));
         var row = await Shown(item, sent.Add);

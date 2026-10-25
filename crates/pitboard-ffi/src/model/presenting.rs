@@ -16,9 +16,9 @@ use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
 use crate::present::{
-    AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
-    NoticeAction, PanelNotice, Question, RowEnd, SetupLink, SetupStep, Severity, WindowOffer,
-    present,
+    AccountDetail, AccountItem, AccountMenuShown, AccountStanding, AccountsShown, ActionKind,
+    Choice, Footing, ItemOffer, LimitKind, MenuEntry, NoteKind, NoticeAction, PanelNotice,
+    Question, RowEnd, SetupLink, SetupStep, Severity, WindowOffer, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::{OS, Os};
@@ -242,6 +242,340 @@ fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
         described(unplaced("codex", false)).limits.is_empty(),
         "nothing measured"
     );
+}
+
+// A view tells limits apart, and counts down to a reset, without reading a word.
+#[test]
+fn a_limit_row_carries_its_kind_name_and_reset_instant() {
+    let back = NOON + 2 * HOUR;
+    let limits = described(
+        account(Some("work"))
+            .signed_in()
+            .limits(vec![
+                window("session", 42.0).resets(Some(back)),
+                window("weekly_all", 12.0).resets(None),
+                window("weekly_scoped", 3.0).scope("Fable"),
+                window("1_day", 7.0).length(DAY),
+                window("burst", 1.0),
+            ])
+            .build(),
+    )
+    .limits;
+    let said: Vec<(LimitKind, String, Option<i64>)> = limits
+        .into_iter()
+        .map(|limit| (limit.kind, limit.name, limit.resets_at))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (
+                LimitKind::FiveHour,
+                words::limit_title("5-hour", None),
+                Some(back)
+            ),
+            (LimitKind::Weekly, words::limit_title("weekly", None), None),
+            (
+                LimitKind::WeeklyModel {
+                    model: "Fable".into()
+                },
+                words::limit_title("weekly", Some("Fable")),
+                Some(100)
+            ),
+            (
+                LimitKind::Other {
+                    length_seconds: Some(DAY)
+                },
+                words::limit_title("daily", None),
+                Some(100)
+            ),
+            (
+                LimitKind::Other {
+                    length_seconds: None
+                },
+                words::limit_title("burst", None),
+                Some(100)
+            ),
+        ]
+    );
+}
+
+#[test]
+fn an_account_says_where_it_stands() {
+    let standing = |account: Account| described(account).standing;
+    assert_eq!(
+        standing(account(Some("work")).signed_in().build()),
+        AccountStanding::InUse
+    );
+    assert_eq!(
+        standing(account(Some("spare")).build()),
+        AccountStanding::Ready
+    );
+    assert_eq!(
+        standing(account(Some("spare")).standing(Standing::Expiring).build()),
+        AccountStanding::Expiring
+    );
+    for refused in [
+        Standing::LoginExpired,
+        Standing::LoginRefused,
+        Standing::LoginReplaced,
+        Standing::NothingParked,
+    ] {
+        assert_eq!(
+            standing(account(Some("old")).standing(refused).build()),
+            AccountStanding::NeedsSignIn,
+            "{refused:?}"
+        );
+    }
+    assert_eq!(
+        standing(account(None).signed_in().uuid("u").build()),
+        AccountStanding::NotAdded
+    );
+    assert_eq!(standing(unplaced("codex", true)), AccountStanding::Unusable);
+    assert_eq!(
+        standing(
+            account(Some("beta"))
+                .standing(Standing::LoginUnread)
+                .build()
+        ),
+        AccountStanding::Unusable
+    );
+    assert_eq!(
+        described_while(account(Some("spare")).build(), switching("claude/spare")).standing,
+        AccountStanding::Switching
+    );
+}
+
+// How long a parked login lasts and where a warm-up stands are the detail's.
+#[test]
+fn a_row_notes_only_what_needs_doing_each_with_its_kind_and_action() {
+    let notes = |account: Account| -> Vec<(NoteKind, String, Option<ActionKind>)> {
+        described(account)
+            .notes
+            .into_iter()
+            .map(|note| (note.kind, note.text, note.action.map(|action| action.kind)))
+            .collect()
+    };
+    let refused = "Its parked login was refused. Sign in to it again.";
+    assert_eq!(
+        notes(
+            account(Some("old"))
+                .standing(Standing::LoginRefused)
+                .explained(refused)
+                .build()
+        ),
+        [(
+            NoteKind::Problem,
+            refused.to_owned(),
+            Some(ActionKind::SignInAgain)
+        )]
+    );
+    assert_eq!(
+        notes(
+            account(Some("old"))
+                .standing(Standing::LoginExpired)
+                .build()
+        ),
+        [(
+            NoteKind::Problem,
+            words::NEEDS_SIGNING_IN_AGAIN.to_owned(),
+            Some(ActionKind::SignInAgain)
+        )]
+    );
+    let login = unplaced("codex", false);
+    let why = login.stale_explanation.clone().expect("why");
+    assert_eq!(notes(login), [(NoteKind::Problem, why, None)]);
+    let due = NOON + 2 * DAY;
+    let life = words::typeset(&pitboard_core::words::parked_life(Some(due), NOON).expect("a life"));
+    assert_eq!(
+        notes(
+            account(Some("spare"))
+                .parked_until(due)
+                .standing(Standing::Expiring)
+                .build()
+        ),
+        [(
+            NoteKind::Expiring,
+            words::sign_in_hint(&life, false),
+            Some(ActionKind::SignInAgain)
+        )]
+    );
+    let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
+    assert_eq!(
+        notes(account(Some("spare")).explained(old_numbers).build()),
+        [(NoteKind::Stale, old_numbers.to_owned(), None)]
+    );
+    assert_eq!(
+        notes(account(None).signed_in().uuid("u").build()),
+        [(
+            NoteKind::Unfinished,
+            words::NOT_NAMED_YET.to_owned(),
+            Some(ActionKind::Add)
+        )]
+    );
+    assert!(
+        notes(account(Some("spare")).parked_until(NOON + 20 * DAY).build()).is_empty(),
+        "a parked login good for weeks is the detail's"
+    );
+    assert!(notes(account(Some("work")).signed_in().build()).is_empty());
+
+    let stale = described_while(
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        signing_in,
+    );
+    let again = stale.notes[0].action.as_ref().expect("its sign-in");
+    assert!(!again.enabled, "held back while another sign-in runs");
+    assert_eq!(
+        Some(again),
+        stale
+            .actions
+            .iter()
+            .find(|action| action.kind == ActionKind::SignInAgain),
+        "the note's action is the menu's"
+    );
+}
+
+#[test]
+fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
+    let lasting = NOON + 20 * DAY;
+    let mut spare = account(Some("spare"))
+        .parked_until(lasting)
+        .read_at(NOON - 300)
+        .build();
+    spare.plan = Some("Max 5x".into());
+    assert_eq!(
+        described(spare).detail,
+        AccountDetail {
+            email: Some("spare@example.com".into()),
+            plan: Some("Max 5x".into()),
+            signed_in_until: Some(lasting),
+            sign_in: Some(words::typeset(
+                &pitboard_core::words::parked_life(Some(lasting), NOON).expect("a life")
+            )),
+            warm: None,
+            read_at: Some(NOON - 300),
+            read: Some(words::updated("11:55")),
+        }
+    );
+    let work = described(
+        account(Some("work"))
+            .signed_in()
+            .parked_until(lasting)
+            .build(),
+    )
+    .detail;
+    assert_eq!(
+        (work.signed_in_until, work.sign_in),
+        (None, Some(words::in_use(OS))),
+        "nothing parked in use"
+    );
+    let old = described(
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .unmeasured()
+            .build(),
+    )
+    .detail;
+    assert_eq!(
+        (old.sign_in.as_deref(), old.read_at, old.read),
+        (Some(words::NEEDS_SIGNING_IN_AGAIN), None, None)
+    );
+    let unnamed = described(account(None).signed_in().uuid("u").build()).detail;
+    assert_eq!(unnamed.sign_in.as_deref(), Some(words::NOT_NAMED_YET));
+    let codex = described(account(Some("main")).of("codex").build()).detail;
+    assert_eq!(codex.sign_in, None, "no expiry known");
+}
+
+// The old `offers`, `windows` and `forget` are the same items.
+#[test]
+fn each_action_says_its_kind() {
+    let (model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("spare")).build(),
+    ]);
+    let [work, spare] = &rows(&model)[..] else {
+        panic!("two rows");
+    };
+    let kinds = |row: &AccountItem| -> Vec<(ActionKind, bool)> {
+        row.actions
+            .iter()
+            .map(|action| (action.kind, action.enabled))
+            .collect()
+    };
+    assert_eq!(
+        kinds(spare),
+        [
+            (ActionKind::Switch, true),
+            (ActionKind::SignInAgain, true),
+            (ActionKind::Rename, true),
+            (ActionKind::OpenWindow, true),
+            (ActionKind::Remove, true)
+        ]
+    );
+    assert_eq!(
+        kinds(work),
+        [
+            (ActionKind::Switch, false),
+            (ActionKind::SignInAgain, true),
+            (ActionKind::Rename, true),
+            (ActionKind::OpenWindow, true),
+            (ActionKind::Remove, false)
+        ]
+    );
+    let sent: Vec<Option<Intent>> = spare
+        .actions
+        .iter()
+        .map(|action| action.intent.clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            Some(switch_to("claude/spare")),
+            Some(sign_in_again("spare")),
+            Some(rename("spare")),
+            None,
+            Some(Intent::Forget {
+                qualified: "claude/spare".into()
+            })
+        ]
+    );
+    for row in [work, spare] {
+        let offered: Vec<ItemOffer> = row.actions[..3]
+            .iter()
+            .map(|action| ItemOffer {
+                title: action.title.clone(),
+                intent: action.intent.clone().expect("an intent"),
+                enabled: action.enabled,
+                confirm: action.confirm.clone(),
+            })
+            .collect();
+        assert_eq!(row.offers, offered);
+        let removes = row.actions.last().expect("forget");
+        assert_eq!(
+            row.forget.as_ref().map(|forget| (
+                &forget.title,
+                &forget.intent,
+                forget.enabled,
+                &forget.confirm
+            )),
+            Some((
+                &removes.title,
+                removes.intent.as_ref().expect("an intent"),
+                removes.enabled,
+                &removes.confirm
+            ))
+        );
+        assert_eq!(
+            (&row.windows[0].title, Some(&row.windows[0].window)),
+            (&row.actions[3].title, row.actions[3].window.as_ref())
+        );
+    }
+    assert_eq!(
+        kinds(&described(account(None).signed_in().uuid("u").build())),
+        [(ActionKind::Add, true)]
+    );
+    assert!(described(unplaced("codex", true)).actions.is_empty());
 }
 
 /// Pressing an account in the menu or the window does the one thing its state allows,
@@ -832,7 +1166,7 @@ fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
     let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
     let said = |account: Account| {
         let item = described(account);
-        (item.notes, item.help)
+        (item.lines, item.help)
     };
     let told = |why: &str| (vec![why.to_owned()], Some(why.to_owned()));
     let login = unplaced("codex", false);
@@ -872,7 +1206,7 @@ fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
 fn a_parked_logins_life_is_said_only_of_an_account_not_in_use() {
     let parking = NOON + 3 * 86_400 + 60;
     assert_eq!(
-        described(account(Some("spare")).parked_until(parking).build()).notes,
+        described(account(Some("spare")).parked_until(parking).build()).lines,
         [words::typeset(
             &pitboard_core::words::parked_life(Some(parking), NOON).expect("a life")
         )]
@@ -884,14 +1218,15 @@ fn a_parked_logins_life_is_said_only_of_an_account_not_in_use() {
                 .parked_until(parking)
                 .build()
         )
-        .notes
+        .lines
         .is_empty()
     );
-    assert!(described(account(Some("spare")).build()).notes.is_empty());
+    assert!(described(account(Some("spare")).build()).lines.is_empty());
 }
 
 const HOUR: i64 = 3_600;
-const WEEK: i64 = 7 * 86_400;
+const DAY: i64 = 86_400;
+const WEEK: i64 = 7 * DAY;
 
 /// A five-hour limit four hours in at 30%, and a week ten hours in at 33%, as of `NOON`.
 fn busy_limits() -> Vec<Limit> {
@@ -2298,6 +2633,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),
         (words::NOT_READ_YET, "")
     );
+    assert_eq!(shown.updated_at, None);
     let mut machine = Stub::reading(Ok(status(vec![account(Some("work")).signed_in().build()])));
     model.send(Intent::Refresh { asked: false });
     model.run_but(&mut machine, super::testing::machine::any_read);
@@ -2313,6 +2649,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),
         (updated.as_str(), updated.as_str())
     );
+    assert_eq!(shown.updated_at, Some(NOON));
 
     let mut failed = at_noon();
     failed.refresh(&mut Stub::reading(Err(refusal(
@@ -2323,6 +2660,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
     let shown = failed.shown();
     assert_eq!(shown.updated_menu, words::SHOWING_LAST_MEASURED);
     assert_eq!(shown.updated_window, "");
+    assert_eq!(shown.updated_at, None);
 }
 
 /// Where the menu has no accounts to list it says why, and the window says it in full: still

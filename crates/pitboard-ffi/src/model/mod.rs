@@ -572,6 +572,8 @@ pub struct Snapshot {
     pub accounts_shown: AccountsShown,
     /// What the menu says where it has no accounts to list.
     pub menu_accounts_note: Option<String>,
+    // when the accounts were last read
+    pub updated_at: Option<i64>,
     /// When the accounts were read, as the menu's Refresh item says it: "Updated 14:05".
     pub updated_menu: String,
     /// The same, as the window's subtitle says it.

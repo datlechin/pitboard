@@ -640,6 +640,9 @@ pub(crate) fn forget_title(name: &str) -> String {
 
 pub(crate) const WARMING_UP: &str = "Warming up…";
 
+// An account's warm-up, where it is turned off.
+pub(crate) const WARM_UP_OFF: &str = "Off";
+
 // The menu's line under an account a switch runs for.
 pub(crate) const SWITCHING_NOW: &str = "Switching…";
 
@@ -648,6 +651,15 @@ pub(crate) const CANNOT_READ_OR_SWITCH: &str = "Can’t be read or switched";
 pub(crate) const NOT_NAMED_YET: &str = "Not named yet";
 
 pub(crate) const NEEDS_SIGNING_IN_AGAIN: &str = "Needs signing in again";
+
+// "5-hour limit", "Weekly limit (Fable)": `name` as a sentence says it, "weekly".
+pub(crate) fn limit_title(name: &str, model: Option<&str>) -> String {
+    let title = format!("{} limit", capitalised(name));
+    match model {
+        Some(model) => format!("{title} ({model})"),
+        None => title,
+    }
+}
 
 // "5-hour 42%".
 pub(crate) fn limit_in_line(name: &str, figure: &str) -> String {
@@ -3654,6 +3666,9 @@ mod tests {
         assert_eq!(NEEDS_SIGNING_IN_AGAIN, "Needs signing in again");
         assert_eq!(NO_USAGE_READ, "No usage read");
         assert_eq!(limit_in_line("5-hour", "42%"), "5-hour 42%");
+        assert_eq!(limit_title("5-hour", None), "5-hour limit");
+        assert_eq!(limit_title("weekly", Some("Fable")), "Weekly limit (Fable)");
+        assert_eq!(WARM_UP_OFF, "Off");
         assert_eq!(
             used_up("5-hour", Some("14:00")),
             "5-hour used up until 14:00"

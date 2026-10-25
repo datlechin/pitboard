@@ -61,7 +61,8 @@ package func snapshot(
         notices: [],
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
-        menuAccountsNote: nil, updatedMenu: updated, updatedWindow: updated, sheetText: nil,
+        menuAccountsNote: nil, updatedAt: nil, updatedMenu: updated, updatedWindow: updated,
+        sheetText: nil,
         signingInText: nil, stowText: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(

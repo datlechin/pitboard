@@ -9,7 +9,7 @@ use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
-use crate::present::words;
+use crate::present::{ActionKind, WarmDetail, words};
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
@@ -97,6 +97,15 @@ fn nothing_is_warmed_up_unless_an_account_is_turned_on() {
     assert_eq!(shown.accounts.len(), 1);
     assert!(!shown.accounts[0].on);
     assert_eq!(shown.standing, None);
+    assert_eq!(
+        model.shown().sections[0].accounts[0].detail.warm,
+        Some(WarmDetail {
+            on: false,
+            said: words::WARM_UP_OFF.into(),
+            next_at: None,
+            running_until: None,
+        })
+    );
 }
 
 /// An account turned on is asked for after every read, and every 30 seconds though nothing
@@ -438,21 +447,30 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         },
         &|_| "10:00".to_owned(),
     );
+    let said = words::typeset(&pitboard_core::words::capitalised(&standing));
+    assert_eq!(item.lines.last(), Some(&said));
     assert_eq!(
-        item.notes.last(),
-        Some(&words::typeset(&pitboard_core::words::capitalised(
-            &standing
-        )))
+        item.detail.warm,
+        Some(WarmDetail {
+            on: true,
+            said,
+            next_at: Some(UNTIL),
+            running_until: Some(UNTIL),
+        })
     );
-    let warm: Vec<(String, bool)> = item
-        .offers
+    let warm: Vec<(ActionKind, &str, bool)> = item
+        .actions
         .iter()
-        .filter(|offer| matches!(offer.intent, Intent::WarmNow { .. }))
-        .map(|offer| (offer.title.clone(), offer.enabled))
+        .filter(|action| matches!(action.intent, Some(Intent::WarmNow { .. })))
+        .map(|action| (action.kind, action.title.as_str(), action.enabled))
         .collect();
     assert_eq!(
         warm,
-        [(words::warm_up_now(OS), false)],
+        [(
+            ActionKind::WarmUpNow,
+            words::warm_up_now(OS).as_str(),
+            false
+        )],
         "its period runs, so nothing to start now"
     );
 }

@@ -17,7 +17,7 @@ internal static class Snapshots
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
-            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
+            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
