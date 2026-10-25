@@ -331,6 +331,10 @@ pub(crate) fn update_config(os: Os) -> String {
 
 pub(crate) const SWITCH: &str = "Switch";
 
+pub(crate) fn switch_back(os: Os) -> String {
+    titled(os, "Switch Back", "Switch back")
+}
+
 // "work has used 96% of its 5-hour limit".
 pub(crate) fn has_used(account: &str, used: &str) -> String {
     typeset(&pitboard_core::words::has_used(&quoted(account), used))
@@ -3161,6 +3165,7 @@ mod tests {
             both(&update_config),
             pair("Update Claude Code’s Config", "Update Claude Code’s config")
         );
+        assert_eq!(both(&switch_back), pair("Switch Back", "Switch back"));
     }
 
     // A sheet's words, by what it does, pinned once: the sheets' and the model's tests compare

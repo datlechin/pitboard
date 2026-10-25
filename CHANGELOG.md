@@ -58,6 +58,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app's **Edit** > **Copy** copies the email address of the account selected.
 - The Windows app copies an account's email address with Ctrl+C on its row, and its shortcut
   menu shows F2, Del and Ctrl+C beside the items they do.
+- After switching Claude Code by itself, the app's notification and its notice in the window
+  offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
+  switched until that limit resets.
 
 ### Changed
 

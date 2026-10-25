@@ -42,8 +42,8 @@ use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
 use super::{
-    AtLimit, Failure, Intent, LastSwitch, Pane, Place, QuitQuestion, ReadFailure, RestartNeeded,
-    RunOutNotice, RunningSignIn, SettingsSection, Sheet, Tip, WindowRequest,
+    AtLimit, Back, Failure, Intent, LastSwitch, Pane, Place, QuitQuestion, ReadFailure,
+    RestartNeeded, RunOutNotice, RunningSignIn, SettingsSection, Sheet, Tip, WindowRequest,
 };
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::words::{
@@ -708,6 +708,13 @@ const LIMITS: Place = Place::Settings {
     section: SettingsSection::Limits,
 };
 
+// Until `until`, when the limit it reached resets, nothing says `from` was kept in use.
+#[derive(Debug)]
+struct SwitchedBack {
+    from: String,
+    until: Option<i64>,
+}
+
 /// A rename, as its answer is taken in.
 #[derive(Clone, Copy)]
 struct Renaming<'a> {
@@ -952,6 +959,7 @@ pub(crate) struct State {
     /// not switch away from a limit, for that limit and its reset, each reason it cannot judge
     /// and each refusal, said once rather than at every look.
     auto_told: BTreeSet<String>,
+    switched_back: Option<SwitchedBack>,
     /// The accounts whose login was replaced outside Pitboard that the last read said and a
     /// notification has told about, by `Account.id`.
     replaced_told: BTreeSet<String>,
@@ -1042,6 +1050,7 @@ impl State {
             advice: Vec::new(),
             told_this_launch: Told::new(),
             auto_told: BTreeSet::new(),
+            switched_back: None,
             replaced_told: BTreeSet::new(),
             unconfirmed_asked: None,
             auto_standing: None,
@@ -1241,6 +1250,7 @@ impl State {
             ),
             Intent::SwitchTo { qualified } => self.switch_asked(qualified, jobs),
             Intent::QuitAndSwitch { qualified } => self.quit_and_switch(&qualified, jobs),
+            Intent::SwitchBack { from, to } => self.switch_back(from, &to, jobs),
             Intent::ReplaceAndSwitch { qualified } => self.replace_and_switch(qualified, jobs),
             Intent::KeepLogin => {
                 if let Some(replacing) = self.replacing.as_mut() {
@@ -1334,6 +1344,7 @@ impl State {
                 Clicked::Switch(qualified) => {
                     self.intent(Intent::SwitchTo { qualified }, now, jobs);
                 }
+                Clicked::SwitchBack { from, to } => self.switch_back(from, &to, jobs),
                 Clicked::SignInAgain(qualified) => {
                     let key = Key::parse(&qualified);
                     let sheet = Sheet::SignInAgain {
@@ -2143,7 +2154,7 @@ impl State {
             return;
         }
         match looked {
-            Ok(AutoLooked::Stands(outcome)) => self.auto_stands(outcome, jobs),
+            Ok(AutoLooked::Stands(outcome)) => self.auto_stands(outcome, now, jobs),
             Ok(AutoLooked::Act) => self.auto_act(now, jobs),
             Err(PitboardError::Failed { message, .. }) => {
                 self.auto_standing = Some(AutoStanding::Stopped {
@@ -2173,12 +2184,7 @@ impl State {
         });
     }
 
-    /// What the core's decision under its lock came to. A switch is taken as one somebody
-    /// asked for is, and said in a notification, since nobody was there to ask for it, even
-    /// where the setting was turned off while it was made. Anything else it came to after it
-    /// was turned off moved nothing, and is neither said nor waited on: turned on again, it
-    /// is somebody asking. A refusal is said once for its code until the next switch, and the
-    /// next is asked for no sooner than the core waits after as many attempts failed in a row.
+    // A switch made as the setting was turned off is still said: nobody was there to ask for it.
     fn auto_switched(
         &mut self,
         done: Result<AutoSwitched, PitboardError>,
@@ -2192,6 +2198,7 @@ impl State {
                 adoption,
                 warnings,
                 used,
+                resets_at,
             }) => {
                 jobs.push(Job::Post {
                     notice: crate::present::auto_switched_notice(
@@ -2203,8 +2210,13 @@ impl State {
                     ),
                 });
                 self.auto_told.clear();
+                self.switched_back = None;
                 self.auto_refusals.ended();
                 let qualified = Key::parse(&to).qualified();
+                let back = Back {
+                    from: Key::parse(&from).qualified(),
+                    resets_at,
+                };
                 let switched = Switched {
                     outcome: Switch::Switched {
                         provider: ProviderId::Claude.code().into(),
@@ -2220,13 +2232,19 @@ impl State {
                     adoption,
                     warnings,
                     used,
+                    resets_at,
                 }));
                 self.switched(&qualified, None, Ok(switched), now, jobs);
+                if let Some(last) = (self.last_switches.iter_mut())
+                    .find(|last| last.provider == ProviderId::Claude.code())
+                {
+                    last.back = Some(back);
+                }
             }
             _ if !self.switches() => self.switching = None,
             Ok(outcome) => {
                 self.switching = None;
-                self.auto_stands(outcome, jobs);
+                self.auto_stands(outcome, now, jobs);
             }
             Err(PitboardError::Failed { code, message, .. }) => {
                 self.switching = None;
@@ -2244,12 +2262,18 @@ impl State {
         }
     }
 
-    /// The core's look or its decision came to `outcome`, which is no switch and ends a row of
-    /// refusals. Said under the setting, and a reason it did not switch away from a limit, or
-    /// cannot judge at all, posted once for what tells it apart until the next switch.
-    fn auto_stands(&mut self, outcome: AutoSwitched, jobs: &mut Vec<Job>) {
+    // A reason is posted once for what tells it apart until the next switch.
+    fn auto_stands(&mut self, outcome: AutoSwitched, now: Now, jobs: &mut Vec<Job>) {
         self.auto_refusals.ended();
+        self.switched_back
+            .take_if(|back| back.until.is_some_and(|until| until <= now.epoch()));
         let told = match &outcome {
+            AutoSwitched::Skipped { from, code, .. }
+                if matches!(*code, "already_switched" | "settling")
+                    && (self.switched_back.as_ref()).is_some_and(|back| back.from == *from) =>
+            {
+                None
+            }
             AutoSwitched::Skipped {
                 key,
                 from,
@@ -2914,6 +2938,7 @@ impl State {
                 said: None,
                 warnings: Vec::new(),
                 opens: None,
+                back: None,
             });
         let app = ProviderId::parse(provider)
             .filter(|_| signing.in_its_app)
@@ -3191,6 +3216,30 @@ impl State {
         } else {
             self.look_over(now);
         }
+    }
+
+    // Once `to` is no longer in use somebody switched since.
+    fn switch_back(&mut self, from: String, to: &str, jobs: &mut Vec<Job>) {
+        let in_use = self.status.as_ref().is_some_and(|read| {
+            read.accounts.iter().any(|account| {
+                account.signed_in
+                    && (account.qualified.as_deref())
+                        .is_some_and(|qualified| Key::parse(qualified) == Key::parse(to))
+            })
+        });
+        if !in_use || self.switch_under_way().is_some() {
+            self.show(Some(Place::Accounts));
+            return;
+        }
+        let until = (self.last_switches.iter())
+            .filter_map(|last| last.back.as_ref())
+            .find(|back| back.from == from)
+            .and_then(|back| back.resets_at);
+        self.switched_back = Some(SwitchedBack {
+            from: Key::parse(&from).typed(),
+            until,
+        });
+        self.switch_asked(from, jobs);
     }
 
     /// A switch asked for from the window, the menu or a notification.
@@ -3501,6 +3550,7 @@ impl State {
                         said: None,
                         warnings: Vec::new(),
                         opens: None,
+                        back: None,
                     });
                 for warning in done.warnings {
                     if !said.warnings.contains(&warning) {
@@ -3534,6 +3584,7 @@ impl State {
             said: None,
             warnings: done.warnings,
             opens,
+            back: None,
         });
     }
 

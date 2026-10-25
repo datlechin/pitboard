@@ -415,7 +415,8 @@ keeps it is in the header of the module named.
   app's UserDefaults are handed over once (`model/keeping.rs`).
 - With its setting on, the app asks the core's look after every read and every
   `DECIDE_EVERY_SECONDS`, as `pitboard watch` decides, paces a refusal by
-  `duty::cadence::retry_after`, and never says what it came to in an alert
+  `duty::cadence::retry_after`, and never says what it came to in an alert. Its Switch Back is
+  a plain switch, taken only while the account it switched to is still in use
   (`model/automatic.rs`).
 - A notice's button is a change of the app's own, never a switch: updating Claude Code's
   config is refused where another account is in use by then, and **Put Away** puts away only

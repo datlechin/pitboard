@@ -1498,8 +1498,8 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
 
 /// On the real core, with switching by itself turned on in the app's preferences, an account
 /// in use at its share is switched from to another with room through the model's lanes: the
-/// switch is said in a notification with nothing to switch back to, the activity log records
-/// it as automatic and made by the app, and the account switched to stays in use.
+/// switch is said in a notification that offers Switch Back, the activity log records it as
+/// automatic and made by the app, and the account switched to stays in use.
 #[test]
 fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     let world = World::new("auto-switch");
@@ -1532,7 +1532,10 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
             &words::follows(&crate::Adoption::PollingWithin(33))
         )
     );
-    assert_eq!(notice.button, None);
+    assert_eq!(
+        notice.button.map(|button| button.clicked),
+        Some(r#"switch-back/["claude/work","claude/spare"]"#.into())
+    );
     let changes = pitboard_core::audit::read(world.ctx(), 20);
     let automatic: Vec<_> = changes
         .iter()

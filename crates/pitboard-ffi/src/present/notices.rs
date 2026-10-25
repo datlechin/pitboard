@@ -248,7 +248,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             vec![switch_action(seen, &advice.switch_to, &advice.instead)],
         ));
     }
-    // Once its countdown is over a bare one says no more than the row's In Use.
+    // Once its countdown is over a bare one says no more than In Use, unless it offers Switch Back.
     said.extend(
         (state.last_switches.iter())
             .map(|last| of_last_switch(seen, last))
@@ -256,6 +256,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
                 notice.severity != Severity::Info
                     || !notice.lines.is_empty()
                     || notice.until.is_some()
+                    || notice.actions.iter().any(|action| action.switches)
             }),
     );
     said.extend(awaiting(seen));
@@ -444,9 +445,7 @@ fn update_config_action(seen: &Seen) -> Vec<NoticeAction> {
         .collect()
 }
 
-/// What one tool's last switch still has to say. Sessions of a tool that follows a switch by
-/// itself pick it up within a moment, and the notice counts down to it; once that moment has
-/// passed a countdown would count to something already over, so there is none.
+// A countdown once sessions have followed would count to something already over.
 fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
     let label = Key::parse(&last.to).label;
     let tool = seen.tool_if_shown(&last.provider);
@@ -471,6 +470,23 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         words::switched_to(tool.as_deref(), &label)
     };
     let until = last.follows_at.filter(|at| *at > seen.now);
+    let back = last.back.as_ref().map(|back| NoticeAction {
+        title: words::switch_back(seen.os),
+        intent: Intent::SwitchBack {
+            from: back.from.clone(),
+            to: Key::parse(&last.to).qualified(),
+        },
+        dismisses: false,
+        switches: true,
+        enabled: seen.state.switch_under_way().is_none(),
+        confirm: None,
+    });
+    let actions = back
+        .into_iter()
+        .chain([dismiss(Intent::DismissSwitch {
+            provider: last.provider.clone(),
+        })])
+        .collect();
     PanelNotice {
         until_label: until.map(|_| words::sessions_follow_in(tool.as_deref())),
         until,
@@ -479,9 +495,7 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
             severity,
             title,
             lines,
-            vec![dismiss(Intent::DismissSwitch {
-                provider: last.provider.clone(),
-            })],
+            actions,
         )
     }
 }
@@ -493,10 +507,13 @@ pub(crate) enum Clicked {
     Accounts,
     Limits,
     Switch(String),
+    SwitchBack { from: String, to: String },
     SignInAgain(String),
 }
 
 const SWITCH: &str = "switch/";
+// then both accounts as a JSON pair, since a label from 0.1 can hold a slash
+const SWITCH_BACK: &str = "switch-back/";
 const SIGN_IN_AGAIN: &str = "sign-in-again/";
 const LIMITS: &str = "limits";
 pub(crate) const UNUSABLE: &str = "unusable/";
@@ -507,6 +524,9 @@ impl Clicked {
             Clicked::Accounts => "accounts".into(),
             Clicked::Limits => LIMITS.into(),
             Clicked::Switch(qualified) => format!("{SWITCH}{qualified}"),
+            Clicked::SwitchBack { from, to } => {
+                format!("{SWITCH_BACK}{}", serde_json::json!([from, to]))
+            }
             Clicked::SignInAgain(qualified) => format!("{SIGN_IN_AGAIN}{qualified}"),
         }
     }
@@ -519,8 +539,13 @@ impl Clicked {
                 .filter(|qualified| !qualified.is_empty())
                 .map(str::to_owned)
         };
+        let back = argument
+            .strip_prefix(SWITCH_BACK)
+            .and_then(|pair| serde_json::from_str::<(String, String)>(pair).ok());
         if let Some(qualified) = named(SWITCH) {
             Clicked::Switch(qualified)
+        } else if let Some((from, to)) = back {
+            Clicked::SwitchBack { from, to }
         } else if let Some(qualified) = named(SIGN_IN_AGAIN) {
             Clicked::SignInAgain(qualified)
         } else if argument == LIMITS {
@@ -555,10 +580,17 @@ pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
         NotificationButtonKind {
             title: words::SWITCH.into(),
             opens_window: false,
+            symbol: "arrow.left.arrow.right".into(),
+        },
+        NotificationButtonKind {
+            title: words::switch_back(OS),
+            opens_window: false,
+            symbol: "arrow.uturn.backward".into(),
         },
         NotificationButtonKind {
             title: words::sign_in_again(OS, false),
             opens_window: true,
+            symbol: "person.crop.circle".into(),
         },
     ]
 }
@@ -591,11 +623,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     }
 }
 
-/// What Pitboard switched by itself, posted since nobody was there to ask for it: "Switched
-/// Claude Code to home", and "work has used 96% of its 5-hour limit. Sessions already running
-/// follow within 33 seconds.", or, while a file sits behind the keychain, when they do
-/// instead. It has nothing to switch to: the account left has reached the share it was
-/// switched away at.
+// `from` and `to` as the core types them.
 pub(crate) fn auto_switched_notice(
     from: &str,
     to: &str,
@@ -603,12 +631,19 @@ pub(crate) fn auto_switched_notice(
     adoption: &Adoption,
     at: i64,
 ) -> RunOutNotice {
-    posted(
-        format!("auto/{from}/{to}/{at}"),
-        words::switched_to(Some(ProviderId::Claude.name()), to),
-        words::used_then(from, used, &words::follows(adoption)),
-        &Clicked::Accounts,
-    )
+    let back = Clicked::SwitchBack {
+        from: Key::parse(from).qualified(),
+        to: Key::parse(to).qualified(),
+    };
+    RunOutNotice {
+        button: button(words::switch_back(OS), &back),
+        ..posted(
+            format!("auto/{from}/{to}/{at}"),
+            words::switched_to(Some(ProviderId::Claude.name()), to),
+            words::used_then(from, used, &words::follows(adoption)),
+            &Clicked::Accounts,
+        )
+    }
 }
 
 /// Where Pitboard would have switched Claude Code by itself and did not: how much of which
@@ -1125,6 +1160,7 @@ mod tests {
             said: None,
             warnings: Vec::new(),
             opens: Some("Claude opens signed in to it.".into()),
+            back: None,
         }];
         let shown = present_on(Os::MacOs, &state, 0, &Utc);
         let notice = shown

@@ -251,6 +251,8 @@ pub(crate) enum AutoSwitched {
         adoption: Adoption,
         warnings: Vec<Warning>,
         used: String,
+        // when the limit it left resets
+        resets_at: Option<i64>,
     },
     /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
     /// the reason `why` says, until `until` where the reason ends then. `key` tells it apart
@@ -260,6 +262,8 @@ pub(crate) enum AutoSwitched {
         from: String,
         used: String,
         why: String,
+        // the core's for the reason, `Skip::code`
+        code: &'static str,
         until: Option<i64>,
     },
     /// Pitboard cannot judge whether to switch, for the reason `why` says, and asks again at
@@ -476,11 +480,13 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             adoption,
             warnings,
             used: words::share_of_limit(&limit),
+            resets_at: limit.resets_at,
         },
         Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
             key: why.told_apart(&from, &limit),
             used: words::share_of_limit(&limit),
             why: words::not_switching(&why, threshold),
+            code: why.code(),
             until: match why {
                 Skip::Settling { until } => Some(until),
                 _ => None,

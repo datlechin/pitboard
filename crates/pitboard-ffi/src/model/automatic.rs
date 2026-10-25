@@ -7,12 +7,12 @@ use super::advice::Told;
 use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub, any_read, offline_read};
-use super::testing::records::{Refusal, refusal, status, watching};
-use super::{AtLimit, Intent, RunOutNotice};
+use super::testing::records::{Refusal, refusal, status, switched, watching};
+use super::{AtLimit, Intent, NotificationButton, Place, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::words as said;
 use std::time::Duration;
 
@@ -67,6 +67,7 @@ fn switched_work_to_personal() -> Result<AutoSwitched, Refusal> {
         adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
         used: "97% of its 5-hour limit".into(),
+        resets_at: Some(9_000),
     })
 }
 
@@ -91,6 +92,7 @@ fn no_room(resets: i64) -> AutoSwitched {
         from: "work".into(),
         used: "97% of its 5-hour limit".into(),
         why: "no other Claude Code account has room below 95% in every limit".into(),
+        code: "no_room",
         until: None,
     }
 }
@@ -325,6 +327,7 @@ fn the_settings_say_why_it_is_not_switching() {
                 from: "work".into(),
                 used: "97% of its 5-hour limit".into(),
                 why: "the account was put in use less than 5 minutes ago".into(),
+                code: "settling",
                 until: Some(now + 300),
             }
         ),
@@ -362,6 +365,7 @@ fn the_settings_say_why_it_is_not_switching() {
                 adoption: Adoption::PollingWithin(33),
                 warnings: Vec::new(),
                 used: "97% of its 5-hour limit".into(),
+                resets_at: Some(9_000),
             }
         ),
         words::typeset(&said::auto_switched(
@@ -424,7 +428,10 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
                 &words::follows(&Adoption::PollingWithin(33))
             ),
             clicked: "accounts".into(),
-            button: None,
+            button: Some(NotificationButton {
+                title: words::switch_back(OS),
+                clicked: r#"switch-back/["claude/work","claude/personal"]"#.into(),
+            }),
         }]
     );
     let last = &model.state.last_switches;
@@ -451,6 +458,195 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
     );
 }
 
+// What switching from `work` to `personal` by itself posted, read after with `personal` in use.
+fn switched_by_itself(model: &mut Hand, machine: &mut Stub) -> RunOutNotice {
+    let resets = model.now.epoch() + 3_600;
+    turned_on(model, machine);
+    machine.look = Ok(AutoLooked::Act);
+    machine.auto = Ok(AutoSwitched::Switched {
+        from: "work".into(),
+        to: "personal".into(),
+        adoption: Adoption::PollingWithin(33),
+        warnings: Vec::new(),
+        used: "97% of its 5-hour limit".into(),
+        resets_at: Some(resets),
+    });
+    model.send(Intent::Refresh { asked: false });
+    model.run_but(machine, auto_switch);
+    machine.answer = Ok(personal_in_use());
+    machine.look = Ok(AutoLooked::Stands(watching("personal")));
+    model.run(machine);
+    machine.posted.pop().expect("the switch posted")
+}
+
+fn work_in_use() -> Status {
+    status(vec![
+        work(97.0),
+        account(Some("personal"))
+            .limits(vec![window("session", 10.0).resets(Some(9_000))])
+            .build(),
+    ])
+}
+
+fn back_to_work() -> Intent {
+    Intent::SwitchBack {
+        from: "claude/work".into(),
+        to: "claude/personal".into(),
+    }
+}
+
+#[test]
+fn only_a_switch_by_itself_offers_switch_back_from_its_notification_and_its_notice() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    let posted = switched_by_itself(&mut model, &mut machine);
+
+    let button = posted.button.expect("Switch Back");
+    assert_eq!(button.title, words::switch_back(OS));
+    assert_eq!(
+        crate::notification_buttons()
+            .into_iter()
+            .find(|kind| kind.title == button.title)
+            .map(|kind| (kind.opens_window, kind.symbol)),
+        Some((false, "arrow.uturn.backward".into()))
+    );
+    model.later(Duration::from_secs(60));
+    let shown = model.shown();
+    let notice = (shown.notices.iter())
+        .find(|notice| notice.id == "switch/claude")
+        .expect("kept past its countdown while it offers Switch Back");
+    let offered: Vec<(&str, &Intent, bool)> = (notice.actions.iter())
+        .map(|action| (action.title.as_str(), &action.intent, action.switches))
+        .collect();
+    assert_eq!(
+        offered[0],
+        (words::switch_back(OS).as_str(), &back_to_work(), true)
+    );
+
+    machine.switched = switched("claude", "personal", "work", Vec::new());
+    model.send(Intent::SwitchTo {
+        qualified: "claude/work".into(),
+    });
+    machine.answer = Ok(work_in_use());
+    model.run(&mut machine);
+    assert!(
+        (model.shown().notices.iter())
+            .filter(|notice| notice.id == "switch/claude")
+            .all(|notice| notice.actions.iter().all(|action| !action.switches)),
+        "{:?}",
+        model.shown().notices
+    );
+}
+
+#[test]
+fn switch_back_switches_to_the_account_left() {
+    for click in [true, false] {
+        let mut model = Hand::new();
+        let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+        let posted = switched_by_itself(&mut model, &mut machine);
+        let window = model.shown().window_request;
+        machine.switched = switched("claude", "personal", "work", Vec::new());
+        if click {
+            model.send(Intent::NotificationClicked {
+                argument: posted.button.expect("Switch Back").clicked,
+            });
+        } else {
+            model.send(back_to_work());
+        }
+        model.run(&mut machine);
+        assert_eq!(machine.switched_to, ["claude/work"]);
+        assert_eq!(model.shown().window_request, window, "no window");
+    }
+}
+
+#[test]
+fn switch_back_after_another_switch_only_opens_the_accounts() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    switched_by_itself(&mut model, &mut machine);
+    let serial = model.shown().window_request.serial;
+    model.send(Intent::SwitchTo {
+        qualified: "claude/personal".into(),
+    });
+    model.send(back_to_work());
+    let shown = model.shown().window_request;
+    assert_eq!(
+        (shown.serial, shown.place),
+        (serial + 1, Some(Place::Accounts))
+    );
+    model.run(&mut machine);
+
+    let spare = account(Some("spare")).signed_in().build();
+    machine.answer = Ok(status(vec![work(97.0), spare]));
+    model.refresh(&mut machine);
+    model.send(back_to_work());
+    model.run(&mut machine);
+    assert_eq!(machine.switched_to, ["claude/personal"]);
+    assert_eq!(model.shown().window_request.serial, serial + 2);
+}
+
+#[test]
+fn after_switch_back_nothing_says_claude_code_was_not_switched_until_the_limit_resets() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
+    let resets = model.now.epoch() + 3_600;
+    switched_by_itself(&mut model, &mut machine);
+    machine.switched = switched("claude", "personal", "work", Vec::new());
+    model.send(back_to_work());
+    machine.answer = Ok(work_in_use());
+    model.run(&mut machine);
+    let skipped = |code: &'static str, resets: i64| AutoSwitched::Skipped {
+        key: format!("skipped/work/session//{resets}/{code}"),
+        from: "work".into(),
+        used: "97% of its 5-hour limit".into(),
+        why: code.into(),
+        code,
+        until: None,
+    };
+    for code in ["settling", "already_switched"] {
+        machine.look = Ok(AutoLooked::Stands(skipped(code, resets)));
+        model.refresh(&mut machine);
+    }
+    assert!(machine.posted.is_empty(), "{:?}", machine.posted);
+    assert_eq!(
+        standing(&model),
+        Some(words::typeset(&said::auto_skipped(
+            "work",
+            "97% of its 5-hour limit",
+            "already_switched",
+            None
+        ))),
+        "the settings still say it"
+    );
+    machine.look = Ok(AutoLooked::Stands(no_room(resets)));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 1, "another reason");
+
+    model.later(Duration::from_secs(3_600));
+    machine.look = Ok(AutoLooked::Stands(skipped(
+        "already_switched",
+        resets + 18_000,
+    )));
+    model.refresh(&mut machine);
+    assert_eq!(machine.posted.len(), 2, "once the limit has reset");
+}
+
+#[test]
+fn a_switch_back_argument_that_cannot_be_read_opens_the_accounts() {
+    for argument in [
+        "switch-back/",
+        r#"switch-back/["claude/work"]"#,
+        "switch-back/claude/work",
+    ] {
+        let mut model = Hand::new();
+        let jobs = model.send(Intent::NotificationClicked {
+            argument: argument.into(),
+        });
+        assert_eq!(jobs, [], "{argument}");
+        assert_eq!(model.shown().window_request.place, Some(Place::Accounts));
+    }
+}
+
 /// The setting promises that running sessions follow within 33 seconds only while the last
 /// read found no file behind the keychain; with one there, it says they keep their account
 /// until their login is next renewed.
@@ -467,10 +663,7 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
             &words::sessions_follow(os, file_left, 33),
         )
     };
-    assert_eq!(
-        model.shown().machine.at_limit.note,
-        note(pitboard_core::host::OS, false)
-    );
+    assert_eq!(model.shown().machine.at_limit.note, note(OS, false));
 
     machine.answer = Ok(super::testing::records::warned(
         vec![work(40.0), personal()],
@@ -506,6 +699,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
         from: "work".into(),
         used: "97% of its 5-hour limit".into(),
         why: why.into(),
+        code: "auth_overridden",
         until: None,
     };
     machine.look = Ok(AutoLooked::Act);

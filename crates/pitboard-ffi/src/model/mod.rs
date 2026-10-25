@@ -219,6 +219,8 @@ pub enum Intent {
     /// `KeepAppOpen` closed that question, and does nothing once taken, or once another
     /// switch has been asked for in that question's place.
     QuitAndSwitch { qualified: String },
+    /// From the notification or notice of a switch by itself, which left `from` for `to`.
+    SwitchBack { from: String, to: String },
     /// The person kept the app open, or the question was closed some other way: the quit
     /// question goes, and nothing is switched.
     KeepAppOpen,
@@ -484,6 +486,16 @@ pub(crate) struct LastSwitch {
     pub warnings: Vec<Warning>,
     // For a tool whose app holds the login from when it is next opened: that, as a sentence.
     pub opens: Option<String>,
+    // where switching by itself made it
+    pub back: Option<Back>,
+}
+
+// The account a switch by itself left, which Switch Back puts back in use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Back {
+    pub from: String,
+    // when the limit it left resets
+    pub resets_at: Option<i64>,
 }
 
 // Something a person asked for that did not happen, numbered one higher for each said.
@@ -651,6 +663,8 @@ pub struct NotificationButtonKind {
     pub title: String,
     // what it asks for always opens a window, so the system brings the app forward with it
     pub opens_window: bool,
+    // the SF Symbol macOS shows beside it
+    pub symbol: String,
 }
 
 // The app's system's notifications, called on a thread of the model's own. Asking for
