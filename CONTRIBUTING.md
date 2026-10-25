@@ -239,6 +239,10 @@ them again, writes them at the sizes the docs use and unregisters the build:
 ./apps/macos/scripts/docs-screenshots.sh
 ```
 
+With `--figures <dir>`, it also writes every picture the test kept into `<dir>`, at full size
+and under the name the test gave it. Those are the scenes usepitboard.com's macOS figures are
+checked against.
+
 ### Unregister a build
 
 A debug build keeps apart from a copy you installed. A release build you made claims what
