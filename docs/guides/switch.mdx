@@ -63,10 +63,25 @@ pitboard use work --yes
 
 On macOS, while a login file sits behind the keychain, open Claude Code sessions follow only at their next renewal or restart. On Windows, the same holds for a login file behind Credential Manager. Put it away as [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account) says.
 
+## Get a notification before a limit runs out
+
+While the app is open, it notifies you once a limit of the account in use reaches a share you choose, 95% at first. Where another account of that tool is under the share in every limit, the notification's **Switch** button switches to it.
+
+<Tabs>
+  <Tab title="macOS">
+    In **Settings** > **Limits**, under **Before an account runs out**, choose **Notify Me** in **When a limit reaches**. Set the share in the field or with the stepper beside it. **Do Nothing** turns the notification off.
+  </Tab>
+  <Tab title="Windows">
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Notify me** in **When a limit reaches**, then expand it and set the share in **Share of a limit**. **Do nothing** turns the notification off.
+  </Tab>
+</Tabs>
+
+The command line posts no notification. [Notifications](/reference/mac-app#notifications) gives its words and when it comes.
+
 ## When an account runs out
 
 When the account in use runs out of a limit, the app offers another account of the same tool, under 100% in every limit, by the rules in [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to). If no account has room, it offers nothing. The command line offers no switch.
 
-The offer is **Switch to personal** in Pitboard's menu and window. With **Notify Me** chosen in [When a limit reaches](/reference/settings#when-a-limit-reaches), as it is at first, the app also posts a notification with a **Switch** button once a limit reaches 95%, before it runs out. The [menu bar app](/reference/mac-app#notifications) and [the app on Windows](/reference/windows-app#notifications) list its words.
+The offer is **Switch to personal** in Pitboard's menu and window.
 
 Pitboard can also [switch Claude Code by itself](/guides/automatic-switching) before an account runs out.
