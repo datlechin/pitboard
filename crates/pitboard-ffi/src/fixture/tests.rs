@@ -1111,12 +1111,16 @@ fn the_menu_lists_every_account_under_its_tool() {
             (
                 Some("Codex".into()),
                 vec![
-                    with_figure("main · Pro", "18%"),
+                    with_figure("main · Pro", "7%"),
                     with_figure("spare · Pro", "0%")
                 ]
             ),
         ]
     );
+    let codex: Vec<&str> = (shown.sections[1].accounts.iter())
+        .map(|item| item.summary.as_str())
+        .collect();
+    assert_eq!(codex, ["Weekly 7%", "Weekly 0%"], "a Pro plan's limits");
     model.shutdown();
 }
 
