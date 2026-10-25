@@ -64,7 +64,7 @@ test("describes the accounts the home card's menu shows", () => {
 });
 
 test("sets the tagline on the home card in three lines, the last on the menu's bottom edge", async () => {
-  assert.equal(TAGLINE, "Switch AI coding accounts and see their usage.");
+  assert.equal(TAGLINE, "Switch AI coding tools between your accounts.");
   const svg = await layout(cards.home, assets, { embedFont: false });
   const lines = new Set(
     [...svg.matchAll(/<text [^>]*y="([\d.]+)"[^>]*font-size="56"/g)].map((m) => m[1]),

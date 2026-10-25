@@ -1,6 +1,6 @@
 # Pitboard
 
-Switch AI coding accounts and see their usage.
+Switch AI coding tools between your accounts.
 
 [![CI](https://github.com/datlechin/pitboard/actions/workflows/ci.yml/badge.svg)](https://github.com/datlechin/pitboard/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/pitboard.svg)](https://crates.io/crates/pitboard)

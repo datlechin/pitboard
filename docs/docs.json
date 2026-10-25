@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "linden",
   "name": "Pitboard",
-  "description": "Switch AI coding accounts and see their usage.",
+  "description": "Switch AI coding tools between your accounts.",
   "colors": {
     "primary": "#166534",
     "light": "#4DD170",

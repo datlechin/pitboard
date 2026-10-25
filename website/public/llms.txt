@@ -1,6 +1,6 @@
 # Pitboard
 
-> Switch AI coding accounts and see their usage.
+> Switch AI coding tools between your accounts.
 
 Pitboard switches Claude Code and OpenAI's Codex CLI on macOS, Windows and Linux, and Claude Desktop on macOS.
 
