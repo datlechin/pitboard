@@ -1,0 +1,34 @@
+---
+// The standard About panel AppVersion.swift puts up, as the app's UI tests read it on macOS 26
+// (docs/facts/site.md): 284 by 170 points, its close button alone working, the app's icon,
+// "Pitboard" in bold and the version with its build, as build-number.sh numbers it, and no
+// "Version" before them. A non-modal <dialog>, drawn once as a template the desk it is asked from
+// clones.
+import Lights from "./Lights.astro";
+import { buildNumber } from "../../../data/settings.ts";
+
+interface Props {
+  version: string;
+}
+const { version } = Astro.props;
+---
+
+<dialog
+  class="absolute top-(--y) right-auto left-1/2 z-6 m-0 h-170 max-h-none w-284 max-w-none -translate-x-1/2 overflow-visible rounded-u-16 border-0 bg-mac-window-bg p-0 text-center text-mac-window-text shadow-mac-window outline-none"
+  aria-labelledby="tpl-about-name"
+  tabindex="-1"
+  data-part="about"
+>
+  <Lights window closeOnly class="top-9 left-9" />
+  <button
+    class="absolute top-8 left-8 z-2 size-16 rounded-circle focus-mac live:cursor-default"
+    type="button"
+    aria-label="Close"
+    data-does="close"
+  ></button>
+  <img class="mx-auto mt-39 size-66" src="/icon-192.png" alt="" width="66" height="66" />
+  <b class="mt-6 block text-u-15/19 font-bold" id="tpl-about-name">Pitboard</b>
+  <span class="mt-6 block text-u-11/15 text-mac-window-sub tabular-nums select-text"
+    >{version} ({buildNumber(version)})</span
+  >
+</dialog>

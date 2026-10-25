@@ -128,6 +128,14 @@ export interface State extends World {
   } | null;
   // the tools whose step asking for a second account somebody put off (present/setup.rs)
   declinedSecond: Tool[];
+  // Settings' General, which is each app's own and not the core's: opening at sign-in, what the
+  // macOS menu bar item shows, and macOS's updater, each at its default (reference/settings.mdx)
+  general: {
+    opensAtLogin: boolean;
+    menuBarShows: "nameAndUsage" | "usage" | "icon";
+    checksForUpdates: boolean;
+    installsUpdates: boolean;
+  };
 }
 
 const minutes = (hm: string) => {
@@ -174,6 +182,12 @@ export function start(): State {
     reading: null,
     signing: null,
     declinedSecond: [],
+    general: {
+      opensAtLogin: false,
+      menuBarShows: "nameAndUsage",
+      checksForUpdates: true,
+      installsUpdates: false,
+    },
   };
 }
 
@@ -1043,6 +1057,21 @@ export function openWindow(tool: Tool, label: string) {
   change((s) => {
     const a = find(s, tool, label);
     if (a && !s.windowsOpen.includes(a.id)) s.windowsOpen.push(a.id);
+  });
+}
+
+// A change to Settings' General.
+export function setGeneral(to: Partial<State["general"]>) {
+  change((s) => {
+    s.general = { ...s.general, ...to };
+  });
+}
+
+// An account's window closed, by its close button: it opens again from a menu.
+export function closeWindow(id: string) {
+  if (!model.get().windowsOpen.includes(id)) return;
+  change((s) => {
+    s.windowsOpen = s.windowsOpen.filter((open) => open !== id);
   });
 }
 

@@ -10,7 +10,7 @@ const { on = false, ...rest } = Astro.props;
 ---
 
 <button
-  class="relative h-16 w-36 flex-none rounded-pill bg-mac-window-fill focus-mac after:absolute after:top-1.5 after:left-1.5 after:h-13 after:w-21 after:rounded-pill after:bg-white after:shadow-mac-knob after:transition-[left] after:duration-200 aria-checked:bg-mac-window-blue aria-checked:after:left-13.5"
+  class="relative h-16 w-36 flex-none rounded-pill bg-mac-window-fill focus-mac after:absolute after:top-1.5 after:left-1.5 after:h-13 after:w-21 after:rounded-pill after:bg-white after:shadow-mac-knob after:transition-[left] after:duration-200 aria-checked:bg-mac-window-blue aria-checked:after:left-13.5 aria-disabled:opacity-50"
   type="button"
   role="switch"
   aria-checked={on ? "true" : "false"}

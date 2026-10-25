@@ -7,6 +7,7 @@
 import { appMenus, type AppMenus, type WindowMenus } from "./appmenu.ts";
 import { shown, text } from "./draw.ts";
 import { bringForward, help } from "./forward.ts";
+import { showAbout, showAccountWindow } from "./windows.ts";
 import { model, openWindow, quit, reset, run, type State } from "../../lib/model.ts";
 import { menuBarClock } from "../../lib/words.ts";
 
@@ -25,7 +26,7 @@ export abstract class LiveFigure extends HTMLElement {
     this.menuBar = appMenus(this, {
       menus: () => this.windowMenus(),
       choose: (does, item) => {
-        if (!this.fromMenuBar(does, item)) fromApp(does, item);
+        if (!this.fromMenuBar(does, item)) fromApp(does, item, this);
       },
     });
     const figure = this.closest("figure");
@@ -88,17 +89,21 @@ export abstract class LiveFigure extends HTMLElement {
   }
 }
 
-// What the app does for an item of the menu bar whichever of its windows is in front.
-function fromApp(does: string, item: HTMLElement) {
+// What the app does for an item of the menu bar whichever of its windows is in front, on `desk`.
+function fromApp(does: string, item: HTMLElement, desk: HTMLElement) {
   const s = model.get();
   switch (does) {
     case "settings":
       return bringForward("settings", "macos");
     case "add":
       return bringForward("accounts", "macos", "add");
+    case "about":
+      return showAbout(desk);
     case "open": {
       const a = s.accounts.find((x) => x.id === item.dataset.account);
-      return a && openWindow(a.tool, a.label);
+      if (!a) return;
+      openWindow(a.tool, a.label);
+      return showAccountWindow(desk, "macos", a);
     }
     case "help":
       return help();

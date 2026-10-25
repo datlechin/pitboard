@@ -1,10 +1,11 @@
 ---
 // Minimise, maximise and close, each 46 pixels wide and as tall as its bar, drawn in 1 pixel lines.
 interface Props {
-  height: 40 | 48;
+  height: 32 | 40 | 48;
 }
 const { height } = Astro.props;
-const button = ["flex w-46 items-center justify-center", height === 40 ? "h-40" : "h-48"];
+const tall = { 32: "h-32", 40: "h-40", 48: "h-48" };
+const button = ["flex w-46 items-center justify-center", tall[height]];
 const glyph = "size-10 fill-none stroke-current";
 ---
 

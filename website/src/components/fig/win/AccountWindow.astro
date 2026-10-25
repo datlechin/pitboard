@@ -1,0 +1,45 @@
+---
+// An account's window, AccountWindow.xaml: titled as the XAML titles it until it reads its
+// account, "Account", then by the account (run 40208954337 saw the first for 73 ms), on Mica with
+// the system's caption buttons, and its CommandBar's Back, Forward and Reload over the page. The
+// page loads nothing on this site, so it stays empty. Drawn once as a template the desk it is
+// opened from clones, at 1100 by 800 where the desk's work area has the room, as WindowChrome.cs
+// `Fit` moves and shrinks a window into its screen's.
+import CaptionButtons from "./CaptionButtons.astro";
+
+const button =
+  "flex h-40 w-48 items-center justify-center rounded-u-4 focus-win live:cursor-default live:enabled:hover:bg-win-subtle disabled:text-win-text-off";
+---
+
+<div
+  class="absolute top-(--y) left-(--x) z-4 flex h-(--h) w-(--w) flex-col overflow-hidden rounded-u-8 bg-win-base font-win text-u-14/20 text-win-text shadow-win-window"
+  role="group"
+  aria-labelledby="tpl-window-title"
+  data-part="account-window"
+>
+  <div class="flex h-32 flex-none items-center">
+    <svg class="ml-16 size-16 shrink-0"><use href="#pb-tray"></use></svg>
+    <span class="ml-16 text-u-12/16" id="tpl-window-title" data-part="title">Account</span>
+    <span class="ml-auto self-start"
+      ><span class="flex" aria-hidden="true"><CaptionButtons height={32} /></span></span
+    >
+  </div>
+  <button
+    class="absolute top-0 right-0 z-2 h-32 w-46 focus-win live:cursor-default"
+    type="button"
+    aria-label="Close"
+    data-does="close"
+  ></button>
+  <div class="flex flex-none gap-4 px-4 py-4">
+    <button class={button} type="button" aria-label="Back" disabled>
+      <svg class="size-16 shrink-0 [--stroke:1.3]"><use href="#ln-back"></use></svg>
+    </button>
+    <button class={button} type="button" aria-label="Forward" disabled>
+      <svg class="size-16 shrink-0 [--stroke:1.3]"><use href="#ln-forward"></use></svg>
+    </button>
+    <button class={button} type="button" aria-label="Reload" data-does="reload">
+      <svg class="size-16 shrink-0"><use href="#fl-refresh"></use></svg>
+    </button>
+  </div>
+  <div class="flex-1 rounded-tl-u-8 bg-win-layer inset-shadow-win-layer-tl"></div>
+</div>

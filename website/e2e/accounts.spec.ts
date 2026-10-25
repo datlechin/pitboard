@@ -183,7 +183,7 @@ test.describe("on macOS", () => {
     await expect(row("personal")).toBeHidden();
     // nothing is selected, the list keeps focus, and Down selects the first row
     await expect(grid).toBeFocused();
-    await expect(fig.locator('[aria-selected="true"]')).toHaveCount(0);
+    await expect(fig.locator('[role="row"][aria-selected="true"]')).toHaveCount(0);
     await page.keyboard.press("ArrowDown");
     await expect(row("work")).toHaveAttribute("aria-selected", "true");
     // work is left alone in its tool, so the window asks for a second, until put off
@@ -295,7 +295,7 @@ test.describe("on macOS", () => {
     await row("personal").locator('[data-does="use"]').dispatchEvent("click");
     await expect(row("personal")).toHaveAttribute("aria-label", /in use/);
     await expect(first).toHaveText(read("work"));
-    await activity.locator('[data-does="refresh"]').click();
+    await activity.getByRole("button", { name: "Refresh" }).click();
     await expect(first).toHaveText(read("personal"));
   });
 
@@ -419,10 +419,10 @@ test.describe("on Windows", () => {
     await expect(bar).toHaveAccessibleName("Pitboard");
     // where WinUI draws no focus visual, the page draws one (WCAG 2.4.7)
     await expect(bar).not.toHaveCSS("outline-style", "none");
-    await expect(fig.locator('[aria-selected="true"]')).toHaveCount(0);
+    await expect(fig.locator('[role="row"][aria-selected="true"]')).toHaveCount(0);
     await page.keyboard.press("ArrowDown");
     await expect(bar).toBeFocused();
-    await expect(fig.locator('[aria-selected="true"]')).toHaveCount(0);
+    await expect(fig.locator('[role="row"][aria-selected="true"]')).toHaveCount(0);
   });
 
   test("Ctrl+C copies the focused account's email", async ({ page }) => {

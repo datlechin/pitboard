@@ -125,8 +125,8 @@ test.describe("Windows", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(work.locator("[data-said]")).toHaveText("On");
     await expect(work.locator("[data-note]")).toHaveText(workNote);
-    await fig.locator("#warm-win-expand").click();
-    await expect(fig.locator("#warm-win-items")).toBeHidden();
+    await fig.locator("#warm-win-warm-expand").click();
+    await expect(fig.locator("#warm-win-warm-items")).toBeHidden();
   });
 
   test("axe finds nothing with a flyout open", async ({ page }) => {

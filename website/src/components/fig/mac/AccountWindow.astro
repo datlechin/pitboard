@@ -1,0 +1,48 @@
+---
+// An account's window, AccountWindowView.swift: its title the account's, over the site's name
+// while the page has no title of its own, Back and Forward and Reload in its toolbar, and the page
+// under them. The page loads nothing on this site, so the window stays empty. Drawn once as a
+// template the desk it is opened from clones, at its default size of 1100 by 800 where the desk has
+// the room, as AppKit keeps a window on its screen.
+import Lights from "./Lights.astro";
+
+const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-mac-glass";
+const tool = "flex w-34.5 justify-center live:cursor-default disabled:opacity-35";
+---
+
+<div
+  class="absolute top-(--y) left-(--x) z-4 flex h-(--h) w-(--w) flex-col overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
+  role="group"
+  aria-labelledby="tpl-window-title"
+  data-part="account-window"
+>
+  <Lights window class="top-19 left-19" />
+  <button
+    class="absolute top-18 left-18 z-2 size-16 rounded-circle focus-mac live:cursor-default"
+    type="button"
+    aria-label="Close"
+    data-does="close"
+  ></button>
+  <div class="flex h-52 flex-none items-center gap-12 pr-8 pl-88">
+    <span class:list={[glass, "px-2"]}>
+      <button class={tool} type="button" aria-label="Back" disabled>
+        <svg class="size-18 shrink-0"><use href="#sf-chev-left"></use></svg>
+      </button>
+      <button class={tool} type="button" aria-label="Forward" disabled>
+        <svg class="size-18 shrink-0"><use href="#sf-chev-right"></use></svg>
+      </button>
+    </span>
+    <span class="flex flex-1 flex-col pb-2.5 text-mac-window-title"
+      ><b class="text-u-13/16 font-bold" id="tpl-window-title" data-part="title"></b><span
+        class="text-u-11/13 text-mac-window-sub"
+        data-part="site"
+      ></span></span
+    >
+    <span class:list={[glass, "w-36 justify-center"]}>
+      <button class={tool} type="button" aria-label="Reload" data-does="reload">
+        <svg class="size-22 shrink-0"><use href="#sf-refresh"></use></svg>
+      </button>
+    </span>
+  </div>
+  <div class="flex-1"></div>
+</div>

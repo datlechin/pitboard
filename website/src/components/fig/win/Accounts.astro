@@ -3,7 +3,9 @@
 // and the setup step's InfoBar. The ListView is a grid of one row an account, a row group a tool,
 // each named as Narrator hears it. Every node a state shows is drawn: each tool's notice, the
 // step, each row's ends, and templates for a row, a limit and a note; the context menu and the
-// dialogs wait over the desk. live/accounts.ts follows the one state with them.
+// dialogs wait over the desk. live/accounts.ts follows the one state with them. Shown on another
+// page, the window draws its list's rows once the list shows, and the page shown comes in its slot.
+import ActivityList from "./ActivityList.astro";
 import Button from "./Button.astro";
 import ContentDialog from "./ContentDialog.astro";
 import InfoBar from "./InfoBar.astro";
@@ -40,9 +42,14 @@ import { toolsOn, whole } from "../../../lib/words.ts";
 interface Props {
   prefix: string;
   moment: Moment;
+  // the page the window shows
+  pane?: "accounts" | "activity" | "settings";
   crop?: boolean;
+  // the release Settings names, drawn with the cut window's templates
+  version?: string;
 }
-const { prefix, moment, crop = false } = Astro.props;
+const { prefix, moment, pane = "accounts", crop = false, version } = Astro.props;
+const rows = pane === "accounts";
 // SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
 const hide = (yes: boolean) => (yes ? { hidden: true } : {});
 const page = accountsPage(moments[moment], moment === "after" ? switchNotice : null);
@@ -65,8 +72,11 @@ const radio =
   "size-20 shrink-0 appearance-none rounded-circle bg-win-control shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-win-strong)] outline-none checked:bg-win-on-accent checked:shadow-[inset_0_0_0_calc(var(--spacing)*5)_var(--color-win-accent)] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text";
 ---
 
-<Window prefix={prefix} pane="accounts" crop={crop}>
+<Window prefix={prefix} pane={pane} crop={crop} templates={crop} version={version}>
+  <ActivityList slot="activity" prefix={prefix} />
+  <slot name="settings" slot="settings" />
   <PageHeader
+    slot="accounts"
     prefix={prefix}
     title={page.title}
     subtitle={page.updated}
@@ -75,7 +85,7 @@ const radio =
       ["fl-add", page.commands[1], "add"],
     ]}
   />
-  <div class="mt-24 px-24 pb-16">
+  <div slot="accounts" class="mt-24 px-24 pb-16">
     {/* NoticeBar.xaml, one a tool, above the list */}
     {shownTools.map(([tool, name]) => <div
       class="pb-8"
@@ -123,7 +133,7 @@ const radio =
           {section.name}
         </div>
         <div class="mx-12 h-1 bg-win-group-rule" />
-        {section.rows.map((r) => <div
+        {(rows ? section.rows : []).map((r) => <div
           class={row}
           role="row"
           aria-selected="false"
@@ -244,6 +254,7 @@ const radio =
     </div>
   </div>
   <Fragment slot="desk">
+    <slot name="desk" />
     {/* AccountMenu.cs: only what applies, with the keys the row answers as text */}
     <div
       class="absolute top-(--y) left-(--x) z-5 w-max min-w-200 rounded-u-8 bg-win-flyout py-2 font-win text-u-14/20 whitespace-nowrap text-win-text shadow-win-flyout outline-none live:cursor-default"

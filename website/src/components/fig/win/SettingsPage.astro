@@ -1,0 +1,97 @@
+---
+// SettingsPage.xaml from its top, as the window shows it the first time it goes to Settings:
+// General, Limits, Advanced and About, in a release from the MSI (data/settings.ts). Drawn once as
+// a template every window that draws no Settings of its own clones; its ids start `tpl-`, which
+// the clone makes its own, and its time pickers' flyouts, marked `data-desk`, go to the desk.
+import Button from "./Button.astro";
+import LimitsSections from "./LimitsSections.astro";
+import Toggle from "./Toggle.astro";
+import { settingsPage as page } from "../../../data/windows.ts";
+import {
+  commandLine,
+  inTerminal,
+  isBeta,
+  named,
+  renew,
+  renewalAbout,
+  updateNote,
+  winAbout,
+  winGeneral,
+} from "../../../data/settings.ts";
+
+interface Props {
+  version: string;
+}
+const { version } = Astro.props;
+const head = "ml-1 pb-6 font-semibold";
+const caption = "block text-u-12/16 text-win-text-2";
+const card =
+  "flex min-h-68 items-center gap-16 rounded-u-4 bg-win-card px-16 py-12 inset-shadow-win-layer-edge";
+const toggle =
+  "group/toggle flex size-32 shrink-0 items-center justify-center rounded-u-4 focus-win live:hover:bg-win-subtle";
+const chevron = "size-12 transition-transform group-aria-[expanded=false]/toggle:rotate-180";
+// a beta while no full release is out: nothing to check for, and why
+const notes = isBeta(version) ? [winGeneral.noFeed, winGeneral.betaNote] : [];
+---
+
+<div class="flex h-full flex-col">
+  <div class="px-24 text-u-28/36 font-semibold">{page.title}</div>
+  <div class="mt-24 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-24 pb-24">
+    <div class={head}>{winGeneral.section}</div>
+    <div class={card}>
+      <span class="min-w-0 flex-1" id="tpl-start">{winGeneral.startAtSignIn}</span>
+      <Toggle aria-labelledby="tpl-start" data-setting="login" />
+    </div>
+    <div class={card}>
+      <span class="min-w-0 flex-1">
+        <span class="block">{winGeneral.checkFor}</span>
+        <span class={caption}>{named(version)}</span>
+        {notes.map((n) => <span class={caption}>{n}</span>)}
+      </span>
+      <Button disabled={notes.length > 0} data-setting="check-now">{winGeneral.checkNow}</Button>
+    </div>
+    <div class:list={[head, "mt-30"]}>{page.section}</div>
+    <LimitsSections prefix="tpl" show="both" />
+    <div class:list={[head, "mt-30"]}>Advanced</div>
+    <div class={card}>
+      <span class="min-w-0 flex-1" id="tpl-renew">
+        <span class="block">{renew}</span>
+        <span class={caption}>{renewalAbout("windows")}</span>
+      </span>
+      <Toggle aria-labelledby="tpl-renew" data-setting="renew" />
+    </div>
+    <div class:list={[card, "flex-col items-start gap-4"]}>
+      <span class="block">{inTerminal}</span>
+      <span class={caption}>{updateNote}</span>
+      <span class="select-text">{commandLine.windows}</span>
+    </div>
+    <div class:list={[head, "mt-30"]}>{winAbout.section}</div>
+    <div class={card} data-header>
+      <img class="size-20" src="/icon-192.png" alt="" width="20" height="20" />
+      <span class="min-w-0 flex-1">{winAbout.header}</span>
+      <span class="text-win-text-2 select-text">{version}</span>
+      <button
+        class={toggle}
+        id="tpl-about-expand"
+        type="button"
+        aria-label="About Pitboard"
+        aria-expanded="false"
+        aria-controls="tpl-about-links"
+      >
+        <svg class={chevron}><use href="#fl-chevron-up"></use></svg>
+      </button>
+    </div>
+    <div class="flex flex-col items-start bg-win-card-2 py-8 pl-46" id="tpl-about-links" hidden>
+      {winAbout.links.map(([title, url]) => <a
+        class="rounded-u-4 px-12 py-6 text-win-accent-text no-underline focus-win live:hover:bg-win-subtle live:hover:text-win-accent-text"
+        href={url}
+        target="_blank"
+        rel="noopener"
+        >{title}</a
+      >)}
+    </div>
+  </div>
+</div>
+<div data-desk>
+  <LimitsSections prefix="tpl" show="warm" flyouts />
+</div>

@@ -9,6 +9,7 @@ import { LiveFigure } from "./figure.ts";
 import { bringForward, help } from "./forward.ts";
 import { INSET, Menu, drawSites } from "./menu.ts";
 import { Tooltips } from "./tooltip.ts";
+import { showAccountWindow } from "./windows.ts";
 import {
   model,
   openWindow,
@@ -146,8 +147,10 @@ class TrayDesk extends LiveFigure {
     const s = model.get();
     const account = s.accounts.find((a) => a.id === chosen.dataset.account);
     const inSubmenu = chosen.closest('[role="menu"]') !== this.#menu.el;
-    if (account && (inSubmenu || chosen.hasAttribute("data-one")))
-      return openWindow(account.tool, account.label);
+    if (account && (inSubmenu || chosen.hasAttribute("data-one"))) {
+      openWindow(account.tool, account.label);
+      return showAccountWindow(this, "windows", account);
+    }
     if (account) {
       if (!isInUse(account, s)) switchFromApp(account.tool, account.label, "windows");
       return;

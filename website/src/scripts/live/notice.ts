@@ -6,13 +6,13 @@
 import { LiveFigure } from "./figure.ts";
 import { say } from "./say.ts";
 import { noticeMoment, type Moment } from "../../lib/moment.ts";
-import type { Posted, State } from "../../lib/model.ts";
+import { model, type Posted, type State } from "../../lib/model.ts";
 import {
   hm,
   menuBarClock,
   menuBarLevel,
   menuBarSpoken,
-  menuBarTitle,
+  menuBarShown,
   shortDate,
 } from "../../lib/words.ts";
 
@@ -66,7 +66,14 @@ class Notice extends LiveFigure {
   }
 
   protected render(s: State) {
-    const inputs = JSON.stringify([s.preferences, s.running, s.accounts, s.inUse, s.watchService]);
+    const inputs = JSON.stringify([
+      s.preferences,
+      s.running,
+      s.accounts,
+      s.inUse,
+      s.watchService,
+      s.general.menuBarShows,
+    ]);
     if (inputs === this.#inputs) return;
     this.#inputs = inputs;
     this.#moment = noticeMoment(s);
@@ -89,7 +96,7 @@ class Notice extends LiveFigure {
     said(this.querySelector("[data-date]"), shortDate(m.at));
     const title = this.querySelector("[data-title]");
     if (title) {
-      said(title, menuBarTitle(m.state));
+      said(title, menuBarShown(m.state, model.get().general.menuBarShows));
       title.parentElement!.setAttribute("aria-label", menuBarSpoken(m.state));
     }
     const level = menuBarLevel(m.state);

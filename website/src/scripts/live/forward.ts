@@ -12,14 +12,21 @@ interface Presents {
 }
 
 export function bringForward(window: Shown, system: "macos" | "windows", sheet?: string) {
-  const figure = [...document.querySelectorAll<HTMLElement>(elements[window])].find((el) =>
-    el.closest(`[data-drawing="app ${system}"]`),
-  );
+  // Windows' Settings is a page of the Pitboard window: the figure that draws it
+  const figure =
+    system === "windows" && window === "settings"
+      ? [
+          ...document.querySelectorAll<HTMLElement>('[data-drawing="app windows"] pb-accounts'),
+        ].find((el) => el.querySelector('[data-pane-panel="settings"] > *'))
+      : [...document.querySelectorAll<HTMLElement>(elements[window])].find((el) =>
+          el.closest(`[data-drawing="app ${system}"]`),
+        );
   if (!figure) return;
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   figure.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
   if (!figure.matches(":defined")) return;
   const presents = figure as HTMLElement & Partial<Presents>;
+  if (system === "windows" && window === "settings") presents.present?.("settings");
   if (sheet && presents.present) presents.present(sheet);
   else
     figure

@@ -4,7 +4,8 @@
 // row group a tool, each named as VoiceOver hears it. Every node a state shows is drawn: each
 // tool's notice, the step, each row's ends, and templates for a row, a limit and a note; the
 // shortcut menu, the Forget alert and the sheets wait over the desk. live/accounts.ts follows the
-// one state with them.
+// one state with them. Shown on another pane, the window draws its list's rows once the pane shows.
+import ActivityTable from "./ActivityTable.astro";
 import Alert from "./Alert.astro";
 import Button from "./Button.astro";
 import Sheet from "./Sheet.astro";
@@ -54,11 +55,16 @@ import {
 interface Props {
   prefix: string;
   moment: Moment;
+  // the pane the window shows
+  pane?: "accounts" | "activity";
   crop?: boolean;
   // one tool's section alone, as the pane scrolled to it shows it
   only?: Tool;
+  // the release the About panel names, drawn with the cut window's templates
+  version?: string;
 }
-const { prefix, moment, crop = false, only } = Astro.props;
+const { prefix, moment, pane = "accounts", crop = false, only, version } = Astro.props;
+const rows = pane === "accounts";
 // SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
 const hide = (yes: boolean) => (yes ? { hidden: true } : {});
 const world = moments[moment];
@@ -92,19 +98,16 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
 
 <Window
   prefix={prefix}
-  pane="accounts"
-  title="Accounts"
-  subtitle={`Updated ${hm(world.readAt)}`}
-  tools={[
-    ["sf-refresh", "Refresh", "refresh"],
-    ["sf-plus", "Add Account", "add"],
-  ]}
+  pane={pane}
+  updated={`Updated ${hm(world.readAt)}`}
   crop={crop}
   fit={only !== undefined}
   templates={crop}
+  version={version}
 >
+  <ActivityTable slot="activity" />
   {/* NoticeRow.swift, first in the list, one a tool, its rule from under its words */}
-  {!only && <div data-part="notices">
+  {!only && <div slot="accounts" data-part="notices">
     {tools.map(([tool, name]) => <div
       class="ml-23.5 pt-17.5 pb-7.5 inset-shadow-mac-window-b"
       data-notice={tool}
@@ -156,7 +159,12 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
     </div>)}
   </div>}
   {/* the step a tool with one account shows (present/setup.rs) */}
-  {!only && <div class="ml-23.5 pt-13.5 pb-11.5 inset-shadow-mac-window-b" data-part="setup" hidden>
+  {!only && <div
+    slot="accounts"
+    class="ml-23.5 pt-13.5 pb-11.5 inset-shadow-mac-window-b"
+    data-part="setup"
+    hidden
+  >
     <div class="-ml-23.5 flex items-start gap-8">
       <svg class="-ml-1 size-16.5 shrink-0 text-mac-window-blue" aria-hidden="true">
         <use href="#sf-switch" />
@@ -172,6 +180,7 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
     </div>
   </div>}
   <div
+    slot="accounts"
     class="group/grid rounded-u-8 outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
     role="grid"
     aria-labelledby={`${prefix}-title`}
@@ -197,7 +206,7 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
       >
         {name}
       </div>
-      {listed(world, tool).map((a) => {
+      {(rows ? listed(world, tool) : []).map((a) => {
         const on = isInUse(a, world);
         const said = notes(a, world, warmsAgainNote(a));
         // each row's rule starts under its name

@@ -18,6 +18,11 @@ export const line: Record<string, string> = {
   "sf-plus": "M10 4v12M4 10h12",
   "sf-check": "M4 10.75 8.5 16 16 3.6",
   "sf-xmark": "M5 5l10 10M15 5 5 15",
+  "sf-chev-left": "M12.5 4 6.5 10l6 6",
+  "sf-chev-right": "M7.5 4l6 6-6 6",
+  // Segoe's Back and Forward, as a WinUI AppBarButton draws them
+  "ln-back": "M16.5 10h-13M8.5 5l-5 5 5 5",
+  "ln-forward": "M3.5 10h13M11.5 5l5 5-5 5",
   // arrow.left.arrow.right, a switch of accounts
   "sf-switch": "M3.5 7h12.5M13 4l3 3-3 3M16.5 13H4M7 10l-3 3 3 3",
   "sf-person":

@@ -146,7 +146,7 @@ export async function astroDrew(browser: Browser, baseURL: string, problems: str
 
 // The figures whose words are the model's at its own clock, which runs a minute on from the moment
 // Astro says them at: their markup is compared without its text, which rule 2 lets them write.
-const timed = ["pb-accounts", "pb-activity"];
+const timed = ["pb-accounts"];
 
 // Each figure's markup by its root's id, without the attributes its live code changes.
 export function drawn(page: Page): Promise<Record<string, string>> {

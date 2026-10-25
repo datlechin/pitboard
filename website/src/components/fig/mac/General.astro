@@ -1,0 +1,96 @@
+---
+// GeneralSettings.swift in a release that can update itself: opening at login and what the menu
+// bar shows, then the updater's switches and Check Now beside the version. Drawn once as a
+// template every Settings window clones; its ids start `tpl-`, which the clone makes its own.
+import Button from "./Button.astro";
+import Switch from "./Switch.astro";
+import { macGeneral as words, named } from "../../../data/settings.ts";
+
+interface Props {
+  version: string;
+}
+const { version } = Astro.props;
+const group = "mx-20 rounded-u-12 bg-mac-window-group";
+const row = "relative flex min-h-40 items-center gap-10 px-10";
+const rule = "before:absolute before:inset-x-10 before:top-0 before:h-1 before:bg-mac-window-rule";
+const menuRow =
+  "relative mx-5 flex items-center rounded-u-6 py-4 pr-16 pl-25 aria-selected:bg-mac-menu-hl aria-selected:text-white data-[state=blink]:bg-transparent data-[state=blink]:text-inherit";
+---
+
+<div class="flex flex-col gap-20 pt-20 pb-20">
+  <div class={group}>
+    <div class={row}>
+      <span class="flex-1" id="tpl-login">{words.openAtLogin}</span>
+      <Switch aria-labelledby="tpl-login" data-setting="login" />
+    </div>
+    <div class:list={[row, rule]}>
+      <span class="flex-1" id="tpl-shows-label">{words.menuBarShows}</span>
+      <span class="relative flex">
+        {/* a pop-up button, which says its choice as a select-only combobox does */}
+        <span
+          class="flex items-center rounded-u-6 focus-mac focus-visible:outline-offset-[calc(var(--u)*2)]"
+          id="tpl-shows"
+          role="combobox"
+          tabindex="0"
+          aria-labelledby="tpl-shows-label"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="tpl-shows-list"
+        >
+          {words.shows.map(([value, title], i) => <span
+            class="whitespace-nowrap"
+            data-value={value}
+            hidden={i > 0}
+            >{title}</span
+          >)}
+          <span
+            class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+            aria-hidden="true"
+          >
+            <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+          </span>
+        </span>
+        <span
+          class="absolute top-[calc(var(--u)*(-6.25_-_24*var(--at,0)))] -left-30 z-10 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-150 data-[state=closing]:pointer-events-none data-[state=closing]:opacity-0"
+          id="tpl-shows-list"
+          role="listbox"
+          aria-labelledby="tpl-shows-label"
+          hidden
+        >
+          {words.shows.map(([value, title], i) => <span
+            class:list={[menuRow, "group/option"]}
+            id={`tpl-shows-${value}`}
+            role="option"
+            aria-selected="false"
+            aria-checked={i === 0 ? "true" : "false"}
+            data-value={value}
+          >
+            <svg
+              class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/option:block"
+              aria-hidden="true"
+            >
+              <use href="#sf-check-heavy" />
+            </svg>
+            {title}
+          </span>)}
+        </span>
+      </span>
+    </div>
+  </div>
+  <div class={group}>
+    <div class={row}>
+      <span class="flex-1" id="tpl-checks">{words.checks}</span>
+      <Switch on aria-labelledby="tpl-checks" data-setting="checks" />
+    </div>
+    <div class:list={[row, rule]}>
+      <span class="flex-1 aria-disabled:text-mac-window-dim" id="tpl-installs"
+        >{words.installs}</span
+      >
+      <Switch aria-labelledby="tpl-installs" data-setting="installs" />
+    </div>
+    <div class:list={[row, rule]}>
+      <span class="flex-1 text-mac-window-sub">{named(version)}</span>
+      <Button data-setting="check-now">{words.checkNow}</Button>
+    </div>
+  </div>
+</div>

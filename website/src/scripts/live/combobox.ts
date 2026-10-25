@@ -8,6 +8,8 @@ export type Kind = "popup" | "combobox";
 
 export interface Combobox {
   set(value: string): void;
+  // shut, choosing nothing, as Reset leaves it
+  close(): void;
 }
 
 // a run of keys typed within this long names one item
@@ -261,6 +263,9 @@ export function combobox(
   });
 
   return {
+    close() {
+      if (isOpen()) close();
+    },
     set(v: string) {
       if (v === value) return;
       value = v;

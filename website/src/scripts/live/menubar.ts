@@ -8,6 +8,7 @@ import { LiveFigure } from "./figure.ts";
 import { bringForward, help } from "./forward.ts";
 import { Menu, drawSites } from "./menu.ts";
 import { Tooltips } from "./tooltip.ts";
+import { showAbout, showAccountWindow } from "./windows.ts";
 import {
   model,
   openWindow,
@@ -22,8 +23,8 @@ import {
   isInUse,
   listed,
   menuBarClock,
+  menuBarShown,
   menuBarSpoken,
-  menuBarTitle,
   menuLine,
   menuTitle,
   staleNote,
@@ -129,8 +130,10 @@ class MenuBarDesk extends LiveFigure {
     const s = model.get();
     const account = s.accounts.find((a) => a.id === chosen.dataset.account);
     const inSubmenu = chosen.closest('[role="menu"]') !== this.#menu.el;
-    if (account && (inSubmenu || chosen.hasAttribute("data-one")))
-      return openWindow(account.tool, account.label);
+    if (account && (inSubmenu || chosen.hasAttribute("data-one"))) {
+      openWindow(account.tool, account.label);
+      return showAccountWindow(this, "macos", account);
+    }
     if (account) {
       // the account in use stays in use; any other is switched to
       if (!isInUse(account, s)) switchFromApp(account.tool, account.label, "macos");
@@ -145,6 +148,8 @@ class MenuBarDesk extends LiveFigure {
         return bringForward("accounts", "macos");
       case "settings":
         return bringForward("settings", "macos");
+      case "about":
+        return showAbout(this);
       case "help":
         return help();
       case "quit":
@@ -157,7 +162,7 @@ class MenuBarDesk extends LiveFigure {
     shown(this.querySelector('[data-part="extra"]'), s.running);
     if (!s.running) this.#menu.closeAll(false);
     text(this.querySelector("[data-clock]"), menuBarClock(s.now));
-    text(item.querySelector('[data-part="title"]'), menuBarTitle(s));
+    text(item.querySelector('[data-part="title"]'), menuBarShown(s, s.general.menuBarShows));
     attr(item, "aria-label", menuBarSpoken(s));
     html(this.querySelector('[data-part="status"]'), statusLine(s));
 

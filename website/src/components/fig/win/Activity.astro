@@ -1,10 +1,7 @@
 ---
-// ActivityPage.xaml under 720 pixels of page, where each change stacks under its date. With
-// live/activity.ts it reads the page's log as the page does: when it comes into view, and on
-// Refresh.
-import PageHeader from "./PageHeader.astro";
-import Window from "./Window.astro";
-import { activityPage as page } from "../../../data/windows.ts";
+// The Pitboard window on its Activity page: the Accounts window's own figure, its navigation on
+// Activity, which reads the page's log as the page does.
+import Accounts from "./Accounts.astro";
 
 interface Props {
   prefix: string;
@@ -12,25 +9,4 @@ interface Props {
 const { prefix } = Astro.props;
 ---
 
-<Window prefix={prefix} pane="activity">
-  <PageHeader
-    prefix={prefix}
-    title={page.title}
-    commands={[["fl-refresh", page.command, "refresh"]]}
-  />
-  <div class="mt-24 px-24 pb-16" data-part="log">
-    {page.rows.map((r) => <div
-      class="grid grid-cols-[auto_1fr] gap-x-12 gap-y-2 py-8 pr-12 pl-16 whitespace-nowrap"
-    >
-      <span class="col-span-2 text-u-12/16 text-win-text-2 tabular-nums">{r.date}</span>
-      <b class="font-semibold">{r.change}</b>
-      <span>{r.account}</span>
-      <span class="text-win-text-2">{r.result}</span>
-      <span class="text-win-text-2">{r.by}</span>
-    </div>)}
-  </div>
-</Window>
-
-<script>
-  import "../../../scripts/live/activity.ts";
-</script>
+<Accounts prefix={prefix} moment="after" pane="activity" />

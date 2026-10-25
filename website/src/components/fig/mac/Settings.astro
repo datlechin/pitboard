@@ -5,7 +5,9 @@
 // Automatically's, under the menu bar the app puts up while Settings is in front. Its controls carry
 // the names machine.rs gives them, and their ids start `prefix`. Every choice's words are drawn,
 // those of the choice not shown hidden.
+import Advanced from "./Advanced.astro";
 import AppMenuBar from "./AppMenuBar.astro";
+import General from "./General.astro";
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock, moments, share, warmUp } from "../../../data/world.ts";
@@ -26,8 +28,10 @@ import { hm, menuBarClock, toolAccounts } from "../../../lib/words.ts";
 interface Props {
   prefix: string;
   show: "switch" | "warm";
+  // the release General names, drawn with the other tabs' templates where `show` is "switch"
+  version?: string;
 }
-const { prefix, show } = Astro.props;
+const { prefix, show, version = "" } = Astro.props;
 const Root = show === "warm" ? "pb-warm" : "pb-settings";
 const tabs = [
   ["general", "General", "sf-gear"],
@@ -38,7 +42,11 @@ const heights = { switch: "h-245", warm: "h-378.5" };
 // with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
 // needs at least, and Warm up limits as its accounts make it. The cut stays 8 points below, the
 // desk's border counted as a static height counts it.
-const live = { switch: "[&:defined]:h-auto", warm: "[&:defined]:h-auto" };
+// Once another tab is shown, the desk keeps its height and cuts the window as it grows.
+const live = {
+  switch: "[&:defined]:h-(--locked,auto)",
+  warm: "[&:defined]:h-(--locked,auto)",
+};
 const frame = { switch: "live:min-h-330.5", warm: "" };
 const drawn: AtLimit = "switch";
 const minutes = (at: string) => {
@@ -90,24 +98,45 @@ const menuRow =
   >
     <div class="relative flex h-80 justify-center gap-0.5 pt-32">
       <Lights window closeOnly class="top-9.5 left-8.75" />
-      <span class="absolute inset-x-0 top-6 text-center font-bold text-mac-window-title"
+      <span
+        class="absolute inset-x-0 top-6 text-center font-bold text-mac-window-title"
+        data-part="title"
         >Limits</span
       >
-      {tabs.map(([id, name, icon]) => <span
-        class:list={[
-          "flex h-48 min-w-55.5 flex-col items-center px-7 pt-2 text-u-11/13",
-          id === "limits"
-            ? "rounded-[calc(var(--spacing)*7)] bg-mac-window-group text-mac-window-blue shadow-mac-glass"
-            : "text-mac-window-sub",
-        ]}
-      >
-        <svg class="-mb-1.5 mt-1.5 size-27 shrink-0 [--stroke:1.1]">
-          <use href={`#${icon}`} />
-        </svg>
-        {name}
-      </span>)}
+      {/* SettingsView.swift's TabView: its tabs in the toolbar, Limits drawn chosen */}
+      <span class="flex gap-0.5" role="tablist" aria-label="Settings">
+        {tabs.map(([id, name, icon]) => <span
+          class="flex h-48 min-w-55.5 flex-col items-center rounded-[calc(var(--spacing)*7)] px-7 pt-2 text-u-11/13 text-mac-window-sub outline-none aria-selected:bg-mac-window-group aria-selected:text-mac-window-blue aria-selected:shadow-mac-glass focus-visible:outline-solid focus-visible:outline-[calc(var(--u)*3.5)] focus-visible:outline-mac-window-focus live:cursor-default"
+          id={`${prefix}-tab-${id}`}
+          role="tab"
+          aria-selected={id === "limits" ? "true" : "false"}
+          aria-controls={`${prefix}-tab-${id}-panel`}
+          tabindex="-1"
+          data-tab={id}
+        >
+          <svg class="-mb-1.5 mt-1.5 size-27 shrink-0 [--stroke:1.1]">
+            <use href={`#${icon}`} />
+          </svg>
+          {name}
+        </span>)}
+      </span>
     </div>
-    <div class="pb-20">
+    {["general", "advanced"].map((id) => (
+      <div
+        id={`${prefix}-tab-${id}-panel`}
+        role="tabpanel"
+        aria-labelledby={`${prefix}-tab-${id}`}
+        data-tab-panel={id}
+        hidden
+      ></div>
+    ))}
+    <div
+      class="pb-20"
+      id={`${prefix}-tab-limits-panel`}
+      role="tabpanel"
+      aria-labelledby={`${prefix}-tab-limits`}
+      data-tab-panel="limits"
+    >
       {show === "switch" && (
         <>
           <p class={head}>{section}</p>
@@ -322,9 +351,15 @@ const menuRow =
       )}
     </div>
   </div>
+  {/* the other tabs, drawn once for both Settings figures to clone */}
+  {show === "switch" && (
+    <>
+      <template data-part="general"><General version={version} /></template>
+      <template data-part="advanced"><Advanced /></template>
+    </>
+  )}
 </Root>
 
 <script>
   import "../../../scripts/live/settings.ts";
-  import "../../../scripts/live/warm.ts";
 </script>

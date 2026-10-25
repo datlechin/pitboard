@@ -7,6 +7,8 @@ import { STEPPER_DELAY, STEPPER_EVERY, holding } from "./spin.ts";
 
 export interface Time {
   set(minutes: number): void;
+  // a TimePicker's flyout shut, taking nothing, as Reset leaves it
+  close?(): void;
 }
 
 const MAX = [23, 59];
@@ -202,6 +204,9 @@ export function timePicker(
   flyout.querySelector("[data-dismiss]")!.addEventListener("click", () => close(false));
 
   return {
+    close() {
+      if (flyout.open) flyout.close();
+    },
     set(minutes) {
       now = parts(minutes);
       shown.forEach((el, i) => {

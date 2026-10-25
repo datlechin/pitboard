@@ -45,11 +45,12 @@ test("the bar lists the app's menus, and is the window's first Tab stop", async 
     "Window",
     "Help",
   ]);
-  await fig.locator('[data-part="window"] [data-does="refresh"]').focus();
+  // the bar, then the window's own controls
+  await title("pitboard").focus();
+  await page.keyboard.press("Tab");
+  await expect(fig.locator('[data-part="window"] :focus')).toHaveCount(1);
   await page.keyboard.press("Shift+Tab");
   await expect(title("pitboard")).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
-  await expect(fig.getByRole("menubar").locator(":focus")).toHaveCount(0);
 });
 
 test("a click opens a menu, the pointer along the bar opens the next, and a click outside closes it", async ({

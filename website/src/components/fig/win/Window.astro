@@ -1,31 +1,37 @@
 ---
 // MainWindow.xaml at 704 pixels, where NavigationView is LeftCompact: the title bar on Mica, the
 // panes' icons with Settings at the foot, and the page on its layer. A `crop` desk shows the top.
-// The caption buttons are the system's. The `desk` slot holds what opens over the desk, which the
-// window's edge does not cut: a context menu, a flyout and the dialogs, whose smoke the window
-// draws over itself.
+// The caption buttons are the system's. Its navigation's items are tabs, each page drawn and the
+// pane `pane` shown: the `accounts`, `activity` and `settings` slots hold theirs, and This PC's,
+// and Settings' where the figure draws none, are cloned from the templates drawn with
+// `templates`. The title bar's pane button opens the navigation over the page with its labels. The
+// `desk` slot holds what opens over the desk, which the window's edge does not cut: a context menu,
+// a flyout and the dialogs, whose smoke the window draws over itself.
+import AccountWindow from "./AccountWindow.astro";
 import CaptionButtons from "./CaptionButtons.astro";
+import SettingsPage from "./SettingsPage.astro";
+import ThisPC from "./ThisPC.astro";
 import { app, panes, type Pane } from "../../../data/windows.ts";
 
 interface Props {
   prefix: string;
   pane: Pane;
   crop?: boolean;
-  // the figure's element, where its pane's would not do
-  element?: "pb-warm";
+  templates?: boolean;
+  // the release Settings names, where the templates are drawn
+  version?: string;
 }
-const { prefix, pane, crop = false, element } = Astro.props;
-const Root =
-  element ??
-  (pane === "settings" ? "pb-settings" : pane === "activity" ? "pb-activity" : "pb-accounts");
-const item = "relative mx-4 my-2 flex h-36 w-40 items-center justify-center rounded-u-4";
-const items: [Pane, string][] = [
-  ...panes.map(([id, , icon]): [Pane, string] => [id, icon]),
-  ["settings", "fl-settings"],
+const { prefix, pane, crop = false, templates = false, version = "" } = Astro.props;
+const item =
+  "group/tab relative mx-4 my-2 flex h-36 items-center gap-16 rounded-u-4 px-12 whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text aria-selected:bg-win-subtle live:cursor-default live:hover:bg-win-subtle";
+const items: [Pane, string, string][] = [
+  ...panes.map(([id, name, icon]): [Pane, string, string] => [id, name, icon]),
+  ["settings", "Settings", "fl-settings"],
 ];
+const id = (p: Pane, part: string) => `${prefix}-${p}-${part}`;
 ---
 
-<Root
+<pb-accounts
   id={prefix}
   class:list={[
     "desk [anchor-name:var(--desk)] desk-px-720",
@@ -36,7 +42,7 @@ const items: [Pane, string][] = [
 >
   <div
     class:list={[
-      "grid w-704 grid-cols-[calc(var(--spacing)*48)_1fr] grid-rows-[calc(var(--spacing)*48)_1fr] overflow-hidden rounded-u-8 [anchor-name:var(--window)] bg-win-base font-win text-u-14/20 text-win-text shadow-win-window",
+      "group/window grid w-704 grid-cols-[calc(var(--spacing)*48)_1fr] grid-rows-[calc(var(--spacing)*48)_1fr] overflow-hidden rounded-u-8 [anchor-name:var(--window)] bg-win-base font-win text-u-14/20 text-win-text shadow-win-window live:h-(--locked,auto)",
       crop ? "absolute top-24 left-8" : "relative",
     ]}
     data-part="window"
@@ -49,25 +55,73 @@ const items: [Pane, string][] = [
       aria-label="Pitboard"
       data-part="title-bar"
     >
-      <span class="ml-4 flex h-36 w-40 items-center justify-center rounded-u-4"
-        ><svg class="size-16"><use href="#fl-navigation"></use></svg></span
+      {/* TitleBar's pane button, which opens the navigation with its labels */}
+      <button
+        class="ml-4 flex h-36 w-40 items-center justify-center rounded-u-4 focus-win live:cursor-default live:hover:bg-win-subtle"
+        type="button"
+        aria-label="Open Navigation"
+        aria-expanded="false"
+        aria-controls={`${prefix}-nav`}
+        data-does="navigation"
       >
+        <svg class="size-16"><use href="#fl-navigation"></use></svg>
+      </button>
       <svg class="ml-3 size-16 shrink-0"><use href="#pb-tray"></use></svg>
       <span class="ml-16 text-u-12/16">{app}</span>
       <span class="ml-auto self-start" aria-hidden="true"><CaptionButtons height={48} /></span>
     </div>
-    <div class="flex flex-col pb-4">
-      {items.map(([id, icon]) => <span
-        class:list={[item, { "bg-win-subtle": id === pane, "mt-auto": id === "settings" }]}
+    <div
+      class="z-3 flex w-48 flex-col pb-4 group-data-[state=open]/window:w-320 group-data-[state=open]/window:rounded-r-u-8 group-data-[state=open]/window:bg-win-flyout group-data-[state=open]/window:shadow-win-flyout"
+      id={`${prefix}-nav`}
+      role="tablist"
+      aria-orientation="vertical"
+      aria-label="Navigation"
+    >
+      {items.map(([p, name, icon]) => <div
+        class:list={[item, { "mt-auto": p === "settings" }]}
+        id={id(p, "tab")}
+        role="tab"
+        aria-selected={p === pane ? "true" : "false"}
+        aria-controls={id(p, "page")}
+        aria-label={name}
+        tabindex="-1"
+        data-pane={p}
       >
-        {id === pane && <span class="absolute top-10 left-2 h-16 w-3 rounded-u-2 bg-win-accent" />}
-        <svg class="size-16"><use href={`#${icon}`}></use></svg>
-      </span>)}
+        <span
+          class="absolute top-10 left-2 hidden h-16 w-3 rounded-u-2 bg-win-accent group-aria-selected/tab:block"
+        ></span>
+        <svg class="size-16 shrink-0"><use href={`#${icon}`}></use></svg>
+        <span class="hidden group-data-[state=open]/window:inline" aria-hidden="true">{name}</span>
+      </div>)}
     </div>
-    <div class="min-w-0 rounded-tl-u-8 bg-win-layer pt-16 inset-shadow-win-layer-tl">
-      <slot />
+    <div
+      class="relative col-start-2 row-start-2 min-h-0 min-w-0 rounded-tl-u-8 bg-win-layer inset-shadow-win-layer-tl"
+    >
+      {items.map(([p]) => <div
+        class:list={["pt-16", { "h-full overflow-y-auto": p !== pane }]}
+        id={id(p, "page")}
+        role="tabpanel"
+        aria-labelledby={id(p, "tab")}
+        data-pane-panel={p}
+        hidden={p !== pane}
+      >
+        {p === "accounts" && <slot name="accounts" />}
+        {p === "activity" && <slot name="activity" />}
+        {p === "settings" && <slot name="settings" />}
+      </div>)}
     </div>
     <div class="absolute inset-0 z-4 bg-win-smoke" data-part="smoke" hidden></div>
   </div>
   <slot name="desk" />
-</Root>
+  {templates && (
+    <>
+      <template data-part="machine"><ThisPC /></template>
+      <template data-part="settings"><SettingsPage version={version} /></template>
+      <template data-part="account-window"><AccountWindow /></template>
+    </>
+  )}
+</pb-accounts>
+
+<script>
+  import "../../../scripts/live/accounts.ts";
+</script>

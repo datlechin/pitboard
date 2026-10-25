@@ -12,7 +12,13 @@ import { Grid } from "./grid.ts";
 import { hold } from "./hold.ts";
 import { INSET, Menu, sectioned } from "./menu.ts";
 import { expired, offersOf } from "./offers.ts";
+import { readLog } from "./activity.ts";
 import type { WindowMenus } from "./appmenu.ts";
+import { MachinePane } from "./machine.ts";
+import { Panes } from "./panes.ts";
+import { disclosure } from "./disclosure.ts";
+import { AtLimitControls, WarmControls } from "./limits.ts";
+import { showAccountWindow } from "./windows.ts";
 import { say } from "./say.ts";
 import {
   cancelSignIn,
@@ -24,6 +30,8 @@ import {
   openWindow,
   refreshFromApp,
   rename,
+  setGeneral,
+  setSchedule,
   signInFromApp,
   switchFromApp,
   typed,
@@ -83,6 +91,11 @@ const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
   in_.querySelector<T>(`[data-part="${name}"]`);
 const accountOf = (s: State, id: string | undefined) => s.accounts.find((a) => a.id === id);
 
+interface Settings {
+  atLimit: AtLimitControls | null;
+  warm: WarmControls | null;
+}
+
 export class AccountsWindow extends LiveFigure {
   system: System = "macos";
   window!: HTMLElement;
@@ -94,11 +107,51 @@ export class AccountsWindow extends LiveFigure {
   // a Control-click's click, which selects nothing
   #swallow = false;
   #saying: Tool | null = null;
+  #panes!: Panes;
+  // a window first shown on another pane draws its list's rows once the list shows
+  #listed = false;
+  #machine!: MachinePane;
+  #seen?: IntersectionObserver;
 
   connectedCallback() {
     const drawing = this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? "";
     this.system = drawing.endsWith("windows") ? "windows" : "macos";
     this.window = this.querySelector<HTMLElement>(':scope > [data-part="window"]')!;
+    this.#panes = new Panes({
+      system: this.system,
+      window: this.window,
+      shown: (pane) => this.#paneShown(pane),
+    });
+    this.#listed = this.#panes.current === "accounts";
+    // a Settings page the figure draws works from the start
+    if (this.#panel("settings")?.firstElementChild) this.#settingsPage();
+    if (this.system === "windows") {
+      const nav = this.querySelector<HTMLElement>('[role="tablist"]');
+      nav?.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && this.window.dataset.state === "open") this.#navigation(false);
+      });
+      document.addEventListener(
+        "pointerdown",
+        (e) => {
+          const at = e.target as Node;
+          const button = this.querySelector('[data-does="navigation"]');
+          if (this.window.dataset.state === "open" && !nav?.contains(at) && !button?.contains(at))
+            this.#navigation(false);
+        },
+        true,
+      );
+    }
+    this.#machine = new MachinePane(
+      this.#panel("machine")!,
+      this.system,
+      this.querySelector<HTMLButtonElement>('[data-does="check"]'),
+    );
+    // the Activity pane reads the log as it comes into view
+    this.#seen = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting) && this.#panes.current === "activity")
+        readLog(this.#panel("activity")!, this.system, model.get());
+    });
+    this.#seen.observe(this);
     const grid = this.querySelector<HTMLElement>('[role="grid"]')!;
     this.#grid = new Grid({
       system: this.system,
@@ -124,15 +177,97 @@ export class AccountsWindow extends LiveFigure {
     super.connectedCallback();
   }
 
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.#seen?.disconnect();
+  }
+
   protected restart() {
     this.#menu.closeAll(false);
     sheets(this.system)?.close();
     this.#grid.select(null, false);
+    this.#settings?.atLimit?.restart();
+    this.#settings?.warm?.restart();
+    this.#navigation(false);
+    this.#panes.restart();
   }
 
-  // the window's Add Account sheet, asked for from elsewhere: the menu bar's Add Account…
+  #panel(pane: string) {
+    return this.window.querySelector<HTMLElement>(`[data-pane-panel="${pane}"]`);
+  }
+
+  #paneShown(pane: string) {
+    this.#menu.closeAll(false);
+    this.#navigation(false);
+    const s = model.get();
+    if (pane === "accounts" && !this.#listed) {
+      this.#listed = true;
+      this.render(s);
+    }
+    if (pane === "activity") readLog(this.#panel("activity")!, this.system, s);
+    if (pane === "machine") this.#machine.show(s);
+    if (pane === "settings" && !this.#settings) this.#settingsPage();
+    this.render(s);
+  }
+
+  // Windows' Settings page: the figure's own, or SettingsPage.astro's from its top, cloned the first
+  // time it shows, its ids made this window's own and its flyouts put on the desk
+  #settings: Settings | null = null;
+  #settingsPage() {
+    const panel = this.#panel("settings");
+    if (!panel) return;
+    if (!panel.firstElementChild) {
+      const template = document.querySelector<HTMLTemplateElement>(
+        '[data-drawing="app windows"] template[data-part="settings"]',
+      );
+      const parts = [...template!.content.children].map((el) => el.cloneNode(true) as HTMLElement);
+      for (const part of parts)
+        for (const node of [part, ...part.querySelectorAll("*")])
+          for (const name of ["id", "aria-labelledby", "aria-controls", "aria-describedby"]) {
+            const v = node.getAttribute(name);
+            if (v?.includes("tpl-")) node.setAttribute(name, v.replace(/\btpl-/g, `${this.id}-`));
+          }
+      for (const part of parts)
+        if (part.hasAttribute("data-desk")) this.append(...part.children);
+        else panel.append(part);
+      const about = panel.querySelector<HTMLButtonElement>(`#${this.id}-about-expand`);
+      if (about) disclosure(about, about.closest<HTMLElement>("[data-header]")!);
+    }
+    const section = (name: string) => panel.querySelector<HTMLElement>(`[data-section="${name}"]`);
+    const at = section("at-limit");
+    const warm = section("warm");
+    this.#settings = {
+      atLimit: at ? new AtLimitControls(at, this.id) : null,
+      warm: warm ? new WarmControls(warm, this.id) : null,
+    };
+    panel.addEventListener("click", (e) => {
+      const control = (e.target as Element).closest<HTMLElement>("[data-setting]");
+      if (!control || control.getAttribute("aria-disabled") === "true") return;
+      const now = model.get();
+      if (control.dataset.setting === "login")
+        setGeneral({ opensAtLogin: !now.general.opensAtLogin });
+      if (control.dataset.setting === "renew") setSchedule(!now.schedule, "app");
+    });
+  }
+
+  // TitleBar's pane button: the navigation over the page with its labels, until a pane is chosen,
+  // Escape, or a press elsewhere
+  #navigation(open: boolean) {
+    if (this.system !== "windows") return;
+    const button = this.querySelector('[data-does="navigation"]');
+    if (open) this.window.dataset.state = "open";
+    else if (this.window.dataset.state === "open") delete this.window.dataset.state;
+    attr(button, "aria-expanded", String(open));
+    attr(button, "aria-label", open ? "Close Navigation" : "Open Navigation");
+  }
+
+  // the window's Add Account sheet, asked for from elsewhere: the menu bar's Add Account…, which
+  // brings the window to its Accounts pane, as a sheet is about accounts (WindowPane.swift)
   present(sheet: string) {
-    if (sheet === "add") sheets(this.system)?.signIn(this, null, null);
+    if (sheet === "settings") return this.#panes.show("settings");
+    if (sheet !== "add") return;
+    this.#panes.show("accounts");
+    sheets(this.system)?.signIn(this, null, null);
   }
 
   #rowFor(id: string | null) {
@@ -150,6 +285,12 @@ export class AccountsWindow extends LiveFigure {
           return;
         case "refresh":
           return refreshFromApp(this.system);
+        case "read":
+          return readLog(this.#panel("activity")!, this.system, model.get());
+        case "check":
+          return this.#machine.check(model.get().now);
+        case "navigation":
+          return this.#navigation(this.window.dataset.state !== "open");
         case "add":
           return sheets(this.system)?.signIn(
             this,
@@ -221,7 +362,8 @@ export class AccountsWindow extends LiveFigure {
       const at = e.target as Element;
       if (this.system !== "macos" || e.defaultPrevented || !e.metaKey || e.key !== "Backspace")
         return;
-      if (at.closest("dialog, input") || !this.#grid.selected) return;
+      if (at.closest("dialog, input") || !this.#grid.selected || this.#panes.current !== "accounts")
+        return;
       e.preventDefault();
       this.#ask("forget", this.#grid.selected);
     });
@@ -324,7 +466,8 @@ export class AccountsWindow extends LiveFigure {
       case "warm":
         return void warmUp(a.label);
       case "open":
-        return openWindow(a.tool, a.label);
+        openWindow(a.tool, a.label);
+        return showAccountWindow(this, this.system, a);
       case "copy":
         return void navigator.clipboard?.writeText(a.email).catch(() => {});
       case "forget":
@@ -336,15 +479,19 @@ export class AccountsWindow extends LiveFigure {
   // selection.
   protected windowMenus(): WindowMenus {
     const s = model.get();
-    return {
-      account: accountOf(s, this.#grid.selected?.dataset.account) ?? null,
-      refresh: { title: "Refresh", enabled: s.reading === null },
-      resizes: true,
-    };
+    const pane = this.#panes.current;
+    // only the Accounts pane puts its account up for the menu bar (AccountsPane.swift)
+    const account =
+      pane === "accounts" ? (accountOf(s, this.#grid.selected?.dataset.account) ?? null) : null;
+    const refresh =
+      pane === "machine"
+        ? { title: "Check Again", enabled: !this.#machine.checking }
+        : { title: "Refresh", enabled: pane === "activity" || s.reading === null };
+    return { account, refresh, resizes: true };
   }
 
   protected fromMenuBar(does: string): boolean {
-    const row = this.#grid.selected;
+    const row = this.#panes.current === "accounts" ? this.#grid.selected : null;
     const a = accountOf(model.get(), row?.dataset.account);
     if (does.startsWith("offer:")) {
       this.#offer(does.slice("offer:".length), a);
@@ -352,10 +499,13 @@ export class AccountsWindow extends LiveFigure {
     }
     switch (does) {
       case "add":
-        sheets(this.system)?.signIn(this, null, null);
+        this.present("add");
         return true;
       case "refresh":
-        refreshFromApp(this.system);
+        if (this.#panes.current === "activity")
+          readLog(this.#panel("activity")!, this.system, model.get());
+        else if (this.#panes.current === "machine") this.#machine.check(model.get().now);
+        else refreshFromApp(this.system);
         return true;
       case "copy":
         if (a?.email) void navigator.clipboard?.writeText(a.email).catch(() => {});
@@ -383,6 +533,21 @@ export class AccountsWindow extends LiveFigure {
     if (!s.running) this.#menu.closeAll(false);
     text(part(this, "updated"), s.reading !== null ? READING : updated(s.readAt));
     attr(this.querySelector('[data-does="refresh"]'), "disabled", s.reading !== null ? "" : null);
+    sheets(this.system)?.render(s);
+    this.#settings?.atLimit?.render(s);
+    this.#settings?.warm?.render(s);
+    const settings = this.#panel("settings");
+    if (settings) {
+      for (const [name, on] of [
+        ["login", s.general.opensAtLogin],
+        ["renew", s.schedule],
+      ] as const) {
+        const toggle = settings.querySelector(`[data-setting="${name}"]`);
+        attr(toggle, "aria-checked", String(on));
+        text(toggle?.parentElement?.querySelector("[data-said]"), on ? "On" : "Off");
+      }
+    }
+    if (!this.#listed) return;
     this.#notices(s);
     this.#setup(s);
     const above = this.querySelectorAll(
@@ -392,7 +557,6 @@ export class AccountsWindow extends LiveFigure {
     for (const group of this.querySelectorAll<HTMLElement>('[role="rowgroup"][data-tool]'))
       this.#rows(s, group, group.dataset.tool as Tool);
     this.#grid.refresh();
-    sheets(this.system)?.render(s);
   }
 
   #notices(s: State) {

@@ -301,6 +301,13 @@ export function menuBarTitle(w: World): string {
   return `${shown.label} ${fullest(shown)}%`;
 }
 
+// MenuBarShows.swift: what Settings' Menu bar shows leaves of the title, the mark alone for Icon
+// only, while its spoken name stays whole.
+export function menuBarShown(w: World, shows: "nameAndUsage" | "usage" | "icon"): string {
+  if (shows === "icon") return "";
+  return shows === "usage" ? `${fullest(titled(w))}%` : menuBarTitle(w);
+}
+
 // The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
 export const menuBarLevel = (w: World) => level(fullest(titled(w)));
 
