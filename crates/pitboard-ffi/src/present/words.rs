@@ -471,6 +471,32 @@ pub(crate) fn updated(clock: &str) -> String {
     format!("Updated {clock}")
 }
 
+pub(crate) fn already_in_use(label: &str) -> String {
+    format!("{label} is already in use.")
+}
+
+pub(crate) const NO_SUCH_ACCOUNT: &str = "That account isn’t in Pitboard anymore.";
+
+pub(crate) fn sign_in_first(label: &str) -> String {
+    format!("Sign in to {label} again in Pitboard to switch to it.")
+}
+
+pub(crate) fn cannot_switch_to(label: &str) -> String {
+    format!("Pitboard can’t switch to {label}.")
+}
+
+pub(crate) const SWITCH_UNDER_WAY: &str = "Pitboard is busy switching or signing in. Try again in a \
+                                           moment.";
+
+// A question only the app can ask.
+pub(crate) fn open_pitboard_to_switch(app: &str) -> String {
+    format!("Open Pitboard to switch while {app} is open.")
+}
+
+pub(crate) fn open_pitboard_to_replace(label: &str) -> String {
+    format!("Open Pitboard to switch to {label}.")
+}
+
 pub(crate) const READING: &str = "Reading…";
 
 pub(crate) const NOT_READ_YET: &str = "Not read yet";
@@ -3883,6 +3909,29 @@ mod tests {
         assert_eq!(
             both(&|os| quit_and_uninstall(os, "Claude")),
             pair("Quit Claude and Uninstall", "Quit Claude and uninstall")
+        );
+    }
+
+    #[test]
+    fn a_request_from_outside_is_answered_in_these_words() {
+        assert_eq!(already_in_use("work"), "work is already in use.");
+        assert_eq!(NO_SUCH_ACCOUNT, "That account isn’t in Pitboard anymore.");
+        assert_eq!(
+            sign_in_first("work"),
+            "Sign in to work again in Pitboard to switch to it."
+        );
+        assert_eq!(cannot_switch_to("work"), "Pitboard can’t switch to work.");
+        assert_eq!(
+            SWITCH_UNDER_WAY,
+            "Pitboard is busy switching or signing in. Try again in a moment."
+        );
+        assert_eq!(
+            open_pitboard_to_switch("ChatGPT"),
+            "Open Pitboard to switch while ChatGPT is open."
+        );
+        assert_eq!(
+            open_pitboard_to_replace("work"),
+            "Open Pitboard to switch to work."
         );
     }
 

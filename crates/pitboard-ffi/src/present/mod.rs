@@ -30,6 +30,7 @@
 //! Finder. So "Add Account…" is said in both places.
 
 mod accounts;
+mod glance;
 mod machine;
 mod notices;
 mod removal;
@@ -42,6 +43,9 @@ pub(crate) mod words;
 #[cfg(test)]
 pub(crate) mod testing;
 
+#[cfg(test)]
+pub(crate) use glance::glance_on;
+pub(crate) use glance::{glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
     CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
@@ -868,6 +872,8 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         uninstall: removal::uninstall(&seen),
         removal: removal::removal(&seen),
         welcome: welcome::welcome(&seen),
+        glance_revision: state.glance_revision(),
+        answers: glance::answers(&seen),
     }
 }
 

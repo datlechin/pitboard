@@ -768,6 +768,7 @@ impl Launched {
                     launch: self.windows.clone(),
                     web_scheme: super::pages::SCHEME.into(),
                 }),
+                glance: None,
             },
             Cadence::APP,
         )

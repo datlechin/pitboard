@@ -187,6 +187,8 @@ pub(crate) struct Stub {
     // what uninstalling gives, and how many times it was asked
     pub removing: Result<Uninstalled, Refusal>,
     pub removals: usize,
+    // every glance written, in order
+    pub glances: Vec<String>,
 }
 
 /// What the core says of warming up where nothing has been set: the default span, nobody.
@@ -278,6 +280,7 @@ impl Stub {
             warm_ranges: Vec::new(),
             removing: Ok(Uninstalled::Removed),
             removals: 0,
+            glances: Vec::new(),
         }
     }
 
@@ -683,6 +686,10 @@ impl Stub {
                     own: self.own,
                 }
             }
+            Job::KeepGlance { text } => {
+                self.glances.push(text);
+                Answer::Saved
+            }
             Job::Uninstall => {
                 self.removals += 1;
                 Answer::Uninstalled(self.removing.clone().map_err(|refused| refused.error()))
@@ -802,6 +809,18 @@ impl Hand {
     pub(crate) fn notice(&mut self, machine: &mut Stub) {
         self.look();
         self.run(machine);
+    }
+
+    // What the actor does after each message: the glance kept where it changed, then shown.
+    pub(crate) fn publish(&mut self) -> Snapshot {
+        if self.state.glances() {
+            let utc = crate::present::testing::Utc;
+            let text = crate::present::glance(&self.state, self.now.epoch(), &utc);
+            if let Some(job) = self.state.glanced(text) {
+                self.took(vec![job]);
+            }
+        }
+        self.shown()
     }
 
     /// What an app is shown now, its clock times read in UTC.

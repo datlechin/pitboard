@@ -111,7 +111,8 @@ public sealed class ModelTests
             Welcome: new WelcomeShown(
                 Title: "Welcome to Pitboard", Lines: [], Tools: [],
                 OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: "", Link: null),
-                Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)));
+                Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
+            GlanceRevision: 0, Answers: []);
 
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],

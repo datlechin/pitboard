@@ -43,7 +43,7 @@ use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
 use super::{
-    AtLimit, Back, Failure, Intent, LastSwitch, Pane, Place, QuitQuestion, ReadFailure,
+    AtLimit, Back, Failure, Intent, LastSwitch, OutsideAsk, Pane, Place, QuitQuestion, ReadFailure,
     RestartNeeded, RunOutNotice, RunningSignIn, SettingsSection, Sheet, Tip, WindowRequest,
 };
 use crate::account_windows::records::{Entry, Loaded};
@@ -69,7 +69,7 @@ use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Foreseen, Left, Stowed, WaitStep};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::time::Duration;
 
 /// How often the model does what it does by itself, and how long it waits for an app.
@@ -280,6 +280,8 @@ pub(crate) enum Job {
     FindCommandLine,
     /// Remove Pitboard from this machine, with the app's own hold on its directory.
     Uninstall,
+    /// Keep the glance in the file the app named for it.
+    KeepGlance { text: String },
 }
 
 impl Job {
@@ -310,6 +312,8 @@ pub(crate) struct Ticket {
     /// Whether it is the read after a change of this app's own to the account index other
     /// than a switch, whose landing ends that change's hold on the index.
     after_change: bool,
+    // the request from outside it answers once over
+    request: Option<u64>,
 }
 
 /// Why what is already known is read.
@@ -642,6 +646,31 @@ pub(crate) enum Removing {
     Done(Uninstalled),
 }
 
+// How a request from outside ended, which `present` words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Answered {
+    Switched { tool: String, label: String },
+    InUse { label: String },
+    Updated { at: i64 },
+    Unknown,
+    NeedsSignIn { label: String },
+    Unusable { label: String },
+    Busy,
+    AppOpen { app: String },
+    // its login in use is refused for good, which only the app asks to replace
+    Replace { label: String },
+    Failed { message: String },
+}
+
+// The glance's last text written, and how many times it changed.
+#[derive(Debug, Default)]
+struct Glancing {
+    written: Option<String>,
+    revision: u64,
+}
+
+const ANSWERS_KEPT: usize = 10;
+
 /// A timer of the model's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Timer {
@@ -720,6 +749,7 @@ struct Asked {
     /// Whether a change of this app's own to the account index asked, other than a switch,
     /// which holds the index until this read is over.
     after_change: bool,
+    request: Option<u64>,
 }
 
 /// What a person asked for that did not happen, before it is numbered.
@@ -1091,6 +1121,11 @@ pub(crate) struct State {
     pub(crate) removing: Option<Removing>,
     // jobs `Job::writes` counts, until each has answered
     at_work: u32,
+    // where the app named a file for the glance
+    glancing: Option<Glancing>,
+    pub(crate) answered: VecDeque<(u64, Answered)>,
+    // the request from outside the switch under way answers
+    outside_switch: Option<u64>,
 }
 
 impl State {
@@ -1163,6 +1198,9 @@ impl State {
             windows: Windows::new(cadence.arming),
             removing: None,
             at_work: 0,
+            glancing: None,
+            answered: VecDeque::new(),
+            outside_switch: None,
         }
     }
 
@@ -1562,6 +1600,81 @@ impl State {
             Intent::DownloadEnded { id, end } => self.windows.download_ended(&id, end),
             Intent::ClearDownloads { store } => self.windows.clear_downloads(&store),
             Intent::Uninstall => self.uninstall(jobs),
+            Intent::Outside { request, ask } => self.outside(request, ask, now, jobs),
+        }
+    }
+
+    pub(crate) fn glance_to_a_file(&mut self) {
+        self.glancing = Some(Glancing::default());
+    }
+
+    pub(crate) fn glances(&self) -> bool {
+        self.glancing.is_some()
+    }
+
+    pub(crate) fn glance_revision(&self) -> u64 {
+        self.glancing
+            .as_ref()
+            .map_or(0, |glancing| glancing.revision)
+    }
+
+    // Kept only where it changed, and not once Pitboard is being removed.
+    pub(crate) fn glanced(&mut self, text: String) -> Option<Job> {
+        let glancing = self.glancing.as_mut()?;
+        if self.removing.is_some() || glancing.written.as_ref() == Some(&text) {
+            return None;
+        }
+        glancing.written = Some(text.clone());
+        glancing.revision += 1;
+        self.at_work += 1;
+        Some(Job::KeepGlance { text })
+    }
+
+    // As a click in the app would, short of a question only the app can ask.
+    fn outside(&mut self, request: u64, ask: OutsideAsk, now: Now, jobs: &mut Vec<Job>) {
+        let OutsideAsk::Switch { account } = ask else {
+            let asked = Asked {
+                fresh: true,
+                request: Some(request),
+                ..Asked::default()
+            };
+            return self.refresh(asked, now, jobs);
+        };
+        let found = self.status.as_ref().and_then(|read| {
+            read.accounts
+                .iter()
+                .find(|known| !known.unplaced && crate::present::glance_id(&known.id) == account)
+        });
+        let Some((found, qualified)) =
+            found.and_then(|found| Some((found, found.qualified.clone()?)))
+        else {
+            return self.answer_outside(request, Answered::Unknown);
+        };
+        let label = Key::parse(&qualified).label;
+        let refused = if found.signed_in {
+            Some(Answered::InUse { label })
+        } else if crate::present::needs_sign_in(found) {
+            Some(Answered::NeedsSignIn { label })
+        } else if !found.standing.switchable() {
+            Some(Answered::Unusable { label })
+        } else if self.switch_under_way().is_some() || self.sign_in_under_way() {
+            Some(Answered::Busy)
+        } else {
+            None
+        };
+        match refused {
+            Some(answered) => self.answer_outside(request, answered),
+            None => {
+                self.switch_asked(qualified, jobs);
+                self.outside_switch = Some(request);
+            }
+        }
+    }
+
+    fn answer_outside(&mut self, request: u64, answered: Answered) {
+        self.answered.push_back((request, answered));
+        while self.answered.len() > ANSWERS_KEPT {
+            self.answered.pop_front();
         }
     }
 
@@ -2680,6 +2793,7 @@ impl State {
             after_switch: asked.after_switch,
             saying: asked.saying,
             after_change: asked.after_change,
+            request: asked.request,
         };
         if let Some(at) = self.updated_ms
             && now.epoch_ms.saturating_sub(at) < older_than
@@ -2714,6 +2828,19 @@ impl State {
     fn over(&mut self, ticket: Ticket, now: Now) {
         if ticket.after_switch {
             self.switching = None;
+        }
+        if let Some(request) = ticket.request {
+            let answered = match &self.failure {
+                Some(failure) => Answered::Failed {
+                    message: failure.message.clone(),
+                },
+                None => Answered::Updated {
+                    at: self
+                        .updated_ms
+                        .map_or(now.epoch(), |ms| ms.div_euclid(1000)),
+                },
+            };
+            self.answer_outside(request, answered);
         }
         if ticket.after_change {
             self.change_over();
@@ -3004,7 +3131,10 @@ impl State {
                 // Nothing kept could be read: nothing was told before, as far as anyone knows,
                 // and the windows' records are held for this launch, never written.
                 Job::LoadKept => self.kept(Told::new(), None, None, now, jobs),
-                Job::KeepTold { .. } | Job::KeepPreferences { .. } | Job::Post { .. } => {}
+                Job::KeepTold { .. }
+                | Job::KeepPreferences { .. }
+                | Job::KeepGlance { .. }
+                | Job::Post { .. } => {}
                 // What it wrote is not known: a window waiting for it opens all the same, and
                 // the next write writes the records whole.
                 Job::KeepWindows { write, .. } => self.windows.written(write),
@@ -3560,6 +3690,10 @@ impl State {
                     self.switching = None;
                     // The app runs again, so a quit gives the copy to open again, if any.
                     self.reopen_after_switch = None;
+                    if let Some(request) = self.outside_switch.take() {
+                        let app = question.name;
+                        return self.answer_outside(request, Answered::AppOpen { app });
+                    }
                 }
                 self.drop_question();
                 self.quitting = Some(Quitting {
@@ -3721,8 +3855,17 @@ impl State {
                 front: false,
             });
         }
+        let outside = self.outside_switch.take();
+        let label = Key::parse(qualified).label;
         match done {
             Ok(done) => {
+                if let Some(request) = outside {
+                    let answered = Answered::Switched {
+                        tool: tool.to_owned(),
+                        label,
+                    };
+                    self.answer_outside(request, answered);
+                }
                 self.refused_by.remove(tool);
                 self.changes_seen += 1;
                 // Advice about this tool is about the account it has just left. Another
@@ -3754,6 +3897,9 @@ impl State {
             })) if code == "live_login_refused" => {
                 self.switching = None;
                 self.keep(&warnings, jobs);
+                if let Some(request) = outside {
+                    return self.answer_outside(request, Answered::Replace { label });
+                }
                 self.replacing = Some(Replacing {
                     qualified: qualified.to_owned(),
                     message,
@@ -3771,7 +3917,13 @@ impl State {
                 self.refused(tool, &refused);
                 // Nothing moved, so what the last switch said stands too.
                 self.keep(&refused.warnings, jobs);
-                self.present(refused);
+                match outside {
+                    Some(request) => {
+                        let message = refused.message;
+                        self.answer_outside(request, Answered::Failed { message });
+                    }
+                    None => self.present(refused),
+                }
             }
         }
     }

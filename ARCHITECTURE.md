@@ -426,6 +426,11 @@ keeps it is in the header of the module named.
   `app.lock` until the directory goes. Nothing writes it after, and a refusal before anything
   went starts the model again (`model/removing.rs`,
   `after_uninstall_nothing_writes_pitboards_directory_again`).
+- The glance for widgets and intents names each account by an id derived from its own, never
+  by an email, a token, a uuid, a path or a notice's lines, and is written only where the app
+  names a file and only once it changed. A request from outside does no more than a click in
+  the app, and one that needs a question only the app asks is refused in words
+  (`model/glancing.rs`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).

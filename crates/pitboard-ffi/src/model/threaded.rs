@@ -92,6 +92,7 @@ fn platform(apps: Arc<dyn AppControl>) -> Platform {
         local_time: Arc::new(Utc),
         earlier: None,
         windows: None,
+        glance: None,
     }
 }
 
@@ -201,6 +202,34 @@ fn after_uninstall_nothing_writes_pitboards_directory_again() {
     }
     model.shutdown();
     assert!(!world.pitboard_dir().exists());
+}
+
+// Through the lane of what the model keeps, into a folder it makes private where it is not there.
+#[test]
+fn the_glance_is_written_to_the_file_the_app_names() {
+    let world = World::new("glance");
+    world.enrolled("work", "here", 42.0);
+    let glance = world
+        .pitboard_dir()
+        .with_file_name("group")
+        .join("glance.json");
+    let told = Arc::new(Told::default());
+    let model = PitboardModel::over(
+        world.core(),
+        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Platform {
+            glance: Some(glance.clone()),
+            ..platform(StandInApps::new(&[], true))
+        },
+        QUICK,
+    );
+    model.send(Intent::Start);
+    told.until("the account read", shows("work"));
+    eventually("the glance written", || {
+        std::fs::read_to_string(&glance).is_ok_and(|text| text.contains(r#""name":"work""#))
+    });
+    assert!(model.snapshot().glance_revision > 0);
+    model.shutdown();
 }
 
 /// A change another front end makes, here a rename typed in a terminal, reaches the
@@ -1138,6 +1167,7 @@ fn model_telling_time(
             local_time: Arc::clone(clock) as Arc<dyn LocalTime>,
             earlier: None,
             windows: None,
+            glance: None,
         },
         cadence,
     );
@@ -1457,6 +1487,7 @@ fn model_posting(
             local_time: Arc::new(Utc),
             earlier: None,
             windows: None,
+            glance: None,
         },
         QUICK,
     );

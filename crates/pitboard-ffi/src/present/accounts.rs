@@ -368,7 +368,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     }
 }
 
-fn standing_of(account: &Account, switching: bool) -> AccountStanding {
+pub(crate) fn standing_of(account: &Account, switching: bool) -> AccountStanding {
     use status::Standing;
     match account.standing {
         _ if switching => AccountStanding::Switching,
@@ -667,7 +667,7 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
     windows.is_empty().then(|| account.email.clone())
 }
 
-fn limits_said(seen: &Seen, account: &Account) -> String {
+pub(crate) fn limits_said(seen: &Seen, account: &Account) -> String {
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
     // Nothing else of the account matters until the last limit it reached resets.
     let reached = (windows.iter())

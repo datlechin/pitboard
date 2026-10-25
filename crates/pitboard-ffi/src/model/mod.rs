@@ -49,6 +49,8 @@ mod cadence;
 #[cfg(test)]
 mod changing;
 #[cfg(test)]
+mod glancing;
+#[cfg(test)]
 mod keeping;
 #[cfg(test)]
 mod maintaining;
@@ -85,6 +87,7 @@ use crate::{AppCore, Warning};
 use lanes::Lanes;
 use state::{Cadence, Msg, Now, State};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -113,6 +116,9 @@ pub struct AppLaunch {
     /// runs, and no store is deleted.
     #[uniffi(default)]
     pub windows: Option<WindowsLaunch>,
+    // Where the glance is kept for widgets and intents: written only where the app names a path.
+    #[uniffi(default)]
+    pub glance: Option<String>,
 }
 
 /// Where the account windows' records are kept, and what this launch is to them.
@@ -400,6 +406,26 @@ pub enum Intent {
     ClearDownloads { store: String },
     /// Once `Snapshot::uninstall` was confirmed: nothing more is read or written until it ends.
     Uninstall,
+    /// From a widget, a control or an intent, which `Snapshot::answers` answers by `request`.
+    Outside { request: u64, ask: OutsideAsk },
+}
+
+/// What a widget, a control or an intent asks, never more than a click in the app does.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum OutsideAsk {
+    /// Switch to the account the glance names by `account`, its id there.
+    Switch {
+        account: String,
+    },
+    Refresh,
+}
+
+// How a request from outside ended, in words, kept for the ten newest.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OutsideAnswer {
+    pub request: u64,
+    pub done: bool,
+    pub said: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -625,6 +651,9 @@ pub struct Snapshot {
     pub uninstall: ItemOffer,
     pub removal: Option<RemovalShown>,
     pub welcome: WelcomeShown,
+    // one higher each time the glance changed, for an app to reload its widgets
+    pub glance_revision: u64,
+    pub answers: Vec<OutsideAnswer>,
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements
@@ -768,6 +797,7 @@ impl PitboardModel {
                     launch,
                     web_scheme: windows::WEB_SCHEME.into(),
                 }),
+                glance: launch.glance.map(PathBuf::from),
             },
             Cadence::APP,
         )
@@ -829,6 +859,7 @@ pub(crate) struct Platform {
     pub(crate) earlier: Option<EarlierPreferences>,
     /// Where the account windows' records are kept, for an app that keeps them.
     pub(crate) windows: Option<WindowsPlace>,
+    pub(crate) glance: Option<PathBuf>,
 }
 
 /// Where the account windows' records are kept, and the scheme their pages are on.
@@ -848,6 +879,9 @@ impl PitboardModel {
     ) -> Arc<PitboardModel> {
         let clock = Clock::starting();
         let mut state = State::new(cadence);
+        if platform.glance.is_some() {
+            state.glance_to_a_file();
+        }
         if let Some(place) = &platform.windows {
             state.windows.on(
                 pitboard_core::host::OS,
@@ -869,6 +903,7 @@ impl PitboardModel {
                 windows: platform
                     .windows
                     .map(|place| lanes::RecordsFile::of(place.launch)),
+                glance: platform.glance,
             },
             cadence,
             &mailbox,
@@ -977,6 +1012,12 @@ impl Actor {
             }
             let now = self.clock.now();
             for job in self.state.apply(msg, now) {
+                self.lanes.run(job);
+            }
+            let glance = self.state.glances().then(|| {
+                crate::present::glance(&self.state, now.epoch(), self.local_time.as_ref())
+            });
+            if let Some(job) = glance.and_then(|text| self.state.glanced(text)) {
                 self.lanes.run(job);
             }
             self.publish(now);

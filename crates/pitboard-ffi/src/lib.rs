@@ -40,9 +40,10 @@ pub use sites::{Site, SiteLink};
 mod model;
 pub use model::{
     AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Intent,
-    LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications, Pane,
-    PitboardModel, Place, PlatformError, ReadFailure, RunOutNotice, RunningSignIn, SettingsSection,
-    Sheet, Snapshot, Tip, WindowRequest, WindowsLaunch,
+    LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications,
+    OutsideAnswer, OutsideAsk, Pane, PitboardModel, Place, PlatformError, ReadFailure,
+    RunOutNotice, RunningSignIn, SettingsSection, Sheet, Snapshot, Tip, WindowRequest,
+    WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same

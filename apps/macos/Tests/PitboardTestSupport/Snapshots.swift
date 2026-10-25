@@ -102,5 +102,6 @@ package func snapshot(
             openAtLogin: WelcomeLogin(
                 title: "Open Pitboard at Login", on: false, note: "", link: nil),
             done: Choice(
-                title: "Continue", intent: .show(place: .accounts), enabled: true)))
+                title: "Continue", intent: .show(place: .accounts), enabled: true)),
+        glanceRevision: 0, answers: [])
 }
