@@ -541,3 +541,8 @@ The images:
   removes it after (runs 38821312770, 38922866517 and 38928930271).
 - Neither image holds Codex's `%ProgramData%\OpenAI\Codex`, Claude Code's
   `C:\Program Files\ClaudeCode` or its policy keys.
+
+The site's terminal:
+
+- RF-S1 reads Windows PowerShell 5.1's completion order, PSReadLine's keys and the layout of a
+  command not found, in run 40190429034: [The site's terminals](site.md).

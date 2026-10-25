@@ -25,5 +25,7 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
 - [One sign-in at a time](sign-in-lock.md): `flock` and std's process starts.
 - [The app model](app-model.md): a look beside the app's own changes, and the timers.
 - [The fixtures](fixtures.md): the worlds the apps' debug builds launch into.
+- [The site's terminals](site.md): the shells, prompts and keys usepitboard.com's terminals
+  draw, and the keys a browser keeps from a page.
 - [Not measured](not-measured.md): what nobody has measured about the tools, and what Pitboard
   does where it cannot know.
