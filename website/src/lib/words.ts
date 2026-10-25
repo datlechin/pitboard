@@ -607,3 +607,12 @@ const readable = (code: string) => capitalised(code.replaceAll("_", " "));
 export const changeVerb = (verb: string) => verbs[verb] ?? moreVerbs[verb] ?? readable(verb);
 export const changeOutcome = (outcome: string) =>
   outcomes[outcome] ?? moreOutcomes[outcome] ?? readable(outcome);
+
+// time.rs `moment`: "20:51" today, "Oct 14 05:53" on another day.
+export function moment(at: number, now: number): string {
+  const day = (t: number) => Math.floor((t + ZONE) / DAY);
+  const d = new Date((at + ZONE) * 1000);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const hm = `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+  return day(at) === day(now) ? hm : `${months[d.getUTCMonth()]} ${d.getUTCDate()} ${hm}`;
+}

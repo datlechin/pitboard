@@ -54,6 +54,12 @@ export interface Account {
   sessionExpiresAt?: number;
   // enrolled since the last read, so no usage is known yet
   unread?: boolean;
+  // what `pitboard doctor` names an account by: its uuid at Anthropic or OpenAI, a Claude Code
+  // account's organization, and the fingerprint of its login's refresh token (store.rs
+  // `fingerprint`), as crates/pitboard-core/src/doctor/example.rs gives them
+  uuid?: string;
+  org?: string;
+  login?: string;
 }
 
 // A five-hour period starts and resets on a ten-minute mark (concepts/usage#when-a-period-starts):
@@ -67,6 +73,9 @@ export const accounts: Account[] = [
     tool: "claude",
     label: "personal",
     email: "me@example.com",
+    uuid: "5f0c9a52-7d1e-4b8a-9c3f-2e6a1d4b8c07",
+    org: "8b2d4e61-3c5a-4f7e-a1d9-6c0e2b7f5a34",
+    login: "fcda3e5dfe80953d",
     plan: "Max 20x",
     limits: [
       { percent: 59, resetsAt: personalPeriodEnds, lengthSeconds: fiveHours },
@@ -79,6 +88,9 @@ export const accounts: Account[] = [
     tool: "claude",
     label: "work",
     email: "me@company.com",
+    uuid: "c3a7e1f9-5b2d-4e8c-b6a0-9d4f1e2c7b58",
+    org: "e4f8a2c6-1d7b-4a3e-9f5c-0b8d6e2a4c91",
+    login: "7f344b8dffee70ba",
     plan: "Max 20x",
     limits: [
       { percent: 12, resetsAt: at("2026-10-13T23:50:00"), lengthSeconds: fiveHours },
@@ -91,6 +103,8 @@ export const accounts: Account[] = [
     tool: "codex",
     label: "main",
     email: "me@example.com",
+    uuid: "a1e5c9d3-6f2b-4c8a-8e7d-3b0f5a9c1e26",
+    login: "a551afc0bc23fb53",
     plan: "Pro",
     limits: [{ percent: 7, resetsAt: at("2026-10-19T15:00:00"), lengthSeconds: WEEK }],
   },
@@ -99,6 +113,8 @@ export const accounts: Account[] = [
     tool: "codex",
     label: "spare",
     email: "me@company.com",
+    uuid: "d7b3f1a5-9c4e-4e2a-a8f6-1c5e9b3d7f40",
+    login: "726500ce1cf2dd6b",
     plan: "Plus",
     // nothing used, so no period runs: it resets five hours from the reading
     limits: [{ percent: 0, resetsAt: at("2026-10-14T01:50:00"), lengthSeconds: fiveHours }],

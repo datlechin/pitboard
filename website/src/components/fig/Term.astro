@@ -1,10 +1,13 @@
 ---
 // A session in the terminal of each system it runs on, and in macOS's on a system it does not; each
-// terminal is a shell of its own, its ids starting `prefix` and its platform.
+// terminal is a shell of its own, its ids starting `prefix` and its platform. Its last line is the
+// shell's prompt: a native field over the cursor each terminal draws, which live/term.ts runs.
+import Prompt from "./Prompt.astro";
 import LinuxTerminal from "./linux/Terminal.astro";
 import MacTerminal from "./mac/Terminal.astro";
 import WinTerminal from "./win/Terminal.astro";
 import { printed, type Session } from "../../data/sessions.ts";
+import { siteData } from "../../lib/data.ts";
 import { platforms, shownOn, type Platform } from "../../lib/platform.ts";
 
 interface Props {
@@ -12,55 +15,90 @@ interface Props {
   session: Session;
 }
 const { prefix, session } = Astro.props;
-// each shell's prompt, and the cursor at it: Windows Terminal's is a bar
+const { downloads } = await siteData();
+// each shell's prompt, and the cursor at it: Terminal's and Ptyxis's a block the text shows
+// through inverted, Windows Terminal's a bar. Out of focus, each is hollow.
 const prompts: Record<Platform, [string, string]> = {
-  macos: ['<span class="text-mac-term-dim">%</span>', '<span class="bg-mac-term-dim"> </span>'],
+  macos: [
+    '<span class="text-mac-term-dim">%</span>',
+    "bg-mac-term-dim text-mac-term-bg live:group-not-focus-within:bg-transparent live:group-not-focus-within:text-mac-term-text live:group-not-focus-within:outline-1 live:group-not-focus-within:-outline-offset-1 live:group-not-focus-within:outline-mac-term-dim",
+  ],
   windows: [
     '<span class="text-win-term-dim">PS C:\\Users\\me&gt;</span>',
-    '<span class="inline-block h-20 w-2 bg-win-term-text align-top"></span>',
+    "inline-block h-20 w-2 bg-win-term-text align-top live:group-not-focus-within:w-[1ch] live:group-not-focus-within:bg-transparent live:group-not-focus-within:outline-1 live:group-not-focus-within:-outline-offset-1 live:group-not-focus-within:outline-win-term-text",
   ],
   linux: [
     '<span class="text-linux-term-dim">$</span>',
-    '<span class="bg-linux-term-text"> </span>',
+    "bg-linux-term-text text-linux-term-bg live:group-not-focus-within:bg-transparent live:group-not-focus-within:text-linux-term-text live:group-not-focus-within:outline-1 live:group-not-focus-within:-outline-offset-1 live:group-not-focus-within:outline-linux-term-text",
   ],
 };
 const drawn = platforms.filter((p) => !session.on || session.on.includes(p));
-// the command typed at the prompt, what it printed, and the prompt again with the cursor
-const lines = (p: Platform) => {
-  const [prompt, cursor] = prompts[p];
-  return [
-    `${prompt} ${session.command}`,
-    ...printed(session, p).map((line) => line || " "),
-    `${prompt} ${cursor}`,
-  ];
-};
+// the command typed at the prompt and what it printed
+const lines = (p: Platform) => [
+  `${prompts[p][0]} ${session.command}`,
+  ...printed(session, p).map((line) => line || " "),
+];
 const desk = "desk flex min-h-0 items-center justify-center";
+const version = (p: Platform) => downloads[p].release.version;
+// question 18: the way out of a field that takes Tab, for a screen reader to say
+const keys = "Tab completes a command. Escape, then Tab, moves on.";
 ---
 
 <div class={shownOn("macos", drawn)} data-drawing="cli macos">
-  <pb-term id={`${prefix}-macos`} class:list={[desk, "py-20"]} inert data-output>
+  <pb-term
+    id={`${prefix}-macos`}
+    class:list={[desk, "py-20"]}
+    inert
+    data-output
+    data-command={session.command}
+    data-version={version("macos")}
+  >
     <MacTerminal title={session.title} id={`${prefix}-macos`} solo>
       {lines("macos").map((line) => (
         <div set:html={line} />
       ))}
+      <Prompt id={`${prefix}-macos`} ps={prompts.macos[0]} cursor={prompts.macos[1]} />
     </MacTerminal>
+    <span id={`${prefix}-macos-keys`} hidden>{keys}</span>
   </pb-term>
 </div>
 {drawn.includes("windows") && <div class={shownOn("windows", drawn)} data-drawing="cli windows">
-  <pb-term id={`${prefix}-windows`} class:list={[desk, "py-24 desk-px-820"]} inert data-output>
+  <pb-term
+    id={`${prefix}-windows`}
+    class:list={[desk, "py-24 desk-px-820"]}
+    inert
+    data-output
+    data-command={session.command}
+    data-version={version("windows")}
+  >
     <WinTerminal title="Windows PowerShell" id={`${prefix}-windows`} solo>
       {lines("windows").map((line) => (
         <div set:html={line} />
       ))}
+      <Prompt id={`${prefix}-windows`} ps={prompts.windows[0]} cursor={prompts.windows[1]} />
     </WinTerminal>
+    <span id={`${prefix}-windows-keys`} hidden>{keys}</span>
   </pb-term>
 </div>}
 {drawn.includes("linux") && <div class={shownOn("linux", drawn)} data-drawing="cli linux">
-  <pb-term id={`${prefix}-linux`} class:list={[desk, "py-24 desk-px-780"]} inert data-output>
+  <pb-term
+    id={`${prefix}-linux`}
+    class:list={[desk, "py-24 desk-px-780"]}
+    inert
+    data-output
+    data-command={session.command}
+    data-version={version("linux")}
+  >
     <LinuxTerminal title={session.title} id={`${prefix}-linux`}>
       {lines("linux").map((line) => (
         <div set:html={line} />
       ))}
+      <Prompt id={`${prefix}-linux`} ps={prompts.linux[0]} cursor={prompts.linux[1]} />
     </LinuxTerminal>
+    <span id={`${prefix}-linux-keys`} hidden>{keys}</span>
   </pb-term>
 </div>}
+
+<script>
+  import "../../scripts/live/term.ts";
+</script>

@@ -1,12 +1,13 @@
 ---
 // Windows Terminal in its dark theme and the Campbell scheme, Cascadia Mono at 12 point and alone 80
-// columns wide; intense text is bright. Output colours spans g, y, r, dim.
+// columns wide; intense text is bright. Output colours spans g, y, r, dim, and br bright red.
 import CaptionButtons from "./CaptionButtons.astro";
 
 interface Props {
   // what the tab says, unless a `title` slot draws it
   title?: string;
-  // a shell's window keeps its output as a log its tab names
+  // a shell's window keeps its output as a log its tab names; live, it grows with its output to
+  // Windows Terminal's 30 rows, then scrolls
   id?: string;
   solo?: boolean;
   class?: string;
@@ -40,8 +41,10 @@ const button = "flex h-32 items-center justify-center";
   </div>
   <div
     class:list={[
-      "flex min-h-0 flex-1 flex-col overflow-hidden p-8 font-win-mono text-u-16/20 whitespace-pre text-win-term-text ligatures-none *:min-h-20 [&_.dim]:text-win-term-dim [&_.g]:text-win-term-green [&_.r]:text-win-term-red [&_.y]:text-win-term-yellow [&_b]:font-normal [&_b]:text-win-term-bright",
-      solo ? "justify-start *:whitespace-pre-wrap" : "justify-end",
+      "flex min-h-0 flex-1 flex-col overflow-hidden p-8 font-win-mono text-u-16/20 whitespace-pre text-win-term-text ligatures-none *:min-h-20 [&_.dim]:text-win-term-dim [&_.g]:text-win-term-green [&_.r]:text-win-term-red [&_.y]:text-win-term-yellow [&_b]:font-normal [&_b]:text-win-term-bright [&_.br]:text-win-term-bright-red [&_b.r]:text-win-term-bright-red",
+      solo
+        ? "justify-start *:whitespace-pre-wrap live:max-h-[calc(30lh+var(--spacing)*8)] live:min-h-(--min) live:overflow-y-auto live:select-text"
+        : "justify-end",
     ]}
     role={id ? "log" : undefined}
     aria-labelledby={id && `${id}-title`}

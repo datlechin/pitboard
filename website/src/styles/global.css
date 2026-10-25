@@ -239,6 +239,7 @@
   --color-win-term-green: #13a10e;
   --color-win-term-yellow: #c19c00;
   --color-win-term-red: #c50f1f;
+  --color-win-term-bright-red: #e74856;
 
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
