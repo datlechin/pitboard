@@ -18,7 +18,7 @@ use crate::present::words;
 use crate::present::{
     AccountDetail, AccountItem, AccountMenuShown, AccountStanding, AccountsShown, ActionKind,
     Choice, Footing, ItemOffer, LimitKind, MenuEntry, NoteKind, NoticeAction, PanelNotice,
-    Question, RowEnd, SetupLink, SetupStep, Severity, WindowOffer, present,
+    Question, RowEnd, SetupStep, Severity, WindowOffer, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::{OS, Os};
@@ -2863,37 +2863,22 @@ fn an_empty_machine_is_asked_to_sign_in_once() {
     assert_eq!(footing(Vec::new()), Footing::NoOneSignedIn);
 }
 
-/// A login with no name cannot be parked, so this is the step between signing in and
-/// Pitboard being able to do anything at all. Until it has one it is called by its email
-/// address, which is how the person knows it.
+// Its row adds it, so no tip above the accounts asks.
 #[test]
-fn an_account_signed_in_without_a_name_is_asked_for_one() {
+fn an_account_signed_in_without_a_name_is_added_from_its_row() {
     let (model, _) = reading(vec![account(None).signed_in().uuid("a").build()]);
     let shown = model.shown();
+    assert_eq!(shown.footing, Footing::Ready);
+    assert_eq!(shown.setup, None);
+    let row = &shown.sections[0].accounts[0];
     assert_eq!(
-        shown.footing,
-        Footing::Unnamed {
-            provider: "claude".into(),
-            email: "a@example.com".into()
-        }
-    );
-    assert_eq!(
-        shown.sections[0].accounts[0].spoken,
+        row.spoken,
         words::row_spoken("a@example.com", None, true, false)
     );
     assert_eq!(
-        shown.setup,
-        Some(SetupStep {
-            title: words::GIVE_IT_A_NAME.into(),
-            detail: words::unnamed_detail("a@example.com", None),
-            actions: vec![Choice {
-                title: words::name_account(None),
-                intent: Intent::Enrol {
-                    provider: "claude".into(),
-                },
-                enabled: true,
-            }],
-            link: None,
+        row.action.as_ref().map(|action| &action.intent),
+        Some(&Intent::Enrol {
+            provider: "claude".into()
         })
     );
 }
@@ -2937,7 +2922,6 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
                     enabled: true,
                 },
             ],
-            link: None,
         })
     );
 }
@@ -2969,7 +2953,6 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
                     enabled: true,
                 },
             ],
-            link: None,
         })
     );
     let windows = windows.expect("a step");
@@ -3043,7 +3026,6 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
                     enabled: true,
                 },
             ],
-            link: None,
         })
     );
 
@@ -3099,48 +3081,15 @@ fn using_codex_adds_the_login_it_stores_read_only_once_asked() {
     assert_eq!(shown.sheet_text.expect("the sheet").name, "acme");
 }
 
-/// The app opens at login only where somebody turned that on, and switches, notifies and
-/// warms up only while it is open, so the step after a second account asks, in each system's
-/// words. Windows puts a new icon behind the taskbar's arrow and lets nothing bring it out but
-/// its own settings, so its step says so and links them.
+// The welcome and Settings offer opening at login, so no tip does.
 #[test]
-fn an_app_that_does_not_open_at_login_is_asked_to() {
+fn no_tip_asks_to_open_at_login() {
     let (mut model, _) = reading(vec![
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ]);
     model.send(Intent::OpensAtLogin { on: false });
-    assert_eq!(model.shown().footing, Footing::NotOpenedAtLogin);
-    let step = |os: Os, link: Option<SetupLink>| SetupStep {
-        title: words::open_at_login(os).0.into(),
-        detail: words::open_at_login(os).1.into(),
-        actions: vec![
-            Choice {
-                title: words::turn_on_at_login(os),
-                intent: Intent::OpensAtLogin { on: true },
-                enabled: true,
-            },
-            Choice {
-                title: words::not_now(os),
-                intent: Intent::DeclineTip {
-                    tip: Tip::OpenAtLogin,
-                },
-                enabled: true,
-            },
-        ],
-        link,
-    };
-    assert_eq!(model.on_a_mac().setup, Some(step(Os::MacOs, None)));
-    assert_eq!(
-        model.on_windows().setup,
-        Some(step(
-            Os::Windows,
-            Some(SetupLink {
-                title: words::TASKBAR_SETTINGS.into(),
-                link: "ms-settings:taskbar".into(),
-            })
-        ))
-    );
+    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
 }
 
 /// Mid-switch, and a login signed out from somewhere else, both leave accounts enrolled with

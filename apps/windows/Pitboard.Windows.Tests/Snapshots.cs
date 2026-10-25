@@ -31,7 +31,11 @@ internal static class Snapshots
                     Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."),
                 Held: []),
             Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
-            Removal: null);
+            Removal: null,
+            Welcome: new WelcomeShown(
+                Title: "Welcome to Pitboard", Lines: [], Tools: [],
+                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: "", Link: null),
+                Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)));
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(

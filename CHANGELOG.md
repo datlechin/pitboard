@@ -43,13 +43,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app's icon shows how much of its limit the account in use has left, none before it
   has a reading, and Windows' warning symbol while its menu opens on something that needs
   attention.
-- The app's setup tips go on past a second account: opening Pitboard at login, then what
-  happens when a limit reaches 95%, each with **Not Now**.
+- The app's setup tips go on past a second account to what happens when a limit reaches 95%,
+  with **Not Now**.
 - The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
   enrolled, and adds the account Codex is signed in to once you choose it, where a machine with
   Claude Code signed in to nothing said **No Accounts**.
-- The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
-  to Taskbar settings.
 - The macOS app's **Settings** take the share a limit is reached at in a field beside its
   stepper.
 - The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
@@ -133,6 +131,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- The app no longer shows a tip to name the account a tool is signed in to: its row offers
+  **Name…**.
 - The app no longer marks a limit's pace or says when a limit runs out at it: `pitboard status`
   still shows both.
 - The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**

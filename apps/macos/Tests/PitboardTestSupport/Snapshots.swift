@@ -96,5 +96,11 @@ package func snapshot(
         accountWindows: windows,
         uninstall: ItemOffer(
             title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
-        removal: nil)
+        removal: nil,
+        welcome: WelcomeShown(
+            title: "Welcome to Pitboard", lines: [], tools: [],
+            openAtLogin: WelcomeLogin(
+                title: "Open Pitboard at Login", on: false, note: "", link: nil),
+            done: Choice(
+                title: "Continue", intent: .show(place: .accounts), enabled: true)))
 }

@@ -1209,16 +1209,18 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
     }
 }
 
-/// The login in use with no name is offered one, as AccountsWindowTests.swift's
-/// testNamingTheAccountInUse reads it, and naming it lists it.
+/// The login in use with no name is added from its row, as AccountsWindowTests.swift's
+/// testNamingTheAccountInUse reads it, and adding it lists it.
 #[test]
 fn the_login_in_use_is_offered_a_name() {
     let launched = made(World::Unnamed);
     let (model, told) = started(&launched);
     let shown = told.last_where("the accounts read", read_in);
     assert_eq!(
-        shown.setup.as_ref().map(|step| step.title.as_str()),
-        Some(words::GIVE_IT_A_NAME)
+        (shown.sections[0].accounts[0].action.as_ref()).map(|action| &action.intent),
+        Some(&Intent::Enrol {
+            provider: "claude".into()
+        })
     );
     model.send(Intent::Enrol {
         provider: "claude".into(),

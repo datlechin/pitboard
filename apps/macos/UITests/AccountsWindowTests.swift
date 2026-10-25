@@ -290,9 +290,9 @@ final class AccountsWindowTests: FixtureTestCase {
     func testNamingTheAccountInUse() {
         let app = launch(.unnamed)
         app.openWindow()
-        let tip = app.control("setup.unnamed")
-        XCTAssertTrue(tip.waitForExistence(timeout: 5))
-        tip.buttons["setup.action.enrol"].click()
+        let add = app.buttons["account.action"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         XCTAssertEqual(name.value as? String, "work", "the name dana@work.example suggests")
@@ -352,18 +352,6 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
         XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
-    }
-
-    /// macOS can refuse the login item, which Settings says under General, so the tip opens
-    /// it there rather than seeming to do nothing.
-    @MainActor
-    func testOpenAtLoginMacOSRefusesOpensTheSettings() {
-        let app = launch(.twoTools, environment: ["PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES": "1"])
-        app.openWindow()
-        let tip = app.control("setup.notOpenedAtLogin")
-        XCTAssertTrue(tip.waitForExistence(timeout: 5))
-        tip.buttons["setup.action.opensAtLogin"].click()
-        XCTAssertTrue(app.windows[Words.general].waitForExistence(timeout: 5))
     }
 
     @MainActor

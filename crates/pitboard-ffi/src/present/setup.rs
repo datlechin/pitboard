@@ -4,10 +4,9 @@
 use super::accounts::in_order;
 use super::notices::INSTALL_CLAUDE_CODE;
 use super::words;
-use super::{AccountsShown, Choice, Footing, Seen, SetupLink, SetupStep};
+use super::{AccountsShown, Choice, Footing, Seen, SetupStep};
 use crate::model::state::in_its_app;
 use crate::model::{Intent, Sheet, Tip};
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 
 /// How far along setting Pitboard up this machine is, worked out across every tool.
@@ -34,12 +33,6 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
             Footing::CodexUnused
         } else {
             Footing::NoOneSignedIn
-        };
-    }
-    if let Some(login) = seen.unnamed().next() {
-        return Footing::Unnamed {
-            provider: login.provider.clone(),
-            email: login.email.clone(),
         };
     }
     // Not before the preferences are in, which say which tools somebody declined it for: a
@@ -72,9 +65,6 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
         return Footing::CodexUnused;
     }
     let preferences = &seen.state.preferences;
-    if seen.state.opens_at_login == Some(false) && !preferences.declined(Tip::OpenAtLogin) {
-        return Footing::NotOpenedAtLogin;
-    }
     let switching = accounts
         .iter()
         .filter(|account| account.provider == ProviderId::Claude.code() && account.label.is_some())
@@ -104,18 +94,6 @@ fn codex_unused(seen: &Seen) -> bool {
 /// has usually never run a command and may never want to.
 pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
     match footing {
-        Footing::Unnamed { provider, email } => Some(SetupStep {
-            title: words::GIVE_IT_A_NAME.into(),
-            detail: words::unnamed_detail(email, seen.tool_if_shown(provider).as_deref()),
-            actions: vec![Choice {
-                title: words::name_account(None),
-                intent: Intent::Enrol {
-                    provider: provider.clone(),
-                },
-                enabled: true,
-            }],
-            link: None,
-        }),
         Footing::OnlyOne { provider, label } => {
             let in_its_app = in_its_app(provider);
             let named = if in_its_app {
@@ -147,7 +125,6 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                         enabled: true,
                     },
                 ],
-                link: None,
             })
         }
         Footing::CodexUnused => Some(SetupStep {
@@ -163,24 +140,6 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                 },
                 not_now(seen, Tip::UseCodex),
             ],
-            link: None,
-        }),
-        Footing::NotOpenedAtLogin => Some(SetupStep {
-            title: words::open_at_login(seen.os).0.into(),
-            detail: words::open_at_login(seen.os).1.into(),
-            actions: vec![
-                Choice {
-                    title: words::turn_on_at_login(seen.os),
-                    intent: Intent::OpensAtLogin { on: true },
-                    enabled: true,
-                },
-                not_now(seen, Tip::OpenAtLogin),
-            ],
-            // The app cannot bring its own icon out of the overflow.
-            link: (seen.os == Os::Windows).then(|| SetupLink {
-                title: words::TASKBAR_SETTINGS.into(),
-                link: "ms-settings:taskbar".into(),
-            }),
         }),
         Footing::AtLimitUnchosen => Some(SetupStep {
             title: words::SWITCH_BEFORE_RUNNING_OUT.into(),
@@ -194,7 +153,6 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                 },
                 not_now(seen, Tip::AtLimit),
             ],
-            link: None,
         }),
         Footing::NoClaudeCode | Footing::NoOneSignedIn | Footing::Ready => None,
     }

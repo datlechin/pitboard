@@ -53,14 +53,12 @@ extension XCUIApplication {
         XCTAssertTrue(windows.firstMatch.waitForExistence(timeout: 5))
     }
 
-    // The tips past a second account: opening at login, then what happens at a limit.
+    // The tip past a second account: what happens at a limit.
     func putTheTipsAway() {
-        for footing in ["notOpenedAtLogin", "atLimitUnchosen"] {
-            let tip = control("setup.\(footing)")
-            XCTAssertTrue(tip.waitForExistence(timeout: 5), footing)
-            tip.buttons["setup.action.declineTip"].click()
-            XCTAssertTrue(tip.waitForNonExistence(timeout: 5), footing)
-        }
+        let tip = control("setup.atLimitUnchosen")
+        XCTAssertTrue(tip.waitForExistence(timeout: 5))
+        tip.buttons["setup.action.declineTip"].click()
+        XCTAssertTrue(tip.waitForNonExistence(timeout: 5))
     }
 
     func openSettings() {

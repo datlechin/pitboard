@@ -2196,9 +2196,9 @@ impl State {
     ///
     /// The preferences read are the app's from now on, with any "Not Now" said meanwhile, and
     /// kept at once where they did not come from their file, so the earlier store is taken
-    /// once. The first time the app has ever been opened, the window opens, once. Where they
+    /// once. The first time the app has ever been opened, the welcome opens, once. Where they
     /// could not be read, `None`, nothing is kept in place of what may be there, then or
-    /// later, and the window does not open as though for the first time.
+    /// later, and the welcome does not open as though for the first time.
     ///
     /// With switching by itself on, the core's look waits for the launch's first read, which
     /// asks Anthropic for the reading it judges by: before it, the readings may be an older
@@ -2223,7 +2223,7 @@ impl State {
                 .extend(self.preferences.second_account_declined.iter().cloned());
             if !preferences.has_been_seen {
                 preferences.has_been_seen = true;
-                self.show(None);
+                self.show(Some(Place::Welcome));
             }
             if preferences != read || !from_file {
                 jobs.push(Job::KeepPreferences {

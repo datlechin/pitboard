@@ -188,8 +188,7 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "unnamed");
         launched.OpenWindow();
 
-        launched.Element("setup.unnamed");
-        launched.Invoke("setup.action.enrol");
+        launched.Invoke("account.action");
         Assert.AreEqual("work", launched.Field("sheet.name").Text, "the name dana@work.example suggests");
         launched.Row("claude/work");
         launched.Answer("sheet", "PrimaryButton");

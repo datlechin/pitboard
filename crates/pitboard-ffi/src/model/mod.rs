@@ -71,13 +71,15 @@ mod threaded;
 #[cfg(test)]
 mod warming;
 #[cfg(test)]
+mod welcoming;
+#[cfg(test)]
 mod windowing;
 
 use crate::account_windows::AlertText;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
     ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, RemovalShown, SetupStep,
-    SheetText, SigningInText, StowText, WindowQuestion, present,
+    SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
 };
 use crate::{AppCore, Warning};
 use lanes::Lanes;
@@ -403,7 +405,6 @@ pub enum Intent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Tip {
     UseCodex,
-    OpenAtLogin,
     AtLimit,
 }
 
@@ -623,6 +624,7 @@ pub struct Snapshot {
     // Uninstall Pitboard…, with its question
     pub uninstall: ItemOffer,
     pub removal: Option<RemovalShown>,
+    pub welcome: WelcomeShown,
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements

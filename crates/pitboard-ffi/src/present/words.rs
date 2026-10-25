@@ -1048,23 +1048,12 @@ fn readable(code: &str) -> String {
     capitalised(&code.replace('_', " "))
 }
 
-pub(crate) const GIVE_IT_A_NAME: &str = "Give this account a name";
-
 // `tool`: the tool named, where the account's is not the only one shown.
 pub(crate) fn add_a_second(tool: Option<&str>) -> String {
     match tool {
         Some(tool) => format!("Add a second {tool} account"),
         None => "Add a second account".into(),
     }
-}
-
-// `tool`: the tool named, where the account's is not the only one shown.
-pub(crate) fn unnamed_detail(email: &str, tool: Option<&str>) -> String {
-    let to = tool.map(|tool| format!(" to {tool}")).unwrap_or_default();
-    format!(
-        "{email} is signed in{to}. Pitboard parks logins under a name you choose, and can’t park \
-         this one until it has one."
-    )
 }
 
 // `tool`: as `add_a_second` names it. `app`: where its logins are signed in to inside an app.
@@ -1095,7 +1084,7 @@ pub(crate) fn add_codex_account(os: Os) -> String {
     titled(os, "Add Codex Account…", "Add Codex account…")
 }
 
-// The tip to open at login: its title, and what it says.
+// The welcome's switch to open at login: its title, and what it says.
 pub(crate) fn open_at_login(os: Os) -> (&'static str, &'static str) {
     match os {
         Os::Windows => (
@@ -1104,14 +1093,41 @@ pub(crate) fn open_at_login(os: Os) -> (&'static str, &'static str) {
              arrow at the end of the taskbar, and Taskbar settings can keep it in view.",
         ),
         Os::MacOs | Os::Linux => (
-            "Open Pitboard at login",
+            "Open Pitboard at Login",
             "Pitboard watches your limits only while it’s open.",
         ),
     }
 }
 
-pub(crate) fn turn_on_at_login(os: Os) -> String {
-    titled(os, "Open at Login", "Turn on")
+pub(crate) const WELCOME: &str = "Welcome to Pitboard";
+
+// `tools`: "Claude Code, Codex and Claude Desktop".
+pub(crate) fn welcome_says(tools: &str) -> String {
+    format!(
+        "Pitboard switches {tools} between your own accounts, and shows how much of each limit \
+         you’ve used."
+    )
+}
+
+pub(crate) fn where_it_lives(os: Os) -> &'static str {
+    match os {
+        Os::Windows => "Pitboard’s icon is in the notification area. Select ^ to find it.",
+        Os::MacOs | Os::Linux => "Pitboard lives in the menu bar.",
+    }
+}
+
+pub(crate) fn welcome_done(os: Os) -> String {
+    titled(os, "Continue", "Get started")
+}
+
+pub(crate) const ADDED: &str = "Added";
+
+pub(crate) const ADD: &str = "Add";
+
+pub(crate) const ADD_ASKING: &str = "Add…";
+
+pub(crate) fn sign_in_asking(os: Os) -> String {
+    titled(os, "Sign In…", "Sign in…")
 }
 
 pub(crate) const TASKBAR_SETTINGS: &str = "Taskbar settings";
@@ -3680,17 +3696,6 @@ mod tests {
     fn setting_up_is_said_in_these_words() {
         let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
-        assert_eq!(GIVE_IT_A_NAME, "Give this account a name");
-        assert_eq!(
-            unnamed_detail("u@example.com", None),
-            "u@example.com is signed in. Pitboard parks logins under a name you choose, and \
-             can’t park this one until it has one."
-        );
-        assert_eq!(
-            unnamed_detail("u@example.com", Some("Codex")),
-            "u@example.com is signed in to Codex. Pitboard parks logins under a name you choose, \
-             and can’t park this one until it has one."
-        );
         assert_eq!(
             only_one("work", None, None),
             "work is the only account Pitboard knows, so there’s nothing to switch to. Adding \
@@ -3719,7 +3724,7 @@ mod tests {
         assert_eq!(
             open_at_login(Os::MacOs),
             (
-                "Open Pitboard at login",
+                "Open Pitboard at Login",
                 "Pitboard watches your limits only while it’s open."
             )
         );
@@ -3731,7 +3736,23 @@ mod tests {
                  the arrow at the end of the taskbar, and Taskbar settings can keep it in view."
             )
         );
-        assert_eq!(both(&turn_on_at_login), pair("Open at Login", "Turn on"));
+        assert_eq!(WELCOME, "Welcome to Pitboard");
+        assert_eq!(
+            welcome_says("Claude Code and Codex"),
+            "Pitboard switches Claude Code and Codex between your own accounts, and shows how \
+             much of each limit you’ve used."
+        );
+        assert_eq!(
+            (where_it_lives(Os::MacOs), where_it_lives(Os::Windows)),
+            (
+                "Pitboard lives in the menu bar.",
+                "Pitboard’s icon is in the notification area. Select ^ to find it."
+            )
+        );
+        assert_eq!(both(&welcome_done), pair("Continue", "Get started"));
+        assert_eq!(ADDED, "Added");
+        assert_eq!((ADD, ADD_ASKING), ("Add", "Add…"));
+        assert_eq!(both(&sign_in_asking), pair("Sign In…", "Sign in…"));
         assert_eq!(TASKBAR_SETTINGS, "Taskbar settings");
         assert_eq!(SWITCH_BEFORE_RUNNING_OUT, "Switch before a limit runs out");
         assert_eq!(

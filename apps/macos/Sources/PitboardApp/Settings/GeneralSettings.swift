@@ -30,6 +30,7 @@ struct GeneralSettings: View {
                 }
                 if let failed = openAtLogin.failed {
                     Text(failed).explanatory()
+                        .accessibilityIdentifier("settings.openAtLoginFailed")
                 }
                 if notifications.off {
                     LabeledContent {

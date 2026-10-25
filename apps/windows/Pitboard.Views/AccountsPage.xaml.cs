@@ -49,8 +49,6 @@ public sealed partial class AccountsPage : Page
 
     public static string SetupGlyph(Footing footing) => footing switch
     {
-        Footing.Unnamed => Glyphs.Name,
-        Footing.NotOpenedAtLogin => Glyphs.Power,
         Footing.AtLimitUnchosen => Glyphs.Limits,
         _ => Glyphs.Switch,
     };
@@ -122,33 +120,8 @@ public sealed partial class AccountsPage : Page
                 button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
             }
 
-            button.Click += (_, _) => Choose(choice.Intent);
+            button.Click += (_, _) => ViewModel.Send(choice.Intent);
             SetupChoices.Children.Add(button);
-        }
-
-        if (step.Link is { } link)
-        {
-            var opens = new HyperlinkButton { Content = link.Title };
-            AutomationProperties.SetAutomationId(opens, "setup.link");
-            opens.Click += (_, _) => ViewModel.OpenSetupLink();
-            SetupChoices.Children.Add(opens);
-        }
-    }
-
-    // Starting at sign-in is Windows': the app turns it on, and says what Windows has. A refusal is said in Settings.
-    private void Choose(Intent intent)
-    {
-        if (intent is Intent.OpensAtLogin opens)
-        {
-            Context.StartAtSignIn.Set(opens.On);
-            if (Context.StartAtSignIn.Failed is not null)
-            {
-                Context.ShowSettings();
-            }
-        }
-        else
-        {
-            ViewModel!.Send(intent);
         }
     }
 

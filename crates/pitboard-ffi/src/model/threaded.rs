@@ -1281,9 +1281,8 @@ fn adding_the_login_signed_in_now_enrols_it_and_names_it_after() {
     let model = model(&world.core(), &told);
     model.send(Intent::Start);
     told.until("the login read", |told| {
-        told.last().is_some_and(|last| {
-            !last.reading && matches!(last.footing, crate::Footing::Unnamed { .. })
-        })
+        told.last()
+            .is_some_and(|last| !last.reading && !last.sections.is_empty())
     });
     model.send(Intent::Enrol {
         provider: "claude".into(),
@@ -1408,9 +1407,8 @@ fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() 
     let adding = model(&world.core(), &told);
     adding.send(Intent::Start);
     told.until("the login read", |told| {
-        told.last().is_some_and(|last| {
-            read_in(last) && matches!(last.footing, crate::Footing::Unnamed { .. })
-        })
+        told.last()
+            .is_some_and(|last| read_in(last) && !last.sections.is_empty())
     });
     let enrol = || {
         adding.send(Intent::Enrol {

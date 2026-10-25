@@ -4,14 +4,11 @@ import SwiftUI
 struct AccountsPane: View {
     let model: AppModel
     let windows: AccountWindows
-    let openAtLogin: OpenAtLogin
     @State private var selection: String?
     /// A question the model asks before something that cannot be undone, and what to send
     /// once it is answered.
     @State private var asking: Asking?
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
-    @AppStorage(DefaultsKey.settingsTab) private var settingsTab = SettingsView.Tab.general
 
     var body: some View {
         content
@@ -118,19 +115,7 @@ struct AccountsPane: View {
                     .selectionDisabled()
             }
             if let step = model.setup {
-                SetupTip(step: step, footing: model.footing) { intent in
-                    // The login item is macOS's: the app turns it on, and says what macOS has,
-                    // and why it refused, in General.
-                    if case .opensAtLogin(let on) = intent {
-                        openAtLogin.set(on)
-                        if openAtLogin.failed != nil {
-                            settingsTab = .general
-                            openSettings()
-                        }
-                    } else {
-                        model.send(intent)
-                    }
-                }
+                SetupTip(step: step, footing: model.footing) { model.send($0) }
             }
             ForEach(model.sections, id: \.id) { section in
                 // A heading per tool once there is more than one, and no section at all
@@ -237,10 +222,6 @@ private struct SetupTip: View {
                                 .accessibilityIdentifier(identifier)
                         }
                     }
-                    if let link = step.link, let url = URL(string: link.link) {
-                        Link(link.title, destination: url)
-                            .accessibilityIdentifier("setup.link")
-                    }
                 }
             }
             Spacer(minLength: 0)
@@ -253,8 +234,6 @@ private struct SetupTip: View {
 
     private var symbol: String {
         switch footing {
-        case .unnamed: "tag"
-        case .notOpenedAtLogin: "power"
         case .atLimitUnchosen: Symbol.limits
         default: Symbol.switchAccount
         }

@@ -35,6 +35,7 @@ mod notices;
 mod removal;
 mod setup;
 mod sheets;
+mod welcome;
 mod windows;
 pub(crate) mod words;
 
@@ -49,6 +50,7 @@ pub use machine::{
 pub use removal::RemovalShown;
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
+pub use welcome::{WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool};
 pub use windows::{
     AccountWindowsShown, DownloadShown, DownloadState, LinkPicker, OpenWindow, PageLoad,
     PickerAccount, PickerShown, StoreDeletion, WaitingShown, WindowWaiting,
@@ -459,15 +461,10 @@ pub enum Footing {
     NoClaudeCode,
     /// No tool has anybody signed in, and nothing is enrolled.
     NoOneSignedIn,
-    /// Somebody is signed in to a tool and Pitboard has not been told what to call them,
-    /// so their login cannot be parked yet.
-    Unnamed { provider: String, email: String },
     /// A tool has one account, so there is nothing yet to switch to in it.
     OnlyOne { provider: String, label: String },
     /// Codex is installed and nothing of it is enrolled, so nothing of it is read.
     CodexUnused,
-    /// The app's system says it does not open the app at login, where nothing it does runs.
-    NotOpenedAtLogin,
     /// Claude Code has two accounts, and nobody chose what happens once a limit reaches the
     /// share.
     AtLimitUnchosen,
@@ -483,11 +480,9 @@ pub struct SetupStep {
     pub detail: String,
     /// What can be pressed, the one to press first first.
     pub actions: Vec<Choice>,
-    // a page of the system's own settings, which the app opens
-    #[uniffi(default)]
-    pub link: Option<SetupLink>,
 }
 
+// A page of the system's own settings, or a tool's install page, which the app opens.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SetupLink {
     pub title: String,
@@ -872,6 +867,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         account_windows: windows::account_windows(&seen),
         uninstall: removal::uninstall(&seen),
         removal: removal::removal(&seen),
+        welcome: welcome::welcome(&seen),
     }
 }
 

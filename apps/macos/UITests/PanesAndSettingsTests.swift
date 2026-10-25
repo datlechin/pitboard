@@ -50,6 +50,18 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(toggle.wait(until: "value == 0", timeout: 5))
     }
 
+    /// macOS can refuse the login item, which General says.
+    @MainActor
+    func testOpenAtLoginMacOSRefusesSaysWhy() {
+        let app = launch(.oneTool, environment: ["PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES": "1"])
+        app.openSettings()
+        let toggle = app.control("settings.openAtLogin")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.click()
+        XCTAssertTrue(app.control("settings.openAtLoginFailed").waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? Int, 0)
+    }
+
     @MainActor
     func testSettingsHaveThreePanes() {
         let app = launch(.oneTool)

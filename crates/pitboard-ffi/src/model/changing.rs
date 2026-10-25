@@ -94,10 +94,6 @@ fn the_login_in_use_is_added_at_once_and_named_after() {
         account(None).signed_in().uuid("a").build(),
     ])));
     model.refresh(&mut machine);
-    assert!(matches!(
-        model.shown().footing,
-        crate::Footing::Unnamed { .. }
-    ));
 
     machine.enrolling_current = Err(refusal(
         "identity_unverifiable",
@@ -165,13 +161,6 @@ fn a_codex_login_is_enrolled_as_codexs() {
         account(None).of("codex").signed_in().uuid("c").build(),
     ])));
     model.refresh(&mut machine);
-    assert_eq!(
-        model.shown().footing,
-        crate::Footing::Unnamed {
-            provider: "codex".into(),
-            email: "c@example.com".into()
-        }
-    );
     model.send(enrol("codex"));
     model.run(&mut machine);
     assert_eq!(machine.enrolled, ["codex/"]);

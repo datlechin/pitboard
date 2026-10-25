@@ -31,13 +31,10 @@ public sealed partial class ScreenshotTests
             Assert.Inconclusive($"CF1: {Foreground.Holder()} keeps the foreground, so a picture would show it");
         }
 
-        // The pictures show the accounts: starting at sign-in, then what happens at a limit.
-        foreach (var tip in new[] { "setup.notOpenedAtLogin", "setup.atLimitUnchosen" })
-        {
-            launched.Element(tip);
-            launched.Invoke("setup.action.declineTip");
-            Assert.IsTrue(launched.Gone(found => found.ByAutomationId(tip)), tip);
-        }
+        // The pictures show the accounts, past the tip on what happens at a limit.
+        launched.Element("setup.atLimitUnchosen");
+        launched.Invoke("setup.action.declineTip");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.atLimitUnchosen")), "the tip stayed");
 
         window.Move(0, 0);
         launched.Row("codex/spare");

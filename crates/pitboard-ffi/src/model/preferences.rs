@@ -17,7 +17,6 @@ const SWITCH: &str = "switch";
 fn tip_code(tip: Tip) -> &'static str {
     match tip {
         Tip::UseCodex => "use_codex",
-        Tip::OpenAtLogin => "open_at_login",
         Tip::AtLimit => "at_limit",
     }
 }
@@ -31,7 +30,7 @@ pub(crate) struct Preferences {
     pub(crate) second_account_declined: BTreeSet<String>,
     /// Whether the app has ever shown anybody anything. An app with no Dock icon that
     /// launches straight into a menu bar item shows somebody who has just installed it
-    /// nothing at all, so the first launch opens the window, once.
+    /// nothing at all, so the first launch opens the welcome, once.
     #[serde(default)]
     pub(crate) has_been_seen: bool,
     // Written beside `at_limit` too, for a version before it.

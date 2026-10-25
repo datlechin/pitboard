@@ -107,7 +107,11 @@ public sealed class ModelTests
             Machine: Unread(),
             AccountWindows: NoWindows(),
             Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
-            Removal: null);
+            Removal: null,
+            Welcome: new WelcomeShown(
+                Title: "Welcome to Pitboard", Lines: [], Tools: [],
+                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: "", Link: null),
+                Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)));
 
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],

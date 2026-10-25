@@ -60,7 +60,8 @@ pub use present::{
     NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount, PickerShown, Question,
     RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
     SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmDetail,
-    WarmShown, WindowOffer, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool, WindowOffer, WindowQuestion,
+    WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;
