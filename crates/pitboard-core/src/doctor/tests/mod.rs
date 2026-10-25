@@ -9,6 +9,9 @@ mod run;
 mod schedule;
 mod windows;
 
+pub(super) use super::example::{
+    NOW, codex_parked, direct, facts, mode, no_codex, parked, with_codex,
+};
 use super::words;
 use super::*;
 use super::{
@@ -31,23 +34,6 @@ use crate::{store, switch};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-// What a mode looks like as access, the way a Unix system describes one.
-pub(super) fn mode(mode: u32) -> Access {
-    Access {
-        shared: mode & 0o077 != 0,
-        described: format!("mode {mode:o}"),
-    }
-}
-
-// A network whose requests go out directly, as no variable names a proxy.
-pub(super) fn direct() -> NetworkFact {
-    NetworkFact {
-        proxy: None,
-        passed_over: Vec::new(),
-        set: Vec::new(),
-    }
-}
 
 pub(super) fn desktop() -> DesktopFacts {
     DesktopFacts {
@@ -103,120 +89,6 @@ pub(super) fn said(checks: &[Check], code: &str) -> Vec<(Level, String)> {
         .collect()
 }
 
-pub(super) fn facts() -> Facts {
-    Facts {
-        os: crate::host::OS,
-        sid: None,
-        security_tool: Some("/usr/bin/security".into()),
-        config_path: PathBuf::from("/home/x/.claude.json"),
-        config: Ok(json!({"oauthAccount": {}})),
-        config_account: Some(claude_paths::ConfigAccount {
-            email: "a@b.c".into(),
-            account_uuid: "acc".into(),
-            organization_uuid: "org".into(),
-            organization_name: None,
-        }),
-        credential_parts: Vec::new(),
-        credential_cost: Some(store::Cost {
-            needs: 900,
-            limit: 4032,
-            second_route: true,
-        }),
-        no_argv: false,
-        service: "Claude Code-credentials".into(),
-        account: "someone".into(),
-        default_slot: true,
-        storage_dir: "/home/x/.claude".into(),
-        backend: Ok(store::Backend::Keychain),
-        vault: store::Backend::Keychain,
-        credential_file: PathBuf::from("/home/x/.claude/.credentials.json"),
-        credential: Ok(Some(json!({"claudeAiOauth": {
-            "refreshToken": "r",
-            "refreshTokenExpiresAt": 2_000_000_000_000i64
-        }}))),
-        home: PathBuf::from("/home/x/.pitboard"),
-        home_access: Some(mode(0o700)),
-        readable_by_others: Vec::new(),
-        machine_id_known: true,
-        windows: None,
-        hover_rest_env: false,
-        daemon: None,
-        pending_parks: Vec::new(),
-        claude_version: Some(crate::provider::claude::assumptions::VERIFIED_AGAINST.into()),
-        claude_program: Some(PathBuf::from("/opt/homebrew/bin/claude")),
-        auth_overrides: Vec::new(),
-        login_pins: Vec::new(),
-        pinned_out: Vec::new(),
-        asking_held: Vec::new(),
-        state: Ok(State::default()),
-        in_use: Some(in_use_as_named()),
-        parks: Vec::new(),
-        interrupted: false,
-        stuck: None,
-        codex: no_codex(),
-        desktop: None,
-        desktop_app: Installed {
-            folder: None,
-            present: false,
-            build: None,
-        },
-        claude_present: true,
-        schedule: None,
-        watch_service: None,
-        network: direct(),
-        in_the_app: false,
-        elevation: crate::host::Elevation::Normal,
-        fallback_login: None,
-        floor: crate::host::Floor::Met,
-        status_line: None,
-        windows_settings: None,
-        pitboards: Vec::new(),
-        wsl: None,
-        now: NOW,
-    }
-}
-
-// `acc`'s login in `org`, as Anthropic named it a minute ago, with the config naming it.
-pub(super) fn in_use_as_named() -> crate::in_use::Known {
-    let owner = crate::provider::Owner {
-        account_uuid: "acc".into(),
-        email: "a@b.c".into(),
-        organization_uuid: "org".into(),
-    };
-    let stored = json!({"claudeAiOauth": {"refreshToken": "r"}});
-    crate::in_use::Known {
-        last: Some(crate::in_use::InUse {
-            owner: Some(owner.clone()),
-            login: crate::provider::document(ProviderId::Claude).fingerprint(&stored),
-            known_at: NOW - 60,
-            named: Some(crate::state::new_id(ProviderId::Claude, &owner)),
-        }),
-        doubt: None,
-        own_record: Some(owner),
-    }
-}
-
-pub(super) fn no_codex() -> CodexFacts {
-    CodexFacts {
-        home: PathBuf::from("/home/x/.codex"),
-        present: false,
-        enrolled: 0,
-        backend: crate::provider::codex::paths::Backend::File,
-        backend_setting: "Codex's default".into(),
-        backend_remedy: String::new(),
-        auth_file: PathBuf::from("/home/x/.codex/auth.json"),
-        auth_access: None,
-        login: Ok(None),
-        program: None,
-        version: None,
-        running: Some(Vec::new()),
-        stored_elsewhere: (0, 0),
-        restrictions: Vec::new(),
-        restrictions_unreadable: false,
-        ruled_out: Vec::new(),
-    }
-}
-
 pub(super) const SID: &str = "S-1-5-21-1004336348-1177238915-682003330-1001";
 
 pub(super) fn open_to_users() -> Access {
@@ -229,52 +101,6 @@ pub(super) fn open_to_users() -> Access {
 // Codex's section for a machine with no Codex accounts parked.
 pub(super) fn codex_checks(codex: &CodexFacts) -> Vec<Check> {
     judge_codex(crate::host::OS, None, codex, &[], NOW, &time::moment)
-}
-
-// A machine whose Codex is signed in, with its login where it should be.
-pub(super) fn with_codex() -> CodexFacts {
-    CodexFacts {
-        present: true,
-        auth_access: Some(mode(0o600)),
-        login: Ok(Some(CodexLogin {
-            email: "w@example.com".into(),
-            account_id: "work-account".into(),
-            fingerprint: "0123456789abcdef".into(),
-        })),
-        program: Some(PathBuf::from("/usr/local/bin/codex")),
-        version: Some(crate::provider::codex::assumptions::VERIFIED_AGAINST.into()),
-        ..no_codex()
-    }
-}
-
-pub(super) const NOW: i64 = 1_789_935_600;
-
-pub(super) fn parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
-    ParkFact {
-        provider: ProviderId::Claude,
-        last_used_at: None,
-        name: Key::new(ProviderId::Claude, label).typed(),
-        active: false,
-        park: Some(Park {
-            service: format!("pitboard-park-{label}-1"),
-            parked_at: NOW - 86_400,
-            kind: crate::state::ParkKind::Vault,
-            login: "f".into(),
-            access_expires_at: None,
-            refresh_expires_at,
-            session_expires_at: None,
-        }),
-        unreadable: None,
-    }
-}
-
-// A Codex account's park, named as a command here would take it.
-pub(super) fn codex_parked(label: &str, refresh_expires_at: Option<i64>) -> ParkFact {
-    ParkFact {
-        provider: ProviderId::Codex,
-        name: Key::new(ProviderId::Codex, label).typed(),
-        ..parked(label, refresh_expires_at)
-    }
 }
 
 pub(super) fn named<'a>(checks: &'a [Check], name: &str) -> &'a Check {

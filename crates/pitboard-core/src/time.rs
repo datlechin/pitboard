@@ -121,19 +121,27 @@ pub fn parse(text: &str) -> Option<i64> {
 
 /// `epoch` in this machine's time zone, formatted with `strftime` directives.
 pub fn local(epoch: i64, pattern: &str) -> String {
+    zoned(&TimeZone::system(), epoch, pattern)
+}
+
+fn zoned(zone: &TimeZone, epoch: i64, pattern: &str) -> String {
     Timestamp::from_second(epoch)
-        .map(|t| t.to_zoned(TimeZone::system()).strftime(pattern).to_string())
+        .map(|t| t.to_zoned(zone.clone()).strftime(pattern).to_string())
         .unwrap_or_default()
 }
 
 /// What a person reads for a moment: "14:02", or with the date once it is not today.
 pub fn moment(epoch: i64, now: i64) -> String {
-    let pattern = if local(epoch, "%F") == local(now, "%F") {
+    moment_in(&TimeZone::system(), epoch, now)
+}
+
+pub(crate) fn moment_in(zone: &TimeZone, epoch: i64, now: i64) -> String {
+    let pattern = if zoned(zone, epoch, "%F") == zoned(zone, now, "%F") {
         "%H:%M"
     } else {
         "%b %-d %H:%M"
     };
-    local(epoch, pattern)
+    zoned(zone, epoch, pattern)
 }
 
 #[cfg(test)]

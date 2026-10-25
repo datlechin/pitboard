@@ -3,6 +3,9 @@
 mod claude;
 mod codex;
 mod desktop;
+#[cfg(any(test, feature = "test-support"))]
+#[cfg_attr(not(feature = "test-support"), allow(unreachable_pub))]
+pub(crate) mod example;
 mod machine;
 mod network;
 mod parks;
