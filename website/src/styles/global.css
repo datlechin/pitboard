@@ -87,13 +87,13 @@
   --color-mac-bar-edge: light-dark(rgb(13 17 16 / 0.06), rgb(0 0 0 / 0.4));
   --color-mac-bar-text: light-dark(#1d1d1f, #f5f5f7);
   --color-mac-bar-hl: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.2));
-  --color-mac-menu-bg: light-dark(rgb(244 245 245 / 0.8), rgb(36 36 36 / 0.78));
+  --color-mac-menu-bg: light-dark(rgb(249 249 249 / 0.8), rgb(36 36 36 / 0.78));
   --color-mac-menu-edge: light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.7));
   --color-mac-menu-rim: light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.13));
   --color-mac-menu-shadow: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.55));
-  --color-mac-menu-text: light-dark(#1d1d1f, #fafafa);
-  --color-mac-menu-sub: light-dark(rgb(0 0 0 / 0.66), rgb(255 255 255 / 0.8));
-  --color-mac-menu-dim: light-dark(rgb(0 0 0 / 0.42), rgb(255 255 255 / 0.42));
+  --color-mac-menu-text: light-dark(rgb(0 0 0 / 0.85), #fafafa);
+  --color-mac-menu-sub: light-dark(rgb(0 0 0 / 0.5), rgb(255 255 255 / 0.8));
+  --color-mac-menu-dim: light-dark(rgb(0 0 0 / 0.26), rgb(255 255 255 / 0.42));
   --color-mac-menu-sep: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.12));
   --color-mac-menu-hl: light-dark(#2d6fe0, #1f5fcf);
   --color-mac-term-bg: light-dark(#ffffff, #161817);
