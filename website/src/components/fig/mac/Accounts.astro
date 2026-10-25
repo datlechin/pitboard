@@ -28,26 +28,33 @@ const sub = "text-u-12/15 text-mac-window-sub";
   crop={crop}
   fit={only !== undefined}
 >
-  {crop && <div class="flex items-start gap-6 pt-10 pb-8 inset-shadow-mac-window-b">
-    <svg class="mt-1 size-15 shrink-0 text-mac-window-sub">
-      <use href="#sf-info-fill" />
-    </svg>
-    <span class="flex-1">
-      <b class="block font-medium">Switched Claude Code to work</b>
-      <span class="text-u-12/15 text-mac-window-sub tabular-nums"
-        >Claude Code sessions already open follow in 0:21</span
-      >
-    </span>
-    <svg class="mt-3 size-11 shrink-0 text-mac-window-sub">
-      <use href="#sf-xmark" />
-    </svg>
+  {/* NoticeRow.swift, first in the list, its rule from under its words */}
+  {crop && <div class="ml-23.5 pt-17.5 pb-7.5 inset-shadow-mac-window-b">
+    <div class="-ml-23.5 flex items-start gap-8">
+      <svg class="-ml-1 size-16.5 shrink-0 text-mac-window-sub">
+        <use href="#sf-info-fill" />
+      </svg>
+      <span class="flex-1">
+        <b class="block font-medium">Switched Claude Code to work</b>
+        <span class="mt-6 block pb-1.5 text-u-12/15 text-mac-window-sub tabular-nums"
+          >Claude Code sessions already open follow in 0:21</span
+        >
+      </span>
+      <svg class="-mr-1 size-16.5 shrink-0 text-mac-window-sub">
+        <use href="#sf-xmark" />
+      </svg>
+    </div>
   </div>}
   {shown.map(([tool, name], t) => (
     <>
       <div
         class:list={[
-          "pb-8 text-u-11/13 font-bold text-mac-window-sub inset-shadow-mac-window-b",
-          t === 0 ? "pt-7" : "pt-27",
+          "pb-8.5 text-u-11/13 font-bold text-mac-window-sub inset-shadow-mac-window-b",
+          t === 0 && !crop ? "pt-6.5" : "pt-26.5",
+          // a list at its top draws a line across the pane under its first heading, and room under it
+          t === 0 &&
+            !crop &&
+            "relative -mx-16 mb-10.5 px-16 after:absolute after:inset-x-16 after:bottom-0 after:h-1 after:bg-mac-window-sep",
         ]}
       >
         {name}
@@ -62,29 +69,30 @@ const sub = "text-u-12/15 text-mac-window-sub";
           warm[a.label] && tool === "claude" ? warm[a.label] : null,
         ].filter(Boolean);
         // each row's rule starts under its name
-        return <div class="ml-34 pt-13 pb-7 inset-shadow-mac-window-b">
+        return <div class="ml-34 pt-8 pb-7.5 inset-shadow-mac-window-b">
           <div class="-ml-34 flex items-center gap-8">
             <svg
               class:list={[
-                "h-22 w-26 shrink-0",
+                // a 17 point symbol whose frame is 20 tall
+                "-my-1 h-22 w-26 shrink-0",
                 on ? "text-mac-window-blue" : "text-mac-window-sub",
               ]}
             >
               <use href={on ? "#sf-person-fill" : "#sf-person"} />
             </svg>
             <span class="flex min-w-0 flex-1 flex-col gap-2">
-              <span class="flex items-center gap-6 font-medium">
+              <span class="flex items-center gap-8 font-medium">
                 {a.label}
                 {a.plan && <span
-                  class="rounded-pill bg-mac-window-track px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
+                  class="rounded-pill bg-mac-window-fill px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
                   >{a.plan}</span
                 >}
               </span>
               {a.email && <span class={sub}>{a.email}</span>}
             </span>
             {on ? (
-              <span class="flex items-center gap-3 text-u-12 text-mac-window-sub">
-                <svg class="size-12 shrink-0">
+              <span class="flex items-center gap-8.5 text-u-12 text-mac-window-sub">
+                <svg class="size-13.5 shrink-0">
                   <use href="#sf-check" />
                 </svg>
                 In Use
@@ -93,8 +101,9 @@ const sub = "text-u-12/15 text-mac-window-sub";
               <Button>Use</Button>
             )}
           </div>
+          {/* macOS 27 sets a gauge's words 1.5 points above its middle */}
           {a.limits.length > 0 && <div
-            class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6 text-u-12/15 tabular-nums"
+            class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums *:[span]:-mt-2.5"
           >
             {a.limits.map((l) => {
               const s = standing(l);
@@ -116,12 +125,15 @@ const sub = "text-u-12/15 text-mac-window-sub";
                         ry="2.5"
                       />
                     )}
+                    {/* the gauge's edge inside its bounds, a quarter point in from each side */}
                     <rect
                       class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
-                      width="100"
-                      height="16"
-                      rx="2.4"
-                      ry="2.5"
+                      x=".25"
+                      y=".25"
+                      width="99.5"
+                      height="15.5"
+                      rx="2.2"
+                      ry="2.25"
                       vector-effect="non-scaling-stroke"
                     />
                     {s !== null && s !== "even" && (
@@ -161,7 +173,8 @@ const sub = "text-u-12/15 text-mac-window-sub";
               );
             })}
           </div>}
-          {notes.map((n) => <p class:list={["mt-6", sub]}>{n}</p>)}
+          {/* a note's line runs past its descent, so a row that ends in one has more under it */}
+          {notes.map((n) => <p class:list={["mt-6 last:pb-1.5", sub]}>{n}</p>)}
         </div>;
       })}
     </>

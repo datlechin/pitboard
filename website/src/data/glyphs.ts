@@ -16,11 +16,16 @@ export const line: Record<string, string> = {
     "M4.5 3.6h11a2.9 2.9 0 0 1 2.9 2.9v7a2.9 2.9 0 0 1-2.9 2.9h-11a2.9 2.9 0 0 1-2.9-2.9v-7a2.9 2.9 0 0 1 2.9-2.9ZM8.6 3.6v12.8M4.4 6.9h1.9M4.4 9.1h1.9M4.4 11.3h1.9",
   "sf-refresh": "M15.6 10A5.6 5.6 0 1 1 13.9 6M14.4 2.8v3.6h-3.6",
   "sf-plus": "M10 4v12M4 10h12",
-  "sf-check": "M4.5 10.4 8.2 14l7.3-8.4",
-  "sf-chev": "M7.5 4.5 13 10l-5.5 5.5",
+  "sf-check": "M4 10.75 8.5 16 16 3.6",
   "sf-xmark": "M5 5l10 10M15 5 5 15",
   "sf-person":
     "M10 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14ZM10 6.3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM5.3 15.2c1-1.6 2.7-2.5 4.7-2.5s3.7.9 4.7 2.5",
+};
+
+// What a macOS 27 menu draws heavier, each with its stroke width in its own units.
+export const heavy: Record<"sf-check-heavy" | "sf-chev-heavy", { d: string; width: number }> = {
+  "sf-check-heavy": { d: "M3.6 11.1 8.2 14.6 14.6 5", width: 2.6 },
+  "sf-chev-heavy": { d: "M4.5 2.25 12 10l-7.5 7.75", width: 4 },
 };
 
 export const bar: Record<"ic-batt" | "ic-wifi" | "ic-cc", { viewBox: string; body: string }> = {

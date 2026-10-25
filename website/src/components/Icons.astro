@@ -4,7 +4,7 @@ import tray from "../../../apps/windows/Icon/icon-16.svg?raw";
 import trayPlenty from "../../../apps/windows/Icon/tray-plenty-16.svg?raw";
 import trayLow from "../../../apps/windows/Icon/tray-low-16.svg?raw";
 import trayOut from "../../../apps/windows/Icon/tray-out-16.svg?raw";
-import { bar, fluent, line, symbolic } from "../data/glyphs.ts";
+import { bar, fluent, heavy, line, symbolic } from "../data/glyphs.ts";
 
 const paths = [...template.matchAll(/<path\b[^>]*?\sd="([^"]+)"/g)];
 if (paths.length !== 2) throw new Error("template.svg is not the kit's two paths");
@@ -31,12 +31,23 @@ const trays = {
     <path d={board} fill="currentColor"></path>
     <path d={dim} fill="currentColor" fill-opacity={dimOpacity}></path>
   </symbol>
+  {/* a figure that draws a symbol larger sets --stroke to keep its line as thin as macOS does */}
   {Object.entries(line).map(([id, d]) => <symbol id={id} viewBox="0 0 20 20">
     <path
+      class="[stroke-width:var(--stroke,1.5)]"
       d={d}
       fill="none"
       stroke="currentColor"
-      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </symbol>)}
+  {Object.entries(heavy).map(([id, g]) => <symbol id={id} viewBox="0 0 20 20">
+    <path
+      d={g.d}
+      fill="none"
+      stroke="currentColor"
+      stroke-width={g.width}
       stroke-linecap="round"
       stroke-linejoin="round"
     />

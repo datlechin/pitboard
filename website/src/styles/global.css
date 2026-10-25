@@ -87,13 +87,13 @@
   --color-mac-bar-edge: light-dark(rgb(13 17 16 / 0.06), rgb(0 0 0 / 0.4));
   --color-mac-bar-text: light-dark(#1d1d1f, #f5f5f7);
   --color-mac-bar-hl: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.2));
-  --color-mac-menu-bg: light-dark(rgb(244 245 245 / 0.8), rgb(36 36 36 / 0.78));
+  --color-mac-menu-bg: light-dark(rgb(249 249 249 / 0.8), rgb(36 36 36 / 0.78));
   --color-mac-menu-edge: light-dark(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.7));
   --color-mac-menu-rim: light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.13));
   --color-mac-menu-shadow: light-dark(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.55));
-  --color-mac-menu-text: light-dark(#1d1d1f, #fafafa);
-  --color-mac-menu-sub: light-dark(rgb(0 0 0 / 0.66), rgb(255 255 255 / 0.8));
-  --color-mac-menu-dim: light-dark(rgb(0 0 0 / 0.42), rgb(255 255 255 / 0.42));
+  --color-mac-menu-text: light-dark(rgb(0 0 0 / 0.85), #fafafa);
+  --color-mac-menu-sub: light-dark(rgb(0 0 0 / 0.5), rgb(255 255 255 / 0.8));
+  --color-mac-menu-dim: light-dark(rgb(0 0 0 / 0.26), rgb(255 255 255 / 0.42));
   --color-mac-menu-sep: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.12));
   --color-mac-menu-hl: light-dark(#2d6fe0, #1f5fcf);
   --color-mac-term-bg: light-dark(#ffffff, #161817);
@@ -121,15 +121,19 @@
   --color-mac-window-bg: light-dark(#ffffff, #1e1e1e);
   --color-mac-window-edge: light-dark(#c9cdcc, #3a3a3c);
   --color-mac-window-text: light-dark(#1d1d1f, #f5f5f7);
-  --color-mac-window-sub: light-dark(#6e6e73, #a1a1a6);
-  --color-mac-window-sep: light-dark(#e3e3e6, #333335);
-  --color-mac-window-track: light-dark(#ebebed, #38383a);
+  --color-mac-window-sub: light-dark(rgb(0 0 0 / 0.5), #a1a1a6);
+  /* macOS 27 draws a toolbar's title lighter than the window's text, and a sidebar's labels black */
+  --color-mac-window-title: light-dark(rgb(0 0 0 / 0.7), #f5f5f7);
+  --color-mac-window-side-text: light-dark(#000000, #f5f5f7);
+  --color-mac-window-sep: light-dark(rgb(0 0 0 / 0.1), #333335);
+  --color-mac-window-track: light-dark(#ededed, #38383a);
+  /* the fill under a plan's tag */
+  --color-mac-window-fill: light-dark(rgb(0 0 0 / 0.1), #38383a);
   /* a key window's close, minimize and zoom buttons, measured on docs/images/window.png */
   --color-mac-window-close: #f87a71;
   --color-mac-window-minimize: #fdc636;
   --color-mac-window-zoom: #7fd458;
   --color-mac-window-btn: light-dark(#ececec, #3a3a3c);
-  --color-mac-window-btn-edge: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.5));
   --color-mac-window-green: light-dark(#34c759, #30d158);
   --color-mac-window-orange: light-dark(#f29200, #ff9f0a);
   --color-mac-window-red: light-dark(#ff383c, #ff453a);
@@ -140,8 +144,14 @@
   --color-mac-window-glass: light-dark(rgb(246 246 246 / 0.5), rgb(80 80 82 / 0.5));
   --color-mac-window-glass-edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
   --color-mac-window-gauge-edge: light-dark(rgb(0 0 0 / 0.13), rgb(255 255 255 / 0.1));
-  --color-mac-window-form: light-dark(#f2f2f4, #1a1a1a);
-  --color-mac-window-stripe: light-dark(#f5f5f7, #232325);
+  /* a grouped form's fill and the rules between its rows, a control's fill, and the buttons a
+     Settings window turns off */
+  --color-mac-window-group: light-dark(rgb(0 0 0 / 0.03), rgb(255 255 255 / 0.05));
+  --color-mac-window-rule: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.08));
+  --color-mac-window-control: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
+  --color-mac-window-off: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.1));
+  --color-mac-window-off-edge: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.2));
+  --color-mac-window-stripe: light-dark(#f4f5f5, #232325);
   /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
@@ -330,17 +340,16 @@
   --shadow-win-field:
     inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge),
     inset 0 calc(-1 * var(--u)) var(--color-win-strong);
-  --shadow-mac-control: 0 calc(0.5 * var(--u)) calc(1 * var(--u)) var(--color-mac-window-btn-edge);
   --shadow-mac-knob: 0 calc(0.5 * var(--u)) calc(1.5 * var(--u)) rgb(0 0 0 / 0.3);
-  --shadow-mac-group: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-sep);
   --shadow-mac-list: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-edge);
   --shadow-mac-glass:
     0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-glass-edge),
     0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(0 0 0 / 0.05);
 
-  /* hairlines half a point wide: on the bottom (b), top (t), left (l) or right (r) edge */
-  --inset-shadow-mac-window-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-window-sep);
-  --inset-shadow-mac-window-t: inset 0 calc(0.5 * var(--u)) var(--color-mac-window-sep);
+  /* a list's rules, a point wide, on the bottom (b) or top (t) edge; hairlines half a point wide
+     on the right (r), bottom or left (l) edge */
+  --inset-shadow-mac-window-b: inset 0 calc(-1 * var(--u)) var(--color-mac-window-sep);
+  --inset-shadow-mac-window-t: inset 0 calc(1 * var(--u)) var(--color-mac-window-sep);
   --inset-shadow-mac-window-r: inset calc(-0.5 * var(--u)) 0 var(--color-mac-window-sep);
   --inset-shadow-mac-bar-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-bar-edge);
   --inset-shadow-mac-term-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-term-sep);

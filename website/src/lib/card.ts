@@ -2,7 +2,7 @@
 
 import satori from "satori";
 import sharp from "sharp";
-import { bar, line } from "../data/glyphs.ts";
+import { bar, heavy } from "../data/glyphs.ts";
 import { TAGLINE } from "../data/site.ts";
 import { clock, tools, type Tool } from "../data/world.ts";
 import { isInUse, listed, menuBarTitle, menuLine, menuTitle } from "./words.ts";
@@ -22,7 +22,7 @@ const LOGO_TOP = 96;
 const LOGO_HEIGHT = 56;
 const CONTENT_TOP = 246;
 // the headline's last baseline on the menu's bottom edge
-const HEADLINE_TOP = 271;
+const HEADLINE_TOP = 272;
 
 // A macOS point is U pixels, about 1.5 times the hero's largest, so a 13-point menu row is 24
 // pixels tall: 8 when the image is shown 400 pixels wide.
@@ -161,16 +161,16 @@ function menu(c: Colors): El {
   const check = img(
     svg(
       "0 0 20 20",
-      `<path d="${line["sf-check"]}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+      `<path d="${heavy["sf-check-heavy"].d}" fill="none" stroke="currentColor" stroke-width="${heavy["sf-check-heavy"].width}" stroke-linecap="round" stroke-linejoin="round"/>`,
       c["mac-menu-text"],
     ),
-    pt(12),
-    pt(12),
+    pt(14),
+    pt(14),
     { position: "absolute", left: pt(7), top: "50%", marginTop: pt(-6) },
   );
   const sep = h("div", {
     height: 1,
-    margin: `${pt(4.5)}px ${pt(16)}px ${pt(4.5)}px ${pt(30)}px`,
+    margin: `${pt(5.5)}px ${pt(16)}px ${pt(4.5)}px ${pt(30)}px`,
     backgroundColor: c["mac-menu-sep"],
   });
   const sections = MENU.flatMap((tool, i) => [
@@ -178,7 +178,7 @@ function menu(c: Colors): El {
     h(
       "div",
       {
-        padding: `${pt(4.5)}px ${pt(18)}px ${pt(4)}px ${pt(30)}px`,
+        padding: `${pt(5.5)}px ${pt(18)}px ${pt(3)}px ${pt(30)}px`,
         fontSize: pt(11),
         fontWeight: 700,
         color: c["mac-menu-dim"],
@@ -211,7 +211,7 @@ function menu(c: Colors): El {
       top: pt(26),
       left: 0,
       flexDirection: "column",
-      padding: `${pt(5)}px 0`,
+      padding: `${pt(4)}px 0 ${pt(6)}px`,
       borderRadius: pt(11),
       backgroundColor: c["mac-menu-bg"],
       boxShadow: [
@@ -269,7 +269,7 @@ function menuBar(assets: Assets, c: Colors, width: number): El {
     },
     item(
       [
-        img(icon, pt(16), pt(16), { marginRight: pt(4) }),
+        img(icon, pt(16), pt(16), { marginRight: pt(2.25) }),
         h("div", {}, menuBarTitle("after")),
         menu(c),
       ],

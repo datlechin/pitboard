@@ -6,6 +6,8 @@ interface Props {
 const { on = false, class: extra } = Astro.props;
 ---
 
-<div class:list={["flex h-22 items-center gap-4 rounded-u-6 px-7", { "bg-mac-bar-hl": on }, extra]}>
+<div
+  class:list={["flex h-22 items-center gap-2.25 rounded-u-6 px-7", { "bg-mac-bar-hl": on }, extra]}
+>
   <slot />
 </div>

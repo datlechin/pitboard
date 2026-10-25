@@ -31,7 +31,7 @@ const either = (
     ? `<span class="${was}">${before}</span><span class="${now}">${after}</span>`
     : after;
 const row = "relative mx-5 flex items-center rounded-u-6 py-4 pr-13 pl-25";
-const sep = "my-4.5 mr-16 ml-30 h-px bg-mac-menu-sep";
+const sep = "mt-5.5 mr-16 mb-4.5 ml-30 h-px bg-mac-menu-sep";
 const rule =
   "bg-linear-to-b from-mac-term-rule to-mac-term-rule bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
 ---
@@ -61,7 +61,7 @@ const rule =
         <span set:html={either(menuBarTitle("before"), menuBarTitle("after"))} />
       </MenuItem>
       <div
-        class="absolute top-26 left-0 w-max rounded-u-11 bg-mac-menu-bg py-5 whitespace-nowrap text-mac-menu-text normal-nums shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 demo-shut:opacity-0"
+        class="absolute top-26 left-0 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text normal-nums shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 demo-shut:opacity-0"
       >
         {moments.map((moment) => <div
           class:list={[
@@ -72,7 +72,7 @@ const rule =
           {tools.map(([tool, name], i) => (
             <>
               {i > 0 && <div class={sep} />}
-              <div class="pt-4.5 pr-18 pb-4 pl-30 text-u-11 font-bold text-mac-menu-dim">
+              <div class="pt-5.5 pr-18 pb-3 pl-30 text-u-11 font-semibold text-mac-menu-dim">
                 {name}
               </div>
               {listed(tool, moment).map((a) => {
@@ -88,9 +88,9 @@ const rule =
                   ]}
                 >
                   {isInUse(a, moment) && <svg
-                    class="absolute top-1/2 left-7 -mt-6 size-12 shrink-0"
+                    class="absolute top-1/2 left-7 -mt-6 size-14 shrink-0"
                   >
-                    <use href="#sf-check" />
+                    <use href="#sf-check-heavy" />
                   </svg>}
                   <span class="flex-1">
                     <span class="block">{menuTitle(a)}</span>
@@ -126,9 +126,9 @@ const rule =
                     >{k}</i
                   >)}
                 {a.more && <svg
-                  class="col-start-2 size-10 shrink-0 justify-self-end text-mac-menu-sub"
+                  class="col-start-2 size-10 shrink-0 justify-self-end text-mac-menu-text"
                 >
-                  <use href="#sf-chev" />
+                  <use href="#sf-chev-heavy" />
                 </svg>}
               </span>
             </div>

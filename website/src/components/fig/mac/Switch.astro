@@ -1,4 +1,5 @@
 ---
+// A switch on macOS 27: 36 by 16 points, its knob a 21 by 13 point pill.
 interface Props {
   on?: boolean;
 }
@@ -7,7 +8,7 @@ const { on = false } = Astro.props;
 
 <span
   class:list={[
-    "relative h-15 w-26 flex-none rounded-pill after:absolute after:top-1 after:size-13 after:rounded-circle after:bg-white after:shadow-mac-knob",
-    on ? "bg-mac-window-blue after:left-12" : "bg-mac-window-track after:left-1",
+    "relative h-16 w-36 flex-none rounded-pill after:absolute after:top-1.5 after:h-13 after:w-21 after:rounded-pill after:bg-white after:shadow-mac-knob",
+    on ? "bg-mac-window-blue after:right-1.5" : "bg-mac-window-fill after:left-1.5",
   ]}
 ></span>

@@ -1,28 +1,34 @@
 ---
-// The Activity pane, with the entries sessions.ts's `pitboard log` prints, in the app's words.
+// The Activity pane, with the entries sessions.ts's `pitboard log` prints, in the app's words; the
+// table stripes the rows the window has room for past them, as a macOS 27 table does.
 import Window from "./Window.astro";
 import { activity } from "../../../lib/words.ts";
-const th = "px-4 py-5 text-left font-normal text-mac-window-sub inset-shadow-mac-window-b";
+const rows = [...activity("macos"), null, null];
 ---
 
 <Window pane="activity" title="Activity" tools={["sf-refresh"]}>
-  <table class="w-full border-collapse text-u-12/15 whitespace-nowrap tabular-nums">
-    <thead>
+  <table class="w-full border-separate border-spacing-0 whitespace-nowrap tabular-nums">
+    <thead
+      class="*:*:relative *:*:h-28.5 *:*:pt-7 *:*:pr-1 *:*:pb-8.5 *:*:pl-11 *:*:text-left *:*:align-top *:*:text-u-11/13 *:*:font-normal *:*:shadow-[inset_0_calc(var(--spacing)*-1.5)_var(--color-mac-window-sep)] *:*:not-first:before:absolute *:*:not-first:before:top-6 *:*:not-first:before:left-0 *:*:not-first:before:h-16 *:*:not-first:before:w-1 *:*:not-first:before:bg-mac-window-sep *:*:first:pl-18"
+    >
       <tr>
-        <th class={th}>Date</th>
-        <th class={th}>Change</th>
-        <th class={th}>Account</th>
-        <th class={th}>Result</th>
-        <th class={th}>Asked By</th>
+        <th>Date</th>
+        <th>Change</th>
+        <th>Account</th>
+        <th>Result</th>
+        <th>Asked By</th>
       </tr>
     </thead>
-    <tbody>
-      {activity("macos").map((e) => <tr class="*:px-4 *:py-4 even:*:bg-mac-window-stripe">
-        <td>{e.date}</td>
-        <td>{e.change}</td>
-        <td>{e.account}</td>
-        <td class="text-mac-window-sub">{e.result}</td>
-        <td class="text-mac-window-sub">{e.by}</td>
+    {/* a stripe stops 10 points short of each side, where its outer cells' borders are clear */}
+    <tbody
+      class="before:table-row before:h-4.5 *:*:h-24 *:*:border-transparent *:*:bg-clip-padding *:*:pr-1 *:*:pl-9 *:*:first:rounded-l-u-16 *:*:first:border-l-10 *:*:first:pl-7 *:*:last:rounded-r-u-16 *:*:last:border-r-10 *:*:last:pr-7 *:even:*:bg-mac-window-stripe"
+    >
+      {rows.map((e) => <tr>
+        <td>{e?.date}</td>
+        <td>{e?.change}</td>
+        <td>{e?.account}</td>
+        <td class="text-mac-window-sub">{e?.result}</td>
+        <td class="text-mac-window-sub">{e?.by}</td>
       </tr>)}
     </tbody>
   </table>

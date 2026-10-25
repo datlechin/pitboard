@@ -44,11 +44,11 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
       </span>
       {panes.map(([id, name, icon]) => <div
         class:list={[
-          "flex h-32 items-center gap-6 rounded-u-8 px-8",
+          "flex h-32 items-center gap-5.75 rounded-u-8 px-6.5 text-mac-window-side-text",
           { "bg-mac-window-pick font-semibold": id === pane },
         ]}
       >
-        <svg class="h-18 w-22 shrink-0 text-mac-window-blue">
+        <svg class="size-24 shrink-0 text-mac-window-blue [--stroke:1.1]">
           <use href={`#${icon}`} />
         </svg>
         {name}
@@ -56,13 +56,14 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
     </div>
     <div class="flex min-w-0 flex-col">
       <div class="flex h-52 flex-none items-center pr-8 pl-20">
-        <span class="flex flex-1 flex-col"
-          ><b class="text-u-13/16 font-bold">{title}</b
+        <span class="flex flex-1 flex-col pb-2.5 text-mac-window-title"
+          ><b class:list={subtitle ? "text-u-13/16 font-bold" : "text-u-15/18 font-semibold"}
+            >{title}</b
           >{subtitle && <span class="text-u-11/13 text-mac-window-sub">{subtitle}</span>}</span
         >
         <span class:list={[glass, tools.length > 1 ? "px-2" : "w-36 justify-center"]}>
-          {tools.map((icon) => <span class="flex w-35 justify-center">
-            <svg class="size-18 shrink-0"><use href={`#${icon}`} /></svg>
+          {tools.map((icon) => <span class="flex w-34.5 justify-center">
+            <svg class="size-22 shrink-0"><use href={`#${icon}`} /></svg>
           </span>)}
         </span>
       </div>
