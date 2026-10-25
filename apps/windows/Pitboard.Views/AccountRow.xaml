@@ -20,12 +20,6 @@
     <Style x:Key="Out" TargetType="ProgressBar" BasedOn="{StaticResource DefaultProgressBarStyle}">
       <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
     </Style>
-    <Style x:Key="OverPace" TargetType="Rectangle">
-      <Setter Property="Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
-    </Style>
-    <Style x:Key="UnderPace" TargetType="Rectangle">
-      <Setter Property="Fill" Value="{ThemeResource SystemFillColorSuccessBrush}" />
-    </Style>
   </UserControl.Resources>
   <Grid Padding="0,10" ColumnSpacing="12" RowSpacing="8">
     <Grid.ColumnDefinitions>

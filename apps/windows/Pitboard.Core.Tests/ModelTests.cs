@@ -502,7 +502,7 @@ public sealed class ModelTests
     {
         var limit = new LimitRow(
             Short: "5h", Percent: 72.4, Figure: "72%", Level: UsageLevel.Low,
-            Resets: "resets in 1h 05m", Pace: null,
+            Resets: "resets in 1h 05m",
             Spoken: "5-hour limit, 72 percent used, resets in 1 hour, 5 minutes");
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
         var window = new WindowAccount(

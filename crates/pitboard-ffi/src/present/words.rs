@@ -3,7 +3,7 @@
 //! a format string a view fills in, so each can read a translation later by its name.
 //!
 //! What the command line says too is not here but there, and called from here: a limit's
-//! names, a reset, a pace, a parked login's life. Each of its sentences an app shows passes
+//! names, a reset, a parked login's life. Each of its sentences an app shows passes
 //! `typeset` first.
 
 use super::Severity;
@@ -17,9 +17,8 @@ use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Stored, Warning as CoreWarning};
 use pitboard_core::state::{Key, SetAside};
 use pitboard_core::time::{DAY, HOUR, MINUTE};
-use pitboard_core::usage::pace::{Pace, Standing};
 use pitboard_core::usage::whole;
-use pitboard_core::words::{capitalised, figure, listed};
+use pitboard_core::words::{capitalised, listed};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -165,58 +164,16 @@ pub(crate) fn spoken_span(seconds: i64) -> String {
     }
 }
 
-/// A limit as VoiceOver says it: "5-hour limit, 42 percent used, 38 percent under an even
-/// pace, resets in 3 hours". The column beside the bar says "5h" and "resets in 30m", which
-/// is read letter by letter or as a unit: "m" is read as "meters". Once the reset is due it
-/// says so, as the column does. `name` is the limit's sentence name with its scope, "weekly
-/// Fable".
-pub(crate) fn spoken_limit(
-    name: &str,
-    percent: f64,
-    resetting_in: Option<i64>,
-    pace: Option<&Pace>,
-) -> String {
-    let mut used = format!("{name} limit, {} percent used", whole(percent));
-    if let Some(pace) = pace {
-        let points = whole(pace.delta.abs());
-        used.push_str(&match pace.standing {
-            Standing::Over { .. } => format!(", {points} percent over an even pace"),
-            Standing::Under => format!(", {points} percent under an even pace"),
-            Standing::Even => ", on an even pace".into(),
-        });
-    }
+/// A limit as VoiceOver says it: "5-hour limit, 42 percent used, resets in 3 hours". The
+/// column beside the bar says "5h" and "resets in 30m", which is read letter by letter or as
+/// a unit: "m" is read as "meters". Once the reset is due it says so, as the column does.
+/// `name` is the limit's sentence name with its scope, "weekly Fable".
+pub(crate) fn spoken_limit(name: &str, percent: f64, resetting_in: Option<i64>) -> String {
+    let used = format!("{name} limit, {} percent used", whole(percent));
     match resetting_in {
         None => used,
         Some(seconds) if seconds <= 0 => format!("{used}, resetting now"),
         Some(seconds) => format!("{used}, resets in {}", spoken_span(seconds)),
-    }
-}
-
-/// When a limit runs out at its pace, beside its figure in the menu: "runs out in 20h
-/// 18m", and under a minute "about to run out", as `pitboard status` says it.
-pub(crate) fn runs_out_in(in_seconds: i64) -> String {
-    match pitboard_core::words::time_to_run_out(in_seconds) {
-        Some(left) => format!("runs out in {left}"),
-        None => "about to run out".into(),
-    }
-}
-
-/// What a bar's help says of the mark on it: how far from an even pace the limit is, what an
-/// even pace would have used by now, and for a limit over pace, when it runs out.
-pub(crate) fn pace_help(pace: &Pace) -> String {
-    let even = format!(
-        "{}: an even pace would have used {} of it by now.",
-        pitboard_core::words::pace_column(pace),
-        figure(pace.expected)
-    );
-    match pace.standing {
-        Standing::Over { runs_out_in } => {
-            match pitboard_core::words::time_to_run_out(runs_out_in) {
-                Some(left) => format!("{even} At this pace it runs out in {left}."),
-                None => format!("{even} At this pace it is about to run out."),
-            }
-        }
-        Standing::Under | Standing::Even => even,
     }
 }
 
@@ -692,12 +649,9 @@ pub(crate) const NOT_NAMED_YET: &str = "Not named yet";
 
 pub(crate) const NEEDS_SIGNING_IN_AGAIN: &str = "Needs signing in again";
 
-// "5-hour 42%", and "weekly 33% (runs out in 20h 18m)" beside the first to run out.
-pub(crate) fn limit_in_line(name: &str, figure: &str, runs_out: Option<i64>) -> String {
-    match runs_out {
-        Some(in_seconds) => format!("{name} {figure} ({})", runs_out_in(in_seconds)),
-        None => format!("{name} {figure}"),
-    }
+// "5-hour 42%".
+pub(crate) fn limit_in_line(name: &str, figure: &str) -> String {
+    format!("{name} {figure}")
 }
 
 // "5-hour used up until 14:00".
@@ -2493,81 +2447,17 @@ mod tests {
     #[test]
     fn a_limit_is_spoken_in_words_and_not_in_its_columns_shorthand() {
         assert_eq!(
-            spoken_limit("5-hour", 42.0, Some(3 * 3600), None),
+            spoken_limit("5-hour", 42.0, Some(3 * 3600)),
             "5-hour limit, 42 percent used, resets in 3 hours"
         );
         assert_eq!(
-            spoken_limit("30-minute", 12.0, None, None),
+            spoken_limit("30-minute", 12.0, None),
             "30-minute limit, 12 percent used"
         );
         assert_eq!(
-            spoken_limit("weekly Fable", 98.0, Some(0), None),
+            spoken_limit("weekly Fable", 98.0, Some(0)),
             "weekly Fable limit, 98 percent used, resetting now",
             "a reset whose time has come is said, as the column says it"
-        );
-    }
-
-    /// A limit with a pace says it after what it has used, as how far it is from an even
-    /// pace, so VoiceOver hears what the mark on its bar shows.
-    #[test]
-    fn a_limit_with_a_pace_is_spoken_with_it() {
-        use pitboard_core::usage::pace::{Pace, Standing};
-        let pace = |delta: f64, standing| Pace {
-            expected: 6.0,
-            delta,
-            standing,
-        };
-        assert_eq!(
-            spoken_limit(
-                "weekly",
-                33.0,
-                Some(6 * 86_400),
-                Some(&pace(27.0, Standing::Over { runs_out_in: 9_000 }))
-            ),
-            "weekly limit, 33 percent used, 27 percent over an even pace, resets in 6 days"
-        );
-        assert_eq!(
-            spoken_limit("5-hour", 30.0, None, Some(&pace(-50.0, Standing::Under))),
-            "5-hour limit, 30 percent used, 50 percent under an even pace"
-        );
-        assert_eq!(
-            spoken_limit("5-hour", 52.0, None, Some(&pace(2.0, Standing::Even))),
-            "5-hour limit, 52 percent used, on an even pace"
-        );
-    }
-
-    /// What a bar's help says of its mark: what an even pace would have used by now, and
-    /// for a limit over pace, when it runs out.
-    #[test]
-    fn a_bars_help_says_what_its_mark_means() {
-        use pitboard_core::usage::pace::{Pace, Standing};
-        assert_eq!(
-            pace_help(&Pace {
-                expected: 5.95,
-                delta: 27.05,
-                standing: Standing::Over {
-                    runs_out_in: 73_090
-                },
-            }),
-            "27% over pace: an even pace would have used 6% of it by now. At this pace it \
-             runs out in 20h 18m."
-        );
-        assert_eq!(
-            pace_help(&Pace {
-                expected: 80.0,
-                delta: -50.0,
-                standing: Standing::Under,
-            }),
-            "50% under pace: an even pace would have used 80% of it by now."
-        );
-        assert_eq!(
-            pace_help(&Pace {
-                expected: 5.95,
-                delta: 94.0,
-                standing: Standing::Over { runs_out_in: 36 },
-            }),
-            "94% over pace: an even pace would have used 6% of it by now. At this pace it is \
-             about to run out."
         );
     }
 
@@ -2577,7 +2467,7 @@ mod tests {
     #[test]
     fn a_spoken_span_of_time_reads_the_same_in_every_region() {
         assert_eq!(
-            spoken_limit("5-hour", 42.0, Some(90 * 60), None),
+            spoken_limit("5-hour", 42.0, Some(90 * 60)),
             "5-hour limit, 42 percent used, resets in 1 hour, 30 minutes"
         );
     }
@@ -3763,11 +3653,7 @@ mod tests {
         assert_eq!(NOT_NAMED_YET, "Not named yet");
         assert_eq!(NEEDS_SIGNING_IN_AGAIN, "Needs signing in again");
         assert_eq!(NO_USAGE_READ, "No usage read");
-        assert_eq!(limit_in_line("5-hour", "42%", None), "5-hour 42%");
-        assert_eq!(
-            limit_in_line("weekly", "33%", Some(20 * 3600 + 18 * 60)),
-            "weekly 33% (runs out in 20h 18m)"
-        );
+        assert_eq!(limit_in_line("5-hour", "42%"), "5-hour 42%");
         assert_eq!(
             used_up("5-hour", Some("14:00")),
             "5-hour used up until 14:00"

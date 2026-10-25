@@ -123,6 +123,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- The app no longer marks a limit's pace or says when a limit runs out at it: `pitboard status`
+  still shows both.
 - The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**
   turns each account's warm-up on and off.
 - The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app

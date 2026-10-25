@@ -221,7 +221,7 @@ impl AccountMade {
         AccountMade { windows, ..self }
     }
 
-    /// With its numbers read at `at`, which is what a limit's pace is as of.
+    /// With its numbers read at `at`.
     pub(crate) fn read_at(self, at: i64) -> AccountMade {
         AccountMade {
             read_at: at,

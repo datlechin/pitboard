@@ -83,19 +83,6 @@ import Testing
     #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])
 }
 
-// Each row has a grid of its own, so an empty pace column widened its bars past another row's.
-@MainActor
-@Test func theBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid() {
-    func width(_ pace: LimitPace?) -> CGFloat {
-        let limit = LimitRow(
-            short: "5h", percent: 42, figure: "42%", level: .plenty,
-            resets: "resets in 2h 10m", pace: pace, spoken: "5-hour limit 42% used")
-        return NSHostingView(rootView: UsageBars(limits: [limit])).fittingSize.width
-    }
-    let over = LimitPace(expected: 30, standing: .over, said: "27% over pace", help: "")
-    #expect(width(nil) == width(over))
-}
-
 /// The UI tests find a control by the model's case it shows or sends, whatever it carries.
 @Test func aCaseIsNamedWithoutWhatItCarries() {
     #expect(caseName(Intent.switchTo(qualified: "codex/spare")) == "switchTo")

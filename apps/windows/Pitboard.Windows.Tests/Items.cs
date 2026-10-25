@@ -39,12 +39,11 @@ internal static class Items
             Site: Site(provider), Label: label, Email: $"{label}@example.com",
             Store: $"{provider}-{label}", InUse: inUse, Title: label);
 
-    public static LimitRow Limit(double percent, PaceStanding standing = PaceStanding.Even) =>
+    public static LimitRow Limit(double percent) =>
         new(
             Short: "5h", Percent: percent, Figure: $"{percent:0}%",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
             Resets: "resets in 2h 10m",
-            Pace: new LimitPace(Expected: 30, Standing: standing, Said: standing == PaceStanding.Over ? "over pace" : "", Help: "Even use would be at 30% by now"),
             Spoken: $"5-hour limit {percent:0}% used, resets in 2 hours 10 minutes");
 
     public static ItemOffer Forget(string qualified) =>

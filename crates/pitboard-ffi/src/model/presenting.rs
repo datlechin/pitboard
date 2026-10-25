@@ -17,8 +17,8 @@ use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
 use crate::present::{
     AccountItem, AccountMenuShown, AccountsShown, Choice, Footing, ItemOffer, MenuEntry,
-    NoticeAction, PaceStanding, PanelNotice, Question, RowEnd, SetupLink, SetupStep, Severity,
-    WindowOffer, present,
+    NoticeAction, PanelNotice, Question, RowEnd, SetupLink, SetupStep, Severity, WindowOffer,
+    present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::{OS, Os};
@@ -716,7 +716,7 @@ fn named(limit: &Limit) -> String {
 
 /// A limit at `figure` in the menu's line, by its kind.
 fn at(limit: Limit, figure: &str) -> String {
-    words::limit_in_line(&named(&limit), figure, None)
+    words::limit_in_line(&named(&limit), figure)
 }
 
 /// Every limit in one line, in the order the service gave them, the way a sentence starts: a
@@ -905,113 +905,30 @@ fn busy_limits() -> Vec<Limit> {
     ]
 }
 
-/// Each bar marks where an even use of its limit would be by now, in the words beside it
-/// and the help over it, as `pitboard status` says it; a limit whose pace means nothing
-/// marks nothing.
+// Pace is `pitboard status`'s alone: the apps show no mark, figure, note or menu suffix for it.
 #[test]
-fn a_bar_marks_where_an_even_pace_would_be() {
-    let rows = described(
+fn no_snapshot_says_pace_or_when_a_limit_runs_out() {
+    let (model, _) = reading(vec![
         account(Some("work"))
             .signed_in()
             .limits(busy_limits())
             .read_at(NOON)
             .build(),
-    )
-    .limits;
-    let pace = |limit: &Limit| {
-        pitboard_core::usage::pace::of(
-            limit.percent,
-            limit.resets_at,
-            limit.length_seconds,
-            NOON,
-            NOON,
-        )
-        .expect("a pace")
-    };
-    let [session_limit, week_limit] = &busy_limits()[..] else {
-        unreachable!("two limits");
-    };
-    let session = rows[0].pace.as_ref().expect("a pace");
-    assert_eq!(session.standing, PaceStanding::Under);
-    assert!((session.expected - 80.0).abs() < 1e-9);
-    assert_eq!(
-        session.said,
-        pitboard_core::words::pace_column(&pace(session_limit))
-    );
-    let week = rows[1].pace.as_ref().expect("a pace");
-    assert_eq!(week.standing, PaceStanding::Over);
-    assert_eq!(
-        week.said,
-        pitboard_core::words::pace_column(&pace(week_limit))
-    );
-    assert_eq!(week.help, words::pace_help(&pace(week_limit)));
-    assert_eq!(
-        rows[1].spoken,
-        words::spoken_limit(
-            &named(week_limit),
-            33.0,
-            week_limit.resets_at.map(|at| at - NOON),
-            Some(&pace(week_limit))
-        )
-    );
-    let unknown = described(
-        account(Some("work"))
-            .signed_in()
-            .limits(vec![window("session", 30.0)])
-            .read_at(NOON)
-            .build(),
-    );
-    assert_eq!(unknown.limits[0].pace, None, "no length, no pace");
-}
-
-/// The account in use says which of its limits runs out first at its pace, as a sentence
-/// in the window and beside that limit in the menu. A parked account is not being used, so
-/// nothing of it runs out, and an account with no limit over pace says nothing.
-#[test]
-fn the_account_in_use_says_which_limit_runs_out_first() {
-    let in_use = described(
-        account(Some("work"))
-            .signed_in()
-            .limits(busy_limits())
-            .read_at(NOON)
-            .build(),
-    );
-    let runs_out = 20 * HOUR + 18 * 60;
-    assert_eq!(
-        in_use.notes,
-        [words::typeset(&pitboard_core::words::capitalised(
-            &pitboard_core::words::runs_out(&named(&busy_limits()[1]), runs_out)
-        ))]
-    );
-    assert_eq!(
-        in_use.summary,
-        words::limits_line(&[
-            at(window("session", 0.0), "30%"),
-            words::limit_in_line(&named(&busy_limits()[1]), "33%", Some(runs_out))
-        ])
-    );
-    let parked = described(
         account(Some("spare"))
             .limits(busy_limits())
             .read_at(NOON)
             .build(),
-    );
-    assert!(parked.notes.is_empty());
-    assert_eq!(
-        parked.summary,
-        words::limits_line(&[
-            at(window("session", 0.0), "30%"),
-            at(window("weekly_all", 0.0), "33%")
-        ])
-    );
-    let calm = described(
-        account(Some("work"))
-            .signed_in()
-            .limits(vec![busy_limits().remove(0)])
-            .read_at(NOON)
-            .build(),
-    );
-    assert!(calm.notes.is_empty());
+    ]);
+    for shown in [model.on_a_mac(), model.on_windows()] {
+        let said = format!("{shown:?}").to_lowercase();
+        let pace = said
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|word| word == "pace");
+        assert!(!pace, "{said}");
+        for runs_out in ["runs out in", "about to run out"] {
+            assert!(!said.contains(runs_out), "{runs_out}: {said}");
+        }
+    }
 }
 
 /// Only an enrolled account that is not the one in use may be forgotten: forgetting that one

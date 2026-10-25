@@ -4,8 +4,8 @@
 
 use super::words;
 use super::{
-    AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitPace, LimitRow,
-    MenuBarText, MenuNotices, PaceStanding, Question, RowEnd, Seen, WindowOffer,
+    AccountItem, AccountMenuShown, AccountSection, ItemAction, ItemOffer, LimitRow, MenuBarText,
+    MenuNotices, Question, RowEnd, Seen, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::advice::window;
@@ -13,7 +13,6 @@ use crate::model::{Intent, Sheet};
 use crate::{Account, Limit, Tool};
 use pitboard_core::host::Os;
 use pitboard_core::status::{self, Stale};
-use pitboard_core::usage::pace::{self, Pace, Standing};
 use pitboard_core::words as said;
 use std::cmp::Ordering;
 
@@ -240,13 +239,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             _ => life,
         }
     };
-    let pace = runs_out_first(account, seen.now).map(|(limit, in_seconds)| {
-        let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-        words::typeset(&said::capitalised(&said::runs_out(
-            &scoped_name(&windows[limit]),
-            in_seconds,
-        )))
-    });
     let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
@@ -265,7 +257,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     } else {
         action.clone().map(|action| RowEnd::Button { action })
     };
-    let notes = [&problem, &stale_note, &pace, &parked_note]
+    let notes = [&problem, &stale_note, &parked_note]
         .into_iter()
         .flatten()
         .cloned()
@@ -305,11 +297,10 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             .usage
             .as_ref()
             .map(|usage| {
-                let read_at = usage.observed_at.unwrap_or(seen.now);
                 usage
                     .windows
                     .iter()
-                    .map(|l| limit_row(l, read_at, seen.now))
+                    .map(|l| limit_row(l, seen.now))
                     .collect()
             })
             .unwrap_or_default(),
@@ -509,35 +500,6 @@ fn scoped_name(limit: &Limit) -> String {
     said::scoped_limit_name(&window(limit))
 }
 
-/// A limit's pace as read at `read_at` and told at `now`, as `pitboard status` works it out.
-fn pace_of(limit: &Limit, read_at: i64, now: i64) -> Option<Pace> {
-    pace::of(
-        limit.percent,
-        limit.resets_at,
-        limit.length_seconds,
-        read_at,
-        now,
-    )
-}
-
-/// Which limit of the account in use runs out first at its pace, by its place among the
-/// account's limits, and in how many seconds. Nothing for an account not in use: it is
-/// parked, and nothing of it runs out.
-fn runs_out_first(account: &Account, now: i64) -> Option<(usize, i64)> {
-    if !account.signed_in {
-        return None;
-    }
-    let usage = account.usage.as_ref()?;
-    let read_at = usage.observed_at.unwrap_or(now);
-    pace::first_to_run_out(
-        usage
-            .windows
-            .iter()
-            .enumerate()
-            .map(|(place, limit)| (place, pace_of(limit, read_at, now))),
-    )
-}
-
 pub(crate) fn needs_sign_in(account: &Account) -> bool {
     account.label.is_some() && account.standing.needs_sign_in()
 }
@@ -575,33 +537,25 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
 
 fn limits_said(seen: &Seen, account: &Account) -> String {
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
-    // The limit that runs out first, said beside its own figure, where there is one.
-    let first = runs_out_first(account, seen.now);
     let limits: Vec<String> = windows
         .iter()
-        .enumerate()
-        .map(|(at, limit)| {
+        .map(|limit| {
             let scoped = scoped_name(limit);
-            let used_up = window(limit).used_up(seen.now);
-            if used_up {
+            if window(limit).used_up(seen.now) {
                 return words::used_up(
                     &scoped,
                     limit.resets_at.map(|back| seen.clock(back)).as_deref(),
                 );
             }
-            let runs_out = first
-                .filter(|(first, _)| *first == at)
-                .map(|(_, in_seconds)| in_seconds);
-            words::limit_in_line(&scoped, &said::figure(limit.percent), runs_out)
+            words::limit_in_line(&scoped, &said::figure(limit.percent))
         })
         .collect();
     words::limits_line(&limits)
 }
 
-/// One limit as a row of its account's bars, from a reading taken at `read_at`, as of `now`.
-pub(crate) fn limit_row(limit: &Limit, read_at: i64, now: i64) -> LimitRow {
+/// One limit as a row of its account's bars, as of `now`.
+pub(crate) fn limit_row(limit: &Limit, now: i64) -> LimitRow {
     let name = scoped_name(limit);
-    let pace = pace_of(limit, read_at, now);
     LimitRow {
         short: said::limit_column(&window(limit)),
         percent: limit.percent,
@@ -611,22 +565,7 @@ pub(crate) fn limit_row(limit: &Limit, read_at: i64, now: i64) -> LimitRow {
             .resets_at
             .map(|at| said::resets(at, now))
             .unwrap_or_default(),
-        spoken: words::spoken_limit(
-            &name,
-            limit.percent,
-            limit.resets_at.map(|at| at - now),
-            pace.as_ref(),
-        ),
-        pace: pace.as_ref().map(|pace| LimitPace {
-            expected: pace.expected,
-            standing: match pace.standing {
-                Standing::Under => PaceStanding::Under,
-                Standing::Even => PaceStanding::Even,
-                Standing::Over { .. } => PaceStanding::Over,
-            },
-            said: said::pace_column(pace),
-            help: words::pace_help(pace),
-        }),
+        spoken: words::spoken_limit(&name, limit.percent, limit.resets_at.map(|at| at - now)),
     }
 }
 
@@ -1057,7 +996,6 @@ mod tests {
             words::limits_line(&[words::limit_in_line(
                 &scoped_name(&window("session", 12.0)),
                 "12%",
-                None,
             )])
         };
         assert_eq!(
@@ -1102,18 +1040,16 @@ mod tests {
     }
 
     /// A limit's row says what the column beside its bar says and what VoiceOver hears, from
-    /// its record and the moment it is shown: names, figure, step, pace and reset.
+    /// its record and the moment it is shown: names, figure, step and reset.
     #[test]
-    fn a_limits_row_says_its_names_figure_step_pace_and_reset() {
+    fn a_limits_row_says_its_names_figure_step_and_reset() {
         let now = 1_800_000_000;
         let left = 3 * 3600 + 5 * 60;
         let limit = window("weekly_scoped", 72.4)
             .scope("Fable")
             .length(604_800)
             .resets(Some(now + left));
-        let row = limit_row(&limit, now, now);
-        let pace = pace_of(&limit, now, now).expect("a pace");
-        assert_eq!(pace.standing, Standing::Under);
+        let row = limit_row(&limit, now);
         assert_eq!(
             row.short,
             said::limit_column(&crate::model::advice::window(&limit))
@@ -1122,28 +1058,22 @@ mod tests {
         assert_eq!(row.level, crate::UsageLevel::Low);
         assert_eq!(row.resets, said::resets(now + left, now));
         assert_eq!(
-            row.pace
-                .as_ref()
-                .map(|shown| (shown.standing, shown.said.clone())),
-            Some((PaceStanding::Under, said::pace_column(&pace)))
-        );
-        assert_eq!(
             row.spoken,
-            words::spoken_limit(&scoped_name(&limit), 72.4, Some(left), Some(&pace))
+            words::spoken_limit(&scoped_name(&limit), 72.4, Some(left))
         );
         let unknown = window("session", 42.0).resets(None);
-        let unknown_row = limit_row(&unknown, now, now);
+        let unknown_row = limit_row(&unknown, now);
         assert_eq!(unknown_row.resets, "", "nothing where no reset is known");
         assert_eq!(
             unknown_row.spoken,
-            words::spoken_limit(&scoped_name(&unknown), 42.0, None, None)
+            words::spoken_limit(&scoped_name(&unknown), 42.0, None)
         );
-        let due = limit_row(&window("session", 100.0).resets(Some(now)), now, now);
+        let due = limit_row(&window("session", 100.0).resets(Some(now)), now);
         assert_eq!(due.resets, said::resets(now, now));
         assert_eq!(due.level, crate::UsageLevel::Out);
         assert_eq!(
             due.spoken,
-            words::spoken_limit(&scoped_name(&window("session", 0.0)), 100.0, Some(0), None)
+            words::spoken_limit(&scoped_name(&window("session", 0.0)), 100.0, Some(0))
         );
     }
 
@@ -1153,8 +1083,7 @@ mod tests {
     #[test]
     fn a_reset_is_said_as_the_command_line_says_it() {
         let noon = 1_768_392_000;
-        let resets =
-            |at: Option<i64>| limit_row(&window("session", 42.0).resets(at), noon, noon).resets;
+        let resets = |at: Option<i64>| limit_row(&window("session", 42.0).resets(at), noon).resets;
         for at in [
             noon + 3600 + 5 * 60,
             noon + 2 * 86_400 + 4 * 3600,

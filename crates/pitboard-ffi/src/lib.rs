@@ -55,12 +55,11 @@ pub use present::{
     AccountItem, AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown,
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice,
     CommandLineShown, DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction,
-    ItemOffer, LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices,
-    Missing, NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice,
-    PickerAccount, PickerShown, Question, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
-    SheetText, SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown,
-    WarmAccountShown, WarmShown, WindowOffer, WindowQuestion, WindowWaiting, check_name,
-    downloads_quit_question,
+    ItemOffer, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
+    NameCheck, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount, PickerShown,
+    Question, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
+    SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmShown,
+    WindowOffer, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;
