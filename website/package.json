@@ -11,6 +11,7 @@
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "check": "ASTRO_TELEMETRY_DISABLED=1 astro check",
     "test": "node --test \"src/lib/*.test.ts\" \"src/data/*.test.ts\" \"src/scripts/*.test.ts\" \"scripts/*.test.mjs\"",
+    "test:browser": "playwright test",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -25,6 +26,8 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
     "prettier": "3.9.10",
     "prettier-plugin-astro": "1.1.0",
     "prettier-plugin-tailwindcss": "0.8.1",
