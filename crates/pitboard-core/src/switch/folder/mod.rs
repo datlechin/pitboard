@@ -21,7 +21,7 @@ mod verdict;
 
 pub use settle::{Ended, GivenUp, MoveSettled};
 
-use super::enroll::{Enrolled, account, claim};
+use super::enroll::{Enrolled, Enrolment, Filing, account};
 use super::{Error, Outcome, Result, Settled, enrolled, identify, shape};
 use crate::context::Context;
 use crate::error::{LoginDoubt, Then};
@@ -231,30 +231,37 @@ fn looks_signed_out(state: &State, app: &dyn Folder, settings: &AppSettings) -> 
     state.account_of(app.id(), owner).map(state::Account::key)
 }
 
-// The login the app holds, filed under `key`: the person's word for whose it is. Moves
-// nothing but what a stopped move left beside it. A park it supersedes is set aside.
+// The login the app holds, filed as `filing` says: the person's word for whose it is.
 pub(crate) fn enroll(
     settled: Settled,
-    key: &Key,
+    filing: &Filing,
     app: &'static dyn Folder,
-) -> Result<(Enrolled, Vec<Warning>)> {
-    enroll_as(settled, key, app, false)
+) -> Result<(Enrolment, Vec<Warning>)> {
+    enroll_as(settled, filing, app, None)
 }
 
-// `waited`: the enrolment of a sign-in inside the app that Pitboard waited for.
+// The label of the add of `tool`'s account an earlier sign-in inside its app waits for.
+fn added_as(state: &State, tool: crate::provider::ProviderId) -> Option<&str> {
+    state
+        .awaiting(tool)
+        .filter(|awaited| awaited.account.is_none())
+        .map(|awaited| awaited.label.as_str())
+}
+
+// `waited`: the label a sign-in inside the app that Pitboard waited for was started under.
 fn enroll_as(
     settled: Settled,
-    key: &Key,
+    filing: &Filing,
     app: &'static dyn Folder,
-    waited: bool,
-) -> Result<(Enrolled, Vec<Warning>)> {
+    waited: Option<&str>,
+) -> Result<(Enrolment, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
         ctx,
         permit,
     } = settled;
-    let tool = key.provider;
+    let tool = filing.provider();
     let _closed = closed(&ctx, app)?;
     // A move that cannot be settled is given up only once this enrolment will go through.
     let (stopped, warnings) = match settle::settle(&ctx, permit, &mut state, app) {
@@ -269,7 +276,10 @@ fn enroll_as(
             Verdict::Nobody { .. } => {
                 return Err(Error::LiveCredentialAbsent {
                     tool,
-                    label: Some(state.typed(key)),
+                    label: match filing {
+                        Filing::Under(key) => Some(state.typed(key)),
+                        Filing::FromEmail(_) => None,
+                    },
                     spelling: crate::words::spelled(&ctx, tool),
                 });
             }
@@ -303,27 +313,30 @@ fn enroll_as(
             Named::Enrolled(holder) => enrolled(&state, holder)?.owner(),
             Named::NotEnrolled { uuid } => in_use::named_only(uuid.clone()),
         };
-        claim(&state, key, &owner).map_err(|refused| match refused {
-            Error::AlreadyEnrolled {
-                tool,
-                email,
-                label,
-                asked,
-                ..
-            } => Error::AlreadyEnrolled {
-                tool,
-                email,
-                label,
-                asked,
-                waited,
-            },
-            other => other,
-        })?;
+        let new = waited.or_else(|| added_as(&state, tool)).map(str::to_owned);
+        let (key, added) = filing
+            .filed(&state, &owner, new.as_deref())
+            .map_err(|refused| match refused {
+                Error::AlreadyEnrolled {
+                    tool,
+                    email,
+                    label,
+                    asked,
+                    ..
+                } => Error::AlreadyEnrolled {
+                    tool,
+                    email,
+                    label,
+                    asked,
+                    waited: waited.is_some(),
+                },
+                other => other,
+            })?;
+        let key = &key;
         if stopped && let Some((_, said)) = settle::give_up(&ctx, permit, &mut state, app, true)? {
             warnings.extend(said);
         }
         let now = ctx.now();
-        let again = state.get(key).is_some();
         let parked = state.get(key).and_then(|a| a.parked.clone());
         state.upsert(account(
             tool,
@@ -381,17 +394,21 @@ fn enroll_as(
         state::save(&ctx, permit, &state)?;
         warnings.extend(filed);
         identify::write_down(&ctx, permit, &noticed);
-        let enrolled = if waited {
+        let enrolled = if waited.is_some() {
             Enrolled::InUse {
                 email: String::new(),
-                again,
+                again: !added,
             }
         } else {
             Enrolled::Current {
                 email: String::new(),
             }
         };
-        Ok(enrolled)
+        Ok(Enrolment {
+            key: key.clone(),
+            added,
+            enrolled,
+        })
     })
 }
 

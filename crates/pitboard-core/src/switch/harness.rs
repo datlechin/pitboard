@@ -384,8 +384,7 @@ pub(crate) fn desktop_pair(name: &str) -> Rig {
     m
 }
 
-// `pitboard enroll desktop/<label> --sign-in`, with Claude opened, signed in to `who` and quit
-// once the wait has said it saw Claude open.
+// `pitboard enroll desktop/<label> --sign-in`, through `signed_in_inside`.
 pub(crate) fn sign_in_inside(
     m: &Rig,
     label: &str,
@@ -396,6 +395,19 @@ pub(crate) fn sign_in_inside(
     let watched = pitboard
         .sign_in_watched(&typed)
         .map_err(|failed| failed.error)?;
+    let login = signed_in_inside(m, watched, who)?;
+    pitboard
+        .enroll_signed_in(&typed, login)
+        .map(|done| (done.value, done.warnings))
+        .map_err(|failed| failed.error)
+}
+
+// Claude opened, signed in to `who` and quit once the wait has said it saw Claude open.
+pub(crate) fn signed_in_inside(
+    m: &Rig,
+    watched: WatchedSignIn,
+    who: &crate::desktop_testing::Person,
+) -> Result<SignIn> {
     let said = watched.said();
     let claude = m.claude();
     claude.opens();
@@ -418,11 +430,7 @@ pub(crate) fn sign_in_inside(
             Err(RecvTimeoutError::Timeout) => panic!("the wait never ended once Claude quit"),
         }
     }
-    let login = watched.finish()?;
-    pitboard
-        .enroll_signed_in(&typed, login)
-        .map(|done| (done.value, done.warnings))
-        .map_err(|failed| failed.error)
+    watched.finish()
 }
 
 pub(crate) fn sessions(m: &Rig) -> Vec<(String, String)> {

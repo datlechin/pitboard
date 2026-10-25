@@ -201,6 +201,58 @@ pub fn choose(typed: &str) -> std::result::Result<Chosen, String> {
     }
 }
 
+// Anyone can have an address at one of these, so the domain says nothing of whose it is.
+const MAIL_SERVICES: &[&str] = &[
+    "163",
+    "aol",
+    "fastmail",
+    "gmail",
+    "gmx",
+    "googlemail",
+    "hey",
+    "hotmail",
+    "icloud",
+    "live",
+    "mac",
+    "mail",
+    "me",
+    "msn",
+    "naver",
+    "outlook",
+    "pm",
+    "proton",
+    "protonmail",
+    "qq",
+    "web",
+    "yahoo",
+    "yandex",
+    "zoho",
+];
+
+/// A name no account of `provider`'s tool has, from `email` where it gives one.
+pub fn suggest(state: &State, provider: ProviderId, email: &str) -> String {
+    let email = email.to_lowercase();
+    let (local, domain) = email.rsplit_once('@').unwrap_or_default();
+    let mailbox = local.split('+').next().unwrap_or_default();
+    let company = domain.split('.').next().unwrap_or_default();
+    let company = Some(company).filter(|company| !MAIL_SERVICES.contains(company));
+    let mut names: Vec<&str> = company
+        .into_iter()
+        .chain([mailbox])
+        .filter(|name| check(name).is_ok())
+        .collect();
+    if names.is_empty() {
+        names.push(provider.code());
+    }
+    let first = names[0];
+    names
+        .iter()
+        .map(|name| (*name).to_owned())
+        .chain((2..).map(|n| format!("{first}-{n}")))
+        .find(|name| state.get(&Key::new(provider, name.as_str())).is_none())
+        .expect("a numbered name no account has")
+}
+
 // An account enrolled already keeps the name it has, which a new one may no longer get:
 // 0.1.x wrote labels with a slash, and the app took labels with a space.
 pub(crate) fn enrolling(state: Option<&State>, typed: &str) -> Result<Key> {
@@ -422,6 +474,44 @@ mod tests {
             let refused = choose(typed).unwrap_err();
             assert!(refused.contains(says), "{typed}: {refused}");
         }
+    }
+
+    // A work address names its company, one at a mail service its mailbox.
+    #[test]
+    fn a_suggested_name_is_one_word_free_in_its_tool_and_never_empty() {
+        let (claude, desktop) = (ProviderId::Claude, ProviderId::Desktop);
+        let none = state(&[]);
+        assert_eq!(suggest(&none, claude, "dana@acme.io"), "acme");
+        assert_eq!(suggest(&none, claude, "dana@eng.acme.io"), "eng");
+        assert_eq!(
+            suggest(&none, ProviderId::Codex, "Dana.Lee+pitboard@Gmail.com"),
+            "dana.lee"
+        );
+        for abroad in ["dana@icloud.com", "dana@yahoo.co.uk", "dana@web.de"] {
+            assert_eq!(suggest(&none, claude, abroad), "dana", "{abroad}");
+        }
+        let taken = |labels: &[&str]| {
+            let labels: Vec<_> = labels.iter().map(|label| (claude, *label)).collect();
+            suggest(&state(&labels), claude, "dana@acme.io")
+        };
+        assert_eq!(taken(&["acme"]), "dana");
+        assert_eq!(taken(&["acme", "dana"]), "acme-2");
+        assert_eq!(taken(&["acme", "dana", "acme-2"]), "acme-3");
+        assert_eq!(
+            suggest(
+                &state(&[(ProviderId::Codex, "acme")]),
+                claude,
+                "dana@acme.io"
+            ),
+            "acme",
+            "another tool's names are its own"
+        );
+        assert_eq!(suggest(&none, desktop, ""), "desktop");
+        assert_eq!(
+            suggest(&state(&[(desktop, "desktop")]), desktop, ""),
+            "desktop-2"
+        );
+        assert_eq!(suggest(&none, claude, "not an address"), "claude");
     }
 
     #[test]

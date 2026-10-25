@@ -1,11 +1,11 @@
 // A sign-in inside the app: the account in use is parked, the app is left signed out, and a
 // thread waits for it to be opened and quit signed in. The core opens and quits nothing.
 
-use super::super::enroll::{Enrolled, SignIn, Steps, WatchedSignIn};
+use super::super::enroll::{Enrolment, Filing, SignIn, Steps, WatchedSignIn, new_label};
 use super::super::{Error, Result, Settled, enrolled, exclusive, identify, shape};
 use super::moves::{self, Leaving, Move, Step};
 use super::verdict::{Unsure, Verdict, look};
-use super::{Begun, Open, begin, midway, open, refusal, saying, there};
+use super::{Begun, Open, added_as, begin, midway, open, refusal, saying, there};
 use crate::context::Context;
 use crate::error::Then;
 use crate::fault;
@@ -97,12 +97,10 @@ fn set_keys_aside(
     }))
 }
 
-// Parks the account in use, or sets a signed-out app's keys aside, then waits on a thread of
-// its own. Each warning of the start is said as a line after `first`, since a sign-in returns
-// none.
+// Each warning of the start is said as a line after `first`, since a sign-in returns none.
 pub(crate) fn start(
     settled: Settled,
-    key: &Key,
+    filing: &Filing,
     app: &'static dyn Folder,
     one_at_a_time: std::fs::File,
     first: Vec<String>,
@@ -113,7 +111,12 @@ pub(crate) fn start(
         ctx,
         permit,
     } = settled;
-    let tool = key.provider;
+    let tool = filing.provider();
+    // A new account waits under the name an add left halfway waits under, or `desktop`.
+    let key = &match filing {
+        Filing::Under(key) => key.clone(),
+        Filing::FromEmail(_) => Key::new(tool, new_label(&state, tool, added_as(&state, tool), "")),
+    };
     let label = state.typed(key);
     let again = state.get(key).map(|a| a.id.clone());
     let Begun {
@@ -233,7 +236,14 @@ pub(crate) fn start(
         stop,
         thread: Some(thread),
     };
-    let pending = SignIn::in_its_app(&ctx, permit, one_at_a_time, app, put_back);
+    let pending = SignIn::in_its_app(
+        &ctx,
+        permit,
+        one_at_a_time,
+        app,
+        put_back,
+        key.label.clone(),
+    );
     Ok((WatchedSignIn::awaited(pending, wait, said, steps), warnings))
 }
 
@@ -336,11 +346,12 @@ impl Waiting {
     }
 }
 
-// The one enrolment of a sign-in waited for: `folder::enroll`, said as a sign-in.
+// The one enrolment of a sign-in waited for under `waits_as`: `folder::enroll`, as a sign-in.
 pub(crate) fn enroll(
     settled: Settled,
-    key: &Key,
+    filing: &Filing,
     app: &'static dyn Folder,
-) -> Result<(Enrolled, Vec<Warning>)> {
-    super::enroll_as(settled, key, app, true)
+    waits_as: &str,
+) -> Result<(Enrolment, Vec<Warning>)> {
+    super::enroll_as(settled, filing, app, Some(waits_as))
 }

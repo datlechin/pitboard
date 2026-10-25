@@ -11,7 +11,7 @@ pub use crate::permit::Permit;
 use crate::permit::gate;
 use crate::provider::{LoginKind, ProviderId};
 use crate::state::{self, Account, Key};
-use crate::switch::{self, Enrolled, Outcome, Renewal, Settled, SignIn};
+use crate::switch::{self, Enrolled, Enrolment, Filing, Naming, Outcome, Renewal, Settled, SignIn};
 use crate::usage::budget::Ask;
 use crate::usage::readings;
 pub use crate::warning::Warning;
@@ -343,14 +343,37 @@ impl Pitboard {
     ) -> std::result::Result<switch::WatchedSignIn, Failed> {
         let permit = self.permitted()?;
         let key = self.chosen(permit, "enroll", typed)?;
-        let driver = match crate::provider::of(key.provider) {
+        self.watched(permit, typed, &Filing::Under(key))
+    }
+
+    /// [`Pitboard::sign_in_watched`] for a new account, named as [`Naming::FromEmail`] says.
+    pub fn sign_in_watched_for(
+        &self,
+        which: ProviderId,
+    ) -> std::result::Result<switch::WatchedSignIn, Failed> {
+        let permit = self.permitted()?;
+        self.watched(permit, "", &Filing::FromEmail(which))
+    }
+
+    // `typed`: what the log names a sign-in that does not start by.
+    fn watched(
+        &self,
+        permit: Permit,
+        typed: &str,
+        filing: &Filing,
+    ) -> std::result::Result<switch::WatchedSignIn, Failed> {
+        let which = filing.provider();
+        let driver = match crate::provider::of(which) {
             LoginKind::Document(driver) => driver,
             // `signin.lock` is taken before `state.lock`, as every sign-in's.
             LoginKind::Folder(app) => {
                 let one_at_a_time = switch::one_at_a_time(&self.ctx, permit)
                     .map_err(|error| self.not_started(permit, typed, error))?;
-                let subject = key.typed();
-                let settling = self.settled_for(permit, "park", &subject, Some(key.provider))?;
+                let subject = match filing {
+                    Filing::Under(key) => key.typed(),
+                    Filing::FromEmail(_) => String::new(),
+                };
+                let settling = self.settled_for(permit, "park", &subject, Some(which))?;
                 // A sign-in returns no warnings, so what settling found is said first.
                 let first = settling
                     .1
@@ -359,13 +382,17 @@ impl Pitboard {
                     .collect();
                 return self
                     .change(permit, "park", &subject, settling, |settled| {
-                        switch::folder::awaited::start(settled, &key, app, one_at_a_time, first)
+                        switch::folder::awaited::start(settled, filing, app, one_at_a_time, first)
                     })
                     .map(|started| started.value);
             }
         };
+        let key = match filing {
+            Filing::Under(key) => Some(key),
+            Filing::FromEmail(_) => None,
+        };
         switch::ready_to_sign_in(&self.ctx, driver)
-            .and_then(|()| switch::sign_in_watched_as(&self.ctx, permit, driver, &key))
+            .and_then(|()| switch::sign_in_watched_as(&self.ctx, permit, driver, key))
             .map_err(|error| self.not_started(permit, typed, error))
     }
 
@@ -390,6 +417,45 @@ impl Pitboard {
     fn not_started(&self, permit: Permit, typed: &str, error: Error) -> Failed {
         audit::record(&self.ctx, permit, "enroll", typed, error.code());
         Failed::refused(error)
+    }
+
+    /// [`Pitboard::enroll_signed_in`] under `naming`, with the account it is filed under.
+    pub fn enroll_signed_in_as(&self, login: SignIn, naming: Naming) -> Changing<Enrolment> {
+        let permit = self.permitted()?;
+        let (filing, subject) = self.filing(permit, login.provider(), naming)?;
+        self.changing(
+            permit,
+            "enroll",
+            &subject,
+            Some(filing.provider()),
+            |settled| switch::enroll_filed(settled, &filing, Some(login)),
+        )
+    }
+
+    /// [`Pitboard::enroll_current`] of `which`'s tool under `naming`, with its account.
+    pub fn enroll_current_as(&self, which: ProviderId, naming: Naming) -> Changing<Enrolment> {
+        let permit = self.permitted()?;
+        let (filing, subject) = self.filing(permit, which, naming)?;
+        self.changing(permit, "enroll", &subject, Some(which), |settled| {
+            switch::enroll_filed(settled, &filing, None)
+        })
+    }
+
+    // What `naming` files an account of `which` under, and what the log names it by until then.
+    fn filing(
+        &self,
+        permit: Permit,
+        which: ProviderId,
+        naming: Naming,
+    ) -> std::result::Result<(Filing, String), Failed> {
+        match naming {
+            Naming::As(label) => {
+                let key = self.chosen(permit, "enroll", &Key::new(which, label).qualified())?;
+                let subject = key.typed();
+                Ok((Filing::Under(key), subject))
+            }
+            Naming::FromEmail => Ok((Filing::FromEmail(which), String::new())),
+        }
     }
 
     pub fn enroll_signed_in(&self, typed: &str, login: SignIn) -> Changing<Enrolled> {
@@ -785,8 +851,8 @@ impl Pitboard {
     ) -> Changing<T> {
         match run(settled) {
             Ok((value, more)) => {
-                let subject = value.audit_subject().unwrap_or(subject);
-                audit::record(&self.ctx, permit, verb, subject, value.audit_code());
+                let subject = value.audit_subject().unwrap_or_else(|| subject.to_owned());
+                audit::record(&self.ctx, permit, verb, &subject, value.audit_code());
                 warnings.extend(more);
                 Ok(Done { value, warnings })
             }
@@ -841,7 +907,7 @@ trait Audited {
     }
 
     // The account it was of, where only running it could tell.
-    fn audit_subject(&self) -> Option<&str> {
+    fn audit_subject(&self) -> Option<String> {
         None
     }
 }
@@ -860,8 +926,19 @@ impl Audited for Outcome {
 }
 
 impl Audited for switch::Reclaimed {}
-impl Audited for switch::WatchedSignIn {}
 impl Audited for Enrolled {}
+
+impl Audited for switch::WatchedSignIn {
+    fn audit_subject(&self) -> Option<String> {
+        self.waits_as().map(|key| key.typed())
+    }
+}
+
+impl Audited for Enrolment {
+    fn audit_subject(&self) -> Option<String> {
+        Some(self.key.typed())
+    }
+}
 impl Audited for String {}
 impl Audited for bool {}
 impl Audited for crate::duty::warm::Range {}
@@ -871,8 +948,8 @@ impl Audited for switch::Stowed {
         self.kept.code()
     }
 
-    fn audit_subject(&self) -> Option<&str> {
-        self.kept.account()
+    fn audit_subject(&self) -> Option<String> {
+        self.kept.account().map(str::to_owned)
     }
 }
 

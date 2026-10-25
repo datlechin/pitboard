@@ -410,32 +410,41 @@ fn reads_as_settling_refuses(case: &str, make: Make, point: &'static str) {
     }
 }
 
+// A sign-in the core names from its email, as the app's, beside one named first.
+fn filings(which: ProviderId, label: &str) -> [(&'static str, Filing); 2] {
+    [
+        ("named", Filing::Under(Key::new(which, label))),
+        ("given no name", Filing::FromEmail(which)),
+    ]
+}
+
 /// Enrolling by signing in writes a login into the vault before anything names it. Killed
 /// in that window, the item is an orphan: never renewed, never deleted, and on macOS not
 /// listable by any tool the user has.
 #[test]
 fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
     for point in ["enroll.park_stored", "enroll.park_recorded"] {
-        let m = machine(&point.replace('.', "-"));
-        m.api.owned_by("access-third-refresh", owner("third"));
+        for (how, filing) in filings(ProviderId::Claude, "third") {
+            let m = machine(&point.replace('.', "-"));
+            m.api.owned_by("access-third-refresh", owner("third"));
 
-        let settled = settle(&m.ctx, Permit::for_a_test(), None)
-            .expect("nothing to recover")
-            .0;
-        let login = planted(
-            &m.ctx,
-            Permit::for_a_test(),
-            provider::document(ProviderId::Claude),
-            document("third-refresh"),
-        )
-        .expect("a sign-in");
-        let died = fault::killing(point, || {
-            enroll(settled, &Key::new(ProviderId::Claude, "third"), Some(login))
-        });
-        assert_eq!(died.unwrap_err(), point);
+            let settled = settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0;
+            let login = planted(
+                &m.ctx,
+                Permit::for_a_test(),
+                provider::document(ProviderId::Claude),
+                document("third-refresh"),
+            )
+            .expect("a sign-in");
+            let died = fault::killing(point, || enroll_filed(settled, &filing, Some(login)));
+            assert_eq!(died.unwrap_err(), point, "{how}");
 
-        recover(&m).unwrap_or_else(|e| panic!("{point}: recovery refused: {e}"));
-        hold(&m, point);
+            let at = format!("{how}, {point}");
+            recover(&m).unwrap_or_else(|e| panic!("{at}: recovery refused: {e}"));
+            hold(&m, &at);
+        }
     }
 }
 
@@ -444,24 +453,30 @@ fn enrolling_killed_between_the_write_and_the_record_leaves_nothing_unnamed() {
 /// the login that was written and every other account still has its own.
 #[test]
 fn signing_in_again_killed_at_any_step_recovers_to_something_whole() {
-    let machines: [(&str, Make); 2] = [("claude", machine), ("codex", codex_machine)];
+    let machines: [(ProviderId, Make); 2] = [
+        (ProviderId::Claude, machine),
+        (ProviderId::Codex, codex_machine),
+    ];
     for (tool, make) in machines {
-        for point in ["enroll.installed", "enroll.recorded"] {
+        for (point, (how, filing)) in ["enroll.installed", "enroll.recorded"]
+            .into_iter()
+            .flat_map(|point| filings(tool, "here").map(|filing| (point, filing)))
+        {
             let m = make(&format!("again-{}", point.replace('.', "-")));
             let login = signed_in(&m, "here", "here-refresh-2");
 
             let settled = settle(&m.ctx, Permit::for_a_test(), None)
                 .expect("nothing to recover yet")
                 .0;
-            let died = fault::killing(point, || enroll(settled, &m.key("here"), Some(login)));
+            let died = fault::killing(point, || enroll_filed(settled, &filing, Some(login)));
             assert_eq!(
                 died.unwrap_err(),
                 point,
-                "{tool}: the sign-in must reach {point} on this machine, or the case proves \
-                 nothing"
+                "{tool}, {how}: the sign-in must reach {point} on this machine, or the case \
+                 proves nothing"
             );
 
-            let at = format!("{tool}, {point}");
+            let at = format!("{tool}, {how}, {point}");
             recover(&m).unwrap_or_else(|e| panic!("{at}: recovery refused: {e}"));
             hold(&m, &at);
             let live = m.live().expect("a login in use");

@@ -163,6 +163,8 @@ pub enum Unidentified {
     Unnamed,
     /// The one a sign-in for the account typed as `label` made.
     SignIn { label: String },
+    /// The one a sign-in for an account not named yet made.
+    NewSignIn,
     /// The one parked for the account typed as `label`.
     Parked { label: String },
 }
@@ -1314,6 +1316,7 @@ fn identity_unverifiable(
         (None, _, Unidentified::Parked { label } | Unidentified::SignIn { label }) => {
             format!("Sign in to it again with `pitboard enroll {label} --sign-in`.")
         }
+        (None, _, Unidentified::NewSignIn) => "Sign in again.".to_owned(),
     };
     match login {
         Unidentified::SignedIn => format!(
@@ -1327,6 +1330,10 @@ fn identity_unverifiable(
         Unidentified::SignIn { label } => format!(
             "Pitboard could not confirm with {service} whose login the sign-in for `{label}` \
              made ({detail}), and keeps no login it cannot identify. {next}"
+        ),
+        Unidentified::NewSignIn => format!(
+            "Pitboard could not confirm with {service} whose login the sign-in made ({detail}), \
+             and keeps no login it cannot identify. {next}"
         ),
         Unidentified::Unnamed => format!(
             "{service} named the account of {}'s login and would not give its email \
@@ -1354,6 +1361,7 @@ fn account_on_hold(tool: ProviderId, login: &Unidentified, link: Option<&str>) -
         Unidentified::Parked { label } | Unidentified::SignIn { label } => {
             format!("`{label}`'s account")
         }
+        Unidentified::NewSignIn => "the account signed in to".to_owned(),
     };
     format!(
         "{service} has put {whose} on hold{see}. Pitboard keeps its login. Follow {service}'s \
@@ -2591,6 +2599,27 @@ mod tests {
             "Pitboard could not confirm with Anthropic whose login the sign-in for `dtg` made \
              (Anthropic answered 400), and keeps no login it cannot identify. Sign in to it \
              again with `pitboard enroll dtg --sign-in`."
+        );
+    }
+
+    #[test]
+    fn a_sign_in_for_an_account_not_named_yet_is_said_without_a_name() {
+        let error = |cause| Error::IdentityUnverifiable {
+            tool: ProviderId::Codex,
+            login: Unidentified::NewSignIn,
+            cause,
+            detail: "OpenAI answered 400".into(),
+            spelling: Spelling::Bare,
+        };
+        assert_eq!(
+            error(Cause::Refused).to_string(),
+            "Pitboard could not confirm with OpenAI whose login the sign-in made (OpenAI \
+             answered 400), and keeps no login it cannot identify. Sign in again."
+        );
+        assert_eq!(
+            account_on_hold(ProviderId::Codex, &Unidentified::NewSignIn, None),
+            "OpenAI has put the account signed in to on hold. Pitboard keeps its login. Follow \
+             OpenAI's instructions for the account, then try again."
         );
     }
 

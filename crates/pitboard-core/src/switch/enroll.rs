@@ -27,6 +27,73 @@ pub enum Enrolled {
     InUse { email: String, again: bool },
 }
 
+/// The name an account is enrolled under.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Naming {
+    /// This label of the login's own tool: the account's own, or a new one.
+    As(String),
+    /// Its owner's label where it is enrolled already, or else one `label::suggest` makes.
+    FromEmail,
+}
+
+/// What enrolling under a [`Naming`] came to.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Enrolment {
+    /// The account the login is filed under.
+    pub key: Key,
+    /// Whether this enrolment added the account, rather than one enrolled already.
+    pub added: bool,
+    pub enrolled: Enrolled,
+}
+
+// What an enrolment files the account under, once its name is read.
+pub(crate) enum Filing {
+    Under(Key),
+    FromEmail(ProviderId),
+}
+
+impl Filing {
+    pub(crate) fn provider(&self) -> ProviderId {
+        match self {
+            Filing::Under(key) => key.provider,
+            Filing::FromEmail(which) => *which,
+        }
+    }
+
+    // The account `owner`'s login is filed under, claimed, and whether that adds it.
+    pub(super) fn filed(
+        &self,
+        state: &State,
+        owner: &Owner,
+        new: Option<&str>,
+    ) -> Result<(Key, bool)> {
+        let key = match self {
+            Filing::Under(key) => key.clone(),
+            Filing::FromEmail(which) => {
+                if let Some(account) = state.account_of(*which, owner) {
+                    return Ok((account.key(), false));
+                }
+                Key::new(*which, new_label(state, *which, new, &owner.email))
+            }
+        };
+        claim(state, &key, owner)?;
+        let added = state.get(&key).is_none();
+        Ok((key, added))
+    }
+}
+
+// A new account of `which`'s tool: `new` where no account has it, or else what `email` suggests.
+pub(super) fn new_label(
+    state: &State,
+    which: ProviderId,
+    new: Option<&str>,
+    email: &str,
+) -> String {
+    new.filter(|label| state.get(&Key::new(which, *label)).is_none())
+        .map_or_else(|| crate::label::suggest(state, which, email), str::to_owned)
+}
+
 // Not yet enrolled. Dropping a program's deletes its private directory and what it kept.
 pub struct SignIn {
     provider: ProviderId,
@@ -68,6 +135,8 @@ enum How {
         app: &'static dyn Folder,
         // the account parked for it; None where nothing is
         put_back: Option<Key>,
+        // the label a new account it signs in to is added under
+        waits_as: String,
     },
 }
 
@@ -83,10 +152,15 @@ impl SignIn {
         one_at_a_time: File,
         app: &'static dyn Folder,
         put_back: Option<Key>,
+        waits_as: String,
     ) -> SignIn {
         SignIn {
             provider: app.id(),
-            how: How::InItsApp { app, put_back },
+            how: How::InItsApp {
+                app,
+                put_back,
+                waits_as,
+            },
             ctx: ctx.clone(),
             permit,
             one_at_a_time,
@@ -456,6 +530,14 @@ impl WatchedSignIn {
         }
     }
 
+    // The account a sign-in inside an app waits to enrol.
+    pub(crate) fn waits_as(&self) -> Option<Key> {
+        match &self.pending.how {
+            How::Privately { .. } => None,
+            How::InItsApp { app, waits_as, .. } => Some(Key::new(app.id(), waits_as.as_str())),
+        }
+    }
+
     pub(super) fn awaited(
         pending: SignIn,
         wait: Wait,
@@ -528,13 +610,14 @@ impl WatchedSignIn {
     }
 }
 
+// `key`: the account the sign-in is for, where one is named before it.
 pub(crate) fn sign_in_watched_as(
     ctx: &Context,
     permit: Permit,
     tool: &'static dyn Provider,
-    key: &Key,
+    key: Option<&Key>,
 ) -> Result<WatchedSignIn> {
-    start_watched(ctx, permit, tool, Some(&key.label))
+    start_watched(ctx, permit, tool, key.map(|key| key.label.as_str()))
 }
 
 fn start_watched(
@@ -604,20 +687,38 @@ pub(crate) fn enroll(
     key: &Key,
     signed_in: Option<SignIn>,
 ) -> Result<(Enrolled, Vec<Warning>)> {
+    enroll_filed(settled, &Filing::Under(key.clone()), signed_in)
+        .map(|(enrolment, warnings)| (enrolment.enrolled, warnings))
+}
+
+/// [`enroll`], under whatever `filing` names once the owner is known.
+pub(crate) fn enroll_filed(
+    settled: Settled,
+    filing: &Filing,
+    signed_in: Option<SignIn>,
+) -> Result<(Enrolment, Vec<Warning>)> {
     let Settled {
         _exclusive,
         mut state,
         ctx,
         permit,
     } = settled;
+    let which = filing.provider();
     match signed_in {
         // A sign-in was run for one tool; filing its login under another would be an
         // account of the wrong tool under the name somebody chose.
-        Some(login) if login.provider != key.provider => Err(Error::Usage(format!(
-            "that sign-in was {}'s, and `{key}` is a {} account",
-            login.provider.name(),
-            key.provider.name()
-        ))),
+        Some(login) if login.provider != which => Err(Error::Usage(match filing {
+            Filing::Under(key) => format!(
+                "that sign-in was {}'s, and `{key}` is a {} account",
+                login.provider.name(),
+                which.name()
+            ),
+            Filing::FromEmail(_) => format!(
+                "that sign-in was {}'s, not {}'s",
+                login.provider.name(),
+                which.name()
+            ),
+        })),
         Some(login) => match &login.how {
             How::Privately {
                 tool,
@@ -629,21 +730,22 @@ pub(crate) fn enroll(
                     document,
                     dir,
                 };
-                from_sign_in(&ctx, *tool, key, &mut state, &stored)
+                from_sign_in(&ctx, *tool, filing, &mut state, &stored)
             }
-            How::InItsApp { app, .. } => super::folder::awaited::enroll(
+            How::InItsApp { app, waits_as, .. } => super::folder::awaited::enroll(
                 Settled {
                     _exclusive,
                     state,
                     ctx,
                     permit,
                 },
-                key,
+                filing,
                 *app,
+                waits_as,
             ),
         },
-        None => match provider::of(key.provider) {
-            LoginKind::Document(tool) => record_current(&ctx, permit, tool, key, &mut state),
+        None => match provider::of(which) {
+            LoginKind::Document(tool) => record_current(&ctx, permit, tool, filing, &mut state),
             LoginKind::Folder(app) => super::folder::enroll(
                 Settled {
                     _exclusive,
@@ -651,7 +753,7 @@ pub(crate) fn enroll(
                     ctx,
                     permit,
                 },
-                key,
+                filing,
                 app,
             ),
         },
@@ -687,11 +789,10 @@ fn record_current(
     ctx: &Context,
     permit: Permit,
     tool: &'static dyn Provider,
-    key: &Key,
+    filing: &Filing,
     state: &mut State,
-) -> Result<(Enrolled, Vec<Warning>)> {
-    let which = key.provider;
-    let label = key.label.as_str();
+) -> Result<(Enrolment, Vec<Warning>)> {
+    let which = tool.id();
     // Through the store itself rather than the provider's reading of it, so a locked
     // keychain says so in the store's own words instead of reading as a strange login. A
     // document with no account in it is nobody signed in: Claude Code's after a `/logout`
@@ -710,15 +811,14 @@ fn record_current(
         owner,
         ..
     } = stored;
-    claim(state, key, &owner)?;
-    let existing = state.get(key);
-    let parked = existing.and_then(|a| a.parked.clone());
+    let (key, added) = filing.filed(state, &owner, None)?;
+    let parked = state.get(&key).and_then(|a| a.parked.clone());
     // Enrolling the account that is signed in is using it.
     let last_used_at = Some(ctx.now());
     state.upsert(account(
         which,
         state.id_of(which, &owner),
-        label,
+        &key.label,
         &owner,
         parked,
         last_used_at,
@@ -728,8 +828,13 @@ fn record_current(
     let (_, noticed) = identify::record(state, which, found, ctx.now());
     state::save(ctx, permit, state)?;
     identify::write_down(ctx, permit, &noticed);
+    let enrolled = Enrolled::Current { email: owner.email };
     Ok((
-        Enrolled::Current { email: owner.email },
+        Enrolment {
+            key,
+            added,
+            enrolled,
+        },
         lost.into_iter().collect(),
     ))
 }
@@ -743,21 +848,30 @@ fn record_current(
 fn from_sign_in(
     ctx: &Context,
     tool: &'static dyn Provider,
-    key: &Key,
+    filing: &Filing,
     state: &mut State,
     login: &Stored<'_>,
-) -> Result<(Enrolled, Vec<Warning>)> {
+) -> Result<(Enrolment, Vec<Warning>)> {
     let owner = identify::asked(&ctx.signed_in_at(login.dir), state, tool, login.document)
         .map_err(|e| {
-            let login = crate::error::Unidentified::SignIn {
-                label: state.typed(key),
+            let login = match filing {
+                Filing::Under(key) => crate::error::Unidentified::SignIn {
+                    label: state.typed(key),
+                },
+                Filing::FromEmail(_) => crate::error::Unidentified::NewSignIn,
             };
             super::unidentified_as(ctx, tool.id(), login, e)
         })?;
-    claim(state, key, &owner)?;
+    let (key, added) = filing.filed(state, &owner, None)?;
+    let key = &key;
     let (now, lost) = signed_in_now(ctx, login.permit, state, tool, &owner);
     let said = |(enrolled, warnings): (Enrolled, Vec<Warning>)| {
-        (enrolled, lost.into_iter().chain(warnings).collect())
+        let enrolment = Enrolment {
+            key: key.clone(),
+            added,
+            enrolled,
+        };
+        (enrolment, lost.into_iter().chain(warnings).collect())
     };
     match now {
         SignedInNow::Theirs(live, first) => {
@@ -1191,6 +1305,99 @@ mod tests {
         let again = enrolled_as(&m, "personal", here_in(&m, "org-team", "team-again"))
             .expect_err("the same organisation is the same login");
         assert!(matches!(again, Error::AlreadyEnrolled { .. }), "{again}");
+    }
+
+    fn enrolled_from_email(m: &Rig, login: Option<SignIn>) -> Result<(Enrolment, Vec<Warning>)> {
+        let settled = settle(&m.ctx, Permit::for_a_test(), Some(m.which))
+            .expect("nothing to recover")
+            .0;
+        enroll_filed(settled, &Filing::FromEmail(m.which), login)
+    }
+
+    // `third@example.com` names its company.
+    #[test]
+    fn a_sign_in_given_no_name_is_enrolled_under_the_name_its_email_suggests() {
+        for (tool, make) in MACHINES {
+            let m = make("from-email");
+            let login = signed_in(&m, "third", "third-refresh");
+            let (enrolment, _) =
+                enrolled_from_email(&m, Some(login)).unwrap_or_else(|e| panic!("{tool}: {e}"));
+            assert_eq!(enrolment.key, m.key("example"), "{tool}");
+            assert!(enrolment.added, "{tool}");
+            assert!(
+                matches!(enrolment.enrolled, Enrolled::SignedIn { .. }),
+                "{tool}: {:?}",
+                enrolment.enrolled
+            );
+            assert!(park_of(&m, "example").is_some(), "{tool}");
+            assert!(
+                in_use(&m, "here-refresh"),
+                "{tool}: the account in use stays"
+            );
+            hold(&m, tool);
+        }
+    }
+
+    // Nobody named it, so an account enrolled already is signed in to again under its own name.
+    #[test]
+    fn a_sign_in_given_no_name_to_an_enrolled_account_signs_it_in_again_under_its_own_name() {
+        for (tool, make) in MACHINES {
+            let m = make("from-email-again");
+            let login = signed_in(&m, "there", "there-refresh-2");
+            let (parked, _) =
+                enrolled_from_email(&m, Some(login)).unwrap_or_else(|e| panic!("{tool}: {e}"));
+            assert_eq!((&parked.key, parked.added), (&m.key("there"), false));
+            assert!(
+                matches!(parked.enrolled, Enrolled::Renewed { .. }),
+                "{tool}: {:?}",
+                parked.enrolled
+            );
+
+            let login = signed_in(&m, "here", "here-refresh-2");
+            let (in_use_now, _) =
+                enrolled_from_email(&m, Some(login)).unwrap_or_else(|e| panic!("{tool}: {e}"));
+            assert_eq!((&in_use_now.key, in_use_now.added), (&m.key("here"), false));
+            assert!(
+                matches!(in_use_now.enrolled, Enrolled::InUse { again: true, .. }),
+                "{tool}: {:?}",
+                in_use_now.enrolled
+            );
+            assert!(in_use(&m, "here-refresh-2"), "{tool}");
+            hold(&m, tool);
+        }
+    }
+
+    #[test]
+    fn two_sign_ins_given_no_name_at_one_company_get_two_names() {
+        let m = machine("from-email-twice");
+        let named = |who: &str| {
+            let login = signed_in(&m, who, &format!("{who}-refresh"));
+            enrolled_from_email(&m, Some(login))
+                .unwrap_or_else(|e| panic!("{who}: {e}"))
+                .0
+                .key
+        };
+        assert_eq!(named("third"), m.key("example"));
+        assert_eq!(named("fourth"), m.key("fourth"));
+        assert_eq!(named("example"), m.key("example-2"));
+        hold(&m, "three sign-ins");
+    }
+
+    #[test]
+    fn the_login_in_use_given_no_name_is_enrolled_under_the_name_its_email_suggests() {
+        let m = machine("current-from-email");
+        m.api
+            .owned_by("access-third-refresh", harness::owner("third"));
+        m.sign_in(&harness::document("third-refresh"));
+        let (enrolment, _) = enrolled_from_email(&m, None).expect("enrolled");
+        assert_eq!((&enrolment.key, enrolment.added), (&m.key("example"), true));
+        assert!(
+            matches!(enrolment.enrolled, Enrolled::Current { .. }),
+            "{:?}",
+            enrolment.enrolled
+        );
+        let (again, _) = enrolled_from_email(&m, None).expect("enrolled again");
+        assert_eq!((&again.key, again.added), (&m.key("example"), false));
     }
 
     /// Both logins are the same person's, so naming the one that holds a label by its email
@@ -1967,7 +2174,7 @@ mod tests {
                 &ctx,
                 Permit::for_a_test(),
                 provider::document(m.which),
-                &m.key("newcomer"),
+                Some(&m.key("newcomer")),
             )
             .unwrap_or_else(|e| panic!("{tool}: {e}"));
             let said = watched.said();

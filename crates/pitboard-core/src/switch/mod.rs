@@ -43,10 +43,10 @@ pub use crate::pending::Reclaimed;
 pub use adopt::Adopted;
 pub(crate) use adopt::adopt;
 pub(crate) use auto::automatically;
-pub(crate) use enroll::enroll;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use enroll::planted;
-pub use enroll::{Enrolled, Said, SignIn, Steps, WatchedSignIn};
+pub use enroll::{Enrolled, Enrolment, Naming, Said, SignIn, Steps, WatchedSignIn};
+pub(crate) use enroll::{Filing, enroll, enroll_filed};
 #[cfg(any(test, feature = "test-support"))]
 pub use enroll::{ScriptedSignIn, SignInScript};
 pub(crate) use enroll::{
