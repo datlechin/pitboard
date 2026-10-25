@@ -1,17 +1,20 @@
 ---
 // As MainWindow.swift lays it out at its minimum width of 640, and as macOS 27 draws it, measured
-// on docs/images/window.png; a `crop` desk shows the window's top, a `fit` one all of it.
+// on docs/images/window.png; a `crop` desk shows the window's top, a `fit` one all of it. Its
+// title's id starts `prefix`, and each toolbar button is named as its Label names it.
 import Lights from "./Lights.astro";
 
 interface Props {
+  prefix: string;
   pane: "accounts" | "activity";
   title: string;
   subtitle?: string;
-  tools: string[];
+  tools: [icon: string, label: string][];
   crop?: boolean;
   fit?: boolean;
 }
-const { pane, title, subtitle, tools, crop = false, fit = false } = Astro.props;
+const { prefix, pane, title, subtitle, tools, crop = false, fit = false } = Astro.props;
+const Root = pane === "accounts" ? "pb-accounts" : "pb-activity";
 const panes = [
   ["accounts", "Accounts", "sf-people"],
   ["activity", "Activity", "sf-clock"],
@@ -22,13 +25,14 @@ const log = pane === "activity";
 const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-mac-glass";
 ---
 
-<div
+<Root
+  id={prefix}
   class:list={[
     "desk [--units:680]",
-    crop ? "h-348" : "flex items-center justify-center py-20",
+    crop ? "block h-348" : "flex items-center justify-center py-20",
     { "min-h-540": pane === "accounts" && !crop && !fit, "min-h-250": log },
   ]}
-  aria-hidden="true"
+  inert
   data-output
 >
   <div
@@ -39,7 +43,7 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
   >
     <div class="relative bg-mac-window-side px-10 pt-52">
       <Lights window class="top-19 left-19" />
-      <span class:list={[glass, "absolute top-8 left-126 w-36 justify-center"]}>
+      <span class:list={[glass, "absolute top-8 left-126 w-36 justify-center"]} aria-hidden="true">
         <svg class="size-20 shrink-0"><use href="#sf-sidebar"></use></svg>
       </span>
       {panes.map(([id, name, icon]) => <div
@@ -57,17 +61,23 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
     <div class="flex min-w-0 flex-col">
       <div class="flex h-52 flex-none items-center pr-8 pl-20">
         <span class="flex flex-1 flex-col pb-2.5 text-mac-window-title"
-          ><b class:list={subtitle ? "text-u-13/16 font-bold" : "text-u-15/18 font-semibold"}
+          ><b
+            class:list={subtitle ? "text-u-13/16 font-bold" : "text-u-15/18 font-semibold"}
+            id={`${prefix}-title`}
             >{title}</b
           >{subtitle && <span class="text-u-11/13 text-mac-window-sub">{subtitle}</span>}</span
         >
         <span class:list={[glass, tools.length > 1 ? "px-2" : "w-36 justify-center"]}>
-          {tools.map((icon) => <span class="flex w-34.5 justify-center">
+          {tools.map(([icon, label]) => <button
+            class="flex w-34.5 justify-center"
+            type="button"
+            aria-label={label}
+          >
             <svg class="size-22 shrink-0"><use href={`#${icon}`} /></svg>
-          </span>)}
+          </button>)}
         </span>
       </div>
       <div class:list={["flex-1", { "px-16 pb-10": !log }]}><slot /></div>
     </div>
   </div>
-</div>
+</Root>

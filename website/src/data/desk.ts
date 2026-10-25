@@ -1,4 +1,5 @@
 import { clock } from "./world.ts";
+import { hm } from "../lib/words.ts";
 
 // MenuBarContent.swift's commands under the accounts, a null between two sections. A debug build
 // has no Check for Updates….
@@ -9,7 +10,7 @@ export const menuCommands: ({
   more?: boolean;
 } | null)[] = [
   { title: "Add Account…", keys: "⌘N" },
-  { title: "Refresh", sub: `Updated ${clock.read}`, keys: "⌘R" },
+  { title: "Refresh", sub: `Updated ${hm(clock.read)}`, keys: "⌘R" },
   null,
   { title: "Open claude.ai", more: true },
   { title: "Open chatgpt.com", more: true },

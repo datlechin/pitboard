@@ -1,5 +1,6 @@
 ---
-// A session in the terminal of each system it runs on, and in macOS's on a system it does not.
+// A session in the terminal of each system it runs on, and in macOS's on a system it does not; each
+// terminal is a shell of its own, its ids starting `prefix` and its platform.
 import LinuxTerminal from "./linux/Terminal.astro";
 import MacTerminal from "./mac/Terminal.astro";
 import WinTerminal from "./win/Terminal.astro";
@@ -7,9 +8,10 @@ import { printed, type Session } from "../../data/sessions.ts";
 import { platforms, shownOn, type Platform } from "../../lib/platform.ts";
 
 interface Props {
+  prefix: string;
   session: Session;
 }
-const { session } = Astro.props;
+const { prefix, session } = Astro.props;
 // each shell's prompt, and the cursor at it: Windows Terminal's is a bar
 const prompts: Record<Platform, [string, string]> = {
   macos: ['<span class="text-mac-term-dim">%</span>', '<span class="bg-mac-term-dim"> </span>'],
@@ -35,30 +37,30 @@ const lines = (p: Platform) => {
 const desk = "desk flex min-h-0 items-center justify-center";
 ---
 
-<div class={shownOn("macos", drawn)}>
-  <div class:list={[desk, "py-20"]} aria-hidden="true" data-output>
-    <MacTerminal title={session.title} solo>
+<div class={shownOn("macos", drawn)} data-drawing="cli macos">
+  <pb-term id={`${prefix}-macos`} class:list={[desk, "py-20"]} inert data-output>
+    <MacTerminal title={session.title} id={`${prefix}-macos`} solo>
       {lines("macos").map((line) => (
         <div set:html={line} />
       ))}
     </MacTerminal>
-  </div>
+  </pb-term>
 </div>
-{drawn.includes("windows") && <div class={shownOn("windows", drawn)}>
-  <div class:list={[desk, "py-24 desk-px-820"]} aria-hidden="true" data-output>
-    <WinTerminal title="Windows PowerShell" solo>
+{drawn.includes("windows") && <div class={shownOn("windows", drawn)} data-drawing="cli windows">
+  <pb-term id={`${prefix}-windows`} class:list={[desk, "py-24 desk-px-820"]} inert data-output>
+    <WinTerminal title="Windows PowerShell" id={`${prefix}-windows`} solo>
       {lines("windows").map((line) => (
         <div set:html={line} />
       ))}
     </WinTerminal>
-  </div>
+  </pb-term>
 </div>}
-{drawn.includes("linux") && <div class={shownOn("linux", drawn)}>
-  <div class:list={[desk, "py-24 desk-px-780"]} aria-hidden="true" data-output>
-    <LinuxTerminal title={session.title}>
+{drawn.includes("linux") && <div class={shownOn("linux", drawn)} data-drawing="cli linux">
+  <pb-term id={`${prefix}-linux`} class:list={[desk, "py-24 desk-px-780"]} inert data-output>
+    <LinuxTerminal title={session.title} id={`${prefix}-linux`}>
       {lines("linux").map((line) => (
         <div set:html={line} />
       ))}
     </LinuxTerminal>
-  </div>
+  </pb-term>
 </div>}

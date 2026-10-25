@@ -1,5 +1,6 @@
 ---
-// IconMenu.cs's menu over Windows Terminal; where it opens is approx until read on Windows.
+// IconMenu.cs's menu over Windows Terminal; where it opens is approx until read on Windows. The
+// icon is a button the Shell names by its tooltip, and its menu's ids each start `prefix`.
 import IconMenu from "./IconMenu.astro";
 import Taskbar from "./Taskbar.astro";
 import Terminal from "./Terminal.astro";
@@ -7,20 +8,23 @@ import Tooltip from "./Tooltip.astro";
 import TrayItem from "./TrayItem.astro";
 import { session } from "../../../data/desk.ts";
 import { accountTip } from "../../../data/windows.ts";
-import { windowsClock } from "../../../data/world.ts";
-import { menuBarLevel, statusLine, trayTip } from "../../../lib/words.ts";
+import { clock, moments } from "../../../data/world.ts";
+import { hm, menuBarLevel, shortDate, statusLine, trayTip } from "../../../lib/words.ts";
 
 interface Props {
+  prefix: string;
   demo?: boolean;
   submenu?: string;
   updates?: boolean;
 }
-const { demo = false, submenu, updates = false } = Astro.props;
+const { prefix, demo = false, submenu, updates = false } = Astro.props;
+const icon = `${prefix}-icon`;
 // The session's status line follows the switch after the menu does.
+const [before, after] = [statusLine(moments.before), statusLine(moments.after)];
 const status =
-  demo && statusLine("before") !== statusLine("after")
-    ? `<span class="hidden demo:inline">${statusLine("before")}</span><span class="demo:hidden">${statusLine("after")}</span>`
-    : statusLine("after");
+  demo && before !== after
+    ? `<span class="hidden demo:inline">${before}</span><span class="demo:hidden">${after}</span>`
+    : after;
 const rule =
   "bg-linear-to-b from-win-term-dim to-win-term-dim bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
 // WinUI centres a tooltip above the pointer, and Check for updates' row puts each row 32 higher.
@@ -34,10 +38,11 @@ const pointer = submenu
 const rowTip = updates ? "bottom-450" : "bottom-418";
 ---
 
-<div
-  class:list={["desk desk-px-720", updates ? "h-572" : "h-540"]}
+<pb-tray
+  id={prefix}
+  class:list={["desk block desk-px-720", updates ? "h-572" : "h-540"]}
   data-demo-desk={demo ? "" : undefined}
-  aria-hidden="true"
+  inert
   data-output
 >
   <Terminal
@@ -57,30 +62,39 @@ const rowTip = updates ? "bottom-450" : "bottom-418";
     <div class={rule}></div>
     <div set:html={`  ${status}`} />
   </Terminal>
-  <Taskbar time={windowsClock.taskbar.time} date={windowsClock.taskbar.date}>
+  <Taskbar time={hm(clock.menuBar)} date={shortDate(clock.menuBar)}>
     <TrayItem
       on
-      level={menuBarLevel("after")}
-      was={demo ? menuBarLevel("before") : undefined}
+      id={icon}
+      name={trayTip(moments.after)}
+      level={menuBarLevel(moments.after)}
+      was={demo ? menuBarLevel(moments.before) : undefined}
       class={demo ? "demo-shut:bg-transparent demo-reach:bg-win-subtle" : undefined}
     />
   </Taskbar>
   <IconMenu
     class="absolute right-6 bottom-48 z-3"
+    prefix={prefix}
+    owner={icon}
     demo={demo}
     updates={updates}
     submenu={submenu}
   />
   {demo && <Tooltip
+    id={`${prefix}-tip`}
     class:list={["absolute left-560 z-3 hidden -translate-x-1/2 demo-hl:block", rowTip]}
-    >{accountTip("work", "before")}</Tooltip
+    >{accountTip("work", moments.before)}</Tooltip
   >}
-  {demo && <Tooltip class="absolute bottom-56 left-500 z-3 hidden -translate-x-1/2 demo-reach:block"
-    >{trayTip("after")
+  {/* the Shell's tooltip, which names the icon */}
+  {demo && <Tooltip
+    class="absolute bottom-56 left-500 z-3 hidden -translate-x-1/2 demo-reach:block"
+    aria-hidden="true"
+    >{trayTip(moments.after)
       .split("\n")
       .map((line) => <span class="block">{line}</span>)}</Tooltip
   >}
   <svg
+    aria-hidden="true"
     class:list={[
       "pointer-events-none absolute bottom-8 left-500 z-4 h-21 w-13 origin-[1px_1px] transition-transform duration-800 ease-out",
       { "demo-pick:scale-86 demo-pick:duration-100": demo },
@@ -95,4 +109,4 @@ const rowTip = updates ? "bottom-450" : "bottom-418";
       stroke-linejoin="round"
     ></path>
   </svg>
-</div>
+</pb-tray>

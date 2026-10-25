@@ -1,13 +1,15 @@
 ---
 // Terminal's Basic profile, 11 point and alone 80 columns wide; output colours spans g, y, r, dim.
+// A shell's window, given its `id`, keeps its output as a log its title names.
 import Lights from "./Lights.astro";
 
 interface Props {
   title: string;
+  id?: string;
   solo?: boolean;
   class?: string;
 }
-const { title, solo = false, class: extra } = Astro.props;
+const { title, id, solo = false, class: extra } = Astro.props;
 ---
 
 <div
@@ -20,7 +22,11 @@ const { title, solo = false, class: extra } = Astro.props;
   <div
     class="relative flex h-28 flex-none items-center bg-mac-term-bar px-10 font-semibold text-mac-term-title inset-shadow-mac-term-b"
   >
-    <Lights /><span class="pointer-events-none absolute inset-x-0 text-center">{title}</span>
+    <Lights /><span
+      class="pointer-events-none absolute inset-x-0 text-center"
+      id={id && `${id}-title`}
+      >{title}</span
+    >
   </div>
   <div
     class:list={[
@@ -29,6 +35,8 @@ const { title, solo = false, class: extra } = Astro.props;
         ? "justify-start px-12 pt-8 pb-10 text-u-11/16 *:min-h-16 *:whitespace-pre-wrap"
         : "justify-end px-10 pb-7 text-u-11/14 *:min-h-14",
     ]}
+    role={id ? "log" : undefined}
+    aria-labelledby={id && `${id}-title`}
   >
     <slot />
   </div>

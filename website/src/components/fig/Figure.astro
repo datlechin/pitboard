@@ -1,6 +1,7 @@
 ---
 // An app figure, its `win` slot drawing it for Windows, and with a `cli` slot its terminal twin.
-// A platform with no drawing or words of its own shows macOS's. Captions and descriptions are HTML.
+// A platform with no drawing or words of its own shows macOS's. Captions and descriptions are HTML;
+// a drawing that works speaks for itself, and src/scripts/live/figure.ts hides its description.
 import Choice from "./Choice.astro";
 import { platforms, shownOn, type Platform } from "../../lib/platform.ts";
 
@@ -23,11 +24,17 @@ const drawn: Platform[] = win ? ["macos", "windows"] : ["macos"];
 const onApp = both ? "block surface-cli:hidden" : "block";
 const onCli = "block surface-app:hidden no-js:mt-6";
 // each surface's words, for each platform that has its own
-const captions: [string, Sides][] = [[onApp, app]];
-if (both) captions.push([onCli, cli!]);
+const captions: [string, "app" | "cli", Sides][] = [[onApp, "app", app]];
+if (both) captions.push([onCli, "cli", cli!]);
+// each platform's words, and the platforms whose drawing they describe: their own, and macOS's
+// wherever a platform has none of its own
 const said = (sides: Sides) => {
   const own = platforms.filter((p) => sides[p] !== undefined);
-  return own.map((p) => ({ shown: shownOn(p, own), ...sides[p]! }));
+  return own.map((p) => ({
+    shown: shownOn(p, own),
+    on: platforms.filter((q) => q === p || (p === "macos" && !own.includes(q))).join(" "),
+    ...sides[p]!,
+  }));
 };
 ---
 
@@ -45,18 +52,34 @@ const said = (sides: Sides) => {
   )}
   <div class="@container">
     <div class={onApp}>
-      <div class={shownOn("macos", drawn)}><slot /></div>
-      {win && <div class={shownOn("windows", drawn)}><slot name="win" /></div>}
+      <div class={shownOn("macos", drawn)} data-drawing="app macos"><slot /></div>
+      {win && <div class={shownOn("windows", drawn)} data-drawing="app windows">
+        <slot name="win" />
+      </div>}
     </div>
     {both && <div class={onCli}>
       <slot name="cli" />
     </div>}
   </div>
   <figcaption class="mt-3.5 font-mono text-ui text-muted [&_code]:text-[1em] [&_code]:text-muted">
-    {captions.map(([surface, sides]) => <span class={surface}>
+    {captions.map(([shown, surface, sides]) => <span class={shown}>
       {said(sides).map((s) => <span class={s.shown}
-        ><span class="sr-only" set:html={`${s.describe} `} /><span set:html={s.caption}
+        ><span
+          class="sr-only"
+          data-describes={surface}
+          data-platforms={s.on}
+          set:html={`${s.describe} `}
+        /><span set:html={s.caption}
       /></span>)}
     </span>)}
+    {/* a live figure shows it once something on the page has changed */}
+    <button
+      class="ml-2 cursor-pointer rounded-sm border border-edge px-2.5 py-0.75 font-mono text-label font-medium text-fg hover:bg-ink/7"
+      type="button"
+      data-reset
+      hidden
+    >
+      Reset
+    </button>
   </figcaption>
 </figure>

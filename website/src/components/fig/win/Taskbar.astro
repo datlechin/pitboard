@@ -1,5 +1,6 @@
 ---
-// Fixed widths, so the slot's icons sit where win/Desk opens their menu; the bell is approx.
+// Fixed widths, so the slot's icons sit where win/Desk opens their menu; the bell is approx. The
+// system's pieces are drawn, and only the slot's icon is Pitboard's.
 interface Props {
   time: string;
   date: string;
@@ -11,20 +12,21 @@ const icon = "size-16 shrink-0";
 <div
   class="absolute inset-x-0 bottom-0 z-2 flex h-48 items-center justify-end bg-win-taskbar pr-12 font-win text-win-text inset-shadow-win-taskbar"
 >
-  <span class="flex h-40 w-24 items-center justify-center rounded-u-4"
+  <span class="flex h-40 w-24 items-center justify-center rounded-u-4" aria-hidden="true"
     ><svg class={icon}><use href="#fl-chevron-up"></use></svg></span
   >
   <slot />
-  <span class="flex h-40 w-80 items-center justify-center gap-8 rounded-u-4">
+  <span class="flex h-40 w-80 items-center justify-center gap-8 rounded-u-4" aria-hidden="true">
     <svg class={icon}><use href="#fl-wifi"></use></svg>
     <svg class={icon}><use href="#fl-speaker"></use></svg>
     <svg class={icon}><use href="#fl-battery"></use></svg>
   </span>
   <span
     class="flex h-40 w-80 flex-col items-end justify-center px-8 text-u-12/16 whitespace-nowrap tabular-nums"
+    aria-hidden="true"
     >{time}<span>{date}</span></span
   >
-  <span class="flex h-40 w-32 items-center justify-center rounded-u-4"
+  <span class="flex h-40 w-32 items-center justify-center rounded-u-4" aria-hidden="true"
     ><svg class={icon}><use href="#fl-alert"></use></svg></span
   >
 </div>

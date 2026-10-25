@@ -47,6 +47,8 @@
 @custom-variant demo-row (&:where(:is([data-demo="move"], [data-demo="hl"], [data-demo="pick"], [data-demo="shut"]) *));
 @custom-variant demo-shut (&:where(:is([data-demo="shut"], [data-demo="reach"]) *));
 @custom-variant demo-reach (&:where([data-demo="reach"] *));
+/* inside a figure whose element is defined, so it works: its hover looks and cursors */
+@custom-variant live (&:where([data-output]:defined *));
 
 @theme {
   --color-*: initial;
