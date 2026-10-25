@@ -1,0 +1,106 @@
+---
+// Windows 11's Notification Center as the app's UI tests read it on windows-2025's 24H2 shell
+// (docs/facts/site.md): over the right of the work area, 12 pixels in, a card 336 wide holding
+// "Notifications" and its Do Not Disturb button over the notifications, and under it the calendar's
+// card, 100 high, with the date and Focus's length. Pitboard's notification, once its toast has
+// gone, waits here under the app's name, as the toast drew it; with none, "No new notifications".
+// Where the desk has less room than the cards, the notifications scroll. Focus, the calendar and Do
+// Not Disturb are the system's, drawn. Its ids start `prefix`.
+import Button from "./Button.astro";
+import { toast } from "../../../data/windows.ts";
+import { clock } from "../../../data/world.ts";
+import { calendarDate } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+}
+const { prefix } = Astro.props;
+const card =
+  "w-336 rounded-u-8 bg-win-flyout font-win text-u-14/20 text-win-text shadow-win-flyout";
+const round =
+  "flex size-32 items-center justify-center rounded-u-4 bg-win-control shadow-win-control text-win-text";
+---
+
+<dialog
+  class="absolute top-12 right-12 bottom-60 left-auto z-4 m-0 h-auto max-h-none w-auto max-w-none flex-col items-end justify-end gap-12 overflow-visible border-0 bg-transparent p-0 text-inherit outline-none open:flex"
+  aria-labelledby={`${prefix}-center-title`}
+  tabindex="-1"
+  data-part="center"
+>
+  <div class:list={[card, "flex min-h-0 flex-col"]}>
+    <div class="flex flex-none items-center gap-8 py-12 pr-12 pl-16">
+      <span class="flex-1" id={`${prefix}-center-title`}>Notifications</span>
+      <button
+        class="rounded-u-4 px-8 py-4 text-u-12/16 focus-win live:cursor-default live:hover:bg-win-subtle"
+        type="button"
+        data-does="clear"
+        hidden
+      >
+        Clear all
+      </button>
+      <span
+        class="flex size-40 items-center justify-center rounded-u-4 bg-win-control shadow-win-control"
+        aria-hidden="true"
+      >
+        <svg class="size-16"><use href="#fl-alert"></use></svg>
+      </span>
+    </div>
+    <div class="min-h-0 overflow-y-auto px-12 pb-12" data-part="list">
+      <p class="py-16 text-center text-u-12/16" data-part="none">No new notifications</p>
+      <div class="flex flex-col gap-8" data-part="group" hidden>
+        <span class="flex items-center gap-8 px-4 text-u-12/16">
+          <svg class="size-16 shrink-0" aria-hidden="true"><use href="#pb-tray"></use></svg>
+          <span class="flex-1">{toast.app}</span>
+        </span>
+        <div
+          class="relative flex flex-col rounded-u-8 bg-win-base p-16 text-win-text-2 inset-shadow-win-layer-edge"
+          role="group"
+          aria-labelledby={`${prefix}-center-note`}
+          data-part="note"
+        >
+          <button
+            class="absolute top-12 right-12 flex size-16 items-center justify-center rounded-u-2 focus-win live:cursor-default"
+            type="button"
+            aria-label="Dismiss"
+            data-does="dismiss"
+          >
+            <svg class="size-16"><use href="#fl-dismiss"></use></svg>
+          </button>
+          <b
+            class="pr-24 font-semibold text-win-text"
+            id={`${prefix}-center-note`}
+            data-part="note-title"
+            >{toast.title}</b
+          >
+          <span data-subtitle>{toast.tool}</span>
+          <span data-body>{toast.body}</span>
+          <span class="mt-16 text-win-text" data-switch-row
+            ><Button stretch data-does="switch">{toast.button}</Button></span
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class:list={[card, "h-100 flex-none"]} aria-hidden="true">
+    <div class="flex h-50 items-center justify-between pr-12 pl-16 inset-shadow-win-layer-edge">
+      <span data-part="date">{calendarDate(clock.warned)}</span>
+      <span class={round}
+        ><svg class="size-12"><use href="#fl-chevron-up"></use></svg></span
+      >
+    </div>
+    <div class="flex h-50 items-center gap-12 pr-12 pl-16">
+      <span class={round}><span class="h-1 w-10 bg-current"></span></span>
+      <span><b class="font-semibold">30</b> mins</span>
+      <span class={round}
+        ><svg class="size-12"><use href="#fl-add"></use></svg></span
+      >
+      <span
+        class="ml-auto flex h-32 items-center gap-6 rounded-u-4 bg-win-control px-12 shadow-win-control"
+        ><svg class="size-10" viewBox="0 0 10 10">
+          <path d="M2 1v8l7-4Z" fill="currentColor"></path>
+        </svg
+        >Focus</span
+      >
+    </div>
+  </div>
+</dialog>

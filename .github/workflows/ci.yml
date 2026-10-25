@@ -1069,8 +1069,9 @@ jobs:
           - project: pixel
             browser: chromium
     runs-on: ubuntu-latest
-    # the website job's ten minutes, and five for the browser's install: apt once took seven
-    timeout-minutes: 15
+    # the test step's ten minutes, and seven for the steps before it, the browser's install with
+    # apt having once taken them all
+    timeout-minutes: 17
     defaults:
       run:
         working-directory: website
@@ -1104,9 +1105,10 @@ jobs:
         env:
           PITBOARD_SITE_OFFLINE: "1"
         run: npm run build
-      # the 3 minutes 58 seconds the slowest project, WebKit, took, and half again
+      # the slowest project, WebKit, ran 112 of its 113 tests in 6 minutes 12 seconds, and half
+      # again makes ten
       - if: steps.touched.outputs.run
-        timeout-minutes: 6
+        timeout-minutes: 10
         env:
           PROJECT: ${{ matrix.project }}
         run: npm run test:browser -- --project="$PROJECT"

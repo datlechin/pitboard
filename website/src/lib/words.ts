@@ -206,6 +206,17 @@ export const menuBarClock = (epoch: number) => {
 };
 
 // the en-GB regional format's "d", under the taskbar's time
+// Windows' calendar flyout's date, in the en-GB format the taskbar's date is in
+const weekdaysLong = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split(" ");
+const monthsLong =
+  "January February March April May June July August September October November December".split(
+    " ",
+  );
+export const calendarDate = (epoch: number) => {
+  const d = local(epoch);
+  return `${weekdaysLong[d.getUTCDay()]} ${d.getUTCDate()} ${monthsLong[d.getUTCMonth()]}`;
+};
+
 export const shortDate = (epoch: number) => {
   const d = local(epoch);
   return `${two(d.getUTCDate())}/${two(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;

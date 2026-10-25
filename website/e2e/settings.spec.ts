@@ -238,6 +238,53 @@ test.describe("Windows", () => {
   });
 });
 
+test.describe("Notification Center", () => {
+  test("on Windows the clock opens it, where the notification waits once its toast has gone", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "a pointer and a keyboard");
+    await choose(page.context(), { platform: "windows" });
+    await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
+    await page.goto("/");
+    await page.waitForFunction(() => customElements.get("pb-notice") !== undefined);
+    const fig = page.locator("#offer-win");
+    const center = fig.locator('[data-part="center"]');
+    const clock = fig.getByRole("button", { name: "05:53 14/10/2026" });
+    await fig.scrollIntoViewIfNeeded();
+    await expect(fig.locator("[data-banner]")).toBeVisible();
+    await page.mouse.move(0, 0);
+    await page.clock.fastForward(5500);
+    await expect(fig.locator("[data-banner]")).toBeHidden();
+    await clock.click();
+    await expect(center).toBeVisible();
+    await expect(clock).toHaveAttribute("aria-expanded", "true");
+    await expect(center).toBeFocused();
+    const note = center.locator('[data-part="note"]');
+    await expect(note).toHaveAccessibleName(heads);
+    await expect(note).toContainText("work has 60% of its own left.");
+    await expect(center).toContainText("Wednesday 14 October");
+    await page.keyboard.press("Escape");
+    await expect(center).toBeHidden();
+    await expect(clock).toBeFocused();
+    // dismissed, it is gone
+    await clock.click();
+    await note.getByRole("button", { name: "Dismiss" }).click();
+    await expect(center).toContainText("No new notifications");
+    await expect(center.getByRole("button", { name: "Clear all" })).toBeHidden();
+    expect(await axe(page, ["#offer-win"])).toEqual([]);
+  });
+
+  test("on macOS, which no reading of it drew, the clock opens nothing", async ({ page }) => {
+    await choose(page.context(), { platform: "macos" });
+    await page.goto("/");
+    const fig = page.locator("#offer-mac");
+    await fig.scrollIntoViewIfNeeded();
+    await expect(fig.locator('[data-part="center"]')).toHaveCount(0);
+    await expect(fig.locator("[data-clock]")).not.toHaveRole("button");
+  });
+});
+
 for (const [platform, id] of [
   ["macos", "offer-mac"],
   ["windows", "offer-win"],

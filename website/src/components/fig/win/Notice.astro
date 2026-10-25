@@ -2,8 +2,11 @@
 // WindowsNotifications.cs's toast at the share; its metrics are approx until read on Windows. The
 // toast is a group its title names; its header's buttons are the system's, and its close button
 // works. Working, it rises above the taskbar, shows the header's buttons while the pointer is over
-// it or focus is inside it, and goes.
+// it or focus is inside it, and goes, to wait in Notification Center, which the taskbar's clock
+// opens. The desk is as tall as Notification Center needs, with JavaScript or without, so nothing
+// moves as the script loads.
 import Button from "./Button.astro";
+import NotificationCenter from "./NotificationCenter.astro";
 import Taskbar from "./Taskbar.astro";
 import TrayItem from "./TrayItem.astro";
 import { toast } from "../../../data/windows.ts";
@@ -18,7 +21,7 @@ const { prefix } = Astro.props;
 const system = "live:opacity-0 live:group-data-[state=held]/banner:opacity-100";
 ---
 
-<pb-notice id={prefix} class="desk block h-260 desk-px-720" inert data-output>
+<pb-notice id={prefix} class="desk block h-450 desk-px-720" inert data-output>
   <div
     class="group/banner absolute right-12 bottom-60 z-3 flex w-364 flex-col rounded-u-8 bg-win-flyout p-16 font-win text-u-14/20 text-win-text-2 shadow-win-flyout live:transition-[translate,opacity,visibility] live:duration-300 live:ease-out live:not-data-[state]:invisible live:not-data-[state]:translate-y-16 live:not-data-[state]:opacity-0"
     role="group"
@@ -45,7 +48,8 @@ const system = "live:opacity-0 live:group-data-[state=held]/banner:opacity-100";
       ><Button stretch data-switch>{toast.button}</Button></span
     >
   </div>
-  <Taskbar time={hm(clock.warned)} date={shortDate(clock.warned)}>
+  <NotificationCenter prefix={prefix} />
+  <Taskbar time={hm(clock.warned)} date={shortDate(clock.warned)} center>
     <TrayItem level={level(share)} levels />
   </Taskbar>
 </pb-notice>

@@ -2,8 +2,13 @@
 // follows the page's choice, share and accounts. Pitboard sets no alert style and no duration, so
 // macOS shows a Temporary banner and Windows a toast that each go after the system's time: it
 // arrives once the row is 60% in view, once for each notification the moment posts, and stays
-// while the pointer is over it or focus is inside it (plan 3.6 and 3.7; question 2).
+// while the pointer is over it or focus is inside it (plan 3.6 and 3.7; question 2). On Windows the
+// taskbar's clock opens Notification Center, where the notification waits once its toast has gone,
+// until it is acted on, dismissed or cleared (answer 2 a).
+// departs from the apps: The Mac's clock opens nothing
+import { attr, shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";
+import { bringForward } from "./forward.ts";
 import { say } from "./say.ts";
 import { noticeMoment, type Moment } from "../../lib/moment.ts";
 import { model, type Posted, type State } from "../../lib/model.ts";
@@ -36,6 +41,10 @@ class Notice extends LiveFigure {
   #pointer = false;
   #focus = false;
   #seen?: IntersectionObserver;
+  // what Notification Center holds of the moment's notification, and the clock that opens it
+  #kept: Posted | null = null;
+  #center: HTMLDialogElement | null = null;
+  #clock: HTMLElement | null = null;
 
   connectedCallback() {
     this.#banner = this.querySelector("[data-banner]")!;
@@ -48,6 +57,9 @@ class Notice extends LiveFigure {
     });
     this.querySelector("[data-close]")?.addEventListener("click", () => this.#leave());
     this.querySelector("[data-switch]")?.addEventListener("click", () => this.#switch());
+    this.#center = this.querySelector<HTMLDialogElement>('[data-part="center"]');
+    this.#clock = this.querySelector('[data-does="center"]');
+    if (this.#center && this.#clock) this.#listenCenter(this.#center, this.#clock);
     this.#seen = new IntersectionObserver(
       ([e]) => {
         this.#inView = e.isIntersecting && e.intersectionRatio >= IN_VIEW;
@@ -84,7 +96,72 @@ class Notice extends LiveFigure {
   // Reset takes the row back to before its notification came
   protected restart() {
     this.#shown = null;
+    this.#kept = null;
+    this.#openCenter(false);
+    this.#drawCenter();
     this.#arrive();
+  }
+
+  #listenCenter(center: HTMLDialogElement, clock: HTMLElement) {
+    clock.addEventListener("click", () => this.#openCenter(!center.open));
+    center.addEventListener("close", () => attr(clock, "aria-expanded", "false"));
+    center.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      this.#openCenter(false);
+      clock.focus({ preventScroll: true });
+    });
+    center.addEventListener("click", (e) => {
+      const does = (e.target as Element).closest<HTMLElement>("[data-does]")?.dataset.does;
+      if (does === "dismiss" || does === "clear") return this.#forget();
+      if (does === "switch") return this.#switch();
+      // a click on the notification itself brings the app's window forward, as its toast's does
+      if ((e.target as Element).closest('[data-part="note"]')) {
+        this.#forget();
+        this.#openCenter(false);
+        bringForward("accounts", "windows");
+      }
+    });
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        const at = e.target as Node;
+        if (center.open && !center.contains(at) && !clock.contains(at)) this.#openCenter(false);
+      },
+      true,
+    );
+  }
+
+  #openCenter(open: boolean) {
+    const center = this.#center;
+    if (!center || open === center.open) return;
+    if (!open) return center.close();
+    center.show();
+    attr(this.#clock, "aria-expanded", "true");
+    this.#leave();
+    center.focus({ preventScroll: true });
+  }
+
+  #forget() {
+    this.#kept = null;
+    this.#drawCenter();
+  }
+
+  // the notification Notification Center holds, or none
+  #drawCenter() {
+    const c = this.#center;
+    if (!c) return;
+    const p = this.#kept;
+    shown(c.querySelector('[data-part="none"]'), !p);
+    shown(c.querySelector('[data-part="group"]'), !!p);
+    shown(c.querySelector('[data-does="clear"]'), !!p);
+    if (!p) return;
+    text(c.querySelector(`[data-part="note-title"]`), p.title);
+    const subtitle = c.querySelector<HTMLElement>("[data-subtitle]");
+    shown(subtitle, p.subtitle !== null);
+    if (p.subtitle) text(subtitle, p.subtitle);
+    text(c.querySelector("[data-body]"), p.body);
+    shown(c.querySelector("[data-switch-row]"), p.switchTo !== null);
   }
 
   // The desk at the moment: its clock, and Pitboard's figure in the menu bar or the tray.
@@ -118,11 +195,16 @@ class Notice extends LiveFigure {
 
   #arrive() {
     const p = this.#moment?.posted;
-    if (!p) return this.#leave();
+    if (!p) {
+      this.#forget();
+      return this.#leave();
+    }
     const key = JSON.stringify([p.title, p.subtitle, p.body, p.switchTo, this.#moment!.at]);
     if (!this.#inView || key === this.#shown) return;
     this.#shown = key;
     this.#fill(p);
+    this.#kept = p;
+    this.#drawCenter();
     this.#banner.dataset.state = this.#held() ? "held" : "in";
     say([p.title, p.subtitle, p.body].filter(Boolean).join(", "));
     this.#wait();
@@ -164,6 +246,9 @@ class Notice extends LiveFigure {
     this.#moment!.state.inUse[to.tool] = to.label;
     this.#draw();
     this.#leave();
+    // acted on, it leaves Notification Center too
+    this.#forget();
+    this.#openCenter(false);
   }
 }
 

@@ -4,8 +4,10 @@
 interface Props {
   time: string;
   date: string;
+  // the clock and its bell open Notification Center, where a figure draws one
+  center?: boolean;
 }
-const { time, date } = Astro.props;
+const { time, date, center = false } = Astro.props;
 const icon = "size-16 shrink-0";
 ---
 
@@ -21,12 +23,31 @@ const icon = "size-16 shrink-0";
     <svg class={icon}><use href="#fl-speaker"></use></svg>
     <svg class={icon}><use href="#fl-battery"></use></svg>
   </span>
-  <span
-    class="flex h-40 w-80 flex-col items-end justify-center px-8 text-u-12/16 whitespace-nowrap tabular-nums"
-    aria-hidden="true"
-    ><span data-time>{time}</span><span data-date>{date}</span></span
-  >
-  <span class="flex h-40 w-32 items-center justify-center rounded-u-4" aria-hidden="true"
-    ><svg class={icon}><use href="#fl-alert"></use></svg></span
-  >
+  {center ? (
+    <button
+      class="flex h-40 items-center rounded-u-4 focus-win aria-expanded:bg-win-subtle live:cursor-default live:hover:bg-win-subtle"
+      type="button"
+      aria-expanded="false"
+      data-does="center"
+    >
+      {/* named by the time and date it shows */}
+      <span
+        class="flex w-80 flex-col items-end justify-center px-8 text-left text-u-12/16 whitespace-nowrap tabular-nums"
+        ><span data-time>{time}</span> <span data-date>{date}</span></span
+      ><span class="flex w-32 items-center justify-center" aria-hidden="true"
+        ><svg class={icon}><use href="#fl-alert"></use></svg></span
+      >
+    </button>
+  ) : (
+    <>
+      <span
+        class="flex h-40 w-80 flex-col items-end justify-center px-8 text-u-12/16 whitespace-nowrap tabular-nums"
+        aria-hidden="true"
+        ><span data-time>{time}</span><span data-date>{date}</span></span
+      >
+      <span class="flex h-40 w-32 items-center justify-center rounded-u-4" aria-hidden="true"
+        ><svg class={icon}><use href="#fl-alert"></use></svg></span
+      >
+    </>
+  )}
 </div>
