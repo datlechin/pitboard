@@ -1,6 +1,8 @@
 ---
 // WindowsNotifications.cs's toast at the share; its metrics are approx until read on Windows. The
-// toast is a group its title names; its header's buttons are the system's.
+// toast is a group its title names; its header's buttons are the system's, and its close button
+// works. Working, it rises above the taskbar, shows the header's buttons while the pointer is over
+// it or focus is inside it, and goes.
 import Button from "./Button.astro";
 import Taskbar from "./Taskbar.astro";
 import TrayItem from "./TrayItem.astro";
@@ -12,26 +14,42 @@ interface Props {
   prefix: string;
 }
 const { prefix } = Astro.props;
+// the header's buttons, shown while the toast is held
+const system = "live:opacity-0 live:group-data-[state=held]/banner:opacity-100";
 ---
 
 <pb-notice id={prefix} class="desk block h-260 desk-px-720" inert data-output>
   <div
-    class="absolute right-12 bottom-60 z-3 flex w-364 flex-col rounded-u-8 bg-win-flyout p-16 font-win text-u-14/20 text-win-text-2 shadow-win-flyout"
+    class="group/banner absolute right-12 bottom-60 z-3 flex w-364 flex-col rounded-u-8 bg-win-flyout p-16 font-win text-u-14/20 text-win-text-2 shadow-win-flyout live:transition-[translate,opacity,visibility] live:duration-300 live:ease-out live:not-data-[state]:invisible live:not-data-[state]:translate-y-16 live:not-data-[state]:opacity-0"
     role="group"
     aria-labelledby={`${prefix}-title`}
+    data-banner
   >
-    <span class="flex items-center gap-8 text-u-12/16" aria-hidden="true">
-      <svg class="size-16 shrink-0"><use href="#pb-tray"></use></svg>
-      <span class="flex-1">{toast.app}</span>
-      <svg class="size-16"><use href="#fl-more"></use></svg>
-      <svg class="ml-8 size-16"><use href="#fl-dismiss"></use></svg>
+    <span class="flex items-center gap-8 text-u-12/16">
+      <svg class="size-16 shrink-0" aria-hidden="true"><use href="#pb-tray"></use></svg>
+      <span class="flex-1" aria-hidden="true">{toast.app}</span>
+      <svg class:list={["size-16", system]} aria-hidden="true"><use href="#fl-more"></use></svg>
+      <button
+        class:list={["ml-8 size-16 rounded-u-2 focus-win", system]}
+        type="button"
+        aria-label="Dismiss"
+        data-close
+      >
+        <svg class="size-16"><use href="#fl-dismiss"></use></svg>
+      </button>
     </span>
     <b class="mt-12 font-semibold text-win-text" id={`${prefix}-title`}>{toast.title}</b>
-    <span>{toast.tool}</span>
-    <span>{toast.body}</span>
-    <span class="mt-16 text-win-text"><Button stretch>{toast.button}</Button></span>
+    <span data-subtitle>{toast.tool}</span>
+    <span data-body>{toast.body}</span>
+    <span class="mt-16 text-win-text" data-switch-row
+      ><Button stretch data-switch>{toast.button}</Button></span
+    >
   </div>
   <Taskbar time={hm(clock.warned)} date={shortDate(clock.warned)}>
-    <TrayItem level={level(share)} />
+    <TrayItem level={level(share)} levels />
   </Taskbar>
 </pb-notice>
+
+<script>
+  import "../../../scripts/live/notice.ts";
+</script>

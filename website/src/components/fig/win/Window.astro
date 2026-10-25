@@ -10,10 +10,13 @@ interface Props {
   prefix: string;
   pane: Pane;
   crop?: boolean;
+  // the figure's element, where its pane's would not do
+  element?: "pb-warm";
 }
-const { prefix, pane, crop = false } = Astro.props;
+const { prefix, pane, crop = false, element } = Astro.props;
 const Root =
-  pane === "settings" ? "pb-settings" : pane === "activity" ? "pb-activity" : "pb-accounts";
+  element ??
+  (pane === "settings" ? "pb-settings" : pane === "activity" ? "pb-activity" : "pb-accounts");
 const item = "relative mx-4 my-2 flex h-36 w-40 items-center justify-center rounded-u-4";
 const items: [Pane, string][] = [
   ...panes.map(([id, , icon]): [Pane, string] => [id, icon]),

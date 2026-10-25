@@ -1,0 +1,163 @@
+// <pb-notice>: the notification row on macOS or Windows, in its own moment (lib/moment.ts), which
+// follows the page's choice, share and accounts. Pitboard sets no alert style and no duration, so
+// macOS shows a Temporary banner and Windows a toast that each go after the system's time: it
+// arrives once the row is 60% in view, once for each notification the moment posts, and stays
+// while the pointer is over it or focus is inside it (plan 3.6 and 3.7; question 2).
+import { LiveFigure } from "./figure.ts";
+import { say } from "./say.ts";
+import { noticeMoment, type Moment } from "../../lib/moment.ts";
+import type { Posted, State } from "../../lib/model.ts";
+import {
+  hm,
+  menuBarClock,
+  menuBarLevel,
+  menuBarSpoken,
+  menuBarTitle,
+  shortDate,
+} from "../../lib/words.ts";
+
+// how long a banner stays, until measured on macOS 27 and Windows 11: Windows' default, which
+// Settings > Accessibility > Visual effects sets
+const SHOWN_MS = 5000;
+const IN_VIEW = 0.6;
+
+const said = (el: Element | null, text: string) => {
+  if (el && el.textContent!.trim() !== text) el.textContent = text;
+};
+
+class Notice extends LiveFigure {
+  #banner!: HTMLElement;
+  #moment: Moment | null = null;
+  #inputs = "";
+  // the notification last shown, which comes again only once the moment posts another
+  #shown: string | null = null;
+  #inView = false;
+  #timer?: ReturnType<typeof setTimeout>;
+  #pointer = false;
+  #focus = false;
+  #seen?: IntersectionObserver;
+
+  connectedCallback() {
+    this.#banner = this.querySelector("[data-banner]")!;
+    const b = this.#banner;
+    b.addEventListener("pointerenter", () => this.#hold("pointer", true));
+    b.addEventListener("pointerleave", () => this.#hold("pointer", false));
+    b.addEventListener("focusin", () => this.#hold("focus", true));
+    b.addEventListener("focusout", (e) => {
+      if (!b.contains(e.relatedTarget as Node | null)) this.#hold("focus", false);
+    });
+    this.querySelector("[data-close]")?.addEventListener("click", () => this.#leave());
+    this.querySelector("[data-switch]")?.addEventListener("click", () => this.#switch());
+    this.#seen = new IntersectionObserver(
+      ([e]) => {
+        this.#inView = e.isIntersecting && e.intersectionRatio >= IN_VIEW;
+        this.#arrive();
+      },
+      { threshold: [0, IN_VIEW] },
+    );
+    this.#seen.observe(this);
+    super.connectedCallback();
+  }
+
+  disconnectedCallback() {
+    this.#seen?.disconnect();
+    clearTimeout(this.#timer);
+    super.disconnectedCallback();
+  }
+
+  protected render(s: State) {
+    const inputs = JSON.stringify([s.preferences, s.running, s.accounts, s.inUse, s.watchService]);
+    if (inputs === this.#inputs) return;
+    this.#inputs = inputs;
+    this.#moment = noticeMoment(s);
+    this.#draw();
+    this.#arrive();
+  }
+
+  // Reset takes the row back to before its notification came
+  protected restart() {
+    this.#shown = null;
+    this.#arrive();
+  }
+
+  // The desk at the moment: its clock, and Pitboard's figure in the menu bar or the tray.
+  #draw() {
+    const m = this.#moment;
+    if (!m) return;
+    said(this.querySelector("[data-clock]"), menuBarClock(m.at));
+    said(this.querySelector("[data-time]"), hm(m.at));
+    said(this.querySelector("[data-date]"), shortDate(m.at));
+    const title = this.querySelector("[data-title]");
+    if (title) {
+      said(title, menuBarTitle(m.state));
+      title.parentElement!.setAttribute("aria-label", menuBarSpoken(m.state));
+    }
+    const level = menuBarLevel(m.state);
+    for (const svg of this.querySelectorAll<SVGElement>("[data-level]"))
+      svg.toggleAttribute("hidden", svg.dataset.level !== level);
+  }
+
+  #fill(p: Posted) {
+    const b = this.#banner;
+    said(b.querySelector(`#${this.id}-title`), p.title);
+    const subtitle = b.querySelector<HTMLElement>("[data-subtitle]")!;
+    subtitle.hidden = p.subtitle === null;
+    if (p.subtitle) said(subtitle, p.subtitle);
+    said(b.querySelector("[data-body]"), p.body);
+    const button =
+      b.querySelector<HTMLElement>("[data-switch-row]") ?? b.querySelector("[data-switch]")!;
+    button.hidden = p.switchTo === null;
+  }
+
+  #arrive() {
+    const p = this.#moment?.posted;
+    if (!p) return this.#leave();
+    const key = JSON.stringify([p.title, p.subtitle, p.body, p.switchTo, this.#moment!.at]);
+    if (!this.#inView || key === this.#shown) return;
+    this.#shown = key;
+    this.#fill(p);
+    this.#banner.dataset.state = this.#held() ? "held" : "in";
+    say([p.title, p.subtitle, p.body].filter(Boolean).join(", "));
+    this.#wait();
+  }
+
+  #held = () => this.#pointer || this.#focus;
+
+  #hold(by: "pointer" | "focus", on: boolean) {
+    if (by === "pointer") this.#pointer = on;
+    else this.#focus = on;
+    if (!this.#banner.dataset.state) return;
+    this.#banner.dataset.state = this.#held() ? "held" : "in";
+    if (!this.#held()) this.#wait();
+  }
+
+  #wait() {
+    clearTimeout(this.#timer);
+    this.#timer = setTimeout(() => {
+      if (!this.#held()) this.#leave();
+    }, SHOWN_MS);
+  }
+
+  #leave() {
+    clearTimeout(this.#timer);
+    if (!this.#banner.dataset.state) return;
+    // focus inside the banner stays on the desk as the banner goes
+    if (this.#banner.contains(document.activeElement)) {
+      this.tabIndex = -1;
+      this.focus({ preventScroll: true });
+    }
+    delete this.#banner.dataset.state;
+    this.#pointer = this.#focus = false;
+  }
+
+  // Switch acts in the moment: Pitboard switches to the account offered, and the desk shows it.
+  #switch() {
+    const to = this.#moment?.posted?.switchTo;
+    if (!to) return;
+    this.#moment!.state.inUse[to.tool] = to.label;
+    this.#draw();
+    this.#leave();
+  }
+}
+
+customElements.define("pb-notice", Notice);

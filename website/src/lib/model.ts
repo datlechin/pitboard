@@ -742,6 +742,15 @@ function readUsage(s: State) {
   warmTick(s);
 }
 
+// A state of its own as a read leaves it, advised on and looked at as the app does after a read:
+// the notification row's own moment, which the store never holds.
+export function advised(state: State): State {
+  const s = structuredClone(state);
+  advise(s);
+  lookToSwitch(s);
+  return s;
+}
+
 function decidePass(s: State) {
   s.decidedAt = s.now;
   lookToSwitch(s);

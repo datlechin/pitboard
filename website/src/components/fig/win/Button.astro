@@ -1,5 +1,6 @@
 ---
-// WinUI's Button, 32 pixels tall with the elevation edge, or with `accent` the accent's fill.
+// WinUI's Button, 32 pixels tall with the elevation edge, or with `accent` the accent's fill, and
+// the system's focus visual.
 import type { HTMLAttributes } from "astro/types";
 
 interface Props extends HTMLAttributes<"button"> {
@@ -11,7 +12,7 @@ const { accent = false, stretch = false, type = "button", ...rest } = Astro.prop
 
 <button
   class:list={[
-    "inline-flex h-32 items-center justify-center rounded-u-4 px-11 pt-5 pb-6 text-u-14/20 whitespace-nowrap",
+    "inline-flex h-32 items-center justify-center rounded-u-4 px-11 pt-5 pb-6 text-u-14/20 whitespace-nowrap focus-win",
     accent ? "bg-win-accent text-win-on-accent" : "bg-win-control shadow-win-control",
     "disabled:bg-win-control-2 disabled:text-win-text-off disabled:shadow-none live:cursor-default",
     { "w-full": stretch },

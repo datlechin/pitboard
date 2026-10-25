@@ -1,10 +1,14 @@
 ---
 // The top of the Limits pane as macOS 27 draws it, in the words machine.rs gives
-// LimitsSettings.swift; each height cuts the window 8 points below its first group. Its controls
-// carry the names machine.rs gives them, and their ids start `prefix`.
+// LimitsSettings.swift; each height cuts the window 8 points below its first group, and a working
+// figure 8 points below the footer of Before an account runs out at its tallest, Switch
+// Automatically's. Its controls carry the names machine.rs gives them, and their ids start
+// `prefix`. Every choice's words are drawn, those of the choice not shown hidden.
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
-import { clock } from "../../../data/world.ts";
+import { clock, share } from "../../../data/world.ts";
+import { atLabel, choices, heading, section, shareLabel, terms } from "../../../data/limits.ts";
+import { atLimitNote, type AtLimit } from "../../../lib/model.ts";
 import { hm } from "../../../lib/words.ts";
 
 interface Props {
@@ -12,13 +16,17 @@ interface Props {
   show: "switch" | "warm";
 }
 const { prefix, show } = Astro.props;
+const Root = show === "warm" ? "pb-warm" : "pb-settings";
 const tabs = [
   ["general", "General", "sf-gear"],
   ["limits", "Limits", "sf-gauge"],
   ["advanced", "Advanced", "sf-gear2"],
 ];
-const heights = { switch: "h-245", warm: "h-378.5" } as const;
-const choice = "Switch Automatically";
+const heights = { switch: "h-245", warm: "h-378.5" };
+// with the window in its flow, as tall as Switch Automatically's footer needs at least
+const live = { switch: "[&:defined]:h-auto", warm: "" };
+const frame = { switch: "live:min-h-330.5", warm: "" };
+const drawn: AtLimit = "switch";
 const head = "pt-28 pb-11.5 pl-30 font-bold";
 const group = "mx-20 rounded-u-12 bg-mac-window-group";
 // each row's label sits 18 points down its middle; a rule 10 points short of each side tops
@@ -29,11 +37,22 @@ const ruled =
 const small = "block text-u-12/15 text-mac-window-sub";
 const field = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-control)]";
 const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-sep)]";
+// a pop-up menu, as the status menu draws macOS 27's: its rows 24 points apart, 4 in
+const menuRow =
+  "relative mx-5 flex items-center rounded-u-6 py-4 pr-16 pl-25 aria-selected:bg-mac-menu-hl aria-selected:text-white data-[state=blink]:bg-transparent data-[state=blink]:text-inherit";
 ---
 
-<pb-settings id={prefix} class:list={["desk block", heights[show]]} inert data-output>
+<Root
+  id={prefix}
+  class:list={["desk block [&:defined]:pt-24", heights[show], live[show]]}
+  inert
+  data-output
+>
   <div
-    class="absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
+    class:list={[
+      "absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window live:relative live:top-0 live:-mb-12 live:overflow-visible",
+      frame[show],
+    ]}
   >
     <div class="relative flex h-80 justify-center gap-0.5 pt-32">
       <Lights window closeOnly class="top-9.5 left-8.75" />
@@ -57,23 +76,39 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
     <div class="pb-20">
       {show === "switch" && (
         <>
-          <p class={head}>Before an account runs out</p>
+          <p class={head}>{section}</p>
           <div class={group}>
             <div class:list={[row, "h-40.5 items-center pr-14 pb-4.5"]}>
-              <span class="flex-1">When a limit reaches</span>
-              {/* drawn: an input's text sits lower in its box than macOS draws it */}
+              <span class="flex-1">{heading}</span>
+              {/* the field as drawn, and once the figure works the text field itself, whose text
+                  Chromium sets a pixel lower than the drawing's */}
               <span
                 class:list={[
-                  "flex h-25.5 w-57.5 items-center justify-end rounded-u-6 bg-mac-window-bg pr-7.5 tabular-nums",
+                  "flex h-25.5 w-57.5 items-center justify-end rounded-u-6 bg-mac-window-bg pr-7.5 tabular-nums live:hidden",
                   field,
                 ]}
-                >95%</span
+                >{share}%</span
               >
+              <input
+                class:list={[
+                  "hidden h-25.5 w-57.5 rounded-u-6 bg-mac-window-bg pr-7.5 text-right tabular-nums select-text focus-mac live:block disabled:text-mac-window-dim",
+                  field,
+                ]}
+                id={`${prefix}-share`}
+                type="text"
+                inputmode="numeric"
+                enterkeyhint="done"
+                autocomplete="off"
+                aria-label={shareLabel}
+                value={`${share}%`}
+              />
               <svg
-                class="ml-7.5 h-24 w-19.5 shrink-0 rounded-u-5 bg-mac-window-control"
+                class="ml-7.5 h-24 w-19.5 shrink-0 rounded-u-5 bg-mac-window-control focus-mac aria-disabled:text-mac-window-dim"
+                id={`${prefix}-stepper`}
                 role="spinbutton"
-                aria-label="Share of a limit"
-                aria-valuenow="95"
+                tabindex="0"
+                aria-label={shareLabel}
+                aria-valuenow={share}
                 aria-valuemin="50"
                 aria-valuemax="99"
                 viewBox="0 0 19.5 24"
@@ -85,28 +120,82 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
                 <path d="M5.4 8.1 10 3.4l4.6 4.7M5.4 15.4l4.6 4.7 4.6-4.7" stroke-width="1.75" />
                 <path d="M3.5 11.75h12.5" stroke-opacity=".16" />
               </svg>
-              {/* a pop-up button, which says its choice as a select-only combobox does */}
-              <span
-                class="flex items-center"
-                role="combobox"
-                aria-label="When a limit reaches 95%"
-                aria-haspopup="listbox"
-                aria-expanded="false"
-              >
-                <span class="ml-21.5 whitespace-nowrap">{choice}</span>
+              <span class="relative ml-21.5 flex">
+                {/* a pop-up button, which says its choice as a select-only combobox does */}
                 <span
-                  class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
-                  aria-hidden="true"
+                  class="flex items-center rounded-u-6 focus-mac focus-visible:outline-offset-[calc(var(--u)*2)]"
+                  id={`${prefix}-at`}
+                  role="combobox"
+                  tabindex="0"
+                  aria-label={atLabel(share)}
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls={`${prefix}-choices`}
                 >
-                  <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                  {choices.map((c) => <span
+                    class="whitespace-nowrap"
+                    data-value={c.value}
+                    hidden={c.value !== drawn}
+                  >
+                    {c.mac}
+                  </span>)}
+                  <span
+                    class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                  </span>
+                </span>
+                {/* the menu opens with the choice over the button's title */}
+                <span
+                  class="absolute top-[calc(var(--u)*(-6.25_-_24*var(--at,0)))] -left-30 z-10 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-150 data-[state=closing]:pointer-events-none data-[state=closing]:opacity-0"
+                  id={`${prefix}-choices`}
+                  role="listbox"
+                  aria-label={heading}
+                  hidden
+                >
+                  {choices.map((c) => <span
+                    class:list={[menuRow, "group/option"]}
+                    id={`${prefix}-choice-${c.value}`}
+                    role="option"
+                    aria-selected="false"
+                    aria-checked={c.value === drawn ? "true" : "false"}
+                    data-value={c.value}
+                  >
+                    <svg
+                      class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/option:block"
+                    >
+                      <use href="#sf-check-heavy" />
+                    </svg>
+                    {c.mac}
+                  </span>)}
                 </span>
               </span>
             </div>
-            <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
-              <span class={small}
+            <div class:list={[row, ruled, "min-h-37 items-center pb-1.5"]} data-standing>
+              <span class={small} data-said
                 >Watching work: 40% of its weekly limit, as of {hm(clock.read)}.</span
               >
             </div>
+          </div>
+          <div class="hidden px-30 pt-9 text-u-12/17 text-mac-window-sub live:block">
+            {choices.map((c) =>
+              c.value === "nothing" ? null : (
+                <p data-note={c.value} hidden={c.value !== drawn}>
+                  {atLimitNote({ atLimit: c.value, chosen: true, share })}
+                </p>
+              ),
+            )}
+            <p class="mt-3.5" data-terms>
+              {terms.sentence}
+              <a
+                class="text-mac-window-link no-underline hover:text-mac-window-link focus-mac"
+                href={terms.href}
+                target="_blank"
+                rel="noopener"
+                >{terms.link}</a
+              >
+            </p>
           </div>
         </>
       )}
@@ -156,4 +245,8 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
       )}
     </div>
   </div>
-</pb-settings>
+</Root>
+
+<script>
+  import "../../../scripts/live/settings.ts";
+</script>

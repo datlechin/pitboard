@@ -160,9 +160,13 @@
   --color-mac-window-off: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.1));
   --color-mac-window-off-edge: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.2));
   --color-mac-window-stripe: light-dark(#f4f5f5, #232325);
+  /* a link in a window, a control's dimmed text, and the ring around the control with keyboard focus */
+  --color-mac-window-link: light-dark(#0068da, #419cff);
+  --color-mac-window-dim: light-dark(rgb(0 0 0 / 0.25), rgb(255 255 255 / 0.25));
   /* over a window with a sheet up, and its close button then: read in light on macOS 26.6 */
   --color-mac-window-scrim: light-dark(rgb(172 172 172 / 0.62), rgb(0 0 0 / 0.4));
   --color-mac-window-close-off: light-dark(#dcdcdc, #5a5a5a);
+  --color-mac-window-focus: light-dark(rgb(0 122 255 / 0.5), rgb(10 132 255 / 0.5));
   /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
@@ -219,6 +223,11 @@
   --color-win-shadow-tight: light-dark(transparent, rgb(0 0 0 / 0.2));
   --color-win-taskbar: light-dark(#eeeeee, #1c1c1c);
   --color-win-window-edge: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.08));
+  /* ControlFillColorInputActive under a focused text box, and ControlFillColorDisabled */
+  --color-win-field-active: light-dark(#ffffff, #1e1e1e);
+  --color-win-control-off: light-dark(rgb(249 249 249 / 0.302), rgb(255 255 255 / 0.043));
+  /* FocusStrokeColorOuter, the system focus visual's outer stroke */
+  --color-win-focus: light-dark(rgb(0 0 0 / 0.894), #ffffff);
   /* Windows Terminal's dark theme and Campbell scheme, the same in both of the site's */
   --color-win-term-bar: #202020;
   --color-win-term-bg: #0c0c0c;
@@ -360,6 +369,11 @@
   --shadow-win-field:
     inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge),
     inset 0 calc(-1 * var(--u)) var(--color-win-strong);
+  /* a focused text box's edge, its bottom in the accent 2 pixels deep, and a disabled one's */
+  --shadow-win-field-active:
+    inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge),
+    inset 0 calc(-2 * var(--u)) var(--color-win-accent);
+  --shadow-win-field-off: inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge);
   --shadow-mac-knob: 0 calc(0.5 * var(--u)) calc(1.5 * var(--u)) rgb(0 0 0 / 0.3);
   --shadow-mac-list: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-edge);
   --shadow-mac-glass:
@@ -503,6 +517,21 @@
   -moz-osx-font-smoothing: auto;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* the ring each system draws around the control with keyboard focus in a figure: macOS's, and
+   WinUI's focus visual 2 pixels wide, 1 pixel off the control */
+@utility focus-mac {
+  &:focus-visible {
+    outline: calc(3.5 * var(--u)) solid var(--color-mac-window-focus);
+    outline-offset: 0;
+  }
+}
+@utility focus-win {
+  &:focus-visible {
+    outline: calc(2 * var(--u)) solid var(--color-win-focus);
+    outline-offset: calc(1 * var(--u));
+  }
 }
 
 @utility desk-px-* {
