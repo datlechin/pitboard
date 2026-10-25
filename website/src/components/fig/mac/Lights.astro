@@ -1,20 +1,25 @@
 ---
 // A key window's buttons on macOS 27, 14 points across and 23 apart, as docs/images/window.png
-// draws them; `class` places them.
+// draws them; `class` places them, and a Settings window can only close.
 interface Props {
   window?: boolean;
+  closeOnly?: boolean;
   class?: string;
 }
-const { window = false, class: place = "top-12 left-12" } = Astro.props;
+const { window = false, closeOnly = false, class: place = "top-12 left-12" } = Astro.props;
+const off =
+  "bg-mac-window-off shadow-[inset_0_0_0_calc(var(--spacing)*0.5)_var(--color-mac-window-off-edge)]";
 const fills = window
-  ? ["bg-mac-window-close", "bg-mac-window-minimize", "bg-mac-window-zoom"]
-  : ["bg-mac-term-tl", "bg-mac-term-tl", "bg-mac-term-tl"];
+  ? closeOnly
+    ? ["bg-mac-window-close inset-shadow-mac-light", off, off]
+    : ["bg-mac-window-close", "bg-mac-window-minimize", "bg-mac-window-zoom"].map(
+        (fill) => `${fill} inset-shadow-mac-light`,
+      )
+  : Array(3).fill("bg-mac-term-tl inset-shadow-mac-light");
 ---
 
 <span class:list={["flex", window ? ["absolute z-1 gap-9", place] : "gap-8"]}
   >{fills.map((fill) => (
-    <i
-      class:list={["rounded-circle inset-shadow-mac-light", window ? "size-14" : "size-12", fill]}
-    ></i>
+    <i class:list={["rounded-circle", window ? "size-14" : "size-12", fill]}></i>
   ))}</span
 >

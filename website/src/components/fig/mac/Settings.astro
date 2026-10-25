@@ -1,5 +1,6 @@
 ---
-// The top of the Limits pane, in the words machine.rs gives LimitsSettings.swift; each height cuts the window 8 points below its first group.
+// The top of the Limits pane as macOS 27 draws it, in the words machine.rs gives
+// LimitsSettings.swift; each height cuts the window 8 points below its first group.
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock } from "../../../data/world.ts";
@@ -13,66 +14,77 @@ const tabs = [
   ["limits", "Limits", "sf-gauge"],
   ["advanced", "Advanced", "sf-gear2"],
 ];
-const heights = { switch: "h-221", warm: "h-336" } as const;
+const heights = { switch: "h-245", warm: "h-378.5" } as const;
 const choice = "Switch Automatically";
-const group = "rounded-u-8 bg-mac-window-bg shadow-mac-group *:not-first:inset-shadow-mac-window-t";
-const row = "flex min-h-36 items-center gap-12 px-10 py-6";
-const label = "min-w-0 flex-1";
+const head = "pt-28 pb-11.5 pl-30 font-bold";
+const group = "mx-20 rounded-u-12 bg-mac-window-group";
+// each row's label sits 18 points down its middle; a rule 10 points short of each side tops
+// every row but the first
+const row = "relative flex px-10";
+const ruled =
+  "pt-1 before:absolute before:inset-x-10 before:top-0 before:h-1 before:bg-mac-window-rule";
 const small = "block text-u-12/15 text-mac-window-sub";
-const head = "px-10 pb-6 font-bold";
-const control = "rounded-u-5 bg-mac-window-btn shadow-mac-control";
-// two arrows, each a 7 by 4 point fill clipped to a triangle
-const stepper = [
-  "flex h-21 w-13 flex-col",
-  "before:flex-1 before:bg-linear-to-b before:from-mac-window-sub before:to-mac-window-sub before:bg-size-[calc(var(--spacing)*7)_calc(var(--spacing)*4)] before:bg-center before:bg-no-repeat before:[clip-path:polygon(50%_30%,75%_65%,25%_65%)]",
-  "after:flex-1 after:bg-linear-to-b after:from-mac-window-sub after:to-mac-window-sub after:bg-size-[calc(var(--spacing)*7)_calc(var(--spacing)*4)] after:bg-center after:bg-no-repeat after:[clip-path:polygon(25%_35%,75%_35%,50%_70%)]",
-];
+const field = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-control)]";
+const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-sep)]";
 ---
 
 <div class:list={["desk", heights[show]]} aria-hidden="true" data-output>
   <div
     class="absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
   >
-    <div
-      class="relative flex justify-center gap-2 bg-mac-window-side pt-30 pb-6 inset-shadow-mac-window-b"
-    >
-      <Lights window />
-      <span class="absolute inset-x-0 top-7 text-center font-bold">Limits</span>
+    <div class="relative flex h-80 justify-center gap-0.5 pt-32">
+      <Lights window closeOnly class="top-9.5 left-8.75" />
+      <span class="absolute inset-x-0 top-6 text-center font-bold text-mac-window-title"
+        >Limits</span
+      >
       {tabs.map(([id, name, icon]) => <span
         class:list={[
-          "flex min-w-62 flex-col items-center gap-2 rounded-u-6 px-4 pt-4 pb-3 text-u-11/13",
-          id === "limits" ? "bg-mac-window-pick text-mac-window-blue" : "text-mac-window-sub",
+          "flex h-48 min-w-55.5 flex-col items-center px-7 pt-2 text-u-11/13",
+          id === "limits"
+            ? "rounded-[calc(var(--spacing)*7)] bg-mac-window-group text-mac-window-blue shadow-mac-glass"
+            : "text-mac-window-sub",
         ]}
       >
-        <svg class="size-22 shrink-0">
+        <svg class="-mb-1.5 mt-1.5 size-27 shrink-0">
           <use href={`#${icon}`} />
         </svg>
         {name}
       </span>)}
     </div>
-    <div class="bg-mac-window-form px-20 pt-14 pb-16">
+    <div class="pb-20">
       {show === "switch" && (
         <>
           <p class={head}>Before an account runs out</p>
           <div class={group}>
-            <div class={row}>
-              <span class={label}>When a limit reaches</span>
-              <span class="flex items-center gap-6">
-                <span
-                  class="w-56 rounded-u-5 bg-mac-window-bg px-4 text-right tabular-nums shadow-mac-control"
-                  >95%</span
-                >
-                <span class:list={[control, ...stepper]}></span>
-                <span
-                  class:list={[control, "flex items-center gap-2 py-1 pr-2 pl-8 whitespace-nowrap"]}
-                  >{choice}<svg class="size-14 shrink-0"><use href="#sf-updown"></use></svg></span
-                >
+            <div class:list={[row, "h-40.5 items-center pr-14 pb-4.5"]}>
+              <span class="flex-1">When a limit reaches</span>
+              <span
+                class:list={[
+                  "flex h-25.5 w-57.5 items-center justify-end rounded-u-6 bg-mac-window-bg pr-7.5 tabular-nums",
+                  field,
+                ]}
+                >95%</span
+              >
+              <svg
+                class="ml-7.5 h-24 w-19.5 shrink-0 rounded-u-5 bg-mac-window-control"
+                viewBox="0 0 19.5 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5.4 8.1 10 3.4l4.6 4.7M5.4 15.4l4.6 4.7 4.6-4.7" stroke-width="1.75" />
+                <path d="M3.5 11.75h12.5" stroke-opacity=".16" />
+              </svg>
+              <span class="ml-21.5 whitespace-nowrap">{choice}</span>
+              <span
+                class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+              >
+                <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
               </span>
             </div>
-            <div class={row}>
-              <span class:list={[small, "pb-2"]}
-                >Watching work: 40% of its weekly limit, as of {clock.read}.</span
-              >
+            <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
+              <span class={small}>Watching work: 40% of its weekly limit, as of {clock.read}.</span>
             </div>
           </div>
         </>
@@ -81,28 +93,40 @@ const stepper = [
         <>
           <p class={head}>Warm up limits</p>
           <div class={group}>
-            <div class={row}>
-              <span class={label}>From</span>
-              <span class:list={[control, "px-6 py-1 tabular-nums"]}>07:00</span>
-            </div>
-            <div class={row}>
-              <span class={label}>To</span>
-              <span class:list={[control, "px-6 py-1 tabular-nums"]}>23:00</span>
-            </div>
-            <div class={row}>
-              <span class={label}>
-                personal · Max 20x<small class={small}>Warms up again at {clock.warmsAgain}</small>
+            {[
+              ["From", "07:00"],
+              ["To", "23:00"],
+            ].map(([label, at], i) => <div
+              class:list={[row, "items-center pb-3", i === 0 ? "h-39" : [ruled, "h-40"]]}
+            >
+              <span class="flex-1">{label}</span>
+              <span
+                class:list={["flex h-22 w-61 items-center rounded-u-6 pl-3.5 tabular-nums", time]}
+                >{at}<svg
+                  class="mr-3.5 ml-auto h-22 w-13.5 shrink-0"
+                  viewBox="0 0 13.5 22"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M3.75 7 6.75 4l3 3M.5 10.75h12.5M3.75 14l3 3 3-3" />
+                </svg></span
+              >
+            </div>)}
+            <div class:list={[row, ruled, "h-56.5 items-start pt-11"]}>
+              <span class="flex-1">
+                personal · Max
+                20x<small class:list={[small, "mt-3"]}>Warms up again at {clock.warmsAgain}</small>
               </span>
               <Switch on />
             </div>
-            <div class={row}>
-              <span class={label}>work · Max 20x</span>
+            <div class:list={[row, ruled, "h-38.5 items-center pb-1.5"]}>
+              <span class="flex-1">work · Max 20x</span>
               <Switch />
             </div>
-            <div class={row}>
-              <span class:list={[small, "pb-2"]}
-                >Next warm-up: personal at {clock.warmsAgain}.</span
-              >
+            <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
+              <span class={small}>Next warm-up: personal at {clock.warmsAgain}.</span>
             </div>
           </div>
         </>

@@ -134,7 +134,6 @@
   --color-mac-window-minimize: #fdc636;
   --color-mac-window-zoom: #7fd458;
   --color-mac-window-btn: light-dark(#ececec, #3a3a3c);
-  --color-mac-window-btn-edge: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.5));
   --color-mac-window-green: light-dark(#34c759, #30d158);
   --color-mac-window-orange: light-dark(#f29200, #ff9f0a);
   --color-mac-window-red: light-dark(#ff383c, #ff453a);
@@ -145,7 +144,13 @@
   --color-mac-window-glass: light-dark(rgb(246 246 246 / 0.5), rgb(80 80 82 / 0.5));
   --color-mac-window-glass-edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
   --color-mac-window-gauge-edge: light-dark(rgb(0 0 0 / 0.13), rgb(255 255 255 / 0.1));
-  --color-mac-window-form: light-dark(#f2f2f4, #1a1a1a);
+  /* a grouped form's fill and the rules between its rows, a control's fill, and the buttons a
+     Settings window turns off */
+  --color-mac-window-group: light-dark(rgb(0 0 0 / 0.03), rgb(255 255 255 / 0.05));
+  --color-mac-window-rule: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.08));
+  --color-mac-window-control: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
+  --color-mac-window-off: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.1));
+  --color-mac-window-off-edge: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.2));
   --color-mac-window-stripe: light-dark(#f4f5f5, #232325);
   /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
@@ -335,9 +340,7 @@
   --shadow-win-field:
     inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge),
     inset 0 calc(-1 * var(--u)) var(--color-win-strong);
-  --shadow-mac-control: 0 calc(0.5 * var(--u)) calc(1 * var(--u)) var(--color-mac-window-btn-edge);
   --shadow-mac-knob: 0 calc(0.5 * var(--u)) calc(1.5 * var(--u)) rgb(0 0 0 / 0.3);
-  --shadow-mac-group: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-sep);
   --shadow-mac-list: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-edge);
   --shadow-mac-glass:
     0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-glass-edge),
