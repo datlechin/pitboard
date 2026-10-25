@@ -1,7 +1,8 @@
 ---
 // Pitboard's icon in the notification area: a 32 by 40 pixel button, its backplate shown while
 // `on`. Its row is as long as what is left of the menu bar's limit; in the demo, `was` is the
-// level before the switch. With a `name`, the button the Shell names by its tooltip.
+// level before the switch, and with `levels` every level is drawn, those not shown hidden, the
+// demo's `was` over them. With a `name`, the button the Shell names by its tooltip.
 import type { level } from "../../../lib/words.ts";
 
 type Level = ReturnType<typeof level>;
@@ -9,13 +10,16 @@ interface Props {
   level: Level;
   was?: Level;
   on?: boolean;
+  levels?: boolean;
   name?: string;
   id?: string;
   class?: string;
 }
-const { level: now, was = now, on = false, name, id, class: extra } = Astro.props;
+const { level: now, was = now, on = false, levels = false, name, id, class: extra } = Astro.props;
 const Item = name ? "button" : "span";
 const tray = { g: "plenty", y: "low", r: "out" } as const;
+// SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
+const shown = (l: Level) => (l === now ? {} : { hidden: true });
 const icon = "size-16 shrink-0";
 ---
 
@@ -30,10 +34,27 @@ const icon = "size-16 shrink-0";
   aria-label={name}
   aria-hidden={name ? undefined : "true"}
 >
-  {was !== now && <svg class={`${icon} hidden demo-before:block`}>
-    <use href={`#pb-tray-${tray[was]}`} />
-  </svg>}
-  <svg class:list={[icon, { "demo-before:hidden": was !== now }]}>
-    <use href={`#pb-tray-${tray[now]}`} />
-  </svg>
+  {levels ? (
+    <>
+      {was !== now && <svg class={`${icon} hidden demo-before:block`}>
+        <use href={`#pb-tray-${tray[was]}`} />
+      </svg>}
+      {(["g", "y", "r"] as const).map((l) => <svg
+        class:list={[icon, { "demo-before:hidden": was !== now }]}
+        data-level={l}
+        {...shown(l)}
+      >
+        <use href={`#pb-tray-${tray[l]}`} />
+      </svg>)}
+    </>
+  ) : (
+    <>
+      {was !== now && <svg class={`${icon} hidden demo-before:block`}>
+        <use href={`#pb-tray-${tray[was]}`} />
+      </svg>}
+      <svg class:list={[icon, { "demo-before:hidden": was !== now }]}>
+        <use href={`#pb-tray-${tray[now]}`} />
+      </svg>
+    </>
+  )}
 </Item>

@@ -1051,9 +1051,25 @@ jobs:
   # The site in Chromium, WebKit and Firefox and on two phones, served by wrangler with its CSP
   # enforced: e2e/ checks the figures' markup, axe, and in Chromium how each figure looks against
   # baselines made here. It builds from the recorded releases, which a new release leaves alone.
+  # One job a Playwright project, each with the one browser it runs.
   website-browsers:
+    name: website-browsers (${{ matrix.project }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium
+            browser: chromium
+          - project: webkit
+            browser: webkit
+          - project: firefox
+            browser: firefox
+          - project: iphone
+            browser: webkit
+          - project: pixel
+            browser: chromium
     runs-on: ubuntu-latest
-    # the website job's ten minutes, and five for the browsers' install: apt once took seven
+    # the website job's ten minutes, and five for the browser's install: apt once took seven
     timeout-minutes: 15
     defaults:
       run:
@@ -1081,20 +1097,24 @@ jobs:
       - if: steps.touched.outputs.run
         run: npm ci
       - if: steps.touched.outputs.run
-        run: npx playwright install --with-deps chromium webkit firefox
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install --with-deps "$BROWSER"
       - if: steps.touched.outputs.run
         env:
           PITBOARD_SITE_OFFLINE: "1"
         run: npm run build
-      # the 3 minutes 18 seconds the suite took, and half again
+      # the 3 minutes 58 seconds the slowest project, WebKit, took, and half again
       - if: steps.touched.outputs.run
-        timeout-minutes: 5
-        run: npm run test:browser
+        timeout-minutes: 6
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: npm run test:browser -- --project="$PROJECT"
       # the report, and the drawing of a figure with no baseline yet, written where it belongs
       - if: failure() && steps.touched.outputs.run
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: website-browsers
+          name: website-browsers-${{ matrix.project }}
           path: |
             website/playwright-report
             website/test-results

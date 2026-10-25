@@ -230,6 +230,15 @@ const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 export const listed = (w: World, tool: Tool) =>
   [...toolAccounts(w, tool)].sort((a, b) => Number(isInUse(b, w)) - Number(isInUse(a, w)));
 
+// present/accounts.rs `in_place_of_limits` while a switch runs, and present/setup.rs
+// `updated_menu` while a read does and after it (present/words.rs `updated`)
+export const SWITCHING = "Switching…";
+export const READING = "Reading…";
+export const updated = (readAt: number) => `Updated ${hm(readAt)}`;
+
+// account_windows/accounts.rs: one item opens a site's one account in place of a submenu
+export const openSiteAs = (site: string, label: string) => `Open ${site} as ${label}`;
+
 export const menuTitle = (a: Account) => (a.plan ? `${a.label} · ${a.plan}` : a.label);
 
 // present/accounts.rs `runs_out_first`: which limit of the account in use runs out first at its
@@ -375,6 +384,14 @@ export const trayTip = (w: World) =>
     }),
   ].join("\n");
 
+// NotifyIcon.cs `Tip`: the Shell holds 127 UTF-16 units of the icon's tooltip, cut never inside a
+// surrogate pair.
+export const TIP_LENGTH = 127;
+export const shellTip = (tip: string) =>
+  tip.length <= TIP_LENGTH
+    ? tip
+    : tip.slice(0, /[\uD800-\uDBFF]/.test(tip[TIP_LENGTH - 1]) ? TIP_LENGTH - 1 : TIP_LENGTH);
+
 // The notification once a limit of the account in use reaches the share (present/notices.rs
 // `at_limit_notice`): personal's weekly limit, with work's room in it.
 export const headsUpTitle = (label: string, limit: Limit, used: number) =>
@@ -394,13 +411,20 @@ export function runsOutNote(a: Account, w: World): string | null {
   return first ? runsOut(scopedLimitName(first.limit), first.inSeconds) : null;
 }
 
+// present/accounts.rs `stale_note`: when Pitboard last read a Claude Desktop login in use, which
+// is also its item's tooltip in the menu.
+export const staleNote = (a: Account, w: World) =>
+  isInUse(a, w) && a.readAt !== undefined
+    ? `Read ${span(w.now - a.readAt)} ago, with Claude closed`
+    : null;
+
 // present/accounts.rs `item`'s notes under an account in the window, then where it stands for
 // warm-ups, where it is turned on for them.
 export function notes(a: Account, w: World, warm: string | null): string[] {
   const on = isInUse(a, w);
   const runs = runsOutNote(a, w);
   return [
-    on && a.readAt !== undefined ? `Read ${span(w.now - a.readAt)} ago, with Claude closed` : null,
+    staleNote(a, w),
     runs && capitalised(runs),
     on ? null : (parkedLife(a.refreshExpiresAt, w.now) ?? sessionLife(a.sessionExpiresAt, w.now)),
     warm,

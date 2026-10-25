@@ -98,6 +98,8 @@
   --color-mac-menu-dim: light-dark(rgb(0 0 0 / 0.26), rgb(255 255 255 / 0.42));
   --color-mac-menu-sep: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.12));
   --color-mac-menu-hl: light-dark(#2d6fe0, #1f5fcf);
+  /* a menu item's tooltip, approx until read on macOS 27 */
+  --color-mac-tip: light-dark(#f2f2f2, #2c2c2c);
   --color-mac-term-bg: light-dark(#ffffff, #161817);
   --color-mac-term-bar: light-dark(#f0f1f1, #222423);
   --color-mac-term-sep: light-dark(rgb(0 0 0 / 0.09), rgb(0 0 0 / 0.6));
@@ -305,6 +307,9 @@
     inset 0 0 0 calc(0.5 * var(--u)) var(--color-mac-menu-rim),
     0 calc(12 * var(--u)) calc(36 * var(--u)) calc(-4 * var(--u)) var(--color-mac-menu-shadow),
     0 calc(2 * var(--u)) calc(8 * var(--u)) calc(-2 * var(--u)) var(--color-mac-menu-shadow);
+  --shadow-mac-tip:
+    0 0 0 calc(0.5 * var(--u)) var(--color-mac-menu-edge),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) var(--color-mac-menu-shadow);
   --shadow-mac-banner:
     0 0 0 calc(0.5 * var(--u)) var(--color-mac-menu-edge),
     0 calc(10 * var(--u)) calc(30 * var(--u)) calc(-6 * var(--u)) var(--color-mac-menu-shadow);

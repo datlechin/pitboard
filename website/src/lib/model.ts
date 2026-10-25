@@ -111,6 +111,9 @@ export interface State extends World {
   // accounts with a window of their site open, by id
   windowsOpen: string[];
   decidedAt: number;
+  // a switch or a read the app has under way: "Switching…" and "Reading…" while it runs
+  switching: { id: string; token: number } | null;
+  reading: number | null;
 }
 
 const minutes = (hm: string) => {
@@ -151,6 +154,8 @@ export function start(): State {
     posted: [],
     windowsOpen: [id("work")],
     decidedAt: clock.menuBar,
+    switching: null,
+    reading: null,
   };
 }
 
@@ -1014,10 +1019,64 @@ export function run() {
   );
 }
 
+// Where Reset returns to: the start, or the state the hero's opening demo left, once its switch
+// is made (plan section 4).
+let rest: State | null = null;
+export function settle(at: State | null = model.get()) {
+  rest = at && structuredClone({ ...at, changed: false });
+  if (at) model.setKey("changed", false);
+}
+
 export function reset() {
   enrolled = 0;
-  model.set(start());
+  model.set(rest ? structuredClone(rest) : start());
   rebase();
+}
+
+// How long each app took over a switch and a read in its UI tests on CI's runners
+// (docs/facts/site.md): In Use 0.12 s after a click on macOS, In use 0.19 to 0.37 s after Use on
+// windows-2025 and 0.25 s on windows-11-arm, and Refresh disabled for 14 to 24 ms on Windows and
+// never seen dimmed on macOS.
+type System = "macos" | "windows";
+export const TAKES_MS: Record<"switch" | "read", Record<System, number>> = {
+  switch: { macos: 120, windows: 250 },
+  read: { macos: 24, windows: 24 },
+};
+let token = 0;
+
+// The app's switch from a menu, the window's Use or a notification's Switch: the account reads
+// "Switching…" and the others are dimmed while it runs, then it is in use.
+export function switchFromApp(tool: Tool, label: string, system: System) {
+  const to = find(model.get(), tool, label);
+  if (!to || model.get().switching) return;
+  const mine = ++token;
+  change((s) => {
+    s.switching = { id: to.id, token: mine };
+  });
+  setTimeout(() => {
+    if (model.get().switching?.token !== mine) return;
+    change((s) => {
+      s.switching = null;
+    }, false);
+    const now = model.get().accounts.find((a) => a.id === to.id);
+    if (now) use(now.tool, now.label);
+  }, TAKES_MS.switch[system]);
+}
+
+// The app's Refresh: "Reading…" while the read runs.
+export function refreshFromApp(system: System) {
+  if (model.get().reading !== null || !model.get().running) return;
+  const mine = ++token;
+  change((s) => {
+    s.reading = mine;
+  });
+  setTimeout(() => {
+    if (model.get().reading !== mine) return;
+    change((s) => {
+      s.reading = null;
+      if (s.running) readUsage(s);
+    });
+  }, TAKES_MS.read[system]);
 }
 
 // A switch notice's countdown, as NoticeRow.swift's timer and Countdown.Left draw it.

@@ -670,9 +670,10 @@ PITBOARD_SITE_OFFLINE=1 npm run build
 npm run test:browser
 ```
 
-CI's `website-browsers` job runs them, and in Chromium also compares each figure with its
-baseline in `e2e/static.spec.ts-snapshots/`. The baselines are made in CI's Linux image: a figure
-whose look changes on purpose takes its new drawing from the job's `website-browsers` artifact.
+CI's `website-browsers` jobs run them, one for each project, and in Chromium also compare each
+figure with its baseline in `e2e/static.spec.ts-snapshots/`. The baselines are made in CI's Linux
+image: a figure whose look changes on purpose takes its new drawing from the Chromium job's
+`website-browsers-chromium` artifact.
 
 ## Changelog
 

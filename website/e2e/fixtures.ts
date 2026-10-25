@@ -1,5 +1,6 @@
 // What every browser test shares: the page as a visitor's choices leave it, the figures it draws,
 // and the rules every test keeps.
+import AxeBuilder from "@axe-core/playwright";
 import {
   test as base,
   expect,
@@ -49,6 +50,22 @@ export const test = base.extend<{ problems: string[] }>({
   },
 });
 
+// axe by WCAG 2.2 A and AA, and an id that ARIA names twice, which the figures drawn for each
+// platform and section would make first.
+export const rules = (page: Page) =>
+  new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+    .options({ rules: { "duplicate-id-aria": { enabled: true } } });
+
+// What axe finds within each part, by its rules; a figure draws its system's own colours, which
+// contrast does not hold it to, and `off` names any other rule a part is let off.
+export async function axe(page: Page, parts: string[], off: string[] = []) {
+  let builder = rules(page).disableRules(["color-contrast", ...off]);
+  for (const part of parts) builder = builder.include(part);
+  const found = await builder.analyze();
+  return found.violations.map((v) => ({ rule: v.id, nodes: v.nodes.map((n) => n.target) }));
+}
+
 // The platform, surface and theme a visitor chose, as head.js reads them before the first paint.
 export async function choose(
   context: BrowserContext,
@@ -83,6 +100,18 @@ export async function defined(page: Page): Promise<string[]> {
       [...document.querySelectorAll("[data-output]")].map((root) => root.localName),
     );
     return [...names].filter((name) => customElements.get(name) !== undefined);
+  });
+}
+
+// The hero's opening demo has handed over, and so made its switch to work: under reduced motion
+// at once, once the hero is mostly in view (src/scripts/live/demo.ts).
+export async function handedOver(page: Page) {
+  await page
+    .locator("figure:has([data-demo-desk])")
+    .evaluate((hero) => hero.scrollIntoView({ block: "center" }));
+  // the demo runs 3.8 s once it starts
+  await expect(page.locator("#hero-mac-item")).toHaveAttribute("aria-label", /\bwork\b/, {
+    timeout: 10_000,
   });
 }
 

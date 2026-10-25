@@ -13,6 +13,7 @@ import {
   SETTLING_SECONDS,
   SIGN_IN_LASTS,
   START_STEP,
+  TAKES_MS,
   advance,
   afterSwitch,
   atLimitNote,
@@ -28,13 +29,16 @@ import {
   notSwitching,
   quit,
   refresh,
+  refreshFromApp,
   rename,
   reset,
   setChoice,
   setShare,
+  settle,
   shareOfLimit,
   signInAgain,
   start,
+  switchFromApp,
   use,
   warmNote,
   warmSaid,
@@ -733,4 +737,61 @@ test("anything done on the page marks it changed until Reset, and time passing d
   assert.equal(model.get().changed, true);
   reset();
   assert.equal(model.get().changed, false);
+});
+
+test("the app's switch says Switching… while it runs, the others not in use dimmed by it", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  reset();
+  switchFromApp("claude", "work", "macos");
+  const work = model.get().accounts.find((a) => a.label === "work")!;
+  assert.deepEqual(model.get().switching, { id: work.id, token: model.get().switching!.token });
+  assert.equal(model.get().inUse.claude, "personal");
+  // a second choice while one runs is not taken
+  switchFromApp("codex", "spare", "macos");
+  t.mock.timers.tick(TAKES_MS.switch.macos);
+  assert.equal(model.get().switching, null);
+  assert.deepEqual(model.get().inUse, { claude: "work", codex: "main", desktop: "home" });
+  assert.equal(model.get().log.at(-1)?.subject, "work");
+  // renamed while it runs, the account is still the one put in use
+  switchFromApp("claude", "personal", "macos");
+  rename("claude", "personal", "home2");
+  t.mock.timers.tick(TAKES_MS.switch.macos);
+  assert.equal(model.get().inUse.claude, "home2");
+  // Reset while it runs drops it
+  switchFromApp("claude", "work", "macos");
+  reset();
+  t.mock.timers.tick(TAKES_MS.switch.macos);
+  assert.equal(model.get().inUse.claude, "personal");
+});
+
+test("the app's Refresh says Reading… while the read runs, then the read's time", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  reset();
+  advance(NOW + 3 * MINUTE);
+  refreshFromApp("macos");
+  assert.notEqual(model.get().reading, null);
+  assert.equal(model.get().readAt, clock.read);
+  t.mock.timers.tick(TAKES_MS.read.macos);
+  assert.equal(model.get().reading, null);
+  assert.equal(model.get().readAt, NOW + 3 * MINUTE);
+  quit();
+  refreshFromApp("macos");
+  assert.equal(model.get().reading, null, "a Pitboard that has quit reads nothing");
+  reset();
+});
+
+test("the switch the hero's demo makes is where the page rests, and Reset comes back to it", () => {
+  reset();
+  use("claude", "work");
+  settle();
+  assert.equal(model.get().changed, false);
+  const rest = structuredClone(model.get());
+  setShare(90);
+  forget("claude", "personal");
+  assert.equal(model.get().changed, true);
+  reset();
+  assert.deepEqual(model.get(), rest);
+  settle(null);
+  reset();
+  assert.deepEqual(model.get(), start());
 });

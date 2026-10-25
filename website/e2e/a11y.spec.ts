@@ -1,18 +1,11 @@
 // axe on the home page in light and dark, with JavaScript and without, and every figure as it is once
 // it works: the roles, names and states its drawing carries, out from under its inert. A figure
 // draws its system's own colours, which axe's contrast does not hold it to.
-import AxeBuilder from "@axe-core/playwright";
+import type AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
-import { choose, expect, platforms, roots, test, withoutScripts } from "./fixtures.ts";
+import { choose, expect, platforms, roots, rules, test, withoutScripts } from "./fixtures.ts";
 
 const schemes = ["light", "dark"] as const;
-
-// WCAG 2.2 A and AA, and an id that ARIA names twice, which the figures drawn for each platform and
-// section would make first.
-const axe = (page: Page) =>
-  new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
-    .options({ rules: { "duplicate-id-aria": { enabled: true } } });
 
 // one run at a time: axe refuses a second while the first runs
 async function violations(...builders: AxeBuilder[]) {
@@ -23,8 +16,9 @@ async function violations(...builders: AxeBuilder[]) {
   return found;
 }
 
-const figures = (page: Page) => axe(page).include(roots).disableRules(["color-contrast"]);
-const everything = (page: Page) => violations(axe(page).exclude(roots), figures(page));
+const figures = (page: Page) => rules(page).include(roots).disableRules(["color-contrast"]);
+const everything = (page: Page, off: string[] = []) =>
+  violations(rules(page).exclude(roots).disableRules(off), figures(page));
 
 test.use({ reducedMotion: "reduce" });
 
