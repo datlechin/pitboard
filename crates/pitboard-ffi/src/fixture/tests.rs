@@ -1136,7 +1136,12 @@ fn the_menu_lists_every_account_under_its_tool() {
     let codex: Vec<&str> = (shown.sections[1].accounts.iter())
         .map(|item| item.summary.as_str())
         .collect();
-    let weekly = |figure| words::limits_line(&[words::limit_in_line("weekly", figure)]);
+    let weekly = |figure: &str| {
+        words::limits_line(
+            OS,
+            &[(words::limit_short("weekly", None), figure.to_owned())],
+        )
+    };
     assert_eq!(codex, [weekly("7%"), weekly("0%")], "a Pro plan's limits");
     model.shutdown();
 }

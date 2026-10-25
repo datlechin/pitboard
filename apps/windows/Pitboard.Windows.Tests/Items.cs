@@ -45,10 +45,11 @@ internal static class Items
 
     public static LimitRow Limit(double percent) =>
         new(
-            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5h", Percent: percent, Figure: $"{percent:0}%",
+            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5-hour", Percent: percent,
+            Figure: $"{percent:0}%", Used: $"{percent:0}% used",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
-            ResetsAt: 1_800_007_800, Resets: "resets in 2h 10m",
-            Spoken: $"5-hour limit {percent:0}% used, resets in 2 hours 10 minutes");
+            ResetsAt: 1_800_007_800, Resets: "Resets 10:10 AM", ResetsIn: "in 2 hr 10 min",
+            Spoken: $"5-hour limit, {percent:0} percent used, resets 10:10 AM");
 
     public static ItemOffer Forget(string qualified) =>
         new(

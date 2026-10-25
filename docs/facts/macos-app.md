@@ -12,7 +12,7 @@ Measured on macOS 27.0 with Swift 6.4 on 5 October 2026, so that `pitboard-ffi`'
   is "1 day, 1 minute". The last unit it says is the rest of the span in that unit, rounded
   the same way, and a rest that rounds up to a whole one of the unit before it is carried:
   1 day 23 hours 30 minutes is "2 days, 0 hours". It writes no thousands separator: 11,574
-  days is "11574 days, 2 hours". `words::spoken_span` is tested against every one.
+  days is "11574 days, 2 hours". Nothing rests on it since a row says a reset as a clock time.
 - The menu bar cut a label past 12 `Character`s to 11 and an ellipsis, and Swift counts
   extended grapheme clusters. Over 22 labels, accents written as combining marks, flags,
   emoji joined by zero-width joiners, keycaps, tag sequences, Hangul written in jamo, Thai,

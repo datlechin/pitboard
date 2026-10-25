@@ -122,6 +122,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
 - The app's notice that Pitboard set a login or its keys aside offers **Show Diagnostics**, which
   opens the checks that list it, where it said **This Mac lists it**.
+- The app names a limit **5-hour** or **Weekly** beside its bar and says when it resets as a
+  clock time, such as **Resets 3:45 PM** or **Resets Mon 9:00 AM**, where it said **resets in
+  2h 05m**.
+- The app's menu says an account's limits as **5-hour 42% used, Weekly 12%**, and only **5-hour
+  limit reached, resets 6:46 PM** once one is reached.
 
 ### Removed
 

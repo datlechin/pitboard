@@ -501,9 +501,9 @@ public sealed class ModelTests
     public void ASnapshotSaysWhatTheMenuAndTheWindowShow()
     {
         var limit = new LimitRow(
-            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5h", Percent: 72.4, Figure: "72%",
-            Level: UsageLevel.Low, ResetsAt: 1_800_003_900, Resets: "resets in 1h 05m",
-            Spoken: "5-hour limit, 72 percent used, resets in 1 hour, 5 minutes");
+            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5-hour", Percent: 72.4, Figure: "72%",
+            Used: "72% used", Level: UsageLevel.Low, ResetsAt: 1_800_003_900, Resets: "Resets 09:05",
+            ResetsIn: "in 1 hr 5 min", Spoken: "5-hour limit, 72 percent used, resets 09:05");
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
         var window = new WindowAccount(
             Sites.ChatGpt, Label: "spare", Email: "spare@example.com", Store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40",
@@ -513,7 +513,7 @@ public sealed class ModelTests
             Email: "spare@example.com", EmailLine: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
             NeedsSignIn: false, Standing: AccountStanding.Ready, Unplaced: false, End: new RowEnd.Button(use), Action: use,
-            Summary: "5-hour 72%",
+            Summary: "5-hour 72% used",
             Notes:
             [
                 new AccountNote(

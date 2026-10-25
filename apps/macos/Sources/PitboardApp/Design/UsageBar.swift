@@ -2,9 +2,8 @@ import PitboardKit
 import SwiftUI
 
 /// A grid, so the columns line up across rows and the name column is as wide as its widest
-/// name: a limit scoped to one model is named "week · Sonnet 4.5", which no fixed width
-/// holds at every text size. What each column says is the model's, made again every minute,
-/// which is as often as "resets in 2h 10m" changes.
+/// name: a limit scoped to one model is named "Weekly (Sonnet 4.5)", which no fixed width
+/// holds at every text size. What each column says is the model's.
 struct UsageBars: View {
     let limits: [LimitRow]
 

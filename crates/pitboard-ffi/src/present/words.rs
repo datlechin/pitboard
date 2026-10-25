@@ -110,70 +110,13 @@ pub(crate) fn bar_name(label: &str) -> String {
     cut
 }
 
-/// `numerator / denominator` rounded to the nearest whole, a half to the even one, as
-/// Foundation rounds a span of time it says.
-fn rounded_half_even(numerator: i64, denominator: i64) -> i64 {
-    let (whole, rest) = (
-        numerator.div_euclid(denominator),
-        numerator.rem_euclid(denominator),
-    );
-    match (2 * rest).cmp(&denominator) {
-        std::cmp::Ordering::Less => whole,
-        std::cmp::Ordering::Greater => whole + 1,
-        std::cmp::Ordering::Equal => whole + (whole & 1),
-    }
-}
-
-/// `count` of `unit`, in words: "1 hour", "2 hours", "0 hours".
-fn units(count: i64, unit: &str) -> String {
-    if count == 1 {
-        format!("1 {unit}")
+// "5-hour limit, 42 percent used, resets 3:45 PM": `resets` as the row says it, or nothing.
+pub(crate) fn spoken_limit(title: &str, percent: f64, resets: &str) -> String {
+    let used = format!("{title}, {} percent used", whole(percent));
+    if resets.is_empty() {
+        used
     } else {
-        format!("{count} {unit}s")
-    }
-}
-
-// A span as VoiceOver heard it in the Swift app, "1 hour, 30 minutes" (docs/facts/macos-app.md).
-pub(crate) fn spoken_span(seconds: i64) -> String {
-    let seconds = seconds.max(MINUTE);
-    let minutes = rounded_half_even(seconds, MINUTE);
-    let (days, hours, rest) = (minutes / (24 * 60), minutes % (24 * 60) / 60, minutes % 60);
-    let named: Vec<(i64, &str)> = [
-        (days, DAY, "day"),
-        (hours, HOUR, "hour"),
-        (rest, MINUTE, "minute"),
-    ]
-    .into_iter()
-    .filter(|(count, ..)| *count > 0)
-    .map(|(_, length, unit)| (length, unit))
-    .take(2)
-    .collect();
-    match named[..] {
-        [(length, unit)] => units(rounded_half_even(seconds, length), unit),
-        [(first, first_unit), (second, second_unit)] => {
-            let mut whole = seconds / first;
-            let mut part = rounded_half_even(seconds - whole * first, second);
-            if part * second == first {
-                whole += 1;
-                part = 0;
-            }
-            format!("{}, {}", units(whole, first_unit), units(part, second_unit))
-        }
-        // Every span is at least a minute, so it has a unit.
-        _ => units(1, "minute"),
-    }
-}
-
-/// A limit as VoiceOver says it: "5-hour limit, 42 percent used, resets in 3 hours". The
-/// column beside the bar says "5h" and "resets in 30m", which is read letter by letter or as
-/// a unit: "m" is read as "meters". Once the reset is due it says so, as the column does.
-/// `name` is the limit's sentence name with its scope, "weekly Fable".
-pub(crate) fn spoken_limit(name: &str, percent: f64, resetting_in: Option<i64>) -> String {
-    let used = format!("{name} limit, {} percent used", whole(percent));
-    match resetting_in {
-        None => used,
-        Some(seconds) if seconds <= 0 => format!("{used}, resetting now"),
-        Some(seconds) => format!("{used}, resets in {}", spoken_span(seconds)),
+        format!("{used}, {}", uncapitalised(resets))
     }
 }
 
@@ -661,22 +604,71 @@ pub(crate) fn limit_title(name: &str, model: Option<&str>) -> String {
     }
 }
 
-// "5-hour 42%".
-pub(crate) fn limit_in_line(name: &str, figure: &str) -> String {
-    format!("{name} {figure}")
-}
-
-// "5-hour used up until 14:00".
-pub(crate) fn used_up(name: &str, until: Option<&str>) -> String {
-    match until {
-        Some(back) => format!("{name} used up until {back}"),
-        None => format!("{name} used up"),
+// Beside a limit's bar: "5-hour", "Weekly (Fable)".
+pub(crate) fn limit_short(name: &str, model: Option<&str>) -> String {
+    let short = capitalised(name);
+    match model {
+        Some(model) => format!("{short} ({model})"),
+        None => short,
     }
 }
 
-// "5-hour 12%, weekly 64%".
-pub(crate) fn limits_line(limits: &[String]) -> String {
-    capitalised(&limits.join(", "))
+// "42% used", as Anthropic says a limit's figure.
+pub(crate) fn used(figure: &str) -> String {
+    format!("{figure} used")
+}
+
+// "Resets 3:45 PM", "Resets Mon 9:00 AM": `clock` as the person's clock says the moment.
+pub(crate) fn resets(clock: &str) -> String {
+    format!("Resets {clock}")
+}
+
+pub(crate) const RESETTING_NOW: &str = "Resetting now";
+
+// How long until a reset, to the minute it has not yet reached.
+pub(crate) fn resets_in(seconds: i64) -> String {
+    let minutes = seconds.max(0) / MINUTE;
+    let (days, hours, rest) = (minutes / (24 * 60), minutes % (24 * 60) / 60, minutes % 60);
+    let left = match (days, hours, rest) {
+        (0, 0, 0) => return "in under a minute".into(),
+        (0, 0, minutes) => format!("{minutes} min"),
+        (0, hours, 0) => format!("{hours} hr"),
+        (0, hours, minutes) => format!("{hours} hr {minutes} min"),
+        (1, 0, _) => "1 day".into(),
+        (1, hours, _) => format!("1 day {hours} hr"),
+        (days, 0, _) => format!("{days} days"),
+        (days, hours, _) => format!("{days} days {hours} hr"),
+    };
+    format!("in {left}")
+}
+
+// "5-hour limit reached, resets 6:46 PM": `title` as a heading names the limit.
+pub(crate) fn limit_reached(title: &str, clock: Option<&str>) -> String {
+    match clock {
+        Some(clock) => format!("{title} reached, resets {clock}"),
+        None => format!("{title} reached"),
+    }
+}
+
+// The menu's line: "5-hour 42% used, Weekly 12%", each limit by its name beside its bar, and
+// in sentence case on Windows.
+pub(crate) fn limits_line(os: Os, limits: &[(String, String)]) -> String {
+    let said: Vec<String> = (limits.iter().enumerate())
+        .map(|(at, (name, figure))| match (at, os) {
+            (0, _) => format!("{name} {}", used(figure)),
+            (_, Os::Windows) => format!("{} {figure}", uncapitalised(name)),
+            (_, Os::MacOs | Os::Linux) => format!("{name} {figure}"),
+        })
+        .collect();
+    said.join(", ")
+}
+
+// Its first letter lower case, as a word after the start of a sentence: "resets 3:45 PM".
+fn uncapitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_lowercase().chain(chars).collect()
+    })
 }
 
 /// A clock time where the person's own clock could not say it: in UTC, and named so, since
@@ -2454,145 +2446,39 @@ mod tests {
         assert!(said.starts_with("cannot has used "), "{said}");
     }
 
-    /// VoiceOver reads the column's "30m" as thirty meters and "5h" as letters, so a limit
-    /// is said in words: its name as a sentence says it, what it has used, and when it
-    /// resets.
     #[test]
-    fn a_limit_is_spoken_in_words_and_not_in_its_columns_shorthand() {
+    fn a_limit_is_spoken_as_one_sentence() {
         assert_eq!(
-            spoken_limit("5-hour", 42.0, Some(3 * 3600)),
-            "5-hour limit, 42 percent used, resets in 3 hours"
+            spoken_limit("5-hour limit", 42.0, &resets("3:45 PM")),
+            "5-hour limit, 42 percent used, resets 3:45 PM"
         );
         assert_eq!(
-            spoken_limit("30-minute", 12.0, None),
+            spoken_limit("30-minute limit", 12.0, ""),
             "30-minute limit, 12 percent used"
         );
         assert_eq!(
-            spoken_limit("weekly Fable", 98.0, Some(0)),
-            "weekly Fable limit, 98 percent used, resetting now",
-            "a reset whose time has come is said, as the column says it"
+            spoken_limit("Weekly limit (Fable)", 98.0, RESETTING_NOW),
+            "Weekly limit (Fable), 98 percent used, resetting now"
         );
     }
 
-    /// Pitboard says everything in English, so a span of time VoiceOver reads inside one of
-    /// its sentences is English too, whatever the region: the Swift app wrote it in
-    /// `en_US_POSIX` for that reason. Here it has no region to follow.
+    // Counted down to the minute, so it never says a reset has come before it has.
     #[test]
-    fn a_spoken_span_of_time_reads_the_same_in_every_region() {
-        assert_eq!(
-            spoken_limit("5-hour", 42.0, Some(90 * 60)),
-            "5-hour limit, 42 percent used, resets in 1 hour, 30 minutes"
-        );
-    }
-
-    /// Every span Foundation was asked to say on macOS 27.0 with Swift 6.4, as the Swift app
-    /// said it, and what it said: rounding to the minute a half to the even one, the two
-    /// largest units that are not nought, and the last rounded up into the one before it.
-    #[test]
-    fn a_span_is_spoken_as_foundation_spoke_it() {
+    fn a_reset_is_counted_down_in_hours_and_minutes() {
         for (seconds, said) in [
-            (0, "1 minute"),
-            (1, "1 minute"),
-            (59, "1 minute"),
-            (60, "1 minute"),
-            (61, "1 minute"),
-            (89, "1 minute"),
-            (90, "2 minutes"),
-            (91, "2 minutes"),
-            (119, "2 minutes"),
-            (120, "2 minutes"),
-            (150, "2 minutes"),
-            (179, "3 minutes"),
-            (180, "3 minutes"),
-            (599, "10 minutes"),
-            (3540, "59 minutes"),
-            (3569, "59 minutes"),
-            (3570, "1 hour"),
-            (3599, "1 hour"),
-            (3600, "1 hour"),
-            (3601, "1 hour"),
-            (3629, "1 hour"),
-            (3630, "1 hour"),
-            (3659, "1 hour, 1 minute"),
-            (3660, "1 hour, 1 minute"),
-            (3690, "1 hour, 2 minutes"),
-            (5400, "1 hour, 30 minutes"),
-            (5429, "1 hour, 30 minutes"),
-            (5430, "1 hour, 30 minutes"),
-            (5459, "1 hour, 31 minutes"),
-            (5460, "1 hour, 31 minutes"),
-            (7169, "1 hour, 59 minutes"),
-            (7170, "2 hours"),
-            (7171, "2 hours"),
-            (7199, "2 hours"),
-            (7200, "2 hours"),
-            (9030, "2 hours, 30 minutes"),
-            (10_799, "3 hours"),
-            (10_800, "3 hours"),
-            (18_000, "5 hours"),
-            (35_999, "10 hours"),
-            (84_599, "23 hours, 30 minutes"),
-            (84_600, "23 hours, 30 minutes"),
-            (86_340, "23 hours, 59 minutes"),
-            (86_369, "23 hours, 59 minutes"),
-            (86_370, "1 day"),
-            (86_371, "1 day"),
-            (86_399, "1 day"),
-            (86_400, "1 day"),
-            (86_401, "1 day"),
-            (86_429, "1 day"),
-            (86_430, "1 day"),
-            (86_431, "1 day, 1 minute"),
-            (86_460, "1 day, 1 minute"),
-            (86_490, "1 day, 2 minutes"),
-            (86_550, "1 day, 2 minutes"),
-            (88_199, "1 day, 30 minutes"),
-            (88_200, "1 day, 30 minutes"),
-            (88_201, "1 day, 30 minutes"),
-            (88_230, "1 day, 30 minutes"),
-            (89_969, "1 day, 59 minutes"),
-            (89_970, "1 day, 1 hour"),
-            (89_971, "1 day, 1 hour"),
-            (89_999, "1 day, 1 hour"),
-            (90_000, "1 day, 1 hour"),
-            (91_799, "1 day, 1 hour"),
-            (91_800, "1 day, 2 hours"),
-            (117_000, "1 day, 8 hours"),
-            (129_600, "1 day, 12 hours"),
-            (131_400, "1 day, 12 hours"),
-            (135_000, "1 day, 14 hours"),
-            (170_940, "1 day, 23 hours"),
-            (171_000, "2 days, 0 hours"),
-            (171_060, "2 days, 0 hours"),
-            (171_900, "2 days, 0 hours"),
-            (172_740, "2 days, 0 hours"),
-            (172_769, "2 days, 0 hours"),
-            (172_770, "2 days"),
-            (172_771, "2 days"),
-            (172_799, "2 days"),
-            (172_800, "2 days"),
-            (172_830, "2 days"),
-            (174_600, "2 days, 30 minutes"),
-            (175_500, "2 days, 45 minutes"),
-            (214_200, "2 days, 12 hours"),
-            (215_999, "2 days, 12 hours"),
-            (259_199, "3 days"),
-            (302_400, "3 days, 12 hours"),
-            (345_599, "4 days"),
-            (345_600, "4 days"),
-            (602_940, "6 days, 23 hours"),
-            (603_000, "7 days, 0 hours"),
-            (603_060, "7 days, 0 hours"),
-            (604_799, "7 days"),
-            (604_800, "7 days"),
-            (605_000, "7 days, 3 minutes"),
-            (1_209_600, "14 days"),
-            (31_536_000, "365 days"),
-            (1_000_000_000, "11574 days, 2 hours"),
-            (-5, "1 minute"),
-            (30, "1 minute"),
+            (0, "in under a minute"),
+            (59, "in under a minute"),
+            (60, "in 1 min"),
+            (47 * 60 + 59, "in 47 min"),
+            (3_600, "in 1 hr"),
+            (2 * 3_600 + 9 * 60 + 59, "in 2 hr 9 min"),
+            (19 * 3_600 + 24 * 60, "in 19 hr 24 min"),
+            (86_400 + 59 * 60, "in 1 day"),
+            (86_400 + 3 * 3_600, "in 1 day 3 hr"),
+            (6 * 86_400 + 23 * 3_600 + 59 * 60, "in 6 days 23 hr"),
+            (7 * 86_400, "in 7 days"),
         ] {
-            assert_eq!(spoken_span(seconds), said, "{seconds}");
+            assert_eq!(resets_in(seconds), said, "{seconds}");
         }
     }
 
@@ -3666,19 +3552,34 @@ mod tests {
         assert_eq!(NOT_NAMED_YET, "Not named yet");
         assert_eq!(NEEDS_SIGNING_IN_AGAIN, "Needs signing in again");
         assert_eq!(NO_USAGE_READ, "No usage read");
-        assert_eq!(limit_in_line("5-hour", "42%"), "5-hour 42%");
         assert_eq!(limit_title("5-hour", None), "5-hour limit");
         assert_eq!(limit_title("weekly", Some("Fable")), "Weekly limit (Fable)");
+        assert_eq!(limit_short("5-hour", None), "5-hour");
+        assert_eq!(limit_short("weekly", Some("Fable")), "Weekly (Fable)");
+        assert_eq!(used("42%"), "42% used");
+        assert_eq!(resets("3:45 PM"), "Resets 3:45 PM");
+        assert_eq!(resets("Mon 9:00 AM"), "Resets Mon 9:00 AM");
+        assert_eq!(RESETTING_NOW, "Resetting now");
         assert_eq!(WARM_UP_OFF, "Off");
         assert_eq!(
-            used_up("5-hour", Some("14:00")),
-            "5-hour used up until 14:00"
+            limit_reached("5-hour limit", Some("6:46 PM")),
+            "5-hour limit reached, resets 6:46 PM"
         );
-        assert_eq!(used_up("5-hour", None), "5-hour used up");
+        assert_eq!(limit_reached("Weekly limit", None), "Weekly limit reached");
+        let limits = [
+            ("5-hour".to_owned(), "42%".to_owned()),
+            ("Weekly".to_owned(), "12%".to_owned()),
+            ("Weekly (Fable)".to_owned(), "3%".to_owned()),
+        ];
         assert_eq!(
-            limits_line(&["weekly 64%".into(), "5-hour 12%".into()]),
-            "Weekly 64%, 5-hour 12%"
+            limits_line(Os::MacOs, &limits),
+            "5-hour 42% used, Weekly 12%, Weekly (Fable) 3%"
         );
+        assert_eq!(
+            limits_line(Os::Windows, &limits),
+            "5-hour 42% used, weekly 12%, weekly (Fable) 3%"
+        );
+        assert_eq!(limits_line(Os::Windows, &limits[1..2]), "Weekly 12% used");
         assert_eq!(
             (in_use(Os::MacOs), in_use(Os::Windows)),
             ("In Use".into(), "In use".into())

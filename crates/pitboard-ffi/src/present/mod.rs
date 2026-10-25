@@ -308,21 +308,24 @@ pub struct WindowOffer {
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct LimitRow {
     pub kind: LimitKind,
-    /// As a heading names it: "5-hour limit", "Weekly limit (Fable)".
+    // as a heading names it: "5-hour limit", "Weekly limit (Fable)"
     pub name: String,
-    /// As the column beside its bar names it: "5h", "week · Fable".
+    // beside its bar: "5-hour", "Weekly (Fable)"
     pub short: String,
     /// The share used, as the service said it, for the bar. Past 100 once exceeded.
     pub percent: f64,
     /// The share used in words: "42%".
     pub figure: String,
+    // "42% used"
+    pub used: String,
     /// The step it is at, which its tint follows.
     pub level: UsageLevel,
-    /// When it resets, in epoch seconds, where its service says.
     pub resets_at: Option<i64>,
-    /// When it resets: "resets in 2h 05m", "resetting now", or empty where nothing says.
+    // "Resets 3:45 PM", "Resets Mon 9:00 AM", "Resetting now", or empty where nothing says
     pub resets: String,
-    /// The whole row as VoiceOver says it: "5-hour limit, 42 percent used, resets in 3 hours".
+    // "in 2 hr 9 min", or empty: the one part the minute tick moves
+    pub resets_in: String,
+    // the row as VoiceOver says it: "5-hour limit, 42 percent used, resets 3:45 PM"
     pub spoken: String,
 }
 

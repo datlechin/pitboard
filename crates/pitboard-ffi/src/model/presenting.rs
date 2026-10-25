@@ -233,9 +233,13 @@ fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
     assert_eq!(in_use.email, "work@example.com");
     assert!(in_use.in_use);
     let names: Vec<String> = in_use.limits.iter().map(|l| l.short.clone()).collect();
-    let column =
-        |kind| pitboard_core::words::limit_column(&super::advice::window(&window(kind, 0.0)));
-    assert_eq!(names, [column("session"), column("weekly_all")]);
+    assert_eq!(
+        names,
+        [
+            words::limit_short("5-hour", None),
+            words::limit_short("weekly", None)
+        ]
+    );
     assert_eq!(in_use.spoken, words::row_spoken("work", None, true, false));
     assert!(!described(account(Some("spare")).build()).in_use);
     assert!(
@@ -1043,57 +1047,50 @@ fn an_account_with_nothing_measured_is_described_by_its_address() {
     );
 }
 
-/// A limit as the menu's line names it: the core's name for its kind, with its model.
-fn named(limit: &Limit) -> String {
-    pitboard_core::words::scoped_limit_name(&super::advice::window(limit))
+fn at(name: &str, model: Option<&str>, figure: &str) -> (String, String) {
+    (words::limit_short(name, model), figure.to_owned())
 }
 
-/// A limit at `figure` in the menu's line, by its kind.
-fn at(limit: Limit, figure: &str) -> String {
-    words::limit_in_line(&named(&limit), figure)
+fn summaries(limits: Vec<Limit>) -> [String; 2] {
+    let (model, _) = reading(vec![account(Some("work")).limits(limits).build()]);
+    [model.on_a_mac(), model.on_windows()]
+        .map(|shown| shown.sections[0].accounts[0].summary.clone())
 }
 
-/// Every limit in one line, in the order the service gave them, the way a sentence starts: a
-/// capital on its first word and on nothing after it. A limit scoped to one model is named
-/// with its model, so it does not read as the account's own.
+// One model's limit names its model, or it reads as the account's own.
 #[test]
-fn limits_are_said_in_one_line_with_only_its_first_letter_capitalised() {
-    let summary =
-        |limits: Vec<Limit>| described(account(Some("work")).limits(limits).build()).summary;
-    let fable = || window("weekly_scoped", 0.0).scope("Fable");
+fn limits_are_said_in_one_line_the_first_saying_what_its_figure_is() {
+    let lines = |limits: &[(String, String)]| {
+        [
+            words::limits_line(Os::MacOs, limits),
+            words::limits_line(Os::Windows, limits),
+        ]
+    };
     assert_eq!(
-        summary(vec![window("weekly_all", 64.4), window("session", 12.0)]),
-        words::limits_line(&[
-            at(window("weekly_all", 0.0), "64%"),
-            at(window("session", 0.0), "12%")
-        ])
+        summaries(vec![window("weekly_all", 64.4), window("session", 12.0)]),
+        lines(&[at("weekly", None, "64%"), at("5-hour", None, "12%")])
     );
     assert_eq!(
-        summary(vec![
+        summaries(vec![
             window("session", 12.5),
             window("weekly_all", 30.0),
             window("weekly_scoped", 98.0).scope("Fable"),
         ]),
-        words::limits_line(&[
-            at(window("session", 0.0), "13%"),
-            at(window("weekly_all", 0.0), "30%"),
-            at(fable(), "98%")
+        lines(&[
+            at("5-hour", None, "13%"),
+            at("weekly", None, "30%"),
+            at("weekly", Some("Fable"), "98%")
         ])
     );
     assert_eq!(
-        summary(vec![window("weekly_scoped", 7.0).scope("Fable")]),
-        words::limits_line(&[at(fable(), "7%")])
+        summaries(vec![window("weekly_scoped", 7.0).scope("Fable")]),
+        lines(&[at("weekly", Some("Fable"), "7%")])
     );
 }
 
-/// A limit that has run out is worth knowing with when it comes back. Later today that is a
-/// clock time, and on another day its weekday too, so a menu left open past midnight is
-/// still right. Used up is the core's: at the service's 100 as read, until its reset, after
-/// which the line gives the last figure, as `pitboard status` does, until a reading moves it.
-///
-/// The clock is read in UTC.
+// Reached is the core's: at 100 as read until its reset, as `pitboard status` has it.
 #[test]
-fn a_used_up_limit_says_when_it_comes_back() {
+fn a_reached_limit_says_when_it_resets() {
     let today = NOON + 2 * 3600;
     let later = NOON + 2 * 86_400;
     let spent = |percent: f64, resets: Option<i64>| {
@@ -1105,12 +1102,12 @@ fn a_used_up_limit_says_when_it_comes_back() {
         )
         .summary
     };
-    let session = named(&window("session", 0.0));
-    let used_up = |until: Option<&str>| words::limits_line(&[words::used_up(&session, until)]);
-    let full = words::limits_line(&[at(window("session", 0.0), "100%")]);
-    assert_eq!(spent(100.0, Some(today)), used_up(Some("14:00")));
-    assert_eq!(spent(100.0, Some(later)), used_up(Some("Fri 12:00")));
-    assert_eq!(spent(100.0, None), used_up(None));
+    let five_hour = words::limit_title("5-hour", None);
+    let reached = |at: Option<&str>| words::limit_reached(&five_hour, at);
+    let full = words::limits_line(OS, &[at("5-hour", None, "100%")]);
+    assert_eq!(spent(100.0, Some(today)), reached(Some("14:00")));
+    assert_eq!(spent(100.0, Some(later)), reached(Some("Fri 12:00")));
+    assert_eq!(spent(100.0, None), reached(None));
     assert_eq!(spent(100.0, Some(NOON - 60)), full, "it has reset");
     assert_eq!(spent(100.0, Some(NOON)), full, "it resets now");
     assert_eq!(
@@ -1118,6 +1115,7 @@ fn a_used_up_limit_says_when_it_comes_back() {
         full,
         "drawn at 100%, and still answered"
     );
+    let weekly = words::limit_title("weekly", None);
     assert_eq!(
         described(
             account(Some("work"))
@@ -1128,10 +1126,19 @@ fn a_used_up_limit_says_when_it_comes_back() {
                 .build()
         )
         .summary,
-        words::limits_line(&[
-            words::used_up(&named(&window("weekly_all", 0.0)), Some("14:00")),
-            at(window("session", 0.0), "40%")
-        ])
+        words::limit_reached(&weekly, Some("14:00"))
+    );
+    assert_eq!(
+        described(
+            account(Some("work"))
+                .limits(vec![
+                    window("session", 100.0).resets(Some(today)),
+                    window("weekly_all", 100.0).resets(Some(later)),
+                ])
+                .build()
+        )
+        .summary,
+        words::limit_reached(&weekly, Some("Fri 12:00"))
     );
 }
 
@@ -1147,12 +1154,66 @@ fn a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all() {
             .build(),
     ]);
     let shown = present(&model.state, NOON, &Unreadable);
+    let utc = words::utc_clock(today, NOON);
+    let work = &shown.sections[0].accounts[0];
     assert_eq!(
-        shown.sections[0].accounts[0].summary,
-        words::limits_line(&[words::used_up(
-            &named(&window("session", 0.0)),
-            Some(&words::utc_clock(today, NOON))
-        )])
+        work.summary,
+        words::limit_reached(&words::limit_title("5-hour", None), Some(&utc))
+    );
+    assert_eq!(work.limits[0].resets, words::resets(&utc));
+}
+
+// As Anthropic and OpenAI say a reset, with its weekday when that is not today; the clock is UTC.
+#[test]
+fn a_reset_is_said_as_a_clock_time_and_counted_down_in_the_detail() {
+    let today = NOON + 2 * HOUR + 9 * 60;
+    let later = NOON + 5 * DAY;
+    let limits = described(
+        account(Some("work"))
+            .signed_in()
+            .limits(vec![
+                window("session", 42.0).resets(Some(today)),
+                window("weekly_all", 12.0).resets(Some(later)),
+                window("weekly_scoped", 3.0).scope("Fable").resets(None),
+                window("1_day", 5.0).resets(Some(NOON)),
+            ])
+            .build(),
+    )
+    .limits;
+    let said: Vec<(&str, &str, &str)> = limits
+        .iter()
+        .map(|limit| {
+            (
+                limit.used.as_str(),
+                limit.resets.as_str(),
+                limit.resets_in.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (
+                words::used("42%").as_str(),
+                words::resets("14:09").as_str(),
+                words::resets_in(2 * HOUR + 9 * 60).as_str()
+            ),
+            (
+                words::used("12%").as_str(),
+                words::resets("Mon 12:00").as_str(),
+                words::resets_in(5 * DAY).as_str()
+            ),
+            (words::used("3%").as_str(), "", ""),
+            (words::used("5%").as_str(), words::RESETTING_NOW, "")
+        ]
+    );
+    assert_eq!(
+        limits[0].spoken,
+        words::spoken_limit(
+            &words::limit_title("5-hour", None),
+            42.0,
+            &words::resets("14:09")
+        )
     );
 }
 
@@ -3631,9 +3692,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     assert_eq!(shown.window_request.serial, 1);
 }
 
-/// What the window shows of the time is made again on the minute tick, once started, and on
-/// nothing else: a reset that was "resets in 2h 05m" says "resets in 2h 04m" a minute later
-/// with nothing read, as the Swift app's bars redrew every minute.
+// The countdown to a reset moves with nothing read, and the row's clock time stays.
 #[test]
 fn what_depends_on_the_time_is_made_again_every_minute() {
     let mut model = at_noon();
@@ -3648,12 +3707,13 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
     model.send(Intent::Start);
     model.run(&mut machine);
     let resets = |model: &Hand| {
-        model.shown().sections[0].accounts[0].limits[0]
-            .resets
-            .clone()
+        let limit = &model.shown().sections[0].accounts[0].limits[0];
+        (limit.resets.clone(), limit.resets_in.clone())
     };
-    let reset = NOON + 2 * 3600 + 5 * 60;
-    assert_eq!(resets(&model), pitboard_core::words::resets(reset, NOON));
+    assert_eq!(
+        resets(&model),
+        (words::resets("14:05"), words::resets_in(2 * 3600 + 5 * 60))
+    );
     let due = model.state.next_due().expect("a timer");
     assert!(due <= model.now.running + Duration::from_secs(60));
 
@@ -3661,11 +3721,7 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
     assert!(model.tick().iter().all(|job| matches!(job, Job::Look)));
     assert_eq!(
         resets(&model),
-        pitboard_core::words::resets(reset, NOON + 60)
-    );
-    assert_ne!(
-        pitboard_core::words::resets(reset, NOON + 60),
-        pitboard_core::words::resets(reset, NOON)
+        (words::resets("14:05"), words::resets_in(2 * 3600 + 4 * 60))
     );
     assert!(
         model.state.next_due().expect("a timer") <= model.now.running + Duration::from_secs(60),

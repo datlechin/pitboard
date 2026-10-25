@@ -36,7 +36,7 @@ public sealed class AccountRowTests
         var row = await Shown(item, sent.Add);
 
         var texts = Views.Texts(row);
-        foreach (var said in new[] { "spare", "Plus", "spare@example.com", "5h", "42%", "resets in 2h 10m", "Its parked login lasts 6 more days" })
+        foreach (var said in new[] { "spare", "Plus", "spare@example.com", "5-hour", "42%", "Resets 10:10 AM", "Its parked login lasts 6 more days" })
         {
             Assert.Contains(said, texts);
         }
@@ -64,9 +64,9 @@ public sealed class AccountRowTests
         var limit = Items.Limit(42);
         var row = await Shown(Items.Account("claude", "work") with { Limits = [limit] });
 
-        var spoken = Views.Visible<TextBlock>(row).Single(text => text.Text == "5h");
+        var spoken = Views.Visible<TextBlock>(row).Single(text => text.Text == "5-hour");
         Assert.AreEqual(limit.Spoken, AutomationProperties.GetName(spoken));
-        foreach (var unspoken in Views.Visible<TextBlock>(row).Where(text => text.Text is "42%" or "resets in 2h 10m"))
+        foreach (var unspoken in Views.Visible<TextBlock>(row).Where(text => text.Text is "42%" or "Resets 10:10 AM"))
         {
             Assert.AreEqual(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(unspoken));
         }
