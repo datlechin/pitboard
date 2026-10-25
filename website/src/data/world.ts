@@ -1,4 +1,5 @@
-// Each plan's limits as Pitboard measured them (the register's `usage_answer_lists_every_limit`).
+// Max 20x shows two of its three limits (the register's `usage_answer_lists_every_limit`), and Codex
+// Pro its weekly limit alone, as docs/concepts/usage.mdx says.
 import { platforms, type Platform } from "../lib/platform.ts";
 
 export type Tool = "claude" | "codex" | "desktop";
@@ -66,10 +67,7 @@ export const accounts: Account[] = [
     label: "main",
     email: "me@example.com",
     plan: "Pro",
-    limits: [
-      { kind: "5h", used: 18, even: 34, resets: "3h 19m" },
-      { kind: "week", used: 7, even: 18, resets: "5d 18h" },
-    ],
+    limits: [{ kind: "week", used: 7, even: 18, resets: "5d 18h" }],
   },
   {
     tool: "codex",

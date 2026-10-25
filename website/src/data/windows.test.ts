@@ -66,7 +66,7 @@ test("the menu heads each tool's accounts with its name, and names each account 
   const checked = menu(false).filter((e) => "account" in e && e.checked);
   assert.deepEqual(
     checked.map((e) => ("account" in e ? e.account : "")),
-    ["work · Max 20x · 40%", "main · Pro · 18%"],
+    ["work · Max 20x · 40%", "main · Pro · 7%"],
   );
 });
 
@@ -107,7 +107,7 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
   assert.ok(present("words.rs").includes('format!("{label} ({tool})")'));
   assert.equal(
     trayTip("after"),
-    "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): 5-hour 18%, weekly 7%",
+    "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): Weekly 7%",
   );
 });
 
