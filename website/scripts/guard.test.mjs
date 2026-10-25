@@ -8,6 +8,7 @@ import {
   bannedFromDocs,
   checkDocsToSite,
   checkImage,
+  checkOldImage,
   checkPage,
   checkSigningPolicy,
   checkVersions,
@@ -209,6 +210,17 @@ test("checks the preview image each page names", () => {
   assert.match(check(png(1200, 630, 2), undefined, "https://example.com"), /not a hashed image/);
   const { all } = checkPage("p.html", page(""), rules);
   assert.match(checkImage("p.html", all, () => null).join(), /is not in dist/);
+});
+
+test("serves the home page's card at /og.png", () => {
+  const { all } = checkPage("index.html", page(""), rules);
+  const card = png(1200, 630, 2);
+  const read = (old) => (path) => ({ "og/home-0123abcd.png": card, "og.png": old })[path] ?? null;
+  assert.deepEqual(checkOldImage(all, read(card)), []);
+  assert.deepEqual(checkOldImage(all, read(png(1200, 630, 6))), [
+    "og.png is not the home page's card",
+  ]);
+  assert.deepEqual(checkOldImage(all, read(null)), ["dist has no og.png"]);
 });
 
 const download = (v, file, text = file) =>
