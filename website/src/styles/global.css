@@ -125,8 +125,10 @@
   /* macOS 27 draws a toolbar's title lighter than the window's text, and a sidebar's labels black */
   --color-mac-window-title: light-dark(rgb(0 0 0 / 0.7), #f5f5f7);
   --color-mac-window-side-text: light-dark(#000000, #f5f5f7);
-  --color-mac-window-sep: light-dark(#e3e3e6, #333335);
-  --color-mac-window-track: light-dark(#ebebed, #38383a);
+  --color-mac-window-sep: light-dark(rgb(0 0 0 / 0.1), #333335);
+  --color-mac-window-track: light-dark(#ededed, #38383a);
+  /* the fill under a plan's tag */
+  --color-mac-window-fill: light-dark(rgb(0 0 0 / 0.1), #38383a);
   /* a key window's close, minimize and zoom buttons, measured on docs/images/window.png */
   --color-mac-window-close: #f87a71;
   --color-mac-window-minimize: #fdc636;
@@ -341,9 +343,10 @@
     0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-glass-edge),
     0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(0 0 0 / 0.05);
 
-  /* hairlines half a point wide: on the bottom (b), top (t), left (l) or right (r) edge */
-  --inset-shadow-mac-window-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-window-sep);
-  --inset-shadow-mac-window-t: inset 0 calc(0.5 * var(--u)) var(--color-mac-window-sep);
+  /* a list's rules, a point wide, on the bottom (b) or top (t) edge; hairlines half a point wide
+     on the right (r), bottom or left (l) edge */
+  --inset-shadow-mac-window-b: inset 0 calc(-1 * var(--u)) var(--color-mac-window-sep);
+  --inset-shadow-mac-window-t: inset 0 calc(1 * var(--u)) var(--color-mac-window-sep);
   --inset-shadow-mac-window-r: inset calc(-0.5 * var(--u)) 0 var(--color-mac-window-sep);
   --inset-shadow-mac-bar-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-bar-edge);
   --inset-shadow-mac-term-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-term-sep);
