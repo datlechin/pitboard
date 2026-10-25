@@ -19,10 +19,16 @@ It keeps the login of each account you are not using, called a parked login. A s
 the chosen account's parked login where the tool reads it. Your history, settings and
 projects stay where they are.
 
-[Open Claude Code sessions](https://docs.usepitboard.com/concepts/switching#open-sessions)
-follow a switch with no restart. A running `codex` keeps the old account until it starts
-again. Claude Desktop switches only while Claude is closed. The app offers to quit Claude,
-and the command line refuses while it is open.
+[Open Claude Code sessions](https://docs.usepitboard.com/concepts/open-sessions) follow a
+switch with no restart. Anything that runs Codex keeps the old account until it starts again.
+Claude Desktop switches only while Claude is closed. The app offers to quit Claude, and the
+command line refuses while it is open.
+
+While the app is open, it notifies you once a limit of the account in use reaches 95%, and
+offers another account with room left. Pitboard can also
+[switch Claude Code by itself](https://docs.usepitboard.com/guides/automatic-switching), from
+the app or from a background service that `pitboard watch install` sets up on macOS, Windows
+and Linux.
 
 The app also gives each Claude Code and Codex account its own
 [window on claude.ai or chatgpt.com](https://docs.usepitboard.com/guides/account-windows).
@@ -88,6 +94,10 @@ Add accounts only this way, never with Claude Code's `/login` or with `codex log
 replaces the login in use without Pitboard parking it. The account that was in use then needs
 a browser sign-in. Never choose **Log out** in Claude Desktop: it ends the login Claude holds
 at claude.ai, and Pitboard cannot bring it back.
+
+`pitboard doctor` checks what Pitboard relies on, and names a setting, such as a managed one,
+that limits which organisation or workspace Claude Code or Codex signs in to. Pitboard refuses
+to switch to an account such a setting rules out.
 
 ## Documentation
 
