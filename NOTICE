@@ -2,15 +2,15 @@ Pitboard
 Copyright 2026 the Pitboard authors
 
 This product is not affiliated with, endorsed by, or sponsored by Anthropic PBC or
-OpenAI. "Claude" and "Claude Code" are trademarks of Anthropic PBC, and "OpenAI" and
-"Codex" are trademarks of OpenAI, used here only to describe interoperability, under
-nominative fair use.
+OpenAI. "Anthropic", "Claude" and "Claude Code" are trademarks of Anthropic PBC, and
+"OpenAI", "ChatGPT" and "Codex" are trademarks of OpenAI, used here only to describe
+interoperability, under nominative fair use.
 
 Pitboard never performs or automates sign-in to a Claude or an OpenAI account, and never
-makes a sign-in from a tool's login. Signing in to Claude Code or Codex happens through the
-tool's own flow, run by you.
+makes a sign-in from a tool's login. Signing in to a tool happens through that tool's own
+flow, run by you.
 
 In the app's account windows, you sign in to claude.ai or chatgpt.com on the site's own
-pages. Pitboard never reads, copies or changes the session that results. WebKit, the
-system's web engine, keeps it on your computer in that account's website data, under
-Pitboard's bundle identifier, as a browser keeps its own.
+pages. Pitboard never reads, copies or changes the session that results. The system's web
+engine, WebKit on macOS and WebView2 on Windows, keeps it on your computer in that
+account's website data, as a browser keeps its own.
