@@ -304,3 +304,19 @@ test("the notification at the share says what WindowsNotifications.cs builds fro
     button: "Switch",
   });
 });
+
+test("the questions' Windows shortcuts are AccountKeys.cs's: F2, Delete and Ctrl+C", () => {
+  const keys = shell("AccountKeys.cs");
+  assert.ok(keys.includes("VirtualKey.F2 when item.Offers.FirstOrDefault(Renames)"));
+  assert.ok(keys.includes("Intent: Intent.PresentSheet { Sheet: Sheet.Rename }"));
+  assert.ok(keys.includes("VirtualKey.Delete when item.Forget is { Enabled: true }"));
+  assert.ok(keys.includes("key == VirtualKey.C && control && item.Email.Length > 0 ? item.Email"));
+  const page = views("AccountsPage.xaml.cs");
+  assert.ok(page.includes("AccountKeys.Copied(args.Key, control, shown.Item)"));
+  assert.ok(page.includes("AccountKeys.Pressed(args.Key, shown.Item)"));
+  assert.ok(
+    repo("website/src/pages/index.astro").includes(
+      "include F2 to rename the account selected, Delete to forget it and Ctrl+C to copy its email address.",
+    ),
+  );
+});

@@ -4,6 +4,7 @@ import Block from "../components/Block.astro";
 import Disclosure from "../components/Disclosure.astro";
 import Icons from "../components/Icons.astro";
 import InstallTabs from "../components/InstallTabs.astro";
+import Part from "../components/Part.astro";
 import Accounts from "../components/fig/mac/Accounts.astro";
 import Activity from "../components/fig/mac/Activity.astro";
 import Desk from "../components/fig/mac/Desk.astro";
@@ -23,6 +24,7 @@ import { sessions } from "../data/sessions.ts";
 import { DOCS, REPO, TAGLINE } from "../data/site.ts";
 import { longDate } from "../lib/changelog.ts";
 import { highlight, siteData } from "../lib/data.ts";
+import type { Platform } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 import { recentReleases } from "../lib/shown.ts";
 import { tools, type Tool } from "../data/world.ts";
@@ -52,10 +54,14 @@ const marks: Record<Tool, { src: string; class: string }[]> = {
   desktop: [sparkMark],
 };
 
-const faq = [
+const faq: { q: string; a: string | { on: Platform[]; a: string }[] }[] = [
   {
     q: "Does it work with API keys?",
     a: `No. Pitboard switches only logins to a Claude or ChatGPT account, not API keys or <a href="${DOCS}/concepts/limits#tools-and-sign-ins-pitboard-does-not-support">other providers</a>.`,
+  },
+  {
+    q: "Does it work on a computer my company manages?",
+    a: `Yes, within the company's settings: Pitboard refuses a switch or sign-in they rule out, and <a href="${DOCS}/reference/maintenance-commands#doctor"><code>pitboard doctor</code> names each setting</a>.`,
   },
   {
     q: "Is this allowed?",
@@ -70,16 +76,26 @@ const faq = [
     a: `No. Pitboard <a href="${DOCS}/concepts/limits#rules">never sees a tool's requests</a>.`,
   },
   {
-    q: "Does it run on Windows or Linux?",
-    a: `Yes. The app runs on macOS and Windows, and <a href="${DOCS}/install#what-you-need">the command line on all three</a>.`,
-  },
-  {
     q: "What happens if I uninstall it?",
     a: `Each tool stays signed in to the account in use. <a href="${DOCS}/install/remove#delete-parked-logins-first">The other accounts need signing in again</a>.`,
   },
   {
     q: "Can I script it?",
     a: `Yes. With <code>--json</code>, <a href="${DOCS}/reference/json-output#the-envelope">every command prints JSON</a>.`,
+  },
+  {
+    q: "Does it have keyboard shortcuts?",
+    // each system's own answer, both shown where no JavaScript chooses one
+    a: [
+      {
+        on: ["macos", "linux"],
+        a: `Yes. On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Forget</b> on <a href="${DOCS}/reference/mac-app#keyboard-shortcuts">Command-Delete</a>.`,
+      },
+      {
+        on: ["windows"],
+        a: `Yes. On Windows, <a href="${DOCS}/reference/windows-app#keyboard-shortcuts">Pitboard's keyboard shortcuts</a> include F2 to rename the account selected, Delete to forget it and Ctrl+C to copy its email address.`,
+      },
+    ],
   },
   {
     q: "Is Pitboard made by Anthropic or OpenAI?",
@@ -484,7 +500,13 @@ const jsonLd = [
     <Block titleId="faq-title" title="Questions">
       <div>
         {faq.map((item) => <Disclosure summary={item.q}>
-          <p set:html={item.a} />
+          {typeof item.a === "string" ? (
+            <p set:html={item.a} />
+          ) : (
+            item.a.map((part) => <Part on={part.on} label={false}>
+              <p set:html={part.a} />
+            </Part>)
+          )}
         </Disclosure>)}
       </div>
     </Block>
