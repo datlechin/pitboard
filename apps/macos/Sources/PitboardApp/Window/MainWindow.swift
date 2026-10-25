@@ -59,7 +59,7 @@ extension Sheet: Identifiable {
         switch self {
         case .add(let provider): "add/\(provider ?? "")"
         case .signInAgain(let provider, let label): "again/\(provider)/\(label)"
-        case .name(let provider, _): "name/\(provider)"
+        case .name(let provider, let label, _): "name/\(provider)/\(label)"
         case .rename(let provider, let label): "rename/\(provider)/\(label)"
         case .stow: "stow"
         }

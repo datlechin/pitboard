@@ -114,7 +114,7 @@ import Testing
     let sheets: [Sheet] = [
         .add(provider: nil), .add(provider: "codex"),
         .signInAgain(provider: "claude", label: "old"),
-        .name(provider: "claude", email: "dana@work.example"),
+        .name(provider: "claude", label: "work", email: "dana@work.example"),
         .rename(provider: "claude", label: "personal"),
         .rename(provider: "codex", label: "personal"),
         .stow,

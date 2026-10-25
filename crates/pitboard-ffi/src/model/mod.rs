@@ -240,19 +240,14 @@ pub enum Intent {
     AbandonStuckSwitch,
     /// Somebody has read what giving up on an interrupted switch kept, and put it away.
     DismissAbandoned,
-    /// Sign in to `provider`'s tool, a `Tool`'s code, through the tool's own sign-in in a
-    /// browser, as the account to be called `name`: a new account, or one enrolled already
-    /// whose parked login can no longer be used, signed in to again, as the Swift model signs
-    /// in to both. For a tool that signs in inside its app, as `State::in_app_add` decides,
-    /// the account the app is signed in to is recorded under `name`, or the account in use is
-    /// parked and the app watched until it quits signed in, each asked through the quit
-    /// question first. The name is read as `check_name` reads it, and one that is not a name
-    /// starts nothing. One sign-in at a time: asked for while one is under way, it does
-    /// nothing. What goes wrong is said in the sheet it was started from, or in
-    /// the window where that sheet has gone, and the sheet closes once the sign-in has
-    /// finished. Signing in again to the account in use is kept as what its tool's last
-    /// switch said.
-    SignIn { provider: String, name: String },
+    /// Sign in to `provider`'s tool, a `Tool`'s code: again to the account `again` names, or to
+    /// a new one, which the core adds under a name from its email as the sign-in finishes and
+    /// `Sheet::Name` then offers to change. One at a time; a tool that signs in inside its app
+    /// asks the quit question first.
+    SignIn {
+        provider: String,
+        again: Option<String>,
+    },
     /// Type back the code the browser showed, to the sign-in under way, once its tool asks
     /// for one: `RunningSignIn::wants_code`. Taken without the white space around it, and one
     /// with nothing else in it is not typed. A code is asked for once, and again once Claude
@@ -284,14 +279,9 @@ pub enum Intent {
     DismissSheetFailure,
     /// Look again which tools are installed, while a sheet that signs in is up.
     LookForTools,
-    /// Enrol the login signed in now to `provider`'s tool under `name`, with no browser: the
-    /// Name sheet's Save. The name is read as `check_name` reads it, and one that is not a
-    /// name saves nothing; nor does a
-    /// second Save from a sheet already saving. Once enrolled, the sheet naming a login of
-    /// that tool closes, and only that one, and the accounts are read; what goes wrong is
-    /// said in the sheet it was asked from, or in the window where that sheet has gone. For a
-    /// tool that signs in inside its app it is asked through the quit question first.
-    Enrol { provider: String, name: String },
+    /// Add the login `provider`'s tool has signed in now, with no browser, as `SignIn` adds a
+    /// new one; where the tool stores none, its sign-in is offered instead.
+    Enrol { provider: String },
     /// Give the account `label` of `provider`'s tool the name `to`, inside its own tool: the
     /// Rename sheet's Save, by the same rules, and a name it has already saves nothing. What
     /// was said about the account is said about it under its new name.
@@ -346,9 +336,6 @@ pub enum Intent {
     OpensAtLogin { on: bool },
     /// The settings, on what happens at a limit, from the tip that asks, which it ends.
     ShowLimits,
-    /// Reads whose login the tool stores, which nothing reads before: Name This Account for it,
-    /// or Add Account set to the tool where it stores none.
-    NameSignedIn { provider: String },
     /// Turned on, an account due is warmed up at once.
     SetWarm { qualified: String, on: bool },
     /// Warm up accounts only from `from` to `to`, in minutes of the day, `to` up to 24 hours;
@@ -434,8 +421,12 @@ pub enum Sheet {
     /// An enrolled account whose parked login can no longer be used, signed in to again
     /// through the same sign-in as a new one.
     SignInAgain { provider: String, label: String },
-    /// The login signed in now to this tool, to be recorded under a name: no browser.
-    Name { provider: String, email: String },
+    /// The account just added under `label`, which the core picked, to be given a name.
+    Name {
+        provider: String,
+        label: String,
+        email: String,
+    },
     /// A new name for an enrolled account.
     Rename { provider: String, label: String },
     /// Putting away the login Claude Code left in a file behind the keychain: put up, it

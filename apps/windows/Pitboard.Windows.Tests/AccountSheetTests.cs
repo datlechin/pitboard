@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Pitboard.Core;
 using Pitboard.Views;
-using Windows.Foundation;
 
 namespace Pitboard.Windows.Tests;
 
@@ -19,8 +18,16 @@ public sealed class AccountSheetTests
 
     private static readonly Sheet Add = new Sheet.Add(Provider: null);
 
+    // The account just added, which the model saved under the name it starts on.
+    private static readonly Snapshot Naming = Snapshots.Read(1) with
+    {
+        Sheet = new Sheet.Name("claude", "work", "dana@work.example"),
+        SheetText = Items.Rename("work") with { Title = "Name this account", Confirm = "Save" },
+    };
+
+    // A new account is named once it is added, so the sheet asks for the tool alone.
     [UITestMethod]
-    public async Task TheSheetForANewAccountSignsInToThePickedToolAsTheNameTyped()
+    public async Task TheSheetForANewAccountSignsInToThePickedTool()
     {
         await using var up = await Up.Over(Snapshots.Read(1) with
         {
@@ -30,59 +37,48 @@ public sealed class AccountSheetTests
         var picker = up.Element<RadioButtons>("sheet.tool");
         Assert.AreEqual("Add account", up.Sheet.Title);
         Assert.AreEqual(0, picker.SelectedIndex);
-        Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled, "Sign in with no name");
+        Assert.IsFalse(up.Visible("sheet.name"), "a name asked for before the sign-in");
+        Assert.IsTrue(up.Sheet.IsPrimaryButtonEnabled);
 
         picker.SelectedIndex = 1;
-        await up.Type("sheet.name", "third");
         Views.Press(up.Part("PrimaryButton"));
 
         Assert.Contains("Pitboard opens Codex’s own sign-in in your browser.", Views.Texts(up.Sheet));
-        await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn("codex", "third")), "no sign-in to Codex as third");
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn("codex", null)), "no sign-in to Codex");
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went before the model closed it");
     }
 
-    // Sign in was dimmed under an empty field whose placeholder read "work", with nothing to say why.
+    // Save was dimmed under an empty field, with nothing to say why.
     [UITestMethod]
-    public async Task TheNameFieldSaysUnderItselfThatSignInWaitsForAName()
+    public async Task TheNameFieldSaysUnderItselfThatSaveWaitsForAName()
     {
-        await using var up = await Up.Over(Snapshots.Read(1) with { Sheet = Add, SheetText = Items.AddAccount(Items.Tool("claude", "Claude Code")) });
+        await using var up = await Up.Over(Naming);
         var field = up.Element<TextBox>("sheet.name");
 
-        Assert.AreEqual("Type a name for this account to sign in.", Views.Description(field));
-        Assert.IsTrue(AutomationProperties.GetIsRequiredForForm(field));
-        Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled);
-
-        await up.Type("sheet.name", "work");
-
+        Assert.AreEqual("work", field.Text, "the name it was added under");
         Assert.IsNull(Views.Description(field));
-        Assert.IsTrue(up.Sheet.IsPrimaryButtonEnabled);
+        Assert.IsTrue(AutomationProperties.GetIsRequiredForForm(field));
+        Assert.IsTrue(up.Sheet.IsPrimaryButtonEnabled, "Save keeps the name it has");
+
+        await up.Type("sheet.name", "");
+
+        Assert.AreEqual("Type a name for this account to save.", Views.Description(field));
+        Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled);
     }
 
-    // The dialog focuses its first control as it loads, at times after Opened, so the tool picker had focus in some launches.
+    // The dialog focuses its first control as it loads, at times after Opened, which took the focus from the name field.
     [UITestMethod]
     public async Task OnlyTheNameFieldTakesFocusAsTheSheetOpens()
     {
         var given = new List<DependencyObject>();
-        var dialogsOwn = false;
         void Getting(object? sender, GettingFocusEventArgs args) => given.Add(args.NewFocusedElement);
         FocusManager.GettingFocus += Getting;
         try
         {
-            await using var up = await Up.Over(
-                Snapshots.Read(1) with
-                {
-                    Sheet = Add,
-                    SheetText = Items.AddAccount(Items.Tool("claude", "Claude Code"), Items.Tool("codex", "Codex")),
-                },
-                sheet => ((UIElement)sheet.Content).AddHandler(
-                    UIElement.GettingFocusEvent,
-                    new TypedEventHandler<UIElement, GettingFocusEventArgs>(
-                        (_, args) => dialogsOwn |= args.NewFocusedElement is not TextBox field
-                            || AutomationProperties.GetAutomationId(field) != "sheet.name"),
-                    handledEventsToo: true));
+            await using var up = await Up.Over(Naming);
             var name = up.Element<TextBox>("sheet.name");
 
-            await Views.Until(() => dialogsOwn && given.Contains(name), "the dialog gave no focus of its own, or the name field none");
+            await Views.Until(() => given.Contains(name), "the name field took no focus");
             await Views.Drained();
 
             Assert.AreSame(name, FocusManager.GetFocusedElement(up.Sheet.XamlRoot));
@@ -177,14 +173,14 @@ public sealed class AccountSheetTests
         Assert.AreEqual("closed, opened", string.Join(", ", opened.Select(open => open ? "opened" : "closed")));
     }
 
-    // The sign-in ended back at the form: the name typed is there to correct, and Enter tries again.
+    // The sign-in ended back at the form, where Enter tries again.
     [UITestMethod]
-    public async Task AfterAFailedSignInTheNameHasFocusAndSignInIsTheDefault()
+    public async Task AfterAFailedSignInSignInIsTheDefault()
     {
         var signingIn = Snapshots.Read(1) with
         {
             Sheet = Add,
-            SheetText = Items.AddAccount() with { Name = "third" },
+            SheetText = Items.AddAccount(),
             SigningIn = Items.Running(Address),
             SigningInText = Items.SigningIn("Claude Code"),
         };
@@ -196,13 +192,13 @@ public sealed class AccountSheetTests
             SigningIn = null,
             SigningInText = null,
             SheetFailure = new FailureText(
-                9, "Couldn’t add third", "The sign-in did not finish, so nothing was enrolled.", []),
+                9, "Couldn’t add the account", "The sign-in did not finish, so nothing was enrolled.", []),
         });
 
-        var name = up.Element<TextBox>("sheet.name");
-        await Views.Until(() => ReferenceEquals(FocusManager.GetFocusedElement(up.Sheet.XamlRoot), name), "the name field did not take focus");
+        var bar = up.Element<InfoBar>("sheet.failure");
+        await Views.Until(() => bar.IsOpen, "the failure was not said");
         Assert.AreEqual(ContentDialogButton.Primary, up.Sheet.DefaultButton);
-        Assert.IsTrue(up.Sheet.IsPrimaryButtonEnabled, "Sign in with the name typed");
+        Assert.IsTrue(up.Sheet.IsPrimaryButtonEnabled, "Sign in again");
     }
 
     // Microsoft's InfoBar guidance gives an error its own bar, where a line of plain text was.
@@ -244,8 +240,6 @@ public sealed class AccountSheetTests
 
         up.Element<RadioButtons>("sheet.tool").SelectedIndex = 1;
         await Views.Until(() => bar.IsOpen, "the missing CLI was not said");
-        Assert.IsNull(Views.Description(up.Element<TextBox>("sheet.name")), "a name asked for where Sign in waits for the CLI");
-        await up.Type("sheet.name", "third");
 
         Assert.AreEqual(missing.Title, bar.Title);
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled, "Sign in to a tool not here");
@@ -453,11 +447,7 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task ASheetSavingANameCannotBeClosed()
     {
-        await using var up = await Up.Over(Snapshots.Read(1) with
-        {
-            Sheet = new Sheet.Name("claude", "dana@work.example"),
-            SheetText = Items.Rename("") with { Title = "Name this account", Confirm = "Save", Saving = true },
-        });
+        await using var up = await Up.Over(Naming with { SheetText = Naming.SheetText! with { Saving = true } });
 
         Assert.IsFalse(up.Part("CloseButton").IsEnabled, "Cancel while saving");
         Assert.IsFalse(up.Element<TextBox>("sheet.name").IsEnabled);
@@ -473,14 +463,9 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task TheModelClosingTheSheetTakesItDownWithoutAWord()
     {
-        var naming = Snapshots.Read(1) with
-        {
-            Sheet = new Sheet.Name("claude", "dana@work.example"),
-            SheetText = Items.Rename("") with { Title = "Name this account", Confirm = "Save" },
-        };
-        await using var up = await Up.Over(naming);
+        await using var up = await Up.Over(Naming);
 
-        up.App.Apply(naming with { Revision = 2, Sheet = null, SheetText = null });
+        up.App.Apply(Naming with { Revision = 2, Sheet = null, SheetText = null });
 
         await Views.Until(() => up.Dialogs.Open is null, "the sheet stayed up");
         Assert.IsEmpty(up.Model.Sent);
@@ -500,22 +485,20 @@ public sealed class AccountSheetTests
         Assert.IsEmpty(up.Model.Sent);
     }
 
-    // The model's Sheet records compare by value, so the same sheet keeps its dialog and a login of another address being
-    // named is a new one.
+    // The model's Sheet records compare by value, so the same sheet keeps its dialog and another account being named is a
+    // new one.
     [UITestMethod]
     public async Task SheetsAreToldApartByTheModelsSheet()
     {
-        var naming = Snapshots.Read(1) with
-        {
-            Sheet = new Sheet.Name("claude", "dana@work.example"),
-            SheetText = Items.Rename("") with { Title = "Name this account", Confirm = "Save" },
-        };
-        await using var up = await Up.Over(naming);
+        await using var up = await Up.Over(Naming);
         var first = up.Sheet;
 
-        up.App.Apply(naming with { Revision = 2, Sheet = new Sheet.Name("claude", "dana@work.example"), SheetText = Items.Rename("dana") });
+        up.App.Apply(Naming with
+        {
+            Revision = 2, Sheet = new Sheet.Name("claude", "work", "dana@work.example"), SheetText = Items.Rename("dana"),
+        });
         Assert.AreSame(first, up.Dialogs.Open, "the same sheet was put up again");
-        up.App.Apply(naming with { Revision = 3, Sheet = new Sheet.Name("claude", "dana@home.example") });
+        up.App.Apply(Naming with { Revision = 3, Sheet = new Sheet.Name("claude", "home", "dana@home.example") });
 
         await Views.Until(() => up.Dialogs.Open is AccountSheet next && next != first, "the sheet for another login kept its dialog");
         Assert.IsEmpty(up.Model.Sent);

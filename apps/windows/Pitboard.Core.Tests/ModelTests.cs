@@ -194,8 +194,8 @@ public sealed class ModelTests
         // calls are registered, before it answers. Saying what a sheet sends reads only what
         // it is given, so it answers at once.
         Assert.AreEqual(
-            new Intent.Enrol("claude", "home"),
-            PitboardFfiMethods.CheckName(new Sheet.Name("claude", "a@example.com"), "claude", " home ").Intent);
+            new Intent.Rename("claude", "acme", "home"),
+            PitboardFfiMethods.CheckName(new Sheet.Name("claude", "acme", "a@example.com"), "claude", " home ").Intent);
     }
 
     // Never started, so nothing on this machine is read.
@@ -300,14 +300,15 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.SignIn(Provider: "claude", Name: "travel"), new Intent.PasteCode(Code: "the-code#the-state"),
+            new Intent.SignIn(Provider: "claude", Again: "work"), new Intent.PasteCode(Code: "the-code#the-state"),
             new Intent.CancelSignIn(), new Intent.PresentSheet(Sheet: new Sheet.Add(Provider: null)),
-            new Intent.CloseSheet(),
+            new Intent.CloseSheet(), new Intent.SignIn(Provider: "codex", Again: null),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.SignIn("claude", "travel"), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.SignIn("codex", "travel"), intents[0]);
-        Assert.AreEqual("travel", intents.OfType<Intent.SignIn>().Single().Name);
+        Assert.AreEqual<Intent>(new Intent.SignIn("claude", "work"), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.SignIn("claude", null), intents[0]);
+        Assert.AreEqual("work", intents.OfType<Intent.SignIn>().First().Again);
+        Assert.IsNull(intents.OfType<Intent.SignIn>().Last().Again, "a new account, named once it is added");
         Assert.AreEqual("the-code#the-state", intents.OfType<Intent.PasteCode>().Single().Code);
         Assert.AreEqual<Intent>(new Intent.PresentSheet(new Sheet.Add(null)), intents[3]);
         Assert.AreNotEqual<Intent>(new Intent.PresentSheet(new Sheet.Add("codex")), intents[3]);
@@ -403,13 +404,15 @@ public sealed class ModelTests
         Sheet[] sheets =
         [
             new Sheet.Add(Provider: "codex"), new Sheet.SignInAgain(Provider: "claude", Label: "work"),
-            new Sheet.Name(Provider: "codex", Email: "c@example.com"), new Sheet.Rename(Provider: "claude", Label: "home"),
+            new Sheet.Name(Provider: "codex", Label: "acme", Email: "c@example.com"),
+            new Sheet.Rename(Provider: "claude", Label: "home"),
         ];
 
         Assert.AreEqual<Sheet>(new Sheet.Add("codex"), sheets[0]);
         Assert.AreNotEqual<Sheet>(new Sheet.Add(null), sheets[0]);
         Assert.AreEqual("work", sheets.OfType<Sheet.SignInAgain>().Single().Label);
         Assert.AreEqual("c@example.com", sheets.OfType<Sheet.Name>().Single().Email);
+        Assert.AreEqual("acme", sheets.OfType<Sheet.Name>().Single().Label);
         Assert.AreNotEqual<Sheet>(new Sheet.Rename("claude", "work"), sheets[3]);
     }
 
@@ -479,7 +482,7 @@ public sealed class ModelTests
         Intent[] intents =
         [
             new Intent.ShowWindow(Pane: Pane.Machine), new Intent.ShowWindow(Pane: null), new Intent.DismissFailure(),
-            new Intent.Enrol(Provider: "codex", Name: "job"),
+            new Intent.Enrol(Provider: "codex"),
             new Intent.Rename(Provider: "claude", Label: "work", To: "office"),
             new Intent.Forget(Qualified: "claude/spare"), new Intent.DeclineSecondAccount(Provider: "codex"),
         ];
@@ -487,7 +490,7 @@ public sealed class ModelTests
         Assert.AreEqual<Intent>(new Intent.ShowWindow(Pane.Machine), intents[0]);
         Assert.AreNotEqual<Intent>(new Intent.ShowWindow(null), intents[0]);
         Assert.IsNull(((Intent.ShowWindow)intents[1]).Pane);
-        Assert.AreEqual("job", intents.OfType<Intent.Enrol>().Single().Name);
+        Assert.AreEqual("codex", intents.OfType<Intent.Enrol>().Single().Provider);
         Assert.AreEqual("office", intents.OfType<Intent.Rename>().Single().To);
         Assert.AreEqual("claude/spare", intents.OfType<Intent.Forget>().Single().Qualified);
         Assert.AreEqual(1, intents.OfType<Intent.DismissFailure>().Count());
@@ -637,16 +640,21 @@ public sealed class ModelTests
     [TestMethod]
     public void ANameComesWithWhatItsSheetSends()
     {
-        var named = new Sheet.Name("claude", "a@example.com");
-        Assert.AreEqual(new NameCheck(null, new Intent.Enrol("claude", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
+        var named = new Sheet.Name("claude", "acme", "a@example.com");
+        Assert.AreEqual(
+            new NameCheck(null, new Intent.Rename("claude", "acme", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
+        Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardFfiMethods.CheckName(named, "claude", " acme"));
         Assert.AreEqual(new NameCheck(null, null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
         Assert.IsNull(PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
         Assert.AreEqual(
             new Intent.SignIn("codex", "work"),
             PitboardFfiMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "codex", "").Intent);
         Assert.AreEqual(
-            new NameCheck("A name can’t contain “/”. Choose the tool above.", null),
-            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"));
+            new NameCheck(null, new Intent.SignIn("codex", null)),
+            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"),
+            "a new account is named once it is added");
+        Assert.AreEqual(
+            new NameCheck("A name can’t contain “/”.", null), PitboardFfiMethods.CheckName(named, "claude", "codex/phu"));
     }
 
     private sealed class Waiting : ModelListener

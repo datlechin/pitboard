@@ -9,8 +9,8 @@
 //! itself once the browser would have come back.
 //!
 //! Whoever signs in is the person the account is for: one enrolled already under that name
-//! signs in again as themselves, and anybody else is somebody new, `<name>@example.com`,
-//! with a five-hour limit barely touched.
+//! signs in again as themselves, and anybody else is somebody new, `<name>@example.com`, or
+//! `dana@travel.example` for an add given no name, with a five-hour limit barely touched.
 
 use super::worlds::{Person, Stage};
 use pitboard_core::provider::ProviderId;
@@ -112,9 +112,7 @@ impl SignInScript for Browser {
         dir: &Path,
         say: Sender<String>,
     ) -> Box<dyn ScriptedSignIn> {
-        let person = self
-            .machine
-            .signing_in_as(which, label.unwrap_or("someone"));
+        let person = self.machine.signing_in_as(which, label);
         let (told, hears) = channel();
         let machine = Arc::clone(&self.machine);
         let dir = dir.to_path_buf();
@@ -241,7 +239,14 @@ fn stopped_within(hears: &Receiver<Told>, wait: Duration, typed: &mut Vec<String
 impl Stage {
     /// Whom a sign-in of `which`'s tool for `label` signs in as: the person enrolled under
     /// it, or somebody new.
-    fn signing_in_as(&self, which: ProviderId, label: &str) -> Person {
+    fn signing_in_as(&self, which: ProviderId, label: Option<&str>) -> Person {
+        let Some(label) = label else {
+            return Person {
+                tool: which,
+                id: format!("travel-{}", which.code()),
+                email: "dana@travel.example".into(),
+            };
+        };
         self.enrolled_as(which, label).unwrap_or_else(|| Person {
             tool: which,
             id: format!("{label}-{}", which.code()),

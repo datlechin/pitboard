@@ -60,16 +60,9 @@ public abstract record SheetPage
         // Null where Pitboard found the tool.
         public Missing? NotFound(string tool) => Chosen(tool)?.Missing;
 
-        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Problem;
-
-        // What the name field says under itself: why what is typed cannot be a name, or that Sign In waits for one alone.
-        public string? Note(string tool, string typed) => Problem(typed) ?? (Ready(tool) ? Needed(typed, Confirm(tool)) : null);
-
-        // Null while Sign In cannot be pressed.
-        public Intent? Start(string tool, string typed) => Ready(tool) ? PitboardFfiMethods.CheckName(Sheet, tool, typed).Intent : null;
-
-        // All Sign In waits for is a name.
-        private bool Ready(string tool) => !Text.Saving && !Running && NotFound(tool) is null;
+        // Null while Sign in cannot be pressed. A new account is named once it is added.
+        public Intent? Start(string tool) =>
+            !Text.Saving && !Running && NotFound(tool) is null ? PitboardFfiMethods.CheckName(Sheet, tool, "").Intent : null;
 
         private SheetTool? Chosen(string tool) => Text.Tools.FirstOrDefault(offered => offered.Code == tool);
     }

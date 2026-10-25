@@ -4,17 +4,16 @@ import XCTest
 final class AccountsWindowTests: FixtureTestCase {
     /// The fixture's Claude Code takes a code as the real one does, `<code>#<state>`. The
     /// address it prints is copied for another browser, and Open is never clicked: it would
-    /// open that address in a real one.
+    /// open that address in a real one. The account is added as the sign-in finishes, under
+    /// the name its email suggests, and named next.
     @MainActor
     func testAddingAClaudeCodeAccount() {
         let app = launch(.oneTool)
         app.openWindow()
         app.toolbars.buttons["toolbar.addAccount"].click()
-        let name = app.textFields["sheet.name"]
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.click()
-        name.typeText("third")
-        app.buttons["sheet.confirm"].click()
+        let signIn = app.buttons["sheet.confirm"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.click()
         let code = app.textFields["sheet.code"]
         XCTAssertTrue(code.waitForExistence(timeout: 10))
         let sheet = app.sheets.firstMatch
@@ -26,6 +25,14 @@ final class AccountsWindowTests: FixtureTestCase {
         code.click()
         code.typeText("fixture-code#state")
         app.buttons["sheet.submitCode"].click()
+        XCTAssertTrue(app.accountRow("claude/travel").waitForExistence(timeout: 10))
+        let name = app.textFields["sheet.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertEqual(name.value as? String, "travel", "the name dana@travel.example suggests")
+        name.click()
+        name.typeKey("a", modifierFlags: .command)
+        name.typeText("third")
+        app.buttons["sheet.confirm"].click()
         XCTAssertTrue(app.accountRow("claude/third").waitForExistence(timeout: 10))
         XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
     }
@@ -41,11 +48,12 @@ final class AccountsWindowTests: FixtureTestCase {
         tool.click()
         // Its own item, not the menu bar item's Codex heading.
         tool.menuItems["Codex"].click()
-        let name = app.textFields["sheet.name"]
-        name.click()
-        name.typeText("third")
         app.buttons["sheet.confirm"].click()
-        XCTAssertTrue(app.accountRow("codex/third").waitForExistence(timeout: 10))
+        XCTAssertTrue(app.accountRow("codex/travel").waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
+        app.buttons["sheet.confirm"].click()
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5), "kept as it is")
+        XCTAssertTrue(app.accountRow("codex/travel").exists)
     }
 
     /// A tool Pitboard did not find says what to install, and cannot be signed in to.
@@ -63,21 +71,22 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(
             sheet.descendants(matching: .any)["sheet.missing"].waitForExistence(timeout: 5))
         XCTAssertTrue(sheet.descendants(matching: .any)["sheet.missing.link"].exists)
-        let name = app.textFields["sheet.name"]
-        name.click()
-        name.typeText("third")
         XCTAssertFalse(app.buttons["sheet.confirm"].isEnabled)
     }
 
-    /// A name typed with its tool says why under the field, and Sign In waits for a name.
+    /// A name typed with its tool says why under the field, and Rename waits for a name.
     @MainActor
     func testANameThatCannotBeOneSaysWhy() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.toolbars.buttons["toolbar.addAccount"].click()
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.rightClick()
+        app.shortcutMenu.menuItems[Words.rename].click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.click()
+        name.typeKey("a", modifierFlags: .command)
         name.typeText("claude/third")
         let problem = app.staticTexts["sheet.problem"]
         XCTAssertTrue(problem.waitForExistence(timeout: 5))
@@ -95,28 +104,23 @@ final class AccountsWindowTests: FixtureTestCase {
         let app = launch(.oneTool)
         app.openWindow()
         app.toolbars.buttons["toolbar.addAccount"].click()
-        let name = app.textFields["sheet.name"]
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.click()
-        name.typeText("third")
-        app.buttons["sheet.confirm"].click()
+        let signIn = app.buttons["sheet.confirm"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.click()
         XCTAssertTrue(app.textFields["sheet.code"].waitForExistence(timeout: 10))
         app.sheets.firstMatch.buttons["sheet.cancel"].click()
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
-        XCTAssertFalse(app.accountRow("claude/third").exists)
+        XCTAssertFalse(app.accountRow("claude/travel").exists)
 
         app.toolbars.buttons["toolbar.addAccount"].click()
-        let again = app.textFields["sheet.name"]
-        XCTAssertTrue(again.waitForExistence(timeout: 5))
-        again.click()
-        again.typeText("third")
-        app.buttons["sheet.confirm"].click()
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.click()
         let code = app.textFields["sheet.code"]
         XCTAssertTrue(code.waitForExistence(timeout: 10))
         code.click()
         code.typeText("fixture-code#state")
         app.buttons["sheet.submitCode"].click()
-        XCTAssertTrue(app.accountRow("claude/third").waitForExistence(timeout: 10))
+        XCTAssertTrue(app.accountRow("claude/travel").waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -288,12 +292,13 @@ final class AccountsWindowTests: FixtureTestCase {
         app.openWindow()
         let tip = app.control("setup.unnamed")
         XCTAssertTrue(tip.waitForExistence(timeout: 5))
-        tip.buttons["setup.action.name"].click()
+        tip.buttons["setup.action.enrol"].click()
         let name = app.textFields["sheet.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         XCTAssertEqual(name.value as? String, "work", "the name dana@work.example suggests")
+        XCTAssertTrue(app.accountRow("claude/work").exists, "added before it is named")
         app.buttons["sheet.confirm"].click()
-        XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
     }
 
     /// With Codex installed, after the tip to use Pitboard with it.
@@ -306,7 +311,7 @@ final class AccountsWindowTests: FixtureTestCase {
         tip.buttons["setup.action.declineTip"].click()
         XCTAssertTrue(app.control("accounts.noAccounts").waitForExistence(timeout: 5))
         app.buttons["accounts.add"].click()
-        XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -342,8 +347,7 @@ final class AccountsWindowTests: FixtureTestCase {
         let activity = app.staticTexts["activity.change"].firstMatch
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         app.typeKey("n", modifierFlags: .command)
-        XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.control("sheet.add").exists)
+        XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 5))
         app.sheets.firstMatch.buttons["sheet.cancel"].click()
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))

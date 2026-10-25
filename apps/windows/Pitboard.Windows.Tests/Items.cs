@@ -89,7 +89,7 @@ internal static class Items
     public static SigningInText SigningIn(string tool) =>
         new(
             Title: $"Signing in to {tool}",
-            Message: $"Finish signing in as third in your browser. This closes once {tool} says you’re in.",
+            Message: $"Finish signing in in your browser. This closes once {tool} says you’re in.",
             CodeNote: $"{tool} takes the code shown after you sign in, whether or not your browser came back to it.",
             Refused: null, Waiting: "Waiting for your browser", OffersLink: true,
             Cancel: new Choice("Cancel", new Intent.CancelSignIn(), Enabled: true), EscapeCancels: true, Undo: null,

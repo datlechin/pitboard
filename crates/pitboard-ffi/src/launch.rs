@@ -300,6 +300,10 @@ pub(crate) enum EnrolledAs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Enrolled {
     pub(crate) email: String,
+    // the label it is filed under, bare
+    pub(crate) label: String,
+    // this enrolment added it, rather than an account enrolled already
+    pub(crate) added: bool,
     pub(crate) outcome: EnrolledAs,
     pub(crate) warnings: Vec<Warning>,
 }
@@ -315,8 +319,8 @@ pub(crate) struct Check {
     pub(crate) advice: String,
 }
 
-fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
-    let (email, outcome) = match enrolled {
+fn enrolled(enrolment: switch::Enrolment, warnings: Vec<Warning>) -> Enrolled {
+    let (email, outcome) = match enrolment.enrolled {
         switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
         switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
         switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
@@ -324,9 +328,24 @@ fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
     };
     Enrolled {
         email,
+        label: enrolment.key.label,
+        added: enrolment.added,
         outcome,
         warnings,
     }
+}
+
+// The tool a `Tool`'s code names.
+fn tool_of(provider: &str) -> Result<ProviderId, PitboardError> {
+    ProviderId::parse(provider).ok_or_else(|| {
+        PitboardError::from(pitboard_core::error::Error::ProviderUnknown {
+            typed: provider.to_owned(),
+            known: ProviderId::ALL
+                .iter()
+                .map(|known| known.code().to_owned())
+                .collect(),
+        })
+    })
 }
 
 fn account(row: status::Row, now: i64) -> Account {
@@ -497,7 +516,7 @@ pub(crate) struct SignInSession {
     /// address and the browser coming back, so a read that held `watched` kept a cancel or
     /// a paste waiting until then.
     said: switch::Said,
-    label: String,
+    naming: switch::Naming,
     /// The core the sign-in started with, which enrols what it signed in to: one made again
     /// meanwhile, from a login shell that answered late, may look elsewhere for programs,
     /// but keeps its accounts in the same place.
@@ -543,7 +562,9 @@ impl SignInSession {
             })?;
         let login = watched.finish()?;
         changed(
-            self.made.core.enroll_signed_in(&self.label, login),
+            self.made
+                .core
+                .enroll_signed_in_as(login, self.naming.clone()),
             enrolled,
         )
     }
@@ -859,12 +880,6 @@ impl AppCore {
             .collect()
     }
 
-    // Asked only once somebody asks to use Pitboard with a tool nothing is enrolled of.
-    pub(crate) fn signed_in_email(&self, provider: &str) -> Option<String> {
-        let which = ProviderId::parse(provider)?;
-        self.readable().ok()?.core.signed_in_email(which)
-    }
-
     /// Every account of every tool and what it has left, each asked of its own service.
     /// Parked logins whose access has lapsed are renewed first.
     ///
@@ -965,26 +980,46 @@ impl AppCore {
         changed(self.core().core.warm_range(range), |_, _| ())
     }
 
-    /// Enroll the account signed in now under `label`.
-    pub(crate) fn enroll_current(&self, label: &str) -> Result<Enrolled, PitboardError> {
-        changed(self.core().core.enroll_current(label), enrolled)
+    /// Enroll the account `provider`'s tool has signed in now, under `naming`.
+    pub(crate) fn enroll_current(
+        &self,
+        provider: &str,
+        naming: switch::Naming,
+    ) -> Result<Enrolled, PitboardError> {
+        let which = tool_of(provider)?;
+        changed(self.core().core.enroll_current_as(which, naming), enrolled)
     }
 
-    /// Starts the tool's own sign-in for a new account, watched rather than inherited. The
-    /// label may name the tool, as in `codex/work`; a bare one means Claude Code. The model
-    /// hands on what the tool says, can paste a fallback code, and finishes it.
+    /// Starts `provider`'s own sign-in, watched rather than inherited, again for the account
+    /// `again` names or for a new one. The model hands on what the tool says, can paste a
+    /// fallback code, and finishes it.
     ///
     /// May ask the login shell again first, as `installed` does: a sign-in is when a program
     /// the first, late, ask could not find is needed.
-    pub(crate) fn sign_in(&self, label: String) -> Result<Arc<SignInSession>, PitboardError> {
+    pub(crate) fn sign_in(
+        &self,
+        provider: &str,
+        again: Option<String>,
+    ) -> Result<Arc<SignInSession>, PitboardError> {
+        let which = tool_of(provider)?;
         let made = self.made.value_asking_again();
-        let watched = made.core.sign_in_watched(&label)?;
+        let (watched, naming) = match again {
+            Some(label) => (
+                made.core
+                    .sign_in_watched(&pitboard_core::state::Key::new(which, &label).qualified())?,
+                switch::Naming::As(label),
+            ),
+            None => (
+                made.core.sign_in_watched_for(which)?,
+                switch::Naming::FromEmail,
+            ),
+        };
         Ok(Arc::new(SignInSession {
             said: watched.said(),
             steps: watched.steps(),
             put_back: watched.put_back().map(|key| key.qualified()),
             watched: Mutex::new(Some(watched)),
-            label,
+            naming,
             made,
         }))
     }
@@ -1708,7 +1743,9 @@ mod tests {
             None,
         );
         assert_eq!(core.core().search_path, None, "the shell could not be run");
-        let Err(PitboardError::Failed { code, .. }) = core.enroll_current("work") else {
+        let Err(PitboardError::Failed { code, .. }) =
+            core.enroll_current("claude", switch::Naming::FromEmail)
+        else {
             panic!("a Claude Code account was enrolled under a custom OAuth endpoint");
         };
         assert_eq!(code, "custom_oauth_endpoint");

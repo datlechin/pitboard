@@ -283,7 +283,7 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
 fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
     let launched = made(World::OneTool);
     let core = &launched.core;
-    let session = core.sign_in("claude/travel".into()).expect("started");
+    let session = core.sign_in("claude", None).expect("started");
     let mut said = String::new();
     while let Some(line) = session.next_line() {
         said.push_str(&line);
@@ -314,7 +314,9 @@ fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
     assert_eq!(
         session.finish().expect("enrolled"),
         Enrolled {
-            email: "travel@example.com".into(),
+            email: "dana@travel.example".into(),
+            label: "travel".into(),
+            added: true,
             outcome: EnrolledAs::SignedIn,
             warnings: Vec::new(),
         }
@@ -334,7 +336,7 @@ fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
 fn claude_code_refuses_a_code_without_both_halves_and_reads_another() {
     let launched = made(World::OneTool);
     let core = &launched.core;
-    let session = core.sign_in("claude/travel".into()).expect("started");
+    let session = core.sign_in("claude", None).expect("started");
     session.paste("fixture-code").expect("typed back");
     let mut said = String::new();
     while let Some(line) = session.next_line() {
@@ -361,7 +363,7 @@ fn claude_code_refuses_a_code_without_both_halves_and_reads_another() {
     assert_eq!(session.next_line(), None);
     assert_eq!(
         session.finish().expect("enrolled").email,
-        "travel@example.com"
+        "dana@travel.example"
     );
 }
 
@@ -378,7 +380,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
     });
     model.send(Intent::SignIn {
         provider: "claude".into(),
-        name: "third".into(),
+        again: None,
     });
     told.last_where("the code asked for", |snapshot| {
         snapshot
@@ -405,7 +407,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
     );
     model.send(Intent::PasteCode { code: CODE.into() });
     told.last_where("the account listed", |snapshot| {
-        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "claude/third")
+        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "claude/travel")
     });
     model.shutdown();
 }
@@ -416,7 +418,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
 fn a_codex_sign_in_finishes_by_itself() {
     let launched = made(World::TwoTools);
     let core = &launched.core;
-    let session = core.sign_in("codex/travel".into()).expect("started");
+    let session = core.sign_in("codex", None).expect("started");
     let mut said = String::new();
     while let Some(line) = session.next_line() {
         said.push_str(&line);
@@ -428,7 +430,9 @@ fn a_codex_sign_in_finishes_by_itself() {
     assert_eq!(
         session.finish().expect("enrolled"),
         Enrolled {
-            email: "travel@example.com".into(),
+            email: "dana@travel.example".into(),
+            label: "travel".into(),
+            added: true,
             outcome: EnrolledAs::SignedIn,
             warnings: Vec::new(),
         }
@@ -759,7 +763,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     // The steps, through the core's own wait, with the fixture's Claude played by hand.
     let launched = made(World::ClaudeDesktop);
     let (core, claude) = (&launched.core, &launched.machine.claude);
-    let session = core.sign_in("desktop/travel".into()).expect("work parked");
+    let session = core.sign_in("desktop", None).expect("work parked");
     assert_eq!(session.put_back.as_deref(), Some("desktop/work"));
     let reading = {
         let session = Arc::clone(&session);
@@ -796,6 +800,10 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     );
     let enrolled = session.finish().expect("travel enrolled");
     assert_eq!(enrolled.outcome, EnrolledAs::InUse { again: false });
+    assert_eq!(
+        enrolled.label, "desktop",
+        "Claude Desktop's accounts have no email"
+    );
 
     // The same add from the app, over a Claude that is open.
     let launched = made(World::ClaudeDesktopOpen);
@@ -807,7 +815,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     });
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
@@ -819,9 +827,10 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     );
     model.send(question.confirmed);
     let waiting = told.last_where("the wait, with Claude opened for it", |snapshot| {
-        snapshot.signing_in_text.as_ref().is_some_and(|text| {
-            text.message == words::in_app_waiting("Claude", "travel", false, None, true)
-        })
+        snapshot
+            .signing_in_text
+            .as_ref()
+            .is_some_and(|text| text.message == words::in_app_waiting("Claude", None, None, true))
     });
     let text = waiting.signing_in_text.expect("the page");
     assert_eq!(text.waiting, words::waiting_to_quit("Claude"));
@@ -829,10 +838,10 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
         text.undo.map(|undo| undo.title),
         Some(words::put_back(OS, "work"))
     );
-    told.last_where("travel added and in use", |snapshot| {
+    told.last_where("travel added, in use and named next", |snapshot| {
         snapshot.signing_in.is_none()
-            && snapshot.sheet.is_none()
-            && shows_in_use(snapshot).contains(&"desktop/travel".into())
+            && matches!(snapshot.sheet, Some(Sheet::Name { .. }))
+            && shows_in_use(snapshot).contains(&"desktop/desktop".into())
     });
     model.shutdown();
     assert_eq!(
@@ -857,7 +866,7 @@ fn an_add_left_halfway_is_put_back_by_use() {
     });
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     let waiting = told.last_where("work parked for the sign-in", |snapshot| {
         snapshot
@@ -868,7 +877,7 @@ fn an_add_left_halfway_is_put_back_by_use() {
     let text = waiting.signing_in_text.expect("the page");
     assert_eq!(
         text.message,
-        words::in_app_waiting("Claude", "travel", false, None, false)
+        words::in_app_waiting("Claude", None, None, false)
     );
     assert_eq!(text.cancel.title, words::LATER);
     assert!(!text.escape_cancels);
@@ -916,10 +925,7 @@ fn a_claude_pitboard_quits_before_anybody_signs_in_writes_nothing_after() {
     let apps = &launched.apps;
     let copy = apps.running(CLAUDE.into()).expect("asked").expect("open");
     apps.request_quit(CLAUDE.into()).expect("asked to quit");
-    let session = launched
-        .core
-        .sign_in("desktop/travel".into())
-        .expect("work parked");
+    let session = launched.core.sign_in("desktop", None).expect("work parked");
     apps.reopen(copy, true).expect("opened for the sign-in");
     apps.request_quit(CLAUDE.into()).expect("asked to quit");
     apps.played();
@@ -1211,10 +1217,11 @@ fn the_login_in_use_is_offered_a_name() {
     );
     model.send(Intent::Enrol {
         provider: "claude".into(),
-        name: "work".into(),
     });
-    told.last_where("the account named", |snapshot| {
-        read_in(snapshot) && lists(snapshot, "claude/work")
+    told.last_where("the account added", |snapshot| {
+        read_in(snapshot)
+            && lists(snapshot, "claude/work")
+            && matches!(snapshot.sheet, Some(Sheet::Name { .. }))
     });
     model.shutdown();
 }
@@ -1368,7 +1375,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
     });
     model.send(Intent::SignIn {
         provider: "claude".into(),
-        name: "third".into(),
+        again: None,
     });
     let asking = told.last_where("the code asked for", |snapshot| {
         snapshot
@@ -1384,7 +1391,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
     told.last_where("the sign-in over", |snapshot| snapshot.signing_in.is_none());
     model.send(Intent::SignIn {
         provider: "claude".into(),
-        name: "third".into(),
+        again: None,
     });
     told.last_where("the code asked for", |snapshot| {
         snapshot
@@ -1394,7 +1401,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
     });
     model.send(Intent::PasteCode { code: CODE.into() });
     told.last_where("the account listed", |snapshot| {
-        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "claude/third")
+        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "claude/travel")
     });
     model.shutdown();
 
@@ -1402,10 +1409,10 @@ fn accounts_are_added_through_each_tools_sign_in() {
     let (model, told) = started(&launched);
     model.send(Intent::SignIn {
         provider: "codex".into(),
-        name: "third".into(),
+        again: None,
     });
     told.last_where("the account listed", |snapshot| {
-        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "codex/third")
+        snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "codex/travel")
     });
     model.shutdown();
 }
@@ -1425,11 +1432,13 @@ fn adding_codex_in_first_launch_reaches_its_sign_in() {
     });
     model.send(Intent::SignIn {
         provider: "codex".into(),
-        name: "work".into(),
+        again: None,
     });
     let ended = told.last_where("the account listed or refused", |snapshot| {
         snapshot.sheet_failure.is_some()
-            || (snapshot.signing_in.is_none() && read_in(snapshot) && lists(snapshot, "codex/work"))
+            || (snapshot.signing_in.is_none()
+                && read_in(snapshot)
+                && lists(snapshot, "codex/travel"))
     });
     assert_eq!(ended.sheet_failure, None);
     model.shutdown();
@@ -1445,7 +1454,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
     let (model, told) = started(&launched);
     let sign_in = || Intent::SignIn {
         provider: "claude".into(),
-        name: "third".into(),
+        again: None,
     };
     let refused =
         |snapshot: &Snapshot| snapshot.failure_alert.is_some() || snapshot.sheet_failure.is_some();
@@ -1479,7 +1488,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
         refused(snapshot)
             || (snapshot.signing_in.is_none()
                 && read_in(snapshot)
-                && lists(snapshot, "claude/third"))
+                && lists(snapshot, "claude/travel"))
     });
     model.shutdown();
 }

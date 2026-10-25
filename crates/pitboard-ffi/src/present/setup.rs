@@ -109,11 +109,8 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             detail: words::unnamed_detail(email, seen.tool_if_shown(provider).as_deref()),
             actions: vec![Choice {
                 title: words::name_account(None),
-                intent: Intent::PresentSheet {
-                    sheet: Sheet::Name {
-                        provider: provider.clone(),
-                        email: email.clone(),
-                    },
+                intent: Intent::Enrol {
+                    provider: provider.clone(),
                 },
                 enabled: true,
             }],
@@ -159,7 +156,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             actions: vec![
                 Choice {
                     title: words::add_codex_account(seen.os),
-                    intent: Intent::NameSignedIn {
+                    intent: Intent::Enrol {
                         provider: ProviderId::Codex.code().into(),
                     },
                     enabled: true,

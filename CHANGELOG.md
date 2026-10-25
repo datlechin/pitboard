@@ -39,7 +39,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
-- The app's **Name This Account** starts with a name from the account's email address.
 - The macOS menu bar mark has a dot while the menu opens on something that needs attention.
 - The Windows app's icon shows how much of its limit the account in use has left, none before it
   has a reading, and Windows' warning symbol while its menu opens on something that needs
@@ -47,7 +46,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's setup tips go on past a second account: opening Pitboard at login, then what
   happens when a limit reaches 95%, each with **Not Now**.
 - The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
-  enrolled, and names the account Codex is signed in to once you choose it, where a machine with
+  enrolled, and adds the account Codex is signed in to once you choose it, where a machine with
   Claude Code signed in to nothing said **No Accounts**.
 - The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
   to Taskbar settings.
@@ -79,6 +78,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or `weekly_scoped` for one model's, where it passed on `five_hour` and `seven_day` from Claude
   Code's status line, Anthropic's answer without `limits` and Codex. Match `kind` against
   `session` and `weekly_all` where a script matched `five_hour` and `seven_day`.
+- The app adds an account as soon as you sign in to it, or choose the one a tool is signed in
+  to, under a name from its email address, or `desktop` for Claude Desktop, and asks for a name
+  after, where it asked for the name first.
 - Clicking one of the app's notifications on macOS opens **Accounts**, or **Settings** on
   **Limits** for what switching or warming up by itself came to, and the Windows app opens the
   same.

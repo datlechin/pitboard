@@ -2,7 +2,7 @@
 //! driven through `State::apply` by hand and read as `present` makes it, its clock times in
 //! UTC.
 
-use super::signing::{add, adding_in_claude, signs_in, travel};
+use super::signing::{add, adding_in_claude, sign_in_to_claude, signs_in};
 use super::state::{Answer, Job, Recording};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub, desktop_machine};
@@ -77,7 +77,7 @@ fn switching(qualified: &str) -> impl FnOnce(&mut Hand) + '_ {
 fn signing_in(model: &mut Hand) {
     model.send(Intent::SignIn {
         provider: "claude".into(),
-        name: "travel".into(),
+        again: None,
     });
 }
 
@@ -292,10 +292,9 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
     let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
     assert_eq!(
         sends(&unnamed),
-        Some(present_sheet(Sheet::Name {
+        Some(Intent::Enrol {
             provider: "codex".into(),
-            email: "u@example.com".into()
-        }))
+        })
     );
     assert_eq!(
         unnamed.action.map(|action| (action.title, action.spoken)),
@@ -417,10 +416,9 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
             account(None).signed_in().uuid("u").build(),
             signing_in
         )),
-        Some(present_sheet(Sheet::Name {
+        Some(Intent::Enrol {
             provider: "claude".into(),
-            email: "u@example.com".into()
-        }))
+        })
     );
     let stale = described_while(
         account(Some("stale"))
@@ -535,10 +533,9 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         unnamed.offers,
         [offer(
             &words::name_account(None),
-            present_sheet(Sheet::Name {
+            Intent::Enrol {
                 provider: "codex".into(),
-                email: "u@example.com".into()
-            })
+            }
         )]
     );
     assert_eq!(unnamed.forget, None);
@@ -1766,8 +1763,8 @@ fn a_warning_the_last_switch_carried_is_said_with_it_and_nowhere_else() {
 #[test]
 fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
     let (mut model, mut machine) = reading(vec![account(Some("work")).signed_in().build()]);
-    machine.enrolling = enrolled_as(EnrolledAs::InUse { again: true }, Vec::new());
-    signs_in(&mut model, &mut machine, "claude", "work", &[]);
+    machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
+    signs_in(&mut model, &mut machine, "claude", Some("work"), &[]);
     assert_eq!(
         model.shown().notices,
         [notice(
@@ -1787,8 +1784,12 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
     );
     let (mut model, mut machine) =
         reading(vec![account(Some("work")).of("codex").signed_in().build()]);
-    machine.enrolling = enrolled_as(EnrolledAs::InUse { again: false }, vec![old_login.clone()]);
-    signs_in(&mut model, &mut machine, "codex", "work", &[]);
+    machine.enrolling = enrolled_as(
+        "work",
+        EnrolledAs::InUse { again: false },
+        vec![old_login.clone()],
+    );
+    signs_in(&mut model, &mut machine, "codex", None, &[]);
     assert_eq!(
         model.shown().notices,
         [notice(
@@ -1814,8 +1815,8 @@ fn a_sign_in_notice_names_its_tool_beside_another() {
         account(Some("work")).signed_in().build(),
         account(Some("work")).of("codex").signed_in().build(),
     ]);
-    machine.enrolling = enrolled_as(EnrolledAs::InUse { again: true }, Vec::new());
-    signs_in(&mut model, &mut machine, "codex", "work", &[]);
+    machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
+    signs_in(&mut model, &mut machine, "codex", Some("work"), &[]);
     let notice = model.shown().notices.remove(0);
     assert_eq!(notice.id, "switch/codex");
     assert_eq!(notice.title, words::has_a_new_login(Some("Codex"), "work"));
@@ -2571,10 +2572,9 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
             detail: words::unnamed_detail("a@example.com", None),
             actions: vec![Choice {
                 title: words::name_account(None),
-                intent: present_sheet(Sheet::Name {
+                intent: Intent::Enrol {
                     provider: "claude".into(),
-                    email: "a@example.com".into()
-                }),
+                },
                 enabled: true,
             }],
             link: None,
@@ -2716,7 +2716,7 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
             actions: vec![
                 Choice {
                     title: words::add_codex_account(Os::MacOs),
-                    intent: Intent::NameSignedIn {
+                    intent: Intent::Enrol {
                         provider: "codex".into()
                     },
                     enabled: true,
@@ -2753,53 +2753,34 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     assert_eq!(enrolled.shown().footing, Footing::AtLimitUnchosen);
 }
 
-/// Asked to use Pitboard with Codex, the model reads whose login Codex stores, and not before:
-/// Name This Account for it, or Add Account set to Codex where nobody is signed in to it.
+/// Asked to use Pitboard with Codex, the model adds the login Codex stores, which nothing
+/// reads before the click, and names it next; `changing.rs` has the sign-in it offers where
+/// Codex stores none.
 #[test]
-fn using_codex_names_the_login_it_stores_read_only_once_asked() {
-    let (mut model, _) = reading_with_codex(vec![account(Some("work")).signed_in().build()]);
+fn using_codex_adds_the_login_it_stores_read_only_once_asked() {
+    let (mut model, mut machine) =
+        reading_with_codex(vec![account(Some("work")).signed_in().build()]);
+    let enrols = |job: &Job| matches!(job, Job::Enrol { .. });
     assert!(
-        !model
-            .asked
-            .iter()
-            .any(|job| matches!(job, Job::ReadSignedIn { .. })),
+        !model.asked.iter().any(enrols),
         "nothing read of Codex before the click"
     );
-    let codex = || Intent::NameSignedIn {
+    machine.enrolling_current = enrolled_as("acme", EnrolledAs::Current, Vec::new());
+    let jobs = model.send(Intent::Enrol {
         provider: "codex".into(),
-    };
-    assert_eq!(
-        model.send(codex()),
-        [Job::ReadSignedIn {
-            provider: "codex".into()
-        }]
-    );
-    model.give(Answer::SignedIn {
-        provider: "codex".into(),
-        email: Some("dana@acme.io".into()),
     });
+    assert!(jobs.iter().any(enrols), "{jobs:?}");
+    model.run(&mut machine);
     let shown = model.shown();
     assert_eq!(
         shown.sheet,
         Some(Sheet::Name {
             provider: "codex".into(),
-            email: "dana@acme.io".into()
+            label: "acme".into(),
+            email: "w@example.com".into(),
         })
     );
     assert_eq!(shown.sheet_text.expect("the sheet").name, "acme");
-
-    model.send(Intent::CloseSheet);
-    model.send(codex());
-    model.give(Answer::SignedIn {
-        provider: "codex".into(),
-        email: None,
-    });
-    assert_eq!(
-        model.shown().sheet,
-        Some(Sheet::Add {
-            provider: Some("codex".into())
-        })
-    );
 }
 
 /// The app opens at login only where somebody turned that on, and switches, notifies and
@@ -2906,9 +2887,7 @@ fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
         assert!(
             rows(&model).iter().all(|row| !matches!(
                 row.action.as_ref().map(|a| &a.intent),
-                Some(Intent::PresentSheet {
-                    sheet: Sheet::Name { .. }
-                })
+                Some(Intent::Enrol { .. })
             )),
             "nothing to name"
         );
@@ -3076,6 +3055,7 @@ fn the_form_starts_on_the_tool_it_is_about() {
     assert_eq!(
         starts(Sheet::Name {
             provider: "codex".into(),
+            label: "acme".into(),
             email: "c@example.com".into()
         }),
         "codex"
@@ -3111,10 +3091,7 @@ fn each_sheet_says_what_it_is_for() {
     let add = shown(Sheet::Add { provider: None });
     assert_eq!(add.title, words::add_account(OS, false));
     assert_eq!(add.message, words::sign_in_message("Claude Code", None));
-    assert_eq!(
-        (add.name.as_str(), add.prompt.as_str()),
-        ("", words::NAME_PROMPT)
-    );
+    assert_eq!(add.name, "", "a sign-in takes no name");
     assert_eq!(add.account, None);
 
     let again = shown(Sheet::SignInAgain {
@@ -3127,10 +3104,16 @@ fn each_sheet_says_what_it_is_for() {
 
     let name = shown(Sheet::Name {
         provider: "codex".into(),
+        label: "acme".into(),
         email: "c@example.com".into(),
     });
     assert_eq!(name.title, words::name_this_account(OS));
     assert_eq!(name.message, words::naming("c@example.com", "Codex"));
+    assert_eq!(
+        (name.name.as_str(), name.prompt.as_str()),
+        ("acme", words::NAME_PROMPT),
+        "it starts on the name the core picked"
+    );
 
     let rename = shown(Sheet::Rename {
         provider: "claude".into(),
@@ -3143,51 +3126,6 @@ fn each_sheet_says_what_it_is_for() {
         ("work", "work")
     );
     assert!(!rename.saving);
-}
-
-/// Name This Account starts on a name from the email address: the domain's first label for a
-/// work address, and the part before any `+` for one at a mail service. A name another
-/// account of the tool already has is passed over for the other, and with both taken the
-/// field starts empty. An account of another tool takes no name from this one's.
-#[test]
-fn name_this_account_starts_on_a_name_from_the_email() {
-    let named = |taken: Vec<Account>, provider: &str, email: &str| {
-        let (mut model, _) = reading(taken);
-        model.send(present_sheet(Sheet::Name {
-            provider: provider.into(),
-            email: email.into(),
-        }));
-        model.shown().sheet_text.expect("the sheet").name
-    };
-    assert_eq!(named(Vec::new(), "claude", "dana@acme.io"), "acme");
-    assert_eq!(named(Vec::new(), "claude", "dana@eng.acme.io"), "eng");
-    assert_eq!(
-        named(Vec::new(), "codex", "Dana.Lee+pitboard@Gmail.com"),
-        "dana.lee"
-    );
-    assert_eq!(named(Vec::new(), "claude", "dana@icloud.com"), "dana");
-    for abroad in ["dana@yahoo.co.uk", "dana@hotmail.fr", "dana@web.de"] {
-        assert_eq!(named(Vec::new(), "claude", abroad), "dana", "{abroad}");
-    }
-    let acme = || account(Some("acme")).signed_in().build();
-    assert_eq!(named(vec![acme()], "claude", "dana@acme.io"), "dana");
-    assert_eq!(
-        named(
-            vec![acme(), account(Some("dana")).build()],
-            "claude",
-            "dana@acme.io"
-        ),
-        ""
-    );
-    assert_eq!(
-        named(
-            vec![account(Some("acme")).of("codex").signed_in().build()],
-            "claude",
-            "dana@acme.io"
-        ),
-        "acme"
-    );
-    assert_eq!(named(Vec::new(), "claude", ""), "");
 }
 
 /// Each sheet's default button says what pressing it does: a sheet that signs in says Sign
@@ -3215,6 +3153,7 @@ fn each_sheets_default_button_says_what_it_does() {
     assert_eq!(
         confirm(Sheet::Name {
             provider: "codex".into(),
+            label: "acme".into(),
             email: "c@example.com".into(),
         }),
         words::SAVE
@@ -3238,7 +3177,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     let mut model = Hand::new();
     let jobs = model.send(Intent::SignIn {
         provider: "claude".into(),
-        name: "travel".into(),
+        again: None,
     });
     let [Job::SignIn { id, .. }] = jobs[..] else {
         panic!("a sign-in: {jobs:?}");
@@ -3251,10 +3190,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     let text = model.shown().signing_in_text.expect("what it says");
     assert_eq!(text.title, words::signing_in_to(OS, "Claude Code"));
     assert!(text.offers_link, "a browser sign-in offers its page");
-    assert_eq!(
-        text.message,
-        words::finish_in_browser("travel", "Claude Code")
-    );
+    assert_eq!(text.message, words::finish_in_browser(None, "Claude Code"));
     assert_eq!(text.code_note, words::code_note("Claude Code"));
     assert_eq!(text.refused, None);
 
@@ -3528,7 +3464,7 @@ fn the_service_asked_is_named_for_the_tools_shown() {
 #[test]
 fn the_quit_question_is_carried_with_the_sheet_it_was_asked_from() {
     let (mut model, mut machine) = adding_in_claude(true);
-    model.send(travel());
+    model.send(sign_in_to_claude());
     model.run(&mut machine);
     let shown = model.on_a_mac();
     assert_eq!(shown.sheet, Some(add(Some("desktop"))));
@@ -3567,7 +3503,7 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
 fn escape_never_leaves_an_add_with_its_account_parked() {
     let (mut model, mut machine) = adding_in_claude(true);
     machine.put_back = Some("desktop/work".into());
-    model.send(travel());
+    model.send(sign_in_to_claude());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
     model.send(question.confirmed);
@@ -3601,7 +3537,7 @@ fn the_sheet_says_claude_is_quitting_and_its_account_is_read() {
         model.refresh(&mut machine);
         model.send(present_sheet(add(opened_on)));
         model.run(&mut machine);
-        model.send(travel());
+        model.send(sign_in_to_claude());
         model.run(&mut machine);
         assert_eq!(
             model.on_a_mac().sheet_text.expect("the form").progress,
@@ -3624,7 +3560,10 @@ fn the_sheet_says_claude_is_quitting_and_its_account_is_read() {
             "opened on {opened_on:?}"
         );
         model.run(&mut machine);
-        assert_eq!(model.shown().sheet, None, "closed once recorded");
+        assert!(
+            matches!(model.shown().sheet, Some(Sheet::Name { .. })),
+            "named next once recorded"
+        );
     }
 }
 
@@ -3650,9 +3589,9 @@ fn an_add_this_app_waits_for_is_not_a_notice_too() {
     assert!(ids(&model.on_a_mac()).contains(&"awaiting/desktop".into()));
     model.send(present_sheet(add(Some("desktop"))));
     model.run(&mut machine);
-    model.send(travel());
+    model.send(sign_in_to_claude());
     model.run(&mut machine);
-    model.send(travel());
+    model.send(sign_in_to_claude());
     model.run(&mut machine);
     let shown = model.on_a_mac();
     assert!(shown.signing_in.is_some(), "this app waits for it");

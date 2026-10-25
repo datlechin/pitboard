@@ -1335,7 +1335,7 @@ fn waiting_in_claude() -> (Hand, Stub, u64) {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
     let id = model.shown().signing_in.expect("waiting").id;
@@ -1511,10 +1511,10 @@ fn a_switch_asked_while_claude_quits_for_a_sign_in_parks_nothing() {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
-    model.send(quit_and_switch("desktop/travel"));
+    model.send(quit_and_switch("desktop/"));
     model.send(Intent::SwitchTo {
         qualified: "desktop/home".into(),
     });
@@ -1562,10 +1562,10 @@ fn claude_left_partly_running_for_an_add_opens_only_after_a_switch_asked_meanwhi
         model.run(&mut machine);
         model.send(Intent::SignIn {
             provider: "desktop".into(),
-            name: "travel".into(),
+            again: None,
         });
         model.run(&mut machine);
-        model.send(quit_and_switch("desktop/travel"));
+        model.send(quit_and_switch("desktop/"));
         model.send(Intent::SwitchTo {
             qualified: "desktop/home".into(),
         });
@@ -1612,10 +1612,10 @@ fn a_switch_asked_while_claude_parks_for_a_sign_in_waits_for_the_park() {
         model.run(&mut machine);
         model.send(Intent::SignIn {
             provider: "desktop".into(),
-            name: "travel".into(),
+            again: None,
         });
         model.run(&mut machine);
-        model.send(quit_and_switch("desktop/travel"));
+        model.send(quit_and_switch("desktop/"));
         let quit = model.next();
         let answer = machine.answer(quit);
         model.give(answer);
@@ -1675,10 +1675,10 @@ fn claude_kept_for_a_switch_is_never_opened_by_another_tools_switch() {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
-    model.send(quit_and_switch("desktop/travel"));
+    model.send(quit_and_switch("desktop/"));
     model.send(Intent::SwitchTo {
         qualified: "desktop/home".into(),
     });
@@ -1714,7 +1714,7 @@ fn a_question_for_a_sign_in_holds_back_no_switch() {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
     let shown = model.shown();

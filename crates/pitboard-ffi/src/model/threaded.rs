@@ -726,10 +726,20 @@ fn signed_in_as<'a>(
     }
 }
 
-fn sign_in(name: &str) -> Intent {
+// An add of a Claude Code account, which the core names from its email.
+fn sign_in() -> Intent {
     Intent::SignIn {
         provider: "claude".into(),
-        name: name.into(),
+        again: None,
+    }
+}
+
+// The last snapshot told has the account just added up to be named, under `label`.
+fn naming(label: &str) -> impl Fn(&[Snapshot]) -> bool + '_ {
+    move |told| {
+        told.last().is_some_and(
+            |last| matches!(&last.sheet, Some(Sheet::Name { label: named, .. }) if named == label),
+        )
     }
 }
 
@@ -745,7 +755,7 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     at.model.send(Intent::PresentSheet {
         sheet: Sheet::Add { provider: None },
     });
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
     at.world.signed_in_privately("away", "access-away", 20.0);
 
@@ -764,14 +774,18 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     at.model.send(paste("the-code#the-state"));
     let told = at
         .told
-        .until("travel enrolled", signed_in_as("travel", |_| true));
+        .until("away enrolled", signed_in_as("example", |_| true));
     let last = told.last().expect("a snapshot");
     assert_eq!(at.claude.typed(), ["half-a-code", "the-code#the-state"]);
-    assert_eq!(last.sheet, None, "the sheet it was started from closed");
+    assert!(
+        naming("example")(std::slice::from_ref(last)),
+        "the sheet it was started from gives way to the name: {:?}",
+        last.sheet
+    );
     assert_eq!((&last.failure_alert, &last.sheet_failure), (&None, &None));
     let travel = rows(last)
-        .find(|row| row.qualified.as_deref() == Some("claude/travel"))
-        .expect("travel");
+        .find(|row| row.qualified.as_deref() == Some("claude/example"))
+        .expect("away, under the name its email suggests");
     assert!(
         !travel.in_use
             && matches!(&travel.action, Some(action) if matches!(action.intent, Intent::SwitchTo { .. })),
@@ -797,7 +811,10 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
             label: "work".into(),
         },
     });
-    at.model.send(sign_in("work"));
+    at.model.send(Intent::SignIn {
+        provider: "claude".into(),
+        again: Some("work".into()),
+    });
     at.told.until("a code asked for", signing(|s| s.wants_code));
     at.world
         .signed_in_privately("here", "access-here-again", 10.0);
@@ -824,7 +841,7 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
 #[test]
 fn cancelling_a_sign_in_stops_its_tool() {
     let at = signing_in_world("cancel");
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
     assert!(at.claude.is_running());
 
@@ -852,7 +869,7 @@ fn cancelling_a_sign_in_stops_its_tool() {
 #[test]
 fn a_sign_in_asked_for_at_once_after_a_cancel_starts_once_that_one_has_stopped() {
     let at = signing_in_world("cancel-then-sign-in");
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at.told.until("a code asked for", signing(|s| s.wants_code));
     let first = told
         .last()
@@ -860,7 +877,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_starts_once_that_one_has_stopped()
         .expect("the first sign-in")
         .id;
     at.model.send(Intent::CancelSignIn);
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at
         .told
         .until("a code asked for again, or a refusal", |told| {
@@ -894,7 +911,7 @@ fn a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open() {
         "cancel-output-held",
         World::claude_stand_in_holding_its_output,
     );
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at.told.until("a code asked for", signing(|s| s.wants_code));
     let first = told
         .last()
@@ -904,7 +921,7 @@ fn a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open() {
     assert!(at.claude.holds_output(), "its output held open");
 
     at.model.send(Intent::CancelSignIn);
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at
         .told
         .until("a code asked for again, or a refusal", |told| {
@@ -942,7 +959,7 @@ fn a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open() {
 #[test]
 fn shutting_down_stops_a_sign_in_under_way() {
     let at = signing_in_world("shutdown-signing-in");
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
     let private = at.world.pitboard_dir().join("signin");
     assert!(at.claude.is_running() && private.exists());
@@ -978,7 +995,7 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
             .is_some_and(|tool| tool.missing.is_some())
     };
     told.until("Claude Code said missing", missing);
-    model.send(sign_in("travel"));
+    model.send(sign_in());
     let told = told.until("the sign-in over", |told| {
         told.last()
             .is_some_and(|last| last.signing_in.is_none() && read_in(last))
@@ -992,8 +1009,7 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
 }
 
 // The report this rebuild began with: Codex enrolled from a terminal, then only the ChatGPT
-// app, so no Codex CLI. The tip's Add Account says the CLI is missing before Sign In, and a
-// name typed with its tool says why it cannot be one.
+// app, so no Codex CLI. The tip's Add Account says the CLI is missing before Sign In.
 #[test]
 fn adding_codex_without_its_cli_says_so_before_sign_in() {
     let world = World::new("chatgpt-app-only");
@@ -1030,17 +1046,6 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
         codex.missing,
         words::missing(OS, "codex"),
         "its CLI is not here"
-    );
-    assert_eq!(
-        crate::present::check_name(
-            Sheet::Add {
-                provider: Some("codex".into())
-            },
-            "codex".into(),
-            "codex/phu".into()
-        )
-        .problem,
-        words::unusable_name(pitboard_core::label::Unusable::Separator, true)
     );
     model.shutdown();
 }
@@ -1230,10 +1235,10 @@ fn putting_away_a_login_left_in_a_file_reaches_the_core() {
     model.shutdown();
 }
 
-/// Naming the login signed in now from its sheet enrols it with the core, and the sheet
-/// closes once it has.
+/// Adding the login signed in now enrols it with the core under the name its email suggests,
+/// which the sheet that follows starts on, and a new name renames it.
 #[test]
-fn naming_the_login_signed_in_now_enrols_it() {
+fn adding_the_login_signed_in_now_enrols_it_and_names_it_after() {
     let world = World::new("name");
     world.signed_in("here", 10.0);
     let told = Arc::new(Told::default());
@@ -1244,26 +1249,57 @@ fn naming_the_login_signed_in_now_enrols_it() {
             !last.reading && matches!(last.footing, crate::Footing::Unnamed { .. })
         })
     });
-    model.send(Intent::PresentSheet {
-        sheet: Sheet::Name {
-            provider: "claude".into(),
-            email: "here@example.com".into(),
-        },
-    });
     model.send(Intent::Enrol {
         provider: "claude".into(),
-        name: " work ".into(),
     });
-    // The sheet closes as the enrolment answers, and the read after it lists the account:
-    // the poll leaves the account index alone meanwhile, the enrolment being the app's own.
-    let told = told.until("the login enrolled", |told| {
+    // The read after it lists the account: the poll leaves the account index alone
+    // meanwhile, the enrolment being the app's own.
+    let enrolled = told.until("the login enrolled", |told| {
+        naming("example")(told) && told.last().is_some_and(|last| labels(last) == ["example"])
+    });
+    let last = enrolled.last().expect("a snapshot");
+    assert_eq!(last.sheet_failure, None);
+    assert_eq!(last.failure_alert, None);
+    let sheet = last.sheet.clone().expect("the name");
+    let to = crate::present::check_name(sheet, "claude".into(), "work".into())
+        .intent
+        .expect("a rename");
+    model.send(to);
+    told.until("renamed", |told| {
         told.last()
             .is_some_and(|last| labels(last) == ["work"] && last.sheet.is_none())
     });
-    let last = told.last().expect("a snapshot");
-    assert_eq!(last.sheet_failure, None);
-    assert_eq!(last.failure_alert, None);
     model.shutdown();
+}
+
+// A crash is the index as it stands, read by another core; a quit is the next launch's read.
+#[test]
+fn quitting_before_the_name_is_saved_keeps_the_account() {
+    let at = signing_in_world("quit-before-naming");
+    at.model.send(Intent::PresentSheet {
+        sheet: Sheet::Add { provider: None },
+    });
+    at.model.send(sign_in());
+    at.told.until("a code asked for", signing(|s| s.wants_code));
+    at.world.signed_in_privately("away", "access-away", 20.0);
+    at.model.send(paste("the-code#the-state"));
+    at.told.until("the name asked for", naming("example"));
+
+    let on_disk = at.world.core().status_offline().expect("the index read");
+    assert!(
+        on_disk
+            .accounts
+            .iter()
+            .any(|account| account.label.as_deref() == Some("example")),
+        "{:?}",
+        on_disk.accounts
+    );
+    at.model.shutdown();
+    let told = Arc::new(Told::default());
+    let next = model(&at.core, &told);
+    next.send(Intent::Start);
+    told.until("the account kept", signed_in_as("example", |_| true));
+    next.shutdown();
 }
 
 /// The last snapshot told is of a read that has landed after everything asked of the model,
@@ -1275,18 +1311,26 @@ fn read_after<'a>(want: &'a [&'a str]) -> impl Fn(&[Snapshot]) -> bool + 'a {
     }
 }
 
-// The look reads the index as `change` wrote it, and lands before the read after the change.
-fn with_a_look_held(model: &PitboardModel, told: &Told, change: impl FnOnce()) {
+// The look reads the index as `change` wrote it, and lands before the read after the change,
+// once what is told says it has `answered`.
+fn with_a_look_held(
+    model: &PitboardModel,
+    told: &Told,
+    change: impl FnOnce(),
+    answered: impl Fn(&[Snapshot]) -> bool,
+) {
     let (held, release) = model.next_look.hold();
     held.recv_timeout(PATIENCE)
         .expect("a look held on the lane of reads");
     change();
-    // Its sheet closes, or its sign-in ends, as it answers.
-    told.until("the change answered", |told| {
-        told.last()
-            .is_some_and(|last| last.sheet.is_none() && last.signing_in.is_none())
-    });
+    told.until("the change answered", answered);
     drop(release);
+}
+
+// Its sheet closes, or its sign-in ends, as it answers.
+fn closed_or_over(told: &[Snapshot]) -> bool {
+    told.last()
+        .is_some_and(|last| last.sheet.is_none() && last.signing_in.is_none())
 }
 
 #[test]
@@ -1307,47 +1351,39 @@ fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
     told.until("the sheet up", |told| {
         told.last().is_some_and(|last| last.sheet.is_some())
     });
-    with_a_look_held(&renaming, &told, || {
+    let rename = || {
         renaming.send(Intent::Rename {
             provider: "claude".into(),
             label: "work".into(),
             to: "office".into(),
         });
-    });
+    };
+    with_a_look_held(&renaming, &told, rename, closed_or_over);
     told.until("the read after the rename", read_after(&["office"]));
     renaming.shutdown();
 }
 
 #[test]
-fn naming_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
+fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
     let world = World::new("name-looked-at");
-    // Nothing enrolled, so there is no account index until the name writes one.
+    // Nothing enrolled, so there is no account index until the enrolment writes one.
     world.signed_in("here", 10.0);
     let told = Arc::new(Told::default());
-    let naming = model(&world.core(), &told);
-    naming.send(Intent::Start);
+    let adding = model(&world.core(), &told);
+    adding.send(Intent::Start);
     told.until("the login read", |told| {
         told.last().is_some_and(|last| {
             read_in(last) && matches!(last.footing, crate::Footing::Unnamed { .. })
         })
     });
-    naming.send(Intent::PresentSheet {
-        sheet: Sheet::Name {
+    let enrol = || {
+        adding.send(Intent::Enrol {
             provider: "claude".into(),
-            email: "here@example.com".into(),
-        },
-    });
-    told.until("the sheet up", |told| {
-        told.last().is_some_and(|last| last.sheet.is_some())
-    });
-    with_a_look_held(&naming, &told, || {
-        naming.send(Intent::Enrol {
-            provider: "claude".into(),
-            name: "work".into(),
         });
-    });
-    told.until("the read after naming it", read_after(&["work"]));
-    naming.shutdown();
+    };
+    with_a_look_held(&adding, &told, enrol, naming("example"));
+    told.until("the read after adding it", read_after(&["example"]));
+    adding.shutdown();
 }
 
 #[test]
@@ -1360,15 +1396,14 @@ fn a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile() {
     let model = model(&world.core(), &told);
     model.send(Intent::Start);
     told.until("the account read", read_after(&["work"]));
-    model.send(sign_in("travel"));
+    model.send(sign_in());
     told.until("a code asked for", signing(|s| s.wants_code));
     world.signed_in_privately("away", "access-away", 20.0);
-    with_a_look_held(&model, &told, || {
-        model.send(paste("the-code#the-state"));
-    });
+    let paste_it = || model.send(paste("the-code#the-state"));
+    with_a_look_held(&model, &told, paste_it, closed_or_over);
     told.until(
         "the read after the sign-in",
-        read_after(&["work", "travel"]),
+        read_after(&["work", "example"]),
     );
     model.shutdown();
 }

@@ -46,7 +46,7 @@ final class MenuBarTests: FixtureTestCase {
         app.openMenu()
         app.menuItem(Words.addAccount).click()
         XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 5))
-        XCTAssertTrue(app.textFields["sheet.name"].exists)
+        XCTAssertTrue(app.buttons["sheet.confirm"].exists)
     }
 
     // Command-0 is Actual Size, as in Safari.

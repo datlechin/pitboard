@@ -75,7 +75,8 @@ built with a `context::Context`:
   written into.
 - `state.rs`: `state.json`, the index of accounts ([The state file](#the-state-file)).
 - `in_use.rs`: whose login each tool has stored, as its service last said.
-- `label.rs`: what somebody typed, as one account.
+- `label.rs`: what somebody typed, as one account, and the name an account gets where nobody
+  typed one.
 - `switch/`: every change to the index: switching, enrolling, adopting, renaming, forgetting,
   renewing, repairing, abandoning, uninstalling and putting away a login left in a file.
   - `journal.rs`, `settle.rs`: an interrupted switch finished, given up or said.
@@ -402,6 +403,9 @@ keeps it is in the header of the module named.
 - One sign-in runs at a time, on a thread of its own, told apart by an id, and enrols only if
   it is still the sign-in under way. It keeps the sheet it started from, and `shutdown` waits
   for each one's tool to stop (`model/signing.rs`).
+- An account the app adds is enrolled as its sign-in ends, under a name the core picks under
+  `state.lock`, and named after, so quitting before the name keeps it
+  (`quitting_before_the_name_is_saved_keeps_the_account`).
 - What the app says by itself is said once: a run-out once per reset across launches, kept in
   `told.json`; a replaced login once per account while the reads say it; a refusal of the
   automatic switch once until it next switches (`model/advising.rs`, `model/threaded.rs`,

@@ -55,8 +55,6 @@ pub(crate) struct Stub {
     pub readings: i64,
     /// The tools whose program the app found.
     pub found: Vec<Tool>,
-    // whose login each tool stores, as the login says it
-    pub stored_email: Option<String>,
     /// What a switch gives.
     pub switched: Result<Switched, Refusal>,
     /// Every account switched to, as the model named it.
@@ -89,7 +87,8 @@ pub(crate) struct Stub {
     pub moving: bool,
     /// What enrolling what a sign-in signed in to gives.
     pub enrolling: Result<Enrolled, Refusal>,
-    /// Every sign-in started, as the model named the account.
+    /// Every sign-in started, as `codex/work` for the account signed in to again, and `codex/`
+    /// for a new one.
     pub signed_in: Vec<String>,
     /// Every code typed back, to which sign-in.
     pub pasted: Vec<(u64, String)>,
@@ -111,7 +110,7 @@ pub(crate) struct Stub {
     pub stowing: Result<Stowed, Refusal>,
     /// Every file put away, by what it was confirmed as.
     pub stowed_seen: Vec<String>,
-    /// Every login enrolled as it is signed in now, as the model named it.
+    /// Every login enrolled as it is signed in now, named as `signed_in` names a sign-in.
     pub enrolled: Vec<String>,
     /// Every rename, from and to, as the model named them.
     pub renamed: Vec<(String, String)>,
@@ -203,7 +202,6 @@ impl Stub {
             changed: 0,
             readings: 0,
             found: vec![claude_code()],
-            stored_email: None,
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
             replaced_with: Vec::new(),
@@ -219,12 +217,12 @@ impl Stub {
             lingers: false,
             whole: true,
             moving: false,
-            enrolling: enrolled_as(EnrolledAs::SignedIn, Vec::new()),
+            enrolling: enrolled_as("travel", EnrolledAs::SignedIn, Vec::new()),
             signed_in: Vec::new(),
             pasted: Vec::new(),
             stopped: Vec::new(),
             over: Vec::new(),
-            enrolling_current: enrolled_as(EnrolledAs::Current, Vec::new()),
+            enrolling_current: enrolled_as("work", EnrolledAs::Current, Vec::new()),
             renaming: Ok(()),
             forgetting: Ok(()),
             updating_config: Ok(Vec::new()),
@@ -391,10 +389,6 @@ impl Stub {
             Job::AskInstalled => Answer::Installed {
                 tools: self.found.clone(),
             },
-            Job::ReadSignedIn { provider } => Answer::SignedIn {
-                provider,
-                email: self.stored_email.clone(),
-            },
             // What holds the login, and quitting an app, by the lanes' own rules over what
             // the test says runs, with no time given to quit: an app quits when asked, or
             // is still running.
@@ -466,8 +460,13 @@ impl Stub {
             }
             // A sign-in's thread answers once its tool has started, as here, then with what
             // the tool says, which a test hands on itself, and once it has stopped.
-            Job::SignIn { id, qualified } => {
-                self.signed_in.push(qualified);
+            Job::SignIn {
+                id,
+                provider,
+                again,
+            } => {
+                self.signed_in
+                    .push(format!("{provider}/{}", again.unwrap_or_default()));
                 Answer::SignInStarted {
                     id,
                     started: self.starting.clone().map_err(|refused| refused.error()),
@@ -487,14 +486,17 @@ impl Stub {
             }
             Job::Enrol {
                 provider,
-                name,
+                again,
                 from,
                 reopen,
             } => {
-                self.enrolled.push(format!("{provider}/{name}"));
+                self.enrolled.push(format!(
+                    "{provider}/{}",
+                    again.as_deref().unwrap_or_default()
+                ));
                 Answer::Enrolled {
                     provider,
-                    name,
+                    again,
                     from,
                     reopen,
                     done: self

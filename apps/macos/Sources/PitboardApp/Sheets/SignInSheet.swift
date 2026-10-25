@@ -3,7 +3,7 @@ import PitboardKit
 import SwiftUI
 
 /// Adds an account, or signs in again to one whose parked login can no longer be used,
-/// through the tool's own sign-in, which the model runs.
+/// through the tool's own sign-in, which the model runs. A new account is named after it.
 ///
 /// Claude Code and Codex open the default browser themselves and finish through their own
 /// callback, so the sheet offers the address each prints: to open where no browser opened,
@@ -16,13 +16,11 @@ struct SignInSheet: View {
     let model: AppModel
     let sheet: Sheet
     @State private var provider: String
-    @State private var name: String
     @State private var code = ""
     /// The sign-in this sheet showed last, and what it said, kept while the sheet closes
     /// after it finishes, when the model has already let it go, so the sheet does not flash
     /// its form on the way out.
     @State private var shown: (signIn: RunningSignIn, text: SigningInText)?
-    @FocusState private var nameFocused: Bool
     @FocusState private var codeFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -33,7 +31,6 @@ struct SignInSheet: View {
         // Chosen before the first frame, not after it: a picker drawn with a selection none
         // of its items has logs that it is invalid, and can draw with nothing selected.
         _provider = State(initialValue: model.sheetText?.tool ?? "")
-        _name = State(initialValue: model.sheetText?.name ?? "")
     }
 
     /// The model runs one sign-in at a time, so a sign-in sheet shows the one running,
@@ -53,7 +50,7 @@ struct SignInSheet: View {
                 shown = (running, text)
             } else if model.sheet != nil {
                 // Over, and the sheet stays: it failed, or it was stopped. Back to the form,
-                // with what went wrong and the name still in it.
+                // with what went wrong in it.
                 shown = nil
             }
         }
@@ -70,7 +67,7 @@ struct SignInSheet: View {
         let tools = text?.tools ?? []
         let chosen = tools.first { $0.code == provider }
         let busy = text?.saving ?? false
-        let check = checkName(sheet: sheet, tool: provider, typed: name)
+        let start = checkName(sheet: sheet, tool: provider, typed: "").intent
         SheetLayout(
             title: text?.title ?? "",
             message: chosen?.message ?? text?.message ?? ""
@@ -87,20 +84,10 @@ struct SignInSheet: View {
                 }
                 if let account = text?.account {
                     LabeledContent("Account", value: account)
-                } else {
-                    TextField("Name", text: $name, prompt: Text(text?.prompt ?? ""))
-                        .accessibilityIdentifier("sheet.name")
-                        .focused($nameFocused)
-                        .onSubmit(start)
-                        .disabled(busy)
                 }
                 if let working = text?.progress {
                     ProgressView(working)
                         .controlSize(.small)
-                }
-            } footer: {
-                if let problem = check.problem {
-                    NameProblem(problem: problem)
                 }
             }
             if let missing = chosen?.missing {
@@ -114,16 +101,13 @@ struct SignInSheet: View {
                 .keyboardShortcut(.cancelAction)
                 .disabled(busy)
                 .accessibilityIdentifier("sheet.cancel")
-            Button(chosen?.confirm ?? text?.confirm ?? "", action: start)
+            Button(chosen?.confirm ?? text?.confirm ?? "", action: signIn)
                 .keyboardShortcut(.defaultAction)
                 .disabled(
-                    check.intent == nil || chosen?.missing != nil || model.signingIn != nil
-                        || busy
+                    start == nil || chosen?.missing != nil || model.signingIn != nil || busy
                 )
                 .accessibilityIdentifier("sheet.confirm")
         }
-        .onAppear { nameFocused = text?.account == nil }
-        .onChange(of: name) { edited() }
         .onChange(of: provider) { edited() }
         // Back from installing a tool Pitboard said it could not find.
         .onReceive(
@@ -136,9 +120,9 @@ struct SignInSheet: View {
         if model.sheetFailure != nil { model.send(.dismissSheetFailure) }
     }
 
-    private func start() {
+    private func signIn() {
         let chosen = model.sheetText?.tools.first { $0.code == provider }
-        guard let intent = checkName(sheet: sheet, tool: provider, typed: name).intent,
+        guard let intent = checkName(sheet: sheet, tool: provider, typed: "").intent,
             chosen?.missing == nil, model.signingIn == nil, shown == nil,
             model.sheetText?.saving != true
         else { return }

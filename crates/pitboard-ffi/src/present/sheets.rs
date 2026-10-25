@@ -20,50 +20,57 @@ use pitboard_core::words as said;
 
 /// What a sheet's default button sends with `typed` as the name, `tool` picked where the sheet
 /// picks one, or why what is typed cannot be a name. The model saves by the same rule, and it
-/// answers at once, so a view asks it as it is typed in.
+/// answers at once, so a view asks it as it is typed in. A sheet that signs in takes no name.
 #[uniffi::export]
 pub fn check_name(sheet: Sheet, tool: String, typed: String) -> NameCheck {
-    match saved_name(&sheet, &typed) {
-        Ok(name) => NameCheck {
-            problem: None,
-            intent: name.and_then(|name| saves(sheet, tool, name)),
-        },
-        Err(unusable) => NameCheck {
-            problem: words::unusable_name(unusable, matches!(sheet, Sheet::Add { .. })),
-            intent: None,
+    let sends = |intent| NameCheck {
+        problem: None,
+        intent,
+    };
+    match sheet {
+        Sheet::Add { .. } => sends(Some(Intent::SignIn {
+            provider: tool,
+            again: None,
+        })),
+        Sheet::SignInAgain { provider, label } => sends(Some(Intent::SignIn {
+            provider,
+            again: Some(label),
+        })),
+        Sheet::Stow => sends(None),
+        Sheet::Name { .. } | Sheet::Rename { .. } => match saved_name(&sheet, &typed) {
+            Ok(Some(to)) => sends(renames(sheet, to)),
+            // The account is added under the name it shows already.
+            Ok(None) => sends(matches!(sheet, Sheet::Name { .. }).then_some(Intent::CloseSheet)),
+            Err(unusable) => NameCheck {
+                problem: words::unusable_name(unusable),
+                intent: None,
+            },
         },
     }
 }
 
-/// The name `typed` saves as from `sheet`, trimmed: none where there is nothing to save, as in
-/// a rename to the name the account has.
+/// The name `typed` gives the account `sheet` names, trimmed: none where it is the name the
+/// account has.
 pub(crate) fn saved_name(sheet: &Sheet, typed: &str) -> Result<Option<String>, label::Unusable> {
-    if let Sheet::SignInAgain { label, .. } = sheet {
-        return Ok(Some(label.clone()));
-    }
     let name = trimmed(typed);
     match sheet {
-        Sheet::Stow => Ok(None),
-        Sheet::Rename { label, .. } if label == name => Ok(None),
+        Sheet::Rename { label, .. } | Sheet::Name { label, .. } if label == name => Ok(None),
         _ => label::check(name).map(|()| Some(name.to_owned())),
     }
 }
 
-fn saves(sheet: Sheet, tool: String, name: String) -> Option<Intent> {
-    Some(match sheet {
-        Sheet::Add { .. } => Intent::SignIn {
-            provider: tool,
-            name,
-        },
-        Sheet::SignInAgain { provider, .. } => Intent::SignIn { provider, name },
-        Sheet::Name { provider, .. } => Intent::Enrol { provider, name },
-        Sheet::Rename { provider, label } => Intent::Rename {
+fn renames(sheet: Sheet, to: String) -> Option<Intent> {
+    match sheet {
+        Sheet::Rename { provider, label }
+        | Sheet::Name {
+            provider, label, ..
+        } => Some(Intent::Rename {
             provider,
             label,
-            to: name,
-        },
-        Sheet::Stow => return None,
-    })
+            to,
+        }),
+        _ => None,
+    }
 }
 
 /// The tool the sheet for `sheet` starts on: the one it is about, and for a new account
@@ -194,18 +201,6 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
     let text = match sheet {
         Sheet::Add { .. } => {
             let (message, confirm) = form_words(seen, sheet, &tool);
-            // An add left halfway is finished under the name it was started with.
-            let name = state
-                .status
-                .as_ref()
-                .and_then(|status| {
-                    status
-                        .awaiting
-                        .iter()
-                        .find(|awaiting| awaiting.provider == tool && !awaiting.again)
-                })
-                .map(|awaiting| awaiting.label.clone())
-                .unwrap_or_default();
             SheetText {
                 title: words::add_account(seen.os, false),
                 message,
@@ -214,7 +209,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
                     .collect(),
                 tool,
                 account: None,
-                name,
+                name: String::new(),
                 prompt: words::NAME_PROMPT.into(),
                 confirm,
                 saving,
@@ -239,12 +234,12 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
                 progress,
             }
         }
-        Sheet::Name { email, .. } => SheetText {
+        Sheet::Name { label, email, .. } => SheetText {
             title: words::name_this_account(seen.os),
             message: words::naming(email, &seen.tool_name(&tool)),
             tools: Vec::new(),
             account: None,
-            name: suggested_name(seen, &tool, email),
+            name: label.clone(),
             tool,
             prompt: words::NAME_PROMPT.into(),
             confirm: words::SAVE.into(),
@@ -266,59 +261,6 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         Sheet::Stow => return None,
     };
     Some(text)
-}
-
-// Anyone can have an address at one of these, in any country, so the domain says nothing of
-// whose account it is.
-const MAIL_SERVICES: &[&str] = &[
-    "163",
-    "aol",
-    "fastmail",
-    "gmail",
-    "gmx",
-    "googlemail",
-    "hey",
-    "hotmail",
-    "icloud",
-    "live",
-    "mac",
-    "mail",
-    "me",
-    "msn",
-    "naver",
-    "outlook",
-    "pm",
-    "proton",
-    "protonmail",
-    "qq",
-    "web",
-    "yahoo",
-    "yandex",
-    "zoho",
-];
-
-fn suggested_name(seen: &Seen, provider: &str, email: &str) -> String {
-    let email = email.to_lowercase();
-    let Some((local, domain)) = email.rsplit_once('@') else {
-        return String::new();
-    };
-    let mailbox = local.split('+').next().unwrap_or_default();
-    let company = domain.split('.').next().unwrap_or_default();
-    let candidates = if MAIL_SERVICES.contains(&company) {
-        vec![mailbox]
-    } else {
-        vec![company, mailbox]
-    };
-    let taken = |name: &str| {
-        seen.accounts()
-            .iter()
-            .any(|account| account.provider == provider && account.label.as_deref() == Some(name))
-    };
-    candidates
-        .into_iter()
-        .find(|name| label::check(name).is_ok() && !taken(name))
-        .unwrap_or_default()
-        .to_owned()
 }
 
 pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
@@ -372,7 +314,7 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         undo: None,
         announce: None,
         title: words::signing_in_to(seen.os, &tool),
-        message: words::finish_in_browser(&signing.name, &tool),
+        message: words::finish_in_browser(signing.again.as_deref(), &tool),
         code_note: words::code_note(&tool),
         refused: signing.code_refused().then(|| words::code_refused(&tool)),
     })
@@ -396,8 +338,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         (
             words::in_app_waiting(
                 app,
-                &signing.name,
-                signing.again,
+                signing.again.as_deref(),
                 signing.step,
                 signing.opened_for_it,
             ),
@@ -411,10 +352,9 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
     );
     let announce = (signing.started && asks_again).then(|| message.clone());
     SigningInText {
-        title: if signing.again {
-            words::sign_in_to_again(seen.os, &signing.name, false)
-        } else {
-            words::add_account(seen.os, false)
+        title: match &signing.again {
+            Some(label) => words::sign_in_to_again(seen.os, label, false),
+            None => words::add_account(seen.os, false),
         },
         message,
         code_note: String::new(),
@@ -488,9 +428,8 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
             message: words::quit_to_move(name, &label),
             confirm: words::quit_and_switch(seen.os, name),
         },
-        After::SignIn { from, .. } => {
-            let again = matches!(from, Some(Sheet::SignInAgain { .. }));
-            let title = words::quit_to_sign_in(name, again.then_some(label.as_str()));
+        After::SignIn { again, .. } => {
+            let title = words::quit_to_sign_in(name, again.as_deref());
             match seen
                 .in_use_of(tool)
                 .filter(|_| !nothing_to_park(seen, tool))
@@ -507,14 +446,14 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
                 },
             }
         }
-        After::Enrol { from, .. } => {
-            let again = matches!(from, Some(Sheet::SignInAgain { .. }));
-            Question {
-                title: words::quit_to_record(name, &label, again),
-                message: words::quit_to_read(name, &label, again),
-                confirm: words::quit_and_record(seen.os, name, again),
-            }
-        }
+        After::Enrol { again, .. } => Question {
+            title: match again {
+                Some(label) => words::quit_to_record(name, label),
+                None => words::quit_to_sign_in(name, None),
+            },
+            message: words::quit_to_read(name, again.as_deref()),
+            confirm: words::quit_and_record(seen.os, name, again.is_some()),
+        },
     }
 }
 
@@ -556,36 +495,37 @@ mod tests {
         check_name(sheet, "claude".into(), typed.into()).problem
     }
 
-    // Save waits for a name, trimmed: in a rename, one the account does not already have.
-    #[test]
-    fn a_name_is_saved_trimmed_and_only_once_there_is_one() {
-        let name = Sheet::Name {
+    fn named(label: &str) -> Sheet {
+        Sheet::Name {
             provider: "claude".into(),
+            label: label.into(),
             email: "a@example.com".into(),
-        };
-        assert_eq!(saved(name.clone(), "  work\n").as_deref(), Some("work"));
-        assert_eq!(saved(name.clone(), " \t\u{200b}"), None);
-        assert_eq!(saved(name.clone(), ""), None);
-        assert_eq!(problem(name, ""), None, "nothing typed is nothing wrong");
-        assert_eq!(saved(rename("work"), " work "), None, "unchanged");
-        assert_eq!(problem(rename("work"), " work "), None);
-        assert_eq!(saved(rename("work"), "home ").as_deref(), Some("home"));
-        assert_eq!(
-            saved(Sheet::Add { provider: None }, " travel").as_deref(),
-            Some("travel")
-        );
-        let again = Sheet::SignInAgain {
-            provider: "codex".into(),
-            label: "my work".into(),
-        };
-        assert_eq!(
-            saved(again, "").as_deref(),
-            Some("my work"),
-            "the account's own name, whatever a new one may be"
-        );
+        }
     }
 
-    // What each sheet's default button sends, so neither app maps a sheet to an intent.
+    // Save waits for a name, trimmed, the account does not already have.
+    #[test]
+    fn a_name_is_saved_trimmed_and_only_once_there_is_one() {
+        for (sheet, kind) in [(named("acme"), "named"), (rename("acme"), "renamed")] {
+            assert_eq!(
+                saved(sheet.clone(), "  work\n").as_deref(),
+                Some("work"),
+                "{kind}"
+            );
+            assert_eq!(saved(sheet.clone(), " \t\u{200b}"), None, "{kind}");
+            assert_eq!(
+                problem(sheet.clone(), ""),
+                None,
+                "{kind}: nothing typed is nothing wrong"
+            );
+            assert_eq!(saved(sheet.clone(), " acme "), None, "{kind}: unchanged");
+            assert_eq!(problem(sheet, " acme "), None, "{kind}");
+        }
+    }
+
+    // What each sheet's default button sends, so neither app maps a sheet to an intent. A sheet
+    // that signs in takes no name, and naming an account just added renames it only where the
+    // name changed.
     #[test]
     fn a_name_comes_with_what_its_sheet_sends() {
         let sends = |sheet: Sheet, tool: &str, typed: &str| {
@@ -595,7 +535,7 @@ mod tests {
             sends(Sheet::Add { provider: None }, "codex", " travel"),
             Some(Intent::SignIn {
                 provider: "codex".into(),
-                name: "travel".into()
+                again: None,
             }),
             "the tool picked"
         );
@@ -603,66 +543,48 @@ mod tests {
             sends(
                 Sheet::SignInAgain {
                     provider: "codex".into(),
-                    label: "work".into()
+                    label: "my work".into()
                 },
                 "codex",
                 ""
             ),
             Some(Intent::SignIn {
                 provider: "codex".into(),
-                name: "work".into()
-            })
+                again: Some("my work".into()),
+            }),
+            "the account's own name, whatever a new one may be"
         );
+        let to_home = Some(Intent::Rename {
+            provider: "claude".into(),
+            label: "acme".into(),
+            to: "home".into(),
+        });
+        assert_eq!(sends(named("acme"), "claude", "home"), to_home);
         assert_eq!(
-            sends(
-                Sheet::Name {
-                    provider: "codex".into(),
-                    email: "a@example.com".into()
-                },
-                "codex",
-                "home"
-            ),
-            Some(Intent::Enrol {
-                provider: "codex".into(),
-                name: "home".into()
-            })
+            sends(named("acme"), "claude", " acme"),
+            Some(Intent::CloseSheet)
         );
-        assert_eq!(
-            sends(rename("work"), "claude", "home"),
-            Some(Intent::Rename {
-                provider: "claude".into(),
-                label: "work".into(),
-                to: "home".into()
-            })
-        );
-        assert_eq!(sends(rename("work"), "claude", "work"), None, "unchanged");
-        assert_eq!(sends(Sheet::Add { provider: None }, "codex", "a/b"), None);
+        assert_eq!(sends(rename("acme"), "claude", "home"), to_home);
+        assert_eq!(sends(rename("acme"), "claude", "acme"), None, "unchanged");
+        assert_eq!(sends(named("acme"), "claude", "a/b"), None);
         assert_eq!(sends(Sheet::Stow, "claude", "work"), None);
     }
 
-    // The tool is picked apart from the name, so a name naming one again is refused as typed,
-    // and not where the core would read it as `codex/codex/phu`.
     #[test]
     fn a_name_that_cannot_be_one_says_why_as_it_is_typed() {
         use pitboard_core::label::Unusable;
-        let add = || Sheet::Add {
-            provider: Some("codex".into()),
-        };
-        assert_eq!(saved(add(), "codex/phu"), None);
-        assert_eq!(
-            problem(add(), "codex/phu"),
-            words::unusable_name(Unusable::Separator, true)
-        );
-        assert_eq!(
-            problem(rename("work"), "a/b"),
-            words::unusable_name(Unusable::Separator, false)
-        );
-        assert_eq!(saved(add(), "my work"), None);
-        assert_eq!(
-            problem(add(), "my work"),
-            words::unusable_name(Unusable::NotOneWord, true)
-        );
-        assert_eq!(problem(add(), "phu"), None);
+        for sheet in [named("acme"), rename("acme")] {
+            assert_eq!(saved(sheet.clone(), "codex/phu"), None);
+            assert_eq!(
+                problem(sheet.clone(), "codex/phu"),
+                words::unusable_name(Unusable::Separator)
+            );
+            assert_eq!(
+                problem(sheet.clone(), "my work"),
+                words::unusable_name(Unusable::NotOneWord)
+            );
+            assert_eq!(problem(sheet, "phu"), None);
+        }
     }
 
     use crate::Account;
@@ -817,11 +739,10 @@ mod tests {
         let mut state = read(waiting, vec![claude_code(), claude_desktop()]);
         let text = form_of(&mut state, add_desktop());
         assert_eq!(
-            (text.message, text.confirm, text.name.as_str()),
+            (text.message, text.confirm),
             (
                 words::add_once_signed_in("Claude", "work"),
                 words::add_account_shown(Os::MacOs, "Claude", false),
-                "travel"
             )
         );
     }
@@ -843,10 +764,10 @@ mod tests {
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
             &seen,
-            &asked("desktop/travel", CLAUDE, "Claude"),
+            &asked("desktop/", CLAUDE, "Claude"),
             &After::SignIn {
                 provider: "desktop".into(),
-                name: "travel".into(),
+                again: None,
                 from: Some(add_desktop()),
             },
         );
@@ -876,15 +797,15 @@ mod tests {
             &asked("desktop/home", CLAUDE, "Claude"),
             &After::Enrol {
                 provider: "desktop".into(),
-                name: "home".into(),
+                again: Some("home".into()),
                 from: Some(again),
             },
         );
         assert_eq!(
             question,
             Question {
-                title: words::quit_to_record("Claude", "home", true),
-                message: words::quit_to_read("Claude", "home", true),
+                title: words::quit_to_record("Claude", "home"),
+                message: words::quit_to_read("Claude", Some("home")),
                 confirm: words::quit_and_record(Os::MacOs, "Claude", true),
             }
         );
@@ -915,10 +836,10 @@ mod tests {
         };
         assert_eq!(
             said(
-                "desktop/travel",
+                "desktop/",
                 After::SignIn {
                     provider: "desktop".into(),
-                    name: "travel".into(),
+                    again: None,
                     from: Some(add_desktop()),
                 }
             ),
@@ -929,7 +850,7 @@ mod tests {
                 "desktop/home",
                 After::SignIn {
                     provider: "desktop".into(),
-                    name: "home".into(),
+                    again: Some("home".into()),
                     from: Some(Sheet::SignInAgain {
                         provider: "desktop".into(),
                         label: "home".into(),
@@ -940,16 +861,16 @@ mod tests {
         );
         assert_eq!(
             said(
-                "desktop/travel",
+                "desktop/",
                 After::Enrol {
                     provider: "desktop".into(),
-                    name: "travel".into(),
+                    again: None,
                     from: Some(add_desktop()),
                 }
             ),
             Question {
-                title: words::quit_to_record("Claude", "travel", false),
-                message: words::quit_to_read("Claude", "travel", false),
+                title: words::quit_to_sign_in("Claude", None),
+                message: words::quit_to_read("Claude", None),
                 confirm: words::quit_and_record(Os::MacOs, "Claude", false),
             }
         );

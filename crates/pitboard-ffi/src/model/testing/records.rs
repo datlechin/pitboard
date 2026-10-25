@@ -187,13 +187,20 @@ pub(crate) fn already_active(label: &str, warnings: Vec<Warning>) -> Result<Swit
     })
 }
 
-/// What a sign-in enrolled, as the core reports it.
+/// What a sign-in enrolled under `label`, as the core reports it: added unless it was
+/// enrolled already.
 pub(crate) fn enrolled_as(
+    label: &str,
     outcome: EnrolledAs,
     warnings: Vec<Warning>,
 ) -> Result<Enrolled, Refusal> {
     Ok(Enrolled {
         email: "w@example.com".into(),
+        label: label.into(),
+        added: !matches!(
+            outcome,
+            EnrolledAs::Renewed | EnrolledAs::InUse { again: true }
+        ),
         outcome,
         warnings,
     })

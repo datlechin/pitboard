@@ -1,7 +1,6 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
-using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
 
 namespace Pitboard.UITests;
@@ -20,7 +19,8 @@ public sealed class AccountsWindowTests
         launched.Row("codex/main");
     }
 
-    // Open is never pressed: it would open the fixture's address in a real browser.
+    // Open is never pressed: it would open the fixture's address in a real browser. The account is added as the sign-in
+    // finishes, under the name its email suggests, and named next.
     [TestMethod]
     public void AddingAClaudeCodeAccount()
     {
@@ -28,7 +28,6 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
 
         launched.Invoke("accounts.add");
-        Launched.Type(launched.Field("sheet.name"), "third");
         launched.Answer("sheet", "PrimaryButton");
         var code = launched.Field("sheet.code");
         Assert.IsTrue(Launched.Enables(launched.Element("sheet.openLink")), "Open stayed dimmed");
@@ -37,8 +36,14 @@ public sealed class AccountsWindowTests
         Launched.Type(code, "fixture-code#state");
         launched.Answer("sheet", "PrimaryButton");
 
+        launched.Row("claude/travel");
+        var name = launched.Field("sheet.name");
+        Assert.AreEqual("travel", name.Text, "the name dana@travel.example suggests");
+        Launched.Type(name, "third");
+        launched.Answer("sheet", "PrimaryButton");
+
         launched.Row("claude/third");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.code")), "the sheet stayed up");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
     }
 
     // A Codex sign-in finishes by itself once the browser is done.
@@ -50,10 +55,12 @@ public sealed class AccountsWindowTests
 
         launched.Invoke("accounts.add");
         launched.Element("sheet.tool.codex").Patterns.SelectionItem.Pattern.Select();
-        Launched.Type(launched.Field("sheet.name"), "third");
         launched.Answer("sheet", "PrimaryButton");
 
-        launched.Row("codex/third");
+        launched.Row("codex/travel");
+        launched.Field("sheet.name");
+        launched.Answer("sheet", "PrimaryButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "kept as it is, the sheet stayed up");
     }
 
     // Sign In stays dimmed while a sign-in runs, so a second one finishing shows the first was stopped.
@@ -64,20 +71,18 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
 
         launched.Invoke("accounts.add");
-        Launched.Type(launched.Field("sheet.name"), "third");
         launched.Answer("sheet", "PrimaryButton");
         launched.Field("sheet.code");
         launched.Answer("sheet", "CloseButton");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.code")), "the sheet stayed up");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.claude/third")), "third was added");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.claude/travel")), "travel was added");
 
         launched.Invoke("accounts.add");
-        Launched.Type(launched.Field("sheet.name"), "third");
         launched.Answer("sheet", "PrimaryButton");
         Launched.Type(launched.Field("sheet.code"), "fixture-code#state");
         launched.Answer("sheet", "PrimaryButton");
 
-        launched.Row("claude/third");
+        launched.Row("claude/travel");
     }
 
     [TestMethod]
@@ -184,11 +189,12 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
 
         launched.Element("setup.unnamed");
-        launched.Invoke("setup.action.name");
+        launched.Invoke("setup.action.enrol");
         Assert.AreEqual("work", launched.Field("sheet.name").Text, "the name dana@work.example suggests");
+        launched.Row("claude/work");
         launched.Answer("sheet", "PrimaryButton");
 
-        launched.Row("claude/work");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
     }
 
     // macOS has no UI test of this: no world of its fixtures left a login in a file until this one.
@@ -217,7 +223,7 @@ public sealed class AccountsWindowTests
         launched.Element("empty");
         launched.Invoke("empty.choice");
 
-        launched.Field("sheet.name");
+        launched.Element("sheet.tool");
     }
 
     [TestMethod]
@@ -246,7 +252,7 @@ public sealed class AccountsWindowTests
         launched.Row("claude/work");
     }
 
-    // The window goes to the accounts, where the sheet comes up with focus in its name field, not the tool picker.
+    // The window goes to the accounts, where the sheet comes up.
     [TestMethod]
     public void CtrlNAddsAnAccountFromAnyPane()
     {
@@ -257,15 +263,10 @@ public sealed class AccountsWindowTests
 
         Foreground.Require(window);
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_N);
-        launched.Field("sheet.name");
         launched.Find(found => found.ByAutomationId("sheet.tool.codex"), "sheet.tool.codex");
-        string Focused() => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "";
-        Assert.IsTrue(
-            Retry.WhileFalse(() => Focused() == "sheet.name", TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(100)).Result,
-            $"the sheet opened with the focus on '{Focused()}'");
         launched.Answer("sheet", "CloseButton");
 
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.tool")), "the sheet stayed up");
         Assert.IsTrue(launched.Selected("pane.accounts"), "Ctrl+N left the window on Activity");
         launched.Row("claude/work");
     }

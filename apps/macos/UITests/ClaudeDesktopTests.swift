@@ -55,17 +55,15 @@ final class ClaudeDesktopTests: FixtureTestCase {
     func testAddingAClaudeDesktopAccountAsksToQuitClaudeOverTheSheet() {
         let app = launch(.claudeDesktopOpen)
         app.openWindow()
-        startAddingTravel(app)
+        startAdding(app)
 
         let park = app.buttons["sheet.confirm"]
         park.click()
         XCTAssertTrue(app.alertCancel.waitForExistence(timeout: 5))
         XCTAssertTrue(app.alertAnswer.exists)
-        let name = app.textFields["sheet.name"]
-        XCTAssertTrue(name.exists, "asked over the sheet, which stays")
+        XCTAssertTrue(app.control("sheet.add").exists, "asked over the sheet, which stays")
         app.alertCancel.click()
         XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
-        XCTAssertEqual(name.value as? String, "travel")
 
         XCTAssertTrue(park.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         park.click()
@@ -73,11 +71,19 @@ final class ClaudeDesktopTests: FixtureTestCase {
         app.alertAnswer.click()
         let waiting = app.sheets.firstMatch.buttons["sheet.undo"]
         XCTAssertTrue(waiting.waitForExistence(timeout: 10))
-        // The fixture's Claude signs in to travel and quits 7 seconds after it is opened.
-        let travel = app.accountRow("desktop/travel")
-        XCTAssertTrue(travel.waitForExistence(timeout: 30))
+        // The fixture's Claude signs in to travel and quits 7 seconds after it is opened. A
+        // Claude Desktop account has no email, so it is added as desktop and named next.
+        let added = app.accountRow("desktop/desktop")
+        XCTAssertTrue(added.waitForExistence(timeout: 30))
         XCTAssertTrue(
-            travel.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 5))
+            added.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 5))
+        let name = app.textFields["sheet.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.click()
+        name.typeKey("a", modifierFlags: .command)
+        name.typeText("travel")
+        app.buttons["sheet.confirm"].click()
+        XCTAssertTrue(app.accountRow("desktop/travel").waitForExistence(timeout: 10))
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
     }
 
@@ -85,7 +91,7 @@ final class ClaudeDesktopTests: FixtureTestCase {
     func testAnAddLeftHalfwayOffersToPutTheParkedAccountBack() {
         let app = launch(.claudeDesktop)
         app.openWindow()
-        startAddingTravel(app)
+        startAdding(app)
 
         app.buttons["sheet.confirm"].click()
         let waiting = app.sheets.firstMatch.buttons["sheet.undo"]
@@ -110,15 +116,12 @@ final class ClaudeDesktopTests: FixtureTestCase {
     }
 
     @MainActor
-    private func startAddingTravel(_ app: XCUIApplication) {
+    private func startAdding(_ app: XCUIApplication) {
         app.toolbars.buttons["toolbar.addAccount"].click()
         let tool = app.popUpButtons["sheet.tool"]
         XCTAssertTrue(tool.waitForExistence(timeout: 5))
         tool.click()
         // Its own item, not the menu bar item's Claude Desktop heading.
         tool.menuItems["Claude Desktop"].click()
-        let name = app.textFields["sheet.name"]
-        name.click()
-        name.typeText("travel")
     }
 }

@@ -7,8 +7,8 @@
 //! `typeset` first.
 
 use super::Severity;
+use crate::model::AtLimit;
 use crate::model::state::{Recording, in_its_app};
-use crate::model::{AtLimit, Sheet};
 use crate::{Level, Warning};
 use pitboard_core::error::{Cause, Error, LoginDoubt, Then, Unidentified};
 use pitboard_core::host::{Os, Private};
@@ -32,8 +32,12 @@ pub(crate) fn could_not_switch(qualified: &str) -> String {
 
 pub(crate) const COULD_NOT_GIVE_UP: &str = "Couldn’t give up on the interrupted switch";
 
-pub(crate) fn could_not_sign_in(name: &str) -> String {
-    format!("Couldn’t sign in to {name}")
+// `again`: the account signed in to again, or none for a new one.
+pub(crate) fn could_not_sign_in(again: Option<&str>) -> String {
+    match again {
+        Some(label) => format!("Couldn’t sign in to {label}"),
+        None => "Couldn’t add the account".into(),
+    }
 }
 
 pub(crate) fn could_not_forget(qualified: &str) -> String {
@@ -56,8 +60,6 @@ pub(crate) fn could_not_warm(qualified: &str) -> String {
     format!("Couldn’t warm up {}", Key::parse(qualified).label)
 }
 
-pub(crate) const COULD_NOT_NAME: &str = "Couldn’t name this account";
-
 // A sign-in that put the new login of `name` in use: `again` where it was enrolled already.
 pub(crate) fn signed_in_now(name: &str, again: bool, app: Option<&str>) -> String {
     match (again, app) {
@@ -67,15 +69,6 @@ pub(crate) fn signed_in_now(name: &str, again: bool, app: Option<&str>) -> Strin
         }
         (true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),
         (false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),
-    }
-}
-
-// What recording the account an app shows from `from` failed under.
-pub(crate) fn could_not_enrol(from: Option<&Sheet>, name: &str) -> String {
-    match from {
-        Some(Sheet::Add { .. }) => format!("Couldn’t add {name}"),
-        Some(Sheet::SignInAgain { .. }) => could_not_sign_in(name),
-        _ => COULD_NOT_NAME.into(),
     }
 }
 
@@ -792,13 +785,11 @@ const INSTALL_CODEX_CLI: &str = "https://developers.openai.com/codex/cli";
 
 const DOWNLOAD_CLAUDE: &str = "https://claude.ai/download";
 
-// Why what was typed cannot be a new name, where something was. `picks_tool`: the sheet has a
-// picker for the tool.
-pub(crate) fn unusable_name(unusable: Unusable, picks_tool: bool) -> Option<String> {
+// Why what was typed cannot be a new name, where something was.
+pub(crate) fn unusable_name(unusable: Unusable) -> Option<String> {
     let said = match unusable {
         Unusable::Empty => return None,
         Unusable::NotOneWord => "A name is one word, with no spaces.",
-        Unusable::Separator if picks_tool => "A name can’t contain “/”. Choose the tool above.",
         Unusable::Separator => "A name can’t contain “/”.",
     };
     Some(said.into())
@@ -1499,22 +1490,20 @@ pub(crate) fn awaiting_lines(app: &str, label: &str, put_back: &str, again: bool
 // What the sheet says while Pitboard waits for `app` to quit signed in, as the wait last said.
 pub(crate) fn in_app_waiting(
     app: &str,
-    name: &str,
-    again: bool,
+    again: Option<&str>,
     step: Option<pitboard_core::switch::WaitStep>,
     opened_for_it: bool,
 ) -> String {
     use pitboard_core::switch::WaitStep;
-    let (sign_in, adds) = if again {
-        (
-            format!("sign in to {name} again"),
-            format!("Pitboard records it as {name}’s login"),
-        )
-    } else {
-        (
+    let (sign_in, adds) = match again {
+        Some(label) => (
+            format!("sign in to {label} again"),
+            format!("Pitboard records it as {label}’s login"),
+        ),
+        None => (
             "sign in to the account you’re adding".to_owned(),
-            format!("Pitboard adds it as {name}"),
-        )
+            "Pitboard adds it".to_owned(),
+        ),
     };
     let first = match step {
         Some(WaitStep::QuitSignedOut) => format!(
@@ -1616,8 +1605,8 @@ pub(crate) fn wait_to_sign_in_again(app: &str, label: &str) -> String {
 
 pub(crate) fn record_first(app: &str) -> String {
     format!(
-        "Pitboard records the account {app} is signed in to under this name. Check which \
-         account {app} shows first: Pitboard can’t ask claude.ai whose it is."
+        "Pitboard adds the account {app} is signed in to. Check which account {app} shows \
+         first: Pitboard can’t ask claude.ai whose it is."
     )
 }
 
@@ -1631,8 +1620,7 @@ pub(crate) fn add_once_signed_in(app: &str, parked: &str) -> String {
 pub(crate) fn record_unidentified(app: &str) -> String {
     format!(
         "Pitboard can’t identify the login {app} holds. Open {app}, check which account it \
-         shows, and quit it. Pitboard records that account under this name: one you added, or \
-         a new one."
+         shows, and quit it. Pitboard records that account: one you added, or a new one."
     )
 }
 
@@ -1666,11 +1654,14 @@ pub(crate) fn name_this_account(os: Os) -> String {
     titled(os, "Name This Account", "Name this account")
 }
 
+// The account the sign-in or the login in use added, by its email where it has one.
 pub(crate) fn naming(email: &str, tool: &str) -> String {
-    format!(
-        "{email} is signed in to {tool}. Pitboard parks its login under this name whenever you \
-         switch to another account."
-    )
+    let added = if email.is_empty() {
+        format!("Pitboard added the account {tool} is signed in to.")
+    } else {
+        format!("Pitboard added {email}, signed in to {tool}.")
+    };
+    format!("{added} It parks its login under this name whenever you switch to another account.")
 }
 
 pub(crate) const SAVE: &str = "Save";
@@ -1716,8 +1707,12 @@ pub(crate) fn signing_in_to(os: Os, tool: &str) -> String {
     )
 }
 
-pub(crate) fn finish_in_browser(name: &str, tool: &str) -> String {
-    format!("Finish signing in as {name} in your browser. This closes once {tool} says you’re in.")
+pub(crate) fn finish_in_browser(again: Option<&str>, tool: &str) -> String {
+    let finish = match again {
+        Some(label) => format!("Finish signing in as {label} in your browser."),
+        None => "Finish signing in in your browser.".to_owned(),
+    };
+    format!("{finish} This closes once {tool} says you’re in.")
 }
 
 pub(crate) fn code_note(tool: &str) -> String {
@@ -1777,13 +1772,9 @@ pub(crate) fn quit_to_sign_in(name: &str, again: Option<&str>) -> String {
     }
 }
 
-// `again`: `label` was added already, and gets a new login.
-pub(crate) fn quit_to_record(name: &str, label: &str, again: bool) -> String {
-    if again {
-        format!("Quit {name} to record {label}?")
-    } else {
-        format!("Quit {name} to add {label}?")
-    }
+// `label` was added already, and gets a new login.
+pub(crate) fn quit_to_record(name: &str, label: &str) -> String {
+    format!("Quit {name} to record {label}?")
 }
 
 // For an app that keeps no login Pitboard moves, which takes a switch once it starts again.
@@ -1819,14 +1810,14 @@ pub(crate) fn quit_to_wait(name: &str) -> String {
     )
 }
 
-pub(crate) fn quit_to_read(name: &str, label: &str, again: bool) -> String {
-    let records = if again {
-        format!("{label}’s login")
-    } else {
-        label.to_owned()
+// `again`: the account its login is recorded for, or none for a new one.
+pub(crate) fn quit_to_read(name: &str, again: Option<&str>) -> String {
+    let records = match again {
+        Some(label) => format!("records that account as {label}’s login"),
+        None => "adds that account".to_owned(),
     };
     format!(
-        "{} It quits {name}, records that account as {records}, and opens it again.",
+        "{} It quits {name}, {records}, and opens it again.",
         only_while_closed(name, &format!("reads which account {name} is signed in to"))
     )
 }
@@ -3267,7 +3258,8 @@ mod tests {
             COULD_NOT_GIVE_UP,
             "Couldn’t give up on the interrupted switch"
         );
-        assert_eq!(could_not_sign_in("work"), "Couldn’t sign in to work");
+        assert_eq!(could_not_sign_in(Some("work")), "Couldn’t sign in to work");
+        assert_eq!(could_not_sign_in(None), "Couldn’t add the account");
         assert_eq!(could_not_forget("claude/work"), "Couldn’t forget work");
         assert_eq!(could_not_rename("work"), "Couldn’t rename work");
         assert_eq!(
@@ -3281,18 +3273,6 @@ mod tests {
             "Couldn’t change which accounts are warmed up"
         );
         assert_eq!(could_not_warm("claude/work"), "Couldn’t warm up work");
-        assert_eq!(COULD_NOT_NAME, "Couldn’t name this account");
-        let add = Sheet::Add { provider: None };
-        let again = Sheet::SignInAgain {
-            provider: "claude".into(),
-            label: "work".into(),
-        };
-        assert_eq!(could_not_enrol(Some(&add), "work"), "Couldn’t add work");
-        assert_eq!(
-            could_not_enrol(Some(&again), "work"),
-            "Couldn’t sign in to work"
-        );
-        assert_eq!(could_not_enrol(None, "work"), COULD_NOT_NAME);
         assert_eq!(COULD_NOT_READ_USAGE, "Couldn’t read usage");
         assert_eq!(
             LAST_MEASURED,
@@ -3432,8 +3412,8 @@ mod tests {
         );
         assert_eq!(
             record_first("Claude"),
-            "Pitboard records the account Claude is signed in to under this name. Check which \
-             account Claude shows first: Pitboard can’t ask claude.ai whose it is."
+            "Pitboard adds the account Claude is signed in to. Check which account Claude shows \
+             first: Pitboard can’t ask claude.ai whose it is."
         );
         assert_eq!(
             add_once_signed_in("Claude", "work"),
@@ -3443,8 +3423,7 @@ mod tests {
         assert_eq!(
             record_unidentified("Claude"),
             "Pitboard can’t identify the login Claude holds. Open Claude, check which account it \
-             shows, and quit it. Pitboard records that account under this name: one you added, \
-             or a new one."
+             shows, and quit it. Pitboard records that account: one you added, or a new one."
         );
         assert_eq!(
             park_to_add("Claude", "work"),
@@ -3466,8 +3445,13 @@ mod tests {
         );
         assert_eq!(
             naming("a@example.com", "Codex"),
-            "a@example.com is signed in to Codex. Pitboard parks its login under this name \
+            "Pitboard added a@example.com, signed in to Codex. It parks its login under this name \
              whenever you switch to another account."
+        );
+        assert_eq!(
+            naming("", "Claude Desktop"),
+            "Pitboard added the account Claude Desktop is signed in to. It parks its login under \
+             this name whenever you switch to another account."
         );
         assert_eq!(rename_title("work"), "Rename “work”");
         assert_eq!(
@@ -3482,8 +3466,12 @@ mod tests {
              where it holds none it can switch to, then deletes the file."
         );
         assert_eq!(
-            finish_in_browser("work", "Codex"),
+            finish_in_browser(Some("work"), "Codex"),
             "Finish signing in as work in your browser. This closes once Codex says you’re in."
+        );
+        assert_eq!(
+            finish_in_browser(None, "Codex"),
+            "Finish signing in in your browser. This closes once Codex says you’re in."
         );
         assert_eq!(
             code_note("Claude Code"),
@@ -3519,17 +3507,13 @@ mod tests {
 
     #[test]
     fn a_name_that_cannot_be_one_says_why_in_these_words() {
-        assert_eq!(unusable_name(Unusable::Empty, true), None);
+        assert_eq!(unusable_name(Unusable::Empty), None);
         assert_eq!(
-            unusable_name(Unusable::NotOneWord, true).as_deref(),
+            unusable_name(Unusable::NotOneWord).as_deref(),
             Some("A name is one word, with no spaces.")
         );
         assert_eq!(
-            unusable_name(Unusable::Separator, true).as_deref(),
-            Some("A name can’t contain “/”. Choose the tool above.")
-        );
-        assert_eq!(
-            unusable_name(Unusable::Separator, false).as_deref(),
+            unusable_name(Unusable::Separator).as_deref(),
             Some("A name can’t contain “/”.")
         );
     }
@@ -3941,12 +3925,8 @@ mod tests {
             "Quit Claude to sign in to home again?"
         );
         assert_eq!(
-            quit_to_record("Claude", "home", true),
+            quit_to_record("Claude", "home"),
             "Quit Claude to record home?"
-        );
-        assert_eq!(
-            quit_to_record("Claude", "travel", false),
-            "Quit Claude to add travel?"
         );
         assert_eq!(
             quit_and_reopen("ChatGPT"),
@@ -3969,14 +3949,14 @@ mod tests {
              and opens it again for you to sign in."
         );
         assert_eq!(
-            quit_to_read("Claude", "home", true),
+            quit_to_read("Claude", Some("home")),
             "Pitboard reads which account Claude is signed in to only while Claude is closed. It \
              quits Claude, records that account as home’s login, and opens it again."
         );
         assert_eq!(
-            quit_to_read("Claude", "travel", false),
+            quit_to_read("Claude", None),
             "Pitboard reads which account Claude is signed in to only while Claude is closed. It \
-             quits Claude, records that account as travel, and opens it again."
+             quits Claude, adds that account, and opens it again."
         );
         let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
@@ -4014,37 +3994,38 @@ mod tests {
                  claude.ai, and Pitboard can’t bring it back."
             )
         };
-        let said = |again, step, opened| in_app_waiting("Claude", "travel", again, step, opened);
+        let said =
+            |again: Option<&str>, step, opened| in_app_waiting("Claude", again, step, opened);
         assert_eq!(
-            said(false, Some(WaitStep::Waiting), true),
+            said(None, Some(WaitStep::Waiting), true),
             both(
                 "In Claude, sign in to the account you’re adding. When it shows your chats, quit \
-                 Claude with Command-Q, and Pitboard adds it as travel."
+                 Claude with Command-Q, and Pitboard adds it."
             )
         );
         assert_eq!(
-            said(false, Some(WaitStep::Open), false),
+            said(None, Some(WaitStep::Open), false),
             both(
                 "Open Claude and sign in to the account you’re adding. When it shows your chats, \
-                 quit Claude with Command-Q, and Pitboard adds it as travel."
+                 quit Claude with Command-Q, and Pitboard adds it."
             )
         );
         assert_eq!(
-            said(false, Some(WaitStep::QuitSignedOut), true),
+            said(None, Some(WaitStep::QuitSignedOut), true),
             both(
                 "Claude quit with nobody signed in. Open Claude, sign in to the account you’re \
                  adding, then quit it with Command-Q."
             )
         );
         assert_eq!(
-            said(false, Some(WaitStep::QuitUnfinished), true),
+            said(None, Some(WaitStep::QuitUnfinished), true),
             both(
                 "Claude quit before it finished signing in. Open Claude, wait until it shows \
                  your chats, then quit it with Command-Q."
             )
         );
         assert_eq!(
-            said(true, None, true),
+            said(Some("travel"), None, true),
             both(
                 "In Claude, sign in to travel again. When it shows your chats, quit Claude with \
                  Command-Q, and Pitboard records it as travel’s login."

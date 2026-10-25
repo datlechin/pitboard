@@ -1,9 +1,8 @@
 import PitboardKit
 import SwiftUI
 
-/// Names the login signed in now, so Pitboard can park it, with no browser since the login
-/// is already there; or gives an enrolled account a new name, which keeps its parked login
-/// and its place, inside its own tool.
+/// Names the account just added, already saved under the name it starts on; or gives an
+/// enrolled account a new name, which keeps its parked login and its place, inside its tool.
 ///
 /// What it says, its default button's words, whether that can be pressed and what it sends
 /// are the model's: the button sends what `checkName` returns, and the model saves by the

@@ -325,9 +325,7 @@ fn offers(os: Os, account: &Account, action: Option<&ItemAction>, busy: bool) ->
         confirm: None,
     };
     let own = action.and_then(|action| match &action.intent {
-        Intent::PresentSheet {
-            sheet: Sheet::Name { .. },
-        } => Some(offer(action.title.clone(), action.intent.clone(), true)),
+        Intent::Enrol { .. } => Some(offer(action.title.clone(), action.intent.clone(), true)),
         _ => None,
     });
     let switches = action.is_some_and(|action| matches!(action.intent, Intent::SwitchTo { .. }));
@@ -475,11 +473,8 @@ fn action(
         return account.signed_in.then(|| ItemAction {
             title: words::name_account(None),
             spoken: words::name_account(Some(spoken)),
-            intent: Intent::PresentSheet {
-                sheet: Sheet::Name {
-                    provider: account.provider.clone(),
-                    email: account.email.clone(),
-                },
+            intent: Intent::Enrol {
+                provider: account.provider.clone(),
             },
         });
     };

@@ -21,19 +21,19 @@ public sealed class SheetPageTests
         Assert.AreEqual(text.Message, form.Message("desktop"), "a tool the picker does not offer");
     }
 
+    // A new account is named once it is added, so all Sign in waits for is no other sign-in or save.
     [TestMethod]
-    public void SignInWaitsForANameAndForNothingToBeUnderWay()
+    public void SignInWaitsForNothingToBeUnderWay()
     {
         var form = new SheetPage.Form(Add, Items.AddAccount(), Running: false);
 
-        Assert.IsNull(form.Start("claude", " \t"));
-        Assert.AreEqual(new Intent.SignIn("codex", "third"), form.Start("codex", "  third\n"));
-        Assert.IsNull((form with { Running = true }).Start("claude", "third"), "a second sign-in");
-        Assert.IsNull((form with { Text = form.Text with { Saving = true } }).Start("claude", "third"), "while saving");
+        Assert.AreEqual(new Intent.SignIn("codex", null), form.Start("codex"));
+        Assert.IsNull((form with { Running = true }).Start("claude"), "a second sign-in");
+        Assert.IsNull((form with { Text = form.Text with { Saving = true } }).Start("claude"), "while saving");
     }
 
     [TestMethod]
-    public void SignInWaitsForAToolPitboardFoundAndANameThatCanBeOne()
+    public void SignInWaitsForAToolPitboardFound()
     {
         var missing = Items.CodexCliMissing();
         var form = new SheetPage.Form(
@@ -41,42 +41,21 @@ public sealed class SheetPageTests
 
         Assert.AreEqual(missing, form.NotFound("codex"));
         Assert.IsNull(form.NotFound("claude"));
-        Assert.IsNull(form.Start("codex", "third"), "a tool Pitboard did not find");
-        Assert.IsNull(form.Start("claude", "codex/phu"));
-        Assert.AreEqual("A name can’t contain “/”. Choose the tool above.", form.Problem("codex/phu"));
-        Assert.AreEqual("A name is one word, with no spaces.", form.Problem("my work"));
-        Assert.IsNull(form.Problem(""), "nothing typed is nothing wrong");
-        Assert.AreEqual(new Intent.SignIn("claude", "third"), form.Start("claude", "third"));
+        Assert.IsNull(form.Start("codex"), "a tool Pitboard did not find");
+        Assert.AreEqual(new Intent.SignIn("claude", null), form.Start("claude"));
     }
 
-    // Sign in was dimmed under an empty field whose placeholder read "work", with nothing to say why.
+    // The button was dimmed under an empty field whose placeholder read "work", with nothing to say why.
     [TestMethod]
     public void TheNameFieldSaysTheButtonWaitsForAName()
     {
-        var form = new SheetPage.Form(Add, Items.AddAccount(), Running: false);
         var rename = new SheetPage.Naming(new Sheet.Rename("claude", "personal"), Items.Rename("personal"));
 
-        Assert.AreEqual("Type a name for this account to sign in.", form.Note("claude", ""));
-        Assert.AreEqual("Type a name for this account to sign in.", form.Note("claude", " \t"));
-        Assert.IsNull(form.Note("claude", "work"));
-        Assert.AreEqual(form.Problem("my work"), form.Note("claude", "my work"));
         Assert.AreEqual("Type a name for this account to rename.", rename.Note(""));
+        Assert.AreEqual("Type a name for this account to rename.", rename.Note(" \t"));
+        Assert.AreEqual("A name is one word, with no spaces.", rename.Note("my work"));
+        Assert.AreEqual("A name can’t contain “/”.", rename.Note("codex/phu"));
         Assert.IsNull(rename.Note("personal"), "the name it has, which Rename waits to change");
-    }
-
-    // Without Claude Code, the field asked for a name while Sign in waited for the tool, which the bar under it says.
-    [TestMethod]
-    public void TheNameFieldAsksForANameOnlyWhenSignInWaitsForNothingElse()
-    {
-        var form = new SheetPage.Form(
-            Add, Items.AddAccount(Items.Tool("claude", "Claude Code"), Items.Tool("codex", "Codex", Items.CodexCliMissing())),
-            Running: false);
-
-        Assert.IsNull(form.Note("codex", ""), "a tool Pitboard did not find");
-        Assert.AreEqual(form.Problem("a/b"), form.Note("codex", "a/b"), "what is wrong with what is typed");
-        Assert.IsNull((form with { Running = true }).Note("claude", ""), "a second sign-in");
-        Assert.IsNull((form with { Text = form.Text with { Saving = true } }).Note("claude", ""), "while saving");
-        Assert.AreEqual("Type a name for this account to sign in.", form.Note("claude", ""));
     }
 
     [TestMethod]
@@ -84,16 +63,19 @@ public sealed class SheetPageTests
     {
         var again = new SheetPage.Form(new Sheet.SignInAgain("claude", "work"), Items.AddAccount() with { Account = "work" }, Running: false);
 
-        Assert.AreEqual(new Intent.SignIn("claude", "work"), again.Start("claude", ""));
+        Assert.AreEqual(new Intent.SignIn("claude", "work"), again.Start("claude"));
     }
 
+    // The account is added under the name it shows already, so Save renames it only where the name changed.
     [TestMethod]
-    public void NamingEnrolsAndRenamingRenames()
+    public void NamingTheAccountJustAddedRenamesItAndRenamingRenames()
     {
-        var name = new SheetPage.Naming(new Sheet.Name("claude", "dana@work.example"), Items.Rename("") with { Confirm = "Save" });
+        var name = new SheetPage.Naming(
+            new Sheet.Name("claude", "work", "dana@work.example"), Items.Rename("work") with { Confirm = "Save" });
         var rename = new SheetPage.Naming(new Sheet.Rename("claude", "personal"), Items.Rename("personal"));
 
-        Assert.AreEqual(new Intent.Enrol("claude", "work"), name.Save(" work "));
+        Assert.AreEqual(new Intent.Rename("claude", "work", "office"), name.Save(" office "));
+        Assert.AreEqual(new Intent.CloseSheet(), name.Save("work"), "kept as it is");
         Assert.IsNull(name.Save(""));
         Assert.IsNull(rename.Save("personal "), "the name it has");
         Assert.AreEqual(new Intent.Rename("claude", "personal", "home"), rename.Save("home"));
@@ -120,7 +102,7 @@ public sealed class SheetPageTests
         Assert.IsNull((signingIn with { SignIn = running with { Url = null } }).Page, "before the tool prints it");
     }
 
-    // Back to the form, with what went wrong and the name still in it.
+    // Back to the form, with what went wrong in it.
     [TestMethod]
     public void ASignInThatStopsWhileTheSheetStaysGoesBackToTheForm()
     {
@@ -146,7 +128,7 @@ public sealed class SheetPageTests
         Assert.IsInstanceOfType<SheetPage.Naming>(
             Shown(Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "work"), SheetText = Items.Rename("work") }));
         Assert.IsInstanceOfType<SheetPage.Naming>(
-            Shown(Snapshots.Read(1) with { Sheet = new Sheet.Name("claude", "dana@work.example"), SheetText = Items.Rename("") }));
+            Shown(Snapshots.Read(1) with { Sheet = new Sheet.Name("claude", "work", "dana@work.example"), SheetText = Items.Rename("work") }));
     }
 
     [TestMethod]
