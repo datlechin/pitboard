@@ -509,7 +509,7 @@ fn a_codex_switchs_warning_reaches_the_snapshot() {
         .iter()
         .find(|line| line.contains("2 codex sessions"))
         .expect("the sessions still running are warned about");
-    assert!(warned.contains("codex/personal"), "{warned:?}");
+    assert!(warned.contains("personal’s sign-in"), "{warned:?}");
     assert!(
         !warns(last, "sessions_still_running"),
         "the read after it does not say it again: {:#?}",
@@ -610,7 +610,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
         panic!("the restart line and what is unknown: {:#?}", said.lines);
     };
     assert_eq!(restart, &words::restart_notice("codex", "personal"));
-    assert!(unknown.contains("codex/personal"), "{unknown:?}");
+    assert!(unknown.contains("personal’s sign-in"), "{unknown:?}");
     assert!(
         !warns(last, "sessions_unknown"),
         "said in the switch's notice"

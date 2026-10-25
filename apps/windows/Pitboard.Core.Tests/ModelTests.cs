@@ -292,7 +292,8 @@ public sealed class ModelTests
                 Confirmed: new Intent.QuitAndSwitch("codex/spare"),
                 Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
-                Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed."),
+                Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed.",
+                Next: new NextStep.Learn(new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors"))),
             WindowRequest = new WindowRequest(Serial: 3, Place: new Place.Accounts()),
         };
 
@@ -433,7 +434,8 @@ public sealed class ModelTests
             Sheet = new Sheet.SignInAgain(Provider: "claude", Label: "work"),
             SheetFailure = new FailureText(
                 Id: 4, Title: "Couldn’t sign in to work", Message: "`claude` is not on this machine",
-                Warnings: ["The account in use is unchanged."]),
+                Warnings: ["The account in use is unchanged."],
+                Next: new NextStep.Learn(new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors#signing-in"))),
         };
 
         Assert.AreEqual(3UL, snapshot.SigningIn?.Id);
@@ -525,7 +527,7 @@ public sealed class ModelTests
             [
                 new AccountNote(
                     Kind: NoteKind.Expiring, Text: "Parked login good for 3 more days: sign in again to keep it",
-                    Action: null),
+                    Action: null, Learn: null),
             ],
             Lines: ["Parked login good for 3 more days: sign in again to keep it"],
             Detail: new AccountDetail(
@@ -563,7 +565,7 @@ public sealed class ModelTests
         var stuck = new PanelNotice(
             Id: "stuck", Severity: Severity.Error, SpokenSeverity: "Problem", Title: "An interrupted switch is waiting",
             Lines: ["An interrupted switch can’t be finished until OpenAI answers."], Until: null, UntilLabel: null,
-            Actions: [giveUp]);
+            Actions: [giveUp], Learn: null);
         var others = new MenuEntry(
             Title: stuck.Title, Subtitle: "Show in Pitboard", Help: stuck.Lines[0], Severity: Severity.Error,
             Intent: new Intent.Show(new Place.Accounts()), Link: null, Enabled: true);

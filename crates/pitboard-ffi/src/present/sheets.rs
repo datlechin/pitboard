@@ -5,13 +5,14 @@
 
 use super::words;
 use super::{
-    Choice, FailureText, Missing, NameCheck, Question, Seen, SheetText, SheetTool, SigningInText,
-    StowText, WindowQuestion, alert_of,
+    Choice, FailureText, Missing, NameCheck, NextStep, Question, Seen, SheetText, SheetTool,
+    SigningInText, StowText, WindowQuestion, alert_of,
 };
 use crate::Tool;
 use crate::account_windows::AlertText;
 use crate::model::state::{After, InAppAdd, Leftover, in_its_app, trimmed};
 use crate::model::{Failure, Intent, QuitQuestion, Sheet};
+use pitboard_core::host::Os;
 use pitboard_core::label;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -462,13 +463,16 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     }
 }
 
-/// A failure's alert, gone once it is read: its title, and its message with everything else
-/// it warned about.
-pub(crate) fn failure_alert(failure: &Failure) -> AlertText {
-    alert_of(&failure.title, &failure.message, &failure.warnings)
+/// A failure's alert, gone once it is read: its title, its message with everything else it
+/// warned about, and what to do.
+pub(crate) fn failure_alert(os: Os, failure: &Failure) -> AlertText {
+    AlertText {
+        next: Some(next_of(os, failure)),
+        ..alert_of(&failure.title, &failure.message, &failure.warnings)
+    }
 }
 
-pub(crate) fn failure_text(failure: &Failure) -> FailureText {
+pub(crate) fn failure_text(os: Os, failure: &Failure) -> FailureText {
     FailureText {
         id: failure.id,
         title: failure.title.clone(),
@@ -478,7 +482,12 @@ pub(crate) fn failure_text(failure: &Failure) -> FailureText {
             .iter()
             .map(|warning| warning.message.clone())
             .collect(),
+        next: next_of(os, failure),
     }
+}
+
+fn next_of(os: Os, failure: &Failure) -> NextStep {
+    super::next::of_failure(os, failure.code.as_deref(), failure.account.as_deref())
 }
 
 #[cfg(test)]
@@ -888,19 +897,23 @@ mod tests {
     /// paragraph each.
     #[test]
     fn a_failures_alert_says_its_warnings_too() {
-        let alert = failure_alert(&Failure {
-            id: 1,
-            title: "Couldn’t switch to personal".into(),
-            message: "Nothing is parked.".into(),
-            code: Some("nothing_parked".into()),
-            warnings: vec![crate::Warning {
-                code: "auth_overridden".into(),
-                message: "ANTHROPIC_API_KEY is set".into(),
+        let alert = failure_alert(
+            Os::MacOs,
+            &Failure {
+                id: 1,
+                title: "Couldn’t switch to personal".into(),
+                message: "Nothing is parked.".into(),
+                code: Some("nothing_parked".into()),
                 account: None,
-                held: None,
-                provider: None,
-            }],
-        });
+                warnings: vec![crate::Warning {
+                    code: "auth_overridden".into(),
+                    message: "ANTHROPIC_API_KEY is set".into(),
+                    account: None,
+                    held: None,
+                    provider: None,
+                }],
+            },
+        );
         assert_eq!(alert.title, "Couldn’t switch to personal");
         assert_eq!(
             alert.message,

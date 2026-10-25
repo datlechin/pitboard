@@ -150,6 +150,7 @@ pub fn download_host(url: Option<String>) -> Option<String> {
 #[uniffi::export]
 pub fn download_question(name: String, host: Option<String>) -> AlertText {
     AlertText {
+        next: None,
         title: match host.filter(|host| !host.is_empty()) {
             Some(host) => format!("Download “{name}” from {host}?"),
             None => format!("Download “{name}”?"),

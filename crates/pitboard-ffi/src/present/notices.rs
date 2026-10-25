@@ -34,6 +34,7 @@ fn notice(
         until: None,
         until_label: None,
         actions,
+        learn: None,
     }
 }
 
@@ -235,7 +236,14 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             Severity::Error,
             words::COULD_NOT_READ_USAGE.into(),
             lines,
-            Vec::new(),
+            vec![NoticeAction {
+                title: words::try_again(seen.os),
+                intent: Intent::Refresh { asked: true },
+                dismisses: false,
+                switches: false,
+                enabled: state.reads == 0,
+                confirm: None,
+            }],
         ));
     }
     for advice in &state.advice {
@@ -282,13 +290,17 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             id = format!("{id}/{twice}");
         }
         ids.push(id.clone());
-        said.push(notice(
-            id,
-            Severity::Warning,
-            words::warning_heading(warning).into(),
-            vec![warning.message.clone()],
-            warning_actions(seen, warning),
-        ));
+        let actions = warning_actions(seen, warning);
+        said.push(PanelNotice {
+            learn: actions.is_empty().then(|| super::next::of_warning(seen.os)),
+            ..notice(
+                id,
+                Severity::Warning,
+                words::warning_heading(warning).into(),
+                vec![warning.message.clone()],
+                actions,
+            )
+        });
     }
     if let Some(abandoned) = &state.abandoned {
         said.push(notice(
@@ -465,7 +477,7 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         .collect();
     lines.extend(warned.iter().map(|warning| warning.message.clone()));
     let title = if last.said.is_some() {
-        words::signed_in_again(tool.as_deref(), &label)
+        words::signed_in_to(tool.as_deref(), &label)
     } else {
         words::switched_to(tool.as_deref(), &label)
     };
@@ -490,6 +502,8 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
     PanelNotice {
         until_label: until.map(|_| words::sessions_follow_in(tool.as_deref())),
         until,
+        learn: (severity != Severity::Info && last.back.is_none())
+            .then(|| super::next::of_warning(seen.os)),
         ..notice(
             format!("switch/{}", last.provider),
             severity,

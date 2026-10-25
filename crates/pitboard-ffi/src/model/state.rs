@@ -758,6 +758,7 @@ struct Refused {
     message: String,
     code: Option<String>,
     warnings: Vec<Warning>,
+    account: Option<String>,
 }
 
 impl Refused {
@@ -767,13 +768,14 @@ impl Refused {
             code,
             message,
             warnings,
-            ..
+            account,
         } = error;
         Refused {
             title,
             message,
             code: Some(code),
             warnings,
+            account,
         }
     }
 
@@ -784,6 +786,7 @@ impl Refused {
             message: NOT_KNOWN_HOW_IT_WENT.into(),
             code: None,
             warnings: Vec::new(),
+            account: None,
         }
     }
 }
@@ -2743,9 +2746,11 @@ impl State {
                 self.warm_later(now);
             }
             Err(WarmRefused { told_apart, error }) => {
-                let PitboardError::Failed { message, .. } = &error;
+                let PitboardError::Failed { message, .. } = &*error;
                 match asked {
-                    Some(qualified) => self.present(Refused::of(could_not_warm(&qualified), error)),
+                    Some(qualified) => {
+                        self.present(Refused::of(could_not_warm(&qualified), *error));
+                    }
                     None => {
                         self.warm.failed = Some(message.clone());
                         self.warm.refusals.refused(now.running);
@@ -3768,8 +3773,9 @@ impl State {
         let failed = |title: String, message: String| Refused {
             title,
             message,
-            code: None,
+            code: Some("app_open".into()),
             warnings: Vec::new(),
+            account: Some(qualified.clone()),
         };
         let lingering = match outcome {
             QuitOutcome::Quit { copy } => {
@@ -3885,6 +3891,7 @@ impl State {
                 code,
                 message,
                 warnings,
+                ..
             })) if code == "live_login_refused" => {
                 self.switching = None;
                 self.keep(&warnings, jobs);
@@ -4442,6 +4449,7 @@ impl State {
             message: refused.message,
             code: refused.code,
             warnings: refused.warnings,
+            account: refused.account,
         }
     }
 

@@ -2301,7 +2301,7 @@ fn a_sign_in_again_of_the_account_in_use_is_said_as_a_new_login() {
         .into_iter()
         .find(|notice| notice.id == "switch/desktop")
         .expect("what the sign-in did");
-    assert_eq!(notice.title, words::signed_in_again(None, "work"));
+    assert_eq!(notice.title, words::signed_in_to(None, "work"));
     assert_eq!(
         notice.lines,
         [words::signed_in_now("work", true, Some("Claude"))]

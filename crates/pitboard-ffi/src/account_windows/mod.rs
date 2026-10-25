@@ -38,10 +38,12 @@ pub(crate) use policy::{is_site_page, window_address};
 use pitboard_core::host::Os;
 
 /// What an alert says: its title, and the sentences below it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AlertText {
     pub title: String,
     pub message: String,
+    // for a failure, what to do about it; a question asks its own
+    pub next: Option<crate::present::NextStep>,
 }
 
 /// How a sentence names the machine Pitboard runs on, which keeps what a window keeps.

@@ -8,7 +8,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AlertTests
 {
-    private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.");
+    private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.", null);
     private static readonly WindowQuestion QuitChatGPT = new(
         new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
         Confirmed: new Intent.QuitAndSwitch("codex/spare"),

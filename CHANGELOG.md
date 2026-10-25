@@ -134,6 +134,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Renew parked logins daily** and **Warm up limits**.
 - The app's notifications are titled in the system's case, such as **5-Hour Limit Almost
   Reached** on macOS, under the name of the tool they are about.
+- What the app says went wrong ends with a button that does what to do next, such as **Sign In
+  Again**, **Show Diagnostics** or **Try Again**, or with **Learn More**, and names no
+  `pitboard` command.
 
 ### Removed
 

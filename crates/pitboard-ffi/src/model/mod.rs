@@ -538,6 +538,8 @@ pub(crate) struct Failure {
     pub message: String,
     pub code: Option<String>,
     pub warnings: Vec<Warning>,
+    // the account its next step is for, by its label with its tool
+    pub account: Option<String>,
 }
 
 // What the model reads afresh each time an app shows it.

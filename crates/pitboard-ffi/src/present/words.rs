@@ -479,12 +479,11 @@ pub(crate) fn switched_to(tool: Option<&str>, label: &str) -> String {
     }
 }
 
-/// The heading of a sign-in that put a new sign-in in use: "work is signed in again", "work
-/// in Codex is signed in again" beside another tool's accounts.
-pub(crate) fn signed_in_again(tool: Option<&str>, label: &str) -> String {
+// "Signed in to work", or "Signed in to work in Codex" beside another tool's accounts.
+pub(crate) fn signed_in_to(tool: Option<&str>, label: &str) -> String {
     match tool {
-        Some(tool) => format!("{label} in {tool} is signed in again"),
-        None => format!("{label} is signed in again"),
+        Some(tool) => format!("Signed in to {label} in {tool}"),
+        None => format!("Signed in to {label}"),
     }
 }
 
@@ -956,7 +955,62 @@ pub(crate) fn check_name(code: &str, name: &str) -> String {
 }
 
 pub(crate) fn check_text(text: &str) -> String {
-    typeset(&prose_capitalised(text))
+    typeset(&prose_capitalised(&without_commands(text)))
+}
+
+// The core's words less each sentence, or clause, naming a pitboard command a terminal runs.
+fn without_commands(core: &str) -> String {
+    // A bare `pitboard` may be a path, but after "run" or "with".
+    let names_one = |part: &str| {
+        part.contains("`pitboard ")
+            || part.match_indices("`pitboard`").any(|(at, _)| {
+                let before = part[..at]
+                    .split_whitespace()
+                    .next_back()
+                    .unwrap_or_default();
+                matches!(before.to_lowercase().as_str(), "run" | "running" | "with")
+            })
+    };
+    let ends_sentence = |c, next: Option<char>| {
+        matches!(c, '.' | '!' | '?') && next.is_none_or(char::is_whitespace)
+    };
+    let mut kept = String::with_capacity(core.len());
+    for said in pieces(core, ends_sentence) {
+        if !names_one(said) {
+            kept.push_str(said);
+            continue;
+        }
+        let before: String = pieces(said, |c, next| c == ';' && next == Some(' '))
+            .into_iter()
+            .take_while(|clause| !names_one(clause))
+            .collect();
+        if !before.is_empty() {
+            kept.push_str(before.trim_end().trim_end_matches(';'));
+            kept.push_str(". ");
+        }
+    }
+    kept.trim_end().to_owned()
+}
+
+// `text` cut after each character `ends` says ends a piece, outside backticks.
+fn pieces(text: &str, ends: impl Fn(char, Option<char>) -> bool) -> Vec<&str> {
+    let mut found = Vec::new();
+    let (mut start, mut quoted) = (0, false);
+    let mut chars = text.char_indices().peekable();
+    while let Some((_, c)) = chars.next() {
+        quoted ^= c == '`';
+        if quoted || !ends(c, chars.peek().map(|&(_, next)| next)) {
+            continue;
+        }
+        while chars.next_if(|&(_, next)| next.is_whitespace()).is_some() {}
+        let end = chars.peek().map_or(text.len(), |&(next, _)| next);
+        found.push(&text[start..end]);
+        start = end;
+    }
+    if start < text.len() {
+        found.push(&text[start..]);
+    }
+    found
 }
 
 // The apps' typography for the core's words, where what the core quotes keeps every letter.
@@ -1097,10 +1151,9 @@ fn contracted(text: &str) -> String {
     contracted
 }
 
-// The command line prints the core's words after "error:"; an app shows them on their own,
-// without a terminal's backticks.
+// The core's words as an app shows them: without a terminal's backticks or a command to run.
 pub(crate) fn sentence(text: &str) -> String {
-    let text = typeset(&prose_capitalised(text));
+    let text = typeset(&prose_capitalised(&without_commands(text)));
     if text.is_empty() || text.ends_with(['.', '!', '?', '…']) {
         text
     } else {
@@ -1335,6 +1388,12 @@ pub(crate) fn could_not_read_accounts(os: Os) -> String {
 
 pub(crate) fn try_again(os: Os) -> String {
     titled(os, "Try Again", "Try again")
+}
+
+pub(crate) const REFRESH: &str = "Refresh";
+
+pub(crate) fn learn_more(os: Os) -> String {
+    titled(os, "Learn More", "Learn more")
 }
 
 pub(crate) fn show_diagnostics(os: Os) -> String {
@@ -2535,11 +2594,208 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             tool.service(),
             bare(label)
         ),
+        Error::IdentityUnverifiable {
+            tool,
+            login: Unidentified::Parked { label },
+            cause,
+            detail,
+            ..
+        } => format!(
+            "Pitboard couldn’t confirm with {} whose sign-in is saved for {} ({detail}), so \
+             nothing has changed. {}",
+            tool.service(),
+            bare(label),
+            match cause {
+                Cause::Unreachable => "Check the connection and try again.",
+                Cause::RateLimited => "Try again in a few minutes.",
+                Cause::ServerError => "Try again later.",
+                _ => "Check for a Pitboard update.",
+            }
+        ),
         Error::ParkedCredentialCorrupt { label, detail } if inside_label(label) => format!(
             "The saved sign-in for {0} isn’t the one Pitboard saved ({detail}). Choose Sign In \
              Again… on {0}’s row.",
             bare(label)
         ),
+        // Claude Code's and Codex's, whose way on the failure's next step offers.
+        Error::AccountUnknown { label, .. } => format!(
+            "No {} account is added as {}.",
+            Key::parse(label).provider.name(),
+            bare(label)
+        ),
+        Error::NothingParked { tool, label } => format!(
+            "{} has no saved sign-in to switch to: the last one went back into use and {} has \
+             moved on from it.",
+            bare(label),
+            tool.name()
+        ),
+        Error::ParkedLoginExpired { label } => {
+            format!("The saved sign-in for {} has expired.", bare(label))
+        }
+        Error::ParkedCredentialMissing { label } => {
+            format!("The saved sign-in for {} is missing.", bare(label))
+        }
+        Error::ParkedCredentialCorrupt { label, detail } => format!(
+            "The saved sign-in for {} isn’t the one Pitboard saved ({detail}).",
+            bare(label)
+        ),
+        Error::ParkedLoginRefused { tool, label } => format!(
+            "{} no longer accepts {}’s saved sign-in, so Pitboard switched nothing and deleted \
+             it.",
+            tool.service(),
+            bare(label)
+        ),
+        Error::ParkedLoginBelongsElsewhere { label, who } => format!(
+            "{label}’s saved sign-in belongs to {who}, not to the account Pitboard has under that \
+             name. Nothing was switched.",
+            label = bare(label)
+        ),
+        Error::CannotForgetActiveAccount { label } => format!(
+            "{} is in use. Switch to another account before removing it.",
+            bare(label)
+        ),
+        Error::ParkSlotExhausted => "Pitboard found no free place to save this sign-in.".into(),
+        Error::SignInNotKept {
+            tool,
+            label,
+            detail,
+        } => format!(
+            "The new sign-in for {} couldn’t be put in use ({detail}), so it wasn’t kept, and {} \
+             keeps the one it has.",
+            bare(label),
+            tool.name()
+        ),
+        Error::SignInIncomplete => "The sign-in didn’t finish, so nothing was added.".into(),
+        Error::SignInNotInstalled {
+            label,
+            detail,
+            parked,
+            ..
+        } => {
+            let then = if *parked {
+                "The new sign-in is saved, so it isn’t lost."
+            } else {
+                "It couldn’t be saved either, so sign in to it again."
+            };
+            format!(
+                "Pitboard signed in to {} again and couldn’t confirm its new sign-in took the \
+                 place of the one in use ({detail}). {then}",
+                bare(label)
+            )
+        }
+        Error::SwitchDidNotHold { tool, to, .. } => match tool {
+            ProviderId::Claude => format!(
+                "A /logout in Claude Code removed {to}’s sign-in before the switch finished. \
+                 Both sign-ins are saved: sign in to any account you’ve added in Claude Code, \
+                 then switch to {to}.",
+                to = bare(to)
+            ),
+            ProviderId::Codex => format!(
+                "A codex session still running rewrote Codex’s sign-in during the switch, and \
+                 {}’s is still saved. Quit every running codex before you sign in or out of \
+                 Codex: either ends the sign-in it finds.",
+                bare(to)
+            ),
+            ProviderId::Desktop => "Claude was opened before the switch finished and wrote its \
+                                    own sign-in back. Quit Claude, then check which account it \
+                                    shows."
+                .into(),
+            _ => return None,
+        },
+        Error::SignInInProgress => "Another sign-in is already waiting in a terminal. Finish or \
+                                    cancel it there first."
+            .into(),
+        Error::LiveAccountNotEnrolled { tool, who } => format!(
+            "{who} is signed in to {} and isn’t added, so Pitboard can’t switch away from it.",
+            tool.name()
+        ),
+        Error::AlreadyEnrolled { email, label, .. } => format!(
+            "{email} is added already, as {}. Sign in to a different account to add another.",
+            bare(label)
+        ),
+        Error::LiveCredentialShapeUnexpected { tool, detail } => format!(
+            "The sign-in in use isn’t shaped like a {} sign-in ({detail}).",
+            tool.name()
+        ),
+        Error::RenewalFailed { label, detail, .. } => format!(
+            "Pitboard couldn’t refresh {}’s saved sign-in ({detail}), so its last reading is \
+             shown.",
+            bare(label)
+        ),
+        Error::ReplaceFailed {
+            tool,
+            label,
+            detail,
+        }
+        | Error::InstallFailed {
+            tool,
+            label,
+            detail,
+        } => format!(
+            "Pitboard couldn’t put {label}’s sign-in where {} reads it ({detail}). {label}’s \
+             sign-in is still saved, and nothing was lost.",
+            tool.name(),
+            label = bare(label)
+        ),
+        Error::SwitchCorrupted {
+            tool,
+            from,
+            to,
+            detail,
+            ..
+        } => format!(
+            "Pitboard couldn’t switch to {to}, or back to {from} ({detail}). {from}’s sign-in is \
+             still saved: sign in to any account you’ve added in {}, then switch to {from}.",
+            tool.name(),
+            from = bare(from),
+            to = bare(to)
+        ),
+        Error::StateCorrupt { path, source } => format!(
+            "Pitboard’s account list at {} is damaged ({source}). Deleting it starts over, and \
+             each account then needs adding again.",
+            path.display()
+        ),
+        Error::StateVersionUnknown { path, found } => format!(
+            "{} is in a format ({found}) no Pitboard has written. Deleting it starts over, and \
+             each account then needs adding again.",
+            path.display()
+        ),
+        Error::StateWrongMachine { path } => format!(
+            "{} was written on another computer, and saved sign-ins don’t move between computers.",
+            path.display()
+        ),
+        Error::StateOnSyncedDrive { path, marker } => format!(
+            "{} looks like it’s inside {marker}, which syncs to other computers. Saved sign-ins \
+             belong to one computer, so set PITBOARD_HOME to a local folder.",
+            path.display()
+        ),
+        Error::LeftLoginNotEnrolled { path, email, .. } => format!(
+            "{} holds {email}’s sign-in, an account you haven’t added, so Pitboard can’t clean \
+             it up. Add that account first.",
+            path.display()
+        ),
+        Error::UninstallWouldStrand {
+            label: Some(label), ..
+        } => format!(
+            "No Claude Desktop account is in use, and {label}’s sign-in is saved, so uninstalling \
+             would delete every Claude Desktop sign-in Pitboard holds. Switch to {label} first, \
+             or remove each Claude Desktop account.",
+            label = bare(label)
+        ),
+        Error::UninstallWouldStrand {
+            label: None,
+            set_aside,
+        } => {
+            let held = match set_aside.as_slice() {
+                [_] => "holds a Claude Desktop sign-in",
+                _ => "hold Claude Desktop sign-ins",
+            };
+            format!(
+                "No Claude Desktop account is in use, and {} {held} Pitboard moved out of the way, \
+                 so uninstalling would delete them. Add an account you keep first.",
+                listed(set_aside.iter().map(|path| path.display().to_string()))
+            )
+        }
         _ => return None,
     };
     Some(typeset(&said))
@@ -2565,12 +2821,8 @@ fn replaced(tool: ProviderId, label: &str, now: &Stored) -> String {
 }
 
 pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
-    if let CoreWarning::LoginReplaced {
-        tool, label, now, ..
-    } = warning
-        && !in_its_app(tool.code())
-    {
-        return Some(typeset(&replaced(*tool, label, now)));
+    if let Some(said) = in_app_any_warning(os, warning) {
+        return Some(typeset(&said));
     }
     let tool = warning.tool().filter(|tool| in_its_app(tool.code()))?;
     let app = tool.program();
@@ -2683,6 +2935,97 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
         _ => return None,
     };
     Some(typeset(&said))
+}
+
+// The app's words for a warning about Claude Code or Codex, or about any tool alike.
+fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
+    use pitboard_core::holder;
+    use pitboard_core::provider::Held;
+    let inside = |tool: &ProviderId| in_its_app(tool.code());
+    Some(match warning {
+        CoreWarning::LoginReplaced {
+            tool, label, now, ..
+        } if !inside(tool) => replaced(*tool, label, now),
+        CoreWarning::ParksPendingRemoval(1) => {
+            "1 old saved sign-in couldn’t be deleted yet. Pitboard tries again at its next change."
+                .into()
+        }
+        CoreWarning::ParksPendingRemoval(count) => format!(
+            "{count} old saved sign-ins couldn’t be deleted yet. Pitboard tries again at its next \
+             change."
+        ),
+        CoreWarning::ParkedLoginRefused { tool, label } => format!(
+            "{} no longer accepts {}’s saved sign-in, so it needs signing in to again.",
+            tool.service(),
+            bare(label)
+        ),
+        CoreWarning::LockCompromised { tool } => format!(
+            "{} took back its lock during this change and may have written a sign-in at the same \
+             time. Check that the right account is in use.",
+            tool.name()
+        ),
+        CoreWarning::FallbackLogin {
+            tool,
+            path,
+            held: Held::Login,
+        } => format!(
+            "{} holds another {} sign-in, which sessions already running keep after a switch. \
+             Clean Up keeps it for its account, then deletes the file.",
+            path.display(),
+            tool.name()
+        ),
+        CoreWarning::FallbackLogin {
+            tool,
+            path,
+            held: Held::NoLogin,
+        } => format!(
+            "{} holds no {} sign-in, and sessions already running don’t follow a switch while it’s \
+             there. Clean Up deletes it.",
+            path.display(),
+            tool.name()
+        ),
+        CoreWarning::FallbackLogin {
+            path,
+            held: Held::Unreadable,
+            ..
+        } => format!(
+            "{} is there, and Pitboard couldn’t read it. Sessions already running don’t follow a \
+             switch while it is.",
+            path.display()
+        ),
+        CoreWarning::SessionsStillRunning { from, holding } => format!(
+            "{} started before this switch {} still running and still using {from}. {} Don’t \
+             sign out in {}: that ends {from}’s sign-in, which Pitboard just saved.",
+            capitalised(&holder::described(holding)),
+            if holder::plural(holding) { "are" } else { "is" },
+            holder::remedies(holding, "to use the new account"),
+            if holder::plural(holding) {
+                "any of them"
+            } else {
+                "it"
+            },
+            from = bare(from)
+        ),
+        CoreWarning::SessionsUnknown { tool, from } => format!(
+            "Pitboard couldn’t tell whether {} sessions started before this switch are still \
+             running. Don’t sign out in one that is: that ends {from}’s sign-in, which Pitboard \
+             just saved.",
+            tool.name(),
+            from = bare(from)
+        ),
+        CoreWarning::SignInParkedNotInUse {
+            tool, label, why, ..
+        } => format!(
+            "{} goes on with the sign-in it has: Pitboard couldn’t tell whose it is ({why}), so \
+             it saved the new sign-in for {} instead of writing over that one.",
+            tool.name(),
+            bare(label)
+        ),
+        CoreWarning::RenewalFailed(error)
+        | CoreWarning::ConfigNotUpdated(error)
+        | CoreWarning::SwitchStuck(error) => in_app_refusal(os, error)?,
+        _ => return None,
+    })
 }
 
 // After Cancel Switch cancelled a switch, so never that nothing has changed.
@@ -3471,10 +3814,10 @@ mod tests {
             "Any codex session started before this switch keeps using personal until it is quit \
              and started again."
         );
-        assert_eq!(signed_in_again(None, "work"), "work is signed in again");
+        assert_eq!(signed_in_to(None, "work"), "Signed in to work");
         assert_eq!(
-            signed_in_again(Some("Codex"), "work"),
-            "work in Codex is signed in again"
+            signed_in_to(Some("Codex"), "work"),
+            "Signed in to work in Codex"
         );
         assert_eq!(
             signed_in_now("work", true, None),
@@ -4664,9 +5007,13 @@ mod tests {
             check_text("`work` is recorded in use and also holds a parked login"),
             "work is recorded in use and also holds a parked login"
         );
+        assert_eq!(check_text("Run `pitboard enroll work --sign-in`."), "");
         assert_eq!(
-            check_text("Run `pitboard enroll work --sign-in`."),
-            "Run pitboard enroll work --sign-in."
+            check_text(
+                "it has expired; run `pitboard doctor`. `PITBOARD_HOME` is `pitboard`. Run \
+                 `pitboard` to see who is signed in."
+            ),
+            "It has expired. PITBOARD_HOME is pitboard."
         );
     }
 
@@ -4772,9 +5119,10 @@ mod tests {
                 &Error::ParkedCredentialMissing {
                     label: "work".into(),
                 }
-            ),
-            None,
-            "Claude Code's says the core's sentence"
+            )
+            .as_deref(),
+            Some("The saved sign-in for work is missing."),
+            "Claude Code's says what is wrong, and its next step what to do"
         );
     }
 
@@ -4798,9 +5146,13 @@ mod tests {
             )
         );
         assert_eq!(
-            in_app_refusal(Os::MacOs, &untold(Cause::Unreachable)),
-            None,
-            "an outage is the core's sentence: try again"
+            in_app_refusal(Os::MacOs, &untold(Cause::Unreachable)).as_deref(),
+            Some(
+                "Pitboard couldn’t confirm with Anthropic whose sign-in is saved for dtg \
+                 (Anthropic answered 400), so nothing has changed. Check the connection and try \
+                 again."
+            ),
+            "an outage is tried again, not signed in to again"
         );
     }
 

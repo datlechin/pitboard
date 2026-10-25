@@ -32,6 +32,7 @@
 mod accounts;
 mod glance;
 mod machine;
+pub(crate) mod next;
 mod notices;
 mod removal;
 mod setup;
@@ -100,10 +101,18 @@ pub struct FailureText {
     pub id: u64,
     /// What was being done: "Couldn’t sign in to work".
     pub title: String,
-    /// What went wrong. Pitboard's errors already say what to do, so it is shown as it is.
+    /// What went wrong.
     pub message: String,
     /// Everything else it warned about, a sentence each.
     pub warnings: Vec<String>,
+    pub next: NextStep,
+}
+
+// What to do about a failure: a button that does it, or a link to the docs about its code.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NextStep {
+    Act { choice: Choice },
+    Learn { link: SetupLink },
 }
 
 /// One tool's accounts, under its name: one section, unheaded, while every account shown is
@@ -196,6 +205,8 @@ pub struct AccountNote {
     pub text: String,
     // what does something about it, where anything does
     pub action: Option<AccountAction>,
+    // where nothing does, the docs about it
+    pub learn: Option<SetupLink>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -403,6 +414,8 @@ pub struct PanelNotice {
     pub until_label: Option<String>,
     /// What can be done about it: buttons, and the one that puts it away.
     pub actions: Vec<NoticeAction>,
+    // where no button does anything about a warning or a problem, the docs about it
+    pub learn: Option<SetupLink>,
 }
 
 /// Something that can be done about a notice.
@@ -855,7 +868,8 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         window_request: state.window,
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
-        sheet_failure: state.sheet_failure.as_ref().map(sheets::failure_text),
+        sheet_failure: (state.sheet_failure.as_ref())
+            .map(|failure| sheets::failure_text(os, failure)),
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
         account_menu: accounts::account_menu(seen.os),
@@ -871,7 +885,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         sheet_text: sheets::sheet_text(&seen),
         signing_in_text: sheets::signing_in_text(&seen),
         stow_text: sheets::stow_text(&seen),
-        failure_alert: state.presented.as_ref().map(sheets::failure_alert),
+        failure_alert: (state.presented.as_ref()).map(|failure| sheets::failure_alert(os, failure)),
         machine: machine::machine(&seen),
         account_windows: windows::account_windows(&seen),
         uninstall: removal::uninstall(&seen),
@@ -890,6 +904,7 @@ pub(crate) fn alert_of(title: &str, message: &str, warnings: &[crate::Warning]) 
     AlertText {
         title: title.to_owned(),
         message: paragraphs.join("\n\n"),
+        next: None,
     }
 }
 

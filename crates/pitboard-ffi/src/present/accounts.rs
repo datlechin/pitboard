@@ -277,7 +277,13 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let actions = actions(seen, account, action.as_ref(), busy, &spoken_name);
     let unnamed = account.label.is_none() && account.signed_in && !account.unplaced;
     let acting = |kind| actions.iter().find(|action| action.kind == kind).cloned();
-    let note = |kind, text, action| AccountNote { kind, text, action };
+    // A note nothing in the app does anything about says where the docs explain it.
+    let note = |kind, text, action: Option<AccountAction>| AccountNote {
+        kind,
+        text,
+        learn: action.is_none().then(|| super::next::of_stale(seen.os)),
+        action,
+    };
     let problem_note = if needs_sign_in {
         let why = (problem.clone()).unwrap_or_else(|| sign_in_standing.unwrap_or_default().into());
         Some(note(

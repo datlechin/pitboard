@@ -138,7 +138,7 @@ fn ids(shown: &Snapshot) -> Vec<String> {
         .collect()
 }
 
-fn give_up() -> NoticeAction {
+fn cancel_switch() -> NoticeAction {
     NoticeAction {
         title: words::cancel_switch(OS, true),
         intent: Intent::AbandonStuckSwitch,
@@ -180,6 +180,7 @@ fn notice(
         until: None,
         until_label: None,
         actions,
+        learn: None,
     }
 }
 
@@ -1670,7 +1671,7 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
                 &words::switch_waits_for("Anthropic or OpenAI"),
                 words::CANCELLING_KEEPS_SIGN_INS,
             ],
-            vec![give_up()],
+            vec![cancel_switch()],
         )
     );
     assert_eq!(notices[1].title, words::warning_heading(&overridden()));
@@ -1701,7 +1702,7 @@ fn an_interrupted_switch_that_stopped_the_read_gives_its_reason() {
             Severity::Error,
             words::SWITCH_WAITING,
             &[reason, words::CANCELLING_KEEPS_SIGN_INS],
-            vec![give_up()],
+            vec![cancel_switch()],
         )]
     );
 }
@@ -1741,7 +1742,14 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
             Severity::Error,
             words::COULD_NOT_READ_USAGE,
             &[reason, words::LAST_MEASURED],
-            Vec::new(),
+            vec![NoticeAction {
+                title: words::try_again(OS),
+                intent: Intent::Refresh { asked: true },
+                dismisses: false,
+                switches: false,
+                enabled: true,
+                confirm: None,
+            }],
         )
     );
     assert_eq!(notices[1].lines, [overridden().message]);
@@ -2048,15 +2056,18 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
     switch(&mut model, &mut machine, "codex/work");
     assert_eq!(
         model.shown().notices,
-        [notice(
-            "switch/codex",
-            Severity::Warning,
-            &words::switched_to(None, "work"),
-            &[&words::restart_notice("codex", "personal")],
-            vec![dismiss(Intent::DismissSwitch {
-                provider: "codex".into()
-            })],
-        )]
+        [PanelNotice {
+            learn: Some(crate::present::next::of_warning(OS)),
+            ..notice(
+                "switch/codex",
+                Severity::Warning,
+                &words::switched_to(None, "work"),
+                &[&words::restart_notice("codex", "personal")],
+                vec![dismiss(Intent::DismissSwitch {
+                    provider: "codex".into()
+                })],
+            )
+        }]
     );
 
     let counted = warning(
@@ -2146,7 +2157,7 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
         [notice(
             "switch/claude",
             Severity::Info,
-            &words::signed_in_again(None, "work"),
+            &words::signed_in_to(None, "work"),
             &[&words::signed_in_now("work", true, None)],
             vec![dismiss(Intent::DismissSwitch {
                 provider: "claude".into()
@@ -2168,18 +2179,21 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
     signs_in(&mut model, &mut machine, "codex", None, &[]);
     assert_eq!(
         model.shown().notices,
-        [notice(
-            "switch/codex",
-            Severity::Warning,
-            &words::signed_in_again(None, "work"),
-            &[
-                &words::signed_in_now("work", false, None),
-                &old_login.message,
-            ],
-            vec![dismiss(Intent::DismissSwitch {
-                provider: "codex".into()
-            })],
-        )]
+        [PanelNotice {
+            learn: Some(crate::present::next::of_warning(OS)),
+            ..notice(
+                "switch/codex",
+                Severity::Warning,
+                &words::signed_in_to(None, "work"),
+                &[
+                    &words::signed_in_now("work", false, None),
+                    &old_login.message,
+                ],
+                vec![dismiss(Intent::DismissSwitch {
+                    provider: "codex".into()
+                })],
+            )
+        }]
     );
 }
 
@@ -2195,7 +2209,7 @@ fn a_sign_in_notice_names_its_tool_beside_another() {
     signs_in(&mut model, &mut machine, "codex", Some("work"), &[]);
     let notice = model.shown().notices.remove(0);
     assert_eq!(notice.id, "switch/codex");
-    assert_eq!(notice.title, words::signed_in_again(Some("Codex"), "work"));
+    assert_eq!(notice.title, words::signed_in_to(Some("Codex"), "work"));
 }
 
 /// Every warning a read carries is a notice of its own, headed from its code so the menu can
@@ -3699,6 +3713,65 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     assert_eq!(failure.title, words::could_not_switch("claude/nobody"));
     assert_eq!(failure.message, "There is no account called claude/nobody.");
     assert_eq!(shown.window_request.serial, 1);
+}
+
+// Plan.md section 3: a refusal, a warning, a failed read and a row's problem say what to do.
+#[test]
+fn every_failure_the_apps_show_ends_with_an_action_or_a_link() {
+    let codes = [
+        "sessions_unknown",
+        "auth_overridden",
+        "fallback_login",
+        "parked_login_refused",
+        "lock_compromised",
+        "parks_pending_removal",
+        "written_on_the_command_line",
+        "config_names_another",
+        "set_aside",
+        "in_use_unconfirmed",
+    ];
+    let accounts = vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("spare"))
+            .explained("Anthropic could not be reached")
+            .build(),
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        unplaced("codex", false),
+    ];
+    let mut model = at_noon();
+    let mut machine = Stub::reading(Ok(warned(
+        accounts,
+        codes.map(|code| warning(code, "It happened.")).to_vec(),
+    )));
+    model.refresh(&mut machine);
+    machine.answer = Err(refusal(
+        "unreachable",
+        "Anthropic could not be reached.",
+        Vec::new(),
+    ));
+    model.refresh(&mut machine);
+    machine.switched = Err(refusal("nothing_parked", "Nothing is saved.", Vec::new()));
+    switch(&mut model, &mut machine, "claude/old");
+    for shown in [model.on_a_mac(), model.on_windows()] {
+        assert!(shown.notices.iter().any(|notice| notice.id == "read"));
+        for notice in shown
+            .notices
+            .iter()
+            .filter(|n| n.severity != Severity::Info)
+        {
+            let acts = notice.actions.iter().any(|action| !action.dismisses);
+            assert!(acts || notice.learn.is_some(), "{notice:?}");
+        }
+        let notes = (shown.sections.iter())
+            .flat_map(|section| &section.accounts)
+            .flat_map(|row| &row.notes);
+        for note in notes {
+            assert!(note.action.is_some() || note.learn.is_some(), "{note:?}");
+        }
+        assert!(shown.failure_alert.and_then(|alert| alert.next).is_some());
+    }
 }
 
 // The countdown to a reset moves with nothing read, and the row's clock time stays.

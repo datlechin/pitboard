@@ -137,7 +137,7 @@ public sealed class AccountSheetTests
         var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
         await using var up = await Up.Over(renaming);
         await up.Type("sheet.name", "work");
-        var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", []);
+        var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", [], Items.LearnMore);
 
         up.App.Apply(renaming with { Revision = 2, SheetFailure = failure });
 
@@ -157,7 +157,7 @@ public sealed class AccountSheetTests
         up.App.Apply(renaming with
         {
             Revision = 2,
-            SheetFailure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", []),
+            SheetFailure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", [], Items.LearnMore),
         });
         await Views.Until(() => bar.IsOpen, "the failure was not said");
         var opened = new List<bool>();
@@ -166,7 +166,7 @@ public sealed class AccountSheetTests
         up.App.Apply(renaming with
         {
             Revision = 3,
-            SheetFailure = new FailureText(8, "Couldn’t rename personal", "home is already the name of another account.", []),
+            SheetFailure = new FailureText(8, "Couldn’t rename personal", "home is already the name of another account.", [], Items.LearnMore),
         });
 
         await Views.Until(() => bar.Message == "home is already the name of another account.", "the second failure was not said");
@@ -192,7 +192,7 @@ public sealed class AccountSheetTests
             SigningIn = null,
             SigningInText = null,
             SheetFailure = new FailureText(
-                9, "Couldn’t add the account", "The sign-in did not finish, so nothing was enrolled.", []),
+                9, "Couldn’t add the account", "The sign-in did not finish, so nothing was enrolled.", [], Items.LearnMore),
         });
 
         var bar = up.Element<InfoBar>("sheet.failure");
@@ -346,7 +346,7 @@ public sealed class AccountSheetTests
         Assert.AreEqual("A name can’t contain “/”.", Views.Description(field));
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled);
 
-        var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", []);
+        var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", [], Items.LearnMore);
         up.App.Apply(renaming with { Revision = 2, SheetFailure = failure });
         await Views.Until(() => up.Element<InfoBar>("sheet.failure").IsOpen, "the failure was not said");
         await up.Type("sheet.name", "home");

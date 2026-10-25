@@ -233,6 +233,7 @@ impl Refusal {
             code: self.code.clone(),
             message: self.message.clone(),
             warnings: self.warnings.clone(),
+            account: None,
         }
     }
 }

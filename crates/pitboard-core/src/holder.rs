@@ -247,7 +247,7 @@ impl Holding {
 }
 
 /// Everything running, as one noun phrase: "2 `codex` sessions and the ChatGPT app".
-pub(crate) fn described(holding: &[Holding]) -> String {
+pub fn described(holding: &[Holding]) -> String {
     crate::words::listed(holding.iter().map(Holding::phrase))
 }
 
@@ -261,7 +261,7 @@ pub(crate) fn described_with_pids(holding: &[Holding]) -> String {
 }
 
 /// Whether what is running reads as more than one thing, for "is" or "are".
-pub(crate) fn plural(holding: &[Holding]) -> bool {
+pub fn plural(holding: &[Holding]) -> bool {
     holding.iter().map(Holding::things).sum::<usize>() > 1
 }
 
@@ -269,7 +269,7 @@ pub(crate) fn plural(holding: &[Holding]) -> bool {
 /// "Quit them and start again to use the new account." Several kinds are each said in turn,
 /// apart, since one clause can have an "and" of its own: "To use the new account: quit the
 /// `codex` sessions and start them again; quit ChatGPT with Command-Q and open it again."
-pub(crate) fn remedies(holding: &[Holding], purpose: &str) -> String {
+pub fn remedies(holding: &[Holding], purpose: &str) -> String {
     match holding {
         [] => String::new(),
         [one] => format!("{} {purpose}.", capitalised(&one.clause(true))),

@@ -60,7 +60,10 @@ internal static class Items
         new(
             Id: id, Severity: Severity.Info, SpokenSeverity: "Note", Title: "Switched Codex to spare",
             Lines: ["Any codex session started before this switch keeps using main."], Until: null, UntilLabel: null,
-            Actions: actions);
+            Actions: actions, Learn: null);
+
+    public static NextStep LearnMore =>
+        new NextStep.Learn(new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors"));
 
     public static NoticeAction Dismiss(string provider) =>
         new(Title: "Dismiss", Intent: new Intent.DismissSwitch(provider), Dismisses: true, Switches: false, Enabled: true, Confirm: null);

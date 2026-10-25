@@ -39,7 +39,7 @@ pub(crate) fn desktop_machine(open: bool) -> Stub {
 fn warm_refused((told_apart, refused): (Apart, Refusal)) -> WarmRefused {
     WarmRefused {
         told_apart,
-        error: refused.error(),
+        error: Box::new(refused.error()),
     }
 }
 

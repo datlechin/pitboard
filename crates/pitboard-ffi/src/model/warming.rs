@@ -256,7 +256,8 @@ fn a_failure_in_other_words_is_notified_once() {
             code,
             message,
             warnings,
-        } = refused.error;
+            ..
+        } = *refused.error;
         (refused.told_apart, refusal(&code, &message, warnings))
     };
     let (first, second) = (refused(), refused());

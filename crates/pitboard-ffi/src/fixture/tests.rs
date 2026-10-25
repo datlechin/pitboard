@@ -995,6 +995,11 @@ fn a_stopped_move_is_given_up_from_the_app() {
         Some(crate::account_windows::AlertText {
             title: words::could_not_switch("desktop/home"),
             message: words::in_app_refusal(OS, &undetermined).expect("the app's words"),
+            next: Some(crate::present::next::of_failure(
+                OS,
+                Some("recovery_undetermined"),
+                Some("desktop/work")
+            )),
         })
     );
     let notice = (refused.notices.iter())

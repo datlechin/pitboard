@@ -72,6 +72,7 @@ pub fn remove_data_alert(account: WindowAccount) -> AlertText {
 fn remove_data_alert_on(os: Os, account: &WindowAccount) -> AlertText {
     let name = &account.site.name;
     AlertText {
+        next: None,
         title: format!("Remove {name} data for “{}”?", account.label),
         message: format!(
             "Pitboard removes the cookies and everything else {name} keeps in this window on \
