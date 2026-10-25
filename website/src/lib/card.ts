@@ -7,9 +7,15 @@ import { TAGLINE } from "../data/site.ts";
 import { clock, tools, type Tool } from "../data/world.ts";
 import { isInUse, listed, menuBarTitle, menuLine, menuTitle } from "./words.ts";
 
-export const WIDTH = 1200;
-export const HEIGHT = 630;
-// Words stay between these: Messages on a phone shows about the middle 900 pixels.
+export interface Size {
+  width: number;
+  height: number;
+}
+export const OPEN_GRAPH: Size = { width: 1200, height: 630 };
+// GitHub shows a repository's social preview at 2:1 and crops any other shape.
+export const GITHUB: Size = { width: 1280, height: 640 };
+// Laid out on OPEN_GRAPH. Words stay between these: Messages on a phone shows about the middle
+// 900 pixels.
 const LEFT = 176;
 const RIGHT = 1040;
 const LOGO_TOP = 96;
@@ -96,34 +102,35 @@ function lockup(assets: Assets, c: Colors): El {
 }
 
 // the desk's wall: a gradient under rings 40 points apart, centred off the lower left
-function wall(c: Colors): El {
-  const cx = -0.1 * WIDTH;
-  const cy = 1.35 * HEIGHT;
+function wall(c: Colors, { width, height }: Size): El {
+  const cx = -0.1 * width;
+  const cy = 1.35 * height;
   const rings = [];
-  for (let r = pt(39.5); r < Math.hypot(WIDTH - cx, cy); r += pt(40)) {
+  for (let r = pt(39.5); r < Math.hypot(width - cx, cy); r += pt(40)) {
     rings.push(`<circle cx="${cx}" cy="${cy}" r="${r}"/>`);
   }
-  const body = `<defs><linearGradient id="w" x2="0" y2="1"><stop stop-color="${c["wall-a"]}"/><stop offset="1" stop-color="${c["wall-b"]}"/></linearGradient></defs><rect width="${WIDTH}" height="${HEIGHT}" fill="url(#w)"/><g fill="none" stroke="${c["wall-line"]}" stroke-width="${pt(1)}">${rings.join("")}</g>`;
-  return img(svg(`0 0 ${WIDTH} ${HEIGHT}`, body), WIDTH, HEIGHT, {
+  const body = `<defs><linearGradient id="w" x2="0" y2="1"><stop stop-color="${c["wall-a"]}"/><stop offset="1" stop-color="${c["wall-b"]}"/></linearGradient></defs><rect width="${width}" height="${height}" fill="url(#w)"/><g fill="none" stroke="${c["wall-line"]}" stroke-width="${pt(1)}">${rings.join("")}</g>`;
+  return img(svg(`0 0 ${width} ${height}`, body), width, height, {
     position: "absolute",
     left: 0,
     top: 0,
   });
 }
 
-const frame = (assets: Assets, c: Colors, content: El[], over: El[] = []) =>
+// The menu bar holds the top edge, so a wider card centres the words and a taller one grows down.
+const frame = (assets: Assets, c: Colors, size: Size, content: El[], over: El[] = []) =>
   h(
     "div",
-    { position: "relative", width: WIDTH, height: HEIGHT, fontFamily: "Inter" },
-    wall(c),
+    { position: "relative", width: size.width, height: size.height, fontFamily: "Inter" },
+    wall(c, size),
     h(
       "div",
       {
         position: "absolute",
-        left: LEFT,
+        left: LEFT + (size.width - OPEN_GRAPH.width) / 2,
         top: LOGO_TOP,
         width: RIGHT - LEFT,
-        height: HEIGHT - LOGO_TOP,
+        height: size.height - LOGO_TOP,
         flexDirection: "column",
       },
       lockup(assets, c),
@@ -135,8 +142,8 @@ const frame = (assets: Assets, c: Colors, content: El[], over: El[] = []) =>
       position: "absolute",
       left: 0,
       top: 0,
-      width: WIDTH,
-      height: HEIGHT,
+      width: size.width,
+      height: size.height,
       border: `1px solid ${c["desk-edge"]}`,
     }),
   );
@@ -220,7 +227,7 @@ function menu(c: Colors): El {
 }
 
 // MenuBar.astro, with the clock's time alone so the menu clears the headline
-function menuBar(assets: Assets, c: Colors): El {
+function menuBar(assets: Assets, c: Colors, width: number): El {
   const color = c["mac-bar-text"];
   const item = (children: El[], style: Style = {}) =>
     h(
@@ -248,7 +255,7 @@ function menuBar(assets: Assets, c: Colors): El {
       position: "absolute",
       left: 0,
       top: 0,
-      width: WIDTH,
+      width,
       height: pt(24),
       alignItems: "center",
       justifyContent: "flex-end",
@@ -275,9 +282,9 @@ function menuBar(assets: Assets, c: Colors): El {
   );
 }
 
-function tree(card: Card, assets: Assets, c: Colors): El {
+function tree(card: Card, assets: Assets, c: Colors, size: Size): El {
   if (card.kind === "page") {
-    return frame(assets, c, [
+    return frame(assets, c, size, [
       h(
         "div",
         mono(500, 24, c["muted"], {
@@ -301,6 +308,7 @@ function tree(card: Card, assets: Assets, c: Colors): El {
   return frame(
     assets,
     c,
+    size,
     [
       h(
         "div",
@@ -314,7 +322,7 @@ function tree(card: Card, assets: Assets, c: Colors): El {
         TAGLINE,
       ),
     ],
-    [menuBar(assets, c)],
+    [menuBar(assets, c, size.width)],
   );
 }
 
@@ -332,18 +340,18 @@ export function describe(card: Card): string {
   return `Pitboard's logo above the line: ${TAGLINE} On the right, Pitboard's menu open below its menu bar item, ${menuBarTitle("after")}. ${sections.join("; ")}; each account shows its plan and how much of each limit it has used.`;
 }
 
-export function layout(card: Card, assets: Assets, o: { embedFont?: boolean } = {}) {
+export function layout(card: Card, assets: Assets, o: { embedFont?: boolean; size?: Size } = {}) {
+  const size = o.size ?? OPEN_GRAPH;
   // satori types its input as a React element, which this tree has the shape of
-  return satori(tree(card, assets, darkColors(assets.css)) as never, {
-    width: WIDTH,
-    height: HEIGHT,
+  return satori(tree(card, assets, darkColors(assets.css), size) as never, {
+    ...size,
     fonts: assets.fonts,
     embedFont: o.embedFont ?? true,
   });
 }
 
-export async function render(card: Card, assets: Assets): Promise<Buffer> {
-  return sharp(Buffer.from(await layout(card, assets)))
+export async function render(card: Card, assets: Assets, size = OPEN_GRAPH): Promise<Buffer> {
+  return sharp(Buffer.from(await layout(card, assets, { size })))
     .flatten({ background: darkColors(assets.css)["page"] })
     .removeAlpha()
     .png({ compressionLevel: 9, adaptiveFiltering: true })
