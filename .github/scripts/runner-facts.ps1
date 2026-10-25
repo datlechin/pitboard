@@ -1800,6 +1800,89 @@ function Measure-JobUser($Result) {
     Invoke-Row $Result 'rf_f3' { Measure-BrowserFolder $null (Join-Path $s 'f3') }
 }
 
+# RF-S1: what the site's PowerShell terminal draws, read in Windows PowerShell 5.1 as the job's
+# user, with the zip package-windows.ps1 makes on the process's PATH and its completion script
+# dot-sourced under RemoteSigned, as the docs set them up: the order Tab offers pitboard's
+# arguments in, the keys PSReadLine binds, and what a command that is not found prints, laid out
+# 80 columns wide as the site's terminal is. It changes nothing outside the scratch folder.
+$windowsPowerShellFacts = @'
+param([string] $Folder, [string] $Out)
+$ErrorActionPreference = 'Stop'
+$env:PATH = "$Folder;$env:PATH"
+. (Join-Path $Folder 'completions\pitboard.ps1')
+$said = [ordered]@{
+    version = $PSVersionTable.PSVersion.ToString()
+    culture = (Get-Culture).Name
+    execution_policy = [string] (Get-ExecutionPolicy)
+    pitboard = [string] (Get-Command pitboard).CommandType
+    error_view = [string] $ErrorView
+    error_colors = @([string] $Host.PrivateData.ErrorForegroundColor, [string] $Host.PrivateData.ErrorBackgroundColor)
+}
+$said.completion = @(foreach ($typed in 'pitboard ', 'pitboard u', 'pitboard s', 'pitboard -', 'pitboard use ', 'pitboard watch ', 'pitboard completions ') {
+    $offered = TabExpansion2 -inputScript $typed -cursorColumn $typed.Length
+    [ordered]@{
+        typed = $typed
+        replaces = @($offered.ReplacementIndex, $offered.ReplacementLength)
+        texts = @($offered.CompletionMatches | ForEach-Object CompletionText)
+        list_items = @($offered.CompletionMatches | ForEach-Object ListItemText)
+    }
+})
+# A line typed at the prompt runs as a script of its own, as each does here.
+$said.not_found = @(foreach ($typed in 'foo', 'pitbord') {
+    $shell = [powershell]::Create().AddScript($typed)
+    $null = $shell.Invoke()
+    $record = $shell.Streams.Error[0]
+    [ordered]@{
+        typed = $typed
+        lines = @(($record | Out-String -Width 80) -split '\r?\n')
+        error_id = $record.FullyQualifiedErrorId
+    }
+})
+try {
+    Import-Module PSReadLine
+    $said.psreadline = [ordered]@{
+        version = [string] (Get-Module PSReadLine).Version
+        edit_mode = [string] (Get-PSReadLineOption).EditMode
+        keys = [ordered]@{}
+    }
+    foreach ($handler in Get-PSReadLineKeyHandler | Where-Object Key -ne 'Unbound') {
+        $said.psreadline.keys[$handler.Key] = $handler.Function
+    }
+} catch {
+    $said.psreadline = [ordered]@{ error = $_.Exception.Message }
+}
+$said | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Out -Encoding UTF8
+'@
+
+function Measure-WindowsPowerShell {
+    if (-not $Pitboard) { throw 'no -Pitboard build was given' }
+    $s = Join-Path $scratch 'windows-powershell'
+    New-Item -ItemType Directory -Force -Path $s | Out-Null
+    $zip = & (Join-Path $PSScriptRoot 'package-windows.ps1') -Exe $Pitboard -Version (Get-WorkspaceVersion) -Triple $Triple -Out $s
+    $folder = $zip -replace '\.zip$', ''
+    $script = Join-Path $s 'facts.ps1'
+    Set-Content -LiteralPath $script -Value $windowsPowerShellFacts -Encoding utf8
+    $out = Join-Path $s 'facts.json'
+    $arguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned', '-File', $script, '-Folder', $folder, '-Out', $out)
+    # Windows PowerShell makes its own PSModulePath where none is set. The one PowerShell 7 hands
+    # on keeps it from its own modules (docs/facts/site.md).
+    $own = @{ PSModulePath = $null }
+    $process = Start-Process -FilePath 'powershell.exe' -ArgumentList (Format-Arguments $arguments) -Environment $own -WorkingDirectory $folder `
+        -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $s 'facts-out.txt') -RedirectStandardError (Join-Path $s 'facts-err.txt')
+    $null = $process.Handle
+    $waited = Wait-Bounded $process 120
+    $r = [ordered]@{ timed_out = $waited.TimedOut; exit = $waited.Exit; facts = (Read-Json $out) }
+    if ($waited.Exit -ne 0) { $r.stderr_tail = Get-ErrorTail (Join-Path $s 'facts-err.txt') $null }
+    # What the console host itself writes for one, to an error stream sent to a file.
+    $written = Join-Path $s 'not-found-err.txt'
+    $process = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -NonInteractive -Command foo' -Environment $own -WorkingDirectory $folder `
+        -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $s 'not-found-out.txt') -RedirectStandardError $written
+    $null = $process.Handle
+    $waited = Wait-Bounded $process 60
+    $r.not_found_written = [ordered]@{ exit = $waited.Exit; lines = @(Get-Content -LiteralPath $written -ErrorAction SilentlyContinue) }
+    $r
+}
+
 # L2, L3, L4 and L8: the command line as Scoop, winget, a folder on the user PATH and
 # ~\.cargo\bin put it, the gated build in the zips package-windows.ps1 makes, served from a
 # loopback server. Each change is undone in the finally below.
@@ -1964,15 +2047,20 @@ while ($listener.IsListening) {
 }
 '@
 
+# Cargo.toml's [workspace.package] version.
+function Get-WorkspaceVersion {
+    $section = ''
+    foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\Cargo.toml')) {
+        if ($line -match '^\[(.+)\]\s*$') { $section = $Matches[1] }
+        elseif ($section -eq 'workspace.package' -and $line -match '^version = "(.+)"') { return $Matches[1] }
+    }
+    throw 'Cargo.toml names no workspace version'
+}
+
 function Measure-Channels($Result) {
     if (-not $Pitboard) { throw 'no -Pitboard build was given' }
     $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-    $version = $null
-    $section = ''
-    foreach ($line in Get-Content -LiteralPath (Join-Path $root 'Cargo.toml')) {
-        if ($line -match '^\[(.+)\]\s*$') { $section = $Matches[1] }
-        elseif ($section -eq 'workspace.package' -and $line -match '^version = "(.+)"') { $version = $Matches[1]; break }
-    }
+    $version = Get-WorkspaceVersion
     $parts = $version -split '[.-]'
     $next = "$($parts[0]).$($parts[1]).$([int] $parts[2] + 1)"
     $Result.versions = @($version, $next)
@@ -2383,6 +2471,8 @@ try {
     Save-Report
     $report.vhd = [System.Collections.Generic.List[object]]::new()
     try { Get-Vhds $report.vhd } catch { $report.vhd_error = $_.Exception.Message }
+    Save-Report
+    $report.windows_powershell = Invoke-Fact { Measure-WindowsPowerShell }
     Save-Report
 
     $report.tools = [ordered]@{}

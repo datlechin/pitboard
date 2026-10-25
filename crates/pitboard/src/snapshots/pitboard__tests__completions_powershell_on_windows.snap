@@ -1,0 +1,435 @@
+---
+source: crates/pitboard/src/main.rs
+expression: "completions(clap_complete::Shell::PowerShell)"
+---
+
+using namespace System.Management.Automation
+using namespace System.Management.Automation.Language
+
+Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+
+    $commandElements = $commandAst.CommandElements
+    $command = @(
+        'pitboard'
+        for ($i = 1; $i -lt $commandElements.Count; $i++) {
+            $element = $commandElements[$i]
+            if ($element -isnot [StringConstantExpressionAst] -or
+                $element.StringConstantType -ne [StringConstantType]::BareWord -or
+                $element.Value.StartsWith('-') -or
+                $element.Value -eq $wordToComplete) {
+                break
+        }
+        $element.Value
+    }) -join ';'
+
+    $completions = @(switch ($command) {
+        'pitboard' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', '-V ', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'What is signed in, and how much each Claude Code and Codex account has left (the default)')
+            [CompletionResult]::new('use', 'use', [CompletionResultType]::ParameterValue, 'Switch a tool to an enrolled account')
+            [CompletionResult]::new('enroll', 'enroll', [CompletionResultType]::ParameterValue, 'Add an account: the one signed in now, or with --sign-in, another one')
+            [CompletionResult]::new('rename', 'rename', [CompletionResultType]::ParameterValue, 'Change the label an account is enrolled under')
+            [CompletionResult]::new('forget', 'forget', [CompletionResultType]::ParameterValue, 'Drop an account and its parked login')
+            [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Switch Claude Code before the account in use runs out, and warm up accounts')
+            [CompletionResult]::new('warm', 'warm', [CompletionResultType]::ParameterValue, 'Start an account''s five-hour period early, so it resets sooner')
+            [CompletionResult]::new('statusline', 'statusline', [CompletionResultType]::ParameterValue, 'One line for Claude Code''s status bar; reads its session JSON on stdin')
+            [CompletionResult]::new('renew', 'renew', [CompletionResultType]::ParameterValue, 'Renew every parked login that is due, and nothing else')
+            [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Keep parked logins alive without running anything yourself')
+            [CompletionResult]::new('log', 'log', [CompletionResultType]::ParameterValue, 'What Pitboard has changed, and when')
+            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Check that what Pitboard relies on still holds on this machine')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files')
+            [CompletionResult]::new('stow', 'stow', [CompletionResultType]::ParameterValue, 'Put away the login Claude Code left in a file behind Credential Manager, then delete the file')
+            [CompletionResult]::new('repair', 'repair', [CompletionResultType]::ParameterValue, 'Ask the credential store what parked logins are here, and account for every one')
+            [CompletionResult]::new('abandon', 'abandon', [CompletionResultType]::ParameterValue, 'Give up on an interrupted switch that cannot be finished, keeping every login')
+            [CompletionResult]::new('adopt', 'adopt', [CompletionResultType]::ParameterValue, 'Take over a Pitboard directory another computer wrote, keeping the accounts')
+            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Print a shell completion script')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;status' {
+            [CompletionResult]::new('--offline', '--offline', [CompletionResultType]::ParameterName, 'Answer from what was last measured, without asking anyone')
+            [CompletionResult]::new('--fresh', '--fresh', [CompletionResultType]::ParameterName, 'Ask about every account, even one asked about moments ago')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;use' {
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Where the service refuses the login in use for good, put this account''s login in its place without asking; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Where the service refuses the login in use for good, put this account''s login in its place without asking; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;enroll' {
+            [CompletionResult]::new('--sign-in', '--sign-in', [CompletionResultType]::ParameterName, 'Sign in to another account first, through the tool''s own sign-in')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;rename' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;forget' {
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Do not ask first; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Do not ask first; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;watch' {
+            [CompletionResult]::new('--at', '--at', [CompletionResultType]::ParameterName, 'Switch once a limit of the account in use reaches this share, from 50 to 99')
+            [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Have this computer''s own service manager run `pitboard watch` from now on and at each sign-in')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say whether it is installed')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Stop it and take it away')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;watch;install' {
+            [CompletionResult]::new('--at', '--at', [CompletionResultType]::ParameterName, 'Switch once a limit of the account in use reaches this share, from 50 to 99')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;watch;status' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;watch;uninstall' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;watch;help' {
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Have this computer''s own service manager run `pitboard watch` from now on and at each sign-in')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say whether it is installed')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Stop it and take it away')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;watch;help;install' {
+            break
+        }
+        'pitboard;watch;help;status' {
+            break
+        }
+        'pitboard;watch;help;uninstall' {
+            break
+        }
+        'pitboard;watch;help;help' {
+            break
+        }
+        'pitboard;warm' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('now', 'now', [CompletionResultType]::ParameterValue, 'Start an account''s five-hour period now, whatever the span, through one short request Claude Code makes with that account''s login')
+            [CompletionResult]::new('on', 'on', [CompletionResultType]::ParameterValue, 'Warm up an account from now on, within the span `range` sets')
+            [CompletionResult]::new('off', 'off', [CompletionResultType]::ParameterValue, 'Stop warming up an account')
+            [CompletionResult]::new('range', 'range', [CompletionResultType]::ParameterValue, 'Warm up accounts only between these times of each day, in this computer''s time zone')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;warm;now' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;warm;on' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;warm;off' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;warm;range' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;warm;help' {
+            [CompletionResult]::new('now', 'now', [CompletionResultType]::ParameterValue, 'Start an account''s five-hour period now, whatever the span, through one short request Claude Code makes with that account''s login')
+            [CompletionResult]::new('on', 'on', [CompletionResultType]::ParameterValue, 'Warm up an account from now on, within the span `range` sets')
+            [CompletionResult]::new('off', 'off', [CompletionResultType]::ParameterValue, 'Stop warming up an account')
+            [CompletionResult]::new('range', 'range', [CompletionResultType]::ParameterValue, 'Warm up accounts only between these times of each day, in this computer''s time zone')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;warm;help;now' {
+            break
+        }
+        'pitboard;warm;help;on' {
+            break
+        }
+        'pitboard;warm;help;off' {
+            break
+        }
+        'pitboard;warm;help;range' {
+            break
+        }
+        'pitboard;warm;help;help' {
+            break
+        }
+        'pitboard;statusline' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;renew' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;schedule' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Ask this computer''s own scheduler to renew parked logins daily')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say whether it is installed')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Take it away')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;schedule;install' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;schedule;status' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;schedule;uninstall' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;schedule;help' {
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Ask this computer''s own scheduler to renew parked logins daily')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say whether it is installed')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Take it away')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;schedule;help;install' {
+            break
+        }
+        'pitboard;schedule;help;status' {
+            break
+        }
+        'pitboard;schedule;help;uninstall' {
+            break
+        }
+        'pitboard;schedule;help;help' {
+            break
+        }
+        'pitboard;log' {
+            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'How many changes to show')
+            [CompletionResult]::new('--lines', '--lines', [CompletionResultType]::ParameterName, 'How many changes to show')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;doctor' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;uninstall' {
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Do not ask first; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Do not ask first; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;stow' {
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Do not ask first; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Do not ask first; needed without a terminal or with `--json`')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;repair' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;abandon' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;adopt' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;completions' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'pitboard;help' {
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'What is signed in, and how much each Claude Code and Codex account has left (the default)')
+            [CompletionResult]::new('use', 'use', [CompletionResultType]::ParameterValue, 'Switch a tool to an enrolled account')
+            [CompletionResult]::new('enroll', 'enroll', [CompletionResultType]::ParameterValue, 'Add an account: the one signed in now, or with --sign-in, another one')
+            [CompletionResult]::new('rename', 'rename', [CompletionResultType]::ParameterValue, 'Change the label an account is enrolled under')
+            [CompletionResult]::new('forget', 'forget', [CompletionResultType]::ParameterValue, 'Drop an account and its parked login')
+            [CompletionResult]::new('watch', 'watch', [CompletionResultType]::ParameterValue, 'Switch Claude Code before the account in use runs out, and warm up accounts')
+            [CompletionResult]::new('warm', 'warm', [CompletionResultType]::ParameterValue, 'Start an account''s five-hour period early, so it resets sooner')
+            [CompletionResult]::new('statusline', 'statusline', [CompletionResultType]::ParameterValue, 'One line for Claude Code''s status bar; reads its session JSON on stdin')
+            [CompletionResult]::new('renew', 'renew', [CompletionResultType]::ParameterValue, 'Renew every parked login that is due, and nothing else')
+            [CompletionResult]::new('schedule', 'schedule', [CompletionResultType]::ParameterValue, 'Keep parked logins alive without running anything yourself')
+            [CompletionResult]::new('log', 'log', [CompletionResultType]::ParameterValue, 'What Pitboard has changed, and when')
+            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Check that what Pitboard relies on still holds on this machine')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files')
+            [CompletionResult]::new('stow', 'stow', [CompletionResultType]::ParameterValue, 'Put away the login Claude Code left in a file behind Credential Manager, then delete the file')
+            [CompletionResult]::new('repair', 'repair', [CompletionResultType]::ParameterValue, 'Ask the credential store what parked logins are here, and account for every one')
+            [CompletionResult]::new('abandon', 'abandon', [CompletionResultType]::ParameterValue, 'Give up on an interrupted switch that cannot be finished, keeping every login')
+            [CompletionResult]::new('adopt', 'adopt', [CompletionResultType]::ParameterValue, 'Take over a Pitboard directory another computer wrote, keeping the accounts')
+            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Print a shell completion script')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'pitboard;help;status' {
+            break
+        }
+        'pitboard;help;use' {
+            break
+        }
+        'pitboard;help;enroll' {
+            break
+        }
+        'pitboard;help;rename' {
+            break
+        }
+        'pitboard;help;forget' {
+            break
+        }
+        'pitboard;help;watch' {
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Have this computer''s own service manager run `pitboard watch` from now on and at each sign-in')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say whether it is installed')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Stop it and take it away')
+            break
+        }
+        'pitboard;help;watch;install' {
+            break
+        }
+        'pitboard;help;watch;status' {
+            break
+        }
+        'pitboard;help;watch;uninstall' {
+            break
+        }
+        'pitboard;help;warm' {
+            [CompletionResult]::new('now', 'now', [CompletionResultType]::ParameterValue, 'Start an account''s five-hour period now, whatever the span, through one short request Claude Code makes with that account''s login')
+            [CompletionResult]::new('on', 'on', [CompletionResultType]::ParameterValue, 'Warm up an account from now on, within the span `range` sets')
+            [CompletionResult]::new('off', 'off', [CompletionResultType]::ParameterValue, 'Stop warming up an account')
+            [CompletionResult]::new('range', 'range', [CompletionResultType]::ParameterValue, 'Warm up accounts only between these times of each day, in this computer''s time zone')
+            break
+        }
+        'pitboard;help;warm;now' {
+            break
+        }
+        'pitboard;help;warm;on' {
+            break
+        }
+        'pitboard;help;warm;off' {
+            break
+        }
+        'pitboard;help;warm;range' {
+            break
+        }
+        'pitboard;help;statusline' {
+            break
+        }
+        'pitboard;help;renew' {
+            break
+        }
+        'pitboard;help;schedule' {
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Ask this computer''s own scheduler to renew parked logins daily')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say whether it is installed')
+            [CompletionResult]::new('uninstall', 'uninstall', [CompletionResultType]::ParameterValue, 'Take it away')
+            break
+        }
+        'pitboard;help;schedule;install' {
+            break
+        }
+        'pitboard;help;schedule;status' {
+            break
+        }
+        'pitboard;help;schedule;uninstall' {
+            break
+        }
+        'pitboard;help;log' {
+            break
+        }
+        'pitboard;help;doctor' {
+            break
+        }
+        'pitboard;help;uninstall' {
+            break
+        }
+        'pitboard;help;stow' {
+            break
+        }
+        'pitboard;help;repair' {
+            break
+        }
+        'pitboard;help;abandon' {
+            break
+        }
+        'pitboard;help;adopt' {
+            break
+        }
+        'pitboard;help;completions' {
+            break
+        }
+        'pitboard;help;help' {
+            break
+        }
+    })
+
+    $completions.Where{ $_.CompletionText -like "$wordToComplete*" } |
+        Sort-Object -Property ListItemText
+}
