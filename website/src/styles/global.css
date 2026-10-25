@@ -121,7 +121,7 @@
   --color-mac-window-bg: light-dark(#ffffff, #1e1e1e);
   --color-mac-window-edge: light-dark(#c9cdcc, #3a3a3c);
   --color-mac-window-text: light-dark(#1d1d1f, #f5f5f7);
-  --color-mac-window-sub: light-dark(#6e6e73, #a1a1a6);
+  --color-mac-window-sub: light-dark(rgb(0 0 0 / 0.5), #a1a1a6);
   /* macOS 27 draws a toolbar's title lighter than the window's text, and a sidebar's labels black */
   --color-mac-window-title: light-dark(rgb(0 0 0 / 0.7), #f5f5f7);
   --color-mac-window-side-text: light-dark(#000000, #f5f5f7);
