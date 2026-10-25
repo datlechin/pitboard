@@ -40,6 +40,13 @@ fn a_healthy_machine_reports_no_failures() {
     assert!(healthy(&checks));
 }
 
+// The command line keeps what doctor prints for it.
+#[test]
+fn the_example_mac_has_nothing_amiss() {
+    let checks = example::healthy_mac();
+    assert!(checks.iter().all(|c| c.level == Level::Ok), "{checks:#?}");
+}
+
 #[test]
 fn every_failure_and_warning_tells_the_user_something() {
     let mut f = facts();

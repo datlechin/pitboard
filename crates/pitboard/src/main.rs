@@ -2185,6 +2185,193 @@ mod tests {
         }
     }
 
+    // Every command and argument as clap holds them once built, hidden ones too. The version
+    // is left out: every release changes it.
+    fn tree(command: &clap::Command) -> Value {
+        let argument = |arg: &clap::Arg| {
+            json!({
+                "id": arg.get_id().as_str(),
+                "long": arg.get_long(),
+                "short": arg.get_short().map(String::from),
+                "aliases": arg.get_all_aliases().unwrap_or_default(),
+                "short_aliases": arg
+                    .get_all_short_aliases()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(String::from)
+                    .collect::<Vec<_>>(),
+                "value_names": arg
+                    .get_value_names()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|name| name.as_str())
+                    .collect::<Vec<_>>(),
+                "num_args": arg.get_num_args().map(|range| range.to_string()),
+                "action": format!("{:?}", arg.get_action()),
+                "index": arg.get_index(),
+                "required": arg.is_required_set(),
+                "global": arg.is_global_set(),
+                "hidden": arg.is_hide_set(),
+                "possible_values": arg
+                    .get_possible_values()
+                    .iter()
+                    .map(|value| value.get_name())
+                    .collect::<Vec<_>>(),
+                "default_values": arg
+                    .get_default_values()
+                    .iter()
+                    .map(|value| value.to_string_lossy())
+                    .collect::<Vec<_>>(),
+                "conflicts_with": command
+                    .get_arg_conflicts_with(arg)
+                    .iter()
+                    .map(|other| other.get_id().as_str())
+                    .collect::<Vec<_>>(),
+                "help": arg.get_help().map(ToString::to_string),
+            })
+        };
+        json!({
+            "name": command.get_name(),
+            "aliases": command.get_all_aliases().collect::<Vec<_>>(),
+            "hidden": command.is_hide_set(),
+            "about": command.get_about().map(ToString::to_string),
+            "arguments": command.get_arguments().map(argument).collect::<Vec<_>>(),
+            "commands": command.get_subcommands().map(tree).collect::<Vec<_>>(),
+        })
+    }
+
+    fn command_tree() -> Value {
+        let mut cli = parser();
+        cli.build();
+        tree(&cli)
+    }
+
+    // What `main` prints for `args`, a help or a usage error, in a terminal 80 columns wide.
+    fn said(args: &[&str]) -> String {
+        let line = std::iter::once("pitboard").chain(args.iter().copied());
+        let error = match parser().term_width(80).try_get_matches_from(line.clone()) {
+            Ok(_) => command_line(line).err(),
+            Err(error) => Some(error),
+        };
+        error
+            .unwrap_or_else(|| panic!("{args:?} is a command line"))
+            .render()
+            .to_string()
+    }
+
+    fn shown(args: &[&str]) -> String {
+        format!("$ pitboard {}\n{}", args.join(" "), said(args))
+    }
+
+    // Every command a person can ask about, by the words that name it.
+    fn commands() -> Vec<Vec<String>> {
+        fn each(command: &clap::Command, path: &mut Vec<String>, all: &mut Vec<Vec<String>>) {
+            all.push(path.clone());
+            for sub in command.get_subcommands() {
+                if sub.get_name() != "help" {
+                    path.push(sub.get_name().to_string());
+                    each(sub, path, all);
+                    path.pop();
+                }
+            }
+        }
+        let mut cli = parser();
+        cli.build();
+        let mut all = Vec::new();
+        each(&cli, &mut Vec::new(), &mut all);
+        all
+    }
+
+    fn typed<'a>(before: &[&'a str], path: &'a [String], after: &[&'a str]) -> Vec<&'a str> {
+        let path = path.iter().map(String::as_str);
+        before
+            .iter()
+            .copied()
+            .chain(path)
+            .chain(after.iter().copied())
+            .collect()
+    }
+
+    fn every_help_typed() -> String {
+        commands()
+            .iter()
+            .map(|path| shown(&typed(&[], path, &["--help"])))
+            .collect()
+    }
+
+    const MISTYPED: &[&[&str]] = &[
+        &["list"],
+        &["lst"],
+        &["stat"],
+        &["doctr"],
+        &["use"],
+        &["--jsno"],
+        &["status", "--verbose"],
+        &["watch", "install", "--at", "40"],
+        &["watch", "install", "--once"],
+        &["completions", "foo"],
+        &["use", "work", "extra"],
+        &["log", "-n", "x"],
+    ];
+
+    fn every_usage_error() -> String {
+        MISTYPED.iter().map(|args| shown(args)).collect()
+    }
+
+    // As a release writes each shell's script.
+    fn completions(shell: clap_complete::Shell) -> String {
+        let mut out = Vec::new();
+        clap_complete::generate(shell, &mut Cli::command(), "pitboard", &mut out);
+        String::from_utf8(out).expect("text")
+    }
+
+    #[test]
+    fn every_help_and_usage_error_fits_80_columns() {
+        let shown = every_help_typed() + &every_usage_error();
+        let over: Vec<&str> = shown
+            .lines()
+            .filter(|line| ui::columns(line) > 80)
+            .collect();
+        assert!(over.is_empty(), "{over:#?}");
+    }
+
+    // No argument has a long help, so clap prints the one layout however help is asked for.
+    #[test]
+    fn dash_h_and_the_help_command_print_what_dash_dash_help_does() {
+        for path in commands() {
+            let help = said(&typed(&[], &path, &["--help"]));
+            assert_eq!(said(&typed(&[], &path, &["-h"])), help, "{path:?}");
+            assert_eq!(said(&typed(&["help"], &path, &[])), help, "{path:?}");
+        }
+    }
+
+    // The bash script names no command's about, so Git Bash on Windows reads the same one.
+    #[test]
+    fn the_usage_errors_and_the_bash_completions_read_alike_on_every_system() {
+        insta::assert_snapshot!("usage_errors", every_usage_error());
+        insta::assert_snapshot!("completions_bash", completions(clap_complete::Shell::Bash));
+    }
+
+    #[test]
+    // windows: macOS and Linux print this help, tree and zsh script; Windows' are the test below
+    #[cfg(not(windows))]
+    fn the_command_tree_help_and_zsh_completions_read_as_they_did_off_windows() {
+        insta::assert_json_snapshot!("command_tree", command_tree());
+        insta::assert_snapshot!("help_in_80_columns", every_help_typed());
+        insta::assert_snapshot!("completions_zsh", completions(clap_complete::Shell::Zsh));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn the_command_tree_help_and_powershell_completions_read_as_they_did_on_windows() {
+        insta::assert_json_snapshot!("command_tree_on_windows", command_tree());
+        insta::assert_snapshot!("help_in_80_columns_on_windows", every_help_typed());
+        insta::assert_snapshot!(
+            "completions_powershell_on_windows",
+            completions(clap_complete::Shell::PowerShell)
+        );
+    }
+
     // Pitboard switches Claude Desktop on macOS alone; Linux's help keeps the words it had.
     #[test]
     fn the_help_names_claude_desktop_only_off_windows() {

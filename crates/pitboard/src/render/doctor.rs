@@ -128,6 +128,13 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_healthy_mac_with_claude_code_and_codex_reads_as_it_did() {
+        let checks = pitboard_core::testing::doctor_on_a_healthy_mac();
+        let printed = anstream::adapter::strip_str(&human(&checks)).to_string();
+        insta::assert_snapshot!("doctor_on_a_healthy_mac", printed);
+    }
+
     /// Codex's checks sit under a heading of their own, after everything about Claude
     /// Code, and a report with none of them reads as it did before there were any.
     #[test]

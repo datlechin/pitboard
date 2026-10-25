@@ -1,0 +1,2391 @@
+---
+source: crates/pitboard/src/main.rs
+expression: command_tree()
+---
+{
+  "name": "pitboard",
+  "aliases": [],
+  "hidden": false,
+  "about": "Switch Claude Code, Codex and Claude Desktop between your own accounts without signing out, and see what each Claude Code and Codex account has left",
+  "arguments": [
+    {
+      "id": "json",
+      "long": "json",
+      "short": null,
+      "aliases": [],
+      "short_aliases": [],
+      "value_names": [
+        "JSON"
+      ],
+      "num_args": "0",
+      "action": "SetTrue",
+      "index": null,
+      "required": false,
+      "global": true,
+      "hidden": false,
+      "possible_values": [],
+      "default_values": [
+        "false"
+      ],
+      "conflicts_with": [],
+      "help": "Print JSON instead of text"
+    },
+    {
+      "id": "help",
+      "long": "help",
+      "short": "h",
+      "aliases": [],
+      "short_aliases": [],
+      "value_names": [],
+      "num_args": "0",
+      "action": "Help",
+      "index": null,
+      "required": false,
+      "global": false,
+      "hidden": false,
+      "possible_values": [],
+      "default_values": [],
+      "conflicts_with": [],
+      "help": "Print help"
+    },
+    {
+      "id": "version",
+      "long": "version",
+      "short": "V",
+      "aliases": [],
+      "short_aliases": [],
+      "value_names": [],
+      "num_args": "0",
+      "action": "Version",
+      "index": null,
+      "required": false,
+      "global": false,
+      "hidden": false,
+      "possible_values": [],
+      "default_values": [],
+      "conflicts_with": [],
+      "help": "Print version"
+    }
+  ],
+  "commands": [
+    {
+      "name": "status",
+      "aliases": [],
+      "hidden": false,
+      "about": "What is signed in, and how much each Claude Code and Codex account has left (the default)",
+      "arguments": [
+        {
+          "id": "offline",
+          "long": "offline",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "OFFLINE"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Answer from what was last measured, without asking anyone"
+        },
+        {
+          "id": "fresh",
+          "long": "fresh",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "FRESH"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [
+            "offline"
+          ],
+          "help": "Ask about every account, even one asked about moments ago"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "use",
+      "aliases": [],
+      "hidden": false,
+      "about": "Switch a tool to an enrolled account",
+      "arguments": [
+        {
+          "id": "label",
+          "long": null,
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "LABEL"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": 1,
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "The label the account was enrolled under, such as `work`, `codex/work` or `desktop/work`"
+        },
+        {
+          "id": "yes",
+          "long": "yes",
+          "short": "y",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "YES"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Where the service refuses the login in use for good, put this account's login in its place without asking; needed without a terminal or with `--json`"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "enroll",
+      "aliases": [],
+      "hidden": false,
+      "about": "Add an account: the one signed in now, or with --sign-in, another one",
+      "arguments": [
+        {
+          "id": "label",
+          "long": null,
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "LABEL"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": 1,
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex account, `desktop/work` a Claude Desktop one; a bare name means Claude Code"
+        },
+        {
+          "id": "sign_in",
+          "long": "sign-in",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "SIGN_IN"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Sign in to another account first, through the tool's own sign-in"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "rename",
+      "aliases": [],
+      "hidden": false,
+      "about": "Change the label an account is enrolled under",
+      "arguments": [
+        {
+          "id": "from",
+          "long": null,
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "FROM"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": 1,
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "The label it has now"
+        },
+        {
+          "id": "to",
+          "long": null,
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "TO"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": 2,
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "The label it should have"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "forget",
+      "aliases": [],
+      "hidden": false,
+      "about": "Drop an account and its parked login",
+      "arguments": [
+        {
+          "id": "label",
+          "long": null,
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "LABEL"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": 1,
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "The label to drop"
+        },
+        {
+          "id": "yes",
+          "long": "yes",
+          "short": "y",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "YES"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Do not ask first; needed without a terminal or with `--json`"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "watch",
+      "aliases": [],
+      "hidden": false,
+      "about": "Switch Claude Code before the account in use runs out, and warm up accounts",
+      "arguments": [
+        {
+          "id": "at",
+          "long": "at",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "PERCENT"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "95"
+          ],
+          "conflicts_with": [],
+          "help": "Switch once a limit of the account in use reaches this share, from 50 to 99"
+        },
+        {
+          "id": "once",
+          "long": "once",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "ONCE"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up"
+        },
+        {
+          "id": "scheduled",
+          "long": "scheduled",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": true,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [
+            "once"
+          ],
+          "help": null
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": [
+        {
+          "name": "install",
+          "aliases": [],
+          "hidden": false,
+          "about": "Have this computer's own service manager run `pitboard watch` from now on and at each sign-in",
+          "arguments": [
+            {
+              "id": "at",
+              "long": "at",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "PERCENT"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "95"
+              ],
+              "conflicts_with": [],
+              "help": "Switch once a limit of the account in use reaches this share, from 50 to 99"
+            },
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "hidden": false,
+          "about": "Say whether it is installed",
+          "arguments": [
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "uninstall",
+          "aliases": [],
+          "hidden": false,
+          "about": "Stop it and take it away",
+          "arguments": [
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "help",
+          "aliases": [],
+          "hidden": false,
+          "about": "Print this message or the help of the given subcommand(s)",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "install",
+              "aliases": [],
+              "hidden": false,
+              "about": "Have this computer's own service manager run `pitboard watch` from now on and at each sign-in",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "status",
+              "aliases": [],
+              "hidden": false,
+              "about": "Say whether it is installed",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "uninstall",
+              "aliases": [],
+              "hidden": false,
+              "about": "Stop it and take it away",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "help",
+              "aliases": [],
+              "hidden": false,
+              "about": "Print this message or the help of the given subcommand(s)",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "warm",
+      "aliases": [],
+      "hidden": false,
+      "about": "Start an account's five-hour period early, so it resets sooner",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": [
+        {
+          "name": "now",
+          "aliases": [],
+          "hidden": false,
+          "about": "Start an account's five-hour period now, whatever the span, through one short request Claude Code makes with that account's login",
+          "arguments": [
+            {
+              "id": "label",
+              "long": null,
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "LABEL"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": 1,
+              "required": true,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "The label the account was enrolled under, such as `work`"
+            },
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "on",
+          "aliases": [],
+          "hidden": false,
+          "about": "Warm up an account from now on, within the span `range` sets",
+          "arguments": [
+            {
+              "id": "label",
+              "long": null,
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "LABEL"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": 1,
+              "required": true,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "The label the account was enrolled under, such as `work`"
+            },
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "off",
+          "aliases": [],
+          "hidden": false,
+          "about": "Stop warming up an account",
+          "arguments": [
+            {
+              "id": "label",
+              "long": null,
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "LABEL"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": 1,
+              "required": true,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "The label the account was enrolled under"
+            },
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "range",
+          "aliases": [],
+          "hidden": false,
+          "about": "Warm up accounts only between these times of each day, in this computer's time zone",
+          "arguments": [
+            {
+              "id": "from",
+              "long": null,
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "FROM"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": 1,
+              "required": true,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "When to start, such as 06:00"
+            },
+            {
+              "id": "to",
+              "long": null,
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "TO"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": 2,
+              "required": true,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "When to stop, such as 22:00; 00:00 and 24:00 are midnight, and a time before FROM runs past it"
+            },
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "help",
+          "aliases": [],
+          "hidden": false,
+          "about": "Print this message or the help of the given subcommand(s)",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "now",
+              "aliases": [],
+              "hidden": false,
+              "about": "Start an account's five-hour period now, whatever the span, through one short request Claude Code makes with that account's login",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "on",
+              "aliases": [],
+              "hidden": false,
+              "about": "Warm up an account from now on, within the span `range` sets",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "off",
+              "aliases": [],
+              "hidden": false,
+              "about": "Stop warming up an account",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "range",
+              "aliases": [],
+              "hidden": false,
+              "about": "Warm up accounts only between these times of each day, in this computer's time zone",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "help",
+              "aliases": [],
+              "hidden": false,
+              "about": "Print this message or the help of the given subcommand(s)",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "statusline",
+      "aliases": [],
+      "hidden": false,
+      "about": "One line for Claude Code's status bar; reads its session JSON on stdin",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "renew",
+      "aliases": [],
+      "hidden": false,
+      "about": "Renew every parked login that is due, and nothing else",
+      "arguments": [
+        {
+          "id": "scheduled",
+          "long": "scheduled",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": true,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": null
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "schedule",
+      "aliases": [],
+      "hidden": false,
+      "about": "Keep parked logins alive without running anything yourself",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": [
+        {
+          "name": "install",
+          "aliases": [],
+          "hidden": false,
+          "about": "Ask this computer's own scheduler to renew parked logins daily",
+          "arguments": [
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "hidden": false,
+          "about": "Say whether it is installed",
+          "arguments": [
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "uninstall",
+          "aliases": [],
+          "hidden": false,
+          "about": "Take it away",
+          "arguments": [
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "help",
+          "aliases": [],
+          "hidden": false,
+          "about": "Print this message or the help of the given subcommand(s)",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "install",
+              "aliases": [],
+              "hidden": false,
+              "about": "Ask this computer's own scheduler to renew parked logins daily",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "status",
+              "aliases": [],
+              "hidden": false,
+              "about": "Say whether it is installed",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "uninstall",
+              "aliases": [],
+              "hidden": false,
+              "about": "Take it away",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "help",
+              "aliases": [],
+              "hidden": false,
+              "about": "Print this message or the help of the given subcommand(s)",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "log",
+      "aliases": [],
+      "hidden": false,
+      "about": "What Pitboard has changed, and when",
+      "arguments": [
+        {
+          "id": "lines",
+          "long": "lines",
+          "short": "n",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "LINES"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "20"
+          ],
+          "conflicts_with": [],
+          "help": "How many changes to show"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "doctor",
+      "aliases": [],
+      "hidden": false,
+      "about": "Check that what Pitboard relies on still holds on this machine",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "uninstall",
+      "aliases": [],
+      "hidden": false,
+      "about": "Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard's own files",
+      "arguments": [
+        {
+          "id": "yes",
+          "long": "yes",
+          "short": "y",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "YES"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Do not ask first; needed without a terminal or with `--json`"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "stow",
+      "aliases": [],
+      "hidden": false,
+      "about": "Put away the login Claude Code left in a file behind the keychain, then delete the file",
+      "arguments": [
+        {
+          "id": "yes",
+          "long": "yes",
+          "short": "y",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "YES"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Do not ask first; needed without a terminal or with `--json`"
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "repair",
+      "aliases": [],
+      "hidden": false,
+      "about": "Ask the credential store what parked logins are here, and account for every one",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "abandon",
+      "aliases": [],
+      "hidden": false,
+      "about": "Give up on an interrupted switch that cannot be finished, keeping every login",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "adopt",
+      "aliases": [],
+      "hidden": false,
+      "about": "Take over a Pitboard directory another computer wrote, keeping the accounts",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "completions",
+      "aliases": [],
+      "hidden": false,
+      "about": "Print a shell completion script",
+      "arguments": [
+        {
+          "id": "shell",
+          "long": null,
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "SHELL"
+          ],
+          "num_args": "1",
+          "action": "Set",
+          "index": 1,
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "possible_values": [
+            "bash",
+            "elvish",
+            "fish",
+            "powershell",
+            "zsh"
+          ],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": null
+        },
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "manpage",
+      "aliases": [],
+      "hidden": true,
+      "about": "Print the man page",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "help",
+      "aliases": [],
+      "hidden": false,
+      "about": "Print this message or the help of the given subcommand(s)",
+      "arguments": [],
+      "commands": [
+        {
+          "name": "status",
+          "aliases": [],
+          "hidden": false,
+          "about": "What is signed in, and how much each Claude Code and Codex account has left (the default)",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "use",
+          "aliases": [],
+          "hidden": false,
+          "about": "Switch a tool to an enrolled account",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "enroll",
+          "aliases": [],
+          "hidden": false,
+          "about": "Add an account: the one signed in now, or with --sign-in, another one",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "rename",
+          "aliases": [],
+          "hidden": false,
+          "about": "Change the label an account is enrolled under",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "forget",
+          "aliases": [],
+          "hidden": false,
+          "about": "Drop an account and its parked login",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "watch",
+          "aliases": [],
+          "hidden": false,
+          "about": "Switch Claude Code before the account in use runs out, and warm up accounts",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "install",
+              "aliases": [],
+              "hidden": false,
+              "about": "Have this computer's own service manager run `pitboard watch` from now on and at each sign-in",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "status",
+              "aliases": [],
+              "hidden": false,
+              "about": "Say whether it is installed",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "uninstall",
+              "aliases": [],
+              "hidden": false,
+              "about": "Stop it and take it away",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        },
+        {
+          "name": "warm",
+          "aliases": [],
+          "hidden": false,
+          "about": "Start an account's five-hour period early, so it resets sooner",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "now",
+              "aliases": [],
+              "hidden": false,
+              "about": "Start an account's five-hour period now, whatever the span, through one short request Claude Code makes with that account's login",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "on",
+              "aliases": [],
+              "hidden": false,
+              "about": "Warm up an account from now on, within the span `range` sets",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "off",
+              "aliases": [],
+              "hidden": false,
+              "about": "Stop warming up an account",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "range",
+              "aliases": [],
+              "hidden": false,
+              "about": "Warm up accounts only between these times of each day, in this computer's time zone",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        },
+        {
+          "name": "statusline",
+          "aliases": [],
+          "hidden": false,
+          "about": "One line for Claude Code's status bar; reads its session JSON on stdin",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "renew",
+          "aliases": [],
+          "hidden": false,
+          "about": "Renew every parked login that is due, and nothing else",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "schedule",
+          "aliases": [],
+          "hidden": false,
+          "about": "Keep parked logins alive without running anything yourself",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "install",
+              "aliases": [],
+              "hidden": false,
+              "about": "Ask this computer's own scheduler to renew parked logins daily",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "status",
+              "aliases": [],
+              "hidden": false,
+              "about": "Say whether it is installed",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "uninstall",
+              "aliases": [],
+              "hidden": false,
+              "about": "Take it away",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        },
+        {
+          "name": "log",
+          "aliases": [],
+          "hidden": false,
+          "about": "What Pitboard has changed, and when",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "doctor",
+          "aliases": [],
+          "hidden": false,
+          "about": "Check that what Pitboard relies on still holds on this machine",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "uninstall",
+          "aliases": [],
+          "hidden": false,
+          "about": "Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard's own files",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "stow",
+          "aliases": [],
+          "hidden": false,
+          "about": "Put away the login Claude Code left in a file behind the keychain, then delete the file",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "repair",
+          "aliases": [],
+          "hidden": false,
+          "about": "Ask the credential store what parked logins are here, and account for every one",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "abandon",
+          "aliases": [],
+          "hidden": false,
+          "about": "Give up on an interrupted switch that cannot be finished, keeping every login",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "adopt",
+          "aliases": [],
+          "hidden": false,
+          "about": "Take over a Pitboard directory another computer wrote, keeping the accounts",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "completions",
+          "aliases": [],
+          "hidden": false,
+          "about": "Print a shell completion script",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "manpage",
+          "aliases": [],
+          "hidden": true,
+          "about": "Print the man page",
+          "arguments": [],
+          "commands": []
+        },
+        {
+          "name": "help",
+          "aliases": [],
+          "hidden": false,
+          "about": "Print this message or the help of the given subcommand(s)",
+          "arguments": [],
+          "commands": []
+        }
+      ]
+    }
+  ]
+}

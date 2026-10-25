@@ -1,0 +1,80 @@
+---
+source: crates/pitboard/src/main.rs
+expression: every_usage_error()
+---
+$ pitboard list
+error: unrecognized subcommand 'list'
+
+Usage: pitboard [OPTIONS] [COMMAND]
+
+For more information, try '--help'.
+$ pitboard lst
+error: unrecognized subcommand 'lst'
+
+  tip: a similar subcommand exists: 'stow'
+
+Usage: pitboard [OPTIONS] [COMMAND]
+
+For more information, try '--help'.
+$ pitboard stat
+error: unrecognized subcommand 'stat'
+
+  tip: some similar subcommands exist: 'statusline', 'status'
+
+Usage: pitboard [OPTIONS] [COMMAND]
+
+For more information, try '--help'.
+$ pitboard doctr
+error: unrecognized subcommand 'doctr'
+
+  tip: some similar subcommands exist: 'adopt', 'doctor'
+
+Usage: pitboard [OPTIONS] [COMMAND]
+
+For more information, try '--help'.
+$ pitboard use
+error: the following required arguments were not provided:
+  <LABEL>
+
+Usage: pitboard use <LABEL>
+
+For more information, try '--help'.
+$ pitboard --jsno
+error: unexpected argument '--jsno' found
+
+  tip: a similar argument exists: '--json'
+
+Usage: pitboard --json
+
+For more information, try '--help'.
+$ pitboard status --verbose
+error: unexpected argument '--verbose' found
+
+Usage: pitboard status [OPTIONS]
+
+For more information, try '--help'.
+$ pitboard watch install --at 40
+error: invalid value '40' for '--at <PERCENT>': 40 is not in 50..=99
+
+For more information, try '--help'.
+$ pitboard watch install --once
+error: unexpected argument '--once' found
+
+Usage: pitboard watch install [OPTIONS]
+
+For more information, try '--help'.
+$ pitboard completions foo
+error: invalid value 'foo' for '<SHELL>'
+  [possible values: bash, elvish, fish, powershell, zsh]
+
+For more information, try '--help'.
+$ pitboard use work extra
+error: unexpected argument 'extra' found
+
+Usage: pitboard use [OPTIONS] <LABEL>
+
+For more information, try '--help'.
+$ pitboard log -n x
+error: invalid value 'x' for '--lines <LINES>': invalid digit found in string
+
+For more information, try '--help'.
