@@ -28,6 +28,15 @@ public sealed class WindowRequests
         }
 
         _shown = request.Serial;
-        return request.Settings ? (null, true) : (request.Pane ?? pane, false);
+        return request.Place switch
+        {
+            Place.Activity => (Pane.Activity, false),
+            Place.Checks => (Pane.Checks, false),
+            Place.Settings { Section: var section } => (null, section == SettingsSection.Limits),
+            // The welcome has no window of its own yet, so it opens on the accounts.
+            Place.Accounts or Place.Welcome => (Pane.Accounts, false),
+            // None asks for the window as it was left.
+            _ => (pane, false),
+        };
     }
 }

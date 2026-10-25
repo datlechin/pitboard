@@ -20,7 +20,7 @@ public sealed class IconCommandsTests
 
         commands.Heard(new IconEvent.Activated());
 
-        CollectionAssert.AreEqual(new Intent[] { new Intent.ShowWindow(Pane: null) }, model.Sent.ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.Show(Place: null) }, model.Sent.ToArray());
         Assert.IsEmpty(targets.Did);
     }
 

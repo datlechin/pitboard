@@ -16,7 +16,7 @@ use super::testing::records::{
     CHATGPT, CLAUDE, already_active, chatgpt_holding, claude, codex_account, desktop_account,
     desktop_warning, percent, refusal, status, still_running, switched, warned, warning,
 };
-use super::{Intent, LastSwitch, Pane, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
+use super::{Intent, LastSwitch, Place, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
 use crate::present::words;
 use crate::{Abandoned, GaveUp};
 use pitboard_core::host::{OS, Os};
@@ -70,8 +70,7 @@ fn a_failed_switch_says_so_and_changes_nothing() {
         shown.window_request,
         WindowRequest {
             serial: 1,
-            pane: None,
-            settings: false,
+            place: None,
         }
     );
     assert_eq!(model.state.switch_under_way(), None);
@@ -839,8 +838,8 @@ fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
         "nothing is quit before the person says so"
     );
     assert_eq!(
-        shown.window_request.pane,
-        Some(Pane::Accounts),
+        shown.window_request.place,
+        Some(Place::Accounts),
         "asked in the window"
     );
     assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
@@ -1083,8 +1082,7 @@ fn one_switch_at_a_time_while_the_app_question_waits() {
         model.shown().window_request,
         WindowRequest {
             serial: asked + 1,
-            pane: Some(Pane::Accounts),
-            settings: false,
+            place: Some(Place::Accounts),
         },
         "the question came back to the front"
     );

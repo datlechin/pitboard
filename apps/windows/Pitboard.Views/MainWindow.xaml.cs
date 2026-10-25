@@ -122,7 +122,7 @@ public sealed partial class MainWindow : Window
         {
             Pane.Accounts => typeof(AccountsPage),
             Pane.Activity => typeof(ActivityPage),
-            Pane.Machine => typeof(MachinePage),
+            Pane.Checks => typeof(MachinePage),
             _ => typeof(SettingsPage),
         };
         if (Pages.CurrentSourcePageType != page)

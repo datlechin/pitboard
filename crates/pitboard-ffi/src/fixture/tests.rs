@@ -11,7 +11,7 @@ use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, event
 use crate::model::testing::records::read_in;
 use crate::model::{
     AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
-    PitboardModel, PlatformError, RunOutNotice, Sheet, Snapshot, Tip,
+    PitboardModel, Place, PlatformError, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
 use crate::present::words;
@@ -1606,8 +1606,8 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     assert_eq!(item.title, words::COULD_NOT_READ_USAGE);
     assert_eq!(
         item.intent,
-        Some(Intent::ShowWindow {
-            pane: Some(Pane::Accounts)
+        Some(Intent::Show {
+            place: Some(Place::Accounts)
         })
     );
     assert_eq!(
@@ -1719,14 +1719,12 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     assert_eq!(item.title, words::SWITCH_WAITING);
     assert_eq!(
         item.intent,
-        Some(Intent::ShowWindow {
-            pane: Some(Pane::Accounts)
+        Some(Intent::Show {
+            place: Some(Place::Accounts)
         })
     );
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks made", |snapshot| {
         !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
     });
@@ -1797,9 +1795,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
 fn this_mac_shows_the_cores_checks() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let shown = told.last_where("the checks made", |snapshot| {
         !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
     });
@@ -1894,9 +1890,7 @@ fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
     );
     model.send(Intent::Start);
     told.last_where("the accounts read", read_in);
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let shown = told.last_where("the checks made", |snapshot| {
         !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
     });
@@ -2487,9 +2481,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     // The login replaced, then the run-out of the account in use, the last refused.
     eventually("posted both", || posted.posted().len() == 2);
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks with the refusal", |snapshot| {
         snapshot
             .machine

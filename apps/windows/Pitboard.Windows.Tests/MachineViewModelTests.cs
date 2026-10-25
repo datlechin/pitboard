@@ -88,6 +88,6 @@ public sealed class MachineViewModelTests
 
         shown.Check();
 
-        Assert.AreEqual(new Intent.PaneShown(Pane.Machine), model.Sent.Single());
+        Assert.AreEqual(new Intent.PaneShown(Pane.Checks), model.Sent.Single());
     }
 }

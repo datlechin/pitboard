@@ -96,7 +96,7 @@ public static class IconMenu
             ],
             Sites(model.AccountWindows),
             [
-                new IconMenuEntry.Command("Open Pitboard", new IconCommand.Send(new Intent.ShowWindow(Pane: null)))
+                new IconMenuEntry.Command("Open Pitboard", new IconCommand.Send(new Intent.Show(Place: null)))
                 {
                     Default = true,
                     Id = "menu.openPitboard",

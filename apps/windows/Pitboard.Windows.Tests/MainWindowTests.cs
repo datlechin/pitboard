@@ -17,7 +17,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class MainWindowTests
 {
-    private static readonly Pane?[] Panes = [Pane.Accounts, Pane.Activity, Pane.Machine, null];
+    private static readonly Pane?[] Panes = [Pane.Accounts, Pane.Activity, Pane.Checks, null];
 
     // A window over its own placement file, which goes with it.
     internal static MainWindow Made(Snapshot snapshot, StartAtSignIn? start = null, Func<NotificationsBlocked?>? notifications = null)

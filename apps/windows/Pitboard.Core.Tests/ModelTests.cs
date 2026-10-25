@@ -92,7 +92,7 @@ public sealed class ModelTests
     private static Snapshot Read(ulong revision) =>
         new(
             Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
-            WindowRequest: new WindowRequest(Serial: 0, Pane: null),
+            WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
@@ -286,13 +286,13 @@ public sealed class ModelTests
                 Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
                 Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed."),
-            WindowRequest = new WindowRequest(Serial: 3, Pane: Pane.Accounts),
+            WindowRequest = new WindowRequest(Serial: 3, Place: new Place.Accounts()),
         };
 
         Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), snapshot.QuitQuestion?.Confirmed);
         Assert.AreEqual("Couldn’t switch to spare", snapshot.FailureAlert?.Title);
-        Assert.AreEqual(Pane.Accounts, snapshot.WindowRequest.Pane);
-        Assert.AreEqual(new WindowRequest(3, Pane.Accounts), snapshot.WindowRequest);
+        Assert.IsInstanceOfType<Place.Accounts>(snapshot.WindowRequest.Place);
+        Assert.AreEqual(new WindowRequest(3, new Place.Accounts()), snapshot.WindowRequest);
     }
 
     [TestMethod]
@@ -481,15 +481,15 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.ShowWindow(Pane: Pane.Machine), new Intent.ShowWindow(Pane: null), new Intent.DismissFailure(),
+            new Intent.Show(Place: new Place.Checks()), new Intent.Show(Place: null), new Intent.DismissFailure(),
             new Intent.Enrol(Provider: "codex"),
             new Intent.Rename(Provider: "claude", Label: "work", To: "office"),
             new Intent.Forget(Qualified: "claude/spare"), new Intent.DeclineSecondAccount(Provider: "codex"),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.ShowWindow(Pane.Machine), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.ShowWindow(null), intents[0]);
-        Assert.IsNull(((Intent.ShowWindow)intents[1]).Pane);
+        Assert.AreEqual<Intent>(new Intent.Show(new Place.Checks()), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.Show(null), intents[0]);
+        Assert.IsNull(((Intent.Show)intents[1]).Place);
         Assert.AreEqual("codex", intents.OfType<Intent.Enrol>().Single().Provider);
         Assert.AreEqual("office", intents.OfType<Intent.Rename>().Single().To);
         Assert.AreEqual("claude/spare", intents.OfType<Intent.Forget>().Single().Qualified);
@@ -559,7 +559,7 @@ public sealed class ModelTests
             Actions: [giveUp]);
         var others = new MenuEntry(
             Title: stuck.Title, Subtitle: "Show in Pitboard", Help: stuck.Lines[0], Severity: Severity.Error,
-            Intent: new Intent.ShowWindow(Pane.Accounts), Link: null, Enabled: true);
+            Intent: new Intent.Show(new Place.Accounts()), Link: null, Enabled: true);
         var snapshot = Read(6) with
         {
             Sections = [new AccountSection(Id: "codex", Heading: "Codex", Accounts: [spare])],
@@ -592,7 +592,7 @@ public sealed class ModelTests
         Assert.IsTrue(snapshot.Notices[0].Severity > Severity.Warning);
         Assert.AreEqual<Intent>(new Intent.AbandonStuckSwitch(), snapshot.Notices[0].Actions[0].Intent);
         Assert.AreEqual("Give Up", snapshot.Notices[0].Actions[0].Confirm?.Confirm);
-        Assert.AreEqual<Intent?>(new Intent.ShowWindow(Pane.Accounts), snapshot.MenuNotices.Others?.Intent);
+        Assert.AreEqual<Intent?>(new Intent.Show(new Place.Accounts()), snapshot.MenuNotices.Others?.Intent);
         Assert.AreEqual(new Footing.OnlyOne("claude", "work"), snapshot.Footing);
         Assert.IsInstanceOfType<Intent.PresentSheet>(snapshot.Setup?.Actions[0].Intent);
         Assert.AreEqual("Try Again", ((AccountsShown.ReadFailed)snapshot.AccountsShown).Retry.Title);
@@ -604,13 +604,13 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.PaneShown(Pane: Pane.Machine), new Intent.PaneShown(Pane: Pane.Activity),
+            new Intent.PaneShown(Pane: Pane.Checks), new Intent.PaneShown(Pane: Pane.Activity),
             new Intent.ReadSchedule(), new Intent.SetSchedule(On: true), new Intent.LookForCommandLine(),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.PaneShown(Pane.Machine), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.PaneShown(Pane.Machine), intents[1]);
-        Assert.AreNotEqual<Intent>(new Intent.ShowWindow(Pane.Machine), intents[0]);
+        Assert.AreEqual<Intent>(new Intent.PaneShown(Pane.Checks), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.PaneShown(Pane.Checks), intents[1]);
+        Assert.AreNotEqual<Intent>(new Intent.Show(new Place.Checks()), intents[0]);
         Assert.IsTrue(intents.OfType<Intent.SetSchedule>().Single().On);
         Assert.AreNotEqual<Intent>(new Intent.SetSchedule(false), intents[3]);
         Assert.AreEqual(1, intents.OfType<Intent.ReadSchedule>().Count());
@@ -948,7 +948,7 @@ public sealed class ModelTests
         // The login replaced, then the run-out of the account in use, the last refused.
         Assert.HasCount(2, posting.Posted.Until(2, Patience));
 
-        model.Send(new Intent.PaneShown(Pane.Machine));
+        model.Send(new Intent.PaneShown(Pane.Checks));
         var checkedIn = waiting.Until(
             snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Name == "Notifications", Patience);
         model.Shutdown();

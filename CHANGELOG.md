@@ -120,6 +120,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   config names somebody no store holds, in the words a refused switch uses.
 - An account's row in the app says to sign in again where its parked login is due to expire, or
   its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
+- The app's notice that Pitboard set a login or its keys aside offers **Show Diagnostics**, which
+  opens the checks that list it, where it said **This Mac lists it**.
 
 ### Removed
 

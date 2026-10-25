@@ -35,7 +35,7 @@ struct MenuBarContent: View {
             }
         }
         Section {
-            Button("Open Pitboard") { model.send(.showWindow(pane: nil)) }
+            Button("Open Pitboard") { model.send(.show(place: nil)) }
             Button("Settings…") {
                 // Choosing an item of a menu bar item's menu does not make the app active,
                 // and settings already open would come forward behind the app in front.

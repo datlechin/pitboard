@@ -31,8 +31,8 @@ struct MenuBarLabel: View {
             // An app with no Dock icon has nothing to bring forward but itself, and the
             // window opens behind whatever is in front otherwise.
             windows.presence.activate()
-            if model.windowRequest.settings {
-                settingsTab = .limits
+            if case .settings(let section) = model.windowRequest.place {
+                settingsTab = SettingsView.Tab(section)
                 openSettings()
             } else {
                 openWindow(id: MainWindow.id)

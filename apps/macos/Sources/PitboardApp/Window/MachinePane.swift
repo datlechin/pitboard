@@ -29,7 +29,7 @@ struct MachinePane: View {
         .navigationTitle("This Mac")
         .toolbar {
             Button {
-                model.send(.paneShown(pane: .machine))
+                model.send(.paneShown(pane: .checks))
             } label: {
                 Label("Check Again", systemImage: Symbol.refresh)
             }
@@ -40,12 +40,12 @@ struct MachinePane: View {
         .focusedSceneValue(
             \.refresh,
             RefreshCommand(title: "Check Again", disabled: checks.checking) {
-                model.send(.paneShown(pane: .machine))
+                model.send(.paneShown(pane: .checks))
             }
         )
         // Every visit: a menu bar app runs for days, and a check fixed in a terminal since
         // would otherwise still read as failing. What was found stays up meanwhile.
-        .task { model.send(.paneShown(pane: .machine)) }
+        .task { model.send(.paneShown(pane: .checks)) }
     }
 
     @ViewBuilder private func summary(_ checks: ChecksShown) -> some View {

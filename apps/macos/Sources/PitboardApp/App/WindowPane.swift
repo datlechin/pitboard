@@ -1,7 +1,7 @@
 import PitboardKit
 
-/// The model's `Pane`, with the `String` raw value `@SceneStorage` needs to keep the pane
-/// shown.
+/// The main window's panes, with the `String` raw value `@SceneStorage` needs to keep the
+/// pane shown.
 enum WindowPane: String, CaseIterable, Identifiable {
     case accounts
     case activity
@@ -9,24 +9,26 @@ enum WindowPane: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    init(_ pane: Pane) {
-        switch pane {
-        case .accounts: self = .accounts
+    // The welcome has no window of its own yet, so it opens on the accounts.
+    init?(_ place: Place) {
+        switch place {
+        case .accounts, .welcome: self = .accounts
         case .activity: self = .activity
-        case .machine: self = .machine
+        case .checks: self = .machine
+        case .settings: return nil
         }
     }
 
-    var pane: Pane {
+    var place: Place {
         switch self {
         case .accounts: .accounts
         case .activity: .activity
-        case .machine: .machine
+        case .machine: .checks
         }
     }
 
     func after(_ request: WindowRequest) -> WindowPane {
-        request.pane.map(WindowPane.init) ?? self
+        request.place.flatMap(WindowPane.init) ?? self
     }
 
     var title: String {

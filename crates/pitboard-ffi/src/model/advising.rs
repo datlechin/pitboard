@@ -6,7 +6,9 @@ use super::advice::{Advice, Told};
 use super::switching::switch;
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{already_active, refusal, status, switched, warned, warning};
-use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, WindowRequest};
+use super::{
+    AtLimit, Intent, NotificationButton, Place, RunOutNotice, SettingsSection, Sheet, WindowRequest,
+};
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
@@ -533,8 +535,7 @@ fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
         model.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: Some(Pane::Accounts),
-            settings: false,
+            place: Some(Place::Accounts),
         }
     );
 
@@ -565,7 +566,7 @@ fn a_sign_in_again_button_puts_up_the_accounts_sheet() {
                 label: "work".into(),
             })
         );
-        assert_eq!(model.shown().window_request.pane, Some(Pane::Accounts));
+        assert_eq!(model.shown().window_request.place, Some(Place::Accounts));
     });
 }
 
@@ -582,8 +583,9 @@ fn a_click_on_what_came_of_switching_or_warming_up_by_itself_opens_the_limits() 
                 model.shown().window_request,
                 WindowRequest {
                     serial: 1,
-                    pane: None,
-                    settings: true,
+                    place: Some(Place::Settings {
+                        section: SettingsSection::Limits,
+                    }),
                 }
             );
         });
@@ -604,8 +606,7 @@ fn a_click_that_asks_for_nothing_a_notification_asks_for_opens_the_accounts() {
             model.shown().window_request,
             WindowRequest {
                 serial: 1,
-                pane: Some(Pane::Accounts),
-                settings: false,
+                place: Some(Place::Accounts),
             },
             "{argument}"
         );

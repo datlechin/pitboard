@@ -268,9 +268,8 @@ pub enum Intent {
     /// The sheet over the main window has gone, however it went, and what went wrong in it
     /// goes with it. A sign-in it started goes on until it ends or is cancelled.
     CloseSheet,
-    /// Open the main window, on `pane` where it matters which, from the menu, a notification
-    /// or anywhere else: `Snapshot::window_request` moves. The sheet up, if any, stays.
-    ShowWindow { pane: Option<Pane> },
+    /// Show `place`, or the main window as it was left: `Snapshot::window_request` moves.
+    Show { place: Option<Place> },
     /// Anything that starts the app can hand it any text, so only what a notice asks for is read.
     NotificationClicked { argument: String },
     /// Somebody has read the failure the window said, and put it away.
@@ -312,7 +311,7 @@ pub enum Intent {
     /// `pane` of the main window is shown, or its own button asks for what it shows to be
     /// read again, as Check Again and the activity's Refresh do: what it shows is read every
     /// time, as the Swift panes read it on every visit, since an app runs for days and a check
-    /// fixed in a terminal since would otherwise still read as failing. For `Pane::Machine`,
+    /// fixed in a terminal since would otherwise still read as failing. For `Pane::Checks`,
     /// every check `pitboard doctor` makes; for `Pane::Activity`, what Pitboard has changed;
     /// for `Pane::Accounts`, the accounts where the numbers shown are a minute old, as for
     /// `Glanced`. What was shown stays meanwhile.
@@ -498,26 +497,38 @@ pub(crate) struct Failure {
     pub warnings: Vec<Warning>,
 }
 
-/// A pane of the main window.
+// What the model reads afresh each time an app shows it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Pane {
     Accounts,
     Activity,
-    Machine,
+    Checks,
 }
 
-/// What the model wants of the main window: it is opened each time `serial` moves, on
-/// `pane` when that says which. A menu has nowhere to put a sentence or a question, so a
-/// failure or a quit question asked for from one is said in the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Place {
+    Accounts,
+    Activity,
+    // doctor's checks, which the apps call Diagnostics
+    Checks,
+    Settings { section: SettingsSection },
+    // what the first launch shows
+    Welcome,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SettingsSection {
+    General,
+    Limits,
+    Advanced,
+}
+
+// Shown each time `serial` moves; a failure or a question asked from a menu is said in a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
 pub struct WindowRequest {
-    /// How many times the window has been asked for.
     pub serial: u64,
-    /// The pane the last request wants shown, when it wants one.
-    pub pane: Option<Pane>,
-    // the settings, on their limits, in place of the main window
-    #[uniffi(default)]
-    pub settings: bool,
+    // none: the main window as it was left
+    pub place: Option<Place>,
 }
 
 /// Why the last read of the accounts did not answer.
@@ -543,7 +554,6 @@ pub struct Snapshot {
     pub quit_question: Option<WindowQuestion>,
     /// The question a switch asks before it replaces a login its service refuses for good.
     pub replace_question: Option<WindowQuestion>,
-    /// What the model wants of the main window.
     pub window_request: WindowRequest,
     /// The sign-in under way, from the moment it is asked for until it has finished, failed
     /// or been cancelled. Nothing else is signed in to meanwhile, so the rows hold back.

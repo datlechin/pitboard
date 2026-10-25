@@ -449,9 +449,7 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
     assert_eq!(machine.doctor_asks, 0);
 
     assert_eq!(
-        model.send(Intent::PaneShown {
-            pane: Pane::Machine
-        }),
+        model.send(Intent::PaneShown { pane: Pane::Checks }),
         [Job::Check]
     );
     assert!(shown(&model).checks.checking);
@@ -493,9 +491,7 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         "Unlock the login keychain.",
     )];
     model.later(Duration::from_secs(5 * 60));
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let checks = shown(&model).checks;
     assert!(checks.checking);
     assert_eq!(checks.lines.len(), 2, "what was found stays up meanwhile");
@@ -551,9 +547,7 @@ fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
             "",
         ),
     ];
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let lines = shown(&model).checks.lines;
     let ids: Vec<(u64, String)> = lines
@@ -605,9 +599,7 @@ fn only_a_check_that_did_not_pass_says_what_to_do() {
             "Run pitboard doctor.",
         ),
     ];
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let advice: Vec<Option<String>> = shown(&model)
         .checks
@@ -628,9 +620,7 @@ fn the_pane_checks_until_the_last_check_asked_for_is_in() {
     let mut model = Hand::new();
     let mut machine = machine();
     machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
-    let pane = Intent::PaneShown {
-        pane: Pane::Machine,
-    };
+    let pane = Intent::PaneShown { pane: Pane::Checks };
     model.send(pane.clone());
     model.send(pane);
     let first = model.next();
@@ -666,9 +656,7 @@ fn doctor_is_only_read_when_asked_for() {
     assert!(checks.lines.is_empty());
     assert_eq!(checks.checked, None);
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let checks = shown(&model).checks;
     assert_eq!(checks.lines.len(), 1);
@@ -702,9 +690,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     assert!(checks.lines.is_empty(), "said beside doctor's checks alone");
     assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let checks = shown(&model).checks;
     assert_eq!(
@@ -752,9 +738,7 @@ fn when_the_checks_were_made_names_its_day_once_that_is_over() {
     let mut machine = machine();
     machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
     model.send(Intent::Start);
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     assert_eq!(
         shown(&model).checks.checked,
@@ -1024,9 +1008,7 @@ fn what_came_to_nothing_holds_nothing_back() {
     assert!(!model.state.machine.scheduling.is_some());
     assert_eq!(shown(&model).schedule.failed, None);
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let check = model.next();
     model.give(Answer::Lost(check));
     assert!(!shown(&model).checks.checking);

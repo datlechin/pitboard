@@ -10,12 +10,15 @@ import Testing
 @Test func aRequestNamesThePaneTheWindowShows() {
     for left in WindowPane.allCases {
         for wanted in WindowPane.allCases {
-            #expect(left.after(WindowRequest(serial: 1, pane: wanted.pane)) == wanted)
+            #expect(left.after(WindowRequest(serial: 1, place: wanted.place)) == wanted)
         }
-        #expect(left.after(WindowRequest(serial: 2, pane: nil)) == left)
+        #expect(left.after(WindowRequest(serial: 2, place: nil)) == left)
+        #expect(left.after(WindowRequest(serial: 3, place: .welcome)) == .accounts)
+        let limits = WindowRequest(serial: 4, place: .settings(section: .limits))
+        #expect(left.after(limits) == left, "the settings are a window of their own")
     }
-    #expect(WindowPane.allCases.map(\.pane) == [.accounts, .activity, .machine])
-    #expect(WindowPane.allCases.allSatisfy { WindowPane($0.pane) == $0 })
+    #expect(WindowPane.allCases.map(\.place) == [.accounts, .activity, .checks])
+    #expect(WindowPane.allCases.allSatisfy { WindowPane($0.place) == $0 })
 }
 
 /// The window opens once for each request, whether the menu bar item first sees it as it
@@ -25,11 +28,11 @@ import Testing
 @MainActor
 @Test func theWindowOpensOnceForEachRequest() {
     let requests = WindowRequests()
-    #expect(!requests.opens(WindowRequest(serial: 0, pane: nil)), "nothing asked yet")
-    #expect(requests.opens(WindowRequest(serial: 1, pane: nil)), "as the label appears")
-    #expect(!requests.opens(WindowRequest(serial: 1, pane: nil)), "and not as it moves")
-    #expect(requests.opens(WindowRequest(serial: 3, pane: .machine)))
-    #expect(!requests.opens(WindowRequest(serial: 2, pane: nil)), "an older one")
+    #expect(!requests.opens(WindowRequest(serial: 0, place: nil)), "nothing asked yet")
+    #expect(requests.opens(WindowRequest(serial: 1, place: nil)), "as the label appears")
+    #expect(!requests.opens(WindowRequest(serial: 1, place: nil)), "and not as it moves")
+    #expect(requests.opens(WindowRequest(serial: 3, place: .checks)))
+    #expect(!requests.opens(WindowRequest(serial: 2, place: nil)), "an older one")
 }
 
 /// Opened again some other way, the window stays on the pane it was left on rather than
@@ -38,13 +41,13 @@ import Testing
 @MainActor
 @Test func theWindowShowsThePaneItIsAskedForOnce() {
     let requests = WindowRequests()
-    let notice = WindowRequest(serial: 1, pane: .accounts)
+    let notice = WindowRequest(serial: 1, place: .accounts)
     #expect(requests.pane(for: notice, from: .machine) == .accounts)
     #expect(requests.pane(for: notice, from: .activity) == .activity, "answered already")
     #expect(
-        requests.pane(for: WindowRequest(serial: 2, pane: nil), from: .activity) == .activity)
+        requests.pane(for: WindowRequest(serial: 2, place: nil), from: .activity) == .activity)
     #expect(
-        requests.pane(for: WindowRequest(serial: 3, pane: .machine), from: .activity)
+        requests.pane(for: WindowRequest(serial: 3, place: .checks), from: .activity)
             == .machine)
 }
 

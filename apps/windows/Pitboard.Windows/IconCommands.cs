@@ -26,7 +26,7 @@ public sealed class IconCommands(AppModel model, IUpdates updates, IIconTargets 
         switch (happened)
         {
             case IconEvent.Activated:
-                model.Send(new Intent.ShowWindow(Pane: null));
+                model.Send(new Intent.Show(Place: null));
                 break;
             case IconEvent.Menu at:
                 targets.ShowMenu(

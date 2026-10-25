@@ -11,7 +11,7 @@ use super::testing::records::{
     CHATGPT, awaiting, chatgpt_holding, claude_code, codex, desktop_account, desktop_warning,
     enrolled_as, refusal, status, switched, warned, warning,
 };
-use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
+use super::{Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
@@ -2572,8 +2572,8 @@ fn the_menu_says_what_needs_attention_in_one_item() {
             subtitle: Some(words::SHOW_IN_PITBOARD.into()),
             help: Some("ANTHROPIC_API_KEY is set".into()),
             severity: Some(Severity::Warning),
-            intent: Some(Intent::ShowWindow {
-                pane: Some(Pane::Accounts)
+            intent: Some(Intent::Show {
+                place: Some(Place::Accounts)
             }),
             link: None,
             enabled: true,
@@ -3504,51 +3504,44 @@ fn opening_the_window_by_itself_leaves_the_sheet_up() {
     };
     let mut model = Hand::new();
     model.send(present_sheet(rename.clone()));
-    model.send(Intent::ShowWindow { pane: None });
+    model.send(Intent::Show { place: None });
     let shown = model.shown();
     assert_eq!(
         shown.window_request,
         WindowRequest {
             serial: 2,
-            pane: None,
-            settings: false,
+            place: None,
         }
     );
     assert_eq!(shown.sheet, Some(rename));
 }
 
-/// A request for the window can ask for a pane: a notice is said on the accounts pane, and
-/// the menu's item for one opens the window there, whichever pane it was left on. A request
-/// that asks for none leaves the pane as it is, so it does not carry a pane an earlier
-/// request asked for, and a failure said in the window is over every pane.
+// One that asks for none leaves the main window as it was left, as a failure said in it does.
 #[test]
-fn a_request_for_the_window_can_ask_for_a_pane() {
+fn a_request_can_ask_for_a_place() {
     let mut model = Hand::new();
-    assert_eq!(model.shown().window_request.pane, None);
-    model.send(Intent::ShowWindow {
-        pane: Some(Pane::Machine),
-    });
-    assert_eq!(
-        model.shown().window_request,
-        WindowRequest {
-            serial: 1,
-            pane: Some(Pane::Machine),
-            settings: false,
-        }
-    );
-    model.send(Intent::ShowWindow {
-        pane: Some(Pane::Accounts),
-    });
-    assert_eq!(
-        model.shown().window_request,
-        WindowRequest {
-            serial: 2,
-            pane: Some(Pane::Accounts),
-            settings: false,
-        }
-    );
-    model.send(Intent::ShowWindow { pane: None });
-    assert_eq!(model.shown().window_request.pane, None);
+    assert_eq!(model.shown().window_request.place, None);
+    let places = [
+        Place::Checks,
+        Place::Activity,
+        Place::Settings {
+            section: SettingsSection::Advanced,
+        },
+        Place::Welcome,
+        Place::Accounts,
+    ];
+    for (serial, place) in (1..).zip(places) {
+        model.send(Intent::Show { place: Some(place) });
+        assert_eq!(
+            model.shown().window_request,
+            WindowRequest {
+                serial,
+                place: Some(place),
+            }
+        );
+    }
+    model.send(Intent::Show { place: None });
+    assert_eq!(model.shown().window_request.place, None);
 
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.forgetting = Err(refusal("account_unknown", "Nothing is parked.", Vec::new()));
@@ -3559,11 +3552,10 @@ fn a_request_for_the_window_can_ask_for_a_pane() {
     assert_eq!(
         model.shown().window_request,
         WindowRequest {
-            serial: 4,
-            pane: None,
-            settings: false,
+            serial: 7,
+            place: None,
         },
-        "an alert is over every pane"
+        "an alert is over every place"
     );
 }
 

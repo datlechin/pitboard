@@ -41,8 +41,10 @@ use super::advice::{Advice, HeadsUp, Told, rename_told};
 use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
-use super::{AtLimit, Failure, Intent, LastSwitch, Pane, QuitQuestion, ReadFailure, RestartNeeded};
-use super::{RunOutNotice, RunningSignIn, Sheet, Tip, WindowRequest};
+use super::{
+    AtLimit, Failure, Intent, LastSwitch, Pane, Place, QuitQuestion, ReadFailure, RestartNeeded,
+    RunOutNotice, RunningSignIn, SettingsSection, Sheet, Tip, WindowRequest,
+};
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::words::{
     COULD_NOT_CHANGE_WARM, COULD_NOT_GIVE_UP, COULD_NOT_STOW, COULD_NOT_TELL_WHOSE,
@@ -701,6 +703,11 @@ fn new_account(provider: &str) -> String {
 // What `switching` holds while Claude Code is switched by itself: the core chooses the account.
 const AUTOMATICALLY: &str = "claude";
 
+// Where what switching or warming up by itself came to is said.
+const LIMITS: Place = Place::Settings {
+    section: SettingsSection::Limits,
+};
+
 /// A rename, as its answer is taken in.
 #[derive(Clone, Copy)]
 struct Renaming<'a> {
@@ -1021,8 +1028,7 @@ impl State {
             failures: 0,
             window: WindowRequest {
                 serial: 0,
-                pane: None,
-                settings: false,
+                place: None,
             },
             signing_in: None,
             sign_in_holding: None,
@@ -1272,7 +1278,7 @@ impl State {
             Intent::OpensAtLogin { on } => self.opens_at_login = Some(on),
             // Keeping the choice shown there writes nothing, and the tip has done its work.
             Intent::ShowLimits => {
-                self.show_settings();
+                self.show(Some(LIMITS));
                 self.put_away(Tip::AtLimit, jobs);
             }
             Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
@@ -1321,10 +1327,10 @@ impl State {
                 self.sheet_failure = None;
                 self.left = None;
             }
-            Intent::ShowWindow { pane } => self.show_window(pane),
+            Intent::Show { place } => self.show(place),
             Intent::NotificationClicked { argument } => match Clicked::read(&argument) {
-                Clicked::Accounts => self.show_window(Some(Pane::Accounts)),
-                Clicked::Limits => self.show_settings(),
+                Clicked::Accounts => self.show(Some(Place::Accounts)),
+                Clicked::Limits => self.show(Some(LIMITS)),
                 Clicked::Switch(qualified) => {
                     self.intent(Intent::SwitchTo { qualified }, now, jobs);
                 }
@@ -1444,7 +1450,7 @@ impl State {
                 jobs,
             ),
             Pane::Activity => jobs.push(Job::ReadLog { limit: LOG_LIMIT }),
-            Pane::Machine => {
+            Pane::Checks => {
                 self.machine.checking += 1;
                 jobs.push(Job::Check);
             }
@@ -1837,7 +1843,7 @@ impl State {
             }
             self.sheet = Some(sheet);
         }
-        self.show_window(Some(Pane::Accounts));
+        self.show(Some(Place::Accounts));
     }
 
     // A save that changes no app's login lets its sheet be replaced and answers in the window.
@@ -1948,7 +1954,7 @@ impl State {
                 .extend(self.preferences.second_account_declined.iter().cloned());
             if !preferences.has_been_seen {
                 preferences.has_been_seen = true;
-                self.show_window(None);
+                self.show(None);
             }
             if preferences != read || !from_file {
                 jobs.push(Job::KeepPreferences {
@@ -3199,7 +3205,7 @@ impl State {
         // be answered comes back to the front rather than being left behind unseen.
         if self.switch_under_way().is_some() {
             if self.asking().is_some() || self.replace_asked().is_some() {
-                self.show_window(Some(Pane::Accounts));
+                self.show(Some(Place::Accounts));
             }
             return;
         }
@@ -3252,7 +3258,7 @@ impl State {
                     asked: true,
                     then,
                 });
-                self.show_window(Some(Pane::Accounts));
+                self.show(Some(Place::Accounts));
             }
             None => self.go_on(qualified, then, None, false, jobs),
         }
@@ -3433,7 +3439,7 @@ impl State {
                     message,
                     asked: true,
                 });
-                self.show_window(Some(Pane::Accounts));
+                self.show(Some(Place::Accounts));
             }
             Err(error) => {
                 self.switching = None;
@@ -3959,7 +3965,7 @@ impl State {
     /// Says a failure in the window.
     fn present(&mut self, refused: Refused) {
         self.presented = Some(self.number(refused));
-        self.show_window(None);
+        self.show(None);
     }
 
     /// A failure, numbered one higher than the last, wherever it is said.
@@ -3987,12 +3993,10 @@ impl State {
         self.warnings = warnings;
     }
 
-    /// Asks for the main window, on `pane` when it matters which.
-    fn show_window(&mut self, pane: Option<Pane>) {
+    fn show(&mut self, place: Option<Place>) {
         self.window = WindowRequest {
             serial: self.window.serial + 1,
-            pane,
-            settings: false,
+            place,
         };
     }
 
@@ -4002,14 +4006,6 @@ impl State {
                 preferences: self.preferences.clone(),
             });
         }
-    }
-
-    fn show_settings(&mut self) {
-        self.window = WindowRequest {
-            serial: self.window.serial + 1,
-            pane: None,
-            settings: true,
-        };
     }
 
     /// A look now, as the timer's would be, for a test that must not wait for the timer.

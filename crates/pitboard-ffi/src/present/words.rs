@@ -1174,6 +1174,10 @@ pub(crate) fn try_again(os: Os) -> String {
     titled(os, "Try Again", "Try again")
 }
 
+pub(crate) fn show_diagnostics(os: Os) -> String {
+    titled(os, "Show Diagnostics", "Show diagnostics")
+}
+
 pub(crate) fn warm_up_now(os: Os) -> String {
     titled(os, "Warm Up Now", "Warm up now")
 }
@@ -2183,20 +2187,18 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             let label = label.as_deref().map(bare);
             match (why, label) {
                 (SetAside::Superseded, Some(label)) => format!(
-                    "Pitboard kept {label}’s earlier parked login in {path} and deleted nothing. \
-                     This Mac lists it."
+                    "Pitboard kept {label}’s earlier parked login in {path} and deleted nothing."
                 ),
-                (SetAside::Superseded, None) => format!(
-                    "Pitboard kept an earlier parked login in {path} and deleted nothing. This \
-                     Mac lists it."
-                ),
+                (SetAside::Superseded, None) => {
+                    format!("Pitboard kept an earlier parked login in {path} and deleted nothing.")
+                }
                 (SetAside::GivenUp, Some(label)) => format!(
                     "Pitboard moved the parts of {label}’s login left in {app}’s folder into \
-                     {path} and deleted nothing. This Mac lists them."
+                     {path} and deleted nothing."
                 ),
                 (SetAside::GivenUp, None) => format!(
                     "Pitboard moved the parts of a login left in {app}’s folder into {path} and \
-                     deleted nothing. This Mac lists them."
+                     deleted nothing."
                 ),
                 (SetAside::InTheWay | SetAside::AnotherMachine | SetAside::Orphan, _) => {
                     format!(
@@ -2206,8 +2208,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             }
         }
         CoreWarning::KeysSetAside { path, label, .. } => format!(
-            "{app} rewrote {}’s keys. Pitboard kept the earlier ones in {} and deleted nothing. \
-             This Mac lists them.",
+            "{app} rewrote {}’s keys. Pitboard kept the earlier ones in {} and deleted nothing.",
             label.as_deref().map_or_else(|| "a login".into(), bare),
             path.display()
         ),
@@ -4487,6 +4488,36 @@ mod tests {
                  no login stored, and Pitboard holds no login for team/a."
             )
         );
+    }
+
+    // Its notice's Show Diagnostics opens the checks that list it.
+    #[test]
+    fn what_claude_desktop_set_aside_is_said_without_where_it_is_listed() {
+        let tool = ProviderId::Desktop;
+        let path = std::path::PathBuf::from("/p/parks/x");
+        let labels = [Some("desktop/home".to_owned()), None];
+        let mut warnings: Vec<CoreWarning> = labels
+            .iter()
+            .flat_map(|label| {
+                [SetAside::Superseded, SetAside::GivenUp].map(|why| CoreWarning::SetAside {
+                    tool,
+                    path: path.clone(),
+                    label: label.clone(),
+                    why,
+                })
+            })
+            .collect();
+        warnings.extend(labels.iter().map(|label| CoreWarning::KeysSetAside {
+            tool,
+            path: path.clone(),
+            label: label.clone(),
+        }));
+        for os in [Os::MacOs, Os::Windows] {
+            for warning in &warnings {
+                let said = in_app_warning(os, warning).expect("Claude Desktop's words");
+                assert!(said.ends_with("deleted nothing."), "{said}");
+            }
+        }
     }
 
     #[test]

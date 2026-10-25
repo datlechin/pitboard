@@ -50,7 +50,7 @@ package func snapshot(
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
-        windowRequest: WindowRequest(serial: 0, pane: nil), signingIn: nil, sheet: nil,
+        windowRequest: WindowRequest(serial: 0, place: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
         menuBar: MenuBarText(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,

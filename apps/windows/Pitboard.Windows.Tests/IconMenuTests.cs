@@ -14,7 +14,7 @@ public sealed class IconMenuTests
 
     private static readonly MenuEntry Stuck = new(
         "An interrupted switch is waiting", null, "Pitboard can finish it or give it up.", null,
-        new Intent.ShowWindow(Pane.Accounts), null, true);
+        new Intent.Show(new Place.Accounts()), null, true);
 
     private static AppModel Model(Func<Snapshot, Snapshot> change) => new(change(Snapshots.Read(1)));
 
@@ -162,7 +162,7 @@ public sealed class IconMenuTests
         Assert.AreEqual(new IconCommand.Send(Advice.Intent!), Command(entries, "menu.switch.0").Does);
         Assert.AreEqual(IconMark.Warning, Command(entries, "menu.switch.0").Mark);
         Assert.IsFalse(Command(entries, "menu.switch.0").Enabled);
-        Assert.AreEqual(new IconCommand.Send(new Intent.ShowWindow(Pane.Accounts)), Command(entries, "menu.others").Does);
+        Assert.AreEqual(new IconCommand.Send(new Intent.Show(new Place.Accounts())), Command(entries, "menu.others").Does);
         Assert.AreEqual(IconMark.Warning, Command(entries, "menu.others").Mark);
     }
 
@@ -188,7 +188,7 @@ public sealed class IconMenuTests
 
         Assert.AreEqual(new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))), Command(entries, "menu.addAccount").Does);
         Assert.AreEqual(new IconCommand.Send(new Intent.Refresh(Asked: true)), Command(entries, "menu.refresh").Does);
-        Assert.AreEqual(new IconCommand.Send(new Intent.ShowWindow(Pane: null)), Command(entries, "menu.openPitboard").Does);
+        Assert.AreEqual(new IconCommand.Send(new Intent.Show(Place: null)), Command(entries, "menu.openPitboard").Does);
         Assert.AreEqual(new IconCommand.ShowSettings(), Command(entries, "menu.settings").Does);
         Assert.AreEqual(new IconCommand.OpenLink("https://docs.usepitboard.com"), Command(entries, "menu.help").Does);
         Assert.AreEqual(new IconCommand.Quit(), Command(entries, "menu.exit").Does);

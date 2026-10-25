@@ -479,7 +479,7 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     let question = asked.quit_question.as_ref().expect("a question");
     assert_eq!(question.question.title, words::quit_to_switch("ChatGPT"));
     assert_eq!(switching(asked), Some("codex/work"));
-    assert_eq!(asked.window_request.pane, Some(super::Pane::Accounts));
+    assert_eq!(asked.window_request.place, Some(super::Place::Accounts));
     assert!(
         apps.asked().is_empty(),
         "nothing is quit before the person says so"
@@ -1715,9 +1715,7 @@ fn the_machine_is_kept_over_the_real_core() {
         "{lines:?}"
     );
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks", |last| {
         !last.machine.checks.lines.is_empty() && !last.machine.checks.checking
     });

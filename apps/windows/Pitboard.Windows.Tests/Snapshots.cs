@@ -8,7 +8,7 @@ internal static class Snapshots
     public static Snapshot Read(ulong revision) =>
         new(
             Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
-            WindowRequest: new WindowRequest(Serial: 0, Pane: null),
+            WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,

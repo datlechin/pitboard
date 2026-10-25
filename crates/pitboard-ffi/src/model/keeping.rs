@@ -6,7 +6,7 @@ use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::status;
-use super::{AtLimit, EarlierPreferences, Intent, Tip, WindowRequest};
+use super::{AtLimit, EarlierPreferences, Intent, Place, SettingsSection, Tip, WindowRequest};
 use crate::Footing;
 use crate::present::testing::account;
 use std::collections::BTreeSet;
@@ -143,7 +143,12 @@ fn opening_the_settings_from_the_tip_ends_it() {
     assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
     model.send(Intent::ShowLimits);
     model.run(&mut machine);
-    assert!(model.shown().window_request.settings);
+    assert_eq!(
+        model.shown().window_request.place,
+        Some(Place::Settings {
+            section: SettingsSection::Limits
+        })
+    );
     assert_eq!(model.shown().footing, Footing::Ready);
     assert_eq!(
         started(&mut machine).shown().footing,
@@ -192,8 +197,7 @@ fn the_first_launch_opens_the_window_once() {
         first.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: None,
-            settings: false,
+            place: None,
         }
     );
     assert!(machine.kept_preferences.last().expect("kept").has_been_seen);

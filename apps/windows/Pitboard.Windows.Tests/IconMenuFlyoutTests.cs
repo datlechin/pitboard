@@ -15,7 +15,7 @@ public sealed class IconMenuFlyoutTests
 {
     private static readonly MenuEntry Stuck = new(
         "An interrupted switch is waiting", null, "Pitboard can finish it or give it up.", null,
-        new Intent.ShowWindow(Pane.Accounts), null, true);
+        new Intent.Show(new Place.Accounts()), null, true);
 
     private static AppModel TwoTools(bool reading = false) => new(TwoToolsRead(reading));
 

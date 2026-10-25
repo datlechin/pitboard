@@ -6,7 +6,7 @@ use super::words;
 use super::{Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen, Severity};
 use crate::model::advice::HeadsUp;
 use crate::model::state::in_its_app;
-use crate::model::{Intent, LastSwitch, Pane, Sheet};
+use crate::model::{Intent, LastSwitch, Place, Sheet};
 use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
 use crate::{Account, Adoption, Held, Warning};
 use pitboard_core::host::OS;
@@ -330,6 +330,19 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
 fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
     if warning.code == "login_replaced" {
         return sign_in_again_action(seen, warning);
+    }
+    // Doctor's checks list what was set aside.
+    if warning.code == "set_aside" {
+        return vec![NoticeAction {
+            title: words::show_diagnostics(seen.os),
+            intent: Intent::Show {
+                place: Some(Place::Checks),
+            },
+            dismisses: false,
+            switches: false,
+            enabled: true,
+            confirm: None,
+        }];
     }
     if let Some(provider) = warning.provider.as_deref().filter(|tool| in_its_app(tool)) {
         return in_app_actions(seen, provider, &warning.code);
@@ -730,8 +743,8 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             }),
             help: one.then(|| first.lines.join(" ")),
             severity: Some(first.severity),
-            intent: Some(Intent::ShowWindow {
-                pane: Some(Pane::Accounts),
+            intent: Some(Intent::Show {
+                place: Some(Place::Accounts),
             }),
             link: None,
             enabled: true,
@@ -826,6 +839,46 @@ mod tests {
             .iter()
             .map(|action| (action.title.as_str(), &action.intent))
             .collect()
+    }
+
+    // Doctor's checks list what was set aside, so its notice shows them rather than saying where.
+    #[test]
+    fn a_notice_about_what_was_set_aside_offers_show_diagnostics() {
+        for os in [Os::MacOs, Os::Windows] {
+            for provider in [None, Some("desktop")] {
+                let set_aside = Warning {
+                    code: "set_aside".into(),
+                    message: "Pitboard kept an earlier parked login and deleted nothing.".into(),
+                    account: None,
+                    held: None,
+                    provider: provider.map(str::to_owned),
+                };
+                let state = read(
+                    status(Vec::new(), vec![set_aside]),
+                    vec![claude_code(), claude_desktop()],
+                );
+                let shown = present_on(os, &state, 0, &Utc);
+                let notice = shown
+                    .notices
+                    .iter()
+                    .find(|notice| notice.id.starts_with("warning/set_aside/"))
+                    .expect("its notice");
+                assert_eq!(
+                    notice.actions,
+                    [NoticeAction {
+                        title: words::show_diagnostics(os),
+                        intent: Intent::Show {
+                            place: Some(Place::Checks)
+                        },
+                        dismisses: false,
+                        switches: false,
+                        enabled: true,
+                        confirm: None,
+                    }],
+                    "{os:?} {provider:?}"
+                );
+            }
+        }
     }
 
     #[test]

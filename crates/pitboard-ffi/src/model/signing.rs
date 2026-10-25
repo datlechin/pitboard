@@ -17,7 +17,7 @@ use super::testing::records::{
     CLAUDE, awaiting, claude, claude_code, claude_desktop, codex, codex_account, desktop_account,
     desktop_warning, enrolled_as, refusal, status, still_running, switched, warning,
 };
-use super::{Intent, Pane, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
+use super::{Intent, Place, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
 use crate::EnrolledAs;
 use crate::present::words;
 use pitboard_core::host::{OS, Os};
@@ -1168,8 +1168,7 @@ fn a_running_sign_in_keeps_its_sheet() {
         shown.window_request,
         WindowRequest {
             serial: requests + 2,
-            pane: Some(Pane::Accounts),
-            settings: false,
+            place: Some(Place::Accounts),
         }
     );
 
@@ -1342,8 +1341,7 @@ fn a_sheet_is_put_up_over_the_window() {
         shown.window_request,
         WindowRequest {
             serial: 1,
-            pane: Some(Pane::Accounts),
-            settings: false,
+            place: Some(Place::Accounts),
         }
     );
 }
@@ -1487,8 +1485,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
         shown.window_request,
         WindowRequest {
             serial: requests + 1,
-            pane: None,
-            settings: false,
+            place: None,
         }
     );
     assert_eq!((shown.sheet, shown.sheet_failure), (None, None));
