@@ -1,15 +1,17 @@
 ---
 // The top of the Limits pane as macOS 27 draws it, in the words machine.rs gives
-// LimitsSettings.swift; each height cuts the window 8 points below its first group.
+// LimitsSettings.swift; each height cuts the window 8 points below its first group. Its controls
+// carry the names machine.rs gives them, and their ids start `prefix`.
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock } from "../../../data/world.ts";
 import { hm } from "../../../lib/words.ts";
 
 interface Props {
+  prefix: string;
   show: "switch" | "warm";
 }
-const { show } = Astro.props;
+const { prefix, show } = Astro.props;
 const tabs = [
   ["general", "General", "sf-gear"],
   ["limits", "Limits", "sf-gauge"],
@@ -29,7 +31,7 @@ const field = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window
 const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-sep)]";
 ---
 
-<div class:list={["desk", heights[show]]} aria-hidden="true" data-output>
+<pb-settings id={prefix} class:list={["desk block", heights[show]]} inert data-output>
   <div
     class="absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
   >
@@ -59,6 +61,7 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
           <div class={group}>
             <div class:list={[row, "h-40.5 items-center pr-14 pb-4.5"]}>
               <span class="flex-1">When a limit reaches</span>
+              {/* drawn: an input's text sits lower in its box than macOS draws it */}
               <span
                 class:list={[
                   "flex h-25.5 w-57.5 items-center justify-end rounded-u-6 bg-mac-window-bg pr-7.5 tabular-nums",
@@ -68,6 +71,11 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
               >
               <svg
                 class="ml-7.5 h-24 w-19.5 shrink-0 rounded-u-5 bg-mac-window-control"
+                role="spinbutton"
+                aria-label="Share of a limit"
+                aria-valuenow="95"
+                aria-valuemin="50"
+                aria-valuemax="99"
                 viewBox="0 0 19.5 24"
                 fill="none"
                 stroke="currentColor"
@@ -77,11 +85,21 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
                 <path d="M5.4 8.1 10 3.4l4.6 4.7M5.4 15.4l4.6 4.7 4.6-4.7" stroke-width="1.75" />
                 <path d="M3.5 11.75h12.5" stroke-opacity=".16" />
               </svg>
-              <span class="ml-21.5 whitespace-nowrap">{choice}</span>
+              {/* a pop-up button, which says its choice as a select-only combobox does */}
               <span
-                class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+                class="flex items-center"
+                role="combobox"
+                aria-label="When a limit reaches 95%"
+                aria-haspopup="listbox"
+                aria-expanded="false"
               >
-                <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                <span class="ml-21.5 whitespace-nowrap">{choice}</span>
+                <span
+                  class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+                  aria-hidden="true"
+                >
+                  <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                </span>
               </span>
             </div>
             <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
@@ -118,17 +136,17 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
               >
             </div>)}
             <div class:list={[row, ruled, "h-56.5 items-start pt-11"]}>
-              <span class="flex-1">
+              <span class="flex-1" id={`${prefix}-personal`}>
                 personal · Max
                 20x<small class:list={[small, "mt-3"]}
                   >Warms up again at {hm(clock.warmsAgain)}</small
                 >
               </span>
-              <Switch on />
+              <Switch on aria-labelledby={`${prefix}-personal`} />
             </div>
             <div class:list={[row, ruled, "h-38.5 items-center pb-1.5"]}>
-              <span class="flex-1">work · Max 20x</span>
-              <Switch />
+              <span class="flex-1" id={`${prefix}-work`}>work · Max 20x</span>
+              <Switch aria-labelledby={`${prefix}-work`} />
             </div>
             <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
               <span class={small}>Next warm-up: personal at {hm(clock.warmsAgain)}.</span>
@@ -138,4 +156,4 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
       )}
     </div>
   </div>
-</div>
+</pb-settings>

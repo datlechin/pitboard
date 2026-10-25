@@ -708,3 +708,13 @@ test("everything the model says keeps the site's rules: no dash, a committed fac
     }
   }
 });
+
+test("anything done on the page marks it changed until Reset, and time passing does not", () => {
+  reset();
+  advance(NOW + READ_EVERY_SECONDS + DECIDE_EVERY_SECONDS);
+  assert.equal(model.get().changed, false, "a read and a look are the app's own");
+  setShare(90);
+  assert.equal(model.get().changed, true);
+  reset();
+  assert.equal(model.get().changed, false);
+});

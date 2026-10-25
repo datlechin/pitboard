@@ -1,13 +1,21 @@
 ---
-interface Props {
+// An item of the menu bar; Pitboard's own is a button, and every other the system's, drawn.
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends HTMLAttributes<"button"> {
   on?: boolean;
-  class?: string;
+  button?: boolean;
 }
-const { on = false, class: extra } = Astro.props;
+const { on = false, button = false, class: extra, ...rest } = Astro.props;
+const look = ["flex h-22 items-center gap-2.25 rounded-u-6 px-7", { "bg-mac-bar-hl": on }, extra];
 ---
 
-<div
-  class:list={["flex h-22 items-center gap-2.25 rounded-u-6 px-7", { "bg-mac-bar-hl": on }, extra]}
->
-  <slot />
-</div>
+{button ? (
+  <button class:list={look} type="button" {...rest}>
+    <slot />
+  </button>
+) : (
+  <div class:list={look} aria-hidden="true">
+    <slot />
+  </div>
+)}

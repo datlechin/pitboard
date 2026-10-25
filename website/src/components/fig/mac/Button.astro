@@ -1,15 +1,22 @@
 ---
-// A push button as macOS 27 draws it: 24 points tall, flat, its corners 6.
-interface Props {
+// A push button as macOS 27 draws it: 24 points tall, flat, its corners 6. Without `button`, the
+// picture of one in a window that stays a drawing.
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends HTMLAttributes<"button"> {
   default?: boolean;
+  button?: boolean;
 }
-const { default: main = false } = Astro.props;
+const { default: main = false, button = true, ...rest } = Astro.props;
+const Item = button ? "button" : "span";
 ---
 
-<span
+<Item
   class:list={[
     "inline-flex h-24 items-center rounded-u-6 px-13 text-u-13 whitespace-nowrap",
     main ? "bg-mac-window-blue text-white" : "bg-mac-window-btn",
   ]}
+  type={button ? "button" : undefined}
+  {...rest}
   ><slot
-/></span>
+/></Item>

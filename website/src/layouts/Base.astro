@@ -108,6 +108,8 @@ const og = await ogImage(image);
     <SiteHeader current={current} stars={stars} />
     <slot />
     <SiteFooter />
+    {/* the page's one status region: what a Copy button or a figure shows for a result */}
+    <p class="sr-only" id="status" role="status"></p>
     <script>
       import "../scripts/site.ts";
     </script>

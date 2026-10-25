@@ -182,9 +182,9 @@ const jsonLd = [
             },
           }}
         >
-          <Desk demo />
-          <WinDesk slot="win" demo updates={updates} />
-          <Term slot="cli" session={sessions.status} />
+          <Desk prefix="hero-mac" demo />
+          <WinDesk slot="win" prefix="hero-win" demo updates={updates} />
+          <Term slot="cli" prefix="hero-cli" session={sessions.status} />
         </Figure>
       </div>
     </section>
@@ -217,9 +217,9 @@ const jsonLd = [
           },
         }}
       >
-        <Accounts moment="after" crop />
-        <WinAccounts slot="win" moment="after" crop />
-        <Term slot="cli" session={sessions.use} />
+        <Accounts prefix="switch-mac" moment="after" crop />
+        <WinAccounts slot="win" prefix="switch-win" moment="after" crop />
+        <Term slot="cli" prefix="switch-cli" session={sessions.use} />
       </Figure>
     </Feature>
     <Feature id="desktop" title="Claude Desktop">
@@ -245,8 +245,8 @@ const jsonLd = [
           },
         }}
       >
-        <Accounts moment="after" only="desktop" />
-        <Term slot="cli" session={sessions.useDesktop} />
+        <Accounts prefix="desktop-mac" moment="after" only="desktop" />
+        <Term slot="cli" prefix="desktop-cli" session={sessions.useDesktop} />
       </Figure>
     </Feature>
 
@@ -288,9 +288,9 @@ const jsonLd = [
           },
         }}
       >
-        <Accounts moment="before" />
-        <WinAccounts slot="win" moment="before" />
-        <Term slot="cli" session={sessions.statusBefore} />
+        <Accounts prefix="usage-mac" moment="before" />
+        <WinAccounts slot="win" prefix="usage-win" moment="before" />
+        <Term slot="cli" prefix="usage-cli" session={sessions.statusBefore} />
       </Figure>
     </Feature>
 
@@ -325,8 +325,8 @@ const jsonLd = [
               },
             }}
           >
-            <Notice />
-            <WinNotice slot="win" />
+            <Notice prefix="offer-mac" />
+            <WinNotice slot="win" prefix="offer-win" />
           </Figure>
         </Row>
         <Row id="auto-title" title="Automatic switch" flip>
@@ -367,9 +367,9 @@ const jsonLd = [
               },
             }}
           >
-            <Settings show="switch" />
-            <WinSettings slot="win" show="switch" />
-            <Term slot="cli" session={sessions.watchInstall} />
+            <Settings prefix="auto-mac" show="switch" />
+            <WinSettings slot="win" prefix="auto-win" show="switch" />
+            <Term slot="cli" prefix="auto-cli" session={sessions.watchInstall} />
           </Figure>
         </Row>
         <Row id="warm-title" title="Warm-up">
@@ -399,9 +399,9 @@ const jsonLd = [
               },
             }}
           >
-            <Settings show="warm" />
-            <WinSettings slot="win" show="warm" />
-            <Term slot="cli" session={sessions.warm} />
+            <Settings prefix="warm-mac" show="warm" />
+            <WinSettings slot="win" prefix="warm-win" show="warm" />
+            <Term slot="cli" prefix="warm-cli" session={sessions.warm} />
           </Figure>
         </Row>
       </div>
@@ -428,8 +428,8 @@ const jsonLd = [
           },
         }}
       >
-        <OpenLink />
-        <WinDesk slot="win" submenu="claude.ai" updates={updates} />
+        <OpenLink prefix="windows-mac" />
+        <WinDesk slot="win" prefix="windows-win" submenu="claude.ai" updates={updates} />
       </Figure>
     </Feature>
 
@@ -472,9 +472,9 @@ const jsonLd = [
           },
         }}
       >
-        <Activity />
-        <WinActivity slot="win" />
-        <Term slot="cli" session={sessions.log} />
+        <Activity prefix="security-mac" />
+        <WinActivity slot="win" prefix="security-win" />
+        <Term slot="cli" prefix="security-cli" session={sessions.log} />
       </Figure>
     </Feature>
 

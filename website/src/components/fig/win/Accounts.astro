@@ -1,5 +1,6 @@
 ---
 // AccountsPage.xaml with AccountRow.xaml's rows, and after a switch the notice NoticeBar.xaml shows.
+// The ListView is a grid of one row an account, a row group a tool, each named as Narrator hears it.
 import Button from "./Button.astro";
 import InfoBar from "./InfoBar.astro";
 import PageHeader from "./PageHeader.astro";
@@ -9,18 +10,20 @@ import { moments, type Moment } from "../../../data/world.ts";
 import { whole } from "../../../lib/words.ts";
 
 interface Props {
+  prefix: string;
   moment: Moment;
   crop?: boolean;
 }
-const { moment, crop = false } = Astro.props;
+const { prefix, moment, crop = false } = Astro.props;
 const page = accountsPage(moments[moment], moment === "after" ? switchNotice : null);
 const fill = { g: "fill-win-success", y: "fill-win-caution", r: "fill-win-critical" };
 const mark = { under: "stroke-win-success", over: "stroke-win-critical" };
 const caption = "text-u-12/16 text-win-text-2";
 ---
 
-<Window pane="accounts" crop={crop}>
+<Window prefix={prefix} pane="accounts" crop={crop}>
   <PageHeader
+    prefix={prefix}
     title={page.title}
     subtitle={page.updated}
     commands={[
@@ -34,88 +37,103 @@ const caption = "text-u-12/16 text-win-text-2";
         <span class="mt-8 block tabular-nums">{page.notice.countdown}</span>
       </InfoBar>
     </div>}
-    {page.sections.map((section) => (
-      <>
-        <div class="mx-12 pt-8 pb-10 font-semibold">{section.name}</div>
+    <div role="grid" aria-labelledby={`${prefix}-title`}>
+      {page.sections.map((section, t) => <div role="rowgroup" aria-labelledby={`${prefix}-${t}`}>
+        <div class="mx-12 pt-8 pb-10 font-semibold" id={`${prefix}-${t}`} aria-hidden="true">
+          {section.name}
+        </div>
         <div class="mx-12 h-1 bg-win-group-rule" />
-        {section.rows.map((row) => <div
-          class="grid grid-cols-[calc(var(--spacing)*28)_1fr_auto] gap-x-12 gap-y-8 py-10 pr-12 pl-16"
-        >
-          <svg
-            class:list={[
-              "size-20 self-center justify-self-center",
-              row.inUse ? "text-win-accent-text" : "text-win-text-2",
-            ]}
+        {section.rows.map((row) => <div role="row" aria-selected="false" aria-label={row.spoken}>
+          <div
+            class="grid grid-cols-[calc(var(--spacing)*28)_1fr_auto] gap-x-12 gap-y-8 py-10 pr-12 pl-16"
+            role="gridcell"
           >
-            <use href={row.inUse ? "#fl-person-filled" : "#fl-person"} />
-          </svg>
-          <span class="flex min-w-0 flex-col gap-2 self-center">
-            <span class="flex items-center gap-8">
-              <b class="truncate font-semibold">{row.label}</b>
-              {row.plan && <span class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
-                >{row.plan}</span
-              >}
-            </span>
-            <span class:list={["truncate", caption]}>{row.email}</span>
-          </span>
-          <span class="self-center">
-            {row.action ? (
-              <Button>{row.action}</Button>
-            ) : (
-              <span class="flex items-center gap-6 text-win-text-2">
-                <svg class="size-12"><use href="#fl-checkmark" /></svg>In use
-              </span>
-            )}
-          </span>
-          <div class="col-span-2 col-start-2 flex flex-col gap-6">
-            <div
+            <svg
+              aria-hidden="true"
               class:list={[
-                "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
-                caption,
+                "size-20 self-center justify-self-center",
+                row.inUse ? "text-win-accent-text" : "text-win-text-2",
               ]}
             >
-              {row.limits.map((l) => (
-                <>
-                  <span>{l.short}</span>
-                  <svg
-                    class="h-12 w-full min-w-80 overflow-visible"
-                    viewBox="0 0 100 12"
-                    preserveAspectRatio="none"
-                  >
-                    <rect class="fill-win-strong" y="5.5" width="100" height="1" />
-                    {l.percent > 0 && (
-                      <rect
-                        class={fill[l.level]}
-                        y="4.5"
-                        width={l.percent}
-                        height="3"
-                        rx="0.4"
-                        ry="1.5"
-                      />
-                    )}
-                    {l.pace && l.pace.standing !== "even" && (
-                      <line
-                        class:list={["stroke-[calc(var(--spacing)*2)]", mark[l.pace.standing]]}
-                        x1={whole(l.pace.expected)}
-                        x2={whole(l.pace.expected)}
-                        y2="12"
-                        vector-effect="non-scaling-stroke"
-                      />
-                    )}
-                  </svg>
-                  <span class="min-w-36 text-right">{l.figure}</span>
-                  <span class="text-right">{l.resets}</span>
-                  <span
-                    class:list={["min-w-96", { "text-win-critical": l.pace?.standing === "over" }]}
-                    >{l.pace?.said}</span
-                  >
-                </>
-              ))}
+              <use href={row.inUse ? "#fl-person-filled" : "#fl-person"} />
+            </svg>
+            <span class="flex min-w-0 flex-col gap-2 self-center">
+              <span class="flex items-center gap-8">
+                <b class="truncate font-semibold">{row.label}</b>
+                {row.plan && <span class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
+                  >{row.plan}</span
+                >}
+              </span>
+              <span class:list={["truncate", caption]}>{row.email}</span>
+            </span>
+            <span class="self-center">
+              {row.action ? (
+                <Button aria-label={row.action.spoken}>{row.action.title}</Button>
+              ) : (
+                <span class="flex items-center gap-6 text-win-text-2">
+                  <svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg>In use
+                </span>
+              )}
+            </span>
+            <div class="col-span-2 col-start-2 flex flex-col gap-6">
+              <div
+                class:list={[
+                  "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
+                  caption,
+                ]}
+              >
+                {row.limits.map((l) => (
+                  <>
+                    {/* the limit read once, as a sentence, and not the bar and each figure */}
+                    <span
+                      ><span aria-hidden="true">{l.short}</span
+                      ><span class="sr-only">{l.spoken}</span></span
+                    >
+                    <svg
+                      aria-hidden="true"
+                      class="h-12 w-full min-w-80 overflow-visible"
+                      viewBox="0 0 100 12"
+                      preserveAspectRatio="none"
+                    >
+                      <rect class="fill-win-strong" y="5.5" width="100" height="1" />
+                      {l.percent > 0 && (
+                        <rect
+                          class={fill[l.level]}
+                          y="4.5"
+                          width={l.percent}
+                          height="3"
+                          rx="0.4"
+                          ry="1.5"
+                        />
+                      )}
+                      {l.pace && l.pace.standing !== "even" && (
+                        <line
+                          class:list={["stroke-[calc(var(--spacing)*2)]", mark[l.pace.standing]]}
+                          x1={whole(l.pace.expected)}
+                          x2={whole(l.pace.expected)}
+                          y2="12"
+                          vector-effect="non-scaling-stroke"
+                        />
+                      )}
+                    </svg>
+                    <span class="min-w-36 text-right" aria-hidden="true">{l.figure}</span>
+                    <span class="text-right" aria-hidden="true">{l.resets}</span>
+                    <span
+                      aria-hidden="true"
+                      class:list={[
+                        "min-w-96",
+                        { "text-win-critical": l.pace?.standing === "over" },
+                      ]}
+                      >{l.pace?.said}</span
+                    >
+                  </>
+                ))}
+              </div>
+              {row.notes.map((n) => <span class={caption}>{n}</span>)}
             </div>
-            {row.notes.map((n) => <span class={caption}>{n}</span>)}
           </div>
         </div>)}
-      </>
-    ))}
+      </div>)}
+    </div>
   </div>
 </Window>

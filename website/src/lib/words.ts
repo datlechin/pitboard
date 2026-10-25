@@ -295,6 +295,75 @@ export function menuBarTitle(w: World): string {
 // The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
 export const menuBarLevel = (w: World) => level(fullest(titled(w)));
 
+// The menu bar item's spoken name: Pitboard, its title, and the tool where more than one is read
+// (present/accounts.rs `menu_bar`).
+export const menuBarSpoken = (w: World) =>
+  ["Pitboard", menuBarTitle(w), toolName(titled(w).tool)].join(", ");
+
+// An account's row and its button, as VoiceOver and Narrator say them (present/accounts.rs `item`
+// and `action`).
+export const accountSpoken = (a: Account, w: World) =>
+  [a.label, a.plan, isInUse(a, w) ? "in use" : null].filter((s) => s !== null).join(", ");
+export const useSpoken = (a: Account) => `Use ${a.label}`;
+
+// present/words.rs `rounded_half_even`, `units` and `spoken_span`: "1 hour, 30 minutes".
+const halfEven = (n: number, d: number) => {
+  const whole = Math.floor(n / d);
+  const twice = 2 * (n - whole * d);
+  return twice < d ? whole : twice > d ? whole + 1 : whole + (whole & 1);
+};
+const units = (count: number, unit: string) => (count === 1 ? `1 ${unit}` : `${count} ${unit}s`);
+
+export function spokenSpan(seconds: number): string {
+  const s = Math.max(seconds, MINUTE);
+  const minutes = halfEven(s, MINUTE);
+  const counts: [number, number, string][] = [
+    [Math.floor(minutes / (24 * 60)), DAY, "day"],
+    [Math.floor((minutes % (24 * 60)) / 60), HOUR, "hour"],
+    [minutes % 60, MINUTE, "minute"],
+  ];
+  const named = counts.filter(([count]) => count > 0).slice(0, 2);
+  if (named.length === 1) return units(halfEven(s, named[0][1]), named[0][2]);
+  const [[, first, firstUnit], [, second, secondUnit]] = named;
+  let whole = Math.floor(s / first);
+  let part = halfEven(s - whole * first, second);
+  if (part * second === first) {
+    whole += 1;
+    part = 0;
+  }
+  return `${units(whole, firstUnit)}, ${units(part, secondUnit)}`;
+}
+
+// present/words.rs `spoken_limit`: a limit's row read as one sentence, from its name, its share,
+// its pace and the seconds until it resets.
+export function spokenLimitOf(
+  name: string,
+  percent: number,
+  resettingIn: number | null,
+  p: Pace | null,
+): string {
+  let said = `${name} limit, ${whole(percent)} percent used`;
+  if (p) {
+    const points = whole(Math.abs(p.delta));
+    said +=
+      p.standing === "even"
+        ? ", on an even pace"
+        : `, ${points} percent ${p.standing} an even pace`;
+  }
+  if (resettingIn === null) return said;
+  return resettingIn <= 0
+    ? `${said}, resetting now`
+    : `${said}, resets in ${spokenSpan(resettingIn)}`;
+}
+
+export const spokenLimit = (limit: Limit, w: World) =>
+  spokenLimitOf(
+    scopedLimitName(limit),
+    limit.percent,
+    limit.resetsAt === null ? null : limit.resetsAt - w.now,
+    pace(limit, w),
+  );
+
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
 // the line the menu shows under it (present/accounts.rs `menu_bar`).
 export const trayTip = (w: World) =>

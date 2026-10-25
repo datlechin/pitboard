@@ -84,6 +84,8 @@ export type AutoStanding =
   | { came: "not-watching"; why: string };
 
 export interface State extends World {
+  // something was done on the page since the start or Reset, which time passing is not
+  changed: boolean;
   // the app runs: Quit stops it until Reset
   running: boolean;
   // when each account was last put in use, by id (state::Account::last_used_at)
@@ -126,6 +128,7 @@ export function start(): State {
     readAt: clock.read,
     accounts,
     inUse: { ...drawnInUse.before },
+    changed: false,
     running: true,
     lastUsedAt: {},
     preferences: { atLimit: "notify", chosen: true, share: defaultShare },
@@ -154,9 +157,10 @@ export function start(): State {
 export const model = map<State>(start());
 
 // Every action changes a copy and puts it in the store whole, so a view sees one change.
-function change<T>(make: (s: State) => T): T {
+function change<T>(make: (s: State) => T, done = true): T {
   const s = structuredClone(model.get());
   const out = make(s);
+  if (done) s.changed = true;
   model.set(s);
   return out;
 }
@@ -991,7 +995,7 @@ export function advance(to: number) {
       else decidePass(s);
     }
     s.now = Math.max(s.now, to);
-  });
+  }, false);
 }
 
 // The page's clock: the world's moment, then real time, by performance.now() so a throttled

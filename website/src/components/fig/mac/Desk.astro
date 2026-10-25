@@ -1,5 +1,6 @@
 ---
-// MenuBarContent.swift's menu over a Claude Code session; with `demo`, site.ts plays a switch.
+// MenuBarContent.swift's menu over a Claude Code session; with `demo`, site.ts plays a switch. Its
+// item and menu carry the roles of a menu button and its menu, their ids each starting `prefix`.
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import Terminal from "./Terminal.astro";
@@ -10,6 +11,7 @@ import {
   isInUse,
   listed,
   menuBarClock,
+  menuBarSpoken,
   menuBarTitle,
   menuLine,
   menuTitle,
@@ -17,9 +19,12 @@ import {
 } from "../../../lib/words.ts";
 
 interface Props {
+  prefix: string;
   demo?: boolean;
 }
-const { demo = false } = Astro.props;
+const { prefix, demo = false } = Astro.props;
+const item = `${prefix}-item`;
+const menu = `${prefix}-menu`;
 const shown: Moment[] = demo ? ["before", "after"] : ["after"];
 // one state, or both with the moments that show each
 // The session's status line follows the switch after the menu does.
@@ -38,7 +43,13 @@ const rule =
   "bg-linear-to-b from-mac-term-rule to-mac-term-rule bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
 ---
 
-<div class="desk h-668" data-demo-desk={demo ? "" : undefined} aria-hidden="true" data-output>
+<pb-menubar
+  id={prefix}
+  class="desk block h-668"
+  data-demo-desk={demo ? "" : undefined}
+  inert
+  data-output
+>
   <Terminal
     title="claude"
     class="top-156 bottom-14 left-14 w-416 [&_.elbow]:mr-2 [&_.elbow]:ml-1 [&_.elbow]:size-6 [&_.elbow]:align-[calc(var(--spacing)*3)]"
@@ -63,7 +74,16 @@ const rule =
   </Terminal>
   <MenuBar clock={menuBarClock(clock.menuBar)}>
     <div class="relative">
-      <MenuItem on class="demo-shut:bg-transparent">
+      <MenuItem
+        button
+        on
+        class="demo-shut:bg-transparent"
+        id={item}
+        aria-label={menuBarSpoken(moments.after)}
+        aria-haspopup="menu"
+        aria-expanded="true"
+        aria-controls={menu}
+      >
         <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg>
         <span
           set:html={either(
@@ -74,6 +94,9 @@ const rule =
       </MenuItem>
       <div
         class="absolute top-26 left-0 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text normal-nums shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 demo-shut:opacity-0"
+        id={menu}
+        role="menu"
+        aria-labelledby={item}
       >
         {shown.map((moment) => <div
           class:list={[
@@ -83,55 +106,72 @@ const rule =
         >
           {tools.map(([tool, name], i) => (
             <>
-              {i > 0 && <div class={sep} />}
-              <div class="pt-5.5 pr-18 pb-3 pl-30 text-u-11 font-semibold text-mac-menu-dim">
-                {name}
-              </div>
-              {listed(moments[moment], tool).map((a) => {
-                const pick = demo && moment === "before" && tool === "claude" && a.label === "work";
-                return <div
-                  class:list={[
-                    row,
-                    "pt-3",
-                    {
-                      "bg-mac-menu-hl text-white demo-moving:bg-transparent demo-moving:text-inherit":
-                        pick,
-                    },
-                  ]}
+              {i > 0 && <div class={sep} role="separator" />}
+              {/* a group per tool, named by its heading */}
+              <div role="group" aria-labelledby={`${prefix}-${moment}-${tool}`}>
+                <div
+                  class="pt-5.5 pr-18 pb-3 pl-30 text-u-11 font-semibold text-mac-menu-dim"
+                  id={`${prefix}-${moment}-${tool}`}
+                  aria-hidden="true"
                 >
-                  {isInUse(a, moments[moment]) && <svg
-                    class="absolute top-1/2 left-7 -mt-6 size-14 shrink-0"
+                  {name}
+                </div>
+                {listed(moments[moment], tool).map((a) => {
+                  const pick =
+                    demo && moment === "before" && tool === "claude" && a.label === "work";
+                  return <div
+                    class:list={[
+                      row,
+                      "group/item pt-3",
+                      {
+                        "bg-mac-menu-hl text-white demo-moving:bg-transparent demo-moving:text-inherit":
+                          pick,
+                      },
+                    ]}
+                    role="menuitemradio"
+                    aria-checked={isInUse(a, moments[moment]) ? "true" : "false"}
                   >
-                    <use href="#sf-check-heavy" />
-                  </svg>}
-                  <span class="flex-1">
-                    <span class="block">{menuTitle(a)}</span>
-                    <span
-                      class:list={[
-                        "block text-u-11/15",
-                        pick ? "text-inherit demo-moving:text-mac-menu-sub" : "text-mac-menu-sub",
-                      ]}
+                    <svg
+                      class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/item:block"
                     >
-                      {menuLine(a, moments[moment])}
+                      <use href="#sf-check-heavy" />
+                    </svg>
+                    <span class="flex-1">
+                      <span class="block">{menuTitle(a)}</span>
+                      <span
+                        class:list={[
+                          "block text-u-11/15",
+                          pick ? "text-inherit demo-moving:text-mac-menu-sub" : "text-mac-menu-sub",
+                        ]}
+                      >
+                        {menuLine(a, moments[moment])}
+                      </span>
                     </span>
-                  </span>
-                </div>;
-              })}
+                  </div>;
+                })}
+              </div>
             </>
           ))}
         </div>)}
-        <div class={sep}></div>
+        <div class={sep} role="separator"></div>
         {menuCommands.map((a) =>
           a === null ? (
-            <div class={sep} />
+            <div class={sep} role="separator" />
           ) : (
-            <div class:list={[row, { "pt-3": a.sub }]}>
+            <div
+              class:list={[row, { "pt-3": a.sub }]}
+              role="menuitem"
+              aria-haspopup={a.more ? "menu" : undefined}
+              aria-expanded={a.more ? "false" : undefined}
+            >
               <span class="flex-1">
                 <span class="block">{a.title}</span>
                 {a.sub && <span class="block text-u-11/15 text-mac-menu-sub">{a.sub}</span>}
               </span>
+              {/* a key equivalent is named in aria-keyshortcuts once it works on the page */}
               <span
                 class="ml-24 grid grid-cols-[calc(var(--spacing)*12)_calc(var(--spacing)*10)] text-mac-menu-dim"
+                aria-hidden="true"
               >
                 {a.keys &&
                   [...a.keys].map((k, j) => <i class:list={["not-italic", { "text-center": j > 0 }]}
@@ -150,6 +190,7 @@ const rule =
     </div>
   </MenuBar>
   {demo && <svg
+    aria-hidden="true"
     class="pointer-events-none absolute top-12 left-300 z-3 h-21 w-14 origin-[1px_1px] transition-transform duration-800 ease-out demo-start:-translate-x-53 demo-start:translate-y-40 demo-row:translate-x-72 demo-row:translate-y-100 demo-pick:scale-86 demo-pick:duration-100"
     viewBox="0 0 17 25"
   >
@@ -160,4 +201,4 @@ const rule =
       stroke-linejoin="round"
     />
   </svg>}
-</div>
+</pb-menubar>

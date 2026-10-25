@@ -1,19 +1,24 @@
 ---
-// The icon's MenuFlyout as IconMenuFlyout.cs builds it from IconMenu.cs, on its narrow padding.
+// The icon's MenuFlyout as IconMenuFlyout.cs builds it from IconMenu.cs, on its narrow padding, with
+// a menu's roles: a group per tool headed by a disabled item, as WinUI shows the heading.
 import { iconMenu, type MenuEntry } from "../../../data/windows.ts";
 import { moments, type Moment } from "../../../data/world.ts";
 
 interface Props {
+  prefix: string;
+  // the icon that opens it, which names it
+  owner: string;
   demo?: boolean;
   updates?: boolean;
   submenu?: string;
   class?: string;
 }
-const { demo = false, updates = false, submenu, class: extra } = Astro.props;
+const { prefix, owner, demo = false, updates = false, submenu, class: extra } = Astro.props;
 const shown: Moment[] = demo ? ["before", "after"] : ["after"];
 const flyout =
   "rounded-u-8 bg-win-flyout py-2 font-win text-u-14/20 whitespace-nowrap text-win-text shadow-win-flyout";
-const row = "relative mx-4 my-2 flex h-28 items-center rounded-u-4 pr-11 pl-39";
+const item = "flex h-28 items-center rounded-u-4 pr-11 pl-39";
+const row = `relative mx-4 my-2 ${item}`;
 // the row the demo's pointer chooses, and the site whose submenu is open
 const picked = (e: MenuEntry, moment: Moment) =>
   demo && moment === "before" && "account" in e && e.label === "work";
@@ -27,6 +32,9 @@ const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site ==
     { "demo-shut:opacity-0": demo },
     extra,
   ]}
+  id={`${prefix}-menu`}
+  role="menu"
+  aria-labelledby={owner}
 >
   {shown.map((moment) => <div
     class:list={[
@@ -34,44 +42,78 @@ const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site ==
       { "demo-before:hidden": demo && moment === "after" },
     ]}
   >
-    {iconMenu(moments[moment], updates).map((group, i) => (
-      <>
-        {i > 0 && <div class="my-1 h-1 bg-win-divider" />}
-        {group.map((e) =>
-          "heading" in e ? (
-            <div class:list={[row, "text-win-text-off"]}>{e.heading}</div>
-          ) : "account" in e ? (
-            <div
-              class:list={[
-                row,
-                {
-                  "bg-win-subtle demo-moving:bg-transparent demo-pick:bg-win-subtle-2": picked(
-                    e,
-                    moment,
-                  ),
-                },
-              ]}
-            >
-              {e.checked && (
-                <span
-                  class="absolute top-1/2 left-14 -mt-2.5 size-5 rounded-circle bg-win-text-2"
-                />
-              )}
-              {e.account}
-            </div>
-          ) : (
-            <div class:list={[row, { "font-semibold": e.bold, "bg-win-subtle": open(e) }]}>
-              <span class="flex-1">{e.command}</span>
-              {e.submenu && <svg class="ml-24 size-12 shrink-0 text-win-text-2">
-                <use href="#fl-chevron-right" />
-              </svg>}
-              {open(e) && <div class:list={["absolute -top-4 right-full", flyout]}>
-                {e.submenu!.map((label) => <div class:list={[row, "pl-11"]}>{label}</div>)}
-              </div>}
-            </div>
-          ),
-        )}
-      </>
-    ))}
+    {iconMenu(moments[moment], updates).map((group, i) => {
+      const heading = group.find((e) => "heading" in e);
+      const id = heading && `${prefix}-${moment}-${i}`;
+      return (
+        <>
+          {i > 0 && <div class="my-1 h-1 bg-win-divider" role="separator" />}
+          <div role={id ? "group" : "none"} aria-labelledby={id}>
+            {group.map((e) =>
+              "heading" in e ? (
+                <div
+                  class:list={[row, "text-win-text-off"]}
+                  id={id}
+                  role="menuitem"
+                  aria-disabled="true"
+                >
+                  {e.heading}
+                </div>
+              ) : "account" in e ? (
+                <div
+                  class:list={[
+                    row,
+                    "group/item",
+                    {
+                      "bg-win-subtle demo-moving:bg-transparent demo-pick:bg-win-subtle-2": picked(
+                        e,
+                        moment,
+                      ),
+                    },
+                  ]}
+                  role="menuitemradio"
+                  aria-checked={e.checked ? "true" : "false"}
+                  aria-describedby={picked(e, moment) ? `${prefix}-tip` : undefined}
+                >
+                  <span
+                    class="absolute top-1/2 left-14 -mt-2.5 hidden size-5 rounded-circle bg-win-text-2 group-aria-checked/item:block"
+                  />
+                  {e.account}
+                </div>
+              ) : e.submenu ? (
+                // the item and the menu it opens side by side, as a menu item holds no other
+                <div class="relative mx-4 my-2" role="none">
+                  <div
+                    class:list={[item, { "bg-win-subtle": open(e) }]}
+                    id={`${prefix}-${moment}-${e.site}`}
+                    role="menuitem"
+                    aria-haspopup="menu"
+                    aria-expanded={open(e) ? "true" : "false"}
+                  >
+                    <span class="flex-1">{e.command}</span>
+                    <svg class="ml-24 size-12 shrink-0 text-win-text-2">
+                      <use href="#fl-chevron-right" />
+                    </svg>
+                  </div>
+                  {open(e) && <div
+                    class:list={["absolute -top-4 right-full", flyout]}
+                    role="menu"
+                    aria-labelledby={`${prefix}-${moment}-${e.site}`}
+                  >
+                    {e.submenu.map((label) => <div class:list={[row, "pl-11"]} role="menuitem">
+                      {label}
+                    </div>)}
+                  </div>}
+                </div>
+              ) : (
+                <div class:list={[row, { "font-semibold": e.bold }]} role="menuitem">
+                  <span class="flex-1">{e.command}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </>
+      );
+    })}
   </div>)}
 </div>

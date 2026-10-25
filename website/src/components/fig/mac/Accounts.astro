@@ -1,17 +1,30 @@
 ---
-// AccountRow.swift, UsageBar.swift, and NoticeRow.swift for the notice a switch leaves.
+// AccountRow.swift, UsageBar.swift, and NoticeRow.swift for the notice a switch leaves. The list
+// is a grid of one row an account, a row group a tool, each named as VoiceOver hears it.
 import Button from "./Button.astro";
 import Window from "./Window.astro";
 import { moments, tools, type Moment, type Tool } from "../../../data/world.ts";
-import { hm, isInUse, limitRow, listed, notes, warmsAgainNote, whole } from "../../../lib/words.ts";
+import {
+  accountSpoken,
+  hm,
+  isInUse,
+  limitRow,
+  listed,
+  notes,
+  spokenLimit,
+  useSpoken,
+  warmsAgainNote,
+  whole,
+} from "../../../lib/words.ts";
 
 interface Props {
+  prefix: string;
   moment: Moment;
   crop?: boolean;
   // one tool's section alone, as the pane scrolled to it shows it
   only?: Tool;
 }
-const { moment, crop = false, only } = Astro.props;
+const { prefix, moment, crop = false, only } = Astro.props;
 const world = moments[moment];
 const shown = only ? tools.filter(([tool]) => tool === only) : tools;
 const fill = { g: "fill-mac-window-green", y: "fill-mac-window-orange", r: "fill-mac-window-red" };
@@ -20,17 +33,21 @@ const sub = "text-u-12/15 text-mac-window-sub";
 ---
 
 <Window
+  prefix={prefix}
   pane="accounts"
   title="Accounts"
   subtitle={`Updated ${hm(world.readAt)}`}
-  tools={["sf-refresh", "sf-plus"]}
+  tools={[
+    ["sf-refresh", "Refresh"],
+    ["sf-plus", "Add Account"],
+  ]}
   crop={crop}
   fit={only !== undefined}
 >
   {/* NoticeRow.swift, first in the list, its rule from under its words */}
   {crop && <div class="ml-23.5 pt-17.5 pb-7.5 inset-shadow-mac-window-b">
     <div class="-ml-23.5 flex items-start gap-8">
-      <svg class="-ml-1 size-16.5 shrink-0 text-mac-window-sub">
+      <svg class="-ml-1 size-16.5 shrink-0 text-mac-window-sub" role="img" aria-label="Note">
         <use href="#sf-info-fill" />
       </svg>
       <span class="flex-1">
@@ -39,14 +56,16 @@ const sub = "text-u-12/15 text-mac-window-sub";
           >Claude Code sessions already open follow in 0:21</span
         >
       </span>
-      <svg class="-mr-1 size-16.5 shrink-0 text-mac-window-sub">
-        <use href="#sf-xmark" />
-      </svg>
+      <button class="-mr-1 shrink-0 text-mac-window-sub" type="button" aria-label="Dismiss">
+        <svg class="block size-16.5"><use href="#sf-xmark" /></svg>
+      </button>
     </div>
   </div>}
-  {shown.map(([tool, name], t) => (
-    <>
+  <div role="grid" aria-labelledby={`${prefix}-title`}>
+    {shown.map(([tool, name], t) => <div role="rowgroup" aria-labelledby={`${prefix}-${tool}`}>
       <div
+        id={`${prefix}-${tool}`}
+        aria-hidden="true"
         class:list={[
           "pb-8.5 text-u-11/13 font-bold text-mac-window-sub inset-shadow-mac-window-b",
           t === 0 && !crop ? "pt-6.5" : "pt-26.5",
@@ -62,111 +81,139 @@ const sub = "text-u-12/15 text-mac-window-sub";
         const on = isInUse(a, world);
         const said = notes(a, world, warmsAgainNote(a));
         // each row's rule starts under its name
-        return <div class="ml-34 pt-8 pb-7.5 inset-shadow-mac-window-b">
-          <div class="-ml-34 flex items-center gap-8">
-            <svg
-              class:list={[
-                // a 17 point symbol whose frame is 20 tall
-                "-my-1 h-22 w-26 shrink-0",
-                on ? "text-mac-window-blue" : "text-mac-window-sub",
-              ]}
-            >
-              <use href={on ? "#sf-person-fill" : "#sf-person"} />
-            </svg>
-            <span class="flex min-w-0 flex-1 flex-col gap-2">
-              <span class="flex items-center gap-8 font-medium">
-                {a.label}
-                {a.plan && <span
-                  class="rounded-pill bg-mac-window-fill px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
-                  >{a.plan}</span
-                >}
+        return <div
+          class="ml-34 pt-8 pb-7.5 inset-shadow-mac-window-b"
+          role="row"
+          aria-selected="false"
+          aria-label={accountSpoken(a, world)}
+        >
+          <div role="gridcell">
+            <div class="-ml-34 flex items-center gap-8">
+              <svg
+                aria-hidden="true"
+                class:list={[
+                  // a 17 point symbol whose frame is 20 tall
+                  "-my-1 h-22 w-26 shrink-0",
+                  on ? "text-mac-window-blue" : "text-mac-window-sub",
+                ]}
+              >
+                <use href={on ? "#sf-person-fill" : "#sf-person"} />
+              </svg>
+              <span class="flex min-w-0 flex-1 flex-col gap-2">
+                <span class="flex items-center gap-8 font-medium">
+                  {a.label}
+                  {a.plan && <span
+                    class="rounded-pill bg-mac-window-fill px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
+                    >{a.plan}</span
+                  >}
+                </span>
+                {a.email && <span class={sub}>{a.email}</span>}
               </span>
-              {a.email && <span class={sub}>{a.email}</span>}
-            </span>
-            {on ? (
-              <span class="flex items-center gap-8.5 text-u-12 text-mac-window-sub">
-                <svg class="size-13.5 shrink-0">
-                  <use href="#sf-check" />
-                </svg>
-                In Use
-              </span>
-            ) : (
-              <Button>Use</Button>
-            )}
-          </div>
-          {/* macOS 27 sets a gauge's words 1.5 points above its middle */}
-          {a.limits.length > 0 && <div
-            class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums *:[span]:-mt-2.5"
-          >
-            {a.limits.map((limit) => {
-              const l = limitRow(limit, world);
-              const s = l.pace?.standing;
-              // the mark at the whole percent its pace is said in
-              const even = whole(l.pace?.expected ?? 0);
-              return (
-                <>
-                  <span class="text-mac-window-sub">{l.short}</span>
-                  <svg
-                    class="h-16 w-full overflow-visible"
-                    viewBox="0 0 100 16"
-                    preserveAspectRatio="none"
-                  >
-                    <rect class="fill-mac-window-track" width="100" height="16" rx="2.4" ry="2.5" />
-                    {l.percent > 0 && (
-                      <rect class={fill[l.level]} width={l.percent} height="16" rx="2.4" ry="2.5" />
-                    )}
-                    {/* the gauge's edge inside its bounds, a quarter point in from each side */}
-                    <rect
-                      class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
-                      x=".25"
-                      y=".25"
-                      width="99.5"
-                      height="15.5"
-                      rx="2.2"
-                      ry="2.25"
-                      vector-effect="non-scaling-stroke"
-                    />
-                    {s !== undefined && s !== "even" && (
-                      <>
-                        <rect
-                          class="fill-mac-window-bg"
-                          x={even - 2}
-                          y="-3"
-                          width="4"
-                          height="22"
-                          rx="2"
-                          ry="2"
-                        />
-                        <rect
-                          class={mark[s]}
-                          x={even - 1}
-                          y="-3"
-                          width="2"
-                          height="22"
-                          rx="1"
-                          ry="1"
-                        />
-                      </>
-                    )}
+              {on ? (
+                <span class="flex items-center gap-8.5 text-u-12 text-mac-window-sub">
+                  <svg class="size-13.5 shrink-0" aria-hidden="true">
+                    <use href="#sf-check" />
                   </svg>
-                  <span class="min-w-38 text-right">{l.figure}</span>
-                  <span class="min-w-110 text-right text-mac-window-sub">{l.resets}</span>
-                  <span
-                    class:list={[
-                      "min-w-100",
-                      // UsageBar.swift tints only over pace
-                      s === "over" ? "text-mac-window-red" : "text-mac-window-sub",
-                    ]}
-                    >{l.pace?.said}</span
-                  >
-                </>
-              );
-            })}
-          </div>}
-          {/* a note's line runs past its descent, so a row that ends in one has more under it */}
-          {said.map((n) => <p class:list={["mt-6 last:pb-1.5", sub]}>{n}</p>)}
+                  In Use
+                </span>
+              ) : (
+                <Button aria-label={useSpoken(a)}>Use</Button>
+              )}
+            </div>
+            {/* macOS 27 sets a gauge's words 1.5 points above its middle */}
+            {a.limits.length > 0 && <div
+              class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums *:[span]:-mt-2.5"
+            >
+              {a.limits.map((limit) => {
+                const l = limitRow(limit, world);
+                const s = l.pace?.standing;
+                // the mark at the whole percent its pace is said in
+                const even = whole(l.pace?.expected ?? 0);
+                return (
+                  <>
+                    {/* the row read as one sentence, and not the bar and each figure on their own */}
+                    <span class="text-mac-window-sub"
+                      ><span aria-hidden="true">{l.short}</span
+                      ><span class="sr-only">{spokenLimit(limit, world)}</span></span
+                    >
+                    <svg
+                      aria-hidden="true"
+                      class="h-16 w-full overflow-visible"
+                      viewBox="0 0 100 16"
+                      preserveAspectRatio="none"
+                    >
+                      <rect
+                        class="fill-mac-window-track"
+                        width="100"
+                        height="16"
+                        rx="2.4"
+                        ry="2.5"
+                      />
+                      {l.percent > 0 && (
+                        <rect
+                          class={fill[l.level]}
+                          width={l.percent}
+                          height="16"
+                          rx="2.4"
+                          ry="2.5"
+                        />
+                      )}
+                      {/* the gauge's edge inside its bounds, a quarter point in from each side */}
+                      <rect
+                        class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
+                        x=".25"
+                        y=".25"
+                        width="99.5"
+                        height="15.5"
+                        rx="2.2"
+                        ry="2.25"
+                        vector-effect="non-scaling-stroke"
+                      />
+                      {s !== undefined && s !== "even" && (
+                        <>
+                          <rect
+                            class="fill-mac-window-bg"
+                            x={even - 2}
+                            y="-3"
+                            width="4"
+                            height="22"
+                            rx="2"
+                            ry="2"
+                          />
+                          <rect
+                            class={mark[s]}
+                            x={even - 1}
+                            y="-3"
+                            width="2"
+                            height="22"
+                            rx="1"
+                            ry="1"
+                          />
+                        </>
+                      )}
+                    </svg>
+                    <span class="min-w-38 text-right" aria-hidden="true">{l.figure}</span>
+                    <span class="min-w-110 text-right text-mac-window-sub" aria-hidden="true"
+                      >{l.resets}</span
+                    >
+                    <span
+                      aria-hidden="true"
+                      class:list={[
+                        "min-w-100",
+                        // UsageBar.swift tints only over pace
+                        s === "over" ? "text-mac-window-red" : "text-mac-window-sub",
+                      ]}
+                      >{l.pace?.said}</span
+                    >
+                  </>
+                );
+              })}
+            </div>}
+            {/* a note's line runs past its descent, so a row that ends in one has more under it */}
+            {said.map((n) => <p class:list={["mt-6 last:pb-1.5", sub]}>{n}</p>)}
+          </div>
         </div>;
       })}
-    </>
-  ))}
+    </div>)}
+  </div>
 </Window>

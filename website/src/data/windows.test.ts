@@ -149,7 +149,23 @@ test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the cor
     ["Claude Code", "Codex"],
   );
   const rows = page.sections.flatMap((s) => s.rows);
-  assert.ok(rows.every((r) => r.inUse !== (r.action === "Use")));
+  assert.ok(rows.every((r) => r.inUse !== (r.action?.title === "Use")));
+  // Narrator hears a row, its button and each limit as present/accounts.rs says them
+  assert.ok(
+    views("AccountRow.xaml").includes(
+      'AutomationProperties.Name="{x:Bind local:AccountRow.ActionSpoken(Account.Item)',
+    ),
+  );
+  assert.ok(
+    views("AccountRow.xaml.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"),
+  );
+  const personal = rows.find((r) => r.label === "personal")!;
+  assert.equal(personal.spoken, "personal, Max 20x");
+  assert.equal(personal.action?.spoken, "Use personal");
+  assert.equal(
+    personal.limits[0].spoken,
+    "5-hour limit, 59 percent used, 18 percent under an even pace, resets in 1 hour, 10 minutes",
+  );
 });
 
 test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put together", () => {
@@ -201,6 +217,16 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(machine.includes(`const AT_LIMIT: &str = "${s.atLimit.header}";`));
   assert.ok(machine.includes(`"${s.atLimit.choice}",`));
   assert.ok(machine.includes(`share_label: "${s.share.header}".into(),`));
+  // the ComboBox and the NumberBox are named as the XAML binds them
+  assert.ok(machine.includes('at_label: format!("{AT_LIMIT} {at}%"),'));
+  assert.ok(shell("SettingsViewModel.cs").includes("AtLimitLabel => AtLimit.AtLabel;"));
+  assert.ok(
+    xaml.includes('AutomationProperties.Name="{x:Bind ViewModel.AtLimitLabel, Mode=OneWay}"'),
+  );
+  assert.ok(
+    xaml.includes('AutomationProperties.Name="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"'),
+  );
+  assert.equal(s.atLimit.label, "When a limit reaches 95%");
   assert.ok(present("words.rs").includes('format!("From {lowest}% to {highest}%")'));
   assert.ok(shell("SettingsViewModel.cs").includes("ShareRange => AtLimit.ShareRange;"));
   const autoswitch = core("duty/autoswitch.rs");

@@ -11,6 +11,7 @@ import {
   type World,
 } from "./world.ts";
 import {
+  accountSpoken,
   activity,
   fullest,
   headsUp,
@@ -21,6 +22,8 @@ import {
   menuLine,
   menuTitle,
   notes,
+  spokenLimit,
+  useSpoken,
   warmsAgainNote,
   toolAccounts,
   toolsOn,
@@ -110,8 +113,9 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
           plan: a.plan,
           email: a.email,
           inUse,
-          action: inUse ? null : "Use",
-          limits: a.limits.map((l) => limitRow(l, w)),
+          spoken: accountSpoken(a, w),
+          action: inUse ? null : { title: "Use", spoken: useSpoken(a) },
+          limits: a.limits.map((l) => ({ ...limitRow(l, w), spoken: spokenLimit(l, w) })),
           notes: notes(a, w, warmsAgainNote(a)),
         };
       }),
@@ -126,6 +130,8 @@ export const settingsPage = {
   section: "Limits",
   atLimit: {
     header: "When a limit reaches",
+    // the ComboBox's name, machine.rs's `at_label`
+    label: `When a limit reaches ${share}%`,
     choice: "Switch automatically",
     standing: `Watching work: 40% of its weekly limit, as of ${hm(clock.read)}.`,
     note: `Pitboard switches Claude Code once a limit of the account in use reaches ${share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`,

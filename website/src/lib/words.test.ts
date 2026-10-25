@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  accountSpoken,
   hm,
   level,
   limitColumn,
   limitName,
   limitRow,
   menuBarClock,
+  menuBarSpoken,
   menuLine,
   notes,
   warmsAgainNote,
@@ -26,11 +28,17 @@ import {
   sessionLifeColumn,
   shortDate,
   span,
+  spokenLimit,
+  spokenLimitOf,
+  spokenSpan,
   statusLine,
   statusLines,
   toolsOn,
   headsUp,
+  useSpoken,
   whole,
+  type Pace,
+  type Standing,
 } from "./words.ts";
 import { plainText } from "./changelog.ts";
 import {
@@ -326,4 +334,73 @@ test("a label, email or plan a visitor types stays text in every line words.ts w
   const text = plainText(html.join("\n"));
   for (const t of typed) assert.ok(text.includes(t), t);
   for (const t of [label, email]) assert.ok(!html.join("\n").includes(t), t);
+});
+
+const ffiWords = repo("crates/pitboard-ffi/src/present/words.rs");
+const ffiAccounts = repo("crates/pitboard-ffi/src/present/accounts.rs");
+
+test("a span is spoken as present/words.rs's a_span_is_spoken_as_foundation_spoke_it says", () => {
+  const body = rustTest(ffiWords, "a_span_is_spoken_as_foundation_spoke_it");
+  const said = [...body.matchAll(/\((-?[\d_]+), "([^"]+)"\)/g)].map((m): [number, string] => [
+    value(m[1]),
+    m[2],
+  ]);
+  assert.ok(said.length > 50, `${said.length} spans`);
+  for (const [seconds, words] of said) assert.equal(spokenSpan(seconds), words, `${seconds}`);
+});
+
+test("a limit is spoken as present/words.rs's tests of spoken_limit say", () => {
+  const body = [
+    "a_limit_is_spoken_in_words_and_not_in_its_columns_shorthand",
+    "a_limit_with_a_pace_is_spoken_with_it",
+    "a_spoken_span_of_time_reads_the_same_in_every_region",
+  ]
+    .map((name) => rustTest(ffiWords, name))
+    .join(" ");
+  const paced = (delta: number, standing: Standing): Pace => ({ expected: 6, delta, standing });
+  const spoken: [Parameters<typeof spokenLimitOf>, string][] = [
+    [["5-hour", 42, 3 * HOUR, null], "5-hour limit, 42 percent used, resets in 3 hours"],
+    [["30-minute", 12, null, null], "30-minute limit, 12 percent used"],
+    [["weekly Fable", 98, 0, null], "weekly Fable limit, 98 percent used, resetting now"],
+    [
+      ["weekly", 33, 6 * DAY, paced(27, "over")],
+      "weekly limit, 33 percent used, 27 percent over an even pace, resets in 6 days",
+    ],
+    [
+      ["5-hour", 30, null, paced(-50, "under")],
+      "5-hour limit, 30 percent used, 50 percent under an even pace",
+    ],
+    [["5-hour", 52, null, paced(2, "even")], "5-hour limit, 52 percent used, on an even pace"],
+    [
+      ["5-hour", 42, 90 * MINUTE, null],
+      "5-hour limit, 42 percent used, resets in 1 hour, 30 minutes",
+    ],
+  ];
+  for (const [args, words] of spoken) {
+    assert.ok(body.includes(`"${words}"`), `the core says "${words}"`);
+    assert.equal(spokenLimitOf(...args), words);
+  }
+  assert.equal(
+    spokenLimit(account("personal").limits[1], moments.before),
+    "weekly limit, 73 percent used, 55 percent over an even pace, resets in 5 days, 18 hours",
+  );
+});
+
+test("the menu bar item, a row and its button are spoken as present/accounts.rs names them", () => {
+  for (const line of [
+    'let mut spoken = vec!["Pitboard".to_owned()];',
+    "spoken.push(name_and_usage.clone());",
+    "spoken.push(tool.name.clone());",
+    "let mut spoken = vec![spoken_name.clone()];",
+    "spoken.push(plan.clone());",
+    'spoken.push("in use".into());',
+    'spoken: format!("Use {spoken}"),',
+  ])
+    assert.ok(ffiAccounts.includes(line), line);
+  assert.equal(menuBarSpoken(moments.before), "Pitboard, personal 73%, Claude Code");
+  assert.equal(menuBarSpoken(moments.after), "Pitboard, work 40%, Claude Code");
+  assert.equal(accountSpoken(account("work"), moments.after), "work, Max 20x, in use");
+  assert.equal(accountSpoken(account("home", "desktop"), moments.after), "home, in use");
+  assert.equal(accountSpoken(account("spare", "codex"), moments.after), "spare, Plus");
+  assert.equal(useSpoken(account("personal")), "Use personal");
 });

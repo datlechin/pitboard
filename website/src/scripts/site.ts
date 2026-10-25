@@ -1,3 +1,5 @@
+import { say } from "./live/say.ts";
+
 const d = document.documentElement;
 
 function put(k: string, v: string) {
@@ -175,13 +177,7 @@ function openTarget(showPlatform: (value: string) => void) {
 }
 
 function copying() {
-  const buttons = all<HTMLButtonElement>("[data-copy]");
-  if (!buttons.length) return;
-  const live = document.createElement("p");
-  live.className = "sr-only";
-  live.setAttribute("role", "status");
-  document.body.appendChild(live);
-  for (const b of buttons) {
+  for (const b of all<HTMLButtonElement>("[data-copy]")) {
     const label = b.textContent;
     const name = b.getAttribute("aria-label");
     let timer = 0;
@@ -189,7 +185,7 @@ function copying() {
     const restore = () => {
       b.textContent = label;
       if (name) b.setAttribute("aria-label", name);
-      live.textContent = "";
+      say("");
       if (shown) {
         shown.classList.add("sr-only");
         shown.parentElement?.removeAttribute("data-full");
@@ -201,7 +197,7 @@ function copying() {
         b.textContent = "Copied";
         // the visible label stays part of the accessible name (WCAG 2.5.3)
         if (name) b.setAttribute("aria-label", "Copied");
-        live.textContent = "Copied";
+        say("Copied");
       } else {
         const code = b.parentElement?.querySelector("code");
         if (code) {
