@@ -4,6 +4,8 @@
 
 Pitboard switches Claude Code and OpenAI's Codex CLI on macOS, Windows and Linux, and Claude Desktop on macOS.
 
+It shows what each Claude Code and Codex account has left, notifies you in the app before a limit runs out, and can switch Claude Code by itself, from the app or from `pitboard watch install`.
+
 Install the command line on macOS or Linux:
 
 ```sh
