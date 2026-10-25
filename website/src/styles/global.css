@@ -146,7 +146,7 @@
   --color-mac-window-glass-edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
   --color-mac-window-gauge-edge: light-dark(rgb(0 0 0 / 0.13), rgb(255 255 255 / 0.1));
   --color-mac-window-form: light-dark(#f2f2f4, #1a1a1a);
-  --color-mac-window-stripe: light-dark(#f5f5f7, #232325);
+  --color-mac-window-stripe: light-dark(#f4f5f5, #232325);
   /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
