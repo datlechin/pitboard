@@ -10,7 +10,12 @@ export interface Share {
 const within = (n: number) => Math.min(HIGHEST, Math.max(LOWEST, n));
 
 // Steps while a press is held: one at once, one at `delay`, then one each `every`.
-function holding(el: Element, delay: number, every: number, step: (e: PointerEvent) => void) {
+export function holding(
+  el: Element,
+  delay: number,
+  every: number,
+  step: (e: PointerEvent) => void,
+) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {
     clearTimeout(timer);
@@ -35,8 +40,8 @@ function holding(el: Element, delay: number, every: number, step: (e: PointerEve
 
 // The share's stepper held: a step at the press, then 20 a second from 0.3 s on, which gives the 6,
 // 16 to 17 and 36 steps of holds of 0.5, 1 and 2 s that run 40252330837 read (docs/facts/site.md).
-const STEPPER_DELAY = 300;
-const STEPPER_EVERY = 50;
+export const STEPPER_DELAY = 300;
+export const STEPPER_EVERY = 50;
 
 // LimitsSettings.swift: a percent typed in the field, its "%" left out or not; text that is no
 // whole figure goes back to the last value, and a figure out of range to the nearest bound.

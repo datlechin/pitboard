@@ -1,8 +1,9 @@
 ---
 // MainWindow.xaml at 704 pixels, where NavigationView is LeftCompact: the title bar on Mica, the
 // panes' icons with Settings at the foot, and the page on its layer. A `crop` desk shows the top.
-// The caption buttons are the system's. The `desk` slot holds what opens over the desk: a context
-// menu and the dialogs, whose smoke the window draws over itself.
+// The caption buttons are the system's. The `desk` slot holds what opens over the desk, which the
+// window's edge does not cut: a context menu, a flyout and the dialogs, whose smoke the window
+// draws over itself.
 import CaptionButtons from "./CaptionButtons.astro";
 import { app, panes, type Pane } from "../../../data/windows.ts";
 

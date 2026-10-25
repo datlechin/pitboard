@@ -10,9 +10,9 @@ const { on = false, ...rest } = Astro.props;
 ---
 
 <span class="flex items-center gap-12">
-  {on ? "On" : "Off"}
+  <span data-said>{on ? "On" : "Off"}</span>
   <button
-    class="relative h-20 w-40 flex-none rounded-pill bg-win-toggle-off inset-shadow-win-strong after:absolute after:top-4 after:left-4 after:size-12 after:rounded-circle after:bg-win-text-2 aria-checked:bg-win-accent aria-checked:inset-shadow-none aria-checked:after:left-24 aria-checked:after:bg-win-on-accent"
+    class="relative h-20 w-40 flex-none rounded-pill bg-win-toggle-off inset-shadow-win-strong focus-win after:absolute after:top-4 after:left-4 after:size-12 after:rounded-circle after:bg-win-text-2 after:transition-[left] after:duration-150 aria-checked:bg-win-accent aria-checked:inset-shadow-none aria-checked:after:left-24 aria-checked:after:bg-win-on-accent"
     type="button"
     role="switch"
     aria-checked={on ? "true" : "false"}

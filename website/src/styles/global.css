@@ -226,6 +226,8 @@
   /* ControlFillColorInputActive under a focused text box, and ControlFillColorDisabled */
   --color-win-field-active: light-dark(#ffffff, #1e1e1e);
   --color-win-control-off: light-dark(rgb(249 249 249 / 0.302), rgb(255 255 255 / 0.043));
+  /* ControlFillColorTertiary under a pressed control */
+  --color-win-control-3: light-dark(rgb(249 249 249 / 0.302), rgb(255 255 255 / 0.031));
   /* FocusStrokeColorOuter, the system focus visual's outer stroke */
   --color-win-focus: light-dark(rgb(0 0 0 / 0.894), #ffffff);
   /* Windows Terminal's dark theme and Campbell scheme, the same in both of the site's */

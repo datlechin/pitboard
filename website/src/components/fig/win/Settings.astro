@@ -3,6 +3,7 @@
 // open on its hours and accounts. Each control is named as the XAML names it; each expander's
 // button shows and hides its items, and their ids start `prefix`. Every choice's words are drawn,
 // those of the choice not shown hidden, and a working window keeps the size its tallest needs.
+// The time pickers' flyouts open over the window.
 import ComboBox from "./ComboBox.astro";
 import NumberBox from "./NumberBox.astro";
 import TimePicker from "./TimePicker.astro";
@@ -11,8 +12,14 @@ import Window from "./Window.astro";
 import { settingsPage as page } from "../../../data/windows.ts";
 import { choices, heading } from "../../../data/limits.ts";
 import { DOCS } from "../../../data/site.ts";
-import { share } from "../../../data/world.ts";
+import { moments, share, warmUp } from "../../../data/world.ts";
 import { atLimitNote, type AtLimit } from "../../../lib/model.ts";
+import { toolAccounts } from "../../../lib/words.ts";
+
+const minutes = (at: string) => {
+  const [h, m] = at.split(":").map(Number);
+  return h * 60 + m;
+};
 
 interface Props {
   prefix: string;
@@ -30,6 +37,16 @@ const toggle =
   "group/toggle flex size-32 shrink-0 items-center justify-center rounded-u-4 focus-win live:hover:bg-win-subtle";
 const chevron = "size-12 transition-transform group-aria-[expanded=false]/toggle:rotate-180";
 const drawn: AtLimit = "switch";
+// the hours, and each Claude Code account with its id, which a working figure follows
+const hours = [
+  ["From", "from", minutes(warmUp.from)],
+  ["To", "to", minutes(warmUp.to)],
+] as const;
+const warmAccounts = toolAccounts(moments.after, "claude").map((a, i) => ({
+  id: a.id,
+  ...page.warm.accounts[i],
+}));
+const card = "min-h-48 last:rounded-b-u-4";
 ---
 
 <Window prefix={prefix} pane="settings" element={show === "warm" ? "pb-warm" : undefined}>
@@ -105,46 +122,73 @@ const drawn: AtLimit = "switch";
     )}
     {show === "warm" && (
       <>
-        <div class={header}>
+        <div
+          class:list={[
+            header,
+            "has-[[data-expander][aria-expanded=false]]:rounded-b-u-4 live:hover:bg-win-control-2",
+          ]}
+          data-header
+        >
           <span class="min-w-0 flex-1">
             <span class="block">{page.warm.header}</span>
-            <span class:list={["block", caption]}>{page.warm.range}</span>
-            <span class:list={["block", caption]}>{page.warm.standing}</span>
+            <span class:list={["block", caption]} data-range>{page.warm.range}</span>
+            <span class:list={["block", caption]} data-next>{page.warm.standing}</span>
           </span>
           <button
-            class="flex size-32 shrink-0 items-center justify-center rounded-u-4"
+            class={toggle}
+            id={`${prefix}-expand`}
             type="button"
+            data-expander
             aria-label={page.warm.header}
             aria-expanded="true"
             aria-controls={items}
           >
-            <svg class="size-12"><use href="#fl-chevron-up"></use></svg>
+            <svg class={chevron}><use href="#fl-chevron-up"></use></svg>
           </button>
         </div>
         <div id={items}>
-          {page.warm.hours.map(([name, at]) => <div class:list={[item, "min-h-48"]}>
+          {hours.map(([name, end, minutes]) => <div class:list={[item, "min-h-48"]}>
             <span class="min-w-0 flex-1">{name}</span>
-            <TimePicker at={at} />
+            <TimePicker prefix={`${prefix}-${end}`} minutes={minutes} label={`Warm up ${end}`} />
           </div>)}
-          {page.warm.accounts.map((a, i) => <div
-            class:list={[
-              item,
-              "min-h-48",
-              { "rounded-b-u-4": i === page.warm.accounts.length - 1 },
-            ]}
-          >
-            <span class="min-w-0 flex-1">
-              <span class="block">{a.title}</span>
-              {a.standing && <span class:list={["block", caption]}>{a.standing}</span>}
-            </span>
-            <Toggle on={a.on} aria-label={a.title} />
-          </div>)}
+          <div data-accounts>
+            {warmAccounts.map((a) => <div class:list={[item, card]} data-account={a.id}>
+              <span class="min-w-0 flex-1">
+                <span class="block" data-title>{a.title}</span>
+                <span class:list={["block", caption]} data-note hidden={!a.standing}
+                  >{a.standing}</span
+                >
+              </span>
+              <Toggle on={a.on} aria-label={a.title} />
+            </div>)}
+          </div>
+          {/* a card for an account added on the page */}
+          <template data-row>
+            <div class:list={[item, card]} data-account="">
+              <span class="min-w-0 flex-1">
+                <span class="block" data-title></span>
+                <span class:list={["block", caption]} data-note hidden></span>
+              </span>
+              <Toggle />
+            </div>
+          </template>
         </div>
       </>
     )}
   </div>
+  {show === "warm" &&
+    hours.map(([, end, minutes]) => (
+      <TimePicker
+        slot="desk"
+        prefix={`${prefix}-${end}`}
+        minutes={minutes}
+        label={`Warm up ${end}`}
+        flyout
+      />
+    ))}
 </Window>
 
 <script>
   import "../../../scripts/live/settings.ts";
+  import "../../../scripts/live/warm.ts";
 </script>

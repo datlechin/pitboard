@@ -6,10 +6,20 @@
 // `prefix`. Every choice's words are drawn, those of the choice not shown hidden.
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
-import { clock, share } from "../../../data/world.ts";
-import { atLabel, choices, heading, section, shareLabel, terms } from "../../../data/limits.ts";
+import { clock, moments, share, warmUp } from "../../../data/world.ts";
+import { settingsPage as page } from "../../../data/windows.ts";
+import {
+  atLabel,
+  choices,
+  heading,
+  section,
+  shareLabel,
+  terms,
+  timeOfDay,
+  warm,
+} from "../../../data/limits.ts";
 import { atLimitNote, type AtLimit } from "../../../lib/model.ts";
-import { hm } from "../../../lib/words.ts";
+import { hm, toolAccounts } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -23,17 +33,37 @@ const tabs = [
   ["advanced", "Advanced", "sf-gear2"],
 ];
 const heights = { switch: "h-245", warm: "h-378.5" };
-// with the window in its flow, as tall as Switch Automatically's footer needs at least
-const live = { switch: "[&:defined]:h-auto", warm: "" };
+// with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
+// needs at least, and Warm up limits as its accounts make it. The cut stays 8 points below, the
+// desk's border counted as a static height counts it.
+const live = { switch: "[&:defined]:h-auto", warm: "[&:defined]:h-auto" };
 const frame = { switch: "live:min-h-330.5", warm: "" };
 const drawn: AtLimit = "switch";
+const minutes = (at: string) => {
+  const [h, m] = at.split(":").map(Number);
+  return h * 60 + m;
+};
+const hours = [
+  ["From", "from", minutes(warmUp.from)],
+  ["To", "to", minutes(warmUp.to)],
+] as const;
+// each Claude Code account with its id, which a working figure follows
+const warmAccounts = toolAccounts(moments.after, "claude").map((a, i) => ({
+  id: a.id,
+  ...page.warm.accounts[i],
+}));
 const head = "pt-28 pb-11.5 pl-30 font-bold";
 const group = "mx-20 rounded-u-12 bg-mac-window-group";
 // each row's label sits 18 points down its middle; a rule 10 points short of each side tops
 // every row but the first
 const row = "relative flex px-10";
-const ruled =
-  "pt-1 before:absolute before:inset-x-10 before:top-0 before:h-1 before:bg-mac-window-rule";
+const rule = "before:absolute before:inset-x-10 before:top-0 before:h-1 before:bg-mac-window-rule";
+const ruled = ["pt-1", rule];
+// an account's row: its name 11 points down, and its warm-up's line under it while it has one
+const account = "items-start pt-11 pb-11.5";
+// the hour or the minute, as macOS selects the one with focus
+const part =
+  "rounded-u-3 outline-none focus:bg-mac-window-blue focus:text-white focus:shadow-[0_0_0_calc(var(--u)*1)_var(--color-mac-window-blue)]";
 const small = "block text-u-12/15 text-mac-window-sub";
 const field = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-control)]";
 const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-sep)]";
@@ -50,7 +80,7 @@ const menuRow =
 >
   <div
     class:list={[
-      "absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window live:relative live:top-0 live:-mb-12 live:overflow-visible",
+      "absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window live:relative live:top-0 live:-mb-[calc(var(--u)*12+2px)] live:overflow-visible",
       frame[show],
     ]}
   >
@@ -201,44 +231,87 @@ const menuRow =
       )}
       {show === "warm" && (
         <>
-          <p class={head}>Warm up limits</p>
+          <p class={head}>{warm.title}</p>
           <div class={group}>
-            {[
-              ["From", "07:00"],
-              ["To", "23:00"],
-            ].map(([label, at], i) => <div
+            {hours.map(([label, end, minutes], i) => <div
               class:list={[row, "items-center pb-3", i === 0 ? "h-39" : [ruled, "h-40"]]}
             >
-              <span class="flex-1">{label}</span>
+              <span class="flex-1" id={`${prefix}-${end}-label`}>{label}</span>
+              {/* NSDatePicker with its stepper: the hour and the minute each take focus, once the
+                  figure works, as two parts the drawing sets as one */}
               <span
-                class:list={["flex h-22 w-61 items-center rounded-u-6 pl-3.5 tabular-nums", time]}
-                >{at}<svg
+                class:list={[
+                  "flex h-22 w-61 items-center rounded-u-6 pl-3.5 tabular-nums has-focus:outline-[calc(3.5*var(--u))] has-focus:outline-mac-window-focus has-focus:outline-solid",
+                  time,
+                ]}
+                id={`${prefix}-${end}`}
+                role="group"
+                aria-labelledby={`${prefix}-${end}-label`}
+                ><span class="live:hidden">{timeOfDay(minutes)}</span
+                ><span class="hidden live:block"
+                  ><span
+                    class={part}
+                    role="spinbutton"
+                    tabindex="0"
+                    aria-label="Hour"
+                    aria-valuenow={Math.floor(minutes / 60)}
+                    aria-valuetext={timeOfDay(minutes).slice(0, 2)}
+                    aria-valuemin="0"
+                    aria-valuemax="23"
+                    data-part="hour"
+                    >{timeOfDay(minutes).slice(0, 2)}</span
+                  >:<span
+                    class={part}
+                    role="spinbutton"
+                    tabindex="0"
+                    aria-label="Minute"
+                    aria-valuenow={minutes % 60}
+                    aria-valuetext={timeOfDay(minutes).slice(3)}
+                    aria-valuemin="0"
+                    aria-valuemax="59"
+                    data-part="minute"
+                    >{timeOfDay(minutes).slice(3)}</span
+                  ></span
+                ><svg
                   class="mr-3.5 ml-auto h-22 w-13.5 shrink-0"
                   viewBox="0 0 13.5 22"
                   fill="none"
                   stroke="currentColor"
                   stroke-linecap="round"
                   stroke-linejoin="round"
+                  aria-hidden="true"
+                  data-stepper
                 >
                   <path d="M3.75 7 6.75 4l3 3M.5 10.75h12.5M3.75 14l3 3 3-3" />
                 </svg></span
               >
             </div>)}
-            <div class:list={[row, ruled, "h-56.5 items-start pt-11"]}>
-              <span class="flex-1" id={`${prefix}-personal`}>
-                personal · Max
-                20x<small class:list={[small, "mt-3"]}
-                  >Warms up again at {hm(clock.warmsAgain)}</small
-                >
-              </span>
-              <Switch on aria-labelledby={`${prefix}-personal`} />
+            <div data-accounts>
+              {warmAccounts.map((a) => <div class:list={[row, rule, account]} data-account={a.id}>
+                <span class="flex-1" id={`${prefix}-${a.id}`}>
+                  <span data-title>{a.title}</span
+                  ><small class:list={[small, "mt-3"]} data-note hidden={!a.standing}
+                    >{a.standing}</small
+                  >
+                </span>
+                <Switch on={a.on} aria-labelledby={`${prefix}-${a.id}`} />
+              </div>)}
             </div>
-            <div class:list={[row, ruled, "h-38.5 items-center pb-1.5"]}>
-              <span class="flex-1" id={`${prefix}-work`}>work · Max 20x</span>
-              <Switch aria-labelledby={`${prefix}-work`} />
-            </div>
-            <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
-              <span class={small}>Next warm-up: personal at {hm(clock.warmsAgain)}.</span>
+            {/* a row for an account added on the page */}
+            <template data-row>
+              <div class:list={[row, rule, account]} data-account="">
+                <span class="flex-1">
+                  <span data-title></span><small
+                    class:list={[small, "mt-3"]}
+                    data-note
+                    hidden
+                  ></small>
+                </span>
+                <Switch />
+              </div>
+            </template>
+            <div class:list={[row, ruled, "h-37 items-center pb-1.5"]} data-next-row>
+              <span class={small} data-next>{page.warm.standing}</span>
             </div>
           </div>
         </>
@@ -249,4 +322,5 @@ const menuRow =
 
 <script>
   import "../../../scripts/live/settings.ts";
+  import "../../../scripts/live/warm.ts";
 </script>

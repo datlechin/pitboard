@@ -954,13 +954,30 @@ export function setShare(share: number) {
   });
 }
 
-export function turnWarmUp(label: string, on: boolean) {
+// service.rs `warm_turn`, logged as the core logs it.
+export function turnWarmUp(label: string, on: boolean, caller: Caller = "app") {
   change((s) => {
     const a = find(s, "claude", label);
     if (!a) return;
     s.warm.on = s.warm.on.filter((id) => id !== a.id);
     if (on) s.warm.on.push(a.id);
+    record(s, caller, on ? "warm-on" : "warm-off", typed(a));
     warmTick(s);
+  });
+}
+
+// warm/mod.rs `Range::new`: a span of the day in minutes, 00:00 at its end meaning 24:00, and
+// never empty; service.rs `warm_range` logs it as `clock` says each end.
+export function setWarmRange(from: number, to: number, caller: Caller = "app"): boolean {
+  const end = to === 0 ? DAY / MINUTE : to;
+  if (from >= DAY / MINUTE || end > DAY / MINUTE || from === end) return false;
+  const clock = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return change((s) => {
+    s.warm = { ...s.warm, from, to: end };
+    record(s, caller, "warm-range", `${clock(from)}-${clock(end)}`);
+    warmTick(s);
+    return true;
   });
 }
 

@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { atLabel, choices, heading, section, shareLabel, shareRange, terms } from "./limits.ts";
+import {
+  atLabel,
+  choices,
+  heading,
+  section,
+  shareLabel,
+  shareRange,
+  terms,
+  timeOfDay,
+  warm,
+} from "./limits.ts";
 import { HIGHEST, LOWEST } from "../lib/model.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -41,4 +51,14 @@ test("the terms are the core's sentence, curled, and its link", () => {
   assert.ok(core.includes(`"${terms.sentence.slice(0, -1).replace("’", "'")}";`));
   assert.ok(core.includes(`pub const IS_THIS_ALLOWED_URL: &str =\n    "${terms.href}";`));
   assert.ok(machine.includes(`link_title: "${terms.link}".into(),`));
+});
+
+test("Warm up limits is titled as machine.rs's `warm` titles it, its times as `clock` says them", () => {
+  assert.ok(machine.includes(`title: "${warm.title}".into(),`));
+  assert.ok(
+    repo("crates/pitboard-core/src/duty/warm/mod.rs").includes(
+      'format!("{:02}:{:02}", minutes / 60, minutes % 60)',
+    ),
+  );
+  assert.deepEqual([timeOfDay(420), timeOfDay(1380), timeOfDay(1440)], ["07:00", "23:00", "00:00"]);
 });

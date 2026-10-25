@@ -1,6 +1,6 @@
-// The Limits settings' words on both systems, as present/machine.rs `at_limit` gives them: each
-// choice titled as macOS titles a menu item and in sentence case on Windows, the controls' names,
-// and the terms under Switch Automatically. limits.test.ts finds each in its source.
+// The Limits settings' words on both systems, as present/machine.rs `at_limit` and `warm` give
+// them: each choice titled as macOS titles a menu item and in sentence case on Windows, the
+// controls' names, the warm-up's hours, and the terms. limits.test.ts finds each in its source.
 import { DOCS } from "./site.ts";
 import type { AtLimit } from "../lib/model.ts";
 
@@ -23,3 +23,16 @@ export const terms = {
   link: "Is this allowed?",
   href: `${DOCS}/concepts/limits#is-this-allowed`,
 };
+
+// A time of the day in minutes, on the world's 24-hour clock.
+export const timeOfDay = (minutes: number) =>
+  `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+// words.rs `warm_hours`: a clock says a day's end as the next day's 00:00, which a span ending
+// then does not mean.
+export function warmHours(from: number, to: number): string {
+  if (from === 0 && to === 24 * 60) return "All day";
+  return `${timeOfDay(from)} to ${to === 24 * 60 ? "midnight" : timeOfDay(to)}`;
+}
+
+export const warm = { title: "Warm up limits" };
