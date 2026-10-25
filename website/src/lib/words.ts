@@ -545,7 +545,14 @@ export function statusLine(w: World): string {
 
 // The activity list's changes, newest first, in the app's words (present/words.rs `change_verb`,
 // `change_outcome` and `change_caller`).
-const verbs: Record<string, string> = { use: "Switch", enroll: "Enrol", "warm-up": "Warm-up" };
+const verbs: Record<string, string> = {
+  use: "Switch",
+  enroll: "Enrol",
+  "warm-up": "Warm-up",
+  "warm-on": "Warm-up turned on",
+  "warm-off": "Warm-up turned off",
+  "warm-range": "Warm-up hours changed",
+};
 const outcomes: Record<string, string> = { ok: "Done" };
 const callers = { app: "Pitboard app", cli: "Command line" };
 
@@ -564,8 +571,39 @@ export const activity = (log: Logged[], platform: Platform) =>
     .reverse()
     .map((e) => ({
       date: dated(e.at, platform),
-      change: verbs[e.verb],
+      change: changeVerb(e.verb),
       account: e.subject,
-      result: outcomes[e.outcome],
+      result: changeOutcome(e.outcome),
       by: callers[e.caller],
     }));
+
+// The rest of present/words.rs `change_verb` and `change_outcome`, and its `readable` for a code
+// they have no words for.
+const moreVerbs: Record<string, string> = {
+  switch: "Switch",
+  "auto-switch": "Automatic switch",
+  "auto-stay": "Automatic switch not made",
+  forget: "Forget",
+  rename: "Rename",
+  renew: "Renew",
+  abandon: "Give up on a switch",
+  repair: "Repair",
+  adopt: "Adopt",
+  uninstall: "Uninstall",
+  "in-use": "Login in use changed",
+  stow: "Put away a login left in a file",
+  park: "Park for a sign-in",
+};
+const moreOutcomes: Record<string, string> = {
+  second_sign_in: "Second sign-in",
+  warm_up_not_started: "No period started",
+  warm_up_limit_reached: "A limit is used up",
+  warm_up_login_refused: "Login refused",
+  warm_up_unreachable: "Anthropic out of reach",
+  warm_up_timed_out: "Took too long",
+  warm_up_failed: "Claude Code failed",
+};
+const readable = (code: string) => capitalised(code.replaceAll("_", " "));
+export const changeVerb = (verb: string) => verbs[verb] ?? moreVerbs[verb] ?? readable(verb);
+export const changeOutcome = (outcome: string) =>
+  outcomes[outcome] ?? moreOutcomes[outcome] ?? readable(outcome);

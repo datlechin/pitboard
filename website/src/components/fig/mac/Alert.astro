@@ -1,0 +1,24 @@
+---
+// An alert as macOS 26 draws one over its window (the Forget alert in the app's UI tests'
+// pictures): 260 points wide, its title bold over its message, and its buttons side by side, one
+// width each, a destructive one red on a pale red fill, neither drawn as the default. A <dialog>
+// live/dialog.ts opens in the middle of its window; its ids start `id`.
+interface Props {
+  id: string;
+}
+const { id } = Astro.props;
+---
+
+<dialog
+  class="supports-[anchor-name:--a]:m-0 [position-anchor:var(--over)] supports-[anchor-name:--a]:right-auto supports-[anchor-name:--a]:bottom-auto supports-[anchor-name:--a]:top-[anchor(center)] supports-[anchor-name:--a]:left-[anchor(center)] supports-[anchor-name:--a]:-translate-1/2 w-260 overflow-visible rounded-[calc(var(--spacing)*26)] bg-mac-alert px-15 pt-19 pb-15 font-mac text-u-13/16 text-mac-window-text shadow-mac-window backdrop:bg-transparent"
+  id={id}
+  role="alertdialog"
+  aria-labelledby={`${id}-title`}
+  aria-describedby={`${id}-message`}
+>
+  <form method="dialog">
+    <h2 class="px-6 font-bold" id={`${id}-title`} data-part="title"></h2>
+    <p class="mt-8 px-6" id={`${id}-message`} data-part="message"></p>
+    <div class="mt-14 grid grid-cols-2 gap-6"><slot /></div>
+  </form>
+</dialog>

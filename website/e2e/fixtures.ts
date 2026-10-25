@@ -144,19 +144,36 @@ export async function astroDrew(browser: Browser, baseURL: string, problems: str
   return html;
 }
 
+// The figures whose words are the model's at its own clock, which runs a minute on from the moment
+// Astro says them at: their markup is compared without its text, which rule 2 lets them write.
+const timed = ["pb-accounts", "pb-activity"];
+
 // Each figure's markup by its root's id, without the attributes its live code changes.
 export function drawn(page: Page): Promise<Record<string, string>> {
-  return page.evaluate((changing) => {
-    const custom = /^(\s*--[\w-]+\s*:[^;]*;?)*\s*$/;
-    const out: Record<string, string> = {};
-    for (const root of document.querySelectorAll("[data-output]")) {
-      const copy = root.cloneNode(true) as Element;
-      for (const el of [copy, ...copy.querySelectorAll("*")]) {
-        for (const name of changing) el.removeAttribute(name);
-        if (custom.test(el.getAttribute("style") ?? "")) el.removeAttribute("style");
+  return page.evaluate(
+    ([changing, timed]) => {
+      const custom = /^(\s*--[\w-]+\s*:[^;]*;?)*\s*$/;
+      const out: Record<string, string> = {};
+      for (const root of document.querySelectorAll("[data-output]")) {
+        const copy = root.cloneNode(true) as Element;
+        for (const el of [copy, ...copy.querySelectorAll("*")]) {
+          for (const name of changing) el.removeAttribute(name);
+          if (custom.test(el.getAttribute("style") ?? "")) el.removeAttribute("style");
+          // in the order of their names, as an attribute written again goes last
+          const kept = [...el.attributes].map((a) => [a.name, a.value] as const).sort();
+          for (const [name] of kept) el.removeAttribute(name);
+          for (const [name, value] of kept) el.setAttribute(name, value);
+        }
+        if (timed.includes(root.localName)) {
+          const words = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+          const found: Node[] = [];
+          while (words.nextNode()) found.push(words.currentNode);
+          for (const t of found) t.parentNode!.removeChild(t);
+        }
+        out[root.id] = copy.outerHTML;
       }
-      out[root.id] = copy.outerHTML;
-    }
-    return out;
-  }, changing);
+      return out;
+    },
+    [changing, timed] as const,
+  );
 }

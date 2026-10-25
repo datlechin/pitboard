@@ -97,7 +97,7 @@ export interface State extends World {
   advice: Advice[];
   lastSwitch: Partial<Record<Tool, LastSwitch>>;
   // a sign-in that put a new login in use
-  newLogin: Partial<Record<Tool, { label: string; at: number }>>;
+  newLogin: Partial<Record<Tool, { label: string; at: number; added?: boolean }>>;
   // limits switched away from, by account id, kind and scope, at their reset
   ledger: Record<string, number>;
   // reasons not to switch already told, until the next switch
@@ -114,6 +114,16 @@ export interface State extends World {
   // a switch or a read the app has under way: "Switching…" and "Reading…" while it runs
   switching: { id: string; token: number } | null;
   reading: number | null;
+  // a sign-in the app has under way, Claude Desktop's parking the account in use first
+  signing: {
+    tool: Tool;
+    label: string;
+    again: boolean;
+    phase: "parking" | "waiting";
+    token: number;
+  } | null;
+  // the tools whose step asking for a second account somebody put off (present/setup.rs)
+  declinedSecond: Tool[];
 }
 
 const minutes = (hm: string) => {
@@ -156,6 +166,8 @@ export function start(): State {
     decidedAt: clock.menuBar,
     switching: null,
     reading: null,
+    signing: null,
+    declinedSecond: [],
   };
 }
 
@@ -879,6 +891,7 @@ export function enroll(tool: Tool, label: string, caller: Caller = "app"): Outco
     if (tool === "desktop") {
       s.accounts.push(a);
       switchTo(s, a, caller, "enroll");
+      s.newLogin.desktop = { label, at: s.now, added: true };
       return "ok";
     }
     a.unread = true;
@@ -1077,6 +1090,64 @@ export function refreshFromApp(system: System) {
       if (s.running) readUsage(s);
     });
   }, TAKES_MS.read[system]);
+}
+
+// The window's notice of a tool's last switch or new login, put away by its close button.
+export function dismissNotice(tool: Tool) {
+  change((s) => {
+    delete s.lastSwitch[tool];
+    delete s.newLogin[tool];
+  });
+}
+
+// Not Now on the step asking for a second account of `tool`.
+export function declineSecond(tool: Tool) {
+  change((s) => {
+    if (!s.declinedSecond.includes(tool)) s.declinedSecond.push(tool);
+  });
+}
+
+// A simulated sign-in ends this long after it starts (answer 16 a).
+export const SIGN_IN_MS = 3000;
+
+// The app's sign-in, from Add Account or Sign In Again: the tool's own sign-in is never loaded,
+// so it ends by itself, Claude Desktop's as if Claude quit signed in. Claude Desktop parks the
+// account in use first, for as long as a switch takes.
+export function signInFromApp(tool: Tool, label: string, again: boolean) {
+  if (model.get().signing) return;
+  const mine = ++token;
+  change((s) => {
+    s.signing = {
+      tool,
+      label,
+      again,
+      phase: tool === "desktop" ? "parking" : "waiting",
+      token: mine,
+    };
+  });
+  const still = () => model.get().signing?.token === mine;
+  if (tool === "desktop")
+    setTimeout(() => {
+      if (still())
+        change((s) => {
+          s.signing!.phase = "waiting";
+        }, false);
+    }, TAKES_MS.switch.macos);
+  setTimeout(() => {
+    if (!still()) return;
+    change((s) => {
+      s.signing = null;
+    }, false);
+    if (again) signInAgain(tool, label);
+    else enroll(tool, label);
+  }, SIGN_IN_MS);
+}
+
+export function cancelSignIn() {
+  if (!model.get().signing) return;
+  change((s) => {
+    s.signing = null;
+  }, false);
 }
 
 // A switch notice's countdown, as NoticeRow.swift's timer and Countdown.Left draw it.

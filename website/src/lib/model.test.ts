@@ -13,14 +13,18 @@ import {
   SETTLING_SECONDS,
   SIGN_IN_LASTS,
   START_STEP,
+  SIGN_IN_MS,
   TAKES_MS,
   advance,
   afterSwitch,
   atLimitNote,
   autoStandingSaid,
+  cancelSignIn,
   clamped,
   countdown,
   decide,
+  declineSecond,
+  dismissNotice,
   enroll,
   forget,
   model,
@@ -37,6 +41,7 @@ import {
   settle,
   shareOfLimit,
   signInAgain,
+  signInFromApp,
   start,
   switchFromApp,
   use,
@@ -794,4 +799,51 @@ test("the switch the hero's demo makes is where the page rests, and Reset comes 
   settle(null);
   reset();
   assert.deepEqual(model.get(), start());
+});
+
+test("a simulated sign-in waits its 3 seconds, Claude Desktop's parking first, and can be cancelled", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  reset();
+  signInFromApp("claude", "third", false);
+  assert.deepEqual(
+    { ...model.get().signing!, token: 0 },
+    { tool: "claude", label: "third", again: false, phase: "waiting", token: 0 },
+  );
+  // one at a time
+  signInFromApp("codex", "other", false);
+  t.mock.timers.tick(SIGN_IN_MS);
+  assert.equal(model.get().signing, null);
+  assert.ok(model.get().accounts.some((a) => a.label === "third" && a.tool === "claude"));
+  assert.ok(!model.get().accounts.some((a) => a.label === "other"));
+
+  signInFromApp("desktop", "studio", false);
+  assert.equal(model.get().signing?.phase, "parking");
+  t.mock.timers.tick(TAKES_MS.switch.macos);
+  assert.equal(model.get().signing?.phase, "waiting");
+  t.mock.timers.tick(SIGN_IN_MS - TAKES_MS.switch.macos);
+  assert.equal(model.get().inUse.desktop, "studio");
+  assert.deepEqual(model.get().newLogin.desktop, {
+    label: "studio",
+    at: model.get().now,
+    added: true,
+  });
+
+  signInFromApp("claude", "work", true);
+  cancelSignIn();
+  t.mock.timers.tick(SIGN_IN_MS);
+  assert.equal(model.get().log.at(-1)?.subject, "desktop/studio", "nothing more was signed in");
+  reset();
+});
+
+test("a notice is put away by its close button, and the second-account step by Not Now", () => {
+  reset();
+  use("codex", "spare");
+  assert.ok(model.get().lastSwitch.codex);
+  dismissNotice("codex");
+  assert.equal(model.get().lastSwitch.codex, undefined);
+  declineSecond("desktop");
+  declineSecond("desktop");
+  assert.deepEqual(model.get().declinedSecond, ["desktop"]);
+  reset();
+  assert.deepEqual(model.get().declinedSecond, []);
 });

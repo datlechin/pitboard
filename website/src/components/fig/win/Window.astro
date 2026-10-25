@@ -1,7 +1,8 @@
 ---
 // MainWindow.xaml at 704 pixels, where NavigationView is LeftCompact: the title bar on Mica, the
 // panes' icons with Settings at the foot, and the page on its layer. A `crop` desk shows the top.
-// The caption buttons are the system's.
+// The caption buttons are the system's. The `desk` slot holds what opens over the desk: a context
+// menu and the dialogs, whose smoke the window draws over itself.
 import CaptionButtons from "./CaptionButtons.astro";
 import { app, panes, type Pane } from "../../../data/windows.ts";
 
@@ -22,17 +23,27 @@ const items: [Pane, string][] = [
 
 <Root
   id={prefix}
-  class:list={["desk desk-px-720", crop ? "block h-356" : "flex items-center justify-center py-24"]}
+  class:list={[
+    "desk [anchor-name:var(--desk)] desk-px-720",
+    crop ? "block h-356" : "flex items-center justify-center py-24",
+  ]}
   inert
   data-output
 >
   <div
     class:list={[
-      "grid w-704 grid-cols-[calc(var(--spacing)*48)_1fr] grid-rows-[calc(var(--spacing)*48)_1fr] overflow-hidden rounded-u-8 bg-win-base font-win text-u-14/20 text-win-text shadow-win-window",
+      "grid w-704 grid-cols-[calc(var(--spacing)*48)_1fr] grid-rows-[calc(var(--spacing)*48)_1fr] overflow-hidden rounded-u-8 [anchor-name:var(--window)] bg-win-base font-win text-u-14/20 text-win-text shadow-win-window",
       crop ? "absolute top-24 left-8" : "relative",
     ]}
   >
-    <div class="col-span-2 flex items-center">
+    {/* TitleBar, which UI Automation names after the window; focus lands on it after Forget */}
+    {/* departs from the apps: After Forget on Windows the page draws a focus ring on the title bar */}
+    <div
+      class="col-span-2 flex items-center outline-none focus-visible:outline-[length:calc(var(--u)*2)] focus-visible:outline-offset-[calc(var(--u)*-2)] focus-visible:outline-solid focus-visible:outline-win-focus"
+      role="group"
+      aria-label="Pitboard"
+      data-part="title-bar"
+    >
       <span class="ml-4 flex h-36 w-40 items-center justify-center rounded-u-4"
         ><svg class="size-16"><use href="#fl-navigation"></use></svg></span
       >
@@ -51,5 +62,7 @@ const items: [Pane, string][] = [
     <div class="min-w-0 rounded-tl-u-8 bg-win-layer pt-16 inset-shadow-win-layer-tl">
       <slot />
     </div>
+    <div class="absolute inset-0 z-4 bg-win-smoke" data-part="smoke" hidden></div>
   </div>
+  <slot name="desk" />
 </Root>

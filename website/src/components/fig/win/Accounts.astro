@@ -1,13 +1,41 @@
 ---
-// AccountsPage.xaml with AccountRow.xaml's rows, and after a switch the notice NoticeBar.xaml shows.
-// The ListView is a grid of one row an account, a row group a tool, each named as Narrator hears it.
+// AccountsPage.xaml with AccountRow.xaml's rows, the notices NoticeBar.xaml shows after a switch,
+// and the setup step's InfoBar. The ListView is a grid of one row an account, a row group a tool,
+// each named as Narrator hears it. Every node a state shows is drawn: each tool's notice, the
+// step, each row's ends, and templates for a row, a limit and a note; the context menu and the
+// dialogs wait over the desk. live/accounts.ts follows the one state with them.
 import Button from "./Button.astro";
+import ContentDialog from "./ContentDialog.astro";
 import InfoBar from "./InfoBar.astro";
 import PageHeader from "./PageHeader.astro";
+import ProgressRing from "./ProgressRing.astro";
 import Window from "./Window.astro";
 import { accountsPage, switchNotice } from "../../../data/windows.ts";
-import { moments, type Moment } from "../../../data/world.ts";
-import { whole } from "../../../lib/words.ts";
+import {
+  CANCEL,
+  FORGET,
+  FORGET_OFFER,
+  NAME,
+  RENAME,
+  RENAME_OFFER,
+  TOOL,
+  ACCOUNT,
+  addAccountAsks,
+  copyEmail,
+  copyLink,
+  inUse,
+  keysOf,
+  notNow,
+  signIn,
+  signInAgain,
+  signInPage,
+  sessionsFollowIn,
+  switchedTo,
+  warmUpNow,
+  OPEN,
+} from "../../../data/window.ts";
+import { account, moments, type Moment } from "../../../data/world.ts";
+import { toolsOn, whole } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -15,10 +43,26 @@ interface Props {
   crop?: boolean;
 }
 const { prefix, moment, crop = false } = Astro.props;
+// SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
+const hide = (yes: boolean) => (yes ? { hidden: true } : {});
 const page = accountsPage(moments[moment], moment === "after" ? switchNotice : null);
-const fill = { g: "fill-win-success", y: "fill-win-caution", r: "fill-win-critical" };
-const mark = { under: "stroke-win-success", over: "stroke-win-critical" };
+const shownTools = toolsOn("windows");
+const fillBy =
+  "data-[state=g]:fill-win-success data-[state=y]:fill-win-caution data-[state=r]:fill-win-critical";
+const markBy = "data-[state=under]:stroke-win-success data-[state=over]:stroke-win-critical";
 const caption = "text-u-12/16 text-win-text-2";
+// ListViewItem: hover and selection on SubtleFillColorSecondary, the accent pill on a selected
+// row, and the focus visual on the row with keyboard focus
+const row =
+  "relative rounded-u-4 outline-none before:absolute before:top-1/2 before:left-0 before:hidden before:h-16 before:w-3 before:-translate-y-1/2 before:rounded-u-2 before:bg-win-accent focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text aria-selected:bg-win-subtle aria-selected:before:block live:cursor-default live:hover:bg-win-subtle";
+const item =
+  "mx-4 my-2 flex h-28 items-center gap-24 rounded-u-4 pr-11 pl-11 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text live:hover:bg-win-subtle live:active:bg-win-subtle-2";
+const key = "ml-auto text-u-12/16 text-win-text-2";
+const sep = "my-1 h-1 bg-win-divider";
+const field =
+  "h-32 w-full rounded-u-4 bg-win-control px-11 text-u-14/20 outline-none shadow-win-field placeholder:text-win-text-2 focus:bg-win-base focus:shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-win-control-edge),inset_0_calc(var(--spacing)*-2)_var(--color-win-accent)]";
+const radio =
+  "size-20 shrink-0 appearance-none rounded-circle bg-win-control shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-win-strong)] outline-none checked:bg-win-on-accent checked:shadow-[inset_0_0_0_calc(var(--spacing)*5)_var(--color-win-accent)] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text";
 ---
 
 <Window prefix={prefix} pane="accounts" crop={crop}>
@@ -27,53 +71,112 @@ const caption = "text-u-12/16 text-win-text-2";
     title={page.title}
     subtitle={page.updated}
     commands={[
-      ["fl-refresh", page.commands[0]],
-      ["fl-add", page.commands[1]],
+      ["fl-refresh", page.commands[0], "refresh"],
+      ["fl-add", page.commands[1], "add"],
     ]}
   />
   <div class="mt-24 px-24 pb-16">
-    {page.notice && <div class="pb-8">
-      <InfoBar title={page.notice.title} closable>
-        <span class="mt-8 block tabular-nums">{page.notice.countdown}</span>
+    {/* NoticeBar.xaml, one a tool, above the list */}
+    {shownTools.map(([tool, name]) => <div
+      class="pb-8"
+      data-notice={tool}
+      hidden={!(page.notice && tool === "claude")}
+    >
+      <InfoBar title={switchedTo(name, "work")} closable live>
+        {[0, 1].map(() => (
+          <span class="mt-8 block" data-part="line" hidden />
+        ))}
+        <span class="mt-8 block tabular-nums" data-part="countdown" hidden={tool !== "claude"}
+          >{page.notice ? page.notice.countdown : `${sessionsFollowIn(name)} 0:21`}</span
+        >
       </InfoBar>
-    </div>}
-    <div role="grid" aria-labelledby={`${prefix}-title`}>
-      {page.sections.map((section, t) => <div role="rowgroup" aria-labelledby={`${prefix}-${t}`}>
+    </div>)}
+    {/* the setup step's InfoBar (AccountsPage.xaml), which is not closable */}
+    <div class="pb-8" data-part="setup" hidden>
+      <div
+        class="relative flex min-h-48 gap-12 rounded-u-4 bg-win-card-2 pt-14 pr-16 pb-12 pl-16 inset-shadow-win-layer-edge"
+      >
+        <svg class="mt-2 size-16 shrink-0 text-win-accent" aria-hidden="true">
+          <use href="#fl-arrow-swap" />
+        </svg>
+        <span class="min-w-0 flex-1">
+          <b class="block font-semibold" data-part="title"></b>
+          <span class="mt-4 block" data-part="detail"></span>
+          <span class="mt-12 flex gap-8">
+            <Button accent data-does="add">{addAccountAsks("windows")}</Button>
+            <Button data-does="not-now">{notNow("windows")}</Button>
+          </span>
+        </span>
+      </div>
+    </div>
+    <div
+      class="group/grid rounded-u-4 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text"
+      role="grid"
+      aria-labelledby={`${prefix}-title`}
+    >
+      {page.sections.map((section, t) => <div
+        role="rowgroup"
+        aria-labelledby={`${prefix}-${t}`}
+        data-tool={shownTools[t][0]}
+      >
         <div class="mx-12 pt-8 pb-10 font-semibold" id={`${prefix}-${t}`} aria-hidden="true">
           {section.name}
         </div>
         <div class="mx-12 h-1 bg-win-group-rule" />
-        {section.rows.map((row) => <div role="row" aria-selected="false" aria-label={row.spoken}>
+        {section.rows.map((r) => <div
+          class={row}
+          role="row"
+          aria-selected="false"
+          aria-label={r.spoken}
+          aria-keyshortcuts={keysOf(account(r.label, shownTools[t][0]), moments[moment], "windows")}
+          data-account={r.id}
+        >
           <div
             class="grid grid-cols-[calc(var(--spacing)*28)_1fr_auto] gap-x-12 gap-y-8 py-10 pr-12 pl-16"
             role="gridcell"
           >
             <svg
               aria-hidden="true"
-              class:list={[
-                "size-20 self-center justify-self-center",
-                row.inUse ? "text-win-accent-text" : "text-win-text-2",
-              ]}
+              class="size-20 self-center justify-self-center text-win-accent-text"
+              data-part="in-use-symbol"
+              {...hide(!r.inUse)}
             >
-              <use href={row.inUse ? "#fl-person-filled" : "#fl-person"} />
+              <use href="#fl-person-filled" />
+            </svg>
+            <svg
+              aria-hidden="true"
+              class="size-20 self-center justify-self-center text-win-text-2"
+              data-part="parked-symbol"
+              {...hide(r.inUse)}
+            >
+              <use href="#fl-person" />
             </svg>
             <span class="flex min-w-0 flex-col gap-2 self-center">
               <span class="flex items-center gap-8">
-                <b class="truncate font-semibold">{row.label}</b>
-                {row.plan && <span class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
-                  >{row.plan}</span
-                >}
+                <b class="truncate font-semibold" data-part="label">{r.label}</b>
+                <span
+                  class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
+                  data-part="plan"
+                  hidden={!r.plan}
+                  >{r.plan}</span
+                >
               </span>
-              <span class:list={["truncate", caption]}>{row.email}</span>
+              <span class:list={["truncate", caption]} data-part="email">{r.email}</span>
             </span>
             <span class="self-center">
-              {row.action ? (
-                <Button aria-label={row.action.spoken}>{row.action.title}</Button>
-              ) : (
-                <span class="flex items-center gap-6 text-win-text-2">
-                  <svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg>In use
-                </span>
-              )}
+              <Button aria-label={r.action?.spoken} data-does="use" hidden={!r.action}
+                >{r.action?.title ?? "Use"}</Button
+              >
+              <span
+                class="flex items-center gap-6 text-win-text-2"
+                data-part="in-use"
+                hidden={!!r.action}
+                ><svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg
+                >{inUse("windows")}</span
+              >
+              <span data-part="switching" hidden
+                ><ProgressRing class="size-16" label="Switching"
+              /></span>
             </span>
             <div class="col-span-2 col-start-2 flex flex-col gap-6">
               <div
@@ -81,59 +184,271 @@ const caption = "text-u-12/16 text-win-text-2";
                   "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
                   caption,
                 ]}
+                data-part="limits"
+                hidden={r.limits.length === 0}
               >
-                {row.limits.map((l) => (
-                  <>
-                    {/* the limit read once, as a sentence, and not the bar and each figure */}
-                    <span
-                      ><span aria-hidden="true">{l.short}</span
-                      ><span class="sr-only">{l.spoken}</span></span
-                    >
-                    <svg
-                      aria-hidden="true"
-                      class="h-12 w-full min-w-80 overflow-visible"
-                      viewBox="0 0 100 12"
-                      preserveAspectRatio="none"
-                    >
-                      <rect class="fill-win-strong" y="5.5" width="100" height="1" />
-                      {l.percent > 0 && (
-                        <rect
-                          class={fill[l.level]}
-                          y="4.5"
-                          width={l.percent}
-                          height="3"
-                          rx="0.4"
-                          ry="1.5"
-                        />
-                      )}
-                      {l.pace && l.pace.standing !== "even" && (
-                        <line
-                          class:list={["stroke-[calc(var(--spacing)*2)]", mark[l.pace.standing]]}
-                          x1={whole(l.pace.expected)}
-                          x2={whole(l.pace.expected)}
-                          y2="12"
-                          vector-effect="non-scaling-stroke"
-                        />
-                      )}
-                    </svg>
-                    <span class="min-w-36 text-right" aria-hidden="true">{l.figure}</span>
-                    <span class="text-right" aria-hidden="true">{l.resets}</span>
-                    <span
-                      aria-hidden="true"
-                      class:list={[
-                        "min-w-96",
-                        { "text-win-critical": l.pace?.standing === "over" },
-                      ]}
-                      >{l.pace?.said}</span
-                    >
-                  </>
-                ))}
+                {r.limits.map((l) => <div class="contents" data-part="limit">
+                  {/* the limit read once, as a sentence, and not the bar and each figure */}
+                  <span
+                    ><span aria-hidden="true" data-part="short">{l.short}</span
+                    ><span class="sr-only" data-part="spoken">{l.spoken}</span></span
+                  >
+                  <svg
+                    aria-hidden="true"
+                    class="h-12 w-full min-w-80 overflow-visible"
+                    viewBox="0 0 100 12"
+                    preserveAspectRatio="none"
+                  >
+                    <rect class="fill-win-strong" y="5.5" width="100" height="1" />
+                    <rect
+                      class={fillBy}
+                      y="4.5"
+                      width={l.percent}
+                      height="3"
+                      rx="0.4"
+                      ry="1.5"
+                      data-part="fill"
+                      data-state={l.level}
+                    />
+                    <line
+                      class:list={["stroke-[calc(var(--spacing)*2)]", markBy]}
+                      x1={whole(l.pace?.expected ?? 0)}
+                      x2={whole(l.pace?.expected ?? 0)}
+                      y2="12"
+                      vector-effect="non-scaling-stroke"
+                      data-part="mark"
+                      data-state={l.pace?.standing ?? "even"}
+                      {...(l.pace && l.pace.standing !== "even" ? {} : { hidden: true })}
+                    />
+                  </svg>
+                  <span class="min-w-36 text-right" aria-hidden="true" data-part="figure"
+                    >{l.figure}</span
+                  >
+                  <span class="text-right" aria-hidden="true" data-part="resets">{l.resets}</span>
+                  <span
+                    aria-hidden="true"
+                    class="min-w-96 data-[state=over]:text-win-critical"
+                    data-part="pace"
+                    data-state={l.pace?.standing ?? "even"}
+                    >{l.pace?.said}</span
+                  >
+                </div>)}
               </div>
-              {row.notes.map((n) => <span class={caption}>{n}</span>)}
+              <div class="contents" data-part="notes">
+                {r.notes.map((n) => <span class={caption}>{n}</span>)}
+              </div>
             </div>
           </div>
         </div>)}
       </div>)}
     </div>
   </div>
+  <Fragment slot="desk">
+    {/* AccountMenu.cs: only what applies, with the keys the row answers as text */}
+    <div
+      class="absolute top-(--y) left-(--x) z-5 w-max min-w-200 rounded-u-8 bg-win-flyout py-2 font-win text-u-14/20 whitespace-nowrap text-win-text shadow-win-flyout outline-none live:cursor-default"
+      id={`${prefix}-menu`}
+      role="menu"
+      aria-label="Account"
+      tabindex="-1"
+      hidden
+    >
+      <div class={item} role="menuitem" tabindex="-1" data-offer="use">
+        <span data-part="title"></span>
+      </div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="sign-in-again">
+        {signInAgain("windows")}
+      </div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="rename">
+        {RENAME_OFFER}<span class={key} aria-hidden="true">F2</span>
+      </div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="warm">{warmUpNow("windows")}</div>
+      <div class={sep} role="separator" data-after="offers"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="open">
+        <span data-part="title"></span>
+      </div>
+      <div class={sep} role="separator" data-after="open"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="copy">
+        {copyEmail("windows")}<span class={key} aria-hidden="true">Ctrl+C</span>
+      </div>
+      <div class={sep} role="separator" data-after="copy"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="forget">
+        {FORGET_OFFER}<span class={key} aria-hidden="true">Del</span>
+      </div>
+    </div>
+    {/* the templates and the dialogs every view of the window shares, drawn once with its top
+       view's: each opens anchored over the window it is opened from */}
+    {crop && (
+      <>
+        {/* an account a visitor adds, a limit its first read finds, and a note */}
+        <template data-part="row">
+          <div class={row} role="row" aria-selected="false">
+            <div
+              class="grid grid-cols-[calc(var(--spacing)*28)_1fr_auto] gap-x-12 gap-y-8 py-10 pr-12 pl-16"
+              role="gridcell"
+            >
+              <svg
+                aria-hidden="true"
+                class="size-20 self-center justify-self-center text-win-accent-text"
+                data-part="in-use-symbol"
+                {...hide(true)}
+              >
+                <use href="#fl-person-filled" />
+              </svg>
+              <svg
+                aria-hidden="true"
+                class="size-20 self-center justify-self-center text-win-text-2"
+                data-part="parked-symbol"
+              >
+                <use href="#fl-person" />
+              </svg>
+              <span class="flex min-w-0 flex-col gap-2 self-center">
+                <span class="flex items-center gap-8">
+                  <b class="truncate font-semibold" data-part="label"></b>
+                  <span
+                    class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
+                    data-part="plan"
+                    hidden
+                  ></span>
+                </span>
+                <span class:list={["truncate", caption]} data-part="email"></span>
+              </span>
+              <span class="self-center">
+                <Button data-does="use">Use</Button>
+                <span class="flex items-center gap-6 text-win-text-2" data-part="in-use" hidden
+                  ><svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg
+                  >{inUse("windows")}</span
+                >
+                <span data-part="switching" hidden
+                  ><ProgressRing class="size-16" label="Switching"
+                /></span>
+              </span>
+              <div class="col-span-2 col-start-2 flex flex-col gap-6">
+                <div
+                  class:list={[
+                    "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
+                    caption,
+                  ]}
+                  data-part="limits"
+                  hidden
+                ></div>
+                <div class="contents" data-part="notes"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template data-part="limit">
+          <div class="contents" data-part="limit">
+            <span
+              ><span aria-hidden="true" data-part="short"></span><span
+                class="sr-only"
+                data-part="spoken"
+              ></span></span
+            >
+            <svg
+              aria-hidden="true"
+              class="h-12 w-full min-w-80 overflow-visible"
+              viewBox="0 0 100 12"
+              preserveAspectRatio="none"
+            >
+              <rect class="fill-win-strong" y="5.5" width="100" height="1" />
+              <rect
+                class={fillBy}
+                y="4.5"
+                width="0"
+                height="3"
+                rx="0.4"
+                ry="1.5"
+                data-part="fill"
+              />
+              <line
+                class:list={["stroke-[calc(var(--spacing)*2)]", markBy]}
+                y2="12"
+                vector-effect="non-scaling-stroke"
+                data-part="mark"
+                {...hide(true)}
+              />
+            </svg>
+            <span class="min-w-36 text-right" aria-hidden="true" data-part="figure"></span>
+            <span class="text-right" aria-hidden="true" data-part="resets"></span>
+            <span
+              aria-hidden="true"
+              class="min-w-96 data-[state=over]:text-win-critical"
+              data-part="pace"
+            ></span>
+          </div>
+        </template>
+        <template data-part="note">
+          <span class={caption}></span>
+        </template>
+        <ContentDialog id="win-accounts-forget" alert>
+          <Fragment slot="buttons">
+            <Button value="forget" type="submit">{FORGET}</Button>
+            <Button data-does="cancel">{CANCEL}</Button>
+          </Fragment>
+        </ContentDialog>
+        <ContentDialog id="win-accounts-rename">
+          <label class="mt-12 block">
+            <span class="mb-8 block">{NAME}</span>
+            <input class={field} name="name" autocomplete="off" spellcheck="false" />
+          </label>
+          <span class:list={["mt-4 block", caption]} data-part="problem" hidden></span>
+          <div
+            class="mt-12 rounded-u-4 bg-win-card-2 px-16 py-12 inset-shadow-win-layer-edge"
+            data-part="failure"
+            hidden
+          >
+            <b class="block font-semibold" data-part="failure-title"></b>
+            <span class="block" data-part="failure-message"></span>
+          </div>
+          <Fragment slot="buttons">
+            <Button accent type="submit" value="rename">{RENAME}</Button>
+            <Button data-does="cancel">{CANCEL}</Button>
+          </Fragment>
+        </ContentDialog>
+        <ContentDialog id="win-accounts-sign-in" wide>
+          <div data-part="form">
+            <fieldset class="mt-12" data-part="tool">
+              <legend class="mb-8">{TOOL}</legend>
+              {shownTools.map(([tool, name], i) => <label class="flex h-32 items-center gap-8">
+                <input class={radio} type="radio" name="tool" value={tool} checked={i === 0} />
+                {name}
+              </label>)}
+            </fieldset>
+            <label class="mt-12 block" data-part="name">
+              <span class="mb-8 block">{NAME}</span>
+              <input
+                class={field}
+                name="name"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="work"
+              />
+            </label>
+            <div class="mt-12" data-part="account">
+              <span class="block">{ACCOUNT}</span>
+              <span class="block select-text" data-part="label"></span>
+            </div>
+            <span class:list={["mt-4 block", caption]} data-part="problem" hidden></span>
+          </div>
+          <div class="mt-12 flex items-center gap-8" data-part="page" hidden>
+            <ProgressRing class="size-20" label="Waiting for your browser" />
+            <span class="flex-1">{signInPage("windows")}</span>
+            <Button disabled>{copyLink("windows")}</Button>
+            <Button disabled>{OPEN}</Button>
+          </div>
+          <Fragment slot="buttons">
+            <Button accent type="submit" value="sign-in" data-part="confirm"
+              >{signIn("windows")}</Button
+            >
+            <Button data-does="cancel">{CANCEL}</Button>
+          </Fragment>
+        </ContentDialog>
+      </>
+    )}
+  </Fragment>
 </Window>
+
+<script>
+  import "../../../scripts/live/accounts.ts";
+</script>

@@ -109,6 +109,7 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
       rows: listed(w, tool).map((a) => {
         const inUse = isInUse(a, w);
         return {
+          id: a.id,
           label: a.label,
           plan: a.plan,
           email: a.email,

@@ -1,0 +1,34 @@
+---
+// WinUI's ContentDialog (ContentDialog_themeresources.xaml): 320 to 548 pixels wide, its title in
+// 20 pixel semibold over its content on LayerFillColorAlt, then its buttons side by side, one width
+// each, on the dialog's ground under a hairline. A <dialog> live/dialog.ts opens with showModal()
+// over its window, which draws its smoke; its ids start `id`.
+interface Props {
+  id: string;
+  alert?: boolean;
+  wide?: boolean;
+}
+const { id, alert = false, wide = false } = Astro.props;
+---
+
+<dialog
+  class:list={[
+    "supports-[anchor-name:--a]:m-0 [position-anchor:var(--over)] supports-[anchor-name:--a]:right-auto supports-[anchor-name:--a]:bottom-auto supports-[anchor-name:--a]:top-[anchor(center)] supports-[anchor-name:--a]:left-[anchor(center)] supports-[anchor-name:--a]:-translate-1/2 overflow-visible rounded-u-8 bg-win-base font-win text-u-14/20 text-win-text shadow-win-flyout ring-1 ring-win-surface-edge backdrop:bg-transparent",
+    wide ? "w-548" : "w-max max-w-548 min-w-320",
+  ]}
+  id={id}
+  role={alert ? "alertdialog" : undefined}
+  aria-labelledby={`${id}-title`}
+  aria-describedby={`${id}-message`}
+>
+  <form method="dialog">
+    <div
+      class="rounded-t-u-8 bg-win-layer-alt p-24 inset-shadow-[inset_0_calc(var(--spacing)*-1)_var(--color-win-layer-edge)]"
+    >
+      <h2 class="mb-12 text-u-20/28 font-semibold" id={`${id}-title`} data-part="title"></h2>
+      <p class="whitespace-pre-line" id={`${id}-message`} data-part="message"></p>
+      <slot />
+    </div>
+    <div class="grid auto-cols-fr grid-flow-col gap-8 p-24"><slot name="buttons" /></div>
+  </form>
+</dialog>

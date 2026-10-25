@@ -6,15 +6,16 @@ interface Props extends HTMLAttributes<"button"> {
   accent?: boolean;
   stretch?: boolean;
 }
-const { accent = false, stretch = false, ...rest } = Astro.props;
+const { accent = false, stretch = false, type = "button", ...rest } = Astro.props;
 ---
 
 <button
   class:list={[
     "inline-flex h-32 items-center justify-center rounded-u-4 px-11 pt-5 pb-6 text-u-14/20 whitespace-nowrap",
     accent ? "bg-win-accent text-win-on-accent" : "bg-win-control shadow-win-control",
+    "disabled:bg-win-control-2 disabled:text-win-text-off disabled:shadow-none live:cursor-default",
     { "w-full": stretch },
   ]}
-  type="button"
+  type={type}
   {...rest}
 ><slot /></button>

@@ -1,7 +1,8 @@
 ---
 // As MainWindow.swift lays it out at its minimum width of 640, and as macOS 27 draws it, measured
 // on docs/images/window.png; a `crop` desk shows the window's top, a `fit` one all of it. Its
-// title's id starts `prefix`, and each toolbar button is named as its Label names it.
+// title's id starts `prefix`, and each toolbar button is named as its Label names it. The `desk`
+// slot holds what the window opens over the desk: its shortcut menu and its sheets.
 import Lights from "./Lights.astro";
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
   pane: "accounts" | "activity";
   title: string;
   subtitle?: string;
-  tools: [icon: string, label: string][];
+  tools: [icon: string, label: string, does: string][];
   crop?: boolean;
   fit?: boolean;
 }
@@ -28,7 +29,7 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
 <Root
   id={prefix}
   class:list={[
-    "desk [--units:680]",
+    "desk [anchor-name:var(--desk)] [--units:680]",
     crop ? "block h-348" : "flex items-center justify-center py-20",
     { "min-h-540": pane === "accounts" && !crop && !fit, "min-h-250": log },
   ]}
@@ -37,7 +38,7 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
 >
   <div
     class:list={[
-      "grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window",
+      "grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-16 [anchor-name:var(--window)] bg-mac-window-bg text-mac-window-text shadow-mac-window",
       crop ? "absolute top-24 left-1/2 -translate-x-1/2" : "relative",
     ]}
   >
@@ -65,13 +66,16 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
             class:list={subtitle ? "text-u-13/16 font-bold" : "text-u-15/18 font-semibold"}
             id={`${prefix}-title`}
             >{title}</b
-          >{subtitle && <span class="text-u-11/13 text-mac-window-sub">{subtitle}</span>}</span
+          >{subtitle && <span class="text-u-11/13 text-mac-window-sub" data-part="updated"
+            >{subtitle}</span
+          >}</span
         >
         <span class:list={[glass, tools.length > 1 ? "px-2" : "w-36 justify-center"]}>
-          {tools.map(([icon, label]) => <button
-            class="flex w-34.5 justify-center"
+          {tools.map(([icon, label, does]) => <button
+            class="flex w-34.5 justify-center live:cursor-default live:disabled:opacity-35"
             type="button"
             aria-label={label}
+            data-does={does}
           >
             <svg class="size-22 shrink-0"><use href={`#${icon}`} /></svg>
           </button>)}
@@ -79,5 +83,8 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
       </div>
       <div class:list={["flex-1", { "px-16 pb-10": !log }]}><slot /></div>
     </div>
+    {/* what macOS 26 draws over a window with a sheet or an alert up */}
+    <div class="absolute inset-0 z-1 bg-mac-window-scrim" data-part="smoke" hidden></div>
   </div>
+  <slot name="desk" />
 </Root>

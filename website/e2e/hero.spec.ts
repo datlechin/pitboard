@@ -22,6 +22,9 @@ async function hero(page: Page, platform: Platform) {
   await handedOver(page);
 }
 
+// the hero's own Reset, of the one in each working figure's caption
+const heroReset = "figure:has([data-demo-desk]) [data-reset]";
+
 // time held, so each delay runs only as a test lets it: a second on, which leaves room for the
 // time the page takes to answer
 async function hold(page: Page) {
@@ -72,7 +75,7 @@ test.describe("the opening demo", () => {
     await expect(page.locator(mac.menu)).toBeVisible();
     await expect(page.locator('#hero-mac [data-part="pointer"]')).toHaveCSS("opacity", "0");
     // the page rests here: the demo's switch is no change of the visitor's to undo
-    await expect(page.locator("[data-reset]:visible")).toHaveCount(0);
+    await expect(page.locator(heroReset)).toBeHidden();
     // a platform change no longer plays it again
     await page.locator('[role="tab"][data-platform="windows"]').first().click();
     await page.clock.runFor(700);
@@ -174,7 +177,7 @@ test.describe("on macOS", () => {
         .first(),
     ).toHaveAttribute("data-account", "personal");
     await expect(page.locator('#hero-mac [data-part="status"]')).toContainText("personal 59%");
-    await expect(page.locator("[data-reset]:visible")).toHaveCount(1);
+    await expect(page.locator(heroReset)).toBeVisible();
   });
 
   test("a press let go off the menu chooses nothing and closes it", async ({ page }) => {
@@ -298,7 +301,7 @@ test.describe("on macOS", () => {
     await page.locator(mac.item).click();
     await page.locator('#hero-mac-menu [data-does="quit"]').click();
     await expect(page.locator(mac.item)).toBeHidden();
-    await page.locator("[data-reset]:visible").click();
+    await page.locator(heroReset).click();
     await expect(page.locator(mac.item)).toBeVisible();
     await expect(page.locator(mac.item)).toBeFocused();
     await expect(page.locator(mac.account("work"))).toHaveAttribute("aria-checked", "true");
@@ -462,7 +465,7 @@ test.describe("on Windows", () => {
     await page.locator(win.icon).click({ button: "right" });
     await page.locator('#hero-win-menu [data-does="Exit"]').click();
     await expect(page.locator(win.icon)).toBeHidden();
-    await page.locator("[data-reset]:visible").click();
+    await page.locator(heroReset).click();
     await expect(page.locator(win.icon)).toBeVisible();
   });
 });

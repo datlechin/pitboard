@@ -1,5 +1,7 @@
 ---
-// ActivityPage.xaml under 720 pixels of page, where each change stacks under its date.
+// ActivityPage.xaml under 720 pixels of page, where each change stacks under its date. With
+// live/activity.ts it reads the page's log as the page does: when it comes into view, and on
+// Refresh.
 import PageHeader from "./PageHeader.astro";
 import Window from "./Window.astro";
 import { activityPage as page } from "../../../data/windows.ts";
@@ -11,8 +13,12 @@ const { prefix } = Astro.props;
 ---
 
 <Window prefix={prefix} pane="activity">
-  <PageHeader prefix={prefix} title={page.title} commands={[["fl-refresh", page.command]]} />
-  <div class="mt-24 px-24 pb-16">
+  <PageHeader
+    prefix={prefix}
+    title={page.title}
+    commands={[["fl-refresh", page.command, "refresh"]]}
+  />
+  <div class="mt-24 px-24 pb-16" data-part="log">
     {page.rows.map((r) => <div
       class="grid grid-cols-[auto_1fr] gap-x-12 gap-y-2 py-8 pr-12 pl-16 whitespace-nowrap"
     >
@@ -24,3 +30,7 @@ const { prefix } = Astro.props;
     </div>)}
   </div>
 </Window>
+
+<script>
+  import "../../../scripts/live/activity.ts";
+</script>
