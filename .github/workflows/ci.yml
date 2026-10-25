@@ -386,6 +386,19 @@ jobs:
         with:
           name: UITests.xcresult
           path: ${{ runner.temp }}/UITests.xcresult
+      # What the tests kept: ScreenshotTests' pictures and SiteFiguresTests' readings and pictures,
+      # which docs/facts/site.md records for usepitboard.com's figures.
+      - if: success() || steps.ui.outcome == 'failure'
+        run: >
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/UITests.xcresult"
+          --output-path "$RUNNER_TEMP/macos-app-pictures"
+      - if: success() || steps.ui.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-app-pictures
+          path: ${{ runner.temp }}/macos-app-pictures
+          if-no-files-found: error
+          retention-days: 7
 
   csharp:
     # The Windows app reaches the core through these bindings, and PitboardShare.exe reaches
@@ -866,6 +879,18 @@ jobs:
         with:
           name: windows-app-pictures
           path: ${{ runner.temp }}/app-tests/Pitboard.UITests/**/*.png
+          if-no-files-found: error
+          retention-days: 7
+      # SiteFiguresTests' readings and pictures, which docs/facts/site.md records for usepitboard.com's figures, from
+      # both images: windows-11-arm is the Windows 11 the figures draw.
+      - name: The site's readings of the app
+        if: success() || failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-figures-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/app-tests/Pitboard.UITests/**/site-*.txt
+            ${{ runner.temp }}/app-tests/Pitboard.UITests/**/site-*.png
           if-no-files-found: error
           retention-days: 7
       # The job's user is elevated, so of the UI tests only the elevated launch's runs.
