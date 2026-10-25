@@ -648,9 +648,24 @@ impl Pitboard {
 
     /// Removes the schedule, every parked login and Pitboard's directory; logins in use stay.
     pub fn uninstall(&self) -> Changing<switch::Removed> {
+        self.removing(switch::uninstall)
+    }
+
+    // An app's, holding `own` from `hold_open`, which is let go of only as the directory goes.
+    pub fn uninstall_from_app(
+        &self,
+        own: &mut Option<crate::app::Open>,
+    ) -> Changing<switch::Removed> {
+        self.removing(|settled| switch::uninstall_from_app(settled, own))
+    }
+
+    fn removing(
+        &self,
+        run: impl FnOnce(Settled) -> Result<switch::Removed>,
+    ) -> Changing<switch::Removed> {
         let permit = self.permitted()?;
         self.changing(permit, "uninstall", "", None, |settled| {
-            switch::uninstall(settled).map(|mut removed| {
+            run(settled).map(|mut removed| {
                 let said = std::mem::take(&mut removed.warnings);
                 (removed, said)
             })
@@ -2821,7 +2836,7 @@ mod tests {
 
     /// Every change a front end can ask for, by its name. `enroll_signed_in` is asked apart,
     /// since it takes a sign-in made before.
-    const CHANGES: [(&str, Change); 19] = [
+    const CHANGES: [(&str, Change); 20] = [
         ("switch_to", |p, m| {
             p.switch_to(&m.key("there").typed()).err()
         }),
@@ -2856,6 +2871,9 @@ mod tests {
             failed(p.keep_app_file(crate::app::AppFile::Preferences, "{}"))
         }),
         ("uninstall", |p, _| p.uninstall().err()),
+        ("uninstall_from_app", |p, _| {
+            p.uninstall_from_app(&mut None).err()
+        }),
         ("auto_switch", |p, _| {
             p.auto_switch(Threshold::DEFAULT).err()
         }),

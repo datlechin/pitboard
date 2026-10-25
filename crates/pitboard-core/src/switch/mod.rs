@@ -67,7 +67,7 @@ pub(crate) use stow::find as left_login;
 pub(crate) use stow::stow;
 pub use stow::{Foreseen, Kept, Left, Stowed};
 pub use uninstall::Removed;
-pub(crate) use uninstall::uninstall;
+pub(crate) use uninstall::{uninstall, uninstall_from_app};
 
 use crate::context::Context;
 use crate::error::{Error, Result};
