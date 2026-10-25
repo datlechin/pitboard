@@ -6,6 +6,7 @@ use crate::watch::epoch;
 use crate::{Report, changed};
 use clap::Subcommand;
 use pitboard_core::duty::warm::{self, Overview, Range, Standing};
+use pitboard_core::host::Os;
 use pitboard_core::service::Pitboard;
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::words;
@@ -91,7 +92,7 @@ fn overview(pitboard: &Pitboard) -> Report {
             account
         }).collect::<Vec<_>>(),
     });
-    Report::done("warm", data, said(&overview))
+    Report::done("warm", data, said(&overview, pitboard_core::host::OS))
 }
 
 fn merge(into: &mut Value, from: Value) {
@@ -116,9 +117,17 @@ fn standing_json(standing: &Standing) -> Value {
     }
 }
 
+// What warms up accounts while it runs. Linux has no app.
+pub(crate) fn warmers(os: Os) -> &'static str {
+    match os {
+        Os::Linux => "`pitboard watch`",
+        Os::MacOs | Os::Windows => "the app or `pitboard watch`",
+    }
+}
+
 /// The span, and each Claude Code account with whether it is warmed up and where it stands,
 /// as a person reads it.
-fn said(overview: &Overview) -> String {
+fn said(overview: &Overview, os: Os) -> String {
     if overview.accounts.is_empty() {
         return "No Claude Code account is enrolled, so there is nothing to warm up.\n".into();
     }
@@ -129,8 +138,9 @@ fn said(overview: &Overview) -> String {
         .max()
         .unwrap_or_default();
     let mut text = format!(
-        "Pitboard warms up these accounts from {}, while the app or `pitboard watch` runs.\n",
-        overview.range
+        "Pitboard warms up these accounts from {}, while {} runs.\n",
+        overview.range,
+        warmers(os)
     );
     let now = epoch();
     let moment = |at| pitboard_core::time::moment(at, now);
@@ -227,19 +237,41 @@ mod tests {
 
     #[test]
     fn a_halt_is_said_under_the_accounts_on_every_system() {
-        let said = anstream::adapter::strip_str(&said(&overview(Some(Halt::ProgramMissing), true)))
-            .to_string();
-        assert!(
-            said.starts_with("Pitboard warms up these accounts from 06:00 to 22:00"),
-            "{said}"
+        for os in [Os::MacOs, Os::Linux, Os::Windows] {
+            let said = said(&overview(Some(Halt::ProgramMissing), true), os);
+            let said = anstream::adapter::strip_str(&said).to_string();
+            assert!(
+                said.starts_with("Pitboard warms up these accounts from 06:00 to 22:00"),
+                "{said}"
+            );
+            assert!(
+                said.ends_with(
+                    "\nPitboard is not warming up accounts: Claude Code is not installed where \
+                     Pitboard looks.\n"
+                ),
+                "{said}"
+            );
+        }
+    }
+
+    #[test]
+    fn linux_which_has_no_app_says_only_pitboard_watch_warms_up() {
+        let first = |os| {
+            let said = said(&overview(None, true), os);
+            let said = anstream::adapter::strip_str(&said).to_string();
+            said.lines().next().expect("a first line").to_owned()
+        };
+        assert_eq!(
+            first(Os::Linux),
+            "Pitboard warms up these accounts from 06:00 to 22:00, while `pitboard watch` runs."
         );
-        assert!(
-            said.ends_with(
-                "\nPitboard is not warming up accounts: Claude Code is not installed where \
-                 Pitboard looks.\n"
-            ),
-            "{said}"
-        );
+        for os in [Os::MacOs, Os::Windows] {
+            assert_eq!(
+                first(os),
+                "Pitboard warms up these accounts from 06:00 to 22:00, while the app or \
+                 `pitboard watch` runs."
+            );
+        }
     }
 
     #[test]

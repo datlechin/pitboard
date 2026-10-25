@@ -203,6 +203,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where Claude Code renews it while they run.
 - The status line no longer waits for the disk after each response, which took it past half a
   second on a busy Windows disk.
+- `pitboard warm` and `pitboard uninstall` on Linux, which has no app, say only `pitboard watch`
+  warms up accounts, where they named the app too.
 
 ## [1.0.0-beta.5] - 2026-10-23
 
