@@ -275,18 +275,30 @@ test("Activity lists Windows' changes in the app's words, dated as the regional 
   );
 });
 
-test("the run-out notification says what WindowsNotifications.cs builds from notices.rs", () => {
+test("the notification at the share says what WindowsNotifications.cs builds from notices.rs", () => {
   const source = shell("WindowsNotifications.cs");
   assert.ok(source.includes('public const string DisplayName = "Pitboard";'));
   assert.ok(source.includes("new AppNotificationButton(button.Title)"));
   assert.ok(present("words.rs").includes('pub(crate) const SWITCH: &str = "Switch";'));
-  assert.ok(present("notices.rs").includes("button(words::SWITCH.into(),"));
-  const words = present("words.rs");
-  assert.ok(words.includes('format!("{account} has no {limit} limit left")'));
-  assert.ok(words.includes('Some(left) => format!("{account} has {left}% of its own left."),'));
+  const notices = present("notices.rs");
+  assert.ok(notices.includes("button(words::SWITCH.into(),"));
+  // short of 100%, the title says how much of the limit the account has used
+  assert.match(
+    notices,
+    /said::has_used\(\s*&words::quoted\(&heads_up\.ran\),\s*&said::share_of_limit\(&limit\),/,
+  );
+  const said = core("words.rs");
+  assert.ok(said.includes('format!("{account} has used {used}")'));
+  assert.ok(said.includes('format!("{} of its {name} limit", figure(limit.percent))'));
+  assert.ok(
+    present("words.rs").includes(
+      'Some(left) => format!("{account} has {left}% of its own left."),',
+    ),
+  );
+  assert.ok(core("duty/autoswitch.rs").includes("pub const DEFAULT: Threshold = Threshold(95);"));
   assert.deepEqual(toast, {
     app: "Pitboard",
-    title: "personal has no weekly limit left",
+    title: "personal has used 95% of its weekly limit",
     tool: "Claude Code",
     body: "work has 60% of its own left.",
     button: "Switch",

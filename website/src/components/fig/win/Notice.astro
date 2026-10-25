@@ -1,10 +1,11 @@
 ---
-// WindowsNotifications.cs's run-out toast; its metrics are approx until read on Windows.
+// WindowsNotifications.cs's toast at the share; its metrics are approx until read on Windows.
 import Button from "./Button.astro";
 import Taskbar from "./Taskbar.astro";
 import TrayItem from "./TrayItem.astro";
 import { toast } from "../../../data/windows.ts";
-import { windowsClock } from "../../../data/world.ts";
+import { share, windowsClock } from "../../../data/world.ts";
+import { level } from "../../../lib/words.ts";
 ---
 
 <div class="desk h-260 desk-px-720" aria-hidden="true" data-output>
@@ -22,7 +23,7 @@ import { windowsClock } from "../../../data/world.ts";
     <span>{toast.body}</span>
     <span class="mt-16 text-win-text"><Button stretch>{toast.button}</Button></span>
   </div>
-  <Taskbar time={windowsClock.runOut.time} date={windowsClock.runOut.date}>
-    <TrayItem level="r" />
+  <Taskbar time={windowsClock.warned.time} date={windowsClock.warned.date}>
+    <TrayItem level={level(share)} />
   </Taskbar>
 </div>

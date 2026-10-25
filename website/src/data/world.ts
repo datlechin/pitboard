@@ -109,16 +109,20 @@ export const clock = {
   desktopSwitched: "18:46",
   warmed: "17:00",
   warmsAgain: "22:00",
-  // when personal, left in use, runs out of its weekly limit
-  runOut: "Wed 14 Oct 07:56",
+  // when personal, left in use, reaches the share of its weekly limit at the pace it runs out at
+  warned: "Wed 14 Oct 05:53",
 };
 
 // The same moments as Windows says them in the en-GB regional format: its taskbar's time over its
 // date, and the app's "t" and "g" (WindowsLocalTime.cs).
 export const windowsClock = {
   taskbar: { time: "20:51", date: "13/10/2026" },
-  runOut: { time: "07:56", date: "14/10/2026" },
+  warned: { time: "05:53", date: "14/10/2026" },
 };
+
+// The share of a limit the app notifies or switches at until someone sets another
+// (autoswitch.rs `Threshold::DEFAULT`).
+export const share = 95;
 
 // The accounts turned on for warm-up, alike on every system.
 export const warmUp = { from: "07:00", to: "23:00", accounts: ["personal"] };

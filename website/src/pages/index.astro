@@ -286,24 +286,26 @@ const jsonLd = [
         >
           Before an account runs out
         </h2>
-        <Row id="offer-title" title="When one runs out">
+        <Row id="offer-title" title="A warning first">
           <p>
-            When the account in use runs out, the app's
-            <a href={`${DOCS}/guides/switch#when-an-account-runs-out`}>notification</a> offers
-            another with room left.
+            While the app is open, its
+            <a href={`${DOCS}/guides/switch#get-a-notification-before-a-limit-runs-out`}
+              >notification</a
+            >
+            offers another account with room left once the account in use reaches 95% of a limit.
           </p>
           <Figure
             slot="fig"
             app={{
               macos: {
-                caption: "The notification on macOS when an account runs out.",
+                caption: "The notification on macOS at 95%.",
                 describe:
-                  "A notification from Pitboard: personal has no weekly limit left. Claude Code. work has 60% of its own left. It has a Switch button.",
+                  "A notification from Pitboard: personal has used 95% of its weekly limit. Claude Code. work has 60% of its own left. It has a Switch button. The menu bar shows personal 95%.",
               },
               windows: {
-                caption: "The notification on Windows when an account runs out.",
+                caption: "The notification on Windows at 95%.",
                 describe:
-                  "A notification from Pitboard in the corner of the screen: personal has no weekly limit left. Claude Code. work has 60% of its own left. It has a Switch button.",
+                  "A notification from Pitboard in the corner of the screen: personal has used 95% of its weekly limit. Claude Code. work has 60% of its own left. It has a Switch button.",
               },
             }}
           >

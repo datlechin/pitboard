@@ -2,9 +2,11 @@
 // crates/pitboard/src/render/status.rs.
 
 import {
+  account,
   accounts,
   inUse,
   logged,
+  share,
   toolOn,
   tools,
   type Account,
@@ -90,6 +92,19 @@ export const trayTip = (moment: Moment) =>
       return `${a.label} (${toolName(tool)}): ${menuLine(a, moment)}`;
     }),
   ].join("\n");
+
+// The notification once a limit of the account in use reaches the share (present/notices.rs
+// `at_limit_notice`): personal's weekly limit, with work's room in it.
+export const headsUpTitle = (label: string, kind: Limit["kind"], used: number) =>
+  `${label} has used ${used}% of its ${sentenceName[kind]} limit`;
+const weekly = (label: string) => account(label).limits.find((l) => l.kind === "week")!;
+export const headsUp = {
+  account: "personal",
+  title: headsUpTitle("personal", "week", share),
+  tool: "Claude Code",
+  body: `work has ${100 - weekly("work").used}% of its own left.`,
+  button: "Switch",
+};
 
 export function runsOutNote(a: Account, moment: Moment): string | null {
   const l = isInUse(a, moment) ? a.limits.find((l) => l.runsOut) : undefined;
