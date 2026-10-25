@@ -104,7 +104,7 @@ const caption = "text-u-12/16 text-win-text-2";
                   </svg>
                   <span class="min-w-36 text-right">{l.used}%</span>
                   <span class="text-right">resets in {l.resets}</span>
-                  <span class={l.standing === "over" ? "text-win-critical" : undefined}
+                  <span class:list={["min-w-96", { "text-win-critical": l.standing === "over" }]}
                     >{l.pace}</span
                   >
                 </>

@@ -85,14 +85,17 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
   assert.equal(work.tip, "5-hour 12%, weekly 40%");
 });
 
-test("a site with several accounts' windows is a submenu of their labels", () => {
+test("a site with several accounts' windows is a submenu of their labels, the one in use first", () => {
   const source = repo("crates/pitboard-ffi/src/account_windows/accounts.rs");
   assert.ok(source.includes('title: format!("Open {}", site.name()),'));
+  // in the accounts' order, which the status gives with the signed-in account first
+  assert.ok(source.includes("let windows = window_accounts(accounts);"));
+  assert.ok(core("status.rs").includes("rows.sort_by_key(|r| (rank(r.provider), !r.signed_in));"));
   const sites = menu(false).flatMap((e) => ("command" in e && e.submenu ? [e] : []));
   assert.deepEqual(
     sites.map((e) => ("command" in e ? [e.command, e.submenu] : [])),
     [
-      ["Open claude.ai", ["personal", "work"]],
+      ["Open claude.ai", ["work", "personal"]],
       ["Open chatgpt.com", ["main", "spare"]],
     ],
   );

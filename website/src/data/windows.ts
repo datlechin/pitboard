@@ -59,7 +59,7 @@ export function iconMenu(moment: Moment, updates: boolean): MenuEntry[][] {
     sites.map(([site, tool]) => ({
       command: `Open ${site}`,
       site,
-      submenu: toolAccounts(tool).map((a) => a.label),
+      submenu: listed(tool, moment).map((a) => a.label),
     })),
     [
       { command: "Open Pitboard", bold: true },

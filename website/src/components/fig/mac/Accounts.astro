@@ -17,7 +17,6 @@ const capitalised = (s: string) => s[0].toUpperCase() + s.slice(1);
 const warm: Record<string, string> = { personal: `Warms up again at ${clock.warmsAgain}` };
 const fill = { g: "fill-mac-window-green", y: "fill-mac-window-orange", r: "fill-mac-window-red" };
 const mark = { under: "fill-mac-window-green", over: "fill-mac-window-red" };
-const pace = { under: "text-mac-window-green-text", over: "text-mac-window-red-text", even: "" };
 const sub = "text-u-12/15 text-mac-window-sub";
 ---
 
@@ -90,7 +89,7 @@ const sub = "text-u-12/15 text-mac-window-sub";
           </div>
           {a.limits.length > 0 && <div
             class:list={[
-              "mt-6 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-6 gap-y-4 text-u-12/15 tabular-nums",
+              "mt-6 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6 text-u-12/15 tabular-nums",
               { "ml-32": !later },
             ]}
           >
@@ -128,9 +127,16 @@ const sub = "text-u-12/15 text-mac-window-sub";
                       </>
                     )}
                   </svg>
-                  <span class="min-w-30 text-right">{l.used}%</span>
-                  <span class="min-w-92 text-right text-mac-window-sub">resets in {l.resets}</span>
-                  <span class={s ? pace[s] : undefined}>{paceText(l)}</span>
+                  <span class="min-w-38 text-right">{l.used}%</span>
+                  <span class="min-w-110 text-right text-mac-window-sub">resets in {l.resets}</span>
+                  <span
+                    class:list={[
+                      "min-w-100",
+                      // UsageBar.swift tints only over pace
+                      s === "over" ? "text-mac-window-red-text" : "text-mac-window-sub",
+                    ]}
+                    >{paceText(l)}</span
+                  >
                 </>
               );
             })}

@@ -1,5 +1,6 @@
 ---
-// As MainWindow.swift lays it out; a `crop` desk shows the window's top, a `fit` one all of it.
+// As MainWindow.swift lays it out, at its minimum width of 640; a `crop` desk shows the window's
+// top, a `fit` one all of it.
 import Lights from "./Lights.astro";
 
 interface Props {
@@ -21,7 +22,7 @@ const log = pane === "activity";
 
 <div
   class:list={[
-    "desk",
+    "desk [--units:680]",
     crop ? "h-356" : "flex items-center justify-center py-20",
     { "min-h-540": pane === "accounts" && !crop && !fit, "min-h-250": log },
   ]}
@@ -30,9 +31,8 @@ const log = pane === "activity";
 >
   <div
     class:list={[
-      "grid min-h-220 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-12 bg-mac-window-bg text-mac-window-text shadow-mac-window",
+      "grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-12 bg-mac-window-bg text-mac-window-text shadow-mac-window",
       crop ? "absolute top-24 left-1/2 -translate-x-1/2" : "relative",
-      log ? "w-580" : "w-560",
     ]}
   >
     <div class="relative bg-mac-window-side px-10 pt-46 inset-shadow-mac-window-r">
