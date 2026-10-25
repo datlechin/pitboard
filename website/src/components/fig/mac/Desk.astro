@@ -3,7 +3,7 @@
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import Terminal from "./Terminal.astro";
-import { session } from "../../../data/desk.ts";
+import { menuCommands, session } from "../../../data/desk.ts";
 import { clock, tools, type Moment } from "../../../data/world.ts";
 import {
   isInUse,
@@ -19,21 +19,6 @@ interface Props {
 }
 const { demo = false } = Astro.props;
 const moments: Moment[] = demo ? ["before", "after"] : ["after"];
-const actions: ({ title: string; sub?: string; keys?: string; more?: boolean } | null)[] = [
-  { title: "Add Account…", keys: "⌘N" },
-  { title: "Refresh", sub: `Updated ${clock.read}`, keys: "⌘R" },
-  null,
-  { title: "Open claude.ai", more: true },
-  { title: "Open chatgpt.com", more: true },
-  null,
-  { title: "Open Pitboard", keys: "⌘0" },
-  { title: "Settings…", keys: "⌘," },
-  { title: "Check for Updates…" },
-  null,
-  { title: "About Pitboard" },
-  { title: "Pitboard Help" },
-  { title: "Quit Pitboard", keys: "⌘Q" },
-];
 // one state, or both with the moments that show each
 // The session's status line follows the switch after the menu does.
 const either = (
@@ -124,7 +109,7 @@ const rule =
           ))}
         </div>)}
         <div class={sep}></div>
-        {actions.map((a) =>
+        {menuCommands.map((a) =>
           a === null ? (
             <div class={sep} />
           ) : (

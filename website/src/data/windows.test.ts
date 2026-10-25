@@ -11,7 +11,7 @@ import {
   toast,
 } from "./windows.ts";
 import { tools } from "./world.ts";
-import { trayTip } from "../lib/words.ts";
+import { menuBarLevel, trayTip } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const views = (file: string) => repo(`apps/windows/Pitboard.Views/${file}`);
@@ -109,6 +109,19 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
     trayTip("after"),
     "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): Weekly 7%",
   );
+});
+
+test("the icon in the notification area draws the menu bar's level, from Tray's drawings", () => {
+  assert.ok(shell("Shell.cs").includes('"Tray", $"{look.Level?.ToString() ?? "None"}.ico"'));
+  const make = repo("apps/windows/Icon/make-ico.py");
+  assert.ok(make.includes('for level in ("Plenty", "Low", "Out", "None"):'));
+  assert.ok(make.includes('f"tray-{level.lower()}-{grid}.svg"'));
+  for (const file of ["plenty", "low", "out"]) {
+    assert.match(repo(`apps/windows/Icon/tray-${file}-16.svg`), /^<svg /);
+  }
+  assert.ok(present("accounts.rs").includes(".map(|limit| crate::usage_level(limit.percent)),"));
+  assert.equal(menuBarLevel("before"), "y");
+  assert.equal(menuBarLevel("after"), "g");
 });
 
 test("the window and its panes are named as MainWindow.xaml names them", () => {

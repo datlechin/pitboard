@@ -23,8 +23,6 @@ import { windowsClock } from "../../../data/world.ts";
     <span class="mt-16 text-win-text"><Button stretch>{toast.button}</Button></span>
   </div>
   <Taskbar time={windowsClock.runOut.time} date={windowsClock.runOut.date}>
-    <TrayItem
-      ><svg class="size-16 shrink-0"><use href="#pb-tray"></use></svg></TrayItem
-    >
+    <TrayItem level="r" />
   </Taskbar>
 </div>

@@ -77,6 +77,9 @@ export function menuBarTitle(moment: Moment): string {
   return `${shown.label} ${fullest(shown)}%`;
 }
 
+// The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
+export const menuBarLevel = (moment: Moment) => level(fullest(titled(moment)));
+
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
 // the line the menu shows under it (present/accounts.rs `menu_bar`).
 export const trayTip = (moment: Moment) =>

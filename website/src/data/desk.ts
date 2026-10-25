@@ -1,3 +1,28 @@
+import { clock } from "./world.ts";
+
+// MenuBarContent.swift's commands under the accounts, a null between two sections. A debug build
+// has no Check for Updates….
+export const menuCommands: ({
+  title: string;
+  sub?: string;
+  keys?: string;
+  more?: boolean;
+} | null)[] = [
+  { title: "Add Account…", keys: "⌘N" },
+  { title: "Refresh", sub: `Updated ${clock.read}`, keys: "⌘R" },
+  null,
+  { title: "Open claude.ai", more: true },
+  { title: "Open chatgpt.com", more: true },
+  null,
+  { title: "Open Pitboard" },
+  { title: "Settings…", keys: "⌘," },
+  { title: "Check for Updates…" },
+  null,
+  { title: "About Pitboard" },
+  { title: "Pitboard Help" },
+  { title: "Quit Pitboard", keys: "⌘Q" },
+];
+
 // The Claude Code session behind the menu, a terminal row a line; each desk sizes the elbow to its type.
 
 const elbow = '<span class="elbow dim inline-block border-b border-l border-current"></span>';
