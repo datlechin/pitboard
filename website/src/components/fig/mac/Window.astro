@@ -1,6 +1,6 @@
 ---
-// As MainWindow.swift lays it out, at its minimum width of 640; a `crop` desk shows the window's
-// top, a `fit` one all of it.
+// As MainWindow.swift lays it out at its minimum width of 640, and as macOS 27 draws it, measured
+// on docs/images/window.png; a `crop` desk shows the window's top, a `fit` one all of it.
 import Lights from "./Lights.astro";
 
 interface Props {
@@ -18,12 +18,14 @@ const panes = [
   ["machine", "This Mac", "sf-steth"],
 ];
 const log = pane === "activity";
+// the toolbar's buttons share one piece of glass, and a button alone is a circle
+const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-mac-glass";
 ---
 
 <div
   class:list={[
     "desk [--units:680]",
-    crop ? "h-356" : "flex items-center justify-center py-20",
+    crop ? "h-348" : "flex items-center justify-center py-20",
     { "min-h-540": pane === "accounts" && !crop && !fit, "min-h-250": log },
   ]}
   aria-hidden="true"
@@ -31,35 +33,40 @@ const log = pane === "activity";
 >
   <div
     class:list={[
-      "grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-12 bg-mac-window-bg text-mac-window-text shadow-mac-window",
+      "grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window",
       crop ? "absolute top-24 left-1/2 -translate-x-1/2" : "relative",
     ]}
   >
-    <div class="relative bg-mac-window-side px-10 pt-46 inset-shadow-mac-window-r">
-      <Lights window />
+    <div class="relative bg-mac-window-side px-10 pt-52">
+      <Lights window class="top-19 left-19" />
+      <span class:list={[glass, "absolute top-8 left-126 w-36 justify-center"]}>
+        <svg class="size-20 shrink-0"><use href="#sf-sidebar"></use></svg>
+      </span>
       {panes.map(([id, name, icon]) => <div
         class:list={[
-          "flex h-28 items-center gap-6 rounded-u-6 px-8",
-          { "bg-mac-window-pick": id === pane },
+          "flex h-32 items-center gap-6 rounded-u-8 px-8",
+          { "bg-mac-window-pick font-semibold": id === pane },
         ]}
       >
-        <svg class="size-16 shrink-0 text-mac-window-blue">
+        <svg class="h-18 w-22 shrink-0 text-mac-window-blue">
           <use href={`#${icon}`} />
         </svg>
         {name}
       </div>)}
     </div>
     <div class="flex min-w-0 flex-col">
-      <div class="flex h-52 flex-none items-center gap-14 pr-14 pl-16 inset-shadow-mac-window-b">
+      <div class="flex h-52 flex-none items-center pr-8 pl-20">
         <span class="flex flex-1 flex-col"
-          ><b class="text-u-15/19 font-bold">{title}</b
+          ><b class="text-u-13/16 font-bold">{title}</b
           >{subtitle && <span class="text-u-11/13 text-mac-window-sub">{subtitle}</span>}</span
         >
-        {tools.map((icon) => <svg class="size-16 shrink-0 text-mac-window-sub">
-          <use href={`#${icon}`} />
-        </svg>)}
+        <span class:list={[glass, tools.length > 1 ? "px-2" : "w-36 justify-center"]}>
+          {tools.map((icon) => <span class="flex w-35 justify-center">
+            <svg class="size-18 shrink-0"><use href={`#${icon}`} /></svg>
+          </span>)}
+        </span>
       </div>
-      <div class:list={["flex-1", { "px-16 pt-4 pb-10": !log }]}><slot /></div>
+      <div class:list={["flex-1", { "px-16 pb-10": !log }]}><slot /></div>
     </div>
   </div>
 </div>

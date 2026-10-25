@@ -42,10 +42,17 @@ const sub = "text-u-12/15 text-mac-window-sub";
       <use href="#sf-xmark" />
     </svg>
   </div>}
-  {shown.map(([tool, name]) => (
+  {shown.map(([tool, name], t) => (
     <>
-      <div class="pt-10 pb-4 text-u-11 font-bold text-mac-window-sub">{name}</div>
-      {listed(tool, moment).map((a, i) => {
+      <div
+        class:list={[
+          "pb-8 text-u-11/13 font-bold text-mac-window-sub inset-shadow-mac-window-b",
+          t === 0 ? "pt-7" : "pt-27",
+        ]}
+      >
+        {name}
+      </div>
+      {listed(tool, moment).map((a) => {
         const on = isInUse(a, moment);
         const notes = [
           on && a.read && `Read ${a.read} ago, with Claude closed`,
@@ -54,10 +61,9 @@ const sub = "text-u-12/15 text-mac-window-sub";
           !on && a.lapses && `Its sign-in may lapse in ${a.lapses.app}`,
           warm[a.label] && tool === "claude" ? warm[a.label] : null,
         ].filter(Boolean);
-        // a later row's rule starts under its name
-        const later = i > 0;
-        return <div class:list={["pt-7 pb-8", { "ml-32 inset-shadow-mac-window-t": later }]}>
-          <div class:list={["flex items-center gap-6", { "-ml-32": later }]}>
+        // each row's rule starts under its name
+        return <div class="ml-34 pt-13 pb-7 inset-shadow-mac-window-b">
+          <div class="-ml-34 flex items-center gap-8">
             <svg
               class:list={[
                 "h-22 w-26 shrink-0",
@@ -66,11 +72,11 @@ const sub = "text-u-12/15 text-mac-window-sub";
             >
               <use href={on ? "#sf-person-fill" : "#sf-person"} />
             </svg>
-            <span class="min-w-0 flex-1">
+            <span class="flex min-w-0 flex-1 flex-col gap-2">
               <span class="flex items-center gap-6 font-medium">
                 {a.label}
                 {a.plan && <span
-                  class="rounded-pill bg-mac-window-track px-6 text-u-10/14 font-normal text-mac-window-sub"
+                  class="rounded-pill bg-mac-window-track px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
                   >{a.plan}</span
                 >}
               </span>
@@ -88,10 +94,7 @@ const sub = "text-u-12/15 text-mac-window-sub";
             )}
           </div>
           {a.limits.length > 0 && <div
-            class:list={[
-              "mt-6 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6 text-u-12/15 tabular-nums",
-              { "ml-32": !later },
-            ]}
+            class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6 text-u-12/15 tabular-nums"
           >
             {a.limits.map((l) => {
               const s = standing(l);
@@ -99,30 +102,47 @@ const sub = "text-u-12/15 text-mac-window-sub";
                 <>
                   <span class="text-mac-window-sub">{l.kind}</span>
                   <svg
-                    class="h-6 w-full overflow-visible"
-                    viewBox="0 0 100 6"
+                    class="h-16 w-full overflow-visible"
+                    viewBox="0 0 100 16"
                     preserveAspectRatio="none"
                   >
-                    <rect class="fill-mac-window-track" width="100" height="6" rx="1.6" ry="3" />
+                    <rect class="fill-mac-window-track" width="100" height="16" rx="2.4" ry="2.5" />
                     {l.used > 0 && (
-                      <rect class={fill[level(l.used)]} width={l.used} height="6" rx="1.6" ry="3" />
+                      <rect
+                        class={fill[level(l.used)]}
+                        width={l.used}
+                        height="16"
+                        rx="2.4"
+                        ry="2.5"
+                      />
                     )}
+                    <rect
+                      class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
+                      width="100"
+                      height="16"
+                      rx="2.4"
+                      ry="2.5"
+                      vector-effect="non-scaling-stroke"
+                    />
                     {s !== null && s !== "even" && (
                       <>
                         <rect
                           class="fill-mac-window-bg"
-                          x={l.even! - 1.4}
+                          x={l.even! - 2}
                           y="-3"
-                          width="2.8"
-                          height="12"
+                          width="4"
+                          height="22"
+                          rx="2"
+                          ry="2"
                         />
                         <rect
                           class={mark[s]}
-                          x={l.even! - 0.7}
+                          x={l.even! - 1}
                           y="-3"
-                          width="1.4"
-                          height="12"
-                          rx="0.7"
+                          width="2"
+                          height="22"
+                          rx="1"
+                          ry="1"
                         />
                       </>
                     )}
@@ -133,7 +153,7 @@ const sub = "text-u-12/15 text-mac-window-sub";
                     class:list={[
                       "min-w-100",
                       // UsageBar.swift tints only over pace
-                      s === "over" ? "text-mac-window-red-text" : "text-mac-window-sub",
+                      s === "over" ? "text-mac-window-red" : "text-mac-window-sub",
                     ]}
                     >{paceText(l)}</span
                   >
@@ -141,7 +161,7 @@ const sub = "text-u-12/15 text-mac-window-sub";
               );
             })}
           </div>}
-          {notes.map((n) => <p class:list={["mt-5", sub, { "ml-32": !later }]}>{n}</p>)}
+          {notes.map((n) => <p class:list={["mt-6", sub]}>{n}</p>)}
         </div>;
       })}
     </>
