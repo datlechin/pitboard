@@ -1,4 +1,4 @@
-import { clock, logged, toolOn, tools, warmUp, type Logged, type Moment } from "./world.ts";
+import { clock, logged, share, toolOn, tools, warmUp, type Logged, type Moment } from "./world.ts";
 import { platforms, type Platform } from "../lib/platform.ts";
 import { statusHeading, statusLines } from "../lib/words.ts";
 
@@ -47,13 +47,13 @@ function status(moment: Moment): Session {
   };
 }
 
-// watch.rs `warms`: nothing where no account is turned on.
-function warms(): string {
-  const on = warmUp.accounts.map((label) => `<b>${label}</b>`);
-  if (on.length === 0) return "";
-  const named = on.length > 1 ? `${on.slice(0, -1).join(", ")} and ${on.at(-1)}` : on[0];
-  return `, and warms up ${named} from ${warmUp.from} to ${warmUp.to}`;
-}
+// Where each system keeps the watch service: launchd.rs's label, systemd.rs's unit and task.rs's
+// task, with the SID of task.rs's test.
+const watchService: Record<Platform, string> = {
+  macos: "/Users/me/Library/LaunchAgents/com.datlechin.pitboard.watch.plist",
+  linux: "/home/me/.config/systemd/user/pitboard-watch.service",
+  windows: "\\Pitboard\\Watch S-1-5-21-1004-1005-1006-1001",
+};
 
 // main.rs `log`: each verb padded to the longest of the entries shown.
 function log(entries: Logged[]): Session {
@@ -91,15 +91,21 @@ export const sessions = {
       line("Claude opens signed in to it."),
     ],
   },
-  watch: {
-    title: "pitboard watch",
-    command: "pitboard watch",
+  watchInstall: {
+    title: "pitboard watch install",
+    command: "pitboard watch install",
     output: [
       line(
-        `Watching Claude Code. Pitboard switches to another of your accounts once a limit of the one in use reaches 95%${warms()}. Stop with Ctrl-C.`,
+        `Pitboard watches Claude Code in the background from now on, and at each sign-in. It switches once a limit of the account in use reaches ${share}%, and warms up the accounts \`pitboard warm on\` turned on.`,
       ),
       line(
-        `<span class="dim">${clock.read}:14</span> Watching <b>work</b>: 40% of its weekly limit, as of ${clock.read}.`,
+        "Your user's systemd runs it while you are signed in. To keep it running when you are not, run `loginctl enable-linger`.",
+        ["linux"],
+      ),
+      ...said((p) => watchService[p]),
+      line(""),
+      line(
+        "Anthropic's terms may cover automatic switching and warm-ups: https://docs.usepitboard.com/concepts/limits#is-this-allowed",
       ),
     ],
   },

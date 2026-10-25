@@ -315,9 +315,9 @@ const jsonLd = [
         </Row>
         <Row id="auto-title" title="Automatic switch" flip>
           <p>
-            Pitboard can
-            <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a> once a
-            limit of the account in use reaches a set share.
+            Pitboard can also
+            <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a>, from
+            the app or from a background service that <code>pitboard watch install</code> sets up.
           </p>
           <Figure
             slot="fig"
@@ -335,15 +335,25 @@ const jsonLd = [
             }}
             cli={{
               macos: {
-                caption: "The same from a terminal.",
+                caption: "The same in the background, from a terminal.",
                 describe:
-                  "<code>pitboard watch</code> prints that it switches to another account once a limit of the one in use reaches 95%, and warms up personal from 07:00 to 23:00, then: Watching work: 40% of its weekly limit, as of 20:50.",
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the file of its LaunchAgent, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+              linux: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints that your user's systemd runs it while you are signed in, then the file of its systemd user service, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+              windows: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the path of its task in Task Scheduler, then that Anthropic's terms may cover automatic switching and warm-ups.",
               },
             }}
           >
             <Settings show="switch" />
             <WinSettings slot="win" show="switch" />
-            <Term slot="cli" session={sessions.watch} />
+            <Term slot="cli" session={sessions.watchInstall} />
           </Figure>
         </Row>
         <Row id="warm-title" title="Warm-up">
