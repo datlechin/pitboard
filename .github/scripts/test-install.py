@@ -1165,6 +1165,14 @@ class FillTemplate(unittest.TestCase):
         self.assertEqual(pages, ["install/upgrade-from-0-3-0"])
         self.assertTrue((REPO / "docs" / f"{pages[0]}.mdx").is_file())
 
+    # A list of tools goes stale as Pitboard switches more of them.
+    def test_neither_cask_names_a_tool_in_its_description(self):
+        for cask in CASKS:
+            desc = re.search(r'^  desc "([^"]*)"$', cask.read_text(), re.M)[1]
+            for tool in ("Claude", "Codex", "ChatGPT"):
+                with self.subTest(cask=cask.name, tool=tool):
+                    self.assertNotIn(tool, desc)
+
     def test_the_install_script_fills_and_parses(self):
         out = self.dir / "install.sh"
         sums = self.write_sums(

@@ -15,7 +15,7 @@ cask "pitboard-app" do
 
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/Pitboard-v#{version}-macos.zip"
   name "Pitboard"
-  desc "Menu bar app to switch Claude Code and Codex accounts and see their limits"
+  desc "Menu bar account switcher for AI coding tools"
   homepage "https://usepitboard.com/"
 
   auto_updates true

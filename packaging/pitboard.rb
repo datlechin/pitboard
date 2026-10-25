@@ -52,7 +52,7 @@ cask "pitboard" do
 
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/pitboard-v#{version}-#{arch}-#{os}.tar.gz"
   name "Pitboard"
-  desc "Switch Claude Code, Codex and Claude Desktop between your own accounts"
+  desc "Command-line account switcher for AI coding tools"
   homepage "https://usepitboard.com/"
 
   # The app carries this same command line and links it to the same place. Homebrew 7.0.6 has
