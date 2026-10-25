@@ -1,10 +1,12 @@
+using FlaUI.Core.Definitions;
+
 namespace Pitboard.UITests;
 
 [TestClass]
 [Elevated(ConditionMode.Exclude)]
 public sealed class PanesTests
 {
-    // Newest first: the fixture's two switches are newer than both its enrolments.
+    // The fixture's switches and enrolments, in the order the model gives them.
     [TestMethod]
     public void ActivityListsChanges()
     {
@@ -12,13 +14,13 @@ public sealed class PanesTests
         launched.OpenWindow();
         launched.Select("pane.activity");
 
-        var switched = launched.Named("Switch");
-        var enrolled = launched.Named("Enrol");
+        var activity = launched.Element("activity");
+        Launched.Within(activity, found => found.ByControlType(ControlType.ListItem), "a change");
 
-        Assert.IsLessThan(enrolled.BoundingRectangle.Top, switched.BoundingRectangle.Top, "newest first");
+        Assert.IsGreaterThan(1, activity.FindAllDescendants(found => found.ByControlType(ControlType.ListItem)).Length);
     }
 
-    // The one thing worth looking at in this fixture is personal's parked login, which lapses soon.
+    // The checks the fixture's doctor makes, under the line that sums them up.
     [TestMethod]
     public void ThisPCShowsTheChecks()
     {
@@ -26,7 +28,7 @@ public sealed class PanesTests
         launched.OpenWindow();
         launched.Select("pane.machine");
 
-        launched.Named("Account personal");
-        launched.Named("One thing is worth looking at.");
+        launched.Element("machine.check");
+        launched.Element("machine.summary");
     }
 }

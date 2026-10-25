@@ -39,6 +39,8 @@ public sealed partial class NoticeBar : UserControl
 
     public string Key => _notice.Id;
 
+    public static string ActionId(Intent intent) => $"notice.action.{Identifiers.Of(intent)}";
+
     public void Show(PanelNotice notice)
     {
         if (!Structural.Equal(notice, _notice))

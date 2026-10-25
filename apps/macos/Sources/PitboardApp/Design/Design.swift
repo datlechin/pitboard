@@ -132,3 +132,12 @@ extension View {
         explanatory().frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+// What the UI tests find a control by: the model's case it shows or sends, "switchTo", and for an
+// intent that puts up a sheet, the sheet's, "rename".
+func caseName(_ value: some Any) -> String {
+    if let intent = value as? Intent, case .presentSheet(let sheet) = intent {
+        return caseName(sheet)
+    }
+    return String(String(describing: value).prefix { $0 != "(" })
+}

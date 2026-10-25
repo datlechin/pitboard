@@ -41,6 +41,7 @@ struct AdvancedSettings: View {
                             Task { await link.install() }
                         }
                         .disabled(link.linking)
+                        .accessibilityIdentifier("settings.installCommandLine")
                     } label: {
                         Text(
                             "Links \(link.target) to the one inside this app. macOS asks for "

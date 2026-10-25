@@ -76,6 +76,7 @@ struct GeneralSettings: View {
                 } footer: {
                     // Without this, a build with no update key would look broken.
                     Text(noUpdateKey()).footnote()
+                        .accessibilityIdentifier("settings.noUpdateKey")
                 }
             }
         }

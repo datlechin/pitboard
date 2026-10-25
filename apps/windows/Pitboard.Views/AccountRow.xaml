@@ -84,7 +84,8 @@
           Height="16"
           IsActive="{x:Bind local:AccountRow.Switching(Account.Item), Mode=OneWay}"
           Visibility="{x:Bind local:AccountRow.SwitchingShown(Account.Item), Mode=OneWay}"
-          AutomationProperties.Name="{x:Bind local:AccountRow.SwitchingSpoken(Account.Item), Mode=OneWay}" />
+          AutomationProperties.Name="{x:Bind local:AccountRow.SwitchingSpoken(Account.Item), Mode=OneWay}"
+          AutomationProperties.AutomationId="account.switching" />
       <StackPanel x:Name="InUseLabel" Orientation="Horizontal" Spacing="6" Visibility="{x:Bind local:AccountRow.InUseShown(Account.Item), Mode=OneWay}">
         <FontIcon
             x:Name="InUseCheck"
@@ -95,13 +96,15 @@
             AutomationProperties.AccessibilityView="Raw" />
         <TextBlock
             Text="{x:Bind local:AccountRow.InUseTitle(Account.Item), Mode=OneWay}"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            AutomationProperties.AutomationId="account.inUse" />
       </StackPanel>
       <Button
           x:Name="ActionButton"
           Content="{x:Bind local:AccountRow.ActionTitle(Account.Item), Mode=OneWay}"
           Visibility="{x:Bind local:AccountRow.ActionShown(Account.Item), Mode=OneWay}"
           AutomationProperties.Name="{x:Bind local:AccountRow.ActionSpoken(Account.Item), Mode=OneWay}"
+          AutomationProperties.AutomationId="account.action"
           Click="OnAction" />
     </Grid>
     <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Spacing="6">

@@ -17,6 +17,8 @@ struct AccountSheetView: View {
                 StowSheet(model: model)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sheet.\(caseName(sheet))")
         // Only while the model keeps this sheet: as it closes, the window's take over.
         .windowAlerts(model, shown: model.sheet?.id == sheet.id)
     }
@@ -36,7 +38,9 @@ struct SheetLayout<Content: View, Status: View, Buttons: View>: View {
                 Text(title)
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("sheet.title")
                 Text(message).explanatory()
+                    .accessibilityIdentifier("sheet.message")
             }
             .padding([.horizontal, .top], 20)
             Form { content }
@@ -132,6 +136,8 @@ struct SheetFailure: View {
                 Image(systemName: Severity.error.symbol)
                     .foregroundStyle(Severity.error.tint)
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("sheet.failure")
         }
         // It appears where nobody's focus is, after the button that was pressed, and
         // VoiceOver does not read what appears by itself.

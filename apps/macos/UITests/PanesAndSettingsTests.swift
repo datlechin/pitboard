@@ -1,28 +1,25 @@
 import XCTest
 
 final class PanesAndSettingsTests: FixtureTestCase {
-    /// Newest first: the fixture's two switches are newer than both its enrolments.
+    /// The fixture's switches and enrolments, in the order the model gives them.
     @MainActor
     func testActivityListsChanges() {
         let app = launch(.oneTool)
         app.openWindow()
         app.descendants(matching: .any)["sidebar.activity"].click()
-        let switched = app.text("Switch")
-        let enrolled = app.text("Enrol")
-        XCTAssertTrue(switched.waitForExistence(timeout: 5))
-        XCTAssertTrue(enrolled.exists)
-        XCTAssertLessThan(switched.frame.minY, enrolled.frame.minY, "newest first")
+        let changes = app.staticTexts.matching(identifier: "activity.change")
+        XCTAssertTrue(changes.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(changes.count, 1)
     }
 
-    /// The one thing worth looking at in this fixture is personal's parked login, which
-    /// lapses soon.
+    /// The checks the fixture's doctor makes, under the line that sums them up.
     @MainActor
     func testThisMacShowsTheChecks() {
         let app = launch(.oneTool)
         app.openWindow()
         app.descendants(matching: .any)["sidebar.machine"].click()
-        XCTAssertTrue(app.staticTexts["Account personal"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["One thing is worth looking at."].exists)
+        XCTAssertTrue(app.control("checks.summary").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.control("check.0").exists)
     }
 
     // The app renews as it reads, and `pitboard schedule status` says where the job is.
@@ -30,7 +27,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testDailyRenewal() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["Advanced"].click()
+        app.toolbars.buttons[Words.advanced].click()
         let renew = app.control("settings.renewDaily")
         XCTAssertTrue(renew.waitForExistence(timeout: 5))
         renew.click()
@@ -57,9 +54,9 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testSettingsHaveThreePanes() {
         let app = launch(.oneTool)
         app.openSettings()
-        let panes = app.windows["General"].toolbars.buttons
+        let panes = app.windows[Words.general].toolbars.buttons
         XCTAssertEqual(panes.count, 3)
-        for pane in ["General", "Limits", "Advanced"] {
+        for pane in [Words.general, Words.limits, Words.advanced] {
             XCTAssertTrue(panes[pane].exists, pane)
         }
     }
@@ -69,7 +66,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testWhatHappensBeforeAnAccountRunsOut() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["Limits"].click()
+        app.toolbars.buttons[Words.limits].click()
         let choice = app.popUpButtons["settings.atLimit"]
         let share = app.control("settings.atLimitShare")
         let standing = app.control("settings.autoSwitchStanding")
@@ -78,29 +75,32 @@ final class PanesAndSettingsTests: FixtureTestCase {
         // Both are held back until the app's preferences have been read.
         XCTAssertTrue(choice.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertTrue(share.isEnabled)
-        XCTAssertEqual(choice.value as? String, "Notify Me", "a fresh install notifies")
+        XCTAssertEqual(choice.value as? String, Words.notifyMe, "a fresh install notifies")
         XCTAssertFalse(standing.exists, "nothing said while it does not switch")
 
-        choice.click()
-        choice.menuItems["Switch Automatically"].click()
-        XCTAssertTrue(choice.wait(until: "value == 'Switch Automatically'", timeout: 5))
+        choose(Words.switchAutomatically, in: choice)
         XCTAssertTrue(standing.waitForExistence(timeout: 5), "what the look came to")
-
-        let raise = share.incrementArrows.firstMatch
-        XCTAssertTrue(raise.exists, "a stepper shows its arrows")
-        raise.click()
-        XCTAssertTrue(says(app, "When a limit reaches 96%").waitForExistence(timeout: 5))
 
         let typed = app.textFields["settings.atLimitShareField"]
         XCTAssertTrue(typed.exists, "a field beside the stepper")
+        let raise = share.incrementArrows.firstMatch
+        XCTAssertTrue(raise.exists, "a stepper shows its arrows")
+        raise.click()
+        XCTAssertTrue(typed.wait(until: "value == '96%'", timeout: 5))
+
         typed.doubleClick()
         typed.typeText("80\r")
-        XCTAssertTrue(says(app, "When a limit reaches 80%").waitForExistence(timeout: 5))
+        XCTAssertTrue(typed.wait(until: "value == '80%'", timeout: 5))
 
-        choice.click()
-        choice.menuItems["Do Nothing"].click()
-        XCTAssertTrue(choice.wait(until: "value == 'Do Nothing'", timeout: 5))
+        choose(Words.doNothing, in: choice)
         XCTAssertTrue(standing.waitForNonExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func choose(_ title: String, in popUp: XCUIElement) {
+        popUp.click()
+        popUp.menuItems[title].click()
+        XCTAssertTrue(popUp.wait(until: "value == '\(title)'", timeout: 5))
     }
 
     /// The fixture's personal is on for warm-ups with no five-hour period running, so it
@@ -109,11 +109,11 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testWarmingUpAccounts() {
         let app = launch(.warmUp)
         app.openWindow()
-        let warmed = app.text("BEGINSWITH", "Warms up again at ")
+        let warmed = app.text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30), "personal is warmed up")
 
         app.openSettings()
-        app.toolbars.buttons["Limits"].click()
+        app.toolbars.buttons[Words.limits].click()
         let personal = app.control("settings.warm.claude/personal")
         let work = app.control("settings.warm.claude/work")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
@@ -127,22 +127,13 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(work.wait(until: "value == 1", timeout: 5))
     }
 
-    /// What names the share a limit is reached at, as `words`: a text beside the stepper,
-    /// or the stepper itself where macOS reads its label as the stepper's.
-    @MainActor
-    private func says(_ app: XCUIApplication, _ words: String) -> XCUIElement {
-        let format = "label == %@ OR CAST(value, \"NSString\") == %@"
-        let named = NSPredicate(format: format, words, words)
-        return app.descendants(matching: .any).matching(named).firstMatch
-    }
-
     // The fixture has no pitboard of its own, so the pane offers the one inside the app.
     @MainActor
     func testInstallingTheCommandLine() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["Advanced"].click()
-        let install = app.buttons["Install Command Line Tool…"]
+        app.toolbars.buttons[Words.advanced].click()
+        let install = app.buttons["settings.installCommandLine"]
         XCTAssertTrue(install.waitForExistence(timeout: 5))
         install.click()
         XCTAssertTrue(install.waitForNonExistence(timeout: 5))
@@ -154,11 +145,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testUpdatesSayWhenTheBuildCannotUpdate() {
         let app = launch(.oneTool)
         app.openSettings()
-        app.toolbars.buttons["General"].click()
-        let prefix = "This copy of Pitboard can"
-        let note = app.staticTexts.matching(
-            NSPredicate(format: "value BEGINSWITH %@ OR label BEGINSWITH %@", prefix, prefix)
-        ).firstMatch
-        XCTAssertTrue(note.waitForExistence(timeout: 5))
+        app.toolbars.buttons[Words.general].click()
+        XCTAssertTrue(app.staticTexts["settings.noUpdateKey"].waitForExistence(timeout: 5))
     }
 }

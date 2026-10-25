@@ -32,6 +32,7 @@ public static class AccountMenu
         {
             Separate(menu);
             var copy = new MenuFlyoutItem { Text = "Copy email address", KeyboardAcceleratorTextOverride = "Ctrl+C" };
+            AutomationProperties.SetAutomationId(copy, "account.copyEmail");
             copy.Click += (_, _) =>
             {
                 var package = new DataPackage();
@@ -59,6 +60,7 @@ public static class AccountMenu
             Text = offer.Title,
             KeyboardAcceleratorTextOverride = AccountKeys.Renames(offer) ? "F2" : "",
         };
+        AutomationProperties.SetAutomationId(entry, $"account.{Identifiers.Of(offer.Intent)}");
         entry.Click += (_, _) => ask(offer.Confirm, offer.Intent);
         return entry;
     }

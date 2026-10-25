@@ -80,6 +80,11 @@ public sealed partial class OpenLinkWindow : Window
         Waiting.Visibility = Look.Shown(shown is PickerShown.Reading);
         WaitingRing.IsActive = shown is PickerShown.Reading;
         Heading.Visibility = Look.Shown(shown is not (null or PickerShown.Reading));
+        if (shown is not null)
+        {
+            AutomationProperties.SetAutomationId(Heading, $"picker.{Identifiers.Of(shown)}");
+        }
+
         LinkLine.Visibility = Look.Shown(shown is PickerShown.NoAccount or PickerShown.Choose);
         Explanation.Visibility = Look.Shown(shown is PickerShown.ReadFailed or PickerShown.Refused or PickerShown.NoAccount);
         AccountList.Visibility = Look.Shown(shown is PickerShown.Choose);

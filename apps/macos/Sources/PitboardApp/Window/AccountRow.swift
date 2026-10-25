@@ -70,13 +70,16 @@ struct AccountRow: View {
         case .switching(let spoken)?:
             ProgressView().controlSize(.small)
                 .accessibilityLabel(spoken)
+                .accessibilityIdentifier("account.switching")
         case .inUse(let title)?:
             Label(title, systemImage: "checkmark")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("account.inUse")
         case .button(let action)?:
             Button(action.title) { perform(action.intent) }
                 .accessibilityLabel(action.spoken)
+                .accessibilityIdentifier("account.action")
         case nil:
             EmptyView()
         }

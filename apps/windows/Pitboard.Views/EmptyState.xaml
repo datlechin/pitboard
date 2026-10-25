@@ -23,7 +23,8 @@
         HorizontalAlignment="Center"
         Text="{x:Bind Title, Mode=OneWay}"
         Style="{StaticResource SubtitleTextBlockStyle}"
-        TextAlignment="Center" />
+        TextAlignment="Center"
+        AutomationProperties.AutomationId="empty" />
     <TextBlock
         HorizontalAlignment="Center"
         Text="{x:Bind Detail, Mode=OneWay}"
@@ -34,6 +35,7 @@
     <Button
         x:Name="ChoiceButton"
         HorizontalAlignment="Center"
+        AutomationProperties.AutomationId="empty.choice"
         Content="{x:Bind Choice, Mode=OneWay}"
         Visibility="{x:Bind local:EmptyState.Said(Choice), Mode=OneWay}"
         IsEnabled="{x:Bind IsChoiceEnabled, Mode=OneWay}"

@@ -34,6 +34,7 @@ struct StowSheet: View {
             Button("Cancel", role: .cancel) { dismiss() }
                 .keyboardShortcut(.cancelAction)
                 .disabled(busy)
+                .accessibilityIdentifier("sheet.cancel")
             Button(text?.confirm ?? "", role: .destructive) { model.send(.stow) }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!(text?.canConfirm ?? false))

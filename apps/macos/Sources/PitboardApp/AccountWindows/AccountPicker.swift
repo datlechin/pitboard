@@ -28,6 +28,7 @@ struct AccountPicker: View {
                     Spacer()
                     Button("Close") { dismissWindow() }
                         .keyboardShortcut(.defaultAction)
+                        .accessibilityIdentifier("picker.close")
                 }
             }
         }
@@ -49,44 +50,57 @@ struct AccountPicker: View {
     }
 
     @ViewBuilder private func content(_ picker: LinkPicker) -> some View {
+        let titled = "picker.\(caseName(picker.shown))"
         switch picker.shown {
         case .reading(let title):
             ProgressView(title)
                 .frame(maxWidth: .infinity)
+                .accessibilityIdentifier(titled)
             buttons { cancelButton }
         case .readFailed(let title, let detail, let retry):
             Text(title).font(.headline)
+                .accessibilityIdentifier(titled)
             Text(detail).explanatory()
+                .accessibilityIdentifier("picker.detail")
             buttons {
                 cancelButton
                 Button(retry.title) { windows.model.send(retry.intent) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!retry.enabled)
+                    .accessibilityIdentifier("picker.retry")
             }
         case .refused(let title, let reason):
             Text(title).font(.headline)
+                .accessibilityIdentifier(titled)
             Text(reason).explanatory()
+                .accessibilityIdentifier("picker.detail")
             buttons {
                 Button("OK") { dismiss() }
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("picker.ok")
             }
         case .noAccount(let title, let link, let linkText, let detail, let inBrowser, let add):
             Text(title).font(.headline)
+                .accessibilityIdentifier(titled)
             LinkLine(text: linkText, url: link.url)
             Text(detail).explanatory()
+                .accessibilityIdentifier("picker.detail")
             HStack {
                 Button(inBrowser) {
                     if let url = URL(string: link.url) { NSWorkspace.shared.open(url) }
                     dismiss()
                 }
+                .accessibilityIdentifier("picker.inBrowser")
                 Spacer()
                 cancelButton
                 Button(add.title) { windows.model.send(add.intent) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!add.enabled)
+                    .accessibilityIdentifier("picker.add")
             }
         case .choose(let title, let link, let linkText, let accounts, let preferred, let open):
             Text(title).font(.headline)
+                .accessibilityIdentifier(titled)
             LinkLine(text: linkText, url: link.url)
             let first = UUID(uuidString: preferred)
             let selection = Binding {
@@ -111,6 +125,7 @@ struct AccountPicker: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!picker.armed)
+                .accessibilityIdentifier("picker.open")
             }
         }
     }
@@ -118,6 +133,7 @@ struct AccountPicker: View {
     private var cancelButton: some View {
         Button("Cancel", role: .cancel) { dismiss() }
             .keyboardShortcut(.cancelAction)
+            .accessibilityIdentifier("picker.cancel")
     }
 
     private func buttons<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {

@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -13,9 +14,9 @@ public sealed class MenuHostTests
 {
     private static readonly IconMenuEntry[] Entries =
     [
-        new IconMenuEntry.Command("Settings", new IconCommand.ShowSettings()),
+        new IconMenuEntry.Command("Settings", new IconCommand.ShowSettings()) { Id = "menu.settings" },
         new IconMenuEntry.Separator(),
-        new IconMenuEntry.Command("Exit", new IconCommand.Quit()),
+        new IconMenuEntry.Command("Exit", new IconCommand.Quit()) { Id = "menu.exit" },
     ];
 
     [UITestMethod]
@@ -43,7 +44,7 @@ public sealed class MenuHostTests
         {
             await up.Opened();
             var menu = up.Host.Menu!;
-            var exit = menu.Items.OfType<MenuFlyoutItem>().Single(item => item.Text == "Exit");
+            var exit = menu.Items.OfType<MenuFlyoutItem>().Single(item => AutomationProperties.GetAutomationId(item) == "menu.exit");
 
             new MenuFlyoutItemAutomationPeer(exit).Invoke();
 

@@ -49,7 +49,7 @@ public abstract record IconMenuEntry
         // What a click on the icon does, which a Windows context menu shows in bold.
         public bool Default { get; init; }
 
-        // What UI Automation finds it by, where its text alone could be another entry's.
+        // What UI Automation finds it by.
         public string? Id { get; init; }
     }
 
@@ -57,11 +57,16 @@ public abstract record IconMenuEntry
     public sealed record Account(string Text, string Group, bool InUse, IconCommand? Does, string? Detail) : IconMenuEntry
     {
         public bool Enabled => InUse || Does is not null;
+
+        public string? Id { get; init; }
     }
 
     public sealed record Label(string Text, bool Heading) : IconMenuEntry;
 
-    public sealed record Submenu(string Text, IReadOnlyList<IconMenuEntry> Entries) : IconMenuEntry;
+    public sealed record Submenu(string Text, IReadOnlyList<IconMenuEntry> Entries) : IconMenuEntry
+    {
+        public string? Id { get; init; }
+    }
 
     public sealed record Separator : IconMenuEntry;
 }
@@ -78,24 +83,32 @@ public static class IconMenu
             Attention(model.MenuNotices, updates),
             .. Accounts(model),
             [
-                new IconMenuEntry.Command("Add account…", new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)))),
+                new IconMenuEntry.Command("Add account…", new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))))
+                {
+                    Id = "menu.addAccount",
+                },
                 new IconMenuEntry.Command("Refresh", new IconCommand.Send(new Intent.Refresh(Asked: true)))
                 {
                     Detail = model.UpdatedMenu,
                     Enabled = !model.Reading,
+                    Id = "menu.refresh",
                 },
             ],
             Sites(model.AccountWindows),
             [
-                new IconMenuEntry.Command("Open Pitboard", new IconCommand.Send(new Intent.ShowWindow(Pane: null))) { Default = true },
-                new IconMenuEntry.Command("Settings", new IconCommand.ShowSettings()),
+                new IconMenuEntry.Command("Open Pitboard", new IconCommand.Send(new Intent.ShowWindow(Pane: null)))
+                {
+                    Default = true,
+                    Id = "menu.openPitboard",
+                },
+                new IconMenuEntry.Command("Settings", new IconCommand.ShowSettings()) { Id = "menu.settings" },
                 .. updates.Available && !updates.Beta
-                    ? [new IconMenuEntry.Command("Check for updates", new IconCommand.CheckForUpdates())]
+                    ? [new IconMenuEntry.Command("Check for updates", new IconCommand.CheckForUpdates()) { Id = "menu.checkForUpdates" }]
                     : Array.Empty<IconMenuEntry>(),
             ],
             [
-                new IconMenuEntry.Command("Pitboard help", new IconCommand.OpenLink(HelpLink)),
-                new IconMenuEntry.Command("Exit", new IconCommand.Quit()),
+                new IconMenuEntry.Command("Pitboard help", new IconCommand.OpenLink(HelpLink)) { Id = "menu.help" },
+                new IconMenuEntry.Command("Exit", new IconCommand.Quit()) { Id = "menu.exit" },
             ],
         ];
 
@@ -118,13 +131,13 @@ public static class IconMenu
         var entries = new List<IconMenuEntry>();
         if (notices.Install is { } install)
         {
-            entries.Add(Notice(install, IconMark.Help));
+            entries.Add(Notice(install, IconMark.Help, "menu.install"));
         }
 
-        entries.AddRange(notices.Switches.Select(advice => Notice(advice, Mark(advice.Severity) ?? IconMark.Switch)));
+        entries.AddRange(notices.Switches.Select((advice, at) => Notice(advice, Mark(advice.Severity) ?? IconMark.Switch, $"menu.switch.{at}")));
         if (notices.Others is { } others)
         {
-            entries.Add(Notice(others, Mark(others.Severity) ?? IconMark.Warning));
+            entries.Add(Notice(others, Mark(others.Severity) ?? IconMark.Warning, "menu.others"));
         }
 
         if (updates.Available && updates.Waiting is { } waiting)
@@ -132,6 +145,7 @@ public static class IconMenu
             entries.Add(new IconMenuEntry.Command($"Install Pitboard {waiting}…", new IconCommand.CheckForUpdates())
             {
                 Mark = IconMark.Update,
+                Id = "menu.update",
             });
         }
 
@@ -158,7 +172,10 @@ public static class IconMenu
                 section.Id,
                 item.InUse,
                 item.Action is { } action ? new IconCommand.Send(action.Intent) : null,
-                Lines(item.Summary, item.Help))));
+                Lines(item.Summary, item.Help))
+            {
+                Id = $"menu.account.{item.Qualified ?? item.Id}",
+            }));
             return entries;
         });
     }
@@ -173,7 +190,10 @@ public static class IconMenu
             {
                 SiteMenu.One one => Window(one.Title, one.Window, windows.Held),
                 SiteMenu.Several several => new IconMenuEntry.Submenu(
-                    several.Title, [.. several.Windows.Select(window => Window(window.Title, window, windows.Held))]),
+                    several.Title, [.. several.Windows.Select(window => Window(window.Title, window, windows.Held))])
+                {
+                    Id = $"menu.site.{several.Site.Host}",
+                },
                 _ => throw new ArgumentOutOfRangeException(nameof(windows), menu, "a site menu of no kind"),
             }),
         ];
@@ -189,7 +209,7 @@ public static class IconMenu
         };
     }
 
-    private static IconMenuEntry.Command Notice(MenuEntry entry, IconMark mark) =>
+    private static IconMenuEntry.Command Notice(MenuEntry entry, IconMark mark, string id) =>
         new(
             entry.Title,
             entry.Intent is { } intent ? new IconCommand.Send(intent)
@@ -199,6 +219,7 @@ public static class IconMenu
             Detail = Lines(entry.Subtitle, entry.Help),
             Enabled = entry.Enabled,
             Mark = mark,
+            Id = id,
         };
 
     private static IconMark? Mark(Severity? severity) => severity switch

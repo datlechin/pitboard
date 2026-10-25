@@ -113,11 +113,14 @@ struct SignInSheet: View {
             Button("Cancel", role: .cancel) { dismiss() }
                 .keyboardShortcut(.cancelAction)
                 .disabled(busy)
+                .accessibilityIdentifier("sheet.cancel")
             Button(chosen?.confirm ?? text?.confirm ?? "", action: start)
                 .keyboardShortcut(.defaultAction)
                 .disabled(
                     check.intent == nil || chosen?.missing != nil || model.signingIn != nil
-                        || busy)
+                        || busy
+                )
+                .accessibilityIdentifier("sheet.confirm")
         }
         .onAppear { nameFocused = text?.account == nil }
         .onChange(of: name) { edited() }
@@ -154,10 +157,12 @@ struct SignInSheet: View {
                             Button("Copy Link") {
                                 if let page { NSPasteboard.general.copy(link: page) }
                             }
+                            .accessibilityIdentifier("sheet.copyLink")
                             Button("Open") {
                                 if let page { openURL(page) }
                             }
                             .help(page?.absoluteString ?? "")
+                            .accessibilityIdentifier("sheet.openLink")
                         }
                         // Dimmed rather than left out until the tool prints the address, so
                         // the sheet does not grow a moment after it opens.
@@ -196,14 +201,17 @@ struct SignInSheet: View {
             }
             .keyboardShortcut(text.escapeCancels ? .cancelAction : nil)
             .disabled(!text.cancel.enabled)
+            .accessibilityIdentifier("sheet.cancel")
             if let undo = text.undo {
                 Button(undo.title) { model.send(undo.intent) }
                     .disabled(!undo.enabled)
+                    .accessibilityIdentifier("sheet.undo")
             }
             if signingIn.wantsCode {
                 Button("Submit Code", action: send)
                     .keyboardShortcut(.defaultAction)
                     .disabled(code.isEmpty)
+                    .accessibilityIdentifier("sheet.submitCode")
             }
         }
         .interactiveDismissDisabled(!text.escapeCancels)

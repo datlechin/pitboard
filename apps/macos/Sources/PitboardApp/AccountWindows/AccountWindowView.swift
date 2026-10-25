@@ -101,6 +101,7 @@ private struct SessionView: View {
                         showingDownloads.toggle()
                     }
                     .help("Show this window’s downloads")
+                    .accessibilityIdentifier("window.downloads")
                     .popover(isPresented: $showingDownloads, arrowEdge: .bottom) {
                         DownloadsList(windows: windows, store: account.store)
                     }
@@ -148,12 +149,14 @@ private struct NoteBar: View {
             Text(note.text)
                 .explanatory()
                 .textSelection(.enabled)
+                .accessibilityIdentifier("window.note.\(caseName(note.kind))")
             Spacer(minLength: 0)
             Button("Dismiss", systemImage: "xmark", action: dismiss)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Dismiss")
+                .accessibilityIdentifier("window.note.dismiss")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

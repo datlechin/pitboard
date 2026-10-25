@@ -125,6 +125,15 @@ function that makes it. Each sentence is pinned once, in the tests of the module
 it: `pitboard_core`'s `words.rs`, `error.rs` or `doctor/words.rs`, or `pitboard-ffi`'s
 `present/words.rs`.
 
+Both apps' UI tests find a control by its accessibility identifier, named for the model's
+case it shows or sends: `notice.action.abandonStuckSwitch`, `setup.onlyOne`. A dialog's
+buttons are the system's: `PrimaryButton` and `CloseButton` in a WinUI `ContentDialog`,
+`action-button-1` and `action-button-2` in an AppKit alert. SwiftUI gives a menu's items no
+identifier, so the macOS UI tests find those, a pop-up's choices and the Settings window's
+panes by their words. Those words, and any sentence a UI test reads, sit in
+`apps/macos/UITests/Words.swift` or `apps/windows/Pitboard.UITests/Words.cs`, the one place a
+change to the model's words reaches the UI tests.
+
 For a change to the install script, `packaging/install.sh`, another template in `packaging/`,
 or `.github/scripts/fill-template.sh`, which fills them at release time:
 

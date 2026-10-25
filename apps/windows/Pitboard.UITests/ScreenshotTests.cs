@@ -32,23 +32,23 @@ public sealed partial class ScreenshotTests
         }
 
         // The pictures show the accounts: starting at sign-in, then what happens at a limit.
-        foreach (var tip in new[] { "Start when you sign in to Windows", "Switch before a limit runs out" })
+        foreach (var tip in new[] { "setup.notOpenedAtLogin", "setup.atLimitUnchosen" })
         {
-            launched.Named(tip);
-            launched.Invoke("Not now");
-            Assert.IsTrue(launched.Gone(found => found.ByName(tip)), tip);
+            launched.Element(tip);
+            launched.Invoke("setup.action.declineTip");
+            Assert.IsTrue(launched.Gone(found => found.ByAutomationId(tip)), tip);
         }
 
         window.Move(0, 0);
         launched.Row("codex/spare");
-        Launched.Shows(window, "5-hour limit, 42", exact: false);
+        Launched.Within(launched.Row("claude/work"), found => found.ByAutomationId("account.inUse"), "work in use");
         Keep(Drawn(() => Capture.Rectangle(Frame(window)), "the window"), pictures, "window");
 
         // The menu opens over the window, as the macOS picture shows it.
         launched.Select("pane.machine");
         var frame = Frame(window);
         HiddenWindows.OpenMenu(launched.Process, frame.Left + 40, frame.Top + 60);
-        var main = launched.Find(found => found.ByName("main · Pro · 7%").And(found.ByControlType(ControlType.MenuItem)), "the menu's main");
+        var main = launched.Element("menu.account.codex/main");
         var menu = Around(main, ControlType.Menu);
         Keep(Drawn(() => Capture.Element(menu), "the menu"), pictures, "menu");
     }

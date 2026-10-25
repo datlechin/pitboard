@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -13,8 +14,9 @@ public sealed class AccountMenuTests
     private static readonly ItemOffer SignInAgain = new("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), false, null);
     private static readonly ItemOffer Rename = new("Rename…", new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), true, null);
 
+    // Each item by what UI Automation finds it by, a separator as "-".
     private static string[] Said(MenuFlyout menu) =>
-        [.. menu.Items.Select(entry => entry is MenuFlyoutItem item ? item.Text : "-")];
+        [.. menu.Items.Select(entry => entry is MenuFlyoutItem item ? AutomationProperties.GetAutomationId(item) : "-")];
 
     // Microsoft's menu guidance removes a context menu's items that do not apply now, as the HIG does.
     [UITestMethod]
@@ -28,7 +30,8 @@ public sealed class AccountMenuTests
 
         var menu = AccountMenu.For(item, (_, _) => { });
 
-        Assert.AreEqual("Use spare, Rename…, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
+        Assert.AreEqual(
+            "account.switchTo, account.rename, -, account.copyEmail, -, account.forget", string.Join(", ", Said(menu)));
     }
 
     // The keys AccountKeys takes on the row, shown beside the items that do the same.
@@ -38,12 +41,12 @@ public sealed class AccountMenuTests
         var item = Items.Account("claude", "spare") with { Offers = [Use, Rename], Forget = Items.Forget("claude/spare") };
 
         var shown = AccountMenu.For(item, (_, _) => { }).Items.OfType<MenuFlyoutItem>()
-            .ToDictionary(entry => entry.Text, entry => entry.KeyboardAcceleratorTextOverride);
+            .ToDictionary(entry => AutomationProperties.GetAutomationId(entry), entry => entry.KeyboardAcceleratorTextOverride);
 
-        Assert.AreEqual("F2", shown["Rename…"]);
-        Assert.AreEqual("Ctrl+C", shown["Copy email address"]);
-        Assert.AreEqual("Del", shown["Forget…"]);
-        Assert.AreEqual("", shown["Use spare"]);
+        Assert.AreEqual("F2", shown["account.rename"]);
+        Assert.AreEqual("Ctrl+C", shown["account.copyEmail"]);
+        Assert.AreEqual("Del", shown["account.forget"]);
+        Assert.AreEqual("", shown["account.switchTo"]);
     }
 
     [UITestMethod]
@@ -55,7 +58,7 @@ public sealed class AccountMenuTests
             Forget = Items.Forget("claude/work") with { Enabled = false },
         };
 
-        Assert.AreEqual("Rename…, -, Copy email address", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
+        Assert.AreEqual("account.rename, -, account.copyEmail", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
     }
 
     [UITestMethod]
@@ -63,7 +66,7 @@ public sealed class AccountMenuTests
     {
         var item = Items.Account("claude", "work") with { Email = "", Offers = [Rename] };
 
-        Assert.AreEqual("Rename…", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
+        Assert.AreEqual("account.rename", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
     }
 
     [UITestMethod]
@@ -93,7 +96,8 @@ public sealed class AccountMenuTests
         var menu = AccountMenu.For(item, (_, _) => { }, opened.Add, held: []);
         new MenuFlyoutItemAutomationPeer((MenuFlyoutItem)menu.Items[2]).Invoke();
 
-        Assert.AreEqual("Rename…, -, Open chatgpt.com, -, Copy email address, -, Forget…", string.Join(", ", Said(menu)));
+        Assert.AreEqual(
+            "account.rename, -, window.chatgpt.com/spare, -, account.copyEmail, -, account.forget", string.Join(", ", Said(menu)));
         Assert.AreEqual(spare, opened.Single());
     }
 
@@ -105,7 +109,7 @@ public sealed class AccountMenuTests
 
         var menu = AccountMenu.For(item, (_, _) => { }, _ => { }, held: [spare.Store]);
 
-        var entry = menu.Items.OfType<MenuFlyoutItem>().Single(found => found.Text == "Open chatgpt.com");
+        var entry = menu.Items.OfType<MenuFlyoutItem>().Single(found => AutomationProperties.GetAutomationId(found) == "window.chatgpt.com/spare");
         Assert.IsFalse(entry.IsEnabled);
         StringAssert.StartsWith((string)ToolTipService.GetToolTip(entry), "What this window kept before is deleted once every account window has closed.");
     }

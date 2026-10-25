@@ -25,40 +25,44 @@ final class ScreenshotTests: FixtureTestCase {
         app.descendants(matching: .any)["sidebar.machine"].click()
         move(window, to: CGPoint(x: below.maxX + 20 - window.frame.width, y: below.minY - 4))
         app.openMenu()
-        XCTAssertTrue(app.menuItem("main · Pro").waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.menuItem(Words.inMenu("main", plan: "Pro")).waitForExistence(timeout: 5))
         keep(cutOut(menu, cornerRadius: 11), as: "menu")
         app.typeKey(.escape, modifierFlags: [])
 
         app.descendants(matching: .any)["sidebar.accounts"].click()
         XCTAssertTrue(app.accountRow("codex/spare").waitForExistence(timeout: 5))
-        XCTAssertTrue(app.text("BEGINSWITH", "5-hour limit, 42").waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.accountRow("claude/work").descendants(matching: .any)["account.inUse"]
+                .waitForExistence(timeout: 5))
         keep(cutOut(window, cornerRadius: 16), as: "window")
 
         keep(item.screenshot().pngRepresentation, as: "status-item")
 
         app.descendants(matching: .any)["sidebar.activity"].click()
-        XCTAssertTrue(app.text("Switch").waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts["activity.change"].firstMatch.waitForExistence(timeout: 5))
         keep(cutOut(window, cornerRadius: 16), as: "activity")
 
         app.openSettings()
-        app.toolbars.buttons["Limits"].click()
-        let settings = app.windows["Limits"]
+        app.toolbars.buttons[Words.limits].click()
+        let settings = app.windows[Words.limits]
         let atLimit = app.popUpButtons["settings.atLimit"]
         XCTAssertTrue(atLimit.waitForExistence(timeout: 5))
         XCTAssertTrue(atLimit.wait(for: \.isEnabled, toEqual: true, timeout: 5))
-        choose("Switch Automatically", in: atLimit)
+        choose(Words.switchAutomatically, in: atLimit)
         XCTAssertTrue(app.control("settings.autoSwitchStanding").waitForExistence(timeout: 5))
         keep(cutOut(settings, cornerRadius: 16), as: "limits-switch")
 
         // Last, since it switches, and to personal, whose five-hour limit is used up: switching
         // automatically would switch away from it again.
-        choose("Notify Me", in: atLimit)
+        choose(Words.notifyMe, in: atLimit)
         settings.buttons[XCUIIdentifierCloseWindow].click()
         XCTAssertTrue(settings.waitForNonExistence(timeout: 5))
         app.descendants(matching: .any)["sidebar.accounts"].click()
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
-        personal.buttons["Use personal (Claude Code)"].click()
+        personal.buttons["account.action"].click()
         let notice = app.descendants(matching: .any)["notice.switch/claude"]
         XCTAssertTrue(notice.waitForExistence(timeout: 10))
         keep(cutOut(window, cornerRadius: 16), as: "switch-notice")
@@ -69,12 +73,12 @@ final class ScreenshotTests: FixtureTestCase {
     func testWarmingUpForTheSite() {
         let app = launch(.warmUp)
         app.openWindow()
-        let warmed = app.text("BEGINSWITH", "Warms up again at ")
+        let warmed = app.text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30))
         app.openSettings()
-        app.toolbars.buttons["Limits"].click()
+        app.toolbars.buttons[Words.limits].click()
         XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
-        keep(cutOut(app.windows["Limits"], cornerRadius: 16), as: "limits-warm")
+        keep(cutOut(app.windows[Words.limits], cornerRadius: 16), as: "limits-warm")
     }
 
     @MainActor

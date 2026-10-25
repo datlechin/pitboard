@@ -3,7 +3,8 @@
     x:Class="Pitboard.Views.NoticeBar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:core="using:Pitboard.Core">
+    xmlns:core="using:Pitboard.Core"
+    xmlns:local="using:Pitboard.Views">
   <!-- As Windows shows a change of the app's state: an InfoBar, its buttons under its message and its dismissal the close button. -->
   <InfoBar x:Name="Bar" IsOpen="True" Closing="OnClosing">
     <StackPanel x:Name="Below" Margin="0,0,0,12" Spacing="8">
@@ -16,7 +17,11 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="core:NoticeAction">
-            <Button Content="{x:Bind Title}" IsEnabled="{x:Bind Enabled}" Click="OnAction" />
+            <Button
+                Content="{x:Bind Title}"
+                IsEnabled="{x:Bind Enabled}"
+                AutomationProperties.AutomationId="{x:Bind local:NoticeBar.ActionId(Intent)}"
+                Click="OnAction" />
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>

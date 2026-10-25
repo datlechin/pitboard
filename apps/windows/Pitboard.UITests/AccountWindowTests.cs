@@ -87,7 +87,7 @@ public sealed class AccountWindowTests
 
         Launched.Press(window, "Continue with Google");
 
-        Assert.IsTrue(Says(window, "window.note", "Pitboard stopped it"), "the window did not say Google was stopped");
+        Assert.IsTrue(Says(window, "window.note", Words.GoogleStopped), "the window did not say Google was stopped");
         Launched.Shows(window, "chatgpt.com stand-in");
     }
 
@@ -100,13 +100,13 @@ public sealed class AccountWindowTests
         var window = launched.AccountWindow("main");
 
         Launched.Press(window, "Download notes");
-        launched.Invoke("Download");
+        launched.Answer("question", "PrimaryButton");
         // Saved before the list opens: an open list named nothing in runs 38874616742, 38879058247 and 38896104748.
         var saved = Path.Combine(Path.GetTempPath(), "pitboard-fixture", "Downloads", "notes.txt");
         Assert.IsTrue(
             Retry.WhileFalse(() => File.Exists(saved), TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(250)).Result,
             $"notes.txt was not saved as {saved}: {Saved(Path.GetDirectoryName(saved)!)}; {launched.Shown()}");
-        Launched.Press(window, "Downloads");
+        launched.Invoke("window.downloads");
 
         // Opened again where it is not up, as a person would.
         var listed = Retry.WhileFalse(
@@ -119,7 +119,7 @@ public sealed class AccountWindowTests
 
                 if (window.FindFirstDescendant(found => found.ByName("Open downloads folder")) is null)
                 {
-                    window.FindFirstDescendant(found => found.ByName("Downloads").And(found.ByControlType(ControlType.Button)))
+                    window.FindFirstDescendant(found => found.ByAutomationId("window.downloads"))
                         ?.Patterns.Invoke.Pattern.Invoke();
                 }
 
@@ -181,10 +181,10 @@ public sealed class AccountWindowTests
         Launched.Shows(window, "A Pitboard fixture page at /chat/fixture", exact: false);
 
         Launched.Within(window, found => found.ByAutomationId("MoreButton"), "the command bar's More").Patterns.Invoke.Pattern.Invoke();
-        launched.Invoke("Remove website data…");
-        launched.Invoke("Remove");
+        launched.Invoke("window.removeData");
+        launched.Answer("question", "PrimaryButton");
 
-        Assert.IsTrue(Says(window, "window.note", "Sign in to chatgpt.com"), "the window did not say how to sign in");
+        Assert.IsTrue(Says(window, "window.note", Words.SignInTo("chatgpt.com")), "the window did not say how to sign in");
         Launched.Shows(window, "A Pitboard fixture page at /.", exact: false);
     }
 

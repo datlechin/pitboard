@@ -205,15 +205,20 @@ internal sealed class Launched : IDisposable
 
     public AutomationElement Named(string name) => Find(found => found.ByName(name), $"'{name}'");
 
-    // As a person presses it once it can be pressed. A SettingsCard that cannot be clicked takes the name of the button
-    // it holds, so only what can be invoked is looked for.
-    public void Invoke(string name)
+    public AutomationElement Element(string automationId) => Find(found => found.ByAutomationId(automationId), automationId);
+
+    // As a person presses it once it can be pressed.
+    public void Invoke(string automationId) => PressOnceEnabled(Element(automationId));
+
+    // A dialog's button, which its template names: PrimaryButton, SecondaryButton or CloseButton.
+    public void Answer(string dialog, string button) =>
+        PressOnceEnabled(Within(Element(dialog), found => found.ByAutomationId(button), button));
+
+    private void PressOnceEnabled(AutomationElement found)
     {
-        var pressable = new PropertyCondition(Automation.PropertyLibrary.PatternAvailability.IsInvokePatternAvailable, true);
-        var found = Find(found => found.ByName(name).And(pressable), $"'{name}' to press");
         if (!Retry.WhileFalse(() => found.IsEnabled, Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result)
         {
-            throw new AssertFailedException($"'{name}', a {found.ControlType} {found.AutomationId}, stayed dimmed for {Shortly}: {Shown()}");
+            throw new AssertFailedException($"{found.AutomationId}, a {found.ControlType} named '{found.Name}', stayed dimmed for {Shortly}: {Shown()}");
         }
 
         found.Patterns.Invoke.Pattern.Invoke();
@@ -272,8 +277,8 @@ internal sealed class Launched : IDisposable
     public TextBox Field(string automationId) => Find(found => found.ByAutomationId(automationId), automationId).AsTextBox();
 
     // A button the model holds back until it can be pressed.
-    public bool Enables(string name) =>
-        Retry.WhileFalse(() => Look(found => found.ByName(name))?.IsEnabled == true, Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
+    public static bool Enables(AutomationElement button) =>
+        Retry.WhileFalse(() => button.IsEnabled, Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
 
     public void Select(string pane) =>
         Find(found => found.ByAutomationId(pane), pane).Patterns.SelectionItem.Pattern.Select();

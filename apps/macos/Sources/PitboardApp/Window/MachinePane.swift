@@ -14,6 +14,7 @@ struct MachinePane: View {
                 // By its place: doctor gives every account's parked login one code.
                 ForEach(checks.lines, id: \.id) { line in
                     CheckRow(line: line)
+                        .accessibilityIdentifier("check.\(line.id)")
                 }
             } header: {
                 summary(checks)
@@ -33,6 +34,7 @@ struct MachinePane: View {
                 Label("Check Again", systemImage: Symbol.refresh)
             }
             .help("Make every check again")
+            .accessibilityIdentifier("toolbar.checkAgain")
             .disabled(checks.checking)
         }
         .focusedSceneValue(
@@ -51,6 +53,7 @@ struct MachinePane: View {
             HStack(alignment: .firstTextBaseline) {
                 // The last line of `pitboard doctor`, so the two never disagree.
                 Text(summary)
+                    .accessibilityIdentifier("checks.summary")
                 Spacer()
                 if checks.checking {
                     ProgressView().controlSize(.small)

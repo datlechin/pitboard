@@ -6,7 +6,7 @@ final class AccountWindowTests: FixtureTestCase {
     func testOpeningAClaudeAccountsWindowFromTheMenu() {
         let app = launch(.onlyOne)
         app.openMenu()
-        app.menuItem("Open claude.ai as work").click()
+        app.menuItem(Words.openSite("claude.ai", as: "work")).click()
         let window = app.accountWindow("work")
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         XCTAssertTrue(
@@ -17,14 +17,14 @@ final class AccountWindowTests: FixtureTestCase {
     func testEachSiteOffersItsOwnToolsAccounts() {
         let app = launch(.twoTools)
         app.openMenu()
-        let claude = app.menuItem("Open claude.ai")
+        let claude = app.menuItem(Words.openSite("claude.ai"))
         XCTAssertTrue(claude.waitForExistence(timeout: 5))
         claude.hover()
         for label in ["work", "personal", "old"] {
             XCTAssertTrue(claude.menuItems[label].waitForExistence(timeout: 5), label)
         }
         XCTAssertFalse(claude.menuItems["main"].exists)
-        let chatGPT = app.menuItem("Open chatgpt.com")
+        let chatGPT = app.menuItem(Words.openSite("chatgpt.com"))
         XCTAssertTrue(chatGPT.exists)
         chatGPT.hover()
         for label in ["main", "spare"] {
@@ -38,9 +38,9 @@ final class AccountWindowTests: FixtureTestCase {
     func testNoAccountOffersNoWindow() {
         let app = launch(.empty)
         app.openMenu()
-        XCTAssertTrue(app.menuItem("Open Pitboard").waitForExistence(timeout: 5))
-        XCTAssertFalse(app.menuItem("Open claude.ai").exists)
-        XCTAssertFalse(app.menuItem("Open chatgpt.com").exists)
+        XCTAssertTrue(app.menuItem(Words.openPitboard).waitForExistence(timeout: 5))
+        XCTAssertFalse(app.menuItem(Words.openSite("claude.ai")).exists)
+        XCTAssertFalse(app.menuItem(Words.openSite("chatgpt.com")).exists)
         app.typeKey(.escape, modifierFlags: [])
     }
 
@@ -48,7 +48,7 @@ final class AccountWindowTests: FixtureTestCase {
     func testOpeningAWindowAgainBringsTheSameOneForward() {
         let app = openChatGPT()
         app.openMenu()
-        let open = app.menuItem("Open chatgpt.com")
+        let open = app.menuItem(Words.openSite("chatgpt.com"))
         open.hover()
         open.menuItems["main"].click()
         XCTAssertTrue(app.accountWindow("main").waitForExistence(timeout: 5))
@@ -99,7 +99,8 @@ final class AccountWindowTests: FixtureTestCase {
         let window = app.accountWindow("main")
         page(of: window).links["Continue with Google"].click()
         let note = window.descendants(matching: .any)["window.note"]
-        XCTAssertTrue(note.text("CONTAINS", "Pitboard stopped it").waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            note.staticTexts["window.note.googleRefused"].waitForExistence(timeout: 5))
         XCTAssertTrue(page(of: window).text("==", "chatgpt.com stand-in").exists)
     }
 
@@ -108,7 +109,7 @@ final class AccountWindowTests: FixtureTestCase {
         let app = openChatGPT()
         let window = app.accountWindow("main")
         page(of: window).links["Download notes"].click()
-        let downloads = window.toolbars.buttons["Downloads"]
+        let downloads = window.toolbars.buttons["window.downloads"]
         XCTAssertTrue(downloads.waitForExistence(timeout: 10))
         downloads.click()
         // A row is one element for VoiceOver, its name and state read together.
@@ -116,7 +117,7 @@ final class AccountWindowTests: FixtureTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         XCTAssertTrue(
             row.wait(
-                until: "label CONTAINS 'notes.txt' AND label CONTAINS 'Downloaded'",
+                until: "label CONTAINS 'notes.txt' AND label CONTAINS '\(Words.downloaded)'",
                 timeout: 10))
     }
 
@@ -135,21 +136,21 @@ final class AccountWindowTests: FixtureTestCase {
         let window = app.accountWindow("main")
         let note = window.descendants(matching: .any)["window.note"]
         // The first opening says how to sign in; put it away, and leave the home page.
-        note.buttons["Dismiss"].click()
+        note.buttons["window.note.dismiss"].click()
         XCTAssertTrue(note.waitForNonExistence(timeout: 5))
         page(of: window).links["A chat"].click()
         XCTAssertTrue(
             page(of: window).text("BEGINSWITH", "A Pitboard fixture page at /chat/fixture")
                 .waitForExistence(timeout: 10))
 
-        let file = app.menuBars.menuBarItems["File"]
+        let file = app.menuBars.menuBarItems[Words.fileMenu]
         file.click()
-        file.menuItems["Remove Website Data…"].click()
-        let remove = window.sheets.firstMatch.buttons["Remove"]
+        file.menuItems[Words.removeWebsiteData].click()
+        // AppKit names an alert's answer action-button-1 (docs/facts/macos-app.md).
+        let remove = window.sheets.firstMatch.buttons["action-button-1"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.click()
-        XCTAssertTrue(
-            note.text("BEGINSWITH", "Sign in to chatgpt.com").waitForExistence(timeout: 10))
+        XCTAssertTrue(note.staticTexts["window.note.signIn"].waitForExistence(timeout: 10))
         XCTAssertTrue(
             page(of: window).text("BEGINSWITH", "A Pitboard fixture page at /.")
                 .waitForExistence(timeout: 10))
@@ -162,7 +163,7 @@ final class AccountWindowTests: FixtureTestCase {
         let row = app.accountRow("codex/spare")
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.rightClick()
-        app.shortcutMenu.menuItems["Open chatgpt.com"].click()
+        app.shortcutMenu.menuItems[Words.openSite("chatgpt.com")].click()
         XCTAssertTrue(app.accountWindow("spare").waitForExistence(timeout: 10))
     }
 
@@ -170,7 +171,7 @@ final class AccountWindowTests: FixtureTestCase {
     private func openChatGPT() -> XCUIApplication {
         let app = launch(.twoTools)
         app.openMenu()
-        let open = app.menuItem("Open chatgpt.com")
+        let open = app.menuItem(Words.openSite("chatgpt.com"))
         XCTAssertTrue(open.waitForExistence(timeout: 5))
         open.hover()
         open.menuItems["main"].click()

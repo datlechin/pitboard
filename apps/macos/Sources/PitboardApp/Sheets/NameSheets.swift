@@ -44,9 +44,11 @@ struct NameSheet: View {
             Button("Cancel", role: .cancel) { dismiss() }
                 .keyboardShortcut(.cancelAction)
                 .disabled(busy)
+                .accessibilityIdentifier("sheet.cancel")
             Button(text?.confirm ?? "", action: save)
                 .keyboardShortcut(.defaultAction)
                 .disabled(check.intent == nil || busy)
+                .accessibilityIdentifier("sheet.confirm")
         }
         .onAppear { focused = true }
         .onChange(of: name) {

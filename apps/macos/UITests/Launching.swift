@@ -49,23 +49,24 @@ extension XCUIApplication {
 
     func openWindow() {
         openMenu()
-        menuItem("Open Pitboard").click()
+        menuItem(Words.openPitboard).click()
         XCTAssertTrue(windows.firstMatch.waitForExistence(timeout: 5))
     }
 
     // The tips past a second account: opening at login, then what happens at a limit.
     func putTheTipsAway() {
-        for tip in ["Open Pitboard at login", "Switch before a limit runs out"] {
-            XCTAssertTrue(staticTexts[tip].waitForExistence(timeout: 5), tip)
-            buttons["Not Now"].click()
-            XCTAssertTrue(staticTexts[tip].waitForNonExistence(timeout: 5), tip)
+        for footing in ["notOpenedAtLogin", "atLimitUnchosen"] {
+            let tip = control("setup.\(footing)")
+            XCTAssertTrue(tip.waitForExistence(timeout: 5), footing)
+            tip.buttons["setup.action.declineTip"].click()
+            XCTAssertTrue(tip.waitForNonExistence(timeout: 5), footing)
         }
     }
 
     func openSettings() {
         openMenu()
-        menuItem("Settings…").click()
-        XCTAssertTrue(windows["General"].waitForExistence(timeout: 5))
+        menuItem(Words.settings).click()
+        XCTAssertTrue(windows[Words.general].waitForExistence(timeout: 5))
     }
 
     /// An item of the menu bar item's menu. The app keeps a main menu, hidden while it has
@@ -81,6 +82,16 @@ extension XCUIApplication {
     /// Bar with a Cancel of its own.
     var alert: XCUIElement {
         sheets["alert"]
+    }
+
+    // AppKit names an alert's buttons by their order: the answer the model words, then Cancel
+    // (docs/facts/macos-app.md).
+    var alertAnswer: XCUIElement {
+        alert.buttons["action-button-1"]
+    }
+
+    var alertCancel: XCUIElement {
+        alert.buttons["action-button-2"]
     }
 
     /// A text anywhere in the app whose words are `words`. A table keeps a cell's words in
@@ -101,11 +112,11 @@ extension XCUIApplication {
 
     // The menu bar's menus are found whether open or not, and none holds Copy Email Address.
     var shortcutMenu: XCUIElement {
-        menus.containing(NSPredicate(format: "title == %@", "Copy Email Address")).firstMatch
+        menus.containing(NSPredicate(format: "title == %@", Words.copyEmail)).firstMatch
     }
 
     var accountMenu: XCUIElement {
-        menuBars.menuBarItems["Account"]
+        menuBars.menuBarItems[Words.accountMenu]
     }
 
     /// macOS titles an account's window with the account's label, then a dash and the page's

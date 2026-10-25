@@ -26,6 +26,7 @@ struct AccountsPane: View {
                     }
                     .help("Read every account’s usage again")
                     .disabled(model.reading)
+                    .accessibilityIdentifier("toolbar.refresh")
                     // Command-N is the window's own command, so it works from every pane.
                     Button {
                         model.send(.presentSheet(sheet: .add(provider: nil)))
@@ -33,6 +34,7 @@ struct AccountsPane: View {
                         Label("Add Account", systemImage: Symbol.add)
                     }
                     .help("Sign in to another account and park its login")
+                    .accessibilityIdentifier("toolbar.addAccount")
                 }
             }
             .focusedSceneValue(
@@ -65,12 +67,14 @@ struct AccountsPane: View {
         case .noTool(let title, let detail, let linkTitle, let link):
             ContentUnavailableView {
                 Label(title, systemImage: Symbol.terminal)
+                    .accessibilityIdentifier("accounts.noTool")
             } description: {
                 Text(detail)
             } actions: {
                 if let link = URL(string: link) {
                     Link(linkTitle, destination: link)
                         .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("accounts.install")
                 }
             }
         case .readFailed(let title, let detail, let retry):
@@ -78,25 +82,30 @@ struct AccountsPane: View {
             // with a way to try again, and not a spinner that never stops.
             ContentUnavailableView {
                 Label(title, systemImage: Severity.error.symbol)
+                    .accessibilityIdentifier("accounts.readFailed")
             } description: {
                 Text(detail)
             } actions: {
                 Button(retry.title) { model.send(retry.intent) }
                     .disabled(!retry.enabled)
+                    .accessibilityIdentifier("accounts.retry")
             }
         case .noAccounts(let title, let detail, let add):
             ContentUnavailableView {
                 Label(title, systemImage: Symbol.accounts)
+                    .accessibilityIdentifier("accounts.noAccounts")
             } description: {
                 Text(detail)
             } actions: {
                 Button(add.title) { model.send(add.intent) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!add.enabled)
+                    .accessibilityIdentifier("accounts.add")
             }
         case .reading(let title):
             ProgressView(title)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("accounts.reading")
         case .list:
             list
         }
@@ -216,17 +225,21 @@ private struct SetupTip: View {
                 Text(step.detail).explanatory()
                 HStack {
                     ForEach(Array(step.actions.enumerated()), id: \.offset) { index, choice in
+                        let identifier = "setup.action.\(caseName(choice.intent))"
                         if index == 0 {
                             Button(choice.title) { perform(choice.intent) }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(!choice.enabled)
+                                .accessibilityIdentifier(identifier)
                         } else {
                             Button(choice.title) { perform(choice.intent) }
                                 .disabled(!choice.enabled)
+                                .accessibilityIdentifier(identifier)
                         }
                     }
                     if let link = step.link, let url = URL(string: link.link) {
                         Link(link.title, destination: url)
+                            .accessibilityIdentifier("setup.link")
                     }
                 }
             }
@@ -234,6 +247,8 @@ private struct SetupTip: View {
         }
         .padding(.vertical, 4)
         .selectionDisabled()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("setup.\(caseName(footing))")
     }
 
     private var symbol: String {

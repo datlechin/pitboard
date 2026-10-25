@@ -82,7 +82,7 @@
               IsOpen="{x:Bind ViewModel.HasSetup, Mode=OneWay}"
               Title="{x:Bind ViewModel.SetupTitle, Mode=OneWay}"
               Message="{x:Bind ViewModel.SetupDetail, Mode=OneWay}"
-              AutomationProperties.AutomationId="setup">
+              AutomationProperties.AutomationId="{x:Bind local:AccountsPage.SetupId(ViewModel.SetupFooting), Mode=OneWay}">
             <InfoBar.IconSource>
               <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupFooting), Mode=OneWay}" />
             </InfoBar.IconSource>

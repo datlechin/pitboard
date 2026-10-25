@@ -45,6 +45,8 @@ public sealed partial class AccountsPage : Page
 
     public static bool Busy(EmptyKind kind) => kind == EmptyKind.Reading;
 
+    public static string SetupId(Footing footing) => $"setup.{Identifiers.Of(footing)}";
+
     public static string SetupGlyph(Footing footing) => footing switch
     {
         Footing.Unnamed => Glyphs.Name,
@@ -114,6 +116,7 @@ public sealed partial class AccountsPage : Page
         {
             var choice = step.Actions[index];
             var button = new Button { Content = choice.Title, IsEnabled = choice.Enabled };
+            AutomationProperties.SetAutomationId(button, $"setup.action.{Identifiers.Of(choice.Intent)}");
             if (index == 0)
             {
                 button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
@@ -126,6 +129,7 @@ public sealed partial class AccountsPage : Page
         if (step.Link is { } link)
         {
             var opens = new HyperlinkButton { Content = link.Title };
+            AutomationProperties.SetAutomationId(opens, "setup.link");
             opens.Click += (_, _) => ViewModel.OpenSetupLink();
             SetupChoices.Children.Add(opens);
         }

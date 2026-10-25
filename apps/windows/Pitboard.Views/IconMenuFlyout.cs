@@ -56,6 +56,11 @@ public static class IconMenuFlyout
                     IsChecked = account.InUse,
                     IsEnabled = account.Enabled,
                 };
+                if (account.Id is { } accountId)
+                {
+                    AutomationProperties.SetAutomationId(radio, accountId);
+                }
+
                 return Described(radio, account.Detail, account.Does, chosen);
             case IconMenuEntry.Command command:
                 var item = new MenuFlyoutItem { Text = command.Text, IsEnabled = command.Enabled };
@@ -77,6 +82,11 @@ public static class IconMenuFlyout
                 return Described(item, command.Detail, command.Does, chosen);
             case IconMenuEntry.Submenu submenu:
                 var sub = new MenuFlyoutSubItem { Text = submenu.Text };
+                if (submenu.Id is { } submenuId)
+                {
+                    AutomationProperties.SetAutomationId(sub, submenuId);
+                }
+
                 foreach (var inner in submenu.Entries)
                 {
                     sub.Items.Add(Item(inner, chosen));

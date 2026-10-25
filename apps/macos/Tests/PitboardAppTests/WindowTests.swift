@@ -96,6 +96,18 @@ import Testing
     #expect(width(nil) == width(over))
 }
 
+/// The UI tests find a control by the model's case it shows or sends, whatever it carries.
+@Test func aCaseIsNamedWithoutWhatItCarries() {
+    #expect(caseName(Intent.switchTo(qualified: "codex/spare")) == "switchTo")
+    #expect(caseName(Intent.abandonStuckSwitch) == "abandonStuckSwitch")
+    #expect(
+        caseName(Intent.presentSheet(sheet: .rename(provider: "claude", label: "work")))
+            == "rename")
+    #expect(caseName(Footing.onlyOne(provider: "claude", label: "work")) == "onlyOne")
+    #expect(caseName(Sheet.signInAgain(provider: "claude", label: "old")) == "signInAgain")
+    #expect(caseName(WindowNoteKind.otherApp(scheme: "vscode")) == "otherApp")
+}
+
 /// A sheet put up in place of another is told apart from it, so the window puts it up
 /// afresh.
 @Test func eachSheetIsToldApart() {
