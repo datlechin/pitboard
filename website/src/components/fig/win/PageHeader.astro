@@ -1,22 +1,24 @@
 ---
 // A page's title, a caption under it, and its commands as AppBarButtons with labels to the right.
 interface Props {
+  prefix: string;
   title: string;
   subtitle?: string;
   commands?: [icon: string, label: string][];
 }
-const { title, subtitle, commands = [] } = Astro.props;
+const { prefix, title, subtitle, commands = [] } = Astro.props;
 ---
 
 <div class="flex items-center gap-12 px-24">
   <span class="min-w-0 flex-1">
-    <span class="block text-u-28/36 font-semibold">{title}</span>
+    <span class="block text-u-28/36 font-semibold" id={`${prefix}-title`}>{title}</span>
     {subtitle && <span class="block text-u-12/16 text-win-text-2">{subtitle}</span>}
   </span>
-  {commands.map(([icon, label]) => <span
+  {commands.map(([icon, label]) => <button
     class="flex h-40 items-center gap-8 px-12 whitespace-nowrap"
+    type="button"
   >
     <svg class="size-16 shrink-0"><use href={`#${icon}`}></use></svg>
     {label}
-  </span>)}
+  </button>)}
 </div>

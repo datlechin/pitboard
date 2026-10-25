@@ -1,14 +1,18 @@
 ---
 // MainWindow.xaml at 704 pixels, where NavigationView is LeftCompact: the title bar on Mica, the
 // panes' icons with Settings at the foot, and the page on its layer. A `crop` desk shows the top.
+// The caption buttons are the system's.
 import CaptionButtons from "./CaptionButtons.astro";
 import { app, panes, type Pane } from "../../../data/windows.ts";
 
 interface Props {
+  prefix: string;
   pane: Pane;
   crop?: boolean;
 }
-const { pane, crop = false } = Astro.props;
+const { prefix, pane, crop = false } = Astro.props;
+const Root =
+  pane === "settings" ? "pb-settings" : pane === "activity" ? "pb-activity" : "pb-accounts";
 const item = "relative mx-4 my-2 flex h-36 w-40 items-center justify-center rounded-u-4";
 const items: [Pane, string][] = [
   ...panes.map(([id, , icon]): [Pane, string] => [id, icon]),
@@ -16,9 +20,10 @@ const items: [Pane, string][] = [
 ];
 ---
 
-<div
-  class:list={["desk desk-px-720", crop ? "h-356" : "flex items-center justify-center py-24"]}
-  aria-hidden="true"
+<Root
+  id={prefix}
+  class:list={["desk desk-px-720", crop ? "block h-356" : "flex items-center justify-center py-24"]}
+  inert
   data-output
 >
   <div
@@ -33,7 +38,7 @@ const items: [Pane, string][] = [
       >
       <svg class="ml-3 size-16 shrink-0"><use href="#pb-tray"></use></svg>
       <span class="ml-16 text-u-12/16">{app}</span>
-      <span class="ml-auto self-start"><CaptionButtons height={48} /></span>
+      <span class="ml-auto self-start" aria-hidden="true"><CaptionButtons height={48} /></span>
     </div>
     <div class="flex flex-col pb-4">
       {items.map(([id, icon]) => <span
@@ -47,4 +52,4 @@ const items: [Pane, string][] = [
       <slot />
     </div>
   </div>
-</div>
+</Root>

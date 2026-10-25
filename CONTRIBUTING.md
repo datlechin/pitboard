@@ -669,6 +669,20 @@ recorded in `src/data/fixtures/` instead, and takes each beta recorded there as 
 build ends with `scripts/guard.mjs`, which fails on anything the site must not ship and says
 what. `npm run preview` serves the build.
 
+The browser tests in `website/e2e/` check the home page's figures, their markup and axe, in
+Chromium, WebKit, Firefox and two phones, against the offline build that wrangler serves with
+its CSP enforced:
+
+```sh
+npx playwright install chromium webkit firefox
+PITBOARD_SITE_OFFLINE=1 npm run build
+npm run test:browser
+```
+
+CI's `website-browsers` job runs them, and in Chromium also compares each figure with its
+baseline in `e2e/static.spec.ts-snapshots/`. The baselines are made in CI's Linux image: a figure
+whose look changes on purpose takes its new drawing from the job's `website-browsers` artifact.
+
 ## Changelog
 
 Record a change that someone using Pitboard would notice in [CHANGELOG.md](CHANGELOG.md),

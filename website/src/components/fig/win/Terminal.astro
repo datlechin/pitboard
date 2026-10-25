@@ -6,10 +6,12 @@ import CaptionButtons from "./CaptionButtons.astro";
 interface Props {
   // what the tab says, unless a `title` slot draws it
   title?: string;
+  // a shell's window keeps its output as a log its tab names
+  id?: string;
   solo?: boolean;
   class?: string;
 }
-const { title, solo = false, class: extra } = Astro.props;
+const { title, id, solo = false, class: extra } = Astro.props;
 const button = "flex h-32 items-center justify-center";
 ---
 
@@ -23,7 +25,7 @@ const button = "flex h-32 items-center justify-center";
   <div class="flex h-40 flex-none items-end bg-win-term-bar pl-8 text-u-12/16">
     <span class="flex h-32 w-200 items-center gap-8 rounded-t-u-8 bg-win-term-bg px-10">
       <svg class="size-16 shrink-0"><use href="#fl-console"></use></svg>
-      <span class="flex min-w-0 flex-1 items-center gap-4 truncate"
+      <span class="flex min-w-0 flex-1 items-center gap-4 truncate" id={id && `${id}-title`}
         ><slot name="title">{title}</slot></span
       >
       <svg class="size-12 shrink-0"><use href="#fl-dismiss"></use></svg>
@@ -34,13 +36,15 @@ const button = "flex h-32 items-center justify-center";
     <span class:list={[button, "w-32"]}
       ><svg class="size-12"><use href="#fl-chevron-down"></use></svg></span
     >
-    <span class="ml-auto self-start"><CaptionButtons height={40} /></span>
+    <span class="ml-auto self-start" aria-hidden="true"><CaptionButtons height={40} /></span>
   </div>
   <div
     class:list={[
       "flex min-h-0 flex-1 flex-col overflow-hidden p-8 font-win-mono text-u-16/20 whitespace-pre text-win-term-text ligatures-none *:min-h-20 [&_.dim]:text-win-term-dim [&_.g]:text-win-term-green [&_.r]:text-win-term-red [&_.y]:text-win-term-yellow [&_b]:font-normal [&_b]:text-win-term-bright",
       solo ? "justify-start *:whitespace-pre-wrap" : "justify-end",
     ]}
+    role={id ? "log" : undefined}
+    aria-labelledby={id && `${id}-title`}
   >
     <slot />
   </div>

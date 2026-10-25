@@ -1,9 +1,11 @@
 ---
 // Ptyxis 49 in a libadwaita 1.8 window, 80 columns of 11 point type; output colours spans g, y, r, dim.
+// Its output is a log its title names.
 interface Props {
   title: string;
+  id: string;
 }
-const { title } = Astro.props;
+const { title, id } = Astro.props;
 const button = "flex h-34 w-34 items-center justify-center";
 const icon = "size-16 shrink-0";
 ---
@@ -23,7 +25,7 @@ const icon = "size-16 shrink-0";
       >
     </span>
     <span class="pointer-events-none absolute inset-x-0 flex flex-col items-center leading-[1.2]">
-      <b class="font-bold">{title}</b>
+      <b class="font-bold" id={`${id}-title`}>{title}</b>
       <span class="text-u-12 opacity-55">~</span>
     </span>
     <span class="ml-auto flex gap-6">
@@ -42,6 +44,8 @@ const icon = "size-16 shrink-0";
   </div>
   <div
     class="flex flex-col px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre-wrap text-linux-term-text ligatures-none *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow"
+    role="log"
+    aria-labelledby={`${id}-title`}
   >
     <slot />
   </div>

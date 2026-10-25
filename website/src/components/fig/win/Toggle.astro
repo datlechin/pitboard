@@ -1,19 +1,21 @@
 ---
-// WinUI's ToggleSwitch as a settings card shows it: On or Off, then a 40 by 20 pixel pill.
-interface Props {
+// WinUI's ToggleSwitch as a settings card shows it: On or Off, then a 40 by 20 pixel pill that
+// looks as aria-checked says.
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends HTMLAttributes<"button"> {
   on?: boolean;
 }
-const { on = false } = Astro.props;
+const { on = false, ...rest } = Astro.props;
 ---
 
 <span class="flex items-center gap-12">
   {on ? "On" : "Off"}
-  <span
-    class:list={[
-      "relative h-20 w-40 flex-none rounded-pill after:absolute after:top-4 after:size-12 after:rounded-circle",
-      on
-        ? "bg-win-accent after:left-24 after:bg-win-on-accent"
-        : "bg-win-toggle-off inset-shadow-win-strong after:left-4 after:bg-win-text-2",
-    ]}
-  ></span>
+  <button
+    class="relative h-20 w-40 flex-none rounded-pill bg-win-toggle-off inset-shadow-win-strong after:absolute after:top-4 after:left-4 after:size-12 after:rounded-circle after:bg-win-text-2 aria-checked:bg-win-accent aria-checked:inset-shadow-none aria-checked:after:left-24 aria-checked:after:bg-win-on-accent"
+    type="button"
+    role="switch"
+    aria-checked={on ? "true" : "false"}
+    {...rest}
+  ></button>
 </span>

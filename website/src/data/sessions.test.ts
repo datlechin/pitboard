@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { printed, sessions, type Session } from "./sessions.ts";
-import { account } from "./world.ts";
+import { account, moments } from "./world.ts";
 import { plainText } from "../lib/changelog.ts";
 import { platforms, type Platform } from "../lib/platform.ts";
 import { listed, menuLine, statusHeading, statusLine, statusLines } from "../lib/words.ts";
@@ -24,21 +24,25 @@ const text = (lines: string[]) => lines.map((l) => plainText(l).trimEnd());
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
 
 test("pitboard after the switch prints the Quickstart's accounts", () => {
-  const ours = text(statusLines("claude", "after"));
+  const ours = text(statusLines(moments.after, "claude"));
   assert.deepEqual(ours, block(docs("quickstart.mdx"), ours[0], ours.length));
 });
 
 test("pitboard before the switch prints what Check what each account has left prints", () => {
-  const ours = text(statusLines("claude", "before"));
+  const ours = text(statusLines(moments.before, "claude"));
   assert.deepEqual(ours, block(docs("guides/usage.mdx"), ours[0], ours.length));
 });
 
 test("the status line before the switch is the Status line guide's", () => {
-  assert.ok(docs("guides/status-line.mdx").includes(`\n${plainText(statusLine("before"))}\n`));
+  assert.ok(
+    docs("guides/status-line.mdx").includes(`\n${plainText(statusLine(moments.before))}\n`),
+  );
 });
 
 test("the menu says an account's limits as the usage guide does", () => {
-  assert.ok(docs("guides/usage.mdx").includes(`**${menuLine(account("personal"), "after")}**`));
+  assert.ok(
+    docs("guides/usage.mdx").includes(`**${menuLine(account("personal"), moments.after)}**`),
+  );
 });
 
 test("pitboard use work prints what the Quickstart prints", () => {
@@ -110,16 +114,18 @@ test("pitboard heads Claude Desktop's accounts as Account commands does", () => 
 
 test("a Claude Desktop row ends as Account status says it does", () => {
   const page = docs("reference/account-status.mdx");
-  for (const line of text(statusLines("desktop", "after"))) {
+  for (const line of text(statusLines(moments.after, "desktop"))) {
     const said = line.slice(line.search(/(signed in|ready)/));
     assert.ok(page.includes(`\`${said}\``), said);
   }
 });
 
 test("the menu says a Claude Desktop account has no usage read, as Account status does", () => {
-  const [inUse] = listed("desktop", "after");
+  const [inUse] = listed(moments.after, "desktop");
   assert.ok(
-    docs("reference/account-status.mdx").includes(`**${menuLine(inUse, "after")}** in the menu`),
+    docs("reference/account-status.mdx").includes(
+      `**${menuLine(inUse, moments.after)}** in the menu`,
+    ),
   );
 });
 
@@ -137,7 +143,7 @@ test("pitboard use desktop/home prints what Claude Desktop's guide prints", () =
 
 test("every listing gives the account in use first", () => {
   for (const moment of ["before", "after"] as const) {
-    const [first] = listed("claude", moment);
+    const [first] = listed(moments[moment], "claude");
     assert.equal(first.label, moment === "before" ? "personal" : "work");
   }
 });

@@ -8,9 +8,10 @@ import {
   iconMenu,
   panes,
   settingsPage,
+  switchNotice,
   toast,
 } from "./windows.ts";
-import { tools } from "./world.ts";
+import { moments, tools } from "./world.ts";
 import { menuBarLevel, trayTip } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -22,7 +23,7 @@ const core = (file: string) => repo(`crates/pitboard-core/src/${file}`);
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
 
 const headings = new Set(tools.map(([, name]) => name));
-const menu = (updates: boolean) => iconMenu("after", updates).flat();
+const menu = (updates: boolean) => iconMenu(moments.after, updates).flat();
 
 test("the icon's menu says what IconMenu.cs gives it, in its order", () => {
   const source = shell("IconMenu.cs");
@@ -78,7 +79,7 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
       "in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))",
     ),
   );
-  const [work] = iconMenu("before", false)
+  const [work] = iconMenu(moments.before, false)
     .flat()
     .filter((e) => "account" in e && e.label === "work");
   assert.ok(work && "tip" in work);
@@ -109,7 +110,7 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
   assert.ok(source.includes('format!("{}: {}", seen.name_of(account), summary(seen, account))'));
   assert.ok(present("words.rs").includes('format!("{label} ({tool})")'));
   assert.equal(
-    trayTip("after"),
+    trayTip(moments.after),
     "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): Weekly 7%",
   );
 });
@@ -123,8 +124,8 @@ test("the icon in the notification area draws the menu bar's level, from Tray's 
     assert.match(repo(`apps/windows/Icon/tray-${file}-16.svg`), /^<svg /);
   }
   assert.ok(present("accounts.rs").includes(".map(|limit| crate::usage_level(limit.percent)),"));
-  assert.equal(menuBarLevel("before"), "y");
-  assert.equal(menuBarLevel("after"), "g");
+  assert.equal(menuBarLevel(moments.before), "y");
+  assert.equal(menuBarLevel(moments.after), "g");
 });
 
 test("the window and its panes are named as MainWindow.xaml names them", () => {
@@ -135,7 +136,7 @@ test("the window and its panes are named as MainWindow.xaml names them", () => {
 });
 
 test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the core say", () => {
-  const page = accountsPage("after");
+  const page = accountsPage(moments.after, switchNotice);
   const xaml = views("AccountsPage.xaml");
   assert.ok(xaml.includes(`Text="${page.title}"`));
   for (const c of page.commands) assert.ok(xaml.includes(`Label="${c}"`), c);
@@ -148,7 +149,23 @@ test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the cor
     ["Claude Code", "Codex"],
   );
   const rows = page.sections.flatMap((s) => s.rows);
-  assert.ok(rows.every((r) => r.inUse !== (r.action === "Use")));
+  assert.ok(rows.every((r) => r.inUse !== (r.action?.title === "Use")));
+  // Narrator hears a row, its button and each limit as present/accounts.rs says them
+  assert.ok(
+    views("AccountRow.xaml").includes(
+      'AutomationProperties.Name="{x:Bind local:AccountRow.ActionSpoken(Account.Item)',
+    ),
+  );
+  assert.ok(
+    views("AccountRow.xaml.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"),
+  );
+  const personal = rows.find((r) => r.label === "personal")!;
+  assert.equal(personal.spoken, "personal, Max 20x");
+  assert.equal(personal.action?.spoken, "Use personal");
+  assert.equal(
+    personal.limits[0].spoken,
+    "5-hour limit, 59 percent used, 18 percent under an even pace, resets in 1 hour, 10 minutes",
+  );
 });
 
 test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put together", () => {
@@ -160,10 +177,8 @@ test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put t
       'CountdownText.Text = $"{label} {Countdown.Left(until, now)}";',
     ),
   );
-  const { notice } = accountsPage("after");
-  assert.equal(notice?.title, "Switched Claude Code to work");
-  assert.equal(notice?.countdown, "Claude Code sessions already open follow in 0:21");
-  assert.equal(accountsPage("before").notice, null);
+  assert.equal(switchNotice.title, "Switched Claude Code to work");
+  assert.equal(switchNotice.countdown, "Claude Code sessions already open follow in 0:21");
 });
 
 test("an account's notes are the core's, with when it warms up last", () => {
@@ -176,7 +191,7 @@ test("an account's notes are the core's, with when it warms up last", () => {
   assert.ok(present("accounts.rs").includes(".chain(warm_note(seen, account))"));
   assert.ok(views("AccountRow.xaml.cs").includes("foreach (var note in item.Notes)"));
   const notes = (moment: "before" | "after") =>
-    accountsPage(moment).sections.flatMap((s) => s.rows.flatMap((r) => r.notes));
+    accountsPage(moments[moment], null).sections.flatMap((s) => s.rows.flatMap((r) => r.notes));
   assert.deepEqual(notes("before"), [
     "Weekly limit runs out in 11h 05m at this pace",
     "Warms up again at 22:00",
@@ -202,6 +217,16 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(machine.includes(`const AT_LIMIT: &str = "${s.atLimit.header}";`));
   assert.ok(machine.includes(`"${s.atLimit.choice}",`));
   assert.ok(machine.includes(`share_label: "${s.share.header}".into(),`));
+  // the ComboBox and the NumberBox are named as the XAML binds them
+  assert.ok(machine.includes('at_label: format!("{AT_LIMIT} {at}%"),'));
+  assert.ok(shell("SettingsViewModel.cs").includes("AtLimitLabel => AtLimit.AtLabel;"));
+  assert.ok(
+    xaml.includes('AutomationProperties.Name="{x:Bind ViewModel.AtLimitLabel, Mode=OneWay}"'),
+  );
+  assert.ok(
+    xaml.includes('AutomationProperties.Name="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"'),
+  );
+  assert.equal(s.atLimit.label, "When a limit reaches 95%");
   assert.ok(present("words.rs").includes('format!("From {lowest}% to {highest}%")'));
   assert.ok(shell("SettingsViewModel.cs").includes("ShareRange => AtLimit.ShareRange;"));
   const autoswitch = core("duty/autoswitch.rs");

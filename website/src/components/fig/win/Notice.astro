@@ -1,29 +1,37 @@
 ---
-// WindowsNotifications.cs's toast at the share; its metrics are approx until read on Windows.
+// WindowsNotifications.cs's toast at the share; its metrics are approx until read on Windows. The
+// toast is a group its title names; its header's buttons are the system's.
 import Button from "./Button.astro";
 import Taskbar from "./Taskbar.astro";
 import TrayItem from "./TrayItem.astro";
 import { toast } from "../../../data/windows.ts";
-import { share, windowsClock } from "../../../data/world.ts";
-import { level } from "../../../lib/words.ts";
+import { clock, share } from "../../../data/world.ts";
+import { hm, level, shortDate } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+}
+const { prefix } = Astro.props;
 ---
 
-<div class="desk h-260 desk-px-720" aria-hidden="true" data-output>
+<pb-notice id={prefix} class="desk block h-260 desk-px-720" inert data-output>
   <div
     class="absolute right-12 bottom-60 z-3 flex w-364 flex-col rounded-u-8 bg-win-flyout p-16 font-win text-u-14/20 text-win-text-2 shadow-win-flyout"
+    role="group"
+    aria-labelledby={`${prefix}-title`}
   >
-    <span class="flex items-center gap-8 text-u-12/16">
+    <span class="flex items-center gap-8 text-u-12/16" aria-hidden="true">
       <svg class="size-16 shrink-0"><use href="#pb-tray"></use></svg>
       <span class="flex-1">{toast.app}</span>
       <svg class="size-16"><use href="#fl-more"></use></svg>
       <svg class="ml-8 size-16"><use href="#fl-dismiss"></use></svg>
     </span>
-    <b class="mt-12 font-semibold text-win-text">{toast.title}</b>
+    <b class="mt-12 font-semibold text-win-text" id={`${prefix}-title`}>{toast.title}</b>
     <span>{toast.tool}</span>
     <span>{toast.body}</span>
     <span class="mt-16 text-win-text"><Button stretch>{toast.button}</Button></span>
   </div>
-  <Taskbar time={windowsClock.warned.time} date={windowsClock.warned.date}>
+  <Taskbar time={hm(clock.warned)} date={shortDate(clock.warned)}>
     <TrayItem level={level(share)} />
   </Taskbar>
-</div>
+</pb-notice>
