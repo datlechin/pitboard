@@ -15,7 +15,7 @@ cask "pitboard-app" do
 
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/Pitboard-v#{version}-macos.zip"
   name "Pitboard"
-  desc "Menu bar app to switch Claude Code and Codex accounts and see their limits"
+  desc "Menu bar account switcher for AI coding tools"
   homepage "https://usepitboard.com/"
 
   auto_updates true
@@ -29,10 +29,9 @@ cask "pitboard-app" do
   zsh_completion "#{appdir}/Pitboard.app/Contents/Resources/completions/pitboard.zsh"
   fish_completion "#{appdir}/Pitboard.app/Contents/Resources/completions/pitboard.fish"
 
-  # The renewal schedule in zap and not uninstall, because Homebrew runs uninstall on every
-  # upgrade and reinstall too. ~/.pitboard stays: it is the only index of the parked logins,
-  # and without it they are left where nothing can name them. `pitboard uninstall` deletes
-  # the logins and then the directory, so it has to come first.
+  # In zap and not uninstall, because Homebrew runs uninstall on every upgrade and reinstall
+  # too. ~/.pitboard stays: it is the only index of the parked logins, so `pitboard uninstall`
+  # has to delete them first.
   #
   # ~/Library/WebKit/com.usepitboard.Pitboard holds each account window's data, its
   # claude.ai or chatgpt.com sign-in included. The preferences list the stores each Pitboard
@@ -40,7 +39,10 @@ cask "pitboard-app" do
   # application state keeps the windows that were open. The Share extension's container and
   # scripts folder are made by macOS the first time the extension runs, and hold nothing
   # Pitboard writes.
-  zap launchctl: "com.datlechin.pitboard.renew",
+  zap launchctl: [
+        "com.datlechin.pitboard.renew",
+        "com.datlechin.pitboard.watch",
+      ],
       trash:     [
         "~/Library/Application Scripts/com.usepitboard.Pitboard.share",
         "~/Library/Application Support/com.usepitboard.Pitboard",
@@ -48,8 +50,10 @@ cask "pitboard-app" do
         "~/Library/Containers/com.usepitboard.Pitboard.share",
         "~/Library/HTTPStorages/com.usepitboard.Pitboard",
         "~/Library/HTTPStorages/com.usepitboard.Pitboard.binarycookies",
+        "~/Library/Logs/Pitboard/watch.log",
         "~/Library/Preferences/com.usepitboard.Pitboard.plist",
         "~/Library/Saved Application State/com.usepitboard.Pitboard.savedState",
         "~/Library/WebKit/com.usepitboard.Pitboard",
-      ]
+      ],
+      rmdir:     "~/Library/Logs/Pitboard"
 end

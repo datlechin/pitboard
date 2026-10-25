@@ -16,38 +16,43 @@ cask "pitboard" do
          arm64_linux:  "@SHA256_AARCH64_UNKNOWN_LINUX_MUSL@",
          x86_64_linux: "@SHA256_X86_64_UNKNOWN_LINUX_MUSL@"
 
-  # The renewal schedule, the launchd job on macOS and the systemd timer on Linux. In zap
-  # and not uninstall, because Homebrew runs uninstall on every upgrade and reinstall too.
-  # ~/.pitboard stays: it is the only index of the parked logins, and without it they are
-  # left where nothing can name them. `pitboard uninstall` deletes the logins and then the
-  # directory, so it has to come first. It is up here because Homebrew's style puts blocks
-  # for one system straight after the checksums.
+  # In zap and not uninstall, because Homebrew runs uninstall on every upgrade and reinstall
+  # too. ~/.pitboard stays: it is the only index of the parked logins, so `pitboard uninstall`
+  # has to delete them first. Up here because Homebrew's style puts blocks for one system
+  # straight after the checksums.
   on_macos do
-    zap launchctl: "com.datlechin.pitboard.renew"
+    zap launchctl: [
+          "com.datlechin.pitboard.renew",
+          "com.datlechin.pitboard.watch",
+        ],
+        trash:     "~/Library/Logs/Pitboard/watch.log",
+        rmdir:     "~/Library/Logs/Pitboard"
   end
-  # A timer systemd has loaded keeps firing after its files are deleted, so it is stopped
-  # first. Homebrew runs the script without XDG_RUNTIME_DIR, and systemctl --user cannot
-  # reach the user's manager without it. Where there is no timer, there is nothing to stop.
+  # systemd keeps running a loaded unit whose files are gone. Homebrew runs the script without
+  # XDG_RUNTIME_DIR, which systemctl --user needs to reach the user's manager.
   on_linux do
     zap script: {
           executable:   "/bin/sh",
           args:         [
             "-c",
-            "test ! -e ~/.config/systemd/user/pitboard-renew.timer || " \
-            "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now pitboard-renew.timer",
+            "for unit in pitboard-renew.timer pitboard-watch.service; do " \
+            "test ! -e ~/.config/systemd/user/$unit || " \
+            "XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user disable --now $unit; done",
           ],
           must_succeed: false,
         },
         trash:  [
+          "~/.config/systemd/user/default.target.wants/pitboard-watch.service",
           "~/.config/systemd/user/pitboard-renew.service",
           "~/.config/systemd/user/pitboard-renew.timer",
+          "~/.config/systemd/user/pitboard-watch.service",
           "~/.config/systemd/user/timers.target.wants/pitboard-renew.timer",
         ]
   end
 
   url "https://github.com/datlechin/pitboard/releases/download/v#{version}/pitboard-v#{version}-#{arch}-#{os}.tar.gz"
   name "Pitboard"
-  desc "Switch Claude Code, Codex and Claude Desktop between your own accounts"
+  desc "Command-line account switcher for AI coding tools"
   homepage "https://usepitboard.com/"
 
   # The app carries this same command line and links it to the same place. Homebrew 7.0.6 has

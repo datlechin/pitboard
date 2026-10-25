@@ -9,7 +9,7 @@ namespace Pitboard.Windows;
 public static class Unregistering
 {
     public static void Run(
-        Build build, string exe, IRunKey run, IRenewalTask renewal, IAppNotifications notifications, INotificationRegistration registration)
+        Build build, string exe, IRunKey run, IScheduledTasks tasks, IAppNotifications notifications, INotificationRegistration registration)
     {
         if (build is Build.Debug)
         {
@@ -29,7 +29,7 @@ public static class Unregistering
 
         try
         {
-            renewal.Remove(exe);
+            tasks.Remove(exe);
         }
         catch (Exception error) when (error is UniffiException or TypeInitializationException or DllNotFoundException)
         {

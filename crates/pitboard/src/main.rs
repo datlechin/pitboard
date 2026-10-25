@@ -1103,7 +1103,7 @@ fn uninstall_question(pitboard: &Pitboard) -> String {
     )
 }
 
-fn uninstall(pitboard: &Pitboard) -> Report {
+fn uninstall(pitboard: &Pitboard, os: pitboard_core::host::Os) -> Report {
     let folder = pitboard.shown(&pitboard.directory());
     changed("uninstall", pitboard.uninstall(), |removed| {
         let mut human = format!(
@@ -1137,8 +1137,9 @@ fn uninstall(pitboard: &Pitboard) -> Report {
             ));
         } else if removed.warming_up {
             human.push_str(&format!(
-                "Another Pitboard is warming up an account, in the app or `pitboard watch`, so \
-                 {folder} was kept; run `pitboard uninstall` again once it is done.\n"
+                "Another Pitboard is warming up an account, in {}, so {folder} was kept; run \
+                 `pitboard uninstall` again once it is done.\n",
+                warm::warmers(os)
             ));
         } else if !removed.home_kept_by.is_empty() {
             let held: Vec<String> = removed
@@ -1414,7 +1415,7 @@ fn main() -> ExitCode {
         Command::Uninstall { yes } => {
             let question = uninstall_question(&pitboard);
             match Confirm::of(&pitboard, yes, cli.json, terminal()).ask("uninstall", &question) {
-                Ok(true) => uninstall(&pitboard),
+                Ok(true) => uninstall(&pitboard, pitboard_core::host::OS),
                 Ok(false) => return ExitCode::SUCCESS,
                 Err(refused) => Report::failed(Some("uninstall"), refused),
             }
@@ -1790,7 +1791,7 @@ mod tests {
             )),
             "{asked}"
         );
-        let said = uninstall(&pitboard).human;
+        let said = uninstall(&pitboard, pitboard_core::host::OS).human;
         assert!(
             said.ends_with(&format!(
                 "{named} is gone. Remove Pitboard itself the way you installed it.\n"
@@ -1803,6 +1804,7 @@ mod tests {
     // A warm-up's tool runs in a home inside Pitboard's directory while it holds `warm.lock`.
     #[test]
     fn uninstall_keeps_the_folder_a_warm_up_runs_in_and_says_so() {
+        use pitboard_core::host::Os;
         use pitboard_core::testing::MemoryHost;
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let home = scratch.path().join("home");
@@ -1815,19 +1817,25 @@ mod tests {
         );
         let running = std::fs::File::create(folder.join("warm.lock")).expect("a lock");
         running.lock().expect("held");
-        let said = uninstall(&pitboard);
-        assert!(
-            said.human.ends_with(&format!(
-                "Another Pitboard is warming up an account, in the app or `pitboard watch`, so \
-                 {} was kept; run `pitboard uninstall` again once it is done.\n",
-                pitboard.shown(&folder)
-            )),
-            "{}",
-            said.human
-        );
+        for (os, warmers) in [
+            (Os::MacOs, "in the app or `pitboard watch`"),
+            (Os::Windows, "in the app or `pitboard watch`"),
+            (Os::Linux, "in `pitboard watch`"),
+        ] {
+            let said = uninstall(&pitboard, os);
+            assert!(
+                said.human.ends_with(&format!(
+                    "Another Pitboard is warming up an account, {warmers}, so {} was kept; run \
+                     `pitboard uninstall` again once it is done.\n",
+                    pitboard.shown(&folder)
+                )),
+                "{os:?}: {}",
+                said.human
+            );
+        }
         assert!(folder.join("warm.lock").exists());
         drop(running);
-        let said = uninstall(&pitboard);
+        let said = uninstall(&pitboard, pitboard_core::host::OS);
         assert!(said.human.contains("is gone"), "{}", said.human);
         assert!(!folder.exists());
     }

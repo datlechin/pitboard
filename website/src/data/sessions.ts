@@ -107,8 +107,10 @@ export const sessions = {
     title: "pitboard warm",
     command: "pitboard warm",
     output: [
-      line(
-        `Pitboard warms up these accounts from ${warmUp.from} to ${warmUp.to}, while the app or \`pitboard watch\` runs.`,
+      // warm.rs `warmers`: Linux has no app.
+      ...said(
+        (p) =>
+          `Pitboard warms up these accounts from ${warmUp.from} to ${warmUp.to}, while ${p === "linux" ? "" : "the app or "}\`pitboard watch\` runs.`,
       ),
       line(`  <b>personal</b>  on   warms up again at ${clock.warmsAgain}`),
       line(`  <b>work    </b>  <span class="dim">off</span>`),

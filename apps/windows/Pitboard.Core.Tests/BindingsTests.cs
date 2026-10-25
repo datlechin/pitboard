@@ -75,7 +75,7 @@ public sealed class BindingsTests
 
     // The core's own tests take a task away on a scheduler in memory; this one reaches none.
     [TestMethod]
-    public void APathThatIsNoAppTakesNoRenewalTaskAway()
+    public void APathThatIsNoAppTakesNoTaskAway()
     {
         var home = Path.Combine(Path.GetTempPath(), $"pitboard-unschedule-{Guid.NewGuid():N}");
         var environment = new Dictionary<string, string>

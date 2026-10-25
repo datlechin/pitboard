@@ -22,6 +22,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `pitboard watch install` has the system's own service manager run `pitboard watch` from each
   sign-in on, and `pitboard watch status` and `pitboard watch uninstall` check and remove it.
 - `pitboard doctor` reports the watch service, and `pitboard uninstall` stops and removes it.
+- `brew uninstall --zap` on either cask stops and removes the watch service, as it does daily
+  renewal.
 - `pitboard watch --help` and `pitboard watch install` say that Anthropic's terms may cover
   automatic switching and warm-ups, and link to what they say.
 - The install script ends with the command to run next and, where your login shell is zsh and
@@ -201,6 +203,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where Claude Code renews it while they run.
 - The status line no longer waits for the disk after each response, which took it past half a
   second on a busy Windows disk.
+- `pitboard warm` and `pitboard uninstall` on Linux, which has no app, say only `pitboard watch`
+  warms up accounts, where they named the app too.
 
 ## [1.0.0-beta.5] - 2026-10-23
 

@@ -1165,6 +1165,14 @@ class FillTemplate(unittest.TestCase):
         self.assertEqual(pages, ["install/upgrade-from-0-3-0"])
         self.assertTrue((REPO / "docs" / f"{pages[0]}.mdx").is_file())
 
+    # A list of tools goes stale as Pitboard switches more of them.
+    def test_neither_cask_names_a_tool_in_its_description(self):
+        for cask in CASKS:
+            desc = re.search(r'^  desc "([^"]*)"$', cask.read_text(), re.M)[1]
+            for tool in ("Claude", "Codex", "ChatGPT"):
+                with self.subTest(cask=cask.name, tool=tool):
+                    self.assertNotIn(tool, desc)
+
     def test_the_install_script_fills_and_parses(self):
         out = self.dir / "install.sh"
         sums = self.write_sums(
@@ -1286,6 +1294,97 @@ class FillTemplate(unittest.TestCase):
         done = subprocess.run(["sh", str(FILL), str(CASKS[0])], capture_output=True, text=True)
         self.assertEqual(done.returncode, 2)
         self.assertIn("usage:", done.stderr)
+
+
+HOST = REPO / "crates" / "pitboard-core" / "src" / "host"
+UNITS = "~/.config/systemd/user"
+
+
+def constants(path, pattern):
+    return re.findall(rf'^const \w+: &str = "({pattern})";$', path.read_text(), re.M)
+
+
+def directive(name, stanza):
+    found = re.search(rf"\b{name}:\s*(\[[^\]]*\]|\"[^\"]*\")", stanza)
+    return re.findall(r'"([^"]*)"', found.group(1)) if found else []
+
+
+class CaskZap(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        launchd = HOST / "macos" / "launchd.rs"
+        cls.labels = constants(launchd, r"com\.datlechin\.pitboard\.[\w.]+")
+        logs = re.search(r'home\.join\("(Library/Logs/[^"]+)"\)', launchd.read_text()).group(1)
+        cls.logs = f"~/{logs}"
+        log = constants(launchd, r"[\w.]+\.log")[0]
+        cls.log = f"{cls.logs}/{log}"
+        cls.units = constants(HOST / "linux" / "systemd.rs", r"pitboard-[\w-]+\.(?:service|timer)")
+        cli = CASKS[0].read_text()
+        cls.zaps = {
+            "pitboard on macOS": re.search(r"^  on_macos do\n(.*?)^  end$", cli, re.M | re.S)[1],
+            "pitboard-app": re.search(r"^  zap (.*?)^end$", CASKS[1].read_text(), re.M | re.S)[1],
+        }
+        cls.linux = re.search(r"^  on_linux do\n(.*?)^  end$", cli, re.M | re.S)[1]
+
+    def test_the_core_names_the_jobs_this_reads(self):
+        self.assertEqual(
+            sorted(self.labels), ["com.datlechin.pitboard.renew", "com.datlechin.pitboard.watch"]
+        )
+        self.assertEqual(self.log, "~/Library/Logs/Pitboard/watch.log")
+        self.assertEqual(
+            sorted(self.units),
+            ["pitboard-renew.service", "pitboard-renew.timer", "pitboard-watch.service"],
+        )
+
+    def test_each_macos_zap_takes_away_every_launchd_job_and_the_log(self):
+        for cask, zap in self.zaps.items():
+            with self.subTest(cask=cask):
+                self.assertEqual(sorted(directive("launchctl", zap)), sorted(self.labels))
+                self.assertIn(self.log, directive("trash", zap))
+                self.assertEqual(directive("rmdir", zap), [self.logs])
+
+    def test_the_linux_zap_trashes_every_unit_and_its_link(self):
+        trash = directive("trash", self.linux)
+        for unit in self.units:
+            self.assertIn(f"{UNITS}/{unit}", trash)
+        self.assertIn(f"{UNITS}/timers.target.wants/pitboard-renew.timer", trash)
+        self.assertIn(f"{UNITS}/default.target.wants/pitboard-watch.service", trash)
+
+    # A stand-in answers for systemctl, so no test reaches this machine's own.
+    def test_the_linux_zap_stops_each_unit_systemd_starts_before_its_files_go(self):
+        script = re.search(r"\bargs:\s*\[(.*?)\]", self.linux, re.S)[1]
+        parts = re.findall(r'"((?:[^"\\]|\\.)*)"', script)
+        self.assertEqual(parts[0], "-c")
+        script = "".join(parts[1:])
+        work = Path(tempfile.mkdtemp(dir=WORK))
+        bin_dir = work / "bin"
+        bin_dir.mkdir()
+        asked = work / "asked"
+        (bin_dir / "systemctl").write_text(f'#!/bin/sh\necho "$*" >> "{asked}"\n')
+        (bin_dir / "systemctl").chmod(0o755)
+        for installed, expected in [
+            ([], []),
+            (
+                self.units,
+                ["--user disable --now pitboard-renew.timer", "--user disable --now pitboard-watch.service"],
+            ),
+        ]:
+            with self.subTest(installed=installed):
+                home = Path(tempfile.mkdtemp(dir=work))
+                folder = home / ".config" / "systemd" / "user"
+                folder.mkdir(parents=True)
+                for unit in installed:
+                    (folder / unit).write_text("")
+                asked.unlink(missing_ok=True)
+                done = subprocess.run(
+                    ["/bin/sh", "-c", script],
+                    env={"HOME": str(home), "PATH": f"{bin_dir}:/usr/bin:/bin"},
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(done.returncode, 0, done.stderr)
+                said = asked.read_text().splitlines() if asked.exists() else []
+                self.assertEqual(sorted(said), expected)
 
 
 if __name__ == "__main__":

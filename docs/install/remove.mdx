@@ -85,7 +85,7 @@ rm ~/.local/bin/pitboard ~/.local/share/man/man1/pitboard.1 \
 
 With `PITBOARD_INSTALL_DIR` set, `pitboard` is in that folder and the rest in the `share` folder beside it.
 
-- `--zap` on either cask also removes a daily renewal schedule that `pitboard uninstall` left.
+- `--zap` on either cask also removes a daily renewal schedule and a watch service that `pitboard uninstall` left.
 - `--zap` on `pitboard-app` also removes the app's files in `~/Library`.
 - Neither cask's `--zap` deletes `~/.pitboard`.
 
@@ -99,17 +99,18 @@ If you clicked **Install Command Line Tool** in **Settings** > **Advanced**, del
 sudo rm /usr/local/bin/pitboard
 ```
 
-On Windows, uninstalling the app removes `%LOCALAPPDATA%\Programs\Pitboard`, its Start shortcut, its `PATH` entry, its `pitboard://` links, its start at sign-in and `%LOCALAPPDATA%\Pitboard App`, where the account windows keep their sign-ins. It turns off daily renewal where the task runs the app's own `pitboard.exe`. It leaves the parked logins and the Pitboard directory, so run `pitboard uninstall` first.
+On Windows, uninstalling the app removes `%LOCALAPPDATA%\Programs\Pitboard`, its Start shortcut, its `PATH` entry, its `pitboard://` links, its start at sign-in and `%LOCALAPPDATA%\Pitboard App`, where the account windows keep their sign-ins. It turns off daily renewal and the watch service, each where its task runs the app's own `pitboard.exe`. It leaves the parked logins and the Pitboard directory, so run `pitboard uninstall` first.
 
 If you added the app's completions to your PowerShell profile, delete that line from the file `$PROFILE` names.
 
-A task that runs another copy, such as Scoop's, stays. From a terminal run as administrator, the uninstall leaves the app's own task too, since [Pitboard changes nothing as administrator](/troubleshooting/refused-changes#pitboard-changes-nothing-as-administrator).
+A task that runs another copy, such as Scoop's, stays. From a terminal run as administrator, the uninstall leaves the app's own tasks too, since [Pitboard changes nothing as administrator](/troubleshooting/refused-changes#pitboard-changes-nothing-as-administrator).
 
-A task left running a `pitboard.exe` you removed runs nothing each day. Remove it in PowerShell:
+A task left running a `pitboard.exe` you removed runs nothing. `Renew` is daily renewal's task and `Watch` the watch service's. Remove either in PowerShell:
 
 ```powershell
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 Unregister-ScheduledTask -TaskPath '\Pitboard\' -TaskName "Renew $sid" -Confirm:$false
+Unregister-ScheduledTask -TaskPath '\Pitboard\' -TaskName "Watch $sid" -Confirm:$false
 ```
 
 ## Remove files Pitboard made as root

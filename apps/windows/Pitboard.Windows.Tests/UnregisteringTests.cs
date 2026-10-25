@@ -16,14 +16,14 @@ public sealed class UnregisteringTests
     {
         var key = new StandInRunKey();
         key.Values["Pitboard"] = $"\"{Installed.ToUpperInvariant()}\" --sign-in";
-        var renewal = new StandInRenewalTask();
+        var tasks = new StandInScheduledTasks();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, key, renewal, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, key, tasks, notifications, registration);
 
         Assert.IsFalse(key.Values.ContainsKey("Pitboard"));
-        Assert.AreEqual($"remove for {Installed}", string.Join(", ", renewal.Asked));
+        Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
     }
@@ -34,7 +34,7 @@ public sealed class UnregisteringTests
         var key = new StandInRunKey();
         key.Values["Pitboard"] = @"""C:\Users\Dana Lee\AppData\Local\Programs\Other\Pitboard.exe"" --sign-in";
 
-        Unregistering.Run(Build.Release, Installed, key, new StandInRenewalTask(), new StandInNotifications(), new StandInRegistration(null));
+        Unregistering.Run(Build.Release, Installed, key, new StandInScheduledTasks(), new StandInNotifications(), new StandInRegistration(null));
 
         Assert.AreEqual(@"""C:\Users\Dana Lee\AppData\Local\Programs\Other\Pitboard.exe"" --sign-in", key.Values["Pitboard"]);
         CollectionAssert.DoesNotContain(key.Asked, "remove Pitboard");
@@ -44,27 +44,27 @@ public sealed class UnregisteringTests
     [TestMethod]
     public void NotificationsThatNeverRegisteredAreNotAsked()
     {
-        var renewal = new StandInRenewalTask();
+        var tasks = new StandInScheduledTasks();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(null);
 
-        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), renewal, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), tasks, notifications, registration);
 
-        Assert.AreEqual($"remove for {Installed}", string.Join(", ", renewal.Asked));
+        Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
         Assert.IsEmpty(notifications.Asked);
         Assert.IsEmpty(registration.Asked);
     }
 
     [TestMethod]
-    public void ACoreThatPanicsOverTheRenewalTaskStillLetsTheNotificationsGo()
+    public void ACoreThatPanicsOverTheTasksStillLetsTheNotificationsGo()
     {
-        var renewal = new StandInRenewalTask { Fails = new PanicException("Rust panic") };
+        var tasks = new StandInScheduledTasks { Fails = new PanicException("Rust panic") };
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), renewal, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), tasks, notifications, registration);
 
-        Assert.AreEqual($"remove for {Installed}", string.Join(", ", renewal.Asked));
+        Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
     }
@@ -77,7 +77,7 @@ public sealed class UnregisteringTests
         var notifications = new StandInNotifications { Fails = Marshal.GetExceptionForHR(unchecked((int)0x80004005)) };
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), new StandInRenewalTask(), notifications, registration);
+        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), new StandInScheduledTasks(), notifications, registration);
 
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
@@ -87,13 +87,13 @@ public sealed class UnregisteringTests
     public void ARunKeyItCannotReadStillLetsTheNotificationsGo()
     {
         var key = new StandInRunKey { ReadRefuses = new UnauthorizedAccessException("Access is denied.") };
-        var renewal = new StandInRenewalTask();
+        var tasks = new StandInScheduledTasks();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, key, renewal, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, key, tasks, notifications, registration);
 
-        Assert.AreEqual($"remove for {Installed}", string.Join(", ", renewal.Asked));
+        Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
     }
@@ -103,14 +103,14 @@ public sealed class UnregisteringTests
     {
         var key = new StandInRunKey();
         key.Values["Pitboard"] = $"\"{Installed}\" --sign-in";
-        var renewal = new StandInRenewalTask();
+        var tasks = new StandInScheduledTasks();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Debug, Installed, key, renewal, notifications, registration);
+        Unregistering.Run(Build.Debug, Installed, key, tasks, notifications, registration);
 
         Assert.IsEmpty(key.Asked);
-        Assert.IsEmpty(renewal.Asked);
+        Assert.IsEmpty(tasks.Asked);
         Assert.IsEmpty(notifications.Asked);
         Assert.IsEmpty(registration.Asked);
     }
@@ -146,7 +146,7 @@ public sealed class UnregisteringTests
     }
 
     // In place of the core, which would ask Task Scheduler: tests never touch it.
-    private sealed class StandInRenewalTask : IRenewalTask
+    private sealed class StandInScheduledTasks : IScheduledTasks
     {
         public List<string> Asked { get; } = [];
 
