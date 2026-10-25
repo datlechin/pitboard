@@ -234,23 +234,29 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         .filter(|_| account.signed_in)
         .or_else(|| stale.clone());
     let parked = account.parked.as_ref().filter(|_| !account.signed_in);
-    let renewable = parked.and_then(|p| p.refresh_expires_at);
-    let life = said::parked_life(renewable, seen.now)
-        .or_else(|| said::session_life(parked.and_then(|p| p.session_expires_at), seen.now))
-        .map(|life| words::typeset(&life));
-    // Without a refresh token's date, it is a Claude Desktop session's that has passed.
-    let expiring = life
-        .as_ref()
+    // Without a refresh token's date, a Claude Desktop session's, which may lapse sooner.
+    let (until, lapses) = match parked.map(|p| (p.refresh_expires_at, p.session_expires_at)) {
+        Some((Some(at), _)) => (Some(at), false),
+        Some((None, at)) => (at, true),
+        None => (None, false),
+    };
+    let life = until.map(|at| words::saved_until(&seen.date_and_time_of(at), lapses));
+    let expiring = until
         .filter(|_| account.standing == status::Standing::Expiring)
-        .map(|life| words::sign_in_hint(life, renewable.is_none()));
-    let parked_note = expiring.clone().or_else(|| life.clone());
+        .map(|at| words::sign_in_expires(at - seen.now, lapses));
+    let sign_in_standing = needs_sign_in.then(|| words::sign_in_standing(account.standing));
     let in_place_of_limits = in_place_of_limits(seen, account);
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
         .map(|limit| said::figure(limit.percent));
     let menu_title =
         words::named_in_menu(seen.os, &title, account.plan.as_deref(), figure.as_deref());
-    let spoken = words::row_spoken(&spoken_name, account.plan.as_deref(), in_use, needs_sign_in);
+    let spoken = words::row_spoken(
+        &spoken_name,
+        account.plan.as_deref(),
+        in_use,
+        sign_in_standing,
+    );
     let end = if switching {
         Some(RowEnd::Switching {
             spoken: words::SWITCHING.into(),
@@ -263,7 +269,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         action.clone().map(|action| RowEnd::Button { action })
     };
     let warm_note = warm_note(seen, account);
-    let lines = [&problem, &stale_note, &parked_note, &warm_note]
+    let lines = [&problem, &stale_note, &expiring, &warm_note]
         .into_iter()
         .flatten()
         .cloned()
@@ -273,7 +279,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let acting = |kind| actions.iter().find(|action| action.kind == kind).cloned();
     let note = |kind, text, action| AccountNote { kind, text, action };
     let problem_note = if needs_sign_in {
-        let why = (problem.clone()).unwrap_or_else(|| words::NEEDS_SIGNING_IN_AGAIN.into());
+        let why = (problem.clone()).unwrap_or_else(|| sign_in_standing.unwrap_or_default().into());
         Some(note(
             NoteKind::Problem,
             why,
@@ -292,7 +298,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         problem_note,
         unnamed.then(|| {
             let add = acting(ActionKind::Add);
-            note(NoteKind::Unfinished, words::NOT_NAMED_YET.into(), add)
+            note(NoteKind::Unfinished, words::NOT_ADDED_YET.into(), add)
         }),
         expiring.map(|life| note(NoteKind::Expiring, life, acting(ActionKind::SignInAgain))),
         stale.map(|why| note(NoteKind::Stale, why, None)),
@@ -308,11 +314,11 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         plan: account.plan.clone(),
         signed_in_until: parked.and_then(|p| p.refresh_expires_at.or(p.session_expires_at)),
         sign_in: if unnamed {
-            Some(words::NOT_NAMED_YET.into())
+            Some(words::NOT_ADDED_YET.into())
         } else if in_use && account.label.is_some() {
             Some(words::in_use(seen.os))
-        } else if needs_sign_in {
-            Some(words::NEEDS_SIGNING_IN_AGAIN.into())
+        } else if let Some(standing) = sign_in_standing {
+            Some(standing.into())
         } else {
             life
         },
@@ -434,7 +440,7 @@ fn actions(
             [
                 does(
                     ActionKind::Switch,
-                    words::use_account(Some(&label)),
+                    words::switch_account(Some(&label)),
                     Intent::SwitchTo {
                         qualified: qualified.clone(),
                     },
@@ -526,7 +532,7 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     }
     let standing = choice.standing.as_ref()?;
     let clock = |at| seen.clock(at);
-    Some(words::typeset(&said::capitalised(&said::warm_standing(
+    Some(words::typeset(&said::capitalised(&words::warm_standing(
         standing, &clock,
     ))))
 }
@@ -556,7 +562,7 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
         .filter(|_| account.label.is_some())?;
     Some(AccountAction {
         kind: ActionKind::Remove,
-        title: words::forget(true).into(),
+        title: words::remove_account(seen.os),
         intent: Some(Intent::Forget {
             qualified: qualified.clone(),
         }),
@@ -564,9 +570,9 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
         // The core refuses it.
         enabled: !account.signed_in,
         confirm: Some(Question {
-            title: words::forget_title(spoken_name),
+            title: words::remove_title(spoken_name),
             message: forget_message_on(seen.os, account, seen.accounts()),
-            confirm: words::forget(false).into(),
+            confirm: words::REMOVE.into(),
         }),
     })
 }
@@ -574,11 +580,11 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
 pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
     AccountMenuShown {
         offers: vec![
-            words::use_account(None),
+            words::switch_account(None),
             words::sign_in_again(os, true),
             words::rename(true).into(),
         ],
-        forget: words::forget(true).into(),
+        forget: words::remove_account(os),
     }
 }
 
@@ -599,8 +605,8 @@ fn action(
     }
     let Some(label) = account.label.as_deref() else {
         return account.signed_in.then(|| ItemAction {
-            title: words::name_account(None),
-            spoken: words::name_account(Some(spoken)),
+            title: words::add_account_signed_in(None),
+            spoken: words::add_account_signed_in(Some(spoken)),
             intent: Intent::Enrol {
                 provider: account.provider.clone(),
             },
@@ -613,8 +619,8 @@ fn action(
         && let Some(qualified) = &account.qualified
     {
         return Some(ItemAction {
-            title: words::use_account(None),
-            spoken: words::use_account(Some(spoken)),
+            title: words::switch_account(None),
+            spoken: words::switch_account(Some(spoken)),
             intent: Intent::SwitchTo {
                 qualified: qualified.clone(),
             },
@@ -655,10 +661,10 @@ fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
         );
     }
     if account.label.is_none() {
-        return Some(words::NOT_NAMED_YET.into());
+        return Some(words::NOT_ADDED_YET.into());
     }
     if needs_sign_in(account) {
-        return Some(words::NEEDS_SIGNING_IN_AGAIN.into());
+        return Some(words::sign_in_standing(account.standing).into());
     }
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
     if windows.is_empty() && account.stale == Some(Stale::NoUsage) {
@@ -1259,10 +1265,9 @@ mod tests {
         let rows = desktop_rows(vec![desktop_account("work", true), home]);
         assert_eq!(rows[0].summary, words::NO_USAGE_READ);
         assert_eq!(rows[1].summary, words::NO_USAGE_READ);
-        assert_eq!(
-            rows[1].lines,
-            [said::session_life(Some(NOW + 25 * 86_400 + 3_600), NOW).expect("a date")],
-            "no usage said once, in the menu's line"
+        assert!(
+            rows[1].lines.is_empty(),
+            "no usage said once, in the menu's line, and its life in the detail"
         );
         let lapsed = Account {
             parked: Some(crate::Parked {
@@ -1272,10 +1277,9 @@ mod tests {
             standing: status::Standing::Expiring,
             ..desktop_account("home", false)
         };
-        let life = said::session_life(Some(NOW - 1), NOW).expect("a date");
         assert_eq!(
             desktop_rows(vec![lapsed])[0].lines,
-            [words::sign_in_hint(&life, true)],
+            [words::sign_in_expires(-1, true)],
             "as `pitboard status` hints a sign-in for it"
         );
     }
@@ -1297,8 +1301,7 @@ mod tests {
             .parked_until(due)
             .standing(status::Standing::Expiring)
             .build());
-        let life = said::parked_life(Some(due), NOW).expect("a date");
-        assert_eq!(expiring.lines, [words::sign_in_hint(&life, false)]);
+        assert_eq!(expiring.lines, [words::sign_in_expires(2 * 86_400, false)]);
         assert!(!expiring.needs_sign_in);
         assert!(matches!(
             expiring.action.map(|action| action.intent),
@@ -1307,10 +1310,7 @@ mod tests {
 
         let lasting = NOW + 20 * 86_400;
         let ready = row(account(Some("work")).parked_until(lasting).build());
-        assert_eq!(
-            ready.lines,
-            [said::parked_life(Some(lasting), NOW).expect("a date")]
-        );
+        assert!(ready.lines.is_empty(), "nothing until three days are left");
     }
 
     fn menu_titles(os: Os, accounts: Vec<Account>) -> Vec<String> {

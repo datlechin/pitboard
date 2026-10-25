@@ -214,9 +214,9 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
 pub(crate) fn menu_accounts_note(seen: &Seen, footing: &Footing) -> Option<String> {
     match &seen.state.status {
         None if seen.problem().is_none() => Some(words::READING_ACCOUNTS.into()),
-        None => Some(words::NO_ACCOUNTS_TO_SHOW.into()),
+        None => Some(words::no_accounts_to_show(seen.os)),
         Some(status) if status.accounts.is_empty() && *footing != Footing::NoClaudeCode => {
-            Some(words::NO_ACCOUNTS_YET.into())
+            Some(words::no_accounts_yet(seen.os))
         }
         Some(_) => None,
     }

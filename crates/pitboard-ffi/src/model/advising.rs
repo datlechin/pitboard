@@ -12,7 +12,7 @@ use super::{
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::status::Standing;
 
 /// `work`, in use, its five-hour limit `percent` used until `resets`.
@@ -284,9 +284,13 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
         machine.posted,
         [RunOutNotice {
             id: "claude/work/session/-7200".into(),
-            title: words::ran_out("work", "5-hour"),
-            subtitle: None,
-            body: words::room_left("personal", Some(90)),
+            title: words::limit_notification(OS, "5-hour", None, true),
+            subtitle: Some("Claude Code".into()),
+            body: format!(
+                "{} {}",
+                words::has_used_share("work", "100%"),
+                words::other_used("personal", Some(90))
+            ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
                 title: words::SWITCH.into(),
@@ -295,8 +299,8 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
         }]
     );
     let notice = model.shown().notices.remove(0);
-    assert_eq!(notice.title, machine.posted[0].title);
-    assert_eq!(notice.lines, [machine.posted[0].body.clone()]);
+    assert_eq!(notice.title, words::ran_out("work", "5-hour"));
+    assert_eq!(notice.lines, [words::other_used("personal", Some(90))]);
 
     let mut both = Hand::new();
     let mut beside = Stub::reading(Ok(status(vec![
@@ -306,7 +310,10 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     ])));
     both.refresh(&mut beside);
     assert_eq!(beside.posted[0].subtitle.as_deref(), Some("Claude Code"));
-    assert_eq!(beside.posted[0].title, words::ran_out("work", "5-hour"));
+    assert_eq!(
+        beside.posted[0].title,
+        words::limit_notification(OS, "5-hour", None, true)
+    );
     assert_eq!(
         both.shown().notices[0].title,
         words::of_tool(Some("Claude Code"), &words::ran_out("work", "5-hour"))
@@ -651,9 +658,13 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
         machine.posted,
         [RunOutNotice {
             id: "claude/work/session/-7200".into(),
-            title: words::has_used("work", "96% of its 5-hour limit"),
-            subtitle: None,
-            body: words::room_left("personal", Some(90)),
+            title: words::limit_notification(OS, "5-hour", None, false),
+            subtitle: Some("Claude Code".into()),
+            body: format!(
+                "{} {}",
+                words::has_used_share("work", "96%"),
+                words::other_used("personal", Some(90))
+            ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
                 title: words::SWITCH.into(),
@@ -702,9 +713,16 @@ fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
     let notice = machine.posted.first().expect("posted");
     assert_eq!(
         notice.title,
-        words::has_used("work", "97% of its 5-hour limit")
+        words::limit_notification(OS, "5-hour", None, false)
     );
-    assert_eq!(notice.body, resets_in_65_minutes());
+    assert_eq!(
+        notice.body,
+        format!(
+            "{} {}",
+            words::has_used_share("work", "97%"),
+            resets_in_65_minutes()
+        )
+    );
     assert_eq!(notice.button, None);
 }
 
@@ -721,7 +739,14 @@ fn an_account_past_the_share_is_not_offered_at_the_share() {
     let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
-    assert_eq!(notice.body, resets_in_65_minutes());
+    assert_eq!(
+        notice.body,
+        format!(
+            "{} {}",
+            words::has_used_share("work", "96%"),
+            resets_in_65_minutes()
+        )
+    );
     assert_eq!(notice.button, None);
 }
 
@@ -768,7 +793,7 @@ fn switch_notifies_of_codex_alone() {
     assert_eq!(
         posted,
         [(
-            words::has_used("job", "97% of its 5-hour limit").as_str(),
+            words::limit_notification(OS, "5-hour", None, false).as_str(),
             Some("Codex")
         )]
     );
@@ -798,7 +823,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         words::at_limit_choice(Os::Windows, AtLimit::Notify)
     );
     assert_eq!(shown.at_limit.title, words::BEFORE_RUNNING_OUT);
-    assert_eq!(shown.warm.title, words::WARM_UP_LIMITS);
+    assert_eq!(shown.warm.title, words::warm_up(OS));
     // The field beside the heading shows the share, and the choice is named with it.
     assert_eq!(shown.at_limit.heading, words::AT_LIMIT);
     assert_eq!(shown.at_limit.at_label, words::at_limit_label(95));

@@ -119,7 +119,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                         confirm: None,
                     },
                     NoticeAction {
-                        title: words::put_back(seen.os, &put_back),
+                        title: words::switch_back_to(seen.os, &put_back),
                         ..switch_action(seen, &awaiting.put_back, &put_back)
                     },
                 ],
@@ -195,7 +195,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
                 moving.push((name, seen.program_of(tool)));
             }
         }
-        let mut lines = vec![reason, words::GIVING_UP_KEEPS_LOGINS.into()];
+        let mut lines = vec![reason, words::CANCELLING_KEEPS_SIGN_INS.into()];
         lines.extend(
             moving
                 .iter()
@@ -207,15 +207,15 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             words::SWITCH_WAITING.into(),
             lines,
             vec![NoticeAction {
-                title: words::give_up(seen.os, true),
+                title: words::cancel_switch(seen.os, true),
                 intent: Intent::AbandonStuckSwitch,
                 dismisses: false,
                 switches: false,
                 enabled: true,
                 confirm: Some(Question {
-                    title: words::GIVE_UP_ON_SWITCH.into(),
-                    message: words::give_up_stuck(&moving),
-                    confirm: words::give_up(seen.os, false),
+                    title: words::CANCEL_SWITCH_QUESTION.into(),
+                    message: words::cancel_stuck(&moving),
+                    confirm: words::cancel_switch(seen.os, false),
                 }),
             }],
         ));
@@ -244,7 +244,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             format!("advice/{}", advice.key_of()),
             Severity::Warning,
             words::of_tool(advice.tool.as_deref(), &words::ran_out(&advice.ran, &limit)),
-            vec![words::room_left(&advice.instead, advice.left)],
+            vec![words::other_used(&advice.instead, advice.left)],
             vec![switch_action(seen, &advice.switch_to, &advice.instead)],
         ));
     }
@@ -285,7 +285,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         said.push(notice(
             id,
             Severity::Warning,
-            words::warning_heading(seen.os, warning).into(),
+            words::warning_heading(warning).into(),
             vec![warning.message.clone()],
             warning_actions(seen, warning),
         ));
@@ -294,8 +294,8 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         said.push(notice(
             "abandoned".into(),
             Severity::Info,
-            words::GAVE_UP_ON_SWITCH.into(),
-            vec![words::gave_up(
+            words::SWITCH_CANCELLED.into(),
+            vec![words::cancelled(
                 &abandoned.from,
                 &abandoned.to,
                 abandoned.logins_kept,
@@ -307,7 +307,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         said.push(notice(
             "moves_given_up".into(),
             Severity::Info,
-            words::GAVE_UP_ON_MOVE.into(),
+            words::MOVE_CANCELLED.into(),
             state.moves_given_up().to_vec(),
             vec![dismiss(Intent::DismissAbandoned)],
         ));
@@ -316,8 +316,8 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         said.push(notice(
             "stowed".into(),
             Severity::Info,
-            words::STOWED.into(),
-            said::stowed_lines(seen.os, stowed)
+            words::CLEANED_UP.into(),
+            words::cleaned_up_lines(seen.os, stowed)
                 .iter()
                 .map(|line| words::typeset(line))
                 .collect(),
@@ -352,7 +352,7 @@ fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
         "config_names_another" => update_config_action(seen),
         "fallback_login" if warning.held != Some(Held::Unreadable) => {
             vec![NoticeAction {
-                title: words::put_away(seen.os, true),
+                title: words::clean_up(seen.os, true),
                 intent: Intent::PresentSheet { sheet: Sheet::Stow },
                 dismisses: false,
                 switches: false,
@@ -411,15 +411,15 @@ fn in_app_actions(seen: &Seen, provider: &str, code: &str) -> Vec<NoticeAction> 
     );
     if code == "move_waiting" && stopped {
         actions.push(NoticeAction {
-            title: words::give_up(seen.os, true),
+            title: words::cancel_switch(seen.os, true),
             intent: Intent::AbandonStuckSwitch,
             dismisses: false,
             switches: false,
             enabled: true,
             confirm: Some(Question {
-                title: words::GIVE_UP_ON_MOVE.into(),
-                message: words::give_up_on_move(app),
-                confirm: words::give_up(seen.os, false),
+                title: words::CANCEL_MOVE_QUESTION.into(),
+                message: words::cancel_move(app),
+                confirm: words::cancel_switch(seen.os, false),
             }),
         });
     }
@@ -465,7 +465,7 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         .collect();
     lines.extend(warned.iter().map(|warning| warning.message.clone()));
     let title = if last.said.is_some() {
-        words::has_a_new_login(tool.as_deref(), &label)
+        words::signed_in_again(tool.as_deref(), &label)
     } else {
         words::switched_to(tool.as_deref(), &label)
     };
@@ -556,11 +556,20 @@ impl Clicked {
     }
 }
 
-fn posted(id: String, title: String, body: String, clicked: &Clicked) -> RunOutNotice {
+// Under the tool it is about, as each system shows a notification's subtitle.
+fn posted(
+    id: String,
+    title: String,
+    tool: Option<&str>,
+    body: String,
+    clicked: &Clicked,
+) -> RunOutNotice {
     RunOutNotice {
         id,
         title,
-        subtitle: None,
+        subtitle: tool
+            .and_then(ProviderId::parse)
+            .map(|tool| tool.name().into()),
         body,
         clicked: clicked.argument(),
         button: None,
@@ -595,29 +604,30 @@ pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
     ]
 }
 
-// Worded as the window's notice of a run-out is, past 100%. Its id names the account, the limit
-// and the reset, so one limit is one notification however far it goes.
+// Its id names the account, the limit and the reset: one notification for each limit.
 pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     let limit = crate::model::advice::window(&heads_up.window);
-    let title = if limit.used_up(now) {
-        words::ran_out(&heads_up.ran, &said::limit_name(&limit))
-    } else {
-        words::has_used(&heads_up.ran, &said::share_of_limit(&limit))
-    };
-    let body = match (&heads_up.instead, limit.resets_at) {
-        (Some((instead, left, _)), _) => words::room_left(instead, *left),
+    let title = words::limit_notification(
+        OS,
+        &said::limit_name(&limit),
+        heads_up.window.scope.as_deref(),
+        limit.used_up(now),
+    );
+    let then = match (&heads_up.instead, limit.resets_at) {
+        (Some((instead, left, _)), _) => words::other_used(instead, *left),
         (None, Some(at)) => words::sentence(&said::resets(at, now)),
         (None, None) => String::new(),
     };
+    let used = words::has_used_share(&heads_up.ran, &said::figure(heads_up.window.percent));
     RunOutNotice {
-        subtitle: heads_up.tool.clone(),
         button: heads_up.instead.as_ref().and_then(|(_, _, switch_to)| {
             button(words::SWITCH.into(), &Clicked::Switch(switch_to.clone()))
         }),
         ..posted(
             format!("{}-{}", heads_up.key_of(), limit.resets_at.unwrap_or(0)),
             title,
-            body,
+            Some(&heads_up.provider),
+            format!("{used} {then}").trim_end().to_owned(),
             &Clicked::Accounts,
         )
     }
@@ -639,7 +649,8 @@ pub(crate) fn auto_switched_notice(
         button: button(words::switch_back(OS), &back),
         ..posted(
             format!("auto/{from}/{to}/{at}"),
-            words::switched_to(Some(ProviderId::Claude.name()), to),
+            words::switched_to(None, &Key::parse(to).label),
+            Some(ProviderId::Claude.code()),
             words::used_then(from, used, &words::follows(adoption)),
             &Clicked::Accounts,
         )
@@ -651,7 +662,8 @@ pub(crate) fn auto_switched_notice(
 pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
-        words::NOT_SWITCHED.into(),
+        words::not_switched(OS),
+        Some(ProviderId::Claude.code()),
         words::used_then(from, used, &words::sentence(why)),
         &Clicked::Limits,
     )
@@ -662,16 +674,14 @@ pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) 
 pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
-        words::NOT_SWITCHING.into(),
+        words::not_switching(OS),
+        Some(ProviderId::Claude.code()),
         words::sentence(why),
         &Clicked::Limits,
     )
 }
 
-/// A warning that stands until somebody acts, posted once while it does, since nobody may
-/// have the window open: a login replaced outside Pitboard, with a button that signs in to
-/// `again`, the account it names, where that is enrolled. Titled and identified as its notice
-/// in the window is, and said in the core's words.
+// A sign-in replaced outside Pitboard, posted once, with Sign In Again for `again` where added.
 pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutNotice {
     RunOutNotice {
         button: again.and_then(|qualified| {
@@ -682,7 +692,8 @@ pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutN
         }),
         ..posted(
             warning_id(warning),
-            words::warning_heading(OS, warning).into(),
+            words::sign_in_replaced(OS),
+            warning.provider.as_deref(),
             warning.message.clone(),
             &Clicked::Accounts,
         )
@@ -690,10 +701,9 @@ pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutN
 }
 
 // Titled as its row is marked.
-pub(crate) fn unusable_notice(account: &Account, tool: Option<String>) -> RunOutNotice {
+pub(crate) fn unusable_notice(account: &Account) -> RunOutNotice {
     let label = account.label.as_deref().unwrap_or_default();
     RunOutNotice {
-        subtitle: tool,
         button: account.qualified.as_ref().and_then(|qualified| {
             button(
                 words::sign_in_again(OS, false),
@@ -702,8 +712,9 @@ pub(crate) fn unusable_notice(account: &Account, tool: Option<String>) -> RunOut
         }),
         ..posted(
             format!("{UNUSABLE}{}", account.id),
-            words::needs_signing_in(label),
-            words::UNUSABLE_LOGIN.into(),
+            words::sign_in_title(OS, account.standing),
+            Some(&account.provider),
+            words::sign_in_to_keep(label),
             &Clicked::Accounts,
         )
     }
@@ -713,7 +724,8 @@ pub(crate) fn unusable_notice(account: &Account, tool: Option<String>) -> RunOut
 pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
     posted(
         format!("auto-refused/{code}"),
-        words::COULD_NOT_SWITCH_ITSELF.into(),
+        words::could_not_switch_itself(OS),
+        Some(ProviderId::Claude.code()),
         message.into(),
         &Clicked::Limits,
     )
@@ -723,7 +735,8 @@ pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
 pub(crate) fn warm_failed_notice(told_apart: &str, message: &str) -> RunOutNotice {
     posted(
         format!("warm-failed/{told_apart}"),
-        words::COULD_NOT_WARM_ITSELF.into(),
+        words::could_not_warm_itself(OS),
+        Some(ProviderId::Claude.code()),
         message.into(),
         &Clicked::Limits,
     )
@@ -769,7 +782,7 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             title: if one {
                 first.title.clone()
             } else {
-                words::things_to_look_at(others.len())
+                words::issues(seen.os, others.len())
             },
             subtitle: Some(if one {
                 words::SHOW_IN_PITBOARD.into()
@@ -787,7 +800,7 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
     });
     MenuNotices {
         install: (*footing == Footing::NoClaudeCode).then(|| MenuEntry {
-            title: words::CLAUDE_CODE_MISSING.into(),
+            title: words::claude_code_not_installed(seen.os),
             subtitle: Some(words::LEARN_TO_INSTALL.into()),
             help: None,
             severity: None,
@@ -939,7 +952,7 @@ mod tests {
                     }
                 ),
                 (
-                    words::put_back(Os::MacOs, "work").as_str(),
+                    words::switch_back_to(Os::MacOs, "work").as_str(),
                     &Intent::SwitchTo {
                         qualified: "desktop/work".into()
                     }
@@ -1012,7 +1025,7 @@ mod tests {
                 .expect("the warning's notice");
             assert_eq!(
                 notice.title,
-                words::warning_heading(Os::MacOs, &desktop_warning("in_use_unconfirmed", "")),
+                words::warning_heading(&desktop_warning("in_use_unconfirmed", "")),
                 "{code}"
             );
             assert_eq!(
@@ -1038,13 +1051,10 @@ mod tests {
         ));
         assert_eq!(
             shown.notices[0].title,
-            words::warning_heading(
-                Os::MacOs,
-                &Warning {
-                    provider: None,
-                    ..config
-                }
-            ),
+            words::warning_heading(&Warning {
+                provider: None,
+                ..config
+            }),
         );
         assert_eq!(
             shown.notices[0].actions[0].title,
@@ -1090,7 +1100,7 @@ mod tests {
             stuck.lines,
             [
                 words::switch_waits_for("Anthropic"),
-                words::GIVING_UP_KEEPS_LOGINS.into(),
+                words::CANCELLING_KEEPS_SIGN_INS.into(),
                 words::move_waits_too("Claude Desktop", "Claude"),
             ]
         );
@@ -1099,7 +1109,7 @@ mod tests {
                 .confirm
                 .as_ref()
                 .map(|asked| asked.message.clone()),
-            Some(words::give_up_stuck(&[("Claude Desktop".into(), "Claude")]))
+            Some(words::cancel_stuck(&[("Claude Desktop".into(), "Claude")]))
         );
         let alone = stuck_beside(Vec::new());
         assert_eq!(alone.lines.len(), 2);
@@ -1108,7 +1118,7 @@ mod tests {
                 .confirm
                 .as_ref()
                 .map(|asked| asked.message.clone()),
-            Some(words::give_up_stuck(&[]))
+            Some(words::cancel_stuck(&[]))
         );
     }
 
@@ -1124,7 +1134,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 words::finish(Os::MacOs, false),
-                words::put_back(Os::MacOs, "work")
+                words::switch_back_to(Os::MacOs, "work")
             ]
         );
         assert!(

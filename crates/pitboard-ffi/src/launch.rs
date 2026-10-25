@@ -390,7 +390,8 @@ fn account(row: status::Row, now: i64) -> Account {
         standing: row.standing(now),
         stale: row.stale,
         // In the row's own tool's words: a Codex row is not about Anthropic.
-        stale_explanation: row.explanation().map(|said| typeset(&said)),
+        stale_explanation: crate::present::words::stale_explanation(&row)
+            .map(|said| typeset(&said)),
         plan: row.plan,
         read_at: row.read_at,
         parked: row.parked.map(|p| Parked {
@@ -522,7 +523,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
         },
         Auto::NotWatching { why } => AutoSwitched::NotWatching {
             key: why.told_apart(),
-            why: words::not_watching(&why),
+            why: crate::present::words::not_watching(&why),
             until: match why {
                 Blind::Unidentified { until, .. } => Some(until),
                 _ => None,

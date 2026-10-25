@@ -52,7 +52,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stepper.
 - The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
 - The macOS app has an **Account** menu with what an account's shortcut menu offers, for the
-  account selected, dimming what cannot be chosen now, and **Forget** on Command-Delete.
+  account selected, dimming what cannot be chosen now, and **Remove Account** on Command-Delete.
 - The macOS app's **Edit** > **Copy** copies the email address of the account selected.
 - The Windows app copies an account's email address with Ctrl+C on its row, and its shortcut
   menu shows F2, Del and Ctrl+C beside the items they do.
@@ -119,8 +119,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it shares with the command line included, and without a terminal's backticks.
 - `pitboard doctor` says why Pitboard leaves a Codex keychain store alone, and that Claude Code's
   config names somebody no store holds, in the words a refused switch uses.
-- An account's row in the app says to sign in again where its parked login is due to expire, or
-  its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
+- An account's row in the app says when its saved sign-in expires once three days or fewer are
+  left, or its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
 - The app's notice that Pitboard set a login or its keys aside offers **Show Diagnostics**, which
   opens the checks that list it, where it said **This Mac lists it**.
 - The app names a limit **5-hour** or **Weekly** beside its bar and says when it resets as a
@@ -128,11 +128,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   2h 05m**.
 - The app's menu says an account's limits as **5-hour 42% used, Weekly 12%**, and only **5-hour
   limit reached, resets 6:46 PM** once one is reached.
+- The app says **Switch**, **Remove Account**, **Cancel Switch** and **Clean Up**, where it said
+  **Use**, **Forget**, **Give Up** and **Put Away**, and calls a parked login a saved sign-in.
+- The app's **Settings** say **Keep Saved Sign-Ins Fresh** and **Warm-Up**, where they said
+  **Renew parked logins daily** and **Warm up limits**.
+- The app's notifications are titled in the system's case, such as **5-Hour Limit Almost
+  Reached** on macOS, under the name of the tool they are about.
 
 ### Removed
 
 - The app no longer shows a tip to name the account a tool is signed in to: its row offers
-  **Name…**.
+  **Add**.
 - The app no longer marks a limit's pace or says when a limit runs out at it: `pitboard status`
   still shows both.
 - The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**

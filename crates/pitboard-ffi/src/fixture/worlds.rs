@@ -69,7 +69,7 @@ pub(crate) enum World {
     /// `OneTool` with a switch to personal interrupted, which nothing can finish: Claude
     /// Code's keychain locked as it was written, and Claude Code has since renewed its login
     /// and its session has expired, so neither the record nor Anthropic says whose it is. The
-    /// read that asks Anthropic says so, `recovery_undetermined`, so the app offers Give Up…
+    /// read that asks Anthropic says so, `recovery_undetermined`, so the app offers Cancel Switch…
     /// as it starts.
     Stuck,
     /// `TwoTools`, with ChatGPT open and running Codex's login.

@@ -915,7 +915,7 @@ public sealed class ModelTests
         [
             new(
                 Id: $"claude/personal/session/-{resetsAt}",
-                Title: "personal has no 5-hour limit left", Subtitle: null, Body: "work has 58% of its own left.",
+                Title: LimitReached, Subtitle: "Claude Code", Body: "personal has used 100%. work has used 42%.",
                 Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
@@ -936,10 +936,10 @@ public sealed class ModelTests
 
         var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
         var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
-        Assert.AreEqual("A login was replaced outside Pitboard", notice.Title);
+        Assert.AreEqual(OperatingSystem.IsWindows() ? "Sign-in replaced" : "Sign-In Replaced", notice.Title);
         Assert.AreEqual(
-            "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has personal’s login stored, " +
-            "and Pitboard holds no login for work.",
+            "work’s sign-in was replaced outside Pitboard: Claude Code is now signed in to personal, " +
+            "and Pitboard has no sign-in saved for work.",
             notice.Body);
         Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
     }
@@ -963,9 +963,12 @@ public sealed class ModelTests
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
         var line = checkedIn.Machine.Checks.Lines[^1];
         Assert.AreEqual(Level.Warn, line.Level);
-        Assert.StartsWith("“personal has no 5-hour limit left” not posted at ", line.Detail);
+        Assert.StartsWith($"“{LimitReached}” not posted at ", line.Detail);
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);
     }
+
+    // A notification's title, in the case each system gives one.
+    private static string LimitReached => OperatingSystem.IsWindows() ? "5-hour limit reached" : "5-Hour Limit Reached";
 
     private static bool LibraryIsOpened =>
         typeof(ModelTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()

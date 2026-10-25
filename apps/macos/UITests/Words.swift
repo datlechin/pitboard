@@ -12,9 +12,9 @@ enum Words {
     static let accountMenu = "Account"
     static let fileMenu = "File"
     static let removeWebsiteData = "Remove Website Data…"
-    static let claudeCodeMissing = "Claude Code isn’t installed"
+    static let claudeCodeMissing = "Claude Code Isn’t Installed"
     static let couldNotReadUsage = "Couldn’t read usage"
-    static let switchWaiting = "An interrupted switch is waiting"
+    static let switchWaiting = "A switch didn’t finish"
 
     static func openSite(_ site: String) -> String { "Open \(site)" }
 
@@ -25,9 +25,9 @@ enum Words {
     static func inMenu(_ label: String, plan: String) -> String { "\(label) · \(plan)" }
 
     // An account's own menu and the Account menu.
-    static func use(_ label: String) -> String { "Use \(label)" }
+    static func use(_ label: String) -> String { "Switch to \(label)" }
     static let rename = "Rename…"
-    static let forget = "Forget…"
+    static let forget = "Remove Account…"
     static let warmUpNow = "Warm Up Now"
 
     // The Settings window's panes, and what a pop-up there offers.

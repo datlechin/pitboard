@@ -282,23 +282,25 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(titles("Go none"), ["Back", "Forward"])
         XCTAssertEqual(dimmed("Go none"), ["Back", "Forward"])
         XCTAssertEqual(titles("Help none"), ["Pitboard Help"])
-        XCTAssertEqual(titles("Account none"), ["Use", "Sign In Again…", "Rename…", "Forget…"])
+        XCTAssertEqual(
+            titles("Account none"), ["Switch", "Sign In Again…", "Rename…", "Remove Account…"])
         XCTAssertEqual(dimmed("Account none"), titles("Account none"))
         XCTAssertEqual(
             titles("Account personal"),
             [
-                "Use personal", "Sign In Again…", "Rename…", "Warm Up Now", "Open claude.ai",
-                "Forget…",
+                "Switch to personal", "Sign In Again…", "Rename…", "Warm Up Now",
+                "Open claude.ai", "Remove Account…",
             ])
         XCTAssertEqual(dimmed("Account personal"), ["Warm Up Now"])
         XCTAssertEqual(
             titles("Account work"),
             [
-                "Use work", "Sign In Again…", "Rename…", "Warm Up Now", "Open claude.ai",
-                "Forget…",
+                "Switch to work", "Sign In Again…", "Rename…", "Warm Up Now", "Open claude.ai",
+                "Remove Account…",
             ]
         )
-        XCTAssertEqual(dimmed("Account work"), ["Use work", "Warm Up Now", "Forget…"])
+        XCTAssertEqual(
+            dimmed("Account work"), ["Switch to work", "Warm Up Now", "Remove Account…"])
         XCTAssertTrue(dimmed("Edit none").contains("Copy"))
         XCTAssertTrue(dimmed("Edit none").contains("Delete"))
         XCTAssertFalse(dimmed("Edit personal").contains("Copy"))
@@ -333,11 +335,11 @@ final class SiteFiguresTests: FixtureTestCase {
     func testReturnInTheForgetAlert() {
         let app = launch(.oneTool)
         let personal = askToForgetPersonal(app)
-        let forget = app.alert.buttons["Forget"]
+        let forget = app.alert.buttons["Remove"]
         let cancel = app.alert.buttons["Cancel"]
         let sheet = app.sheets["alert"].exists
         let dialogs = app.dialogs.count
-        let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Forget" : "Forget, Cancel"
+        let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Remove" : "Remove, Cancel"
         keep(app.alert, as: "site-forget-alert")
         keep(app.windows["main"], as: "site-forget-alert-window")
         let tree = tree(of: app.alert)
@@ -351,7 +353,7 @@ final class SiteFiguresTests: FixtureTestCase {
             as: "site-forget-alert-return")
         XCTAssertTrue(sheet)
         XCTAssertEqual(dialogs, 0)
-        XCTAssertEqual(order, "Cancel, Forget")
+        XCTAssertEqual(order, "Cancel, Remove")
         XCTAssertFalse(closed, "Return pressed a button")
         XCTAssertTrue(kept)
     }
@@ -365,7 +367,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let keptAfterPeriod = personal.exists
         if period {
             app.typeKey(.delete, modifierFlags: .command)
-            XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.alert.buttons["Remove"].waitForExistence(timeout: 5))
         }
         app.typeKey(.escape, modifierFlags: [])
         let escape = app.alert.waitForNonExistence(timeout: 3)
@@ -384,7 +386,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testWhereFocusGoesAfterForget() {
         let app = launch(.oneTool)
         let personal = askToForgetPersonal(app)
-        app.alert.buttons["Forget"].click()
+        app.alert.buttons["Remove"].click()
         XCTAssertTrue(personal.waitForNonExistence(timeout: 5))
         sleep(1)
         let window = app.windows["main"]
@@ -464,8 +466,8 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(
             shown.map(\.title),
             [
-                "Use personal", "Sign In Again…", "Rename…", "Open claude.ai",
-                "Copy Email Address", "Forget…",
+                "Switch to personal", "Sign In Again…", "Rename…", "Open claude.ai",
+                "Copy Email Address", "Remove Account…",
             ])
         XCTAssertEqual(copied, "dana@home.example")
         XCTAssertEqual(after, ["claude/work"])
@@ -478,7 +480,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let window = app.windows["main"]
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
-        let use = personal.buttons["Use personal"]
+        let use = personal.buttons["Switch to personal"]
         XCTAssertTrue(use.waitForExistence(timeout: 5))
         var switching = false
         let start = Date()
@@ -757,7 +759,7 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         personal.click()
         app.typeKey(.delete, modifierFlags: .command)
-        XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alert.buttons["Remove"].waitForExistence(timeout: 5))
         return personal
     }
 

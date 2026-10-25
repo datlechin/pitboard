@@ -80,7 +80,7 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
         .as_ref()
         .map_or(&[][..], |usage| &usage.windows);
     let said = match standing {
-        AccountStanding::NeedsSignIn => words::NEEDS_SIGNING_IN_AGAIN.into(),
+        AccountStanding::NeedsSignIn => words::sign_in_standing(account.standing).into(),
         AccountStanding::Unusable => words::CANNOT_READ_OR_SWITCH.into(),
         _ if windows.is_empty() && account.stale == Some(Stale::NoUsage) => {
             words::NO_USAGE_READ.into()

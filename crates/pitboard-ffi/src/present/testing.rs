@@ -373,6 +373,80 @@ impl LocalTime for Unreadable {
     }
 }
 
+// Every string in `shown`'s `{:?}`, but ids and codes: what a person may read of it.
+pub(crate) fn strings_of(shown: &impl std::fmt::Debug) -> Vec<String> {
+    let debugged = format!("{shown:?}");
+    let mut strings = Vec::new();
+    let mut chars = debugged.chars();
+    while chars.by_ref().any(|c| c == '"') {
+        let mut string = String::new();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => string.extend(chars.next()),
+                '"' => break,
+                c => string.push(c),
+            }
+        }
+        let code = !string.contains(' ')
+            && string.contains(['_', '/', ':'])
+            && !string.contains(char::is_uppercase);
+        if !code {
+            strings.push(string);
+        }
+    }
+    strings
+}
+
+// The core's words for how it works, which the apps leave to the command line and its docs.
+pub(crate) fn mechanism_words(text: &str) -> Vec<String> {
+    const WORDS: [&str; 22] = [
+        "park",
+        "parks",
+        "parked",
+        "parking",
+        "enrol",
+        "enrols",
+        "enrolled",
+        "enrolling",
+        "enrolment",
+        "enroll",
+        "record",
+        "records",
+        "recorded",
+        "recording",
+        "settle",
+        "settles",
+        "settled",
+        "settling",
+        "forget",
+        "forgets",
+        "forgotten",
+        "forgetting",
+    ];
+    const PUT: [&str; 3] = ["put", "puts", "putting"];
+    const GIVE: [&str; 5] = ["give", "gives", "gave", "given", "giving"];
+    let lower = text.to_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| !(c.is_alphanumeric() || c == '-'))
+        .filter(|word| !word.is_empty())
+        .collect();
+    let mut found: Vec<String> = (words.iter())
+        .filter(|word| WORDS.contains(word))
+        .map(|word| (*word).to_owned())
+        .collect();
+    for pair in words.windows(2) {
+        let phrase = match pair {
+            [verb, "away"] => PUT.contains(verb),
+            [verb, "up"] => GIVE.contains(verb),
+            _ => false,
+        };
+        if phrase {
+            found.push(pair.join(" "));
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

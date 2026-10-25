@@ -11,7 +11,7 @@ struct AdvancedSettings: View {
         Form {
             Section {
                 Toggle(
-                    "Renew parked logins daily",
+                    "Keep Saved Sign-Ins Fresh",
                     isOn: Binding(
                         get: { schedule.on }, set: { model.send(.setSchedule(on: $0)) })
                 )

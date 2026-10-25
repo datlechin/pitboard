@@ -140,7 +140,7 @@ public sealed partial class SiteFiguresTests
         Thread.Sleep(500);
         var clicked = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
         Press(VirtualKeyShort.DELETE);
-        launched.Find(found => found.ByName("Forget").And(found.ByControlType(ControlType.Button)), "the dialog's Forget");
+        launched.Find(found => found.ByName("Remove").And(found.ByControlType(ControlType.Button)), "the dialog's Remove");
         Thread.Sleep(500);
         var asked = Focused(launched);
         var askedId = FocusedId(launched);
@@ -164,7 +164,7 @@ public sealed partial class SiteFiguresTests
 
         Assert.AreEqual("account.claude/personal", clicked.Focused);
         Assert.AreEqual("claude/personal", Joined(clicked.Selected));
-        Assert.AreEqual("PrimaryButton", askedId, "Forget is not focused as the dialog opens");
+        Assert.AreEqual("PrimaryButton", askedId, "Remove is not focused as the dialog opens");
         Assert.IsTrue(forgotten);
         Assert.AreEqual("AppTitleBar", after.Focused);
         Assert.AreEqual("", Joined(after.Selected));
@@ -209,8 +209,8 @@ public sealed partial class SiteFiguresTests
 
         Assert.AreEqual("claude/work", Joined(clicked));
         Assert.AreEqual("claude/work", Joined(rightClicked));
-        Assert.AreEqual("Use personal", focused);
-        Assert.AreEqual("Use personal | Sign in again… | Rename… F2 | Open claude.ai | Copy email address Ctrl+C | Forget… Del", Joined(keys));
+        Assert.AreEqual("Switch to personal", focused);
+        Assert.AreEqual("Switch to personal | Sign in again… | Rename… F2 | Open claude.ai | Copy email address Ctrl+C | Remove account… Del", Joined(keys));
         Assert.AreEqual("dana@home.example", copied);
         Assert.AreEqual("claude/work", Joined(after));
     }
@@ -220,7 +220,7 @@ public sealed partial class SiteFiguresTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
-        var use = Launched.Within(launched.Row("claude/personal"), found => found.ByName("Use personal"), "Use personal").AsButton();
+        var use = Launched.Within(launched.Row("claude/personal"), found => found.ByName("Switch to personal"), "Switch to personal").AsButton();
 
         var switching = false;
         var watch = Stopwatch.StartNew();

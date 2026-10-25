@@ -985,6 +985,14 @@ pub enum Error {
 }
 
 impl Error {
+    // A saved login no store could look at, and why: the app says it in words of its own.
+    pub fn unread_park(&self) -> Option<(&std::path::Path, &str)> {
+        match self {
+            Error::Store(crate::store::Error::ParkUnread { path, why, .. }) => Some((path, why)),
+            _ => None,
+        }
+    }
+
     /// A stable identifier a program can branch on. Adding one is safe; renaming one is not.
     pub fn code(&self) -> &'static str {
         use Error::*;

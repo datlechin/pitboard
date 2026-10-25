@@ -2289,7 +2289,7 @@ fn a_sign_in_again_of_the_account_in_use_is_said_as_a_new_login() {
     );
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::park("work")
+        words::CONTINUE
     );
     model.send(sign_in("desktop", Some("work")));
     model.run(&mut machine);
@@ -2301,7 +2301,7 @@ fn a_sign_in_again_of_the_account_in_use_is_said_as_a_new_login() {
         .into_iter()
         .find(|notice| notice.id == "switch/desktop")
         .expect("what the sign-in did");
-    assert_eq!(notice.title, words::has_a_new_login(None, "work"));
+    assert_eq!(notice.title, words::signed_in_again(None, "work"));
     assert_eq!(
         notice.lines,
         [words::signed_in_now("work", true, Some("Claude"))]
@@ -2344,7 +2344,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     assert_eq!(
         page.undo.map(|undo| (undo.title, undo.intent)),
         Some((
-            words::put_back(Os::MacOs, "work"),
+            words::switch_back_to(Os::MacOs, "work"),
             Intent::SwitchTo {
                 qualified: "desktop/work".into(),
             }
@@ -2395,7 +2395,7 @@ fn no_undo_is_offered_before_the_core_says_what_it_parked() {
     assert_eq!(page.undo, None);
     assert!(!page.escape_cancels);
     assert_eq!(page.cancel.title, words::CANCEL);
-    assert_eq!(page.waiting, words::parking("work").1);
+    assert_eq!(page.waiting, words::signing_out("work").1);
 }
 
 #[test]

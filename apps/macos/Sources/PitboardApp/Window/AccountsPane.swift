@@ -30,7 +30,7 @@ struct AccountsPane: View {
                     } label: {
                         Label("Add Account", systemImage: Symbol.add)
                     }
-                    .help("Sign in to another account and park its login")
+                    .help("Sign in to another account")
                     .accessibilityIdentifier("toolbar.addAccount")
                 }
             }

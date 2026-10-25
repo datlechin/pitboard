@@ -1296,7 +1296,7 @@ fn giving_up_that_is_refused_is_said_in_the_window() {
     model.run(&mut machine);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("the failure is said");
-    assert_eq!(failure.title, words::COULD_NOT_GIVE_UP);
+    assert_eq!(failure.title, words::COULD_NOT_CANCEL);
     assert_eq!(failure.message, "another Pitboard is changing accounts");
     assert_eq!(failure.code.as_deref(), Some("lock_busy"));
     assert_eq!(shown.window_request.serial, 1);
@@ -1436,7 +1436,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::park("work"),
+        words::CONTINUE,
         "a change of it that lands clears it"
     );
 }
@@ -1809,7 +1809,7 @@ fn a_stopped_claude_desktop_move_offers_give_up_and_the_account_claude_shows() {
             .confirm
             .as_ref()
             .map(|asked| asked.title.as_str()),
-        Some(words::GIVE_UP_ON_MOVE)
+        Some(words::CANCEL_MOVE_QUESTION)
     );
 }
 
@@ -1856,7 +1856,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     model.run(&mut machine);
     assert_eq!(
         model.state.presented.clone().expect("said").title,
-        words::could_not_forget("desktop/home")
+        words::could_not_remove("desktop/home")
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
@@ -1903,7 +1903,7 @@ fn giving_up_gives_up_a_waiting_move_too() {
         .iter()
         .find(|notice| notice.id == "moves_given_up")
         .expect("what was given up");
-    assert_eq!(notice.title, words::GAVE_UP_ON_MOVE);
+    assert_eq!(notice.title, words::MOVE_CANCELLED);
     assert_eq!(notice.lines, [given]);
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),

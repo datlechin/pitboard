@@ -16,7 +16,6 @@ use pitboard_core::label;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::{Foreseen, WaitStep};
-use pitboard_core::words as said;
 
 /// What a sheet's default button sends with `typed` as the name, `tool` picked where the sheet
 /// picks one, or why what is typed cannot be a name. The model saves by the same rule, and it
@@ -129,30 +128,31 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
         .any(|account| account.provider == provider);
     match sheet {
         Sheet::SignInAgain { label, .. } if current => {
-            (words::record_shown(app, label), words::record_as(label))
+            (words::add_shown(app, label), words::add_as(label))
         }
         Sheet::SignInAgain { label, .. } => match park {
             Some(work) => (
-                words::park_to_sign_in_again(app, label, work),
-                words::park(work),
+                words::sign_out_to_sign_in_again(app, label, work),
+                words::CONTINUE.into(),
             ),
             None => (
                 words::wait_to_sign_in_again(app, label),
                 words::start_sign_in(seen.os),
             ),
         },
-        _ if current && first => (words::record_first(app), words::add_account(seen.os, false)),
+        _ if current && first => (
+            words::add_shown_first(app),
+            words::add_account(seen.os, false),
+        ),
         _ if current => (
             match awaiting {
-                Some(awaiting) => {
-                    words::add_once_signed_in(app, &Key::parse(&awaiting.put_back).label)
-                }
-                None => words::record_unidentified(app),
+                Some(_) => words::add_once_signed_in(app),
+                None => words::add_unidentified(app),
             },
             words::add_account_shown(seen.os, app, false),
         ),
         _ => match park {
-            Some(work) => (words::park_to_add(app, work), words::park(work)),
+            Some(work) => (words::sign_out_to_add(app, work), words::CONTINUE.into()),
             None => (words::wait_to_add(app), words::start_sign_in(seen.os)),
         },
     }
@@ -242,7 +242,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
             name: label.clone(),
             tool,
             prompt: words::NAME_PROMPT.into(),
-            confirm: words::SAVE.into(),
+            confirm: words::DONE.into(),
             saving,
             progress: None,
         },
@@ -274,9 +274,9 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
             (Vec::new(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
         }
         Some(Leftover::Unknown) => (Vec::new(), None, false),
-        Some(Leftover::Found(None)) => (vec![words::typeset(said::nothing_left())], None, false),
+        Some(Leftover::Found(None)) => (vec![words::nothing_to_clean_up(seen.os)], None, false),
         Some(Leftover::Found(Some(left))) => (
-            said::left_lines(seen.os, left)
+            words::clean_up_lines(seen.os, left)
                 .iter()
                 .map(|line| words::typeset(line))
                 .collect(),
@@ -285,11 +285,11 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
         ),
     };
     Some(StowText {
-        title: words::stow_title(seen.os),
-        message: words::stow_message(seen.os),
+        title: words::clean_up_title(seen.os),
+        message: words::clean_up_message(seen.os),
         lines,
         looking,
-        confirm: words::put_away(seen.os, false),
+        confirm: words::clean_up(seen.os, false),
         can_confirm,
         saving,
     })
@@ -331,7 +331,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
             .in_use_of(provider)
             .filter(|_| !nothing_to_park(seen, provider))
         {
-            Some(work) => words::parking(work),
+            Some(work) => words::signing_out(work),
             None => (words::GETTING_READY.0.into(), words::GETTING_READY.1.into()),
         }
     } else {
@@ -373,7 +373,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         },
         escape_cancels: signing.started && put_back.is_none(),
         undo: put_back.map(|qualified| Choice {
-            title: words::put_back(seen.os, &Key::parse(qualified).label),
+            title: words::switch_back_to(seen.os, &Key::parse(qualified).label),
             intent: Intent::SwitchTo {
                 qualified: qualified.to_owned(),
             },
@@ -389,7 +389,7 @@ pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> Windo
     let tool = seen.tool_name(Key::parse(qualified).provider.code());
     WindowQuestion {
         question: Question {
-            title: words::replace_title(seen.os, &tool),
+            title: words::replace_title(&tool),
             message: why.to_owned(),
             confirm: words::REPLACE.into(),
         },
@@ -436,8 +436,8 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
             {
                 Some(work) => Question {
                     title,
-                    message: words::quit_to_park(name, work),
-                    confirm: words::quit_and_park(seen.os, name, work),
+                    message: words::quit_to_sign_out(name, work),
+                    confirm: words::quit_and_continue(seen.os, name),
                 },
                 None => Question {
                     title,
@@ -448,11 +448,11 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
         }
         After::Enrol { again, .. } => Question {
             title: match again {
-                Some(label) => words::quit_to_record(name, label),
+                Some(label) => words::quit_to_add(name, label),
                 None => words::quit_to_sign_in(name, None),
             },
             message: words::quit_to_read(name, again.as_deref()),
-            confirm: words::quit_and_record(seen.os, name, again.is_some()),
+            confirm: words::quit_and_add(seen.os, name),
         },
         After::Uninstall => Question {
             title: words::quit_to_uninstall(name),
@@ -675,7 +675,7 @@ mod tests {
             [
                 ("claude", sign_in.clone()),
                 ("codex", sign_in.clone()),
-                ("desktop", words::park("work"))
+                ("desktop", words::CONTINUE.into())
             ]
         );
         assert_eq!(text.confirm, sign_in, "it starts on Claude Code");
@@ -690,13 +690,16 @@ mod tests {
         assert_eq!(
             case(Vec::new(), Vec::new()),
             (
-                words::record_first("Claude"),
+                words::add_shown_first("Claude"),
                 words::add_account(Os::MacOs, false)
             )
         );
         assert_eq!(
             case(work_and_home(), Vec::new()),
-            (words::park_to_add("Claude", "work"), words::park("work"))
+            (
+                words::sign_out_to_add("Claude", "work"),
+                words::CONTINUE.into()
+            )
         );
         let signed_out = (
             words::wait_to_add("Claude"),
@@ -723,7 +726,7 @@ mod tests {
             signed_out
         );
         let doubt = (
-            words::record_unidentified("Claude"),
+            words::add_unidentified("Claude"),
             words::add_account_shown(Os::MacOs, "Claude", false),
         );
         for code in ["in_use_unconfirmed", "move_waiting"] {
@@ -746,7 +749,7 @@ mod tests {
         assert_eq!(
             (text.message, text.confirm),
             (
-                words::add_once_signed_in("Claude", "work"),
+                words::add_once_signed_in("Claude"),
                 words::add_account_shown(Os::MacOs, "Claude", false),
             )
         );
@@ -794,7 +797,7 @@ mod tests {
             work_and_home(),
             vec![desktop_warning("in_use_unconfirmed", "in doubt")],
         );
-        assert_eq!(text.confirm, words::record_as("home"));
+        assert_eq!(text.confirm, words::add_as("home"));
         let state = State::new(Cadence::APP);
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
@@ -809,9 +812,9 @@ mod tests {
         assert_eq!(
             question,
             Question {
-                title: words::quit_to_record("Claude", "home"),
+                title: words::quit_to_add("Claude", "home"),
                 message: words::quit_to_read("Claude", Some("home")),
-                confirm: words::quit_and_record(Os::MacOs, "Claude", true),
+                confirm: words::quit_and_add(Os::MacOs, "Claude"),
             }
         );
     }
@@ -836,8 +839,8 @@ mod tests {
         );
         let parks = |again| Question {
             title: words::quit_to_sign_in("Claude", again),
-            message: words::quit_to_park("Claude", "work"),
-            confirm: words::quit_and_park(Os::MacOs, "Claude", "work"),
+            message: words::quit_to_sign_out("Claude", "work"),
+            confirm: words::quit_and_continue(Os::MacOs, "Claude"),
         };
         assert_eq!(
             said(
@@ -876,7 +879,7 @@ mod tests {
             Question {
                 title: words::quit_to_sign_in("Claude", None),
                 message: words::quit_to_read("Claude", None),
-                confirm: words::quit_and_record(Os::MacOs, "Claude", false),
+                confirm: words::quit_and_add(Os::MacOs, "Claude"),
             }
         );
     }
@@ -946,7 +949,7 @@ mod tests {
                 .title
         };
         for os in [Os::MacOs, Os::Windows] {
-            assert_eq!(titled(os), words::replace_title(os, "Claude Code"));
+            assert_eq!(titled(os), words::replace_title("Claude Code"));
         }
     }
 }

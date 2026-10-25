@@ -701,7 +701,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
             level: Level::Warn,
             spoken_level: words::spoken_level(Level::Warn).into(),
             detail: words::check_text(&words::not_posted(
-                words::warning_heading(pitboard_core::host::OS, &replaced("work")),
+                &words::sign_in_replaced(pitboard_core::host::OS),
                 "08:00",
                 "COMException 0x80070490"
             )),

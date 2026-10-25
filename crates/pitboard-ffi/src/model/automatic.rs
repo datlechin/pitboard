@@ -420,8 +420,8 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
         machine.posted,
         [RunOutNotice {
             id: format!("auto/work/personal/{}", model.now.epoch()),
-            title: words::switched_to(Some("Claude Code"), "personal"),
-            subtitle: None,
+            title: words::switched_to(None, "personal"),
+            subtitle: Some("Claude Code".into()),
             body: words::used_then(
                 "work",
                 "97% of its 5-hour limit",
@@ -713,7 +713,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
         "the look stands on what was recorded"
     );
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
+    assert_eq!(machine.posted[0].title, words::not_switched(OS));
     assert_eq!(
         machine.posted[0].body,
         words::used_then("work", "97% of its 5-hour limit", &words::sentence(why))
@@ -750,8 +750,8 @@ fn a_reason_it_is_not_watching_is_said_once() {
         machine.posted,
         [RunOutNotice {
             id: "auto-not-watching/switch_interrupted".into(),
-            title: words::NOT_SWITCHING.into(),
-            subtitle: None,
+            title: words::not_switching(OS),
+            subtitle: Some("Claude Code".into()),
             body: words::sentence(why),
             clicked: "limits".into(),
             button: None,
@@ -791,7 +791,7 @@ fn a_refusal_is_said_once_and_lets_go() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1);
-    assert_eq!(machine.posted[0].title, words::COULD_NOT_SWITCH_ITSELF);
+    assert_eq!(machine.posted[0].title, words::could_not_switch_itself(OS));
     assert!(model.state.switch_under_way().is_none());
     assert!(model.state.presented.is_none(), "nobody asked, so no alert");
 }
@@ -1006,7 +1006,7 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
             .iter()
             .map(|notice| notice.title.as_str())
             .collect::<Vec<_>>(),
-        [words::switched_to(Some("Claude Code"), "personal")]
+        [words::switched_to(None, "personal")]
     );
     assert_eq!(
         model
@@ -1104,7 +1104,7 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
+    assert_eq!(machine.posted[0].title, words::not_switched(OS));
     let AutoSwitched::Skipped { why, .. } = no_room(9_000) else {
         unreachable!("no room is a switch skipped");
     };

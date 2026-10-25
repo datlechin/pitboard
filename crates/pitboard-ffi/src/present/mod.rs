@@ -19,7 +19,7 @@
 //! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`,
 //! a `NoticeAction` or a `WindowQuestion`'s answers, so a view never words an intent or
 //! decides whether to offer one, and both apps label and hold back one offer alike: a row's
-//! "Use", "Sign In Again…" or "Name…", what an account's own menu offers, the setup step's
+//! "Switch", "Sign In Again…" or "Add…", what an account's own menu offers, the setup step's
 //! "Add Account…" and "Not Now", an empty pane's "Try Again", a window's "Clear", the quit
 //! question's "Quit Claude and Switch" and a sheet's default button, whose intent
 //! `check_name` gives. A control an app always
@@ -155,7 +155,7 @@ pub struct AccountItem {
     pub summary: String,
     // what needs doing about it, the most pressing first
     pub notes: Vec<AccountNote>,
-    // the window's lines under its limits: its notes, its parked login's life and its warm-up
+    // the window's lines under its limits: its notes, a sign-in due to expire and its warm-up
     pub lines: Vec<String>,
     pub detail: AccountDetail,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
@@ -217,7 +217,7 @@ pub struct AccountDetail {
     pub plan: Option<String>,
     // when its parked login stops working, for an account not in use
     pub signed_in_until: Option<i64>,
-    // "In Use", "Parked login good for 26 more days", "Needs signing in again"
+    // "In Use", "Saved sign-in valid until Nov 20, 2026 at 3:45 PM", "Sign-in expired"
     pub sign_in: Option<String>,
     // for a Claude Code account Pitboard can warm up
     pub warm: Option<WarmDetail>,
@@ -284,9 +284,9 @@ pub struct AccountMenuShown {
 /// What pressing an account does.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ItemAction {
-    /// What the row's button says: "Use", "Sign In Again…", "Name…".
+    /// What the row's button says: "Switch", "Sign In Again…", "Add…".
     pub title: String,
-    /// What VoiceOver says of that button: "Use work (Codex)".
+    /// What VoiceOver says of that button: "Switch to work (Codex)".
     pub spoken: String,
     /// What to send.
     pub intent: Intent,
@@ -353,7 +353,7 @@ pub enum LimitKind {
 pub struct Question {
     pub title: String,
     pub message: String,
-    /// What the button that does it says: "Forget", "Give Up".
+    /// What the button that does it says: "Remove", "Cancel Switch".
     pub confirm: String,
 }
 
@@ -408,7 +408,7 @@ pub struct PanelNotice {
 /// Something that can be done about a notice.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NoticeAction {
-    /// What its button says: "Switch to spare", "Give Up…", "Dismiss".
+    /// What its button says: "Switch to spare", "Cancel Switch…", "Dismiss".
     pub title: String,
     /// What to send, once any question has been answered.
     pub intent: Intent,
@@ -570,9 +570,9 @@ pub struct StowText {
     /// What the look found, a paragraph each. Empty while it looks, and where it could not
     /// look, which the sheet's failure says.
     pub lines: Vec<String>,
-    /// What the sheet says while it looks: "Finding out whose login it is…".
+    /// What the sheet says while it looks: "Finding out whose sign-in it is…".
     pub looking: Option<String>,
-    /// What its default button says: "Put Away".
+    /// What its default button says: "Clean Up".
     pub confirm: String,
     /// Whether that button can be pressed: the look found a login to put away, of an
     /// enrolled account or of none, and it is not being put away already.
@@ -709,6 +709,11 @@ impl<'a> Seen<'a> {
     /// `LocalTime`'s to read, and nothing here reads it.
     pub(crate) fn clock(&self, at: i64) -> String {
         clock_of(self.local, at, self.now)
+    }
+
+    // A moment as the person's calendar and clock say it, or in UTC where they can't.
+    pub(crate) fn date_and_time_of(&self, at: i64) -> String {
+        (self.local.date_and_time(at)).unwrap_or_else(|_| words::utc_clock(at, self.now))
     }
 
     pub(crate) fn time_of_day(&self, minutes: u16) -> Option<String> {

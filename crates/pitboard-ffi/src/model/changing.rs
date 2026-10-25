@@ -24,7 +24,7 @@ use super::{Intent, Sheet};
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{Account, EnrolledAs};
-use pitboard_core::host::{OS, Os};
+
 use pitboard_core::switch::Foreseen;
 use std::time::Duration;
 
@@ -185,7 +185,7 @@ fn a_refused_forget_is_reported() {
     model.run(&mut machine);
     assert_eq!(machine.forgot, ["claude/alpha", "claude/beta"]);
     let refused = model.state.presented.clone().expect("said");
-    assert_eq!(refused.title, words::could_not_forget("claude/beta"));
+    assert_eq!(refused.title, words::could_not_remove("claude/beta"));
     assert_eq!(
         refused.message,
         "beta is the account in use, so it cannot be forgotten."
@@ -242,7 +242,7 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
     assert_eq!(machine.forgot, ["codex/work", "claude/work"]);
     assert_eq!(
         codex_work.spoken,
-        words::row_spoken(&words::named_with_tool("work", "Codex"), None, false, false)
+        words::row_spoken(&words::named_with_tool("work", "Codex"), None, false, None)
     );
 }
 
@@ -922,7 +922,7 @@ fn updating_claude_codes_config_is_no_switch() {
         .into_iter()
         .map(|notice| notice.title)
         .collect();
-    assert_eq!(titles, [words::warning_heading(Os::MacOs, &behind_again)]);
+    assert_eq!(titles, [words::warning_heading(&behind_again)]);
 }
 
 /// A config that could not be written is said beside the read after the update, which still
@@ -941,13 +941,10 @@ fn a_config_that_could_not_be_updated_is_said_beside_the_read_after() {
     machine.updating_config = Ok(vec![not_written.clone()]);
     model.send(the_update(&model));
     model.run(&mut machine);
-    let names_another_heading = words::warning_heading(OS, &names_another());
+    let names_another_heading = words::warning_heading(&names_another());
     assert_eq!(
         titles(&model),
-        [
-            names_another_heading,
-            words::warning_heading(OS, &not_written)
-        ]
+        [names_another_heading, words::warning_heading(&not_written)]
     );
     assert_eq!(model.shown().notices[1].lines, [not_written.message]);
     assert!(model.state.last_switches.is_empty());

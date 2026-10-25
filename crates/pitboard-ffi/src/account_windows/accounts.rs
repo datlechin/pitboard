@@ -128,23 +128,20 @@ pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
         .collect()
 }
 
-/// What the alert asking to forget `account` says, among `accounts`, on `os`: the question
-/// an account's Forget… asks first, which the snapshot carries as `AccountItem::forget`.
-/// Forgetting an account that has a window deletes what that window keeps too, and a person
-/// deciding should know.
+// What Remove Account… asks, which names what the account's windows keep too.
 pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account]) -> String {
     if crate::model::state::in_its_app(&account.provider) {
         let app = pitboard_core::provider::ProviderId::parse(&account.provider)
             .map_or(account.provider.as_str(), |tool| tool.program());
         return format!(
-            "Pitboard deletes the login it parked for this account and the folders set aside \
-             for it. Using it again needs a sign-in in {app}."
+            "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using \
+             it again needs a sign-in in {app}."
         );
     }
     let windows = windows_of_account(account, accounts);
     if windows.is_empty() {
-        return "Pitboard deletes the login it parked for this account. Using it again needs a \
-                sign-in in your browser."
+        return "Pitboard deletes this account’s saved sign-in. Using it again needs a sign-in in \
+                your browser."
             .into();
     }
     let sites: Vec<&str> = windows
@@ -152,8 +149,8 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
         .map(|window| window.site.name.as_str())
         .collect();
     format!(
-        "Pitboard deletes the login it parked for this account, and everything its {} window \
-         keeps on {}, its sign-in included. Using it again needs a sign-in in your browser.",
+        "Pitboard deletes this account’s saved sign-in, and everything its {} window keeps on \
+         {}, its sign-in included. Using it again needs a sign-in in your browser.",
         pitboard_sites::listed(&sites, Conjunction::And),
         this_machine(os)
     )
@@ -320,44 +317,44 @@ pub(crate) mod tests {
         assert!(windows_of_account(&unplaced("codex"), &all()).is_empty());
     }
 
-    /// Forgetting an account that has a window deletes what that window keeps too, and a
-    /// person deciding should know. The Mac's words are the Swift test's.
+    /// Removing an account that has a window deletes what that window keeps too, and a
+    /// person deciding should know.
     #[test]
-    fn the_forget_alert_names_the_windows_data() {
+    fn the_remove_alert_names_the_windows_data() {
         let work = || account(Some("work"), "claude", "a");
         assert_eq!(
             forget_message_on(Os::MacOs, &work(), &[work()]),
-            "Pitboard deletes the login it parked for this account, and everything its \
-             claude.ai window keeps on this Mac, its sign-in included. Using it again needs a \
-             sign-in in your browser."
+            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
+             keeps on this Mac, its sign-in included. Using it again needs a sign-in in your \
+             browser."
         );
         assert_eq!(
             forget_message_on(Os::Linux, &work(), &[work()]),
-            "Pitboard deletes the login it parked for this account, and everything its \
-             claude.ai window keeps on this computer, its sign-in included. Using it again \
-             needs a sign-in in your browser."
+            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
+             keeps on this computer, its sign-in included. Using it again needs a sign-in in \
+             your browser."
         );
         assert_eq!(
             forget_message_on(Os::Windows, &work(), &[work()]),
-            "Pitboard deletes the login it parked for this account, and everything its \
-             claude.ai window keeps on this PC, its sign-in included. Using it again needs a \
-             sign-in in your browser."
+            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
+             keeps on this PC, its sign-in included. Using it again needs a sign-in in your \
+             browser."
         );
         let api = || unplaced("codex");
-        let said = "Pitboard deletes the login it parked for this account. Using it again needs \
-                    a sign-in in your browser.";
+        let said = "Pitboard deletes this account’s saved sign-in. Using it again needs a \
+                    sign-in in your browser.";
         for os in [Os::MacOs, Os::Linux, Os::Windows] {
             assert_eq!(forget_message_on(os, &api(), &[api()]), said);
         }
     }
 
     #[test]
-    fn forgetting_a_claude_desktop_account_says_it_needs_a_sign_in_in_claude() {
+    fn removing_a_claude_desktop_account_says_it_needs_a_sign_in_in_claude() {
         let home = account(Some("home"), "desktop", "5b1e");
         assert_eq!(
             forget_message_on(Os::MacOs, &home, std::slice::from_ref(&home)),
-            "Pitboard deletes the login it parked for this account and the folders set aside \
-             for it. Using it again needs a sign-in in Claude."
+            "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using \
+             it again needs a sign-in in Claude."
         );
     }
 }

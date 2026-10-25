@@ -48,8 +48,8 @@ use super::{
 };
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::words::{
-    COULD_NOT_CHANGE_WARM, COULD_NOT_GIVE_UP, COULD_NOT_STOW, COULD_NOT_TELL_WHOSE,
-    COULD_NOT_UNINSTALL, COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_forget,
+    COULD_NOT_CANCEL, COULD_NOT_CHANGE_WARM, COULD_NOT_CLEAN_UP, COULD_NOT_TELL_WHOSE,
+    COULD_NOT_UNINSTALL, COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_remove,
     could_not_rename, could_not_sign_in, could_not_switch, could_not_warm, signed_in_now,
 };
 use crate::present::{Clicked, UNUSABLE};
@@ -2432,20 +2432,11 @@ impl State {
         self.told
             .retain(|key, _| !key.starts_with(UNUSABLE) || unusable.contains_key(key));
         let mut kept = self.told.len() != before;
-        let tools: BTreeSet<&str> = read
-            .accounts
-            .iter()
-            .map(|account| account.provider.as_str())
-            .collect();
         for (key, account) in unusable {
             if self.told.insert(key, 0).is_none() {
                 kept = true;
-                let tool = (tools.len() > 1).then(|| {
-                    ProviderId::parse(&account.provider)
-                        .map_or_else(|| account.provider.clone(), |tool| tool.name().into())
-                });
                 jobs.push(Job::Post {
-                    notice: crate::present::unusable_notice(account, tool),
+                    notice: crate::present::unusable_notice(account),
                 });
             }
         }
@@ -4221,7 +4212,7 @@ impl State {
             }
             Err(error) => {
                 self.change_over();
-                let title = could_not_forget(qualified);
+                let title = could_not_remove(qualified);
                 let refused = match error {
                     Some(error) => Refused::of(title, error),
                     None => Refused::lost(title),
@@ -4342,8 +4333,8 @@ impl State {
             Err(error) => {
                 self.change_over();
                 let refused = match error {
-                    Some(error) => Refused::of(COULD_NOT_STOW.into(), error),
-                    None => Refused::lost(COULD_NOT_STOW.into()),
+                    Some(error) => Refused::of(COULD_NOT_CLEAN_UP.into(), error),
+                    None => Refused::lost(COULD_NOT_CLEAN_UP.into()),
                 };
                 self.save_failed(from, refused);
                 // What it found is out of date: the file may have changed, or been renewed
@@ -4392,8 +4383,8 @@ impl State {
             Err(error) => {
                 self.change_over();
                 self.present(match error {
-                    Some(error) => Refused::of(COULD_NOT_GIVE_UP.into(), error),
-                    None => Refused::lost(COULD_NOT_GIVE_UP.into()),
+                    Some(error) => Refused::of(COULD_NOT_CANCEL.into(), error),
+                    None => Refused::lost(COULD_NOT_CANCEL.into()),
                 });
             }
         }

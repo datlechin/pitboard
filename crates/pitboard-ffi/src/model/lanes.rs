@@ -1039,7 +1039,7 @@ mod tests {
             id: "claude/work/session/-1800018000".into(),
             title: ran_out.clone(),
             subtitle: None,
-            body: crate::present::words::room_left("spare", Some(80)),
+            body: crate::present::words::other_used("spare", Some(80)),
             clicked: "accounts".into(),
             button: None,
         };

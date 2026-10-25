@@ -618,7 +618,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     assert!(
         last.notices
             .iter()
-            .all(|n| n.title != words::warning_heading(OS, &warning("sessions_unknown", ""))),
+            .all(|n| n.title != words::warning_heading(&warning("sessions_unknown", ""))),
         "said once: {:#?}",
         last.notices
     );
@@ -1523,13 +1523,23 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
     told.until("the advice", advised);
     eventually("the notification posted", || posted.posted().len() == 1);
     let notice = posted.posted().remove(0);
-    assert_eq!(notice.title, words::ran_out("work", "5-hour"));
-    assert_eq!(notice.body, words::room_left("spare", Some(90)));
+    assert_eq!(
+        notice.title,
+        words::limit_notification(OS, "5-hour", None, true)
+    );
+    assert_eq!(
+        notice.body,
+        format!(
+            "{} {}",
+            words::has_used_share("work", "100%"),
+            words::other_used("spare", Some(90))
+        )
+    );
     assert_eq!(
         notice.button.map(|button| button.clicked).as_deref(),
         Some("switch/claude/spare")
     );
-    assert_eq!(notice.subtitle, None);
+    assert_eq!(notice.subtitle.as_deref(), Some("Claude Code"));
     let kept = world.pitboard_dir().join("told.json");
     eventually("the record of it kept", || {
         std::fs::read_to_string(&kept).is_ok_and(|text| text.contains("claude/work/session/"))
@@ -1585,10 +1595,7 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     told.until("spare in use", in_use("claude", "spare"));
     eventually("the switch said", || !posted.posted().is_empty());
     let notice = posted.posted().remove(0);
-    assert_eq!(
-        notice.title,
-        words::switched_to(Some("Claude Code"), "spare")
-    );
+    assert_eq!(notice.title, words::switched_to(None, "spare"));
     assert_eq!(
         notice.body,
         words::used_then(

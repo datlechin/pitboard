@@ -184,7 +184,7 @@ pub struct ActivityLine {
     /// When, as the person's own calendar and clock say it, or the log's own text where that
     /// does not read as a time.
     pub date: String,
-    /// What was done, in a word: "Switch", "Enrol".
+    /// What was done, in a word: "Switch", "Add".
     pub change: String,
     /// What it was done to, as the log keeps it.
     pub account: String,
@@ -262,9 +262,9 @@ fn warm(seen: &Seen) -> WarmShown {
                     ),
                     on: choice.on,
                     standing: choice.standing.as_ref().map(|standing| {
-                        words::typeset(&pitboard_core::words::capitalised(
-                            &pitboard_core::words::warm_standing(standing, &clock),
-                        ))
+                        words::typeset(&pitboard_core::words::capitalised(&words::warm_standing(
+                            standing, &clock,
+                        )))
                     }),
                 })
                 .collect()
@@ -291,7 +291,7 @@ fn warm(seen: &Seen) -> WarmShown {
             })
     });
     WarmShown {
-        title: words::WARM_UP_LIMITS.into(),
+        title: words::warm_up(seen.os),
         none_enrolled: accounts.is_empty().then(|| words::NONE_TO_WARM.into()),
         from: range.from(),
         to: range.to(),
@@ -346,7 +346,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
         share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
         heading: words::AT_LIMIT.into(),
         at_label: words::at_limit_label(at),
-        share_label: words::SHARE_OF_A_LIMIT.into(),
+        share_label: words::AT.into(),
         share_range: words::share_range(Threshold::LOWEST, Threshold::HIGHEST),
         note,
         standing: state
@@ -786,7 +786,15 @@ mod tests {
         ] {
             state.warm.overview = Some(overview(on));
             let windows = present_on(Os::Windows, &state, 0, &Utc).machine.warm;
-            assert_eq!(windows, present_on(Os::MacOs, &state, 0, &Utc).machine.warm);
+            let mac = present_on(Os::MacOs, &state, 0, &Utc).machine.warm;
+            assert_eq!(
+                windows,
+                super::WarmShown {
+                    title: words::warm_up(Os::Windows),
+                    ..mac
+                },
+                "but in its own case"
+            );
             assert!(windows.enabled, "{on}");
             assert_eq!(windows.none_enrolled, None);
             assert_eq!(
