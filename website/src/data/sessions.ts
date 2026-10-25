@@ -1,6 +1,16 @@
-import { clock, logged, share, toolOn, tools, warmUp, type Logged, type Moment } from "./world.ts";
+import {
+  clock,
+  logged,
+  moments,
+  share,
+  toolOn,
+  tools,
+  warmUp,
+  type Logged,
+  type World,
+} from "./world.ts";
 import { platforms, type Platform } from "../lib/platform.ts";
-import { statusHeading, statusLines } from "../lib/words.ts";
+import { escaped, hm, stamp, statusHeading, statusLines } from "../lib/words.ts";
 
 export interface Line {
   html: string;
@@ -35,12 +45,12 @@ export function printed(session: Session, platform: Platform): string[] {
   return session.output.filter((l) => !l.on || l.on.includes(platform)).map((l) => l.html);
 }
 
-function status(moment: Moment): Session {
+function status(w: World): Session {
   return {
     title: "pitboard",
     command: "pitboard",
     output: tools.flatMap(([tool], i) =>
-      [...(i > 0 ? [""] : []), statusHeading(tool), ...statusLines(tool, moment)].map((html) =>
+      [...(i > 0 ? [""] : []), statusHeading(tool), ...statusLines(w, tool)].map((html) =>
         line(html, toolOn[tool]),
       ),
     ),
@@ -65,15 +75,15 @@ function log(entries: Logged[]): Session {
       said((p) => {
         if (!shown(p).includes(e)) return null;
         const width = Math.max(...shown(p).map((s) => s.verb.length));
-        return `<span class="dim">${e.day}T${e.time}+07:00</span>  ${e.verb.padEnd(width)}  ${e.account}  <span class="dim">ok</span>`;
+        return `<span class="dim">${stamp(e.at)}</span>  ${e.verb.padEnd(width)}  ${escaped(e.subject)}  <span class="dim">${e.outcome}</span>`;
       }),
     ),
   };
 }
 
 export const sessions = {
-  status: status("after"),
-  statusBefore: status("before"),
+  status: status(moments.after),
+  statusBefore: status(moments.before),
   use: {
     title: "pitboard use work",
     command: "pitboard use work",
@@ -118,7 +128,7 @@ export const sessions = {
         (p) =>
           `Pitboard warms up these accounts from ${warmUp.from} to ${warmUp.to}, while ${p === "linux" ? "" : "the app or "}\`pitboard watch\` runs.`,
       ),
-      line(`  <b>personal</b>  on   warms up again at ${clock.warmsAgain}`),
+      line(`  <b>personal</b>  on   warms up again at ${hm(clock.warmsAgain)}`),
       line(`  <b>work    </b>  <span class="dim">off</span>`),
     ],
   },

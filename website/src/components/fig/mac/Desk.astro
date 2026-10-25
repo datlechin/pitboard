@@ -4,10 +4,12 @@ import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import Terminal from "./Terminal.astro";
 import { menuCommands, session } from "../../../data/desk.ts";
-import { clock, tools, type Moment } from "../../../data/world.ts";
+import { clock, moments, tools, type Moment } from "../../../data/world.ts";
 import {
+  escaped,
   isInUse,
   listed,
+  menuBarClock,
   menuBarTitle,
   menuLine,
   menuTitle,
@@ -18,7 +20,7 @@ interface Props {
   demo?: boolean;
 }
 const { demo = false } = Astro.props;
-const moments: Moment[] = demo ? ["before", "after"] : ["after"];
+const shown: Moment[] = demo ? ["before", "after"] : ["after"];
 // one state, or both with the moments that show each
 // The session's status line follows the switch after the menu does.
 const either = (
@@ -50,20 +52,30 @@ const rule =
     <div
       set:html={
         "  " +
-        either(statusLine("before"), statusLine("after"), "hidden demo:inline", "demo:hidden")
+        either(
+          statusLine(moments.before),
+          statusLine(moments.after),
+          "hidden demo:inline",
+          "demo:hidden",
+        )
       }
     />
   </Terminal>
-  <MenuBar clock={clock.menuBar}>
+  <MenuBar clock={menuBarClock(clock.menuBar)}>
     <div class="relative">
       <MenuItem on class="demo-shut:bg-transparent">
         <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg>
-        <span set:html={either(menuBarTitle("before"), menuBarTitle("after"))} />
+        <span
+          set:html={either(
+            escaped(menuBarTitle(moments.before)),
+            escaped(menuBarTitle(moments.after)),
+          )}
+        />
       </MenuItem>
       <div
         class="absolute top-26 left-0 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text normal-nums shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 demo-shut:opacity-0"
       >
-        {moments.map((moment) => <div
+        {shown.map((moment) => <div
           class:list={[
             { "hidden demo-before:block": demo && moment === "before" },
             { "demo-before:hidden": demo && moment === "after" },
@@ -75,7 +87,7 @@ const rule =
               <div class="pt-5.5 pr-18 pb-3 pl-30 text-u-11 font-semibold text-mac-menu-dim">
                 {name}
               </div>
-              {listed(tool, moment).map((a) => {
+              {listed(moments[moment], tool).map((a) => {
                 const pick = demo && moment === "before" && tool === "claude" && a.label === "work";
                 return <div
                   class:list={[
@@ -87,7 +99,7 @@ const rule =
                     },
                   ]}
                 >
-                  {isInUse(a, moment) && <svg
+                  {isInUse(a, moments[moment]) && <svg
                     class="absolute top-1/2 left-7 -mt-6 size-14 shrink-0"
                   >
                     <use href="#sf-check-heavy" />
@@ -100,7 +112,7 @@ const rule =
                         pick ? "text-inherit demo-moving:text-mac-menu-sub" : "text-mac-menu-sub",
                       ]}
                     >
-                      {menuLine(a, moment)}
+                      {menuLine(a, moments[moment])}
                     </span>
                   </span>
                 </div>;

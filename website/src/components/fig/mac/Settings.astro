@@ -4,6 +4,7 @@
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock } from "../../../data/world.ts";
+import { hm } from "../../../lib/words.ts";
 
 interface Props {
   show: "switch" | "warm";
@@ -84,7 +85,9 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
               </span>
             </div>
             <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
-              <span class={small}>Watching work: 40% of its weekly limit, as of {clock.read}.</span>
+              <span class={small}
+                >Watching work: 40% of its weekly limit, as of {hm(clock.read)}.</span
+              >
             </div>
           </div>
         </>
@@ -117,7 +120,9 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
             <div class:list={[row, ruled, "h-56.5 items-start pt-11"]}>
               <span class="flex-1">
                 personal · Max
-                20x<small class:list={[small, "mt-3"]}>Warms up again at {clock.warmsAgain}</small>
+                20x<small class:list={[small, "mt-3"]}
+                  >Warms up again at {hm(clock.warmsAgain)}</small
+                >
               </span>
               <Switch on />
             </div>
@@ -126,7 +131,7 @@ const time = "shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-
               <Switch />
             </div>
             <div class:list={[row, ruled, "h-37 items-center pb-1.5"]}>
-              <span class={small}>Next warm-up: personal at {clock.warmsAgain}.</span>
+              <span class={small}>Next warm-up: personal at {hm(clock.warmsAgain)}.</span>
             </div>
           </div>
         </>

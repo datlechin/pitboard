@@ -1,50 +1,218 @@
-// The app's and the command line's words for world.ts, by crates/pitboard-core/src/words.rs and
-// crates/pitboard/src/render/status.rs.
+// The app's and the command line's words for world.ts, by crates/pitboard-core/src/words.rs,
+// crates/pitboard-ffi/src/present and crates/pitboard/src/render/status.rs.
 
 import {
+  DAY,
+  HOUR,
+  MINUTE,
+  WEEK,
+  ZONE,
   account,
-  accounts,
-  inUse,
-  logged,
   share,
   toolOn,
   tools,
+  warmUp,
   type Account,
   type Limit,
   type Logged,
-  type Moment,
   type Tool,
+  type World,
 } from "../data/world.ts";
 import type { Platform } from "./platform.ts";
 
+// Every value of the world a line puts into HTML: a label someone types is text.
+const entities: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+export const escaped = (text: string) => text.replace(/[&<>"]/g, (c) => entities[c]);
+
+// usage/mod.rs `whole`: Rust's round takes a half away from zero.
+export const whole = (percent: number) =>
+  percent < 0 ? -Math.round(-percent) : Math.round(percent);
+
+export const figure = (percent: number) => `${whole(percent)}%`;
+
+// words.rs `span`: "6d 4h", "2h 05m", "47m", "<1m".
+export function span(seconds: number): string {
+  const s = Math.max(0, seconds);
+  const days = Math.floor(s / DAY);
+  const hours = Math.floor((s % DAY) / HOUR);
+  const minutes = Math.floor((s % HOUR) / MINUTE);
+  if (days === 0 && hours === 0) return minutes === 0 ? "<1m" : `${minutes}m`;
+  if (days === 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  return `${days}d ${hours}h`;
+}
+
+// words.rs `limit_column` and `limit_name`, by the length a limit runs.
+export function limitColumn(limit: Limit): string {
+  const s = limit.lengthSeconds;
+  if (s === WEEK) return "week";
+  if (s === DAY) return "day";
+  if (s % DAY === 0) return `${s / DAY}d`;
+  if (s % HOUR === 0) return `${s / HOUR}h`;
+  if (s % MINUTE === 0) return `${s / MINUTE}m`;
+  return `${s}s`;
+}
+
+export function limitName(limit: Limit): string {
+  const s = limit.lengthSeconds;
+  if (s === WEEK) return "weekly";
+  if (s === DAY) return "daily";
+  if (s % DAY === 0) return `${s / DAY}-day`;
+  if (s % HOUR === 0) return `${s / HOUR}-hour`;
+  if (s % MINUTE === 0) return `${s / MINUTE}-minute`;
+  return `${s}-second`;
+}
+
+// words.rs `resets`
+export const resets = (at: number, now: number) =>
+  at <= now ? "resetting now" : `resets in ${span(at - now)}`;
+
+// usage/pace.rs: more than MARGIN points either side of even counts, and nothing is said of a
+// window less than TOO_EARLY in.
+export const MARGIN = 5;
+export const TOO_EARLY = 0.03;
+
 export type Standing = "over" | "under" | "even";
-
-// More than 5 points either side of an even pace counts (concepts/usage#pace).
-export function standing(limit: Limit): Standing | null {
-  if (limit.even === null) return null;
-  const delta = limit.used - limit.even;
-  if (delta > 5) return "over";
-  if (delta < -5) return "under";
-  return "even";
+export interface Pace {
+  expected: number;
+  delta: number;
+  standing: Standing;
+  // over pace: when it runs out, from the moment it is told
+  runsOutIn?: number;
 }
 
-export function paceText(limit: Limit): string {
-  const s = standing(limit);
-  if (s === null) return "";
-  if (s === "even") return "on pace";
-  return `${Math.round(Math.abs(limit.used - limit.even!))}% ${s} pace`;
+// pace.rs `of`
+export function paceOf(
+  used: number,
+  resetsAt: number,
+  length: number,
+  readAt: number,
+  now: number,
+): Pace | null {
+  if (!(length > 0)) return null;
+  const at = Math.min(readAt, now);
+  const left = resetsAt - at;
+  if (resetsAt <= now || left > length || used >= 100) return null;
+  const gone = length - left;
+  const part = gone / length;
+  if (part < TOO_EARLY) return null;
+  const share = Math.max(used, 0);
+  const expected = part * 100;
+  const delta = share - expected;
+  if (delta > MARGIN) {
+    const fromReading = Math.trunc(((100 - share) * gone) / share);
+    return { expected, delta, standing: "over", runsOutIn: Math.max(fromReading - (now - at), 0) };
+  }
+  return { expected, delta, standing: delta < -MARGIN ? "under" : "even" };
 }
+
+// A limit's pace as the world read it, told at its moment.
+export const pace = (limit: Limit, w: World) =>
+  paceOf(limit.percent, limit.resetsAt, limit.lengthSeconds, w.readAt, w.now);
+
+// words.rs `pace_column`
+export function paceColumn(p: Pace): string {
+  if (p.standing === "even") return "on pace";
+  return `${whole(Math.abs(p.delta))}% ${p.standing} pace`;
+}
+
+// words.rs `time_to_run_out` and `runs_out`; present/words.rs `runs_out_in` for the menu.
+export const timeToRunOut = (inSeconds: number) => (inSeconds >= MINUTE ? span(inSeconds) : null);
+
+export function runsOut(limit: string, inSeconds: number): string {
+  const left = timeToRunOut(inSeconds);
+  return left
+    ? `${limit} limit runs out in ${left} at this pace`
+    : `${limit} limit is about to run out`;
+}
+
+export function runsOutIn(inSeconds: number): string {
+  const left = timeToRunOut(inSeconds);
+  return left ? `runs out in ${left}` : "about to run out";
+}
+
+// state.rs `RENEW_WITHIN` and `renewal_due`
+export const RENEW_WITHIN = 3 * DAY;
+export const renewalDue = (refreshExpiresAt: number, now: number) => {
+  const left = refreshExpiresAt - now;
+  return left >= 1 && left < RENEW_WITHIN;
+};
+
+// words.rs `parked_life`, `parked_life_column`, `session_life` and `session_life_column`
+export function parkedLife(refreshExpiresAt: number | undefined, now: number): string | null {
+  if (refreshExpiresAt === undefined) return null;
+  const left = refreshExpiresAt - now;
+  if (left <= 0) return "Its parked login has expired";
+  const days = Math.floor(left / DAY);
+  if (days === 0) return "Parked login good for under a day";
+  return days === 1
+    ? "Parked login good for 1 more day"
+    : `Parked login good for ${days} more days`;
+}
+
+export function parkedLifeColumn(refreshExpiresAt: number, now: number): string {
+  const left = refreshExpiresAt - now;
+  if (left <= 0) return "expired";
+  if (renewalDue(refreshExpiresAt, now)) return `expires in ${span(left)}`;
+  return `good for ${span(left)}`;
+}
+
+export function sessionLife(sessionExpiresAt: number | undefined, now: number): string | null {
+  if (sessionExpiresAt === undefined) return null;
+  const left = sessionExpiresAt - now;
+  if (left <= 0) return "Its sign-in may have lapsed";
+  const days = Math.floor(left / DAY);
+  if (days === 0) return "Its sign-in may lapse in under a day";
+  return days === 1 ? "Its sign-in may lapse in 1 day" : `Its sign-in may lapse in ${days} days`;
+}
+
+export function sessionLifeColumn(sessionExpiresAt: number, now: number): string {
+  const left = sessionExpiresAt - now;
+  return left <= 0 ? "sign-in may have lapsed" : `sign-in may lapse in ${span(left)}`;
+}
+
+export const capitalised = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 // the app draws "y" in orange
-export function level(used: number): "g" | "y" | "r" {
-  return used >= 90 ? "r" : used >= 70 ? "y" : "g";
+export type Level = "g" | "y" | "r";
+// words.rs `usage_level`, as its figure is drawn
+export function level(percent: number): Level {
+  const drawn = whole(percent);
+  return drawn >= 90 ? "r" : drawn >= 70 ? "y" : "g";
 }
 
-const sentenceName = { "5h": "5-hour", week: "weekly" } as const;
+// The world's clock, in its own zone: "20:51", and as each system's clock says the moment.
+const local = (epoch: number) => new Date((epoch + ZONE) * 1000);
+const two = (n: number) => String(n).padStart(2, "0");
+const weekdays = "Sun Mon Tue Wed Thu Fri Sat".split(" ");
+const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+const offset = `${ZONE < 0 ? "-" : "+"}${two(Math.floor(Math.abs(ZONE) / HOUR))}:${two((Math.abs(ZONE) % HOUR) / MINUTE)}`;
 
-export const isInUse = (a: Account, moment: Moment) => inUse[moment][a.tool] === a.label;
+export const hm = (epoch: number) => {
+  const d = local(epoch);
+  return `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+};
 
-export const toolAccounts = (tool: Tool) => accounts.filter((a) => a.tool === tool);
+// the macOS menu bar's "Tue 13 Oct 20:51"
+export const menuBarClock = (epoch: number) => {
+  const d = local(epoch);
+  return `${weekdays[d.getUTCDay()]} ${d.getUTCDate()} ${months[d.getUTCMonth()]} ${hm(epoch)}`;
+};
+
+// the en-GB regional format's "d", under the taskbar's time
+export const shortDate = (epoch: number) => {
+  const d = local(epoch);
+  return `${two(d.getUTCDate())}/${two(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+};
+
+// audit.rs's timestamp, as `pitboard log` prints it
+export const stamp = (epoch: number) => {
+  const d = local(epoch);
+  return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}T${hm(epoch)}:${two(d.getUTCSeconds())}${offset}`;
+};
+
+export const isInUse = (a: Account, w: World) => w.inUse[a.tool] === a.label;
+
+export const toolAccounts = (w: World, tool: Tool) => w.accounts.filter((a) => a.tool === tool);
 
 export const toolsOn = (platform: Platform) =>
   tools.filter(([tool]) => toolOn[tool].includes(platform));
@@ -52,190 +220,243 @@ export const toolsOn = (platform: Platform) =>
 const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 
 // As every listing gives a tool's accounts: the one in use first (status.rs `assemble`).
-export const listed = (tool: Tool, moment: Moment) =>
-  [...toolAccounts(tool)].sort((a, b) => Number(isInUse(b, moment)) - Number(isInUse(a, moment)));
+export const listed = (w: World, tool: Tool) =>
+  [...toolAccounts(w, tool)].sort((a, b) => Number(isInUse(b, w)) - Number(isInUse(a, w)));
 
 export const menuTitle = (a: Account) => (a.plan ? `${a.label} · ${a.plan}` : a.label);
 
-export function menuLine(a: Account, moment: Moment): string {
+// present/accounts.rs `runs_out_first`: which limit of the account in use runs out first at its
+// pace, and in how many seconds.
+export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: number } | null {
+  if (!isInUse(a, w)) return null;
+  let first: { limit: Limit; inSeconds: number } | null = null;
+  for (const limit of a.limits) {
+    const p = pace(limit, w);
+    if (p?.runsOutIn === undefined) continue;
+    if (!first || p.runsOutIn < first.inSeconds) first = { limit, inSeconds: p.runsOutIn };
+  }
+  return first;
+}
+
+// present/accounts.rs `limits_said`: the line under an account in the menu.
+export function menuLine(a: Account, w: World): string {
   if (a.limits.length === 0) return "No usage read";
+  const first = runsOutFirst(a, w);
   const said = a.limits.map((l) => {
-    const runs = isInUse(a, moment) && l.runsOut ? ` (runs out in ${l.runsOut})` : "";
-    return `${sentenceName[l.kind]} ${l.used}%${runs}`;
+    const runs = first?.limit === l ? ` (${runsOutIn(first.inSeconds)})` : "";
+    return `${limitName(l)} ${figure(l.percent)}${runs}`;
   });
-  const line = said.join(", ");
-  return line[0].toUpperCase() + line.slice(1);
+  return capitalised(said.join(", "));
+}
+
+// present/accounts.rs `limit_row`: one limit as a row of its account's bars.
+export interface LimitRow {
+  short: string;
+  percent: number;
+  figure: string;
+  level: Level;
+  resets: string;
+  pace: { expected: number; standing: Standing; said: string } | null;
+}
+
+export function limitRow(limit: Limit, w: World): LimitRow {
+  const p = pace(limit, w);
+  return {
+    short: limitColumn(limit),
+    percent: limit.percent,
+    figure: figure(limit.percent),
+    level: level(limit.percent),
+    resets: resets(limit.resetsAt, w.now),
+    pace: p && { expected: p.expected, standing: p.standing, said: paceColumn(p) },
+  };
 }
 
 // The in-use account closest to running out, a tie going to Claude Code (reference/mac-app#menu-bar-item).
-export const fullest = (a: Account) => Math.max(...a.limits.map((l) => l.used));
-const titled = (moment: Moment) =>
+export const fullest = (a: Account) => Math.max(...a.limits.map((l) => whole(l.percent)));
+const inUseOf = (w: World, tool: Tool) => w.accounts.find((a) => a.tool === tool && isInUse(a, w))!;
+const titled = (w: World) =>
   (["claude", "codex"] as Tool[])
-    .map((tool) => accounts.find((a) => a.tool === tool && isInUse(a, moment))!)
+    .map((tool) => inUseOf(w, tool))
     .reduce((best, a) => (fullest(a) > fullest(best) ? a : best));
 
-export function menuBarTitle(moment: Moment): string {
-  const shown = titled(moment);
+export function menuBarTitle(w: World): string {
+  const shown = titled(w);
   return `${shown.label} ${fullest(shown)}%`;
 }
 
 // The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
-export const menuBarLevel = (moment: Moment) => level(fullest(titled(moment)));
+export const menuBarLevel = (w: World) => level(fullest(titled(w)));
 
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
 // the line the menu shows under it (present/accounts.rs `menu_bar`).
-export const trayTip = (moment: Moment) =>
+export const trayTip = (w: World) =>
   [
     "Pitboard",
     ...(["claude", "codex"] as Tool[]).map((tool) => {
-      const a = accounts.find((a) => a.tool === tool && isInUse(a, moment))!;
-      return `${a.label} (${toolName(tool)}): ${menuLine(a, moment)}`;
+      const a = inUseOf(w, tool);
+      return `${a.label} (${toolName(tool)}): ${menuLine(a, w)}`;
     }),
   ].join("\n");
 
 // The notification once a limit of the account in use reaches the share (present/notices.rs
 // `at_limit_notice`): personal's weekly limit, with work's room in it.
-export const headsUpTitle = (label: string, kind: Limit["kind"], used: number) =>
-  `${label} has used ${used}% of its ${sentenceName[kind]} limit`;
-const weekly = (label: string) => account(label).limits.find((l) => l.kind === "week")!;
+export const headsUpTitle = (label: string, limit: Limit, used: number) =>
+  `${label} has used ${used}% of its ${limitName(limit)} limit`;
+const weekly = (label: string) => account(label).limits.find((l) => l.lengthSeconds === WEEK)!;
 export const headsUp = {
   account: "personal",
-  title: headsUpTitle("personal", "week", share),
+  title: headsUpTitle("personal", weekly("personal"), share),
   tool: "Claude Code",
-  body: `work has ${100 - weekly("work").used}% of its own left.`,
+  body: `work has ${100 - whole(weekly("work").percent)}% of its own left.`,
   button: "Switch",
 };
 
-export function runsOutNote(a: Account, moment: Moment): string | null {
-  const l = isInUse(a, moment) ? a.limits.find((l) => l.runsOut) : undefined;
-  return l ? `${sentenceName[l.kind]} limit runs out in ${l.runsOut} at this pace` : null;
+// The limit that runs out first, in the sentence the window's note and `pitboard` say it in.
+export function runsOutNote(a: Account, w: World): string | null {
+  const first = runsOutFirst(a, w);
+  return first ? runsOut(limitName(first.limit), first.inSeconds) : null;
 }
 
-const span = (cls: string, text: string) => (text ? `<span class="${cls}">${text}</span>` : "");
+// present/accounts.rs `item`'s notes under an account in the window, the warm-up's last.
+export function notes(a: Account, w: World): string[] {
+  const on = isInUse(a, w);
+  const runs = runsOutNote(a, w);
+  const fiveHour = a.limits.find((l) => l.lengthSeconds === 5 * HOUR);
+  return [
+    on && a.readAt !== undefined ? `Read ${span(w.now - a.readAt)} ago, with Claude closed` : null,
+    runs && capitalised(runs),
+    on ? null : (parkedLife(a.refreshExpiresAt, w.now) ?? sessionLife(a.sessionExpiresAt, w.now)),
+    a.tool === "claude" && warmUp.accounts.includes(a.label) && fiveHour
+      ? `Warms up again at ${hm(fiveHour.resetsAt)}`
+      : null,
+  ].filter((n): n is string => n !== null);
+}
+
+const tinted = (cls: string, html: string) => (html ? `<span class="${cls}">${html}</span>` : "");
 const pad = (text: string, width: number) => text + " ".repeat(Math.max(0, width - text.length));
 
 // crates/pitboard/src/ui.rs `bar`; a run of cells is one span, drawn as one block of its colour.
 const cell = "bg-current [-webkit-text-fill-color:transparent]";
 const shade = "bg-current/32 [-webkit-text-fill-color:transparent]";
-function bar(limit: Limit): string {
+function bar(limit: Limit, p: Pace | null): string {
   const width = 10;
-  const filled = Math.min(width, Math.max(0, Math.round((limit.used / 100) * width)));
+  const filled = Math.min(width, Math.max(0, Math.round((limit.percent / 100) * width)));
   const cells = (from: number, to: number) => {
     const full = Math.min(Math.max(filled, from), to);
     return (
-      span(`${level(limit.used)} ${cell}`, "█".repeat(full - from)) +
-      span(`dim ${shade}`, "░".repeat(to - full))
+      tinted(`${level(limit.percent)} ${cell}`, "█".repeat(full - from)) +
+      tinted(`dim ${shade}`, "░".repeat(to - full))
     );
   };
-  const s = standing(limit);
-  if (s === null || s === "even") return cells(0, width);
-  const at = Math.min(Math.floor((limit.even! / 100) * width), width - 1);
-  return cells(0, at) + span(s === "over" ? "r" : "g", "│") + cells(at + 1, width);
+  if (p === null || p.standing === "even") return cells(0, width);
+  const at = Math.min(Math.floor((p.expected / 100) * width), width - 1);
+  return cells(0, at) + tinted(p.standing === "over" ? "r" : "g", "│") + cells(at + 1, width);
 }
 
 // A tool's heading in `pitboard`, with what is true of all its accounts said once on it.
 export function statusHeading(tool: Tool): string {
   const name = `<b>${toolName(tool)}</b>`;
   return tool === "desktop"
-    ? `${name}${span("dim", " · Pitboard reads no usage for Claude Desktop")}`
+    ? `${name}${tinted("dim", " · Pitboard reads no usage for Claude Desktop")}`
     : name;
 }
 
-function standingText(a: Account, on: boolean): string {
+function standingText(a: Account, on: boolean, now: number): string {
   if (on)
-    return a.read
-      ? `${span("g", "signed in")} ${span("dim", `· read ${a.read} ago`)}`
-      : span("g", "signed in");
-  const until = a.parked
-    ? `good for ${a.parked.cli}`
-    : a.lapses
-      ? `sign-in may lapse in ${a.lapses.cli}`
-      : null;
-  return until ? `${span("g", "ready")} ${span("dim", `· ${until}`)}` : span("g", "ready");
+    return a.readAt !== undefined
+      ? `${tinted("g", "signed in")} ${tinted("dim", `· read ${span(now - a.readAt)} ago`)}`
+      : tinted("g", "signed in");
+  const until =
+    a.refreshExpiresAt !== undefined
+      ? parkedLifeColumn(a.refreshExpiresAt, now)
+      : a.sessionExpiresAt !== undefined
+        ? sessionLifeColumn(a.sessionExpiresAt, now)
+        : null;
+  return until ? `${tinted("g", "ready")} ${tinted("dim", `· ${until}`)}` : tinted("g", "ready");
 }
 
 // `pitboard` for one tool's accounts, one HTML string a line, usage lines only where it is read.
-export function statusLines(tool: Tool, moment: Moment): string[] {
-  const rows = listed(tool, moment);
-  const labelWidth = Math.max(...accounts.map((a) => a.label.length));
-  const emailWidth = Math.max(...accounts.map((a) => a.email.length));
-  const planWidth = Math.max(...accounts.map((a) => a.plan?.length ?? 0));
-  const resetsWidth = Math.max(
-    ...accounts.flatMap((a) => a.limits.map((l) => `resets in ${l.resets}`.length)),
-  );
+export function statusLines(w: World, tool: Tool): string[] {
+  const rows = listed(w, tool);
+  const width = (of: (a: Account) => string[]) =>
+    Math.max(0, ...w.accounts.flatMap(of).map((s) => s.length));
+  const labelWidth = width((a) => [a.label]);
+  const emailWidth = width((a) => [a.email]);
+  const planWidth = width((a) => [a.plan ?? ""]);
+  const nameWidth = width((a) => a.limits.map(limitColumn));
+  const resetsWidth = width((a) => a.limits.map((l) => resets(l.resetsAt, w.now)));
   const lines: string[] = [];
   rows.forEach((a, i) => {
     if (i > 0 && a.limits.length > 0) lines.push("");
-    const on = isInUse(a, moment);
+    const on = isInUse(a, w);
     lines.push(
-      `${on ? span("g", "●") : span("dim", "○")} <b>${pad(a.label, labelWidth)}</b>  ${span("dim", pad(a.email, emailWidth))}  ${span("dim", pad(a.plan ?? "", planWidth))}  ${standingText(a, on)}`,
+      `${on ? tinted("g", "●") : tinted("dim", "○")} <b>${escaped(pad(a.label, labelWidth))}</b>  ${tinted("dim", escaped(pad(a.email, emailWidth)))}  ${tinted("dim", escaped(pad(a.plan ?? "", planWidth)))}  ${standingText(a, on, w.now)}`,
     );
     for (const l of a.limits) {
-      const resets = `resets in ${l.resets}`;
-      const pace = paceText(l);
-      const after = pace
-        ? `${span("dim", pad(resets, resetsWidth))}  ${span(standing(l) === "over" ? "r" : standing(l) === "under" ? "g" : "dim", pace)}`
-        : span("dim", resets);
+      const p = pace(l, w);
+      const said = resets(l.resetsAt, w.now);
+      const after = p
+        ? `${tinted("dim", pad(said, resetsWidth))}  ${tinted(p.standing === "over" ? "r" : p.standing === "under" ? "g" : "dim", paceColumn(p))}`
+        : tinted("dim", said);
       lines.push(
-        `    ${pad(l.kind, 4)}  ${bar(l)}  ${span(level(l.used), `${String(l.used).padStart(3)}%`)}  ${after}`,
+        `    ${pad(limitColumn(l), nameWidth)}  ${bar(l, p)}  ${tinted(level(l.percent), figure(l.percent).padStart(4))}  ${after}`,
       );
     }
-    const note = runsOutNote(a, moment);
-    if (note) lines.push(`    ${pad("", 4)}  ${span("r", note)}`);
+    const note = runsOutNote(a, w);
+    if (note) lines.push(`    ${pad("", nameWidth)}  ${tinted("r", note)}`);
   });
   return lines;
 }
 
 // reference/integration-commands#statusline
-export function statusLine(moment: Moment): string {
+export function statusLine(w: World): string {
   const share = (l: Limit | undefined, marks: boolean) => {
-    if (!l) return span("dim", "?");
-    const s = standing(l);
+    if (!l) return tinted("dim", "?");
+    const s = pace(l, w)?.standing;
     const mark =
-      marks && s === "over" ? span("r", "▲") : marks && s === "under" ? span("g", "▼") : "";
-    return `${span(level(l.used), `${l.used}%`)}${mark}`;
+      marks && s === "over" ? tinted("r", "▲") : marks && s === "under" ? tinted("g", "▼") : "";
+    return `${tinted(level(l.percent), figure(l.percent))}${mark}`;
   };
   const shares = (a: Account, marks: boolean) =>
     `${share(
-      a.limits.find((l) => l.kind === "5h"),
+      a.limits.find((l) => l.lengthSeconds === 5 * HOUR),
       marks,
-    )}${span("dim", "·")}${share(
-      a.limits.find((l) => l.kind === "week"),
+    )}${tinted("dim", "·")}${share(
+      a.limits.find((l) => l.lengthSeconds === WEEK),
       marks,
     )}`;
-  const claude = toolAccounts("claude");
-  const current = claude.find((a) => isInUse(a, moment))!;
+  const claude = toolAccounts(w, "claude");
+  const current = inUseOf(w, "claude");
   const others = claude.filter((a) => a !== current);
   return [
-    `<b>${current.label}</b> ${shares(current, true)}`,
-    ...others.map((a) => `${span("dim", a.label)} ${shares(a, false)}`),
+    `<b>${escaped(current.label)}</b> ${shares(current, true)}`,
+    ...others.map((a) => `${tinted("dim", escaped(a.label))} ${shares(a, false)}`),
   ].join("  ");
 }
 
 // The activity list's changes, newest first, in the app's words (present/words.rs `change_verb`,
 // `change_outcome` and `change_caller`).
 const verbs: Record<string, string> = { use: "Switch", enroll: "Enrol", "warm-up": "Warm-up" };
+const outcomes: Record<string, string> = { ok: "Done" };
 const callers = { app: "Pitboard app", cli: "Command line" };
-const months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 
 // As each app dates a change: "13 Oct 2026 at 20:49" on macOS, and in the en-GB regional format's
 // "g" on Windows, "13/10/2026 20:49".
-const dated = (e: Logged, platform: Platform) => {
-  const [year, month, day] = e.day.split("-");
-  const time = e.time.slice(0, 5);
+const dated = (at: number, platform: Platform) => {
+  const d = local(at);
   return platform === "windows"
-    ? `${day}/${month}/${year} ${time}`
-    : `${Number(day)} ${months[Number(month) - 1]} ${year} at ${time}`;
+    ? `${shortDate(at)} ${hm(at)}`
+    : `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} at ${hm(at)}`;
 };
 
-export const activity = (platform: Platform) =>
-  logged
+export const activity = (log: Logged[], platform: Platform) =>
+  log
     .filter((e) => !e.on || e.on.includes(platform))
     .reverse()
     .map((e) => ({
-      date: dated(e, platform),
+      date: dated(e.at, platform),
       change: verbs[e.verb],
-      account: e.account,
-      result: "Done",
+      account: e.subject,
+      result: outcomes[e.outcome],
       by: callers[e.caller],
     }));

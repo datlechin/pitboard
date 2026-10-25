@@ -4,8 +4,8 @@ import satori from "satori";
 import sharp from "sharp";
 import { bar, heavy } from "../data/glyphs.ts";
 import { TAGLINE } from "../data/site.ts";
-import { clock, tools, type Tool } from "../data/world.ts";
-import { isInUse, listed, menuBarTitle, menuLine, menuTitle } from "./words.ts";
+import { clock, moments, tools, type Tool } from "../data/world.ts";
+import { hm, isInUse, listed, menuBarTitle, menuLine, menuTitle } from "./words.ts";
 
 export interface Size {
   width: number;
@@ -185,7 +185,7 @@ function menu(c: Colors): El {
       },
       nameOf(tool),
     ),
-    ...listed(tool, "after").map((a) =>
+    ...listed(moments.after, tool).map((a) =>
       h(
         "div",
         {
@@ -194,12 +194,12 @@ function menu(c: Colors): El {
           margin: `0 ${pt(5)}px`,
           padding: `${pt(3)}px ${pt(13)}px ${pt(4)}px ${pt(25)}px`,
         },
-        ...(isInUse(a, "after") ? [check] : []),
+        ...(isInUse(a, moments.after) ? [check] : []),
         h("div", {}, menuTitle(a)),
         h(
           "div",
           { fontSize: pt(11), lineHeight: `${pt(15)}px`, color: c["mac-menu-sub"] },
-          menuLine(a, "after"),
+          menuLine(a, moments.after),
         ),
       ),
     ),
@@ -270,7 +270,7 @@ function menuBar(assets: Assets, c: Colors, width: number): El {
     item(
       [
         img(icon, pt(16), pt(16), { marginRight: pt(2.25) }),
-        h("div", {}, menuBarTitle("after")),
+        h("div", {}, menuBarTitle(moments.after)),
         menu(c),
       ],
       { position: "relative", backgroundColor: c["mac-bar-hl"] },
@@ -278,7 +278,7 @@ function menuBar(assets: Assets, c: Colors, width: number): El {
     glyph("ic-batt", 25, 12),
     glyph("ic-wifi", 16, 12),
     glyph("ic-cc", 16, 14),
-    item([h("div", {}, clock.menuBar.split(" ").at(-1)!)], { paddingLeft: pt(9) }),
+    item([h("div", {}, hm(clock.menuBar))], { paddingLeft: pt(9) }),
   );
 }
 
@@ -332,12 +332,12 @@ export function describe(card: Card): string {
     return `Pitboard's logo above the label ${card.label} and the line: ${card.title}.`;
   }
   const sections = MENU.map((tool) => {
-    const rows = listed(tool, "after").map((a) =>
-      isInUse(a, "after") ? `${a.label}, in use,` : a.label,
+    const rows = listed(moments.after, tool).map((a) =>
+      isInUse(a, moments.after) ? `${a.label}, in use,` : a.label,
     );
     return `${nameOf(tool)} has ${rows.join(" and ")}`;
   });
-  return `Pitboard's logo above the line: ${TAGLINE} On the right, Pitboard's menu open below its menu bar item, ${menuBarTitle("after")}. ${sections.join("; ")}; each account shows its plan and how much of each limit it has used.`;
+  return `Pitboard's logo above the line: ${TAGLINE} On the right, Pitboard's menu open below its menu bar item, ${menuBarTitle(moments.after)}. ${sections.join("; ")}; each account shows its plan and how much of each limit it has used.`;
 }
 
 export function layout(card: Card, assets: Assets, o: { embedFont?: boolean; size?: Size } = {}) {

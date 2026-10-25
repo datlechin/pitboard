@@ -1,18 +1,26 @@
 // What the Windows app shows in the site's figures, in its own words: windows.test.ts finds each
 // in the file that says it.
-import { clock, share, warmUp, type Account, type Limit, type Moment, type Tool } from "./world.ts";
+import {
+  clock,
+  logged,
+  moments,
+  share,
+  warmUp,
+  type Account,
+  type Tool,
+  type World,
+} from "./world.ts";
 import {
   activity,
   fullest,
   headsUp,
+  hm,
   isInUse,
-  level,
+  limitRow,
   listed,
   menuLine,
   menuTitle,
-  paceText,
-  runsOutNote,
-  standing,
+  notes,
   toolAccounts,
   toolsOn,
 } from "../lib/words.ts";
@@ -45,22 +53,22 @@ const itemTitle = (a: Account) =>
 
 // IconMenu.cs `Entries`, a group between each two separators. A beta's menu has no Check for updates.
 // An account's tooltip is the line the menu bar app shows under it.
-export function iconMenu(moment: Moment, updates: boolean): MenuEntry[][] {
+export function iconMenu(w: World, updates: boolean): MenuEntry[][] {
   return [
     ...toolsOn("windows").map(([tool, name]) => [
       { heading: name },
-      ...listed(tool, moment).map((a) => ({
+      ...listed(w, tool).map((a) => ({
         account: itemTitle(a),
         label: a.label,
-        checked: isInUse(a, moment),
-        tip: menuLine(a, moment),
+        checked: isInUse(a, w),
+        tip: menuLine(a, w),
       })),
     ]),
     [{ command: "Add account…" }, { command: "Refresh" }],
     sites.map(([site, tool]) => ({
       command: `Open ${site}`,
       site,
-      submenu: listed(tool, moment).map((a) => a.label),
+      submenu: listed(w, tool).map((a) => a.label),
     })),
     [
       { command: "Open Pitboard", bold: true },
@@ -72,52 +80,38 @@ export function iconMenu(moment: Moment, updates: boolean): MenuEntry[][] {
 }
 
 // The tooltip of an account's row in the icon's menu.
-export function accountTip(label: string, moment: Moment): string {
-  for (const e of iconMenu(moment, false).flat()) {
+export function accountTip(label: string, w: World): string {
+  for (const e of iconMenu(w, false).flat()) {
     if ("account" in e && e.label === label) return e.tip;
   }
   throw new Error(`the icon's menu lists no ${label}`);
 }
 
-const capitalised = (s: string) => s[0].toUpperCase() + s.slice(1);
+// NoticeBar.xaml's notice after the switch to work, counting down
+export const switchNotice = {
+  title: "Switched Claude Code to work",
+  countdown: "Claude Code sessions already open follow in 0:21",
+};
 
 // AccountRow.xaml: its notes are the problem, the pace, the parked login's life and the warm-up.
-export function accountsPage(moment: Moment) {
+export function accountsPage(w: World, notice: typeof switchNotice | null) {
   return {
     title: "Accounts",
-    updated: `Updated ${clock.read}`,
+    updated: `Updated ${hm(w.readAt)}`,
     commands: ["Refresh", "Add account"],
-    notice:
-      moment === "after"
-        ? {
-            title: "Switched Claude Code to work",
-            countdown: "Claude Code sessions already open follow in 0:21",
-          }
-        : null,
+    notice,
     sections: toolsOn("windows").map(([tool, name]) => ({
       name,
-      rows: listed(tool, moment).map((a) => {
-        const inUse = isInUse(a, moment);
-        const runsOut = runsOutNote(a, moment);
+      rows: listed(w, tool).map((a) => {
+        const inUse = isInUse(a, w);
         return {
           label: a.label,
           plan: a.plan,
           email: a.email,
           inUse,
           action: inUse ? null : "Use",
-          limits: a.limits.map((l: Limit) => ({
-            ...l,
-            level: level(l.used),
-            standing: standing(l),
-            pace: paceText(l),
-          })),
-          notes: [
-            runsOut && capitalised(runsOut),
-            !inUse && a.parked && `Parked login good for ${a.parked.app}`,
-            tool === "claude" &&
-              warmUp.accounts.includes(a.label) &&
-              `Warms up again at ${clock.warmsAgain}`,
-          ].filter((n): n is string => Boolean(n)),
+          limits: a.limits.map((l) => limitRow(l, w)),
+          notes: notes(a, w),
         };
       }),
     })),
@@ -132,7 +126,7 @@ export const settingsPage = {
   atLimit: {
     header: "When a limit reaches",
     choice: "Switch automatically",
-    standing: `Watching work: 40% of its weekly limit, as of ${clock.read}.`,
+    standing: `Watching work: 40% of its weekly limit, as of ${hm(clock.read)}.`,
     note: `Pitboard switches Claude Code once a limit of the account in use reaches ${share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`,
     terms: "Anthropic’s terms may cover automatic switching and warm-ups.",
     link: "Is this allowed?",
@@ -141,16 +135,16 @@ export const settingsPage = {
   warm: {
     header: "Warm up limits",
     range: `${warmUp.from} to ${warmUp.to}`,
-    standing: `Next warm-up: ${warmUp.accounts[0]} at ${clock.warmsAgain}.`,
+    standing: `Next warm-up: ${warmUp.accounts[0]} at ${hm(clock.warmsAgain)}.`,
     hours: [
       ["From", warmUp.from],
       ["To", warmUp.to],
     ],
-    accounts: toolAccounts("claude").map((a) => {
+    accounts: toolAccounts(moments.after, "claude").map((a) => {
       const on = warmUp.accounts.includes(a.label);
       return {
         title: menuTitle(a),
-        standing: on ? `Warms up again at ${clock.warmsAgain}` : null,
+        standing: on ? `Warms up again at ${hm(clock.warmsAgain)}` : null,
         on,
       };
     }),
@@ -160,7 +154,7 @@ export const settingsPage = {
 export const activityPage = {
   title: "Activity",
   command: "Refresh",
-  rows: activity("windows"),
+  rows: activity(logged, "windows"),
 };
 
 // The notification at the share: title, tool and body, and its one button (WindowsNotifications.cs)

@@ -4,8 +4,8 @@ import Button from "./Button.astro";
 import Taskbar from "./Taskbar.astro";
 import TrayItem from "./TrayItem.astro";
 import { toast } from "../../../data/windows.ts";
-import { share, windowsClock } from "../../../data/world.ts";
-import { level } from "../../../lib/words.ts";
+import { clock, share } from "../../../data/world.ts";
+import { hm, level, shortDate } from "../../../lib/words.ts";
 ---
 
 <div class="desk h-260 desk-px-720" aria-hidden="true" data-output>
@@ -23,7 +23,7 @@ import { level } from "../../../lib/words.ts";
     <span>{toast.body}</span>
     <span class="mt-16 text-win-text"><Button stretch>{toast.button}</Button></span>
   </div>
-  <Taskbar time={windowsClock.warned.time} date={windowsClock.warned.date}>
+  <Taskbar time={hm(clock.warned)} date={shortDate(clock.warned)}>
     <TrayItem level={level(share)} />
   </Taskbar>
 </div>

@@ -1,7 +1,7 @@
 ---
 // The icon's MenuFlyout as IconMenuFlyout.cs builds it from IconMenu.cs, on its narrow padding.
 import { iconMenu, type MenuEntry } from "../../../data/windows.ts";
-import type { Moment } from "../../../data/world.ts";
+import { moments, type Moment } from "../../../data/world.ts";
 
 interface Props {
   demo?: boolean;
@@ -10,7 +10,7 @@ interface Props {
   class?: string;
 }
 const { demo = false, updates = false, submenu, class: extra } = Astro.props;
-const moments: Moment[] = demo ? ["before", "after"] : ["after"];
+const shown: Moment[] = demo ? ["before", "after"] : ["after"];
 const flyout =
   "rounded-u-8 bg-win-flyout py-2 font-win text-u-14/20 whitespace-nowrap text-win-text shadow-win-flyout";
 const row = "relative mx-4 my-2 flex h-28 items-center rounded-u-4 pr-11 pl-39";
@@ -28,13 +28,13 @@ const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site ==
     extra,
   ]}
 >
-  {moments.map((moment) => <div
+  {shown.map((moment) => <div
     class:list={[
       { "hidden demo-before:block": demo && moment === "before" },
       { "demo-before:hidden": demo && moment === "after" },
     ]}
   >
-    {iconMenu(moment, updates).map((group, i) => (
+    {iconMenu(moments[moment], updates).map((group, i) => (
       <>
         {i > 0 && <div class="my-1 h-1 bg-win-divider" />}
         {group.map((e) =>

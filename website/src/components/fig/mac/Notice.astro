@@ -4,11 +4,11 @@
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import { clock, share } from "../../../data/world.ts";
-import { headsUp } from "../../../lib/words.ts";
+import { headsUp, menuBarClock } from "../../../lib/words.ts";
 ---
 
 <div class="desk h-160" aria-hidden="true" data-output>
-  <MenuBar clock={clock.warned}>
+  <MenuBar clock={menuBarClock(clock.warned)}>
     <MenuItem>
       <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg>
       {`${headsUp.account} ${share}%`}

@@ -2,8 +2,9 @@
 // The Activity pane, with the entries sessions.ts's `pitboard log` prints, in the app's words; the
 // table stripes the rows the window has room for past them, as a macOS 27 table does.
 import Window from "./Window.astro";
+import { logged } from "../../../data/world.ts";
 import { activity } from "../../../lib/words.ts";
-const rows = [...activity("macos"), null, null];
+const rows = [...activity(logged, "macos"), null, null];
 ---
 
 <Window pane="activity" title="Activity" tools={["sf-refresh"]}>

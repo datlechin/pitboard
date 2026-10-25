@@ -1,11 +1,87 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { headsUp, level, toolsOn } from "./words.ts";
-import { account, clock, share, windowsClock } from "../data/world.ts";
+import {
+  hm,
+  level,
+  limitColumn,
+  limitName,
+  limitRow,
+  menuBarClock,
+  menuLine,
+  notes,
+  paceColumn,
+  paceOf,
+  parkedLife,
+  parkedLifeColumn,
+  RENEW_WITHIN,
+  MARGIN,
+  TOO_EARLY,
+  resets,
+  runsOut,
+  runsOutFirst,
+  runsOutNote,
+  sessionLife,
+  sessionLifeColumn,
+  shortDate,
+  span,
+  statusLine,
+  statusLines,
+  toolsOn,
+  headsUp,
+  whole,
+} from "./words.ts";
+import { plainText } from "./changelog.ts";
+import {
+  DAY,
+  HOUR,
+  MINUTE,
+  WEEK,
+  account,
+  accounts,
+  clock,
+  moments,
+  share,
+  type World,
+} from "../data/world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
-const provider = repo("crates/pitboard-core/src/provider/mod.rs");
+const core = (path: string) => repo(`crates/pitboard-core/src/${path}`);
+const provider = core("provider/mod.rs");
+
+// A Rust test's body, which has to still be there for the port to answer to it.
+function rustTest(source: string, name: string): string {
+  const start = source.indexOf(`fn ${name}()`);
+  assert.ok(start >= 0, `the core still has ${name}`);
+  const body = source.slice(start);
+  const end = body.indexOf("#[test]");
+  return (end < 0 ? body : body.slice(0, end)).replace(/\s+/g, " ");
+}
+
+// An integer as the Rust tests write one: `2 * 86_400 - 1`, `25 * DAY + 3 * HOUR`.
+const NOW = 1_789_935_000;
+const named = { DAY, HOUR, MINUTE, WEEK, RENEW_WITHIN, NOW };
+function value(expression: string): number {
+  const clean = expression.replace(/(\d)_(?=\d)/g, "$1").trim();
+  assert.match(clean, /^[\w\s+\-*/()]+$/, expression);
+  return Function(...Object.keys(named), `return (${clean});`)(...Object.values(named));
+}
+
+// Each `assert_eq!(call(…), "…")` of a test body, its argument and the words it expects.
+function cases(body: string, call: string): [number, string][] {
+  const found = [
+    ...body.matchAll(
+      new RegExp(
+        `assert_eq!\\( ?${call}\\(([^()]*)\\)(?:\\.as_deref\\(\\))?, (?:Some\\()?"([^"]*)"\\)? ?\\);`,
+        "g",
+      ),
+    ),
+  ].map((m): [number, string] => [value(m[1]), m[2]]);
+  assert.ok(found.length >= 4, `${call} has its cases`);
+  return found;
+}
+
+const said = core("words.rs");
 
 test("each system lists the tools Pitboard supports on it, Claude Desktop on macOS alone", () => {
   assert.ok(provider.includes("(ProviderId::Claude | ProviderId::Codex, _) => true,"));
@@ -17,25 +93,236 @@ test("each system lists the tools Pitboard supports on it, Claude Desktop on mac
   assert.deepEqual(listed("linux"), ["claude", "codex"]);
 });
 
-test("a figure's level steps where the core's usage_level does, at 70% and 90%", () => {
-  const core = repo("crates/pitboard-core/src/words.rs");
-  assert.ok(core.includes("        90.. => UsageLevel::Out,\n        70.. => UsageLevel::Low,"));
-  assert.deepEqual([0, 69, 70, 89, 90, 100].map(level), ["g", "g", "y", "y", "r", "r"]);
+test("a figure's level steps where the core's usage_level does, at 70% and 90% as drawn", () => {
+  assert.ok(said.includes("        90.. => UsageLevel::Out,\n        70.. => UsageLevel::Low,"));
+  assert.ok(said.includes("    match whole(percent) {"));
+  assert.deepEqual([0, 69.4, 69.5, 89.4, 89.5, 100, 130].map(level), [
+    "g",
+    "g",
+    "y",
+    "y",
+    "r",
+    "r",
+    "r",
+  ]);
+});
+
+test("a figure is rounded as Rust rounds, a half away from zero", () => {
+  assert.ok(
+    core("usage/mod.rs").includes(
+      "pub fn whole(percent: f64) -> i64 {\n    percent.round() as i64",
+    ),
+  );
+  assert.deepEqual([17.5, -17.5, 0.4, -0.5, 59].map(whole), [18, -18, 0, -1, 59]);
+});
+
+test("spans read as words.rs's spans_read_at_a_glance says", () => {
+  for (const [seconds, words] of cases(rustTest(said, "spans_read_at_a_glance"), "span"))
+    assert.equal(span(seconds), words, String(seconds));
+});
+
+test("resets read as words.rs's a_reset_is_said_in_the_largest_units_that_fit says", () => {
+  const body = rustTest(said, "a_reset_is_said_in_the_largest_units_that_fit");
+  assert.ok(body.includes("let resets = |left: i64| resets(NOW + left, NOW);"));
+  for (const [left, words] of cases(body, "resets")) assert.equal(resets(NOW + left, NOW), words);
+});
+
+test("a limit is named for its length, as words.rs's a_limit_is_named_for_its_length says", () => {
+  const body = rustTest(said, "a_limit_is_named_for_its_length");
+  const rows = [...body.matchAll(/\(([\d_]+), "([^"]+)", "([^"]+)"\)/g)];
+  assert.ok(rows.length >= 8);
+  for (const [, length, column, sentence] of rows) {
+    const limit = { percent: 0, resetsAt: NOW, lengthSeconds: value(length) };
+    assert.equal(limitColumn(limit), column, length);
+    assert.equal(limitName(limit), sentence, length);
+  }
+});
+
+test("a pace is said as words.rs's a_pace_is_said_as_over_under_or_on says", () => {
+  const body = rustTest(said, "a_pace_is_said_as_over_under_or_on");
+  const rows = [...body.matchAll(/pace_column\(&pace\((-?[\d.]+), Standing::(\w+)[^"]*"([^"]+)"/g)];
+  assert.equal(rows.length, 4);
+  for (const [, delta, standing, words] of rows) {
+    const p = { expected: 40, delta: Number(delta), standing: standing.toLowerCase() as "over" };
+    assert.equal(paceColumn(p), words);
+  }
+});
+
+test("a limit running out is said as words.rs's a_limit_running_out_is_named_with_when says", () => {
+  const body = rustTest(said, "a_limit_running_out_is_named_with_when");
+  const rows = [...body.matchAll(/runs_out\("([^"]+)", ([^)]+)\), "([^"]+)"/g)];
+  assert.equal(rows.length, 3);
+  for (const [, limit, seconds, words] of rows) assert.equal(runsOut(limit, value(seconds)), words);
+});
+
+test("a parked login's life reads as words.rs's tests of parked_life and parked_life_column say", () => {
+  const sentence = rustTest(said, "a_parked_logins_life_in_a_sentence_is_counted_in_whole_days");
+  assert.ok(sentence.includes("assert_eq!(parked_life(None, NOW), None);"));
+  assert.equal(parkedLife(undefined, NOW), null);
+  for (const [left, words] of cases(sentence, "life"))
+    assert.equal(parkedLife(NOW + left, NOW), words);
+  const column = rustTest(said, "a_parked_logins_life_in_a_column_says_when_it_expires");
+  for (const [left, words] of cases(column, "life"))
+    assert.equal(parkedLifeColumn(NOW + left, NOW), words);
+  assert.ok(core("state.rs").includes("pub(crate) const RENEW_WITHIN: i64 = 3 * 86_400;"));
+  assert.equal(RENEW_WITHIN, 3 * DAY);
+});
+
+test("a Claude Desktop sign-in's life is hedged, as words.rs's a_session_life_is_hedged_and_never_says_expired says", () => {
+  const body = rustTest(said, "a_session_life_is_hedged_and_never_says_expired");
+  for (const [left, words] of cases(body, "column"))
+    assert.equal(sessionLifeColumn(NOW + left, NOW), words);
+  for (const left of [-DAY, 0, 30, DAY, 40 * DAY]) {
+    const both = `${sessionLifeColumn(NOW + left, NOW)} ${sessionLife(NOW + left, NOW) ?? ""}`;
+    assert.ok(!both.includes("expire"), both);
+  }
+});
+
+const pace = core("usage/pace.rs");
+// pace.rs's own helper: a window of `length` with `gone` of it gone by, read now
+const paced = (used: number, gone: number, length: number) =>
+  paceOf(used, NOW + length - gone, length, NOW, NOW);
+
+test("pace.rs's margin and early part are the port's", () => {
+  assert.ok(pace.includes("pub(crate) const MARGIN: f64 = 5.0;"));
+  assert.ok(pace.includes("pub(crate) const TOO_EARLY: f64 = 0.03;"));
+  assert.equal(MARGIN, 5);
+  assert.equal(TOO_EARLY, 0.03);
+});
+
+test("a_limit_is_measured_against_the_part_of_its_window_gone_by", () => {
+  rustTest(pace, "a_limit_is_measured_against_the_part_of_its_window_gone_by");
+  const half = paced(50, WEEK / 2, WEEK)!;
+  assert.ok(Math.abs(half.expected - 50) < 1e-9);
+  assert.equal(half.standing, "even");
+  const busy = paced(33, 10 * HOUR + 18 * 60, WEEK)!;
+  assert.ok(Math.abs(busy.expected - 6.13) < 0.01);
+  assert.equal(busy.standing, "over");
+  assert.equal(paced(10, WEEK / 2, WEEK)!.standing, "under");
+  assert.equal(paced(54.9, WEEK / 2, WEEK)!.standing, "even");
+  assert.equal(paced(44.9, WEEK / 2, WEEK)!.standing, "under");
+});
+
+test("a_limit_faster_than_even_says_when_it_runs_out", () => {
+  rustTest(pace, "a_limit_faster_than_even_says_when_it_runs_out");
+  const gone = 10 * HOUR;
+  assert.equal(paced(33, gone, WEEK)!.runsOutIn, Math.trunc((67 * gone) / 33));
+  assert.ok(paced(55.1, (5 * HOUR) / 2, 5 * HOUR)!.runsOutIn! < (5 * HOUR) / 2);
+});
+
+test("a_pace_is_said_only_where_it_means_something", () => {
+  rustTest(pace, "a_pace_is_said_only_where_it_means_something");
+  assert.equal(paceOf(40, NOW + DAY, 0, NOW, NOW), null);
+  assert.equal(paceOf(40, NOW, WEEK, NOW, NOW), null);
+  assert.equal(paceOf(40, NOW - 60, WEEK, NOW, NOW), null);
+  assert.equal(paceOf(40, NOW + WEEK + 60, WEEK, NOW, NOW), null);
+  assert.equal(paced(100, DAY, WEEK), null);
+  assert.equal(paced(104, DAY, WEEK), null);
+  const early = Math.trunc(TOO_EARLY * 5 * HOUR);
+  assert.equal(paced(20, early - 1, 5 * HOUR), null);
+  assert.notEqual(paced(20, early + 1, 5 * HOUR), null);
+});
+
+test("a_readings_pace_is_its_own_and_only_counts_down", () => {
+  rustTest(pace, "a_readings_pace_is_its_own_and_only_counts_down");
+  const read = NOW - HOUR;
+  const resetsAt = NOW + WEEK - 11 * HOUR;
+  const then = paceOf(33, resetsAt, WEEK, read, read)!;
+  const later = paceOf(33, resetsAt, WEEK, read, NOW)!;
+  assert.equal(later.expected, then.expected);
+  assert.equal(later.runsOutIn, then.runsOutIn! - HOUR);
+  assert.equal(paceOf(90, NOW + 3 * DAY, WEEK, NOW - 3 * DAY, NOW)!.runsOutIn, 0);
+  assert.equal(paceOf(33, NOW - 1, WEEK, NOW - DAY, NOW), null);
+  assert.deepEqual(
+    paceOf(33, resetsAt, WEEK, NOW + HOUR, NOW),
+    paceOf(33, resetsAt, WEEK, NOW, NOW),
+  );
+});
+
+test("an_untouched_limit_is_under_pace", () => {
+  rustTest(pace, "an_untouched_limit_is_under_pace");
+  assert.equal(paced(0, DAY, WEEK)!.standing, "under");
+  assert.equal(paced(-1, DAY, WEEK)!.standing, "under");
+});
+
+test("the world's times give every word the figures were drawn with", () => {
+  const before = moments.before;
+  const row = (label: string, tool: "claude" | "codex" = "claude") =>
+    account(label, tool).limits.map((l) => {
+      const r = limitRow(l, before);
+      return [r.short, r.figure, r.resets, r.pace?.said ?? "", r.pace && whole(r.pace.expected)];
+    });
+  assert.deepEqual(row("personal"), [
+    ["5h", "59%", "resets in 1h 10m", "18% under pace", 77],
+    ["week", "73%", "resets in 5d 18h", "55% over pace", 18],
+  ]);
+  assert.deepEqual(row("work"), [
+    ["5h", "12%", "resets in 3h 00m", "28% under pace", 40],
+    ["week", "40%", "resets in 2d 4h", "29% under pace", 69],
+  ]);
+  assert.deepEqual(row("main", "codex"), [
+    ["week", "7%", "resets in 5d 18h", "11% under pace", 18],
+  ]);
+  assert.deepEqual(row("spare", "codex"), [["5h", "0%", "resets in 5h 00m", "", null]]);
+  assert.equal(
+    runsOutNote(account("personal"), before),
+    "weekly limit runs out in 11h 05m at this pace",
+  );
+  assert.equal(
+    menuLine(account("personal"), before),
+    "5-hour 59%, weekly 73% (runs out in 11h 05m)",
+  );
+  assert.equal(runsOutFirst(account("personal"), moments.after), null);
+  const all = (w: World) => accounts.map((a) => notes(a, w));
+  assert.deepEqual(all(before), [
+    ["Weekly limit runs out in 11h 05m at this pace", "Warms up again at 22:00"],
+    ["Parked login good for 26 more days"],
+    [],
+    [],
+    ["Read 2h 05m ago, with Claude closed"],
+    ["Its sign-in may lapse in 25 days"],
+  ]);
+  const column = (label: string) =>
+    plainText(statusLines(before, label === "office" ? "desktop" : "claude").join("\n"));
+  assert.match(column("work"), /ready · good for 26d 4h/);
+  assert.match(column("office"), /signed in · read 2h 05m ago/);
+  assert.match(column("office"), /ready · sign-in may lapse in 25d 3h/);
+  assert.deepEqual(
+    [menuBarClock(clock.menuBar), menuBarClock(clock.warned), hm(clock.read)],
+    ["Tue 13 Oct 20:51", "Wed 14 Oct 05:53", "20:50"],
+  );
+  assert.deepEqual(
+    [hm(clock.menuBar), shortDate(clock.menuBar), hm(clock.warned), shortDate(clock.warned)],
+    ["20:51", "13/10/2026", "05:53", "14/10/2026"],
+  );
 });
 
 test("the notification comes when personal's weekly limit, at its pace, reaches the share", () => {
-  const week = account("personal").limits.find((l) => l.kind === "week")!;
-  const minutes = (hm: string) => {
-    const [h, m] = /(\d+)h (\d+)m/.exec(hm)!.slice(1).map(Number);
-    return h * 60 + m;
-  };
-  const at = (clock: string) => {
-    const [h, m] = clock.slice(-5).split(":").map(Number);
-    return h * 60 + m;
-  };
-  const left = ((share - week.used) / (100 - week.used)) * minutes(week.runsOut!);
-  const warned = (at(clock.menuBar) + Math.round(left)) % (24 * 60);
-  assert.equal(at(clock.warned), warned);
-  assert.equal(at(windowsClock.warned.time), warned);
+  const week = account("personal").limits.find((l) => l.lengthSeconds === WEEK)!;
+  const runs = runsOutFirst(account("personal"), moments.before)!;
+  assert.equal(runs.limit, week);
+  // from the menu bar's clock, the part of what is left that takes it to the share
+  const left = ((share - week.percent) / (100 - week.percent)) * runs.inSeconds;
+  const minute = (epoch: number) => Math.floor(epoch / MINUTE);
+  assert.equal(minute(clock.menuBar + left), minute(clock.warned));
   assert.equal(headsUp.title, `personal has used ${share}% of its weekly limit`);
+});
+
+test("a label, email or plan a visitor types stays text in every line words.ts writes as HTML", () => {
+  const typed = ["<b>x&y", "<style>*{color:red}", '"'];
+  const [label, email, plan] = typed;
+  const w: World = {
+    ...moments.after,
+    accounts: accounts.map((a) =>
+      a.tool === "claude" && a.label === "work" ? { ...a, label, email, plan } : a,
+    ),
+    inUse: { ...moments.after.inUse, claude: label },
+  };
+  const html = [...statusLines(w, "claude"), statusLine(w)];
+  // past the lines' own markup, nothing is left that could open a tag or close an attribute
+  for (const line of html)
+    assert.doesNotMatch(line.replace(/<\/?b>|<span class="[^"<>]*">|<\/span>/g, ""), /[<>"]/);
+  const text = plainText(html.join("\n"));
+  for (const t of typed) assert.ok(text.includes(t), t);
+  for (const t of [label, email]) assert.ok(!html.join("\n").includes(t), t);
 });
