@@ -10,7 +10,7 @@ use super::{AtLimit, Intent, NotificationButton, Pane, RunOutNotice, Sheet, Wind
 use crate::Account;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
-use pitboard_core::host::OS;
+use pitboard_core::host::Os;
 use pitboard_core::status::Standing;
 
 /// `work`, in use, its five-hour limit `percent` used until `resets`.
@@ -282,9 +282,9 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
         machine.posted,
         [RunOutNotice {
             id: "claude/work/session/-7200".into(),
-            title: "work has no 5-hour limit left".into(),
+            title: words::ran_out("work", "5-hour"),
             subtitle: None,
-            body: "personal has 90% of its own left.".into(),
+            body: words::room_left("personal", Some(90)),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
                 title: words::SWITCH.into(),
@@ -304,10 +304,10 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     ])));
     both.refresh(&mut beside);
     assert_eq!(beside.posted[0].subtitle.as_deref(), Some("Claude Code"));
-    assert_eq!(beside.posted[0].title, "work has no 5-hour limit left");
+    assert_eq!(beside.posted[0].title, words::ran_out("work", "5-hour"));
     assert_eq!(
         both.shown().notices[0].title,
-        "Claude Code: work has no 5-hour limit left"
+        words::of_tool(Some("Claude Code"), &words::ran_out("work", "5-hour"))
     );
 }
 
@@ -504,7 +504,7 @@ fn updating_the_config_keeps_the_advice_about_the_account_in_use() {
         .notices
         .into_iter()
         .flat_map(|notice| notice.actions)
-        .find(|action| action.title == words::update_config(OS))
+        .find(|action| matches!(action.intent, Intent::UpdateConfig { .. }))
         .expect("offered");
 
     machine.answer = Ok(status(vec![work(100.0, 7_200), personal()]));
@@ -650,9 +650,9 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
         machine.posted,
         [RunOutNotice {
             id: "claude/work/session/-7200".into(),
-            title: "work has used 96% of its 5-hour limit".into(),
+            title: words::has_used("work", "96% of its 5-hour limit"),
             subtitle: None,
-            body: "personal has 90% of its own left.".into(),
+            body: words::room_left("personal", Some(90)),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
                 title: words::SWITCH.into(),
@@ -685,6 +685,11 @@ fn a_limit_past_its_reset_is_neither_notified_nor_advised_on() {
     }
 }
 
+/// What the notification says of a limit read at 1_800_000_000 that resets 65 minutes later.
+fn resets_in_65_minutes() -> String {
+    words::sentence(&pitboard_core::words::resets(1_800_003_900, 1_800_000_000))
+}
+
 /// With no other account to switch to, it says when the limit resets.
 #[test]
 fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
@@ -694,8 +699,11 @@ fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
     let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
-    assert_eq!(notice.title, "work has used 97% of its 5-hour limit");
-    assert_eq!(notice.body, "Resets in 1h 05m.");
+    assert_eq!(
+        notice.title,
+        words::has_used("work", "97% of its 5-hour limit")
+    );
+    assert_eq!(notice.body, resets_in_65_minutes());
     assert_eq!(notice.button, None);
 }
 
@@ -712,7 +720,7 @@ fn an_account_past_the_share_is_not_offered_at_the_share() {
     let mut machine = Stub::reading(Ok(read));
     model.refresh(&mut machine);
     let notice = machine.posted.first().expect("posted");
-    assert_eq!(notice.body, "Resets in 1h 05m.");
+    assert_eq!(notice.body, resets_in_65_minutes());
     assert_eq!(notice.button, None);
 }
 
@@ -758,7 +766,10 @@ fn switch_notifies_of_codex_alone() {
         .collect();
     assert_eq!(
         posted,
-        [("job has used 97% of its 5-hour limit", Some("Codex"))]
+        [(
+            words::has_used("job", "97% of its 5-hour limit").as_str(),
+            Some("Codex")
+        )]
     );
 }
 
@@ -776,21 +787,23 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         .iter()
         .map(|choice| choice.title.clone())
         .collect();
-    assert_eq!(titles, ["Do Nothing", "Notify Me", "Switch Automatically"]);
+    assert_eq!(
+        titles,
+        [AtLimit::Nothing, AtLimit::Notify, AtLimit::Switch]
+            .map(|choice| words::at_limit_choice(Os::MacOs, choice))
+    );
     assert_eq!(
         model.on_windows().machine.at_limit.choices[1].title,
-        "Notify me"
+        words::at_limit_choice(Os::Windows, AtLimit::Notify)
     );
-    assert_eq!(shown.at_limit.title, "Before an account runs out");
-    assert_eq!(shown.warm.title, "Warm up limits");
+    assert_eq!(shown.at_limit.title, words::BEFORE_RUNNING_OUT);
+    assert_eq!(shown.warm.title, words::WARM_UP_LIMITS);
     // The field beside the heading shows the share, and the choice is named with it.
-    assert_eq!(shown.at_limit.heading, "When a limit reaches");
-    assert_eq!(shown.at_limit.at_label, "When a limit reaches 95%");
+    assert_eq!(shown.at_limit.heading, words::AT_LIMIT);
+    assert_eq!(shown.at_limit.at_label, words::at_limit_label(95));
     assert_eq!(
-        shown.at_limit.note.as_deref(),
-        Some(
-            "Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open."
-        )
+        shown.at_limit.note,
+        words::at_limit_note(AtLimit::Notify, 95, "")
     );
     assert!(shown.at_limit.share_enabled);
     assert_eq!(
@@ -817,7 +830,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         terms.sentence,
         words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS)
     );
-    assert_eq!(terms.link_title, "Is this allowed?");
+    assert_eq!(terms.link_title, words::IS_THIS_ALLOWED);
 
     model.send(Intent::SetAtLimit {
         choice: AtLimit::Nothing,

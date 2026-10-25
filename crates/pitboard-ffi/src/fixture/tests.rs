@@ -14,7 +14,7 @@ use crate::model::{
     PitboardModel, PlatformError, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
-use crate::present::words::{self, titled};
+use crate::present::words;
 use crate::present::{AccountItem, AccountsShown, Footing};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
@@ -241,11 +241,24 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
             .find(|item| item.title == "personal")
             .and_then(|item| item.notes.last().cloned())
     };
+    // What the row says while a period runs, up to the clock time it says.
+    let running = words::typeset(&pitboard_core::words::capitalised(
+        &pitboard_core::words::warm_standing(
+            &pitboard_core::duty::warm::Standing::Running {
+                until: 0,
+                next: Some(0),
+            },
+            &|_| String::new(),
+        ),
+    ));
     let shown = told.last_where("personal warmed up", |shown| {
-        personal(shown).is_some_and(|note| note.starts_with("Warms up again at "))
+        personal(shown).is_some_and(|note| note.starts_with(&running))
     });
     let warm = &shown.machine.warm;
-    assert_eq!(warm.range_label, "All day");
+    assert_eq!(
+        Some(warm.range_label.as_str()),
+        words::warm_hours(0, 24 * 60, |_| None).as_deref()
+    );
     assert!(
         warm.accounts
             .iter()
@@ -1093,26 +1106,23 @@ fn the_menu_lists_every_account_under_its_tool() {
             )
         })
         .collect();
-    let with_figure = |title: &str, figure: &str| match OS {
-        Os::Windows => format!("{title} · {figure}"),
-        Os::MacOs | Os::Linux => title.to_owned(),
-    };
+    let named = |title, plan, figure| words::named_in_menu(OS, title, plan, figure);
     assert_eq!(
         sections,
         [
             (
                 Some("Claude Code".into()),
                 vec![
-                    with_figure("work", "42%"),
-                    "old".into(),
-                    with_figure("personal", "100%")
+                    named("work", None, Some("42%")),
+                    named("old", None, None),
+                    named("personal", None, Some("100%"))
                 ]
             ),
             (
                 Some("Codex".into()),
                 vec![
-                    with_figure("main · Pro", "7%"),
-                    with_figure("spare · Pro", "0%")
+                    named("main", Some("Pro"), Some("7%")),
+                    named("spare", Some("Pro"), Some("0%"))
                 ]
             ),
         ]
@@ -1120,7 +1130,8 @@ fn the_menu_lists_every_account_under_its_tool() {
     let codex: Vec<&str> = (shown.sections[1].accounts.iter())
         .map(|item| item.summary.as_str())
         .collect();
-    assert_eq!(codex, ["Weekly 7%", "Weekly 0%"], "a Pro plan's limits");
+    let weekly = |figure| words::limits_line(&[words::limit_in_line("weekly", figure, None)]);
+    assert_eq!(codex, [weekly("7%"), weekly("0%")], "a Pro plan's limits");
     model.shutdown();
 }
 
@@ -1167,7 +1178,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
             snapshot.footing == Footing::NoOneSignedIn
         });
         assert!(
-            matches!(&declined.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == titled(OS, "No Accounts", "No accounts")),
+            matches!(&declined.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(OS).0),
             "{}: {:?}",
             world.name(),
             declined.accounts_shown
@@ -1262,7 +1273,7 @@ fn one_account_is_offered_a_second_until_not_now() {
         provider: "claude".into(),
     });
     told.last_where("the next tip, for Codex", |snapshot| {
-        snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some("Use Pitboard with Codex")
+        snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some(words::USE_WITH_CODEX)
     });
     let started = Instant::now();
     while !launched
@@ -1497,20 +1508,20 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
             (item.title.clone(), titles)
         })
         .collect();
-    let titles = |titles: &[&str]| titles.iter().map(|&title| title.to_owned()).collect();
-    let again = words::sign_in_again(OS, true);
-    let now = words::warm_up_now(OS);
+    let titles = |label| {
+        vec![
+            words::use_account(Some(label)),
+            words::sign_in_again(OS, true),
+            words::rename(true).into(),
+            words::warm_up_now(OS),
+            words::forget(true).into(),
+        ]
+    };
     assert_eq!(
         menus,
         [
-            (
-                "work".into(),
-                titles(&["Use work", &again, "Rename…", &now, "Forget…"])
-            ),
-            (
-                "personal".into(),
-                titles(&["Use personal", &again, "Rename…", &now, "Forget…"])
-            ),
+            ("work".into(), titles("work")),
+            ("personal".into(), titles("personal")),
         ]
     );
     let work = &shown.sections[0].accounts[0];
@@ -1748,7 +1759,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         notice
             .lines
             .iter()
-            .any(|line| line.contains("2 logins kept")),
+            .any(|line| line.contains(&words::logins(2))),
         "{notice:?}"
     );
     told.last_where("nothing waiting", |snapshot| {
@@ -1802,7 +1813,10 @@ fn this_mac_shows_the_cores_checks() {
     let parked: Vec<&str> = checks
         .lines
         .iter()
-        .filter(|line| line.name.starts_with("Account "))
+        .filter(|line| {
+            line.name
+                .starts_with(&words::check_name("parked_login", "account "))
+        })
         .map(|line| line.name.as_str())
         .collect();
     assert!(parked.len() > 1, "{:#?}", checks.lines);
@@ -1921,7 +1935,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
         .iter()
         .map(|offer| (offer.title.as_str(), offer.window.label.as_str()))
         .collect();
-    assert_eq!(opens, [("Open chatgpt.com", "spare")]);
+    assert_eq!(opens, [(words::open_site("chatgpt.com").as_str(), "spare")]);
     let shown = read.account_windows;
     let menus: Vec<(String, Vec<String>)> = shown
         .menus
@@ -1938,11 +1952,11 @@ fn the_account_windows_are_what_their_ui_tests_read() {
         menus,
         [
             (
-                "Open claude.ai".to_owned(),
+                words::open_site("claude.ai"),
                 vec!["work".to_owned(), "old".into(), "personal".into()]
             ),
             (
-                "Open chatgpt.com".to_owned(),
+                words::open_site("chatgpt.com"),
                 vec!["main".to_owned(), "spare".into()]
             ),
         ]
@@ -2475,14 +2489,15 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
 
     let line = checked.machine.checks.lines.last().expect("a line");
     assert_eq!(line.level, crate::Level::Warn);
+    // Said at the clock time it was refused, which the test cannot know to the minute.
+    let said = words::check_text(&words::not_posted(
+        &words::ran_out("personal", "5-hour"),
+        "\n",
+        "COMException 0x80070490",
+    ));
+    let (before, after) = said.split_once('\n').expect("a clock time");
     assert!(
-        line.detail
-            .starts_with("“personal has no 5-hour limit left” not posted at "),
-        "{}",
-        line.detail
-    );
-    assert!(
-        line.detail.ends_with(" · COMException 0x80070490"),
+        line.detail.starts_with(before) && line.detail.ends_with(after),
         "{}",
         line.detail
     );

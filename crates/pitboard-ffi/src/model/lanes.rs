@@ -1007,11 +1007,12 @@ mod tests {
     fn a_notification_the_system_refused_answers_with_why() {
         let world = World::new("refused-post");
         let mut worker = worker(world.core(), StandInApps::new(&[], true));
+        let ran_out = crate::present::words::ran_out("work", "5-hour");
         let notice = crate::model::RunOutNotice {
             id: "claude/work/session/-1800018000".into(),
-            title: "work has no 5-hour limit left".into(),
+            title: ran_out.clone(),
             subtitle: None,
-            body: "spare has 80% of its own left.".into(),
+            body: crate::present::words::room_left("spare", Some(80)),
             clicked: "accounts".into(),
             button: None,
         };
@@ -1021,18 +1022,12 @@ mod tests {
             Answer::Posted { title, refused } => (title, refused),
             _ => panic!("a post answers as one"),
         };
-        assert_eq!(
-            answered(&worker),
-            ("work has no 5-hour limit left".into(), None)
-        );
+        assert_eq!(answered(&worker), (ran_out.clone(), None));
 
         worker.notifications = Arc::new(Posted::refusing("COMException 0x80070490"));
         assert_eq!(
             answered(&worker),
-            (
-                "work has no 5-hour limit left".into(),
-                Some("COMException 0x80070490".into())
-            )
+            (ran_out, Some("COMException 0x80070490".into()))
         );
     }
 

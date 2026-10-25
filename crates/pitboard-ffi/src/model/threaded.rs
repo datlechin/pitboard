@@ -6,7 +6,7 @@
 
 use super::state::Cadence;
 use super::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
-use super::testing::records::{CHATGPT, CHATGPT_CODEX, percent, read_in};
+use super::testing::records::{CHATGPT, CHATGPT_CODEX, percent, read_in, warning};
 use super::testing::world::StandIn;
 use super::testing::world::World;
 use super::{
@@ -15,7 +15,8 @@ use super::{
 };
 use crate::AppCore;
 use crate::present::testing::Utc;
-use crate::present::{AccountItem, PanelNotice};
+use crate::present::{AccountItem, PanelNotice, words};
+use pitboard_core::host::OS;
 use pitboard_core::state::Key;
 use pitboard_core::testing::{Asked, live_service};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -476,10 +477,7 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     });
     let asked = asked.last().expect("a snapshot");
     let question = asked.quit_question.as_ref().expect("a question");
-    assert_eq!(
-        question.question.title,
-        crate::present::words::quit_to_switch("ChatGPT")
-    );
+    assert_eq!(question.question.title, words::quit_to_switch("ChatGPT"));
     assert_eq!(switching(asked), Some("codex/work"));
     assert_eq!(asked.window_request.pane, Some(super::Pane::Accounts));
     assert!(
@@ -506,7 +504,7 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
         .unwrap_or_else(|| panic!("the switch's notice: {:#?}", last.notices));
     assert_eq!(
         said.lines,
-        [crate::present::words::restart_notice("codex", "personal")],
+        [words::restart_notice("codex", "personal")],
         "switched once ChatGPT had quit, with nothing left running to warn about"
     );
     model.shutdown();
@@ -546,10 +544,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     let [restart, unknown] = &said.lines[..] else {
         panic!("the restart line and what is unknown: {:#?}", said.lines);
     };
-    assert_eq!(
-        restart,
-        &crate::present::words::restart_notice("codex", "personal")
-    );
+    assert_eq!(restart, &words::restart_notice("codex", "personal"));
     assert!(unknown.contains("codex/personal"), "{unknown:?}");
     assert!(
         !warns(last, "sessions_unknown"),
@@ -558,7 +553,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     assert!(
         last.notices
             .iter()
-            .all(|n| n.title != "Couldn’t tell which sessions are open"),
+            .all(|n| n.title != words::warning_heading(OS, &warning("sessions_unknown", ""))),
         "said once: {:#?}",
         last.notices
     );
@@ -814,10 +809,7 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
     );
     let last = told.last().expect("a snapshot");
     let said = notice(last, "switch/claude").expect("the sign-in's notice");
-    assert_eq!(
-        said.lines,
-        [crate::present::words::signed_in_now("work", true, None)]
-    );
+    assert_eq!(said.lines, [words::signed_in_now("work", true, None)]);
     assert_eq!(signed_in(last, "claude").as_deref(), Some("work"));
     assert_eq!(last.sheet, None);
     assert!(
@@ -1034,11 +1026,10 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
         .iter()
         .find(|tool| tool.code == "codex")
         .expect("codex offered");
-    let missing = codex.missing.as_ref().expect("its CLI is not here");
-    assert!(
-        missing
-            .title
-            .starts_with("Pitboard can’t find the Codex CLI")
+    assert_eq!(
+        codex.missing,
+        words::missing(OS, "codex"),
+        "its CLI is not here"
     );
     assert_eq!(
         crate::present::check_name(
@@ -1048,9 +1039,8 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
             "codex".into(),
             "codex/phu".into()
         )
-        .problem
-        .as_deref(),
-        Some("A name can’t contain “/”. Choose the tool above.")
+        .problem,
+        words::unusable_name(pitboard_core::label::Unusable::Separator, true)
     );
     model.shutdown();
 }
@@ -1433,8 +1423,8 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
     told.until("the advice", advised);
     eventually("the notification posted", || posted.posted().len() == 1);
     let notice = posted.posted().remove(0);
-    assert_eq!(notice.title, "work has no 5-hour limit left");
-    assert_eq!(notice.body, "spare has 90% of its own left.");
+    assert_eq!(notice.title, words::ran_out("work", "5-hour"));
+    assert_eq!(notice.body, words::room_left("spare", Some(90)));
     assert_eq!(
         notice.button.map(|button| button.clicked).as_deref(),
         Some("switch/claude/spare")
@@ -1495,11 +1485,17 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     told.until("spare in use", in_use("claude", "spare"));
     eventually("the switch said", || !posted.posted().is_empty());
     let notice = posted.posted().remove(0);
-    assert_eq!(notice.title, "Switched Claude Code to spare");
+    assert_eq!(
+        notice.title,
+        words::switched_to(Some("Claude Code"), "spare")
+    );
     assert_eq!(
         notice.body,
-        "work has used 97% of its 5-hour limit. Sessions already running follow within 33 \
-         seconds."
+        words::used_then(
+            "work",
+            "97% of its 5-hour limit",
+            &words::follows(&crate::Adoption::PollingWithin(33))
+        )
     );
     assert_eq!(notice.button, None);
     let changes = pitboard_core::audit::read(world.ctx(), 20);
@@ -1613,7 +1609,7 @@ fn the_apps_preferences_follow_its_pitboard_directory() {
 fn the_machine_is_kept_over_the_real_core() {
     use super::Pane;
     use crate::{FoundCommandLine, Schedule};
-    use pitboard_core::host::{OS, Os};
+    use pitboard_core::host::Os;
     let mut world = World::new("machine");
     world.in_the_default_home();
     world.enrolled("work", "here", 42.0);
@@ -1652,27 +1648,35 @@ fn the_machine_is_kept_over_the_real_core() {
         pane: Pane::Activity,
     });
     let logged = told.last_where("the log", |last| !last.machine.activity.lines.is_empty());
-    let lines: Vec<(&str, &str, &str, &str)> = logged
+    let lines: Vec<(String, &str, String, String)> = logged
         .machine
         .activity
         .lines
         .iter()
         .map(|line| {
             (
-                line.change.as_str(),
+                line.change.clone(),
                 line.account.as_str(),
-                line.result.as_str(),
-                line.asked_by.as_str(),
+                line.result.clone(),
+                line.asked_by.clone(),
             )
         })
         .collect();
+    let said = |verb, account, outcome, caller| {
+        (
+            words::change_verb(verb),
+            account,
+            words::change_outcome(outcome),
+            words::change_caller(caller),
+        )
+    };
     assert_eq!(
         lines.first(),
-        Some(&("Schedule", "install", "Done", "Pitboard app")),
+        Some(&said("schedule", "install", "ok", "app")),
         "{lines:?}"
     );
     assert!(
-        lines.contains(&("Enrol", "work", "Done", "Command line")),
+        lines.contains(&said("enroll", "work", "ok", "cli")),
         "{lines:?}"
     );
 
@@ -1698,7 +1702,10 @@ fn the_machine_is_kept_over_the_real_core() {
     });
     let command_line = &found.machine.command_line;
     assert_eq!(command_line.found, Some(FoundCommandLine::Nowhere));
-    assert_eq!(command_line.in_terminal.as_deref(), Some("Not installed"));
+    assert_eq!(
+        command_line.in_terminal.as_deref(),
+        Some(words::NOT_INSTALLED)
+    );
     assert!(command_line.offers_link);
     model.shutdown();
 }

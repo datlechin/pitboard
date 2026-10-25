@@ -9,7 +9,7 @@ use super::testing::machine::{Hand, Stub, desktop_machine};
 use super::testing::platform::StandInApps;
 use super::testing::records::{
     CHATGPT, awaiting, chatgpt_holding, claude_code, codex, desktop_account, desktop_warning,
-    enrolled_as, refusal, status, switched, titled, warned, warning,
+    enrolled_as, refusal, status, switched, warned, warning,
 };
 use super::{Intent, Pane, Sheet, Snapshot, Tip, WindowRequest};
 use crate::account_windows::forget_message_on;
@@ -86,13 +86,33 @@ fn sends(row: &AccountItem) -> Option<Intent> {
     row.action.as_ref().map(|action| action.intent.clone())
 }
 
-/// What an account's own menu offers above its windows, by title, and whether each can be
-/// chosen now.
-fn offered(row: &AccountItem) -> Vec<(&str, bool)> {
+/// What an account's own menu offers above its windows, by what each sends, and whether each
+/// can be chosen now.
+fn offered(row: &AccountItem) -> Vec<(Intent, bool)> {
     row.offers
         .iter()
-        .map(|offer| (offer.title.as_str(), offer.enabled))
+        .map(|offer| (offer.intent.clone(), offer.enabled))
         .collect()
+}
+
+fn switch_to(qualified: &str) -> Intent {
+    Intent::SwitchTo {
+        qualified: qualified.into(),
+    }
+}
+
+fn sign_in_again(label: &str) -> Intent {
+    present_sheet(Sheet::SignInAgain {
+        provider: "claude".into(),
+        label: label.into(),
+    })
+}
+
+fn rename(label: &str) -> Intent {
+    present_sheet(Sheet::Rename {
+        provider: "claude".into(),
+        label: label.into(),
+    })
 }
 
 fn present_sheet(sheet: Sheet) -> Intent {
@@ -154,12 +174,7 @@ fn notice(
     PanelNotice {
         id: id.into(),
         severity,
-        spoken_severity: match severity {
-            Severity::Info => "Note",
-            Severity::Warning => "Warning",
-            Severity::Error => "Problem",
-        }
-        .into(),
+        spoken_severity: words::spoken_severity(severity).into(),
         title: title.into(),
         lines: lines.iter().map(|&line| line.to_owned()).collect(),
         until: None,
@@ -182,7 +197,7 @@ fn an_account_is_called_by_its_name_or_its_address_or_what_is_wrong_with_it() {
     );
     assert_eq!(
         described(unplaced("codex", false)).title,
-        "Login Pitboard can’t use"
+        words::nameless_login(true)
     );
 }
 
@@ -193,8 +208,14 @@ fn an_account_carries_the_plan_its_login_says() {
     team.plan = Some("Team 5x".into());
     let team = described(team);
     assert_eq!(team.plan.as_deref(), Some("Team 5x"));
-    assert_eq!(team.menu_title, "work · Team 5x");
-    assert_eq!(team.spoken, "work, Team 5x, in use");
+    assert_eq!(
+        team.menu_title,
+        words::named_in_menu(OS, "work", Some("Team 5x"), None)
+    );
+    assert_eq!(
+        team.spoken,
+        words::row_spoken("work", Some("Team 5x"), true, false)
+    );
     let spare = described(account(Some("spare")).build());
     assert_eq!((spare.plan, spare.menu_title.as_str()), (None, "spare"));
 }
@@ -211,9 +232,11 @@ fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
     );
     assert_eq!(in_use.email, "work@example.com");
     assert!(in_use.in_use);
-    let names: Vec<&str> = in_use.limits.iter().map(|l| l.short.as_str()).collect();
-    assert_eq!(names, ["5h", "week"]);
-    assert_eq!(in_use.spoken, "work, in use");
+    let names: Vec<String> = in_use.limits.iter().map(|l| l.short.clone()).collect();
+    let column =
+        |kind| pitboard_core::words::limit_column(&super::advice::window(&window(kind, 0.0)));
+    assert_eq!(names, [column("session"), column("weekly_all")]);
+    assert_eq!(in_use.spoken, words::row_spoken("work", None, true, false));
     assert!(!described(account(Some("spare")).build()).in_use);
     assert!(
         described(unplaced("codex", false)).limits.is_empty(),
@@ -227,20 +250,15 @@ fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
 #[test]
 fn pressing_an_account_does_the_one_thing_its_state_allows() {
     let spare = described(account(Some("spare")).build());
-    assert_eq!(
-        sends(&spare),
-        Some(Intent::SwitchTo {
-            qualified: "claude/spare".into()
-        })
-    );
+    assert_eq!(sends(&spare), Some(switch_to("claude/spare")));
     let action = spare.action.as_ref().expect("an action");
     assert_eq!(
-        (action.title.as_str(), action.spoken.as_str()),
-        ("Use", "Use spare")
+        (action.title.clone(), action.spoken.clone()),
+        (words::use_account(None), words::use_account(Some("spare")))
     );
     assert_eq!(
-        spare.offers.first().map(|offer| offer.title.as_str()),
-        Some("Use spare"),
+        spare.offers.first().map(|offer| offer.title.clone()),
+        Some(words::use_account(Some("spare"))),
         "as the account's own menu says it"
     );
     assert_eq!(
@@ -269,7 +287,7 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
     );
     assert_eq!(
         stale.action.map(|action| action.spoken),
-        Some(titled("Sign In to stale Again…", "Sign in to stale again…"))
+        Some(words::sign_in_to_again(OS, "stale", true))
     );
     let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
     assert_eq!(
@@ -281,7 +299,10 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
     );
     assert_eq!(
         unnamed.action.map(|action| (action.title, action.spoken)),
-        Some(("Name…".into(), "Name u@example.com…".into()))
+        Some((
+            words::name_account(None),
+            words::name_account(Some("u@example.com"))
+        ))
     );
     assert_eq!(
         sends(&described(account(None).uuid("u").build())),
@@ -304,7 +325,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
         switching(running),
     );
     assert!(spare.switching());
-    assert_eq!(spare.summary, "Switching…");
+    assert_eq!(spare.summary, words::SWITCHING_NOW);
     assert_eq!(spare.action, None);
 
     let other = described_while(
@@ -314,17 +335,25 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
         switching(running),
     );
     assert!(!other.switching());
-    assert_eq!(other.summary, "5-hour 5%");
+    assert_eq!(
+        other.summary,
+        described(
+            account(Some("other"))
+                .limits(vec![window("session", 5.0)])
+                .build()
+        )
+        .summary,
+        "its limits, as with no switch running"
+    );
     assert_eq!(other.action, None);
     // Its own menu holds its switch back too, and what else it offers it offers as the Swift
     // menu did, which held nothing else back for a switch.
-    let again = words::sign_in_again(OS, true);
     assert_eq!(
         offered(&other),
         [
-            ("Use other", false),
-            (again.as_str(), true),
-            ("Rename…", true)
+            (switch_to("claude/other"), false),
+            (sign_in_again("other"), true),
+            (rename("other"), true)
         ]
     );
     assert!(other.forget.as_ref().is_some_and(|forget| forget.enabled));
@@ -372,20 +401,14 @@ fn a_row_says_its_email_line_and_what_ends_it() {
 #[test]
 fn a_sign_in_running_holds_back_only_another_sign_in() {
     let spare = described_while(account(Some("spare")).build(), signing_in);
-    assert_eq!(
-        sends(&spare),
-        Some(Intent::SwitchTo {
-            qualified: "claude/spare".into()
-        })
-    );
+    assert_eq!(sends(&spare), Some(switch_to("claude/spare")));
     // Its own menu shows signing in again, held back, beside what can still be done.
-    let again = words::sign_in_again(OS, true);
     assert_eq!(
         offered(&spare),
         [
-            ("Use spare", true),
-            (again.as_str(), false),
-            ("Rename…", true)
+            (switch_to("claude/spare"), true),
+            (sign_in_again("spare"), false),
+            (rename("spare"), true)
         ]
     );
     assert!(spare.forget.as_ref().is_some_and(|forget| forget.enabled));
@@ -409,9 +432,9 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
     assert_eq!(
         offered(&stale),
         [
-            ("Use stale", false),
-            (again.as_str(), false),
-            ("Rename…", true)
+            (switch_to("claude/stale"), false),
+            (sign_in_again("stale"), false),
+            (rename("stale"), true)
         ]
     );
 }
@@ -429,19 +452,9 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
 /// testTheAccountInUseOffersNoForget read.
 #[test]
 fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
-    let again = |label: &str| {
-        present_sheet(Sheet::SignInAgain {
-            provider: "claude".into(),
-            label: label.into(),
-        })
-    };
-    let rename = |label: &str| {
-        present_sheet(Sheet::Rename {
-            provider: "claude".into(),
-            label: label.into(),
-        })
-    };
+    let again = sign_in_again;
     let sign_in_again = words::sign_in_again(OS, true);
+    let renames = words::rename(true);
     let offer = |title: &str, intent: Intent| ItemOffer {
         title: title.into(),
         intent,
@@ -452,9 +465,8 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         enabled: false,
         ..offer(title, intent)
     };
-    let switch = |label: &str| Intent::SwitchTo {
-        qualified: format!("claude/{label}"),
-    };
+    let switch = |label: &str| switch_to(&format!("claude/{label}"));
+    let switches = |label: &str| words::use_account(Some(label));
     let spare = account(Some("spare")).build();
     let accounts = vec![
         account(Some("work")).signed_in().build(),
@@ -471,9 +483,9 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         work.offers,
         [
-            dimmed("Use work", switch("work")),
+            dimmed(&switches("work"), switch("work")),
             offer(&sign_in_again, again("work")),
-            offer("Rename…", rename("work"))
+            offer(renames, rename("work"))
         ],
         "nothing to switch to: it is the one in use"
     );
@@ -486,28 +498,23 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         spare_row.offers,
         [
-            offer(
-                "Use spare",
-                Intent::SwitchTo {
-                    qualified: "claude/spare".into()
-                }
-            ),
+            offer(&switches("spare"), switch("spare")),
             offer(&sign_in_again, again("spare")),
-            offer("Rename…", rename("spare")),
+            offer(renames, rename("spare")),
         ]
     );
     assert_eq!(
         spare_row.forget,
         Some(ItemOffer {
-            title: "Forget…".into(),
+            title: words::forget(true).into(),
             intent: Intent::Forget {
                 qualified: "claude/spare".into()
             },
             enabled: true,
             confirm: Some(Question {
-                title: "Forget “spare”?".into(),
+                title: words::forget_title("spare"),
                 message: forget_message_on(OS, &spare, &accounts),
-                confirm: "Forget".into(),
+                confirm: words::forget(false).into(),
             }),
         })
     );
@@ -515,9 +522,9 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         stale.offers,
         [
-            dimmed("Use stale", switch("stale")),
+            dimmed(&switches("stale"), switch("stale")),
             offer(&sign_in_again, again("stale")),
-            offer("Rename…", rename("stale"))
+            offer(renames, rename("stale"))
         ],
         "its own action, offered once"
     );
@@ -527,7 +534,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         unnamed.offers,
         [offer(
-            "Name…",
+            &words::name_account(None),
             present_sheet(Sheet::Name {
                 provider: "codex".into(),
                 email: "u@example.com".into()
@@ -556,11 +563,11 @@ fn the_account_menu_with_nothing_selected_keeps_its_items() {
         model.on_a_mac().account_menu,
         AccountMenuShown {
             offers: vec![
-                "Use".into(),
+                words::use_account(None),
                 words::sign_in_again(Os::MacOs, true),
-                "Rename…".into()
+                words::rename(true).into()
             ],
-            forget: "Forget…".into(),
+            forget: words::forget(true).into(),
         }
     );
     assert_eq!(
@@ -594,14 +601,14 @@ fn an_accounts_own_menu_opens_its_windows() {
     assert_eq!(
         work.windows,
         [WindowOffer {
-            title: "Open claude.ai".into(),
+            title: words::open_site("claude.ai"),
             window: listed[0].clone(),
         }]
     );
     assert_eq!(
         main.windows,
         [WindowOffer {
-            title: "Open chatgpt.com".into(),
+            title: words::open_site("chatgpt.com"),
             window: listed[1].clone(),
         }]
     );
@@ -624,14 +631,17 @@ fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
             .limits(vec![window("session", 12.0)])
             .build()
     };
-    assert_eq!(described(stale()).summary, "Needs signing in again");
+    assert_eq!(described(stale()).summary, words::NEEDS_SIGNING_IN_AGAIN);
     assert_eq!(
         described_while(stale(), signing_in).summary,
-        "Needs signing in again"
+        words::NEEDS_SIGNING_IN_AGAIN
     );
     let switch_elsewhere = described_while(stale(), switching("claude/spare"));
-    assert_eq!(switch_elsewhere.summary, "Needs signing in again");
-    assert_eq!(switch_elsewhere.spoken, "stale, needs signing in again");
+    assert_eq!(switch_elsewhere.summary, words::NEEDS_SIGNING_IN_AGAIN);
+    assert_eq!(
+        switch_elsewhere.spoken,
+        words::row_spoken("stale", None, false, true)
+    );
 }
 
 /// An account whose login may be the one in use that could not be read is not said to need
@@ -650,7 +660,7 @@ fn an_account_whose_login_could_not_be_read_is_not_said_to_need_signing_in() {
     let said = described(unread);
     assert!(!said.needs_sign_in);
     assert_eq!(said.summary, why);
-    assert_eq!(said.spoken, "beta");
+    assert_eq!(said.spoken, words::row_spoken("beta", None, false, false));
 }
 
 /// The line under an account's name in the menu says what stands in its way before
@@ -667,10 +677,10 @@ fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
         stale_explanation: None,
         ..login
     };
-    assert_eq!(described(unexplained).summary, "Can’t be read or switched");
+    assert_eq!(described(unexplained).summary, words::CANNOT_READ_OR_SWITCH);
     assert_eq!(
         described(account(None).signed_in().uuid("u").limits(limits()).build()).summary,
-        "Not named yet"
+        words::NOT_NAMED_YET
     );
     assert_eq!(
         described(
@@ -680,7 +690,7 @@ fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
                 .build()
         )
         .summary,
-        "Needs signing in again"
+        words::NEEDS_SIGNING_IN_AGAIN
     );
 }
 
@@ -702,6 +712,16 @@ fn an_account_with_nothing_measured_is_described_by_its_address() {
     );
 }
 
+/// A limit as the menu's line names it: the core's name for its kind, with its model.
+fn named(limit: &Limit) -> String {
+    pitboard_core::words::scoped_limit_name(&super::advice::window(limit))
+}
+
+/// A limit at `figure` in the menu's line, by its kind.
+fn at(limit: Limit, figure: &str) -> String {
+    words::limit_in_line(&named(&limit), figure, None)
+}
+
 /// Every limit in one line, in the order the service gave them, the way a sentence starts: a
 /// capital on its first word and on nothing after it. A limit scoped to one model is named
 /// with its model, so it does not read as the account's own.
@@ -709,9 +729,13 @@ fn an_account_with_nothing_measured_is_described_by_its_address() {
 fn limits_are_said_in_one_line_with_only_its_first_letter_capitalised() {
     let summary =
         |limits: Vec<Limit>| described(account(Some("work")).limits(limits).build()).summary;
+    let fable = || window("weekly_scoped", 0.0).scope("Fable");
     assert_eq!(
         summary(vec![window("weekly_all", 64.4), window("session", 12.0)]),
-        "Weekly 64%, 5-hour 12%"
+        words::limits_line(&[
+            at(window("weekly_all", 0.0), "64%"),
+            at(window("session", 0.0), "12%")
+        ])
     );
     assert_eq!(
         summary(vec![
@@ -719,11 +743,15 @@ fn limits_are_said_in_one_line_with_only_its_first_letter_capitalised() {
             window("weekly_all", 30.0),
             window("weekly_scoped", 98.0).scope("Fable"),
         ]),
-        "5-hour 13%, weekly 30%, weekly Fable 98%"
+        words::limits_line(&[
+            at(window("session", 0.0), "13%"),
+            at(window("weekly_all", 0.0), "30%"),
+            at(fable(), "98%")
+        ])
     );
     assert_eq!(
         summary(vec![window("weekly_scoped", 7.0).scope("Fable")]),
-        "Weekly Fable 7%"
+        words::limits_line(&[at(fable(), "7%")])
     );
 }
 
@@ -746,14 +774,17 @@ fn a_used_up_limit_says_when_it_comes_back() {
         )
         .summary
     };
-    assert_eq!(spent(100.0, Some(today)), "5-hour used up until 14:00");
-    assert_eq!(spent(100.0, Some(later)), "5-hour used up until Fri 12:00");
-    assert_eq!(spent(100.0, None), "5-hour used up");
-    assert_eq!(spent(100.0, Some(NOON - 60)), "5-hour 100%", "it has reset");
-    assert_eq!(spent(100.0, Some(NOON)), "5-hour 100%", "it resets now");
+    let session = named(&window("session", 0.0));
+    let used_up = |until: Option<&str>| words::limits_line(&[words::used_up(&session, until)]);
+    let full = words::limits_line(&[at(window("session", 0.0), "100%")]);
+    assert_eq!(spent(100.0, Some(today)), used_up(Some("14:00")));
+    assert_eq!(spent(100.0, Some(later)), used_up(Some("Fri 12:00")));
+    assert_eq!(spent(100.0, None), used_up(None));
+    assert_eq!(spent(100.0, Some(NOON - 60)), full, "it has reset");
+    assert_eq!(spent(100.0, Some(NOON)), full, "it resets now");
     assert_eq!(
         spent(99.6, Some(today)),
-        "5-hour 100%",
+        full,
         "drawn at 100%, and still answered"
     );
     assert_eq!(
@@ -766,7 +797,10 @@ fn a_used_up_limit_says_when_it_comes_back() {
                 .build()
         )
         .summary,
-        "Weekly used up until 14:00, 5-hour 40%"
+        words::limits_line(&[
+            words::used_up(&named(&window("weekly_all", 0.0)), Some("14:00")),
+            at(window("session", 0.0), "40%")
+        ])
     );
 }
 
@@ -784,7 +818,10 @@ fn a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all() {
     let shown = present(&model.state, NOON, &Unreadable);
     assert_eq!(
         shown.sections[0].accounts[0].summary,
-        "5-hour used up until 14:00 UTC"
+        words::limits_line(&[words::used_up(
+            &named(&window("session", 0.0)),
+            Some(&words::utc_clock(today, NOON))
+        )])
     );
 }
 
@@ -884,18 +921,41 @@ fn a_bar_marks_where_an_even_pace_would_be() {
             .build(),
     )
     .limits;
+    let pace = |limit: &Limit| {
+        pitboard_core::usage::pace::of(
+            limit.percent,
+            limit.resets_at,
+            limit.length_seconds,
+            NOON,
+            NOON,
+        )
+        .expect("a pace")
+    };
+    let [session_limit, week_limit] = &busy_limits()[..] else {
+        unreachable!("two limits");
+    };
     let session = rows[0].pace.as_ref().expect("a pace");
     assert_eq!(session.standing, PaceStanding::Under);
     assert!((session.expected - 80.0).abs() < 1e-9);
-    assert_eq!(session.said, "50% under pace");
+    assert_eq!(
+        session.said,
+        pitboard_core::words::pace_column(&pace(session_limit))
+    );
     let week = rows[1].pace.as_ref().expect("a pace");
     assert_eq!(week.standing, PaceStanding::Over);
-    assert_eq!(week.said, "27% over pace");
-    assert!(week.help.contains("runs out in 20h 18m"), "{}", week.help);
-    assert!(
-        rows[1].spoken.contains("27 percent over an even pace"),
-        "{}",
-        rows[1].spoken
+    assert_eq!(
+        week.said,
+        pitboard_core::words::pace_column(&pace(week_limit))
+    );
+    assert_eq!(week.help, words::pace_help(&pace(week_limit)));
+    assert_eq!(
+        rows[1].spoken,
+        words::spoken_limit(
+            &named(week_limit),
+            33.0,
+            week_limit.resets_at.map(|at| at - NOON),
+            Some(&pace(week_limit))
+        )
     );
     let unknown = described(
         account(Some("work"))
@@ -919,13 +979,19 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .read_at(NOON)
             .build(),
     );
+    let runs_out = 20 * HOUR + 18 * 60;
     assert_eq!(
         in_use.notes,
-        ["Weekly limit runs out in 20h 18m at this pace"]
+        [words::typeset(&pitboard_core::words::capitalised(
+            &pitboard_core::words::runs_out(&named(&busy_limits()[1]), runs_out)
+        ))]
     );
     assert_eq!(
         in_use.summary,
-        "5-hour 30%, weekly 33% (runs out in 20h 18m)"
+        words::limits_line(&[
+            at(window("session", 0.0), "30%"),
+            words::limit_in_line(&named(&busy_limits()[1]), "33%", Some(runs_out))
+        ])
     );
     let parked = described(
         account(Some("spare"))
@@ -934,7 +1000,13 @@ fn the_account_in_use_says_which_limit_runs_out_first() {
             .build(),
     );
     assert!(parked.notes.is_empty());
-    assert_eq!(parked.summary, "5-hour 30%, weekly 33%");
+    assert_eq!(
+        parked.summary,
+        words::limits_line(&[
+            at(window("session", 0.0), "30%"),
+            at(window("weekly_all", 0.0), "33%")
+        ])
+    );
     let calm = described(
         account(Some("work"))
             .signed_in()
@@ -979,9 +1051,9 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
     assert_eq!(
         forget.confirm,
         Some(Question {
-            title: "Forget “spare”?".into(),
+            title: words::forget_title("spare"),
             message: forget_message_on(OS, &spare, &accounts),
-            confirm: "Forget".into(),
+            confirm: words::forget(false).into(),
         })
     );
     assert_eq!(
@@ -1019,17 +1091,12 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() 
         [again("claude", "spare"), None, again("codex", "work")]
     );
     assert_eq!(
-        shown[2]
-            .action
-            .as_ref()
-            .map(|action| action.spoken.as_str()),
-        Some(
-            titled(
-                "Sign In to work (Codex) Again…",
-                "Sign in to work (Codex) again…"
-            )
-            .as_str()
-        ),
+        shown[2].action.as_ref().map(|action| action.spoken.clone()),
+        Some(words::sign_in_to_again(
+            OS,
+            &words::named_with_tool("work", "Codex"),
+            true
+        )),
         "named with its tool beside another tool's accounts"
     );
 }
@@ -1098,7 +1165,10 @@ fn one_tool_looks_as_it_always_did() {
         assert_eq!(shown.sections.len(), 1, "{tool}");
         assert_eq!(shown.sections[0].heading, None);
         assert_eq!(shown.sections[0].accounts.len(), 2);
-        assert_eq!(shown.menu_bar.name_and_usage, "unnamed 80%");
+        assert_eq!(
+            shown.menu_bar.name_and_usage,
+            words::in_bar(words::UNNAMED, "80%")
+        );
     }
     assert!(reading(Vec::new()).0.shown().sections.is_empty());
 }
@@ -1139,7 +1209,7 @@ fn a_read_fills_in_the_title() {
             .build(),
     ]);
     let bar = model.shown().menu_bar;
-    assert_eq!(bar.name_and_usage, "work 42%");
+    assert_eq!(bar.name_and_usage, words::in_bar("work", "42%"));
     assert_eq!(bar.usage, "42%");
 }
 
@@ -1148,7 +1218,10 @@ fn a_read_fills_in_the_title() {
 #[test]
 fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
     let mut model = at_noon();
-    assert_eq!(model.shown().menu_bar.spoken, "Pitboard");
+    assert_eq!(
+        model.shown().menu_bar.spoken,
+        words::bar_spoken(None, None, false)
+    );
     let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work"))
             .signed_in()
@@ -1156,7 +1229,10 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
             .build(),
     ])));
     model.refresh(&mut machine);
-    assert_eq!(model.shown().menu_bar.spoken, "Pitboard, work 42%");
+    assert_eq!(
+        model.shown().menu_bar.spoken,
+        words::bar_spoken(Some(&words::in_bar("work", "42%")), None, false)
+    );
 
     machine.answer = Ok(status(vec![
         account(Some("work"))
@@ -1170,7 +1246,10 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
             .build(),
     ]));
     model.refresh(&mut machine);
-    assert_eq!(model.shown().menu_bar.spoken, "Pitboard, work 80%, Codex");
+    assert_eq!(
+        model.shown().menu_bar.spoken,
+        words::bar_spoken(Some(&words::in_bar("work", "80%")), Some("Codex"), false)
+    );
 }
 
 // What the window and the menu have to tell somebody.
@@ -1221,10 +1300,7 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
             vec![give_up()],
         )
     );
-    assert_eq!(
-        notices[1].title,
-        "An environment variable overrides the login"
-    );
+    assert_eq!(notices[1].title, words::warning_heading(OS, &overridden()));
     assert!(
         !notices
             .iter()
@@ -1282,7 +1358,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
         titles,
         [
             words::COULD_NOT_READ_USAGE,
-            "An environment variable overrides the login"
+            words::warning_heading(OS, &overridden())
         ]
     );
     assert_eq!(
@@ -1564,26 +1640,24 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     assert_eq!(left_behind.severity, Severity::Warning);
     assert_eq!(
         [model.on_a_mac(), model.on_windows()].map(|shown| shown.notices[0].title.clone()),
-        [
-            "A login file is left behind the keychain",
-            "A login file is left behind Credential Manager"
-        ]
+        [Os::MacOs, Os::Windows].map(|os| words::warning_heading(os, &left).to_owned())
     );
     assert_eq!(left_behind.lines, [left.message]);
     assert_eq!(left_behind.until, None);
+    let at_renewal = crate::Adoption::AtRenewal { file: path.into() };
     assert_eq!(
         crate::present::auto_switched_notice(
             "personal",
             "work",
             "96% of its 5-hour limit",
-            &crate::Adoption::AtRenewal { file: path.into() },
+            &at_renewal,
             NOON,
         )
         .body,
-        format!(
-            "personal has used 96% of its 5-hour limit. Sessions already running keep the \
-             account they are on until their login is next renewed, or until they are started \
-             again: {path} is there."
+        words::used_then(
+            "personal",
+            "96% of its 5-hour limit",
+            &words::follows(&at_renewal)
         )
     );
 }
@@ -1640,10 +1714,7 @@ fn a_restart_is_explained_when_no_sessions_were_counted() {
     switch(&mut model, &mut machine, "codex/work");
     assert_eq!(
         model.shown().notices[0].lines,
-        [
-            "Any codex session started before this switch keeps using personal until it is quit \
-          and started again."
-        ]
+        [words::restart_notice("codex", "personal")]
     );
 }
 
@@ -1757,7 +1828,7 @@ fn a_sign_in_notice_names_its_tool_beside_another() {
 fn each_warning_a_read_carries_is_a_notice_headed_from_its_code() {
     let second = warning("auth_overridden", "CLAUDE_CODE_OAUTH_TOKEN is set");
     let novel = warning("something_new", "Something Pitboard does not know yet");
-    let warnings = vec![overridden(), novel, second];
+    let warnings = vec![overridden(), novel.clone(), second];
     let mut model = at_noon();
     let mut machine = Stub::reading(Ok(warned(
         vec![account(Some("work")).signed_in().build()],
@@ -1767,13 +1838,10 @@ fn each_warning_a_read_carries_is_a_notice_headed_from_its_code() {
 
     let notices = model.shown().notices;
     let titles: Vec<&str> = notices.iter().map(|n| n.title.as_str()).collect();
+    let overrides = words::warning_heading(OS, &overridden());
     assert_eq!(
         titles,
-        [
-            "An environment variable overrides the login",
-            "Pitboard has a warning",
-            "An environment variable overrides the login",
-        ]
+        [overrides, words::warning_heading(OS, &novel), overrides]
     );
     for (notice, warning) in notices.iter().zip(&warnings) {
         assert_eq!(notice.lines, std::slice::from_ref(&warning.message));
@@ -1995,7 +2063,7 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
             &words::ran_out("work", "5-hour"),
             &[&words::room_left("spare", Some(80))],
             vec![NoticeAction {
-                title: "Switch to spare".into(),
+                title: words::switch_to("spare"),
                 intent: Intent::SwitchTo {
                     qualified: "claude/spare".into()
                 },
@@ -2099,7 +2167,7 @@ fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
     assert_eq!(
         menu.switches,
         [MenuEntry {
-            title: "Switch to spare".into(),
+            title: words::switch_to("spare"),
             subtitle: Some(words::ran_out("work", "5-hour")),
             help: None,
             severity: None,
@@ -2247,7 +2315,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     assert_eq!(
         menu.others,
         Some(MenuEntry {
-            title: "An environment variable overrides the login".into(),
+            title: words::warning_heading(OS, &overridden()).into(),
             subtitle: Some(words::SHOW_IN_PITBOARD.into()),
             help: Some("ANTHROPIC_API_KEY is set".into()),
             severity: Some(Severity::Warning),
@@ -2310,7 +2378,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
     let shown = model.shown();
     assert_eq!(
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),
-        ("Not read yet", "")
+        (words::NOT_READ_YET, "")
     );
     let mut machine = Stub::reading(Ok(status(vec![account(Some("work")).signed_in().build()])));
     model.send(Intent::Refresh { asked: false });
@@ -2318,13 +2386,14 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
     let shown = model.shown();
     assert_eq!(
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),
-        ("Reading…", "Reading…")
+        (words::READING, words::READING)
     );
     model.run(&mut machine);
     let shown = model.shown();
+    let updated = words::updated("12:00");
     assert_eq!(
         (shown.updated_menu.as_str(), shown.updated_window.as_str()),
-        ("Updated 12:00", "Updated 12:00")
+        (updated.as_str(), updated.as_str())
     );
 
     let mut failed = at_noon();
@@ -2334,7 +2403,7 @@ fn when_the_numbers_were_read_is_said_as_a_time() {
         Vec::new(),
     ))));
     let shown = failed.shown();
-    assert_eq!(shown.updated_menu, "Showing the last numbers measured");
+    assert_eq!(shown.updated_menu, words::SHOWING_LAST_MEASURED);
     assert_eq!(shown.updated_window, "");
 }
 
@@ -2350,12 +2419,12 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     let shown = model.shown();
     assert_eq!(
         shown.menu_accounts_note.as_deref(),
-        Some("Reading accounts…")
+        Some(words::READING_ACCOUNTS)
     );
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::Reading {
-            title: "Reading accounts…".into()
+            title: words::READING_ACCOUNTS.into()
         }
     );
 
@@ -2370,16 +2439,17 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
 
     let (empty, _) = reading(Vec::new());
     let shown = empty.shown();
-    assert_eq!(shown.menu_accounts_note.as_deref(), Some("No accounts yet"));
+    assert_eq!(
+        shown.menu_accounts_note.as_deref(),
+        Some(words::NO_ACCOUNTS_YET)
+    );
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::NoAccounts {
-            title: titled("No Accounts", "No accounts"),
-            detail: "Sign in once here and Pitboard parks that login, so signing in to another \
-                     account doesn’t cost you the first."
-                .into(),
+            title: words::no_accounts(OS).0,
+            detail: words::no_accounts(OS).1.into(),
             add: Choice {
-                title: titled("Add Account…", "Add account…"),
+                title: words::add_account(OS, true),
                 intent: present_sheet(Sheet::Add { provider: None }),
                 enabled: true,
             },
@@ -2395,12 +2465,9 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::NoTool {
-            title: "Claude Code Isn’t Installed".into(),
-            detail: "Pitboard switches the logins of Claude Code, Codex and Claude Desktop, so \
-                     there is nothing for it to do until one of them is installed and signed in \
-                     once."
-                .into(),
-            link_title: "How to Install Claude Code".into(),
+            title: words::claude_code_not_installed(Os::MacOs),
+            detail: words::no_tool("Claude Code, Codex and Claude Desktop"),
+            link_title: words::how_to_install_claude_code(Os::MacOs),
             link: "https://docs.claude.com/en/docs/claude-code/setup".into(),
         }
     );
@@ -2495,17 +2562,15 @@ fn an_account_signed_in_without_a_name_is_asked_for_one() {
     );
     assert_eq!(
         shown.sections[0].accounts[0].spoken,
-        "a@example.com, in use"
+        words::row_spoken("a@example.com", None, true, false)
     );
     assert_eq!(
         shown.setup,
         Some(SetupStep {
             title: words::GIVE_IT_A_NAME.into(),
-            detail: "a@example.com is signed in. Pitboard parks logins under a name you \
-                     choose, and can’t park this one until it has one."
-                .into(),
+            detail: words::unnamed_detail("a@example.com", None),
             actions: vec![Choice {
-                title: "Name…".into(),
+                title: words::name_account(None),
                 intent: present_sheet(Sheet::Name {
                     provider: "claude".into(),
                     email: "a@example.com".into()
@@ -2539,19 +2604,17 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
         shown.setup,
         Some(SetupStep {
             title: words::add_a_second(None),
-            detail: "work is the only account Pitboard knows, so there’s nothing to switch to. \
-                     Adding another signs in to it and parks its login beside this one."
-                .into(),
+            detail: words::only_one("work", None, None),
             actions: vec![
                 Choice {
-                    title: titled("Add Account…", "Add account…"),
+                    title: words::add_account(OS, true),
                     intent: present_sheet(Sheet::Add {
                         provider: Some("claude".into())
                     }),
                     enabled: true,
                 },
                 Choice {
-                    title: titled("Not Now", "Not now"),
+                    title: words::not_now(OS),
                     intent: Intent::DeclineSecondAccount {
                         provider: "claude".into()
                     },
@@ -2576,18 +2639,16 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
     assert_eq!(
         mac,
         Some(SetupStep {
-            title: "Switch before a limit runs out".into(),
-            detail: "Pitboard notifies you once a limit of the account in use reaches 95%. It \
-                     can switch Claude Code to another of your accounts instead."
-                .into(),
+            title: words::SWITCH_BEFORE_RUNNING_OUT.into(),
+            detail: words::at_limit_tip(95),
             actions: vec![
                 Choice {
-                    title: "Open Settings…".into(),
+                    title: words::open_settings(Os::MacOs),
                     intent: Intent::ShowLimits,
                     enabled: true,
                 },
                 Choice {
-                    title: "Not Now".into(),
+                    title: words::not_now(Os::MacOs),
                     intent: Intent::DeclineTip { tip: Tip::AtLimit },
                     enabled: true,
                 },
@@ -2600,9 +2661,12 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
         windows
             .actions
             .iter()
-            .map(|choice| choice.title.as_str())
+            .map(|choice| choice.title.clone())
             .collect::<Vec<_>>(),
-        ["Open settings", "Not now"]
+        [
+            words::open_settings(Os::Windows),
+            words::not_now(Os::Windows)
+        ]
     );
 
     let (mut chose, _) = reading(vec![
@@ -2647,20 +2711,18 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     assert_eq!(
         shown.setup,
         Some(SetupStep {
-            title: "Use Pitboard with Codex".into(),
-            detail: "Codex is installed. Pitboard reads nothing of it until you add the account \
-                     it’s signed in to."
-                .into(),
+            title: words::USE_WITH_CODEX.into(),
+            detail: words::CODEX_UNUSED.into(),
             actions: vec![
                 Choice {
-                    title: "Add Codex Account…".into(),
+                    title: words::add_codex_account(Os::MacOs),
                     intent: Intent::NameSignedIn {
                         provider: "codex".into()
                     },
                     enabled: true,
                 },
                 Choice {
-                    title: "Not Now".into(),
+                    title: words::not_now(Os::MacOs),
                     intent: Intent::DeclineTip { tip: Tip::UseCodex },
                     enabled: true,
                 },
@@ -2752,50 +2814,35 @@ fn an_app_that_does_not_open_at_login_is_asked_to() {
     ]);
     model.send(Intent::OpensAtLogin { on: false });
     assert_eq!(model.shown().footing, Footing::NotOpenedAtLogin);
-    let not_now = |title: &str| Choice {
-        title: title.into(),
-        intent: Intent::DeclineTip {
-            tip: Tip::OpenAtLogin,
-        },
-        enabled: true,
-    };
-    assert_eq!(
-        model.on_a_mac().setup,
-        Some(SetupStep {
-            title: "Open Pitboard at login".into(),
-            detail: "Pitboard watches your limits only while it’s open.".into(),
-            actions: vec![
-                Choice {
-                    title: "Open at Login".into(),
-                    intent: Intent::OpensAtLogin { on: true },
-                    enabled: true,
+    let step = |os: Os, link: Option<SetupLink>| SetupStep {
+        title: words::open_at_login(os).0.into(),
+        detail: words::open_at_login(os).1.into(),
+        actions: vec![
+            Choice {
+                title: words::turn_on_at_login(os),
+                intent: Intent::OpensAtLogin { on: true },
+                enabled: true,
+            },
+            Choice {
+                title: words::not_now(os),
+                intent: Intent::DeclineTip {
+                    tip: Tip::OpenAtLogin,
                 },
-                not_now("Not Now"),
-            ],
-            link: None,
-        })
-    );
+                enabled: true,
+            },
+        ],
+        link,
+    };
+    assert_eq!(model.on_a_mac().setup, Some(step(Os::MacOs, None)));
     assert_eq!(
         model.on_windows().setup,
-        Some(SetupStep {
-            title: "Start when you sign in to Windows".into(),
-            detail: "Pitboard watches your limits only while it’s running. Its icon starts \
-                     behind the arrow at the end of the taskbar, and Taskbar settings can keep \
-                     it in view."
-                .into(),
-            actions: vec![
-                Choice {
-                    title: "Turn on".into(),
-                    intent: Intent::OpensAtLogin { on: true },
-                    enabled: true,
-                },
-                not_now("Not now"),
-            ],
-            link: Some(SetupLink {
-                title: "Taskbar settings".into(),
+        Some(step(
+            Os::Windows,
+            Some(SetupLink {
+                title: words::TASKBAR_SETTINGS.into(),
                 link: "ms-settings:taskbar".into(),
-            }),
-        })
+            })
+        ))
     );
 }
 
@@ -2839,12 +2886,7 @@ fn only_one_account_is_counted_per_tool() {
     );
     let step = shown.setup.expect("a step");
     assert_eq!(step.title, words::add_a_second(Some("Codex")));
-    assert!(
-        step.detail
-            .starts_with("job is the only Codex account Pitboard knows"),
-        "{}",
-        step.detail
-    );
+    assert_eq!(step.detail, words::only_one("job", Some("Codex"), None));
 }
 
 /// A login Pitboard could not read, or cannot switch, has no account behind it. Offering to
@@ -2891,7 +2933,7 @@ fn a_login_whose_account_cannot_be_told_is_shown_from_the_first_run() {
         panic!("one row");
     };
     assert!(row.unplaced && row.action.is_none(), "{row:?}");
-    assert_eq!(row.title, "Login Pitboard can’t identify");
+    assert_eq!(row.title, words::nameless_login(false));
     assert_eq!(
         row.summary,
         "Pitboard could not tell which account Claude Code's login is (Anthropic answered 400)"
@@ -2938,19 +2980,14 @@ fn every_tool_is_offered_and_one_not_found_says_how_to_get_it() {
         (vec!["claude", "codex", "desktop"], vec!["codex", "desktop"])
     );
     assert_eq!(codex_known.tool, "claude");
-    let missing = codex_known.tools[1].missing.as_ref().expect("codex");
     assert_eq!(
-        missing.title,
-        "Pitboard can’t find the Codex CLI on this Mac."
+        codex_known.tools[1].missing,
+        words::missing(Os::MacOs, "codex")
     );
     assert_eq!(
-        missing.detail,
-        "Adding a Codex account runs the Codex CLI’s own sign-in. Pitboard doesn’t use the copy \
-         inside the ChatGPT app. Install the CLI, then come back to this window."
+        codex_known.tools[1].message,
+        words::sign_in_message("Codex", None)
     );
-    assert_eq!(missing.link_title, "How to Install the Codex CLI");
-    assert_eq!(missing.link, "https://developers.openai.com/codex/cli");
-    assert!(codex_known.tools[1].message.contains("Codex’s own sign-in"));
 
     let codex_only = adding(vec![codex()], Vec::new())
         .sheet_text
@@ -3072,7 +3109,7 @@ fn each_sheet_says_what_it_is_for() {
         model.shown().sheet_text.expect("the sheet")
     };
     let add = shown(Sheet::Add { provider: None });
-    assert_eq!(add.title, words::add_account(OS));
+    assert_eq!(add.title, words::add_account(OS, false));
     assert_eq!(add.message, words::sign_in_message("Claude Code", None));
     assert_eq!(
         (add.name.as_str(), add.prompt.as_str()),
@@ -3084,7 +3121,7 @@ fn each_sheet_says_what_it_is_for() {
         provider: "codex".into(),
         label: "work".into(),
     });
-    assert_eq!(again.title, words::sign_in_to_again(OS, "work"));
+    assert_eq!(again.title, words::sign_in_to_again(OS, "work", false));
     assert_eq!(again.message, words::sign_in_message("Codex", Some("work")));
     assert_eq!(again.account.as_deref(), Some("work"));
 
@@ -3187,7 +3224,7 @@ fn each_sheets_default_button_says_what_it_does() {
             provider: "claude".into(),
             label: "work".into(),
         }),
-        words::RENAME
+        words::rename(false)
     );
 }
 
@@ -3367,7 +3404,7 @@ fn a_failure_away_from_the_window_is_said_in_it() {
     let shown = model.shown();
     assert_eq!(shown.window_request.serial, 1);
     let alert = shown.failure_alert.expect("an alert");
-    assert_eq!(alert.title, "Couldn’t forget beta");
+    assert_eq!(alert.title, words::could_not_forget("claude/beta"));
     assert_eq!(
         alert.message,
         "beta is the account in use, so it cannot be forgotten.\n\nANTHROPIC_API_KEY is set"
@@ -3406,7 +3443,7 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     switch(&mut model, &mut machine, "claude/nobody");
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said in the window");
-    assert_eq!(failure.title, "Couldn’t switch to nobody");
+    assert_eq!(failure.title, words::could_not_switch("claude/nobody"));
     assert_eq!(failure.message, "There is no account called claude/nobody.");
     assert_eq!(shown.window_request.serial, 1);
 }
@@ -3432,13 +3469,21 @@ fn what_depends_on_the_time_is_made_again_every_minute() {
             .resets
             .clone()
     };
-    assert_eq!(resets(&model), "resets in 2h 05m");
+    let reset = NOON + 2 * 3600 + 5 * 60;
+    assert_eq!(resets(&model), pitboard_core::words::resets(reset, NOON));
     let due = model.state.next_due().expect("a timer");
     assert!(due <= model.now.running + Duration::from_secs(60));
 
     model.later(Duration::from_secs(60));
     assert!(model.tick().iter().all(|job| matches!(job, Job::Look)));
-    assert_eq!(resets(&model), "resets in 2h 04m");
+    assert_eq!(
+        resets(&model),
+        pitboard_core::words::resets(reset, NOON + 60)
+    );
+    assert_ne!(
+        pitboard_core::words::resets(reset, NOON + 60),
+        pitboard_core::words::resets(reset, NOON)
+    );
     assert!(
         model.state.next_due().expect("a timer") <= model.now.running + Duration::from_secs(60),
         "and again a minute later"

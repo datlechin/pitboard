@@ -134,7 +134,7 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
                 words::start_sign_in(seen.os),
             ),
         },
-        _ if current && first => (words::record_first(app), words::add_account(seen.os)),
+        _ if current && first => (words::record_first(app), words::add_account(seen.os, false)),
         _ if current => (
             match awaiting {
                 Some(awaiting) => {
@@ -207,7 +207,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
                 .map(|awaiting| awaiting.label.clone())
                 .unwrap_or_default();
             SheetText {
-                title: words::add_account(seen.os),
+                title: words::add_account(seen.os, false),
                 message,
                 tools: (seen.tools.iter())
                     .map(|offered| sheet_tool(seen, sheet, offered))
@@ -224,7 +224,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         Sheet::SignInAgain { label, .. } => {
             let (message, confirm) = form_words(seen, sheet, &tool);
             SheetText {
-                title: words::sign_in_to_again(seen.os, label),
+                title: words::sign_in_to_again(seen.os, label, false),
                 message,
                 tools: (seen.tools.iter())
                     .filter(|own| own.code == tool)
@@ -259,7 +259,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
             account: None,
             name: label.clone(),
             prompt: label.clone(),
-            confirm: words::RENAME.into(),
+            confirm: words::rename(false).into(),
             saving,
             progress: None,
         },
@@ -412,9 +412,9 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
     let announce = (signing.started && asks_again).then(|| message.clone());
     SigningInText {
         title: if signing.again {
-            words::sign_in_to_again(seen.os, &signing.name)
+            words::sign_in_to_again(seen.os, &signing.name, false)
         } else {
-            words::add_account(seen.os)
+            words::add_account(seen.os, false)
         },
         message,
         code_note: String::new(),
@@ -644,22 +644,23 @@ mod tests {
     // and not where the core would read it as `codex/codex/phu`.
     #[test]
     fn a_name_that_cannot_be_one_says_why_as_it_is_typed() {
+        use pitboard_core::label::Unusable;
         let add = || Sheet::Add {
             provider: Some("codex".into()),
         };
         assert_eq!(saved(add(), "codex/phu"), None);
         assert_eq!(
-            problem(add(), "codex/phu").as_deref(),
-            Some("A name can’t contain “/”. Choose the tool above.")
+            problem(add(), "codex/phu"),
+            words::unusable_name(Unusable::Separator, true)
         );
         assert_eq!(
-            problem(rename("work"), "a/b").as_deref(),
-            Some("A name can’t contain “/”.")
+            problem(rename("work"), "a/b"),
+            words::unusable_name(Unusable::Separator, false)
         );
         assert_eq!(saved(add(), "my work"), None);
         assert_eq!(
-            problem(add(), "my work").as_deref(),
-            Some("A name is one word, with no spaces.")
+            problem(add(), "my work"),
+            words::unusable_name(Unusable::NotOneWord, true)
         );
         assert_eq!(problem(add(), "phu"), None);
     }
@@ -761,7 +762,10 @@ mod tests {
         };
         assert_eq!(
             case(Vec::new(), Vec::new()),
-            (words::record_first("Claude"), words::add_account(Os::MacOs))
+            (
+                words::record_first("Claude"),
+                words::add_account(Os::MacOs, false)
+            )
         );
         assert_eq!(
             case(work_and_home(), Vec::new()),

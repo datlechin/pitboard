@@ -6,12 +6,6 @@ use crate::{
 };
 use pitboard_core::provider::ProviderId;
 
-/// A control's words as this system writes them, title case on a Mac and sentence case on
-/// Windows, for a test of what `shown` says.
-pub(crate) fn titled(title_case: &str, sentence_case: &str) -> String {
-    crate::present::words::titled(pitboard_core::host::OS, title_case, sentence_case)
-}
-
 /// The ChatGPT app's bundle id, which is how the core's holder detection names it.
 pub(crate) const CHATGPT: &str = "com.openai.codex";
 

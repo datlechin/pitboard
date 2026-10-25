@@ -7,7 +7,7 @@
 
 use super::state::Job;
 use super::testing::machine::{Hand, Stub};
-use super::testing::records::{DANA, refusal, status, titled};
+use super::testing::records::{DANA, refusal, status};
 use super::windows::{LINK_SCHEME, WEB_SCHEME};
 use super::{DownloadEnd, EarlierWindowRecords, Intent};
 use crate::account_windows::records::{Entry, Records};
@@ -208,7 +208,7 @@ fn the_picker_offers_the_sites_accounts_with_one_chosen() {
     assert_eq!(title, words::open_link_as("claude.ai"));
     assert_eq!(link.url, "https://claude.ai/chat/x");
     assert_eq!(link_text, "claude.ai/chat/x");
-    assert_eq!(open, "Open");
+    assert_eq!(open, words::OPEN);
     let labels: Vec<&str> = accounts.iter().map(|a| a.window.label.as_str()).collect();
     assert_eq!(labels, ["work", "personal"], "only claude.ai's accounts");
     assert_eq!(accounts[0].detail, "work@example.com");
@@ -253,7 +253,7 @@ fn the_picker_says_what_stands_in_the_way() {
     assert_eq!(
         picker(&unread).shown,
         PickerShown::Reading {
-            title: "Reading accounts…".into()
+            title: words::READING_ACCOUNTS.into()
         }
     );
 
@@ -288,18 +288,10 @@ fn the_picker_says_what_stands_in_the_way() {
     else {
         panic!("no account");
     };
-    assert_eq!(
-        title,
-        titled("No claude.ai Account", "No claude.ai account")
-    );
+    assert_eq!((title, detail), words::no_site_account(OS, "claude.ai"));
     assert_eq!(link_text, "claude.ai/");
-    assert_eq!(
-        detail,
-        "None of the accounts Pitboard has opens claude.ai. Add one, and this link waits here \
-         until you choose it."
-    );
-    assert_eq!(in_browser, titled("Open in Browser", "Open in browser"));
-    assert_eq!(add.title, titled("Add Account…", "Add account…"));
+    assert_eq!(in_browser, words::open_in_browser(OS));
+    assert_eq!(add.title, words::add_account(OS, true));
     assert_eq!(
         add.intent,
         Intent::PresentSheet {
@@ -450,7 +442,13 @@ fn the_windows_are_the_enrolled_accounts_of_each_site() {
             SiteMenu::One { title, .. } | SiteMenu::Several { title, .. } => title.as_str(),
         })
         .collect();
-    assert_eq!(titles, ["Open claude.ai", "Open chatgpt.com"]);
+    assert_eq!(
+        titles,
+        [
+            words::open_site("claude.ai"),
+            words::open_site("chatgpt.com")
+        ]
+    );
 }
 
 /// A window that cannot show its page yet says what it waits for in the model's words, as
@@ -462,9 +460,9 @@ fn the_windows_are_the_enrolled_accounts_of_each_site() {
 #[test]
 fn a_window_that_cannot_show_its_page_says_why_in_the_models_words() {
     let reading = WindowWaiting {
-        window_title: "Account".into(),
+        window_title: words::ACCOUNT.into(),
         shown: WaitingShown::Reading {
-            title: "Reading accounts…".into(),
+            title: words::READING_ACCOUNTS.into(),
         },
     };
     assert_eq!(Hand::new().shown().account_windows.waiting, reading);
@@ -482,7 +480,7 @@ fn a_window_that_cannot_show_its_page_says_why_in_the_models_words() {
     assert_eq!(
         model.shown().account_windows.waiting,
         WindowWaiting {
-            window_title: "Account".into(),
+            window_title: words::ACCOUNT.into(),
             shown: WaitingShown::ReadFailed {
                 title: words::could_not_read_accounts(OS),
                 detail: "could not read Pitboard's account list".into(),
@@ -611,7 +609,7 @@ fn a_link_for_an_open_window_loads_in_it() {
     let PickerShown::Choose { accounts, .. } = picker(&model).shown else {
         panic!("accounts to choose from");
     };
-    assert_eq!(accounts[0].detail, "main@example.com, window open");
+    assert_eq!(accounts[0].detail, words::window_open("main@example.com"));
     armed(&mut model);
     choose(&mut model, &main);
     let after = open_window(&model, &main).expect("still open").load;
@@ -1382,7 +1380,7 @@ fn a_download_goes_from_starting_to_its_end_once() {
     });
     let one = &downloads(&model)[0];
     assert_eq!(one.state, DownloadState::Finished { file: file.into() });
-    assert_eq!(one.said.as_deref(), Some("Downloaded"));
+    assert_eq!(one.said.as_deref(), Some(words::DOWNLOADED));
     assert!(!one.running);
 
     model.send(Intent::DownloadStarted {
@@ -1411,7 +1409,7 @@ fn a_download_goes_from_starting_to_its_end_once() {
     });
     let two = &downloads(&model)[0];
     assert_eq!(two.state, DownloadState::Cancelled);
-    assert_eq!(two.said.as_deref(), Some("Cancelled"));
+    assert_eq!(two.said.as_deref(), Some(words::CANCELLED));
 
     model.send(Intent::DownloadStarted {
         id: "3".into(),
@@ -1465,7 +1463,7 @@ fn an_open_window_offers_to_clear_its_ended_downloads() {
     assert_eq!(
         clear(&model),
         Some(Choice {
-            title: "Clear".into(),
+            title: words::CLEAR.into(),
             intent: Intent::ClearDownloads {
                 store: work.clone()
             },
@@ -1530,18 +1528,15 @@ fn a_window_on_windows_offers_no_clear_of_its_downloads() {
 /// Swift tested nowhere.
 #[test]
 fn quitting_while_downloads_run_asks_first() {
-    let question = |title: &str| Question {
-        title: title.into(),
-        message: "Quitting Pitboard stops them, and they will not resume.".into(),
-        confirm: "Quit".into(),
+    let question = |running| {
+        let (title, message, confirm) = words::quit_with_downloads(running);
+        Question {
+            title,
+            message: message.into(),
+            confirm: confirm.into(),
+        }
     };
     assert_eq!(downloads_quit_question(0), None);
-    assert_eq!(
-        downloads_quit_question(1),
-        Some(question("A download is in progress. Quit anyway?"))
-    );
-    assert_eq!(
-        downloads_quit_question(2),
-        Some(question("2 downloads are in progress. Quit anyway?"))
-    );
+    assert_eq!(downloads_quit_question(1), Some(question(1)));
+    assert_eq!(downloads_quit_question(2), Some(question(2)));
 }

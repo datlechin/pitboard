@@ -238,7 +238,7 @@ fn what_stops_it_is_said_in_the_sheet() {
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t tell whose login it is");
+    assert_eq!(failure.title, words::COULD_NOT_TELL_WHOSE);
     assert!(!shown.stow_text.expect("still up").can_confirm);
 
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
@@ -257,7 +257,7 @@ fn what_stops_it_is_said_in_the_sheet() {
     let shown = model.shown();
     assert_eq!(shown.sheet, Some(Sheet::Stow));
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t put the login away");
+    assert_eq!(failure.title, words::COULD_NOT_STOW);
     assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     assert!(!shown.stow_text.expect("still up").saving);
 }
@@ -324,6 +324,6 @@ fn putting_away_that_came_to_nothing_is_said_in_its_sheet() {
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t put the login away");
+    assert_eq!(failure.title, words::COULD_NOT_STOW);
     assert!(!shown.stow_text.expect("still up").saving);
 }

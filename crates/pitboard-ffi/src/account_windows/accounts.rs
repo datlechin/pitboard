@@ -2,6 +2,7 @@
 //! what forgetting an account deletes of its window.
 
 use super::{stores, this_machine};
+use crate::present::words;
 use crate::{Account, Site};
 use pitboard_core::host::Os;
 use pitboard_sites::Conjunction;
@@ -70,7 +71,7 @@ pub(crate) fn window_accounts(accounts: &[Account]) -> Vec<WindowAccount> {
                 store: stores::derive(site.store_name, &account.account_id),
                 in_use: account.signed_in,
                 title: if shared {
-                    format!("{label} ({})", site.name())
+                    words::named_with_tool(label, site.name())
                 } else {
                     label.to_owned()
                 },
@@ -113,12 +114,12 @@ pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
                 1 => {
                     let window = mine.remove(0);
                     Some(SiteMenu::One {
-                        title: format!("Open {} as {}", site.name(), window.label),
+                        title: words::open_site_as(site.name(), &window.label),
                         window,
                     })
                 }
                 _ => Some(SiteMenu::Several {
-                    title: format!("Open {}", site.name()),
+                    title: words::open_site(site.name()),
                     site: (*site).into(),
                     windows: mine,
                 }),
@@ -261,7 +262,14 @@ pub(crate) mod tests {
             account(Some("home"), "claude", "c"),
         ]);
         let titles: Vec<&str> = windows.iter().map(|w| w.title.as_str()).collect();
-        assert_eq!(titles, ["work (claude.ai)", "work (chatgpt.com)", "home"]);
+        assert_eq!(
+            titles,
+            [
+                words::named_with_tool("work", "claude.ai").as_str(),
+                &words::named_with_tool("work", "chatgpt.com"),
+                "home"
+            ]
+        );
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["work", "work", "home"]);
     }
@@ -285,9 +293,9 @@ pub(crate) mod tests {
         else {
             panic!("an item for claude.ai and a submenu for chatgpt.com: {menus:?}");
         };
-        assert_eq!(title, "Open claude.ai as work");
+        assert_eq!(*title, words::open_site_as("claude.ai", "work"));
         assert_eq!(window.label, "work");
-        assert_eq!(several, "Open chatgpt.com");
+        assert_eq!(*several, words::open_site("chatgpt.com"));
         assert_eq!(site.host, "chatgpt.com");
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["main", "spare"]);

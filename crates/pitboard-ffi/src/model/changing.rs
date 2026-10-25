@@ -24,7 +24,7 @@ use super::{Intent, Sheet};
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{Account, EnrolledAs};
-use pitboard_core::host::OS;
+use pitboard_core::host::{OS, Os};
 use pitboard_core::switch::Foreseen;
 use std::time::Duration;
 
@@ -110,7 +110,7 @@ fn only_an_unenrolled_signed_in_account_can_be_named_here() {
     model.run(&mut machine);
     let shown = model.shown();
     let refused = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(refused.title, "Couldn’t name this account");
+    assert_eq!(refused.title, words::COULD_NOT_NAME);
     assert_eq!(refused.message, "There is already an account called work.");
     assert_eq!(shown.sheet, Some(name), "the sheet stays open to say why");
     assert!(
@@ -171,7 +171,7 @@ fn a_refused_forget_is_reported() {
     model.run(&mut machine);
     assert_eq!(machine.forgot, ["claude/alpha", "claude/beta"]);
     let refused = model.state.presented.clone().expect("said");
-    assert_eq!(refused.title, "Couldn’t forget beta");
+    assert_eq!(refused.title, words::could_not_forget("claude/beta"));
     assert_eq!(
         refused.message,
         "beta is the account in use, so it cannot be forgotten."
@@ -226,7 +226,10 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
         model.run(&mut machine);
     }
     assert_eq!(machine.forgot, ["codex/work", "claude/work"]);
-    assert_eq!(codex_work.spoken, "work (Codex)");
+    assert_eq!(
+        codex_work.spoken,
+        words::row_spoken(&words::named_with_tool("work", "Codex"), None, false, false)
+    );
 }
 
 /// Naming or renaming closes its own sheet once it is done, and only that. The name is saved
@@ -771,7 +774,7 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None);
     let failure = model.state.presented.clone().expect("said in the window");
-    assert_eq!(failure.title, "Couldn’t name this account");
+    assert_eq!(failure.title, words::COULD_NOT_NAME);
     assert_eq!(shown.window_request.serial, requests + 1);
 
     put_up(&mut model, &mut machine, renaming("claude", "work"));
@@ -781,7 +784,7 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     assert_eq!(shown.sheet_failure, None, "not in another sheet");
     assert_eq!(
         model.state.presented.clone().map(|failure| failure.title),
-        Some("Couldn’t rename work".into())
+        Some(words::could_not_rename("work"))
     );
 }
 
@@ -796,8 +799,8 @@ fn a_save_that_came_to_nothing_says_so() {
     model.give(Answer::Lost(job));
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t rename work");
-    assert!(failure.message.starts_with("Pitboard stopped before"));
+    assert_eq!(failure.title, words::could_not_rename("work"));
+    assert_eq!(failure.message, words::NOT_KNOWN_HOW_IT_WENT);
     assert!(!shown.sheet_text.expect("the sheet").saving);
 }
 
@@ -823,7 +826,7 @@ fn the_update(model: &Hand) -> Intent {
         .notices
         .into_iter()
         .flat_map(|notice| notice.actions)
-        .find(|action| action.title == words::update_config(OS))
+        .find(|action| matches!(action.intent, Intent::UpdateConfig { .. }))
         .expect("offered")
         .intent
 }
@@ -866,10 +869,11 @@ fn updating_claude_codes_config_is_no_switch() {
         .collect();
     assert!(
         rows.iter()
-            .all(|(summary, switching)| summary != "Switching…" && !switching),
+            .all(|(summary, switching)| summary != words::SWITCHING_NOW && !switching),
         "{rows:?}"
     );
 
+    let behind_again = behind.clone();
     machine.updating_config = Ok(vec![behind.clone()]);
     machine.answer = Ok(warned(work_in_use(), vec![behind]));
     model.run(&mut machine);
@@ -882,7 +886,7 @@ fn updating_claude_codes_config_is_no_switch() {
         .into_iter()
         .map(|notice| notice.title)
         .collect();
-    assert_eq!(titles, ["A login file is left behind the keychain"]);
+    assert_eq!(titles, [words::warning_heading(Os::MacOs, &behind_again)]);
 }
 
 /// A config that could not be written is said beside the read after the update, which still
@@ -901,21 +905,19 @@ fn a_config_that_could_not_be_updated_is_said_beside_the_read_after() {
     machine.updating_config = Ok(vec![not_written.clone()]);
     model.send(the_update(&model));
     model.run(&mut machine);
+    let names_another_heading = words::warning_heading(OS, &names_another());
     assert_eq!(
         titles(&model),
         [
-            "Claude Code’s config names another account",
-            "Pitboard has a warning"
+            names_another_heading,
+            words::warning_heading(OS, &not_written)
         ]
     );
     assert_eq!(model.shown().notices[1].lines, [not_written.message]);
     assert!(model.state.last_switches.is_empty());
 
     model.refresh(&mut machine);
-    assert_eq!(
-        titles(&model),
-        ["Claude Code’s config names another account"]
-    );
+    assert_eq!(titles(&model), [names_another_heading]);
 }
 
 /// Pressed once another account is in use, as after a switch that landed before the press,
@@ -934,7 +936,7 @@ fn a_config_update_refused_is_said_in_the_window() {
     model.send(update_config("claude/work"));
     model.run(&mut machine);
     let refused = model.state.presented.clone().expect("said");
-    assert_eq!(refused.title, "Couldn’t update Claude Code’s config");
+    assert_eq!(refused.title, words::COULD_NOT_UPDATE_CONFIG);
     assert_eq!(refused.code.as_deref(), Some("account_not_in_use"));
     assert!(model.state.last_switches.is_empty());
     assert!(machine.switched_to.is_empty());
@@ -1021,7 +1023,10 @@ fn a_recording_whose_app_does_not_quit_reads_nothing_and_lets_its_sheet_go() {
         let shown = model.on_a_mac();
         assert_eq!(shown.sheet, Some(adding.clone()));
         let failure = shown.sheet_failure.expect("said in the sheet");
-        assert_eq!(failure.title, "Couldn’t add travel");
+        assert_eq!(
+            failure.title,
+            words::could_not_enrol(Some(&Sheet::Add { provider: None }), "travel")
+        );
         assert_eq!(failure.message, message);
         let form = shown.sheet_text.expect("the form");
         assert!(!form.saving, "{message}");

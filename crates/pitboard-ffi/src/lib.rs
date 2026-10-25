@@ -386,7 +386,7 @@ pub(crate) fn doctor_level(checks: &[Check]) -> Level {
 mod tests {
     use super::*;
 
-    /// A check that warns is worth looking at, and one that fails outweighs every warning.
+    /// Each check keeps doctor's level, so the line over the checks says what doctor says.
     #[test]
     fn the_doctor_summary_says_not_to_switch_while_a_check_fails() {
         let check = |level: Level| Check {
@@ -396,17 +396,18 @@ mod tests {
             detail: String::new(),
             advice: String::new(),
         };
+        use doctor::Level as Core;
         assert_eq!(
             doctor_summary(&[check(Level::Ok)]),
-            "Everything Pitboard checks is in order."
+            words::doctor_summary([Core::Ok])
         );
         assert_eq!(
             doctor_summary(&[check(Level::Warn), check(Level::Ok), check(Level::Fail)]),
-            "1 broken: do not switch accounts until fixed."
+            words::doctor_summary([Core::Warn, Core::Ok, Core::Fail])
         );
         assert_eq!(
             doctor_summary(&[check(Level::Warn), check(Level::Warn)]),
-            "2 things are worth looking at."
+            words::doctor_summary([Core::Warn, Core::Warn])
         );
     }
 

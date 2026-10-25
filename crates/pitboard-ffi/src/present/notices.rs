@@ -3,10 +3,7 @@
 //! has to say, and what the menu says of all of it, from MenuBarContent.swift.
 
 use super::words;
-use super::{
-    Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen, Severity,
-    spoken_severity,
-};
+use super::{Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen, Severity};
 use crate::model::advice::HeadsUp;
 use crate::model::state::in_its_app;
 use crate::model::{Intent, LastSwitch, Pane, Sheet};
@@ -31,7 +28,7 @@ fn notice(
     PanelNotice {
         id,
         severity,
-        spoken_severity: spoken_severity(severity).into(),
+        spoken_severity: words::spoken_severity(severity).into(),
         title,
         lines,
         until: None,
@@ -560,10 +557,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     let title = if limit.used_up(now) {
         words::ran_out(&heads_up.ran, &said::limit_name(&limit))
     } else {
-        words::typeset(&said::has_used(
-            &words::quoted(&heads_up.ran),
-            &said::share_of_limit(&limit),
-        ))
+        words::has_used(&heads_up.ran, &said::share_of_limit(&limit))
     };
     let body = match (&heads_up.instead, limit.resets_at) {
         (Some((instead, left, _)), _) => words::room_left(instead, *left),
@@ -784,8 +778,10 @@ mod tests {
     #[test]
     fn every_severity_sounds_like_itself_and_orders_by_how_pressing_it_is() {
         let severities = [Severity::Info, Severity::Warning, Severity::Error];
-        let spoken: std::collections::BTreeSet<_> =
-            severities.iter().map(|s| spoken_severity(*s)).collect();
+        let spoken: std::collections::BTreeSet<_> = severities
+            .iter()
+            .map(|s| words::spoken_severity(*s))
+            .collect();
         assert_eq!(spoken.len(), severities.len());
         let mut sorted = vec![Severity::Error, Severity::Info, Severity::Warning];
         sorted.sort();

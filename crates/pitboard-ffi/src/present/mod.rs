@@ -790,16 +790,6 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     }
 }
 
-/// A notice's severity, said in a word where a symbol shows it: if two ever sounded the
-/// same, an error would pass for a note.
-pub(crate) fn spoken_severity(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Info => "Note",
-        Severity::Warning => "Warning",
-        Severity::Error => "Problem",
-    }
-}
-
 /// An alert's words for a failure: its title, and its message with everything else it
 /// warned about, a paragraph each.
 pub(crate) fn alert_of(title: &str, message: &str, warnings: &[crate::Warning]) -> AlertText {
@@ -838,25 +828,22 @@ mod tests {
             let empty = shown.machine.activity.empty.expect("no activity");
             [title, add.title, sheet.title, sheet.confirm, empty.title]
         };
-        assert_eq!(
+        for os in [Os::MacOs, Os::Windows] {
+            assert_eq!(
+                words(os),
+                [
+                    words::no_accounts(os).0,
+                    words::add_account(os, true),
+                    words::add_account(os, false),
+                    words::sign_in(os),
+                    words::no_activity(os).0
+                ]
+            );
+        }
+        assert_ne!(
             words(Os::MacOs),
-            [
-                "No Accounts".into(),
-                "Add Account…".into(),
-                words::add_account(Os::MacOs),
-                words::sign_in(Os::MacOs),
-                "No Activity".into()
-            ]
-        );
-        assert_eq!(
             words(Os::Windows),
-            [
-                "No accounts".into(),
-                "Add account…".into(),
-                words::add_account(Os::Windows),
-                words::sign_in(Os::Windows),
-                "No activity".into()
-            ]
+            "each system its own case"
         );
     }
 

@@ -6,8 +6,9 @@
 //! names, a reset, a pace, a parked login's life. Each of its sentences an app shows passes
 //! `typeset` first.
 
-use crate::model::Sheet;
+use super::Severity;
 use crate::model::state::{Recording, in_its_app};
+use crate::model::{AtLimit, Sheet};
 use crate::{Level, Warning};
 use pitboard_core::error::{Cause, Error, LoginDoubt, Then, Unidentified};
 use pitboard_core::host::{Os, Private};
@@ -437,12 +438,14 @@ pub(crate) fn update_config(os: Os) -> String {
 
 pub(crate) const SWITCH: &str = "Switch";
 
+// "work has used 96% of its 5-hour limit".
+pub(crate) fn has_used(account: &str, used: &str) -> String {
+    typeset(&pitboard_core::words::has_used(&quoted(account), used))
+}
+
 // "work has used 96% of its 5-hour limit.", then what came of it.
 pub(crate) fn used_then(account: &str, used: &str, then: &str) -> String {
-    format!(
-        "{}. {then}",
-        typeset(&pitboard_core::words::has_used(&quoted(account), used))
-    )
+    format!("{}. {then}", has_used(account, used))
 }
 
 pub(crate) const NOT_SWITCHED: &str = "Claude Code wasn’t switched";
@@ -542,8 +545,7 @@ pub(crate) fn things_to_look_at(count: usize) -> String {
     format!("{count} things to look at")
 }
 
-/// An account named where nothing around it says which tool it is for, once more than one
-/// tool is shown: "work (Codex)".
+// "work (Codex)", "work (claude.ai)", where nothing around it says which tool or site.
 pub(crate) fn named_with_tool(label: &str, tool: &str) -> String {
     format!("{label} ({tool})")
 }
@@ -568,6 +570,154 @@ pub(crate) fn named_in_menu(
 /// stay open, and "just now" would still say so ten minutes later.
 pub(crate) fn updated(clock: &str) -> String {
     format!("Updated {clock}")
+}
+
+pub(crate) const READING: &str = "Reading…";
+
+pub(crate) const NOT_READ_YET: &str = "Not read yet";
+
+pub(crate) const SHOWING_LAST_MEASURED: &str = "Showing the last numbers measured";
+
+pub(crate) const PITBOARD: &str = "Pitboard";
+
+// What the menu bar calls a login signed in with no name yet.
+pub(crate) const UNNAMED: &str = "unnamed";
+
+// "work 42%".
+pub(crate) fn in_bar(name: &str, figure: &str) -> String {
+    format!("{name} {figure}")
+}
+
+// "Pitboard, work 42%, Codex, needs attention": the tool only after what the bar shows.
+pub(crate) fn bar_spoken(shown: Option<&str>, tool: Option<&str>, attention: bool) -> String {
+    let mut said = vec![PITBOARD];
+    if let Some(shown) = shown {
+        said.push(shown);
+        said.extend(tool);
+    }
+    if attention {
+        said.push("needs attention");
+    }
+    said.join(", ")
+}
+
+// The notification area's tooltip, then "work: 5-hour 12%" for each account in use.
+pub(crate) fn bar_tip(
+    attention: bool,
+    in_use: impl IntoIterator<Item = (String, String)>,
+) -> String {
+    let mut tip = vec![PITBOARD.to_owned()];
+    // Before the accounts, which can run past the 127 characters a tooltip holds.
+    if attention {
+        tip.push("Needs attention".into());
+    }
+    tip.extend(
+        in_use
+            .into_iter()
+            .map(|(name, line)| format!("{name}: {line}")),
+    );
+    tip.join("\n")
+}
+
+// A row for a login nobody named: `unusable` where Pitboard cannot use it either.
+pub(crate) fn nameless_login(unusable: bool) -> &'static str {
+    if unusable {
+        "Login Pitboard can’t use"
+    } else {
+        "Login Pitboard can’t identify"
+    }
+}
+
+// "work, Team 5x, in use", as VoiceOver and Narrator say a row.
+pub(crate) fn row_spoken(
+    name: &str,
+    plan: Option<&str>,
+    in_use: bool,
+    needs_sign_in: bool,
+) -> String {
+    let mut said = vec![name];
+    said.extend(plan);
+    if in_use {
+        said.push("in use");
+    }
+    if needs_sign_in {
+        said.push("needs signing in again");
+    }
+    said.join(", ")
+}
+
+// A Claude Desktop login in use, read last while its app was closed.
+pub(crate) fn read_ago(span: &str, program: &str) -> String {
+    format!("Read {span} ago, with {program} closed")
+}
+
+pub(crate) fn open_site(site: &str) -> String {
+    format!("Open {site}")
+}
+
+// The one account of a site with a window: "Open claude.ai as work".
+pub(crate) fn open_site_as(site: &str, label: &str) -> String {
+    format!("Open {site} as {label}")
+}
+
+// "Use", and aloud "Use work".
+pub(crate) fn use_account(spoken: Option<&str>) -> String {
+    match spoken {
+        Some(name) => format!("Use {name}"),
+        None => "Use".into(),
+    }
+}
+
+// "Name…", and aloud "Name dana@example.com…".
+pub(crate) fn name_account(spoken: Option<&str>) -> String {
+    match spoken {
+        Some(name) => format!("Name {name}…"),
+        None => "Name…".into(),
+    }
+}
+
+pub(crate) fn rename(asks: bool) -> &'static str {
+    if asks { "Rename…" } else { "Rename" }
+}
+
+pub(crate) fn forget(asks: bool) -> &'static str {
+    if asks { "Forget…" } else { "Forget" }
+}
+
+pub(crate) fn forget_title(name: &str) -> String {
+    format!("Forget “{name}”?")
+}
+
+pub(crate) const WARMING_UP: &str = "Warming up…";
+
+// The menu's line under an account a switch runs for.
+pub(crate) const SWITCHING_NOW: &str = "Switching…";
+
+pub(crate) const CANNOT_READ_OR_SWITCH: &str = "Can’t be read or switched";
+
+pub(crate) const NOT_NAMED_YET: &str = "Not named yet";
+
+pub(crate) const NEEDS_SIGNING_IN_AGAIN: &str = "Needs signing in again";
+
+// "5-hour 42%", and "weekly 33% (runs out in 20h 18m)" beside the first to run out.
+pub(crate) fn limit_in_line(name: &str, figure: &str, runs_out: Option<i64>) -> String {
+    match runs_out {
+        Some(in_seconds) => format!("{name} {figure} ({})", runs_out_in(in_seconds)),
+        None => format!("{name} {figure}"),
+    }
+}
+
+// "5-hour used up until 14:00".
+pub(crate) fn used_up(name: &str, until: Option<&str>) -> String {
+    match until {
+        Some(back) => format!("{name} used up until {back}"),
+        None => format!("{name} used up"),
+    }
+}
+
+// "5-hour 12%, weekly 64%".
+pub(crate) fn limits_line(limits: &[String]) -> String {
+    capitalised(&limits.join(", "))
 }
 
 /// A clock time where the person's own clock could not say it: in UTC, and named so, since
@@ -606,11 +756,7 @@ pub(crate) fn missing(os: Os, tool: &str) -> Option<super::Missing> {
             format!("Pitboard can’t find Claude Code on {here}."),
             "Adding a Claude Code account runs Claude Code’s own sign-in. Install it, then come \
              back to this window.",
-            titled(
-                os,
-                "How to Install Claude Code",
-                "How to install Claude Code",
-            ),
+            how_to_install_claude_code(os),
             super::notices::INSTALL_CLAUDE_CODE,
         ),
         "codex" => (
@@ -677,6 +823,15 @@ pub(crate) fn spoken_level(level: Level) -> &'static str {
         Level::Ok => "Passed",
         Level::Warn => "Worth looking at",
         Level::Fail => "Failed",
+    }
+}
+
+// Said where a symbol shows it: two alike would let an error pass for a note.
+pub(crate) fn spoken_severity(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Info => "Note",
+        Severity::Warning => "Warning",
+        Severity::Error => "Problem",
     }
 }
 
@@ -948,6 +1103,110 @@ pub(crate) fn add_a_second(tool: Option<&str>) -> String {
     }
 }
 
+// `tool`: the tool named, where the account's is not the only one shown.
+pub(crate) fn unnamed_detail(email: &str, tool: Option<&str>) -> String {
+    let to = tool.map(|tool| format!(" to {tool}")).unwrap_or_default();
+    format!(
+        "{email} is signed in{to}. Pitboard parks logins under a name you choose, and can’t park \
+         this one until it has one."
+    )
+}
+
+// `tool`: as `add_a_second` names it. `app`: where its logins are signed in to inside an app.
+pub(crate) fn only_one(label: &str, tool: Option<&str>, app: Option<&str>) -> String {
+    let tool = tool.map(|tool| format!("{tool} ")).unwrap_or_default();
+    let adding = match app {
+        Some(app) => {
+            format!("Adding another parks this one while you sign in to the other in {app}.")
+        }
+        None => "Adding another signs in to it and parks its login beside this one.".into(),
+    };
+    format!(
+        "{label} is the only {tool}account Pitboard knows, so there’s nothing to switch to. \
+         {adding}"
+    )
+}
+
+pub(crate) fn not_now(os: Os) -> String {
+    titled(os, "Not Now", "Not now")
+}
+
+pub(crate) const USE_WITH_CODEX: &str = "Use Pitboard with Codex";
+
+pub(crate) const CODEX_UNUSED: &str =
+    "Codex is installed. Pitboard reads nothing of it until you add the account it’s signed in to.";
+
+pub(crate) fn add_codex_account(os: Os) -> String {
+    titled(os, "Add Codex Account…", "Add Codex account…")
+}
+
+// The tip to open at login: its title, and what it says.
+pub(crate) fn open_at_login(os: Os) -> (&'static str, &'static str) {
+    match os {
+        Os::Windows => (
+            "Start when you sign in to Windows",
+            "Pitboard watches your limits only while it’s running. Its icon starts behind the \
+             arrow at the end of the taskbar, and Taskbar settings can keep it in view.",
+        ),
+        Os::MacOs | Os::Linux => (
+            "Open Pitboard at login",
+            "Pitboard watches your limits only while it’s open.",
+        ),
+    }
+}
+
+pub(crate) fn turn_on_at_login(os: Os) -> String {
+    titled(os, "Open at Login", "Turn on")
+}
+
+pub(crate) const TASKBAR_SETTINGS: &str = "Taskbar settings";
+
+pub(crate) const SWITCH_BEFORE_RUNNING_OUT: &str = "Switch before a limit runs out";
+
+pub(crate) fn at_limit_tip(at: u8) -> String {
+    format!(
+        "Pitboard notifies you once a limit of the account in use reaches {at}%. It can switch \
+         Claude Code to another of your accounts instead."
+    )
+}
+
+pub(crate) fn open_settings(os: Os) -> String {
+    titled(os, "Open Settings…", "Open settings")
+}
+
+pub(crate) fn claude_code_not_installed(os: Os) -> String {
+    titled(os, "Claude Code Isn’t Installed", CLAUDE_CODE_MISSING)
+}
+
+// `tools`: every tool Pitboard switches, listed.
+pub(crate) fn no_tool(tools: &str) -> String {
+    format!(
+        "Pitboard switches the logins of {tools}, so there is nothing for it to do until one of \
+         them is installed and signed in once."
+    )
+}
+
+pub(crate) fn how_to_install_claude_code(os: Os) -> String {
+    titled(
+        os,
+        "How to Install Claude Code",
+        "How to install Claude Code",
+    )
+}
+
+// What stands in for the accounts while nobody is signed in: its title, and why to add one.
+pub(crate) fn no_accounts(os: Os) -> (String, &'static str) {
+    (
+        titled(os, "No Accounts", "No accounts"),
+        "Sign in once here and Pitboard parks that login, so signing in to another account \
+         doesn’t cost you the first.",
+    )
+}
+
+pub(crate) const READING_ACCOUNTS: &str = "Reading accounts…";
+
+pub(crate) const NO_ACCOUNTS_YET: &str = "No accounts yet";
+
 pub(crate) const NO_ACCOUNTS_TO_SHOW: &str = "No accounts to show";
 
 pub(crate) fn could_not_read_accounts(os: Os) -> String {
@@ -964,6 +1223,55 @@ pub(crate) fn warm_up_now(os: Os) -> String {
 
 pub(crate) fn open_link_as(site: &str) -> String {
     format!("Open this {site} link as:")
+}
+
+// An account in the Open Link window, with a window of its own open.
+pub(crate) fn window_open(email: &str) -> String {
+    format!("{email}, window open")
+}
+
+pub(crate) const OPEN: &str = "Open";
+
+// What the Open Link window says where no account opens `site`: its title, and what to do.
+pub(crate) fn no_site_account(os: Os, site: &str) -> (String, String) {
+    (
+        titled(
+            os,
+            &format!("No {site} Account"),
+            &format!("No {site} account"),
+        ),
+        format!(
+            "None of the accounts Pitboard has opens {site}. Add one, and this link waits here \
+             until you choose it."
+        ),
+    )
+}
+
+pub(crate) fn open_in_browser(os: Os) -> String {
+    titled(os, "Open in Browser", "Open in browser")
+}
+
+// What a window is called until it shows its account's page.
+pub(crate) const ACCOUNT: &str = "Account";
+
+pub(crate) const CLEAR: &str = "Clear";
+
+pub(crate) const DOWNLOADED: &str = "Downloaded";
+
+pub(crate) const CANCELLED: &str = "Cancelled";
+
+// Asked before quitting while downloads run: its title, what quitting does, and its button.
+pub(crate) fn quit_with_downloads(running: u32) -> (String, &'static str, &'static str) {
+    let title = if running == 1 {
+        "A download is in progress. Quit anyway?".to_owned()
+    } else {
+        format!("{running} downloads are in progress. Quit anyway?")
+    };
+    (
+        title,
+        "Quitting Pitboard stops them, and they will not resume.",
+        "Quit",
+    )
 }
 
 pub(crate) fn cannot_open_link(os: Os) -> String {
@@ -1077,6 +1385,77 @@ pub(crate) fn share_range(lowest: u8, highest: u8) -> String {
     format!("From {lowest}% to {highest}%")
 }
 
+pub(crate) const BEFORE_RUNNING_OUT: &str = "Before an account runs out";
+
+pub(crate) const AT_LIMIT: &str = "When a limit reaches";
+
+// "When a limit reaches 95%", the choice's name for VoiceOver and Narrator.
+pub(crate) fn at_limit_label(at: u8) -> String {
+    format!("{AT_LIMIT} {at}%")
+}
+
+pub(crate) const SHARE_OF_A_LIMIT: &str = "Share of a limit";
+
+pub(crate) fn at_limit_choice(os: Os, choice: AtLimit) -> String {
+    match choice {
+        AtLimit::Nothing => titled(os, "Do Nothing", "Do nothing"),
+        AtLimit::Notify => titled(os, "Notify Me", "Notify me"),
+        AtLimit::Switch => titled(os, "Switch Automatically", "Switch automatically"),
+    }
+}
+
+// Under the choice; `follows` says when running sessions follow a switch.
+pub(crate) fn at_limit_note(choice: AtLimit, at: u8, follows: &str) -> Option<String> {
+    match choice {
+        AtLimit::Nothing => None,
+        AtLimit::Notify => Some(format!(
+            "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
+             is open."
+        )),
+        AtLimit::Switch => Some(format!(
+            "Pitboard switches Claude Code once a limit of the account in use reaches {at}%, never \
+             back by itself, and notifies you of Codex. {follows}"
+        )),
+    }
+}
+
+// Within `seconds` only while the last read found no login file behind the store.
+pub(crate) fn sessions_follow(os: Os, file_left: bool, seconds: u32) -> String {
+    if file_left {
+        format!(
+            "While a login file is left behind {}, Claude Code sessions already running {}.",
+            pitboard_core::words::store_in_front(os),
+            typeset(pitboard_core::words::kept_until_renewed())
+        )
+    } else {
+        format!("Sessions already running follow within about {seconds} seconds.")
+    }
+}
+
+pub(crate) const WARM_UP_LIMITS: &str = "Warm up limits";
+
+pub(crate) const NONE_TO_WARM: &str = "No Claude Code account is enrolled yet.";
+
+pub(crate) const WARM_UP_NOTE: &str = "Pitboard starts each account’s five-hour period as soon as \
+                                       the last one resets, within these hours, while the app is \
+                                       open.";
+
+pub(crate) fn warm_up_failed(failed: &str) -> String {
+    format!("The last warm-up came to nothing: {failed}")
+}
+
+// The next warm-up of `account`, `at` a clock time, or now where it is due.
+pub(crate) fn next_warm_up(account: &str, at: Option<&str>) -> String {
+    match at {
+        Some(at) => format!("Next warm-up: {account} at {at}."),
+        None => format!("Warming up {account} now."),
+    }
+}
+
+pub(crate) const IS_THIS_ALLOWED: &str = "Is this allowed?";
+
+pub(crate) const NOT_INSTALLED: &str = "Not installed";
+
 // The installer puts the app's `pitboard` on the `PATH`, which only terminals opened after see.
 pub(crate) const NEW_TERMINALS: &str =
     "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
@@ -1178,15 +1557,20 @@ pub(crate) fn sign_in(os: Os) -> String {
     titled(os, "Sign In", "Sign in")
 }
 
-pub(crate) fn add_account(os: Os) -> String {
-    titled(os, "Add Account", "Add account")
+pub(crate) fn add_account(os: Os, asks: bool) -> String {
+    if asks {
+        titled(os, "Add Account…", "Add account…")
+    } else {
+        titled(os, "Add Account", "Add account")
+    }
 }
 
-pub(crate) fn sign_in_to_again(os: Os, label: &str) -> String {
+pub(crate) fn sign_in_to_again(os: Os, label: &str, asks: bool) -> String {
+    let more = if asks { "…" } else { "" };
     titled(
         os,
-        &format!("Sign In to {label} Again"),
-        &format!("Sign in to {label} again"),
+        &format!("Sign In to {label} Again{more}"),
+        &format!("Sign in to {label} again{more}"),
     )
 }
 
@@ -1297,8 +1681,6 @@ pub(crate) fn rename_title(label: &str) -> String {
 
 pub(crate) const RENAMING: &str = "The account keeps its parked login. Only the name you switch \
                                    to it by changes, here and in the command line.";
-
-pub(crate) const RENAME: &str = "Rename";
 
 pub(crate) const FINDING_OUT_WHOSE: &str = "Finding out whose login it is…";
 
@@ -2623,6 +3005,14 @@ mod tests {
         let codex = missing(Os::Windows, "codex").expect("codex");
         assert_eq!(codex.title, "Pitboard can’t find the Codex CLI on this PC.");
         assert_eq!(codex.link_title, "How to install the Codex CLI");
+        assert_eq!(
+            codex.detail,
+            "Adding a Codex account runs the Codex CLI’s own sign-in. Pitboard doesn’t use the \
+             copy inside the ChatGPT app. Install the CLI, then come back to this window."
+        );
+        assert_eq!(codex.link, "https://developers.openai.com/codex/cli");
+        let codex = missing(Os::MacOs, "codex").expect("codex");
+        assert_eq!(codex.link_title, "How to Install the Codex CLI");
         let claude = missing(Os::MacOs, "claude").expect("claude");
         assert_eq!(claude.title, "Pitboard can’t find Claude Code on this Mac.");
         assert_eq!(
@@ -2842,10 +3232,111 @@ mod tests {
              there."
         );
         assert_eq!(
+            has_used("work", "96% of its 5-hour limit"),
+            "work has used 96% of its 5-hour limit"
+        );
+        assert_eq!(
             used_then("work", "96% of its 5-hour limit", "It ended."),
             "work has used 96% of its 5-hour limit. It ended."
         );
         assert_eq!(needs_signing_in("work"), "work needs signing in again");
+        assert_eq!(
+            follows(&pitboard_core::provider::Adoption::PollingWithin(33)),
+            "Sessions already running follow within 33 seconds."
+        );
+        assert_eq!(
+            follows(&pitboard_core::provider::Adoption::AtRenewal {
+                file: "/Users/x/.claude/.credentials.json".into()
+            }),
+            "Sessions already running keep the account they are on until their login is next \
+             renewed, or until they are started again: /Users/x/.claude/.credentials.json is \
+             there."
+        );
+    }
+
+    // What a failure is titled, by what failed, pinned once.
+    #[test]
+    fn a_failure_is_titled_in_these_words() {
+        assert_eq!(
+            NOT_KNOWN_HOW_IT_WENT,
+            "Pitboard stopped before it could say how this went. Refresh to see where things \
+             stand."
+        );
+        assert_eq!(could_not_switch("claude/work"), "Couldn’t switch to work");
+        assert_eq!(
+            COULD_NOT_GIVE_UP,
+            "Couldn’t give up on the interrupted switch"
+        );
+        assert_eq!(could_not_sign_in("work"), "Couldn’t sign in to work");
+        assert_eq!(could_not_forget("claude/work"), "Couldn’t forget work");
+        assert_eq!(could_not_rename("work"), "Couldn’t rename work");
+        assert_eq!(
+            COULD_NOT_UPDATE_CONFIG,
+            "Couldn’t update Claude Code’s config"
+        );
+        assert_eq!(COULD_NOT_TELL_WHOSE, "Couldn’t tell whose login it is");
+        assert_eq!(COULD_NOT_STOW, "Couldn’t put the login away");
+        assert_eq!(
+            COULD_NOT_CHANGE_WARM,
+            "Couldn’t change which accounts are warmed up"
+        );
+        assert_eq!(could_not_warm("claude/work"), "Couldn’t warm up work");
+        assert_eq!(COULD_NOT_NAME, "Couldn’t name this account");
+        let add = Sheet::Add { provider: None };
+        let again = Sheet::SignInAgain {
+            provider: "claude".into(),
+            label: "work".into(),
+        };
+        assert_eq!(could_not_enrol(Some(&add), "work"), "Couldn’t add work");
+        assert_eq!(
+            could_not_enrol(Some(&again), "work"),
+            "Couldn’t sign in to work"
+        );
+        assert_eq!(could_not_enrol(None, "work"), COULD_NOT_NAME);
+        assert_eq!(COULD_NOT_READ_USAGE, "Couldn’t read usage");
+        assert_eq!(
+            LAST_MEASURED,
+            "The numbers shown are the last ones measured."
+        );
+        assert_eq!(
+            still_open("ChatGPT", "switch again"),
+            "ChatGPT is still open, so nothing has changed. Quit it, then switch again."
+        );
+    }
+
+    // The notices' fixed words, pinned once.
+    #[test]
+    fn a_notice_is_headed_in_these_words() {
+        assert_eq!(DISMISS, "Dismiss");
+        assert_eq!(SWITCH_WAITING, "An interrupted switch is waiting");
+        assert_eq!(
+            GIVING_UP_KEEPS_LOGINS,
+            "Giving up on it keeps every login. Nothing is deleted."
+        );
+        assert_eq!(GIVE_UP_ON_SWITCH, "Give up on the interrupted switch?");
+        assert_eq!(GIVE_UP_ON_MOVE, "Give up on the interrupted move?");
+        assert_eq!(GAVE_UP_ON_SWITCH, "Gave up on the interrupted switch");
+        assert_eq!(GAVE_UP_ON_MOVE, "Gave up on the interrupted move");
+        assert_eq!(STOWED, "Put away the login left in a file");
+        assert_eq!(SWITCH, "Switch");
+        assert_eq!(
+            UNUSABLE_LOGIN,
+            "Its parked login can no longer be used, so Pitboard can’t switch to it."
+        );
+        assert_eq!(SHOW_IN_PITBOARD, "Show in Pitboard");
+        assert_eq!(
+            awaiting_lines("Claude", "travel", "work", false),
+            [
+                "Claude is signed out for a sign-in, and work is parked.",
+                "Sign in to the account you’re adding in Claude, quit Claude, then choose Finish \
+                 Adding. Put work Back undoes it."
+            ]
+        );
+        assert_eq!(
+            awaiting_lines("Claude", "home", "work", true)[1],
+            "Sign in to home in Claude, quit Claude, then choose Finish Signing In. Put work Back \
+             undoes it."
+        );
     }
 
     // A notice's and a notification's buttons, as each system titles a button.
@@ -3016,6 +3507,31 @@ mod tests {
             ("Parking work.".into(), "Parking work".into())
         );
         assert_eq!(waiting_to_quit("Claude"), "Waiting for Claude to quit");
+        assert_eq!(NAME_PROMPT, "work");
+        assert_eq!(SAVE, "Save");
+        assert_eq!(FINDING_OUT_WHOSE, "Finding out whose login it is…");
+        assert_eq!(WAITING_FOR_BROWSER, "Waiting for your browser");
+        assert_eq!(CANCEL, "Cancel");
+        assert_eq!(LATER, "Later");
+        assert_eq!(GETTING_READY, ("Getting ready.", "Starting"));
+        assert_eq!(REPLACE, "Replace");
+    }
+
+    #[test]
+    fn a_name_that_cannot_be_one_says_why_in_these_words() {
+        assert_eq!(unusable_name(Unusable::Empty, true), None);
+        assert_eq!(
+            unusable_name(Unusable::NotOneWord, true).as_deref(),
+            Some("A name is one word, with no spaces.")
+        );
+        assert_eq!(
+            unusable_name(Unusable::Separator, true).as_deref(),
+            Some("A name can’t contain “/”. Choose the tool above.")
+        );
+        assert_eq!(
+            unusable_name(Unusable::Separator, false).as_deref(),
+            Some("A name can’t contain “/”.")
+        );
     }
 
     // A sheet's titles and buttons, as each system titles them.
@@ -3024,10 +3540,17 @@ mod tests {
         let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(both(&sign_in), pair("Sign In", "Sign in"));
-        assert_eq!(both(&add_account), pair("Add Account", "Add account"));
         assert_eq!(
-            both(&|os| sign_in_to_again(os, "work")),
+            both(&|os| add_account(os, false)),
+            pair("Add Account", "Add account")
+        );
+        assert_eq!(
+            both(&|os| sign_in_to_again(os, "work", false)),
             pair("Sign In to work Again", "Sign in to work again")
+        );
+        assert_eq!(
+            both(&|os| sign_in_to_again(os, "work", true)),
+            pair("Sign In to work Again…", "Sign in to work again…")
         );
         assert_eq!(both(&start_sign_in), pair("Start Sign-In", "Start sign-in"));
         assert_eq!(
@@ -3095,6 +3618,315 @@ mod tests {
             )
         );
         assert_eq!(no_link(Os::Windows).0, "No link to open");
+        assert_eq!(window_open("a@example.com"), "a@example.com, window open");
+        assert_eq!(OPEN, "Open");
+        assert_eq!(
+            no_site_account(Os::MacOs, "chatgpt.com"),
+            (
+                "No chatgpt.com Account".into(),
+                "None of the accounts Pitboard has opens chatgpt.com. Add one, and this link \
+                 waits here until you choose it."
+                    .into()
+            )
+        );
+        assert_eq!(
+            no_site_account(Os::Windows, "chatgpt.com").0,
+            "No chatgpt.com account"
+        );
+        assert_eq!(
+            (open_in_browser(Os::MacOs), open_in_browser(Os::Windows)),
+            ("Open in Browser".into(), "Open in browser".into())
+        );
+        assert_eq!(ACCOUNT, "Account");
+        assert_eq!(
+            (CLEAR, DOWNLOADED, CANCELLED),
+            ("Clear", "Downloaded", "Cancelled")
+        );
+        assert_eq!(
+            quit_with_downloads(1),
+            (
+                "A download is in progress. Quit anyway?".into(),
+                "Quitting Pitboard stops them, and they will not resume.",
+                "Quit"
+            )
+        );
+        assert_eq!(
+            quit_with_downloads(2).0,
+            "2 downloads are in progress. Quit anyway?"
+        );
+        assert_eq!(BEFORE_RUNNING_OUT, "Before an account runs out");
+        assert_eq!(AT_LIMIT, "When a limit reaches");
+        assert_eq!(at_limit_label(95), "When a limit reaches 95%");
+        assert_eq!(SHARE_OF_A_LIMIT, "Share of a limit");
+        let both = |choice| {
+            (
+                at_limit_choice(Os::MacOs, choice),
+                at_limit_choice(Os::Windows, choice),
+            )
+        };
+        assert_eq!(
+            both(AtLimit::Nothing),
+            ("Do Nothing".into(), "Do nothing".into())
+        );
+        assert_eq!(
+            both(AtLimit::Notify),
+            ("Notify Me".into(), "Notify me".into())
+        );
+        assert_eq!(
+            both(AtLimit::Switch),
+            ("Switch Automatically".into(), "Switch automatically".into())
+        );
+        assert_eq!(at_limit_note(AtLimit::Nothing, 95, "Then."), None);
+        assert_eq!(
+            at_limit_note(AtLimit::Notify, 95, "Then.").as_deref(),
+            Some(
+                "Pitboard notifies you once a limit of the account in use reaches 95%, while the \
+                 app is open."
+            )
+        );
+        assert_eq!(
+            at_limit_note(AtLimit::Switch, 95, "Then.").as_deref(),
+            Some(
+                "Pitboard switches Claude Code once a limit of the account in use reaches 95%, \
+                 never back by itself, and notifies you of Codex. Then."
+            )
+        );
+        assert_eq!(
+            sessions_follow(Os::MacOs, false, 33),
+            "Sessions already running follow within about 33 seconds."
+        );
+        assert_eq!(
+            sessions_follow(Os::MacOs, true, 33),
+            format!(
+                "While a login file is left behind the keychain, Claude Code sessions already \
+                 running {}.",
+                typeset(pitboard_core::words::kept_until_renewed())
+            )
+        );
+        assert_eq!(WARM_UP_LIMITS, "Warm up limits");
+        assert_eq!(NONE_TO_WARM, "No Claude Code account is enrolled yet.");
+        assert_eq!(
+            WARM_UP_NOTE,
+            "Pitboard starts each account’s five-hour period as soon as the last one resets, \
+             within these hours, while the app is open."
+        );
+        assert_eq!(
+            warm_up_failed("Claude Code failed."),
+            "The last warm-up came to nothing: Claude Code failed."
+        );
+        assert_eq!(
+            next_warm_up("work", Some("22:50")),
+            "Next warm-up: work at 22:50."
+        );
+        assert_eq!(next_warm_up("work", None), "Warming up work now.");
+        assert_eq!(IS_THIS_ALLOWED, "Is this allowed?");
+        assert_eq!(NOT_INSTALLED, "Not installed");
+    }
+
+    // The menu bar's, the menu's and a row's words, pinned once.
+    #[test]
+    fn an_account_is_said_in_these_words() {
+        assert_eq!(PITBOARD, "Pitboard");
+        assert_eq!(UNNAMED, "unnamed");
+        assert_eq!(in_bar("work", "42%"), "work 42%");
+        assert_eq!(bar_spoken(None, None, false), "Pitboard");
+        assert_eq!(
+            bar_spoken(Some("work 42%"), Some("Codex"), true),
+            "Pitboard, work 42%, Codex, needs attention"
+        );
+        assert_eq!(
+            bar_spoken(None, Some("Codex"), true),
+            "Pitboard, needs attention"
+        );
+        assert_eq!(bar_tip(false, []), "Pitboard");
+        assert_eq!(
+            bar_tip(
+                true,
+                [
+                    ("work".into(), "5-hour 12%".into()),
+                    ("job".into(), "5-hour 71%".into())
+                ]
+            ),
+            "Pitboard\nNeeds attention\nwork: 5-hour 12%\njob: 5-hour 71%"
+        );
+        assert_eq!(nameless_login(true), "Login Pitboard can’t use");
+        assert_eq!(nameless_login(false), "Login Pitboard can’t identify");
+        assert_eq!(row_spoken("work", None, false, false), "work");
+        assert_eq!(
+            row_spoken("work", Some("Team 5x"), true, false),
+            "work, Team 5x, in use"
+        );
+        assert_eq!(
+            row_spoken("stale", None, false, true),
+            "stale, needs signing in again"
+        );
+        assert_eq!(
+            read_ago("2h 00m", "Claude"),
+            "Read 2h 00m ago, with Claude closed"
+        );
+        assert_eq!(open_site("claude.ai"), "Open claude.ai");
+        assert_eq!(open_site_as("claude.ai", "work"), "Open claude.ai as work");
+        assert_eq!(use_account(None), "Use");
+        assert_eq!(use_account(Some("spare")), "Use spare");
+        assert_eq!(name_account(None), "Name…");
+        assert_eq!(name_account(Some("u@example.com")), "Name u@example.com…");
+        assert_eq!((rename(true), rename(false)), ("Rename…", "Rename"));
+        assert_eq!((forget(true), forget(false)), ("Forget…", "Forget"));
+        assert_eq!(forget_title("spare"), "Forget “spare”?");
+        assert_eq!(WARMING_UP, "Warming up…");
+        assert_eq!(SWITCHING_NOW, "Switching…");
+        assert_eq!(CANNOT_READ_OR_SWITCH, "Can’t be read or switched");
+        assert_eq!(NOT_NAMED_YET, "Not named yet");
+        assert_eq!(NEEDS_SIGNING_IN_AGAIN, "Needs signing in again");
+        assert_eq!(NO_USAGE_READ, "No usage read");
+        assert_eq!(limit_in_line("5-hour", "42%", None), "5-hour 42%");
+        assert_eq!(
+            limit_in_line("weekly", "33%", Some(20 * 3600 + 18 * 60)),
+            "weekly 33% (runs out in 20h 18m)"
+        );
+        assert_eq!(
+            used_up("5-hour", Some("14:00")),
+            "5-hour used up until 14:00"
+        );
+        assert_eq!(used_up("5-hour", None), "5-hour used up");
+        assert_eq!(
+            limits_line(&["weekly 64%".into(), "5-hour 12%".into()]),
+            "Weekly 64%, 5-hour 12%"
+        );
+        assert_eq!(
+            (in_use(Os::MacOs), in_use(Os::Windows)),
+            ("In Use".into(), "In use".into())
+        );
+        assert_eq!(SWITCHING, "Switching");
+        assert_eq!(named_with_tool("work", "Codex"), "work (Codex)");
+        assert_eq!(named_with_tool("work", "claude.ai"), "work (claude.ai)");
+        assert_eq!(
+            named_in_menu(Os::MacOs, "work", Some("Team 5x"), Some("64%")),
+            "work · Team 5x"
+        );
+        assert_eq!(
+            named_in_menu(Os::Windows, "work", Some("Team 5x"), Some("64%")),
+            "work · Team 5x · 64%"
+        );
+        assert_eq!(named_in_menu(Os::Windows, "spare", None, None), "spare");
+        assert_eq!(updated("12:00"), "Updated 12:00");
+        assert_eq!(READING, "Reading…");
+        assert_eq!(NOT_READ_YET, "Not read yet");
+        assert_eq!(SHOWING_LAST_MEASURED, "Showing the last numbers measured");
+        assert_eq!(switch_to("spare"), "Switch to spare");
+        assert_eq!(
+            (
+                spoken_severity(Severity::Info),
+                spoken_severity(Severity::Warning)
+            ),
+            ("Note", "Warning")
+        );
+        assert_eq!(spoken_severity(Severity::Error), "Problem");
+    }
+
+    // What the window and the menu say until the accounts are set up, pinned once.
+    #[test]
+    fn setting_up_is_said_in_these_words() {
+        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
+        assert_eq!(GIVE_IT_A_NAME, "Give this account a name");
+        assert_eq!(
+            unnamed_detail("u@example.com", None),
+            "u@example.com is signed in. Pitboard parks logins under a name you choose, and \
+             can’t park this one until it has one."
+        );
+        assert_eq!(
+            unnamed_detail("u@example.com", Some("Codex")),
+            "u@example.com is signed in to Codex. Pitboard parks logins under a name you choose, \
+             and can’t park this one until it has one."
+        );
+        assert_eq!(
+            only_one("work", None, None),
+            "work is the only account Pitboard knows, so there’s nothing to switch to. Adding \
+             another signs in to it and parks its login beside this one."
+        );
+        assert_eq!(
+            only_one("work", Some("Claude Desktop"), Some("Claude")),
+            "work is the only Claude Desktop account Pitboard knows, so there’s nothing to \
+             switch to. Adding another parks this one while you sign in to the other in Claude."
+        );
+        assert_eq!(
+            both(&|os| add_account(os, true)),
+            pair("Add Account…", "Add account…")
+        );
+        assert_eq!(both(&not_now), pair("Not Now", "Not now"));
+        assert_eq!(USE_WITH_CODEX, "Use Pitboard with Codex");
+        assert_eq!(
+            CODEX_UNUSED,
+            "Codex is installed. Pitboard reads nothing of it until you add the account it’s \
+             signed in to."
+        );
+        assert_eq!(
+            both(&add_codex_account),
+            pair("Add Codex Account…", "Add Codex account…")
+        );
+        assert_eq!(
+            open_at_login(Os::MacOs),
+            (
+                "Open Pitboard at login",
+                "Pitboard watches your limits only while it’s open."
+            )
+        );
+        assert_eq!(
+            open_at_login(Os::Windows),
+            (
+                "Start when you sign in to Windows",
+                "Pitboard watches your limits only while it’s running. Its icon starts behind \
+                 the arrow at the end of the taskbar, and Taskbar settings can keep it in view."
+            )
+        );
+        assert_eq!(both(&turn_on_at_login), pair("Open at Login", "Turn on"));
+        assert_eq!(TASKBAR_SETTINGS, "Taskbar settings");
+        assert_eq!(SWITCH_BEFORE_RUNNING_OUT, "Switch before a limit runs out");
+        assert_eq!(
+            at_limit_tip(95),
+            "Pitboard notifies you once a limit of the account in use reaches 95%. It can switch \
+             Claude Code to another of your accounts instead."
+        );
+        assert_eq!(
+            both(&open_settings),
+            pair("Open Settings…", "Open settings")
+        );
+        assert_eq!(
+            both(&claude_code_not_installed),
+            pair("Claude Code Isn’t Installed", "Claude Code isn’t installed")
+        );
+        assert_eq!(CLAUDE_CODE_MISSING, "Claude Code isn’t installed");
+        assert_eq!(LEARN_TO_INSTALL, "Learn how to install it");
+        assert_eq!(
+            no_tool("Claude Code and Codex"),
+            "Pitboard switches the logins of Claude Code and Codex, so there is nothing for it to \
+             do until one of them is installed and signed in once."
+        );
+        assert_eq!(
+            both(&how_to_install_claude_code),
+            pair("How to Install Claude Code", "How to install Claude Code")
+        );
+        assert_eq!(
+            no_accounts(Os::MacOs),
+            (
+                "No Accounts".into(),
+                "Sign in once here and Pitboard parks that login, so signing in to another \
+                 account doesn’t cost you the first."
+            )
+        );
+        assert_eq!(no_accounts(Os::Windows).0, "No accounts");
+        assert_eq!(READING_ACCOUNTS, "Reading accounts…");
+        assert_eq!(NO_ACCOUNTS_YET, "No accounts yet");
+        assert_eq!(NO_ACCOUNTS_TO_SHOW, "No accounts to show");
+        assert_eq!(
+            no_activity(Os::MacOs),
+            (
+                "No Activity".into(),
+                "Pitboard lists every change it makes here."
+            )
+        );
+        assert_eq!(no_activity(Os::Windows).0, "No activity");
     }
 
     #[test]
@@ -3314,6 +4146,157 @@ mod tests {
     #[test]
     fn the_checks_say_when_they_were_made() {
         assert_eq!(checked_at("14:05"), "Checked at 14:05");
+    }
+
+    // Doctor names a check for a terminal's table: "account personal", "config file".
+    #[test]
+    fn each_check_is_named_in_sentence_case() {
+        let named: Vec<String> = [
+            ("config_file", "config file"),
+            ("parked_login", "account personal"),
+            ("interrupted_switch", "interrupted switch"),
+            ("claude_version", "Claude Code build"),
+            ("no_argv", "PITBOARD_NO_ARGV"),
+            ("machine_id", "machine id"),
+            ("schedule_proxy", "renewal schedule's proxy"),
+            ("storage_v5", "storage v5"),
+        ]
+        .into_iter()
+        .map(|(code, name)| check_name(code, name))
+        .collect();
+        assert_eq!(
+            named,
+            [
+                "Config file",
+                "Account personal",
+                "Interrupted switch",
+                "Claude Code build",
+                "PITBOARD_NO_ARGV",
+                "Machine ID",
+                "Renewal schedule’s proxy",
+                "Claude Code’s new login storage",
+            ]
+        );
+        assert_eq!(NOTIFICATIONS, "Notifications");
+    }
+
+    #[test]
+    fn a_checks_prose_starts_with_a_capital_and_data_keeps_its_case() {
+        let said: Vec<String> = [
+            "inactive",
+            "none enrolled yet",
+            "direct: no variable names a proxy",
+            "config.json read",
+            r"C:\Users\dana\AppData\Local\Pitboard",
+            "dana@example.com · org 1f2e",
+            "2.1.299",
+            "1 enrolled",
+            "none outstanding",
+        ]
+        .into_iter()
+        .map(check_text)
+        .collect();
+        assert_eq!(
+            said,
+            [
+                "Inactive",
+                "None enrolled yet",
+                "Direct: no variable names a proxy",
+                "config.json read",
+                r"C:\Users\dana\AppData\Local\Pitboard",
+                "dana@example.com · org 1f2e",
+                "2.1.299",
+                "1 enrolled",
+                "None outstanding",
+            ]
+        );
+    }
+
+    // A terminal marks a command with backticks; an app shows them as typed.
+    #[test]
+    fn no_check_says_a_backtick() {
+        assert_eq!(
+            check_text("It writes this after its first successful call. Run `claude` once."),
+            "It writes this after its first successful call. Run claude once."
+        );
+        assert_eq!(
+            check_text("`work` is recorded in use and also holds a parked login"),
+            "work is recorded in use and also holds a parked login"
+        );
+        assert_eq!(
+            check_text("Run `pitboard enroll work --sign-in`."),
+            "Run pitboard enroll work --sign-in."
+        );
+    }
+
+    #[test]
+    fn a_notification_not_posted_says_which_when_and_why() {
+        assert_eq!(
+            not_posted("Couldn’t switch", "08:00", "Notifications are off"),
+            "“Couldn’t switch” not posted at 08:00 · Notifications are off"
+        );
+    }
+
+    // A twelve-hour clock, as an American's says the warm-up's hours.
+    #[test]
+    fn the_warm_up_hours_are_said_on_the_persons_clock() {
+        let twelve = |minutes: u16| {
+            let (hours, minutes) = (minutes / 60, minutes % 60);
+            let half = if hours < 12 { "AM" } else { "PM" };
+            Some(format!("{}:{minutes:02} {half}", (hours + 11) % 12 + 1))
+        };
+        assert_eq!(
+            warm_hours(6 * 60, 22 * 60, twelve).as_deref(),
+            Some("6:00 AM to 10:00 PM")
+        );
+        assert_eq!(
+            warm_hours(22 * 60 + 30, 6 * 60, twelve).as_deref(),
+            Some("10:30 PM to 6:00 AM")
+        );
+        assert_eq!(
+            warm_hours(0, 12 * 60, twelve).as_deref(),
+            Some("12:00 AM to 12:00 PM")
+        );
+        assert_eq!(
+            warm_hours(6 * 60, 24 * 60, twelve).as_deref(),
+            Some("6:00 AM to midnight")
+        );
+        assert_eq!(warm_hours(0, 24 * 60, twelve).as_deref(), Some("All day"));
+        assert_eq!(
+            warm_hours(0, 24 * 60, |_| None).as_deref(),
+            Some("All day"),
+            "the whole day needs no clock"
+        );
+        assert_eq!(warm_hours(6 * 60, 22 * 60, |_| None), None);
+    }
+
+    #[test]
+    fn renewal_and_the_command_line_are_said_in_these_words() {
+        assert_eq!(
+            renewal_about(Os::MacOs, false),
+            "Your Mac’s own scheduler renews your parked logins once a day, so one you leave \
+             alone doesn’t expire."
+        );
+        assert_eq!(
+            renewal_about(Os::MacOs, true),
+            "Your Mac’s own scheduler renews your parked logins once a day, so one you leave \
+             alone doesn’t expire. A parked Claude Desktop login is never renewed."
+        );
+        assert_eq!(
+            renewal_about(Os::Windows, false),
+            "Your PC’s own scheduler renews your parked logins once a day, so one you leave \
+             alone doesn’t expire."
+        );
+        assert_eq!(
+            NEW_TERMINALS,
+            "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran \
+             see."
+        );
+        assert_eq!(
+            NO_UPDATE_KEY,
+            "This copy of Pitboard can’t update itself: it was built from source and carries no \
+             update key. A copy from a release keeps itself up to date."
+        );
     }
 
     #[test]

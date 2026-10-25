@@ -1359,11 +1359,9 @@ mod tests {
         };
         assert_eq!(
             refused(&below, full.clone()).map(|failure| failure.message),
-            Some(
-                "Pitboard changes nothing on Windows build 22631. It changes things on Windows \
-                 11 24H2 and later, and on Windows Server 2025: update Windows to use it here."
-                    .into()
-            )
+            Some(sentence(
+                &pitboard_core::error::Error::SystemTooOld { build: Some(22631) }.to_string()
+            ))
         );
         let floor_unknown = |host: &pitboard_core::testing::MemoryHost| {
             host.runs_on(Floor::Unknown);

@@ -12,6 +12,7 @@ use super::{AtLimit, Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
+use pitboard_core::host::Os;
 use pitboard_core::words as said;
 use std::time::Duration;
 
@@ -92,6 +93,11 @@ fn no_room(resets: i64) -> AutoSwitched {
         why: "no other Claude Code account has room below 95% in every limit".into(),
         until: None,
     }
+}
+
+/// What the settings say while it watches `account`, with nothing more known of it.
+fn watching_said(account: &str) -> String {
+    words::typeset(&said::watching(&words::quoted(account), None, None, None))
 }
 
 /// A switch the core refused before it could record the attempt.
@@ -410,11 +416,13 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
         machine.posted,
         [RunOutNotice {
             id: format!("auto/work/personal/{}", model.now.epoch()),
-            title: "Switched Claude Code to personal".into(),
+            title: words::switched_to(Some("Claude Code"), "personal"),
             subtitle: None,
-            body: "work has used 97% of its 5-hour limit. Sessions already running follow \
-                   within 33 seconds."
-                .into(),
+            body: words::used_then(
+                "work",
+                "97% of its 5-hour limit",
+                &words::follows(&Adoption::PollingWithin(33))
+            ),
             clicked: "accounts".into(),
             button: None,
         }]
@@ -437,8 +445,8 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
         "and the account switched to has room"
     );
     assert_eq!(
-        standing(&model).as_deref(),
-        Some("Watching personal."),
+        standing(&model),
+        Some(watching_said("personal")),
         "the look after the read after it"
     );
 }
@@ -452,13 +460,16 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    assert_eq!(
-        model.shown().machine.at_limit.note.as_deref(),
-        Some(
-            "Pitboard switches Claude Code once a limit of the account in use reaches 95%, never \
-             back by itself, and notifies you of Codex. Sessions already running follow within \
-             about 33 seconds."
+    let note = |os, file_left| {
+        words::at_limit_note(
+            AtLimit::Switch,
+            95,
+            &words::sessions_follow(os, file_left, 33),
         )
+    };
+    assert_eq!(
+        model.shown().machine.at_limit.note,
+        note(pitboard_core::host::OS, false)
     );
 
     machine.answer = Ok(super::testing::records::warned(
@@ -469,21 +480,15 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
         )],
     ));
     model.refresh(&mut machine);
-    let note = model.on_a_mac().machine.at_limit.note.unwrap_or_default();
-    assert!(!note.contains("33 seconds"), "{note}");
-    assert!(
-        note.contains(
-            "While a login file is left behind the keychain, Claude Code sessions already \
-             running keep the account they are on until their login is next renewed, or until \
-             they are started again."
-        ),
-        "{note}"
+    assert_eq!(
+        model.on_a_mac().machine.at_limit.note,
+        note(Os::MacOs, true)
     );
-    let note = model.on_windows().machine.at_limit.note.unwrap_or_default();
-    assert!(
-        note.contains("While a login file is left behind Credential Manager, Claude Code"),
-        "{note}"
+    assert_eq!(
+        model.on_windows().machine.at_limit.note,
+        note(Os::Windows, true)
     );
+    assert_ne!(note(Os::MacOs, true), note(Os::MacOs, false));
 }
 
 /// A reason it did not switch is said once for the limit and its reset, whether the decision
@@ -494,13 +499,13 @@ fn a_reason_it_did_not_switch_is_said_once() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
+    let why = "Claude Code signs in another way, set by apiKeyHelper, so a switch would change \
+               nothing its sessions use";
     let overridden = |resets: i64| AutoSwitched::Skipped {
         key: format!("skipped/work/session//{resets}/auth_overridden"),
         from: "work".into(),
         used: "97% of its 5-hour limit".into(),
-        why: "Claude Code signs in another way, set by apiKeyHelper, so a switch would change \
-              nothing its sessions use"
-            .into(),
+        why: why.into(),
         until: None,
     };
     machine.look = Ok(AutoLooked::Act);
@@ -517,8 +522,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
     assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
     assert_eq!(
         machine.posted[0].body,
-        "work has used 97% of its 5-hour limit. Claude Code signs in another way, set by \
-         apiKeyHelper, so a switch would change nothing its sessions use."
+        words::used_then("work", "97% of its 5-hour limit", &words::sentence(why))
     );
     assert_eq!(machine.posted[0].button, None);
     assert_eq!(machine.posted[0].clicked, "limits");
@@ -539,9 +543,10 @@ fn a_reason_it_is_not_watching_is_said_once() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
+    let why = "a switch was interrupted, and the next change you make finishes it";
     machine.look = Ok(AutoLooked::Stands(AutoSwitched::NotWatching {
         key: "not-watching/switch_interrupted".into(),
-        why: "a switch was interrupted, and the next change you make finishes it".into(),
+        why: why.into(),
         until: None,
     }));
     model.refresh(&mut machine);
@@ -553,7 +558,7 @@ fn a_reason_it_is_not_watching_is_said_once() {
             id: "auto-not-watching/switch_interrupted".into(),
             title: words::NOT_SWITCHING.into(),
             subtitle: None,
-            body: "A switch was interrupted, and the next change you make finishes it.".into(),
+            body: words::sentence(why),
             clicked: "limits".into(),
             button: None,
         }]
@@ -780,7 +785,7 @@ fn a_decision_answered_after_it_was_turned_off_says_nothing_and_holds_nothing_ba
         });
         model.run(&mut machine);
         assert_eq!(machine.auto_at.len(), asked + 1, "asked at once");
-        assert_eq!(standing(&model).as_deref(), Some("Watching work."));
+        assert_eq!(standing(&model), Some(watching_said("work")));
     }
 }
 
@@ -807,7 +812,7 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
             .iter()
             .map(|notice| notice.title.as_str())
             .collect::<Vec<_>>(),
-        ["Switched Claude Code to personal"]
+        [words::switched_to(Some("Claude Code"), "personal")]
     );
     assert_eq!(
         model
@@ -843,7 +848,7 @@ fn the_first_look_of_a_launch_follows_its_first_read() {
     model.run(&mut machine);
     assert_eq!(machine.looked_at.len(), 1, "once it lands");
     assert!(machine.posted.is_empty(), "{:?}", machine.posted);
-    assert_eq!(standing(&model).as_deref(), Some("Watching work."));
+    assert_eq!(standing(&model), Some(watching_said("work")));
 }
 
 /// A read that lands before the preferences are read is looked at as they are.
@@ -906,10 +911,12 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
     assert_eq!(machine.posted[0].title, words::NOT_SWITCHED);
+    let AutoSwitched::Skipped { why, .. } = no_room(9_000) else {
+        unreachable!("no room is a switch skipped");
+    };
     assert_eq!(
         machine.posted[0].body,
-        "work has used 97% of its 5-hour limit. No other Claude Code account has room below \
-         95% in every limit."
+        words::used_then("work", "97% of its 5-hour limit", &words::sentence(&why))
     );
     assert!(model.state.switch_under_way().is_none());
 
@@ -1005,7 +1012,7 @@ fn turning_it_on_is_kept_and_looks_at_once() {
     let shown = model.shown().machine.at_limit;
     assert!(shown.choice == AtLimit::Switch && shown.enabled);
     assert_eq!((shown.at, shown.lowest, shown.highest), (90, 50, 99));
-    assert_eq!(shown.at_label, "When a limit reaches 90%");
+    assert_eq!(shown.at_label, words::at_limit_label(90));
 
     model.run(&mut machine);
     assert_eq!(

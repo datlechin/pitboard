@@ -1893,7 +1893,7 @@ fn a_first_account_of_such_a_tool_is_recorded_as_the_one_signed_in() {
     put_up(&mut model, &mut machine, add(Some("desktop")));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::add_account(Os::MacOs)
+        words::add_account(Os::MacOs, false)
     );
     let jobs = model.send(sign_in("desktop", "work"));
     assert_eq!(

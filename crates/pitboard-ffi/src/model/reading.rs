@@ -279,7 +279,7 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
         machine.posted,
         [RunOutNotice {
             id: "warning/login_replaced/claude:work".into(),
-            title: "A login was replaced outside Pitboard".into(),
+            title: words::warning_heading(OS, &replaced).into(),
             subtitle: None,
             body: replaced.message.clone(),
             clicked: "accounts".into(),

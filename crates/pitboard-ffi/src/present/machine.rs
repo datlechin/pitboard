@@ -283,21 +283,16 @@ fn warm(seen: &Seen) -> WarmShown {
                     return Some(words::typeset(&pitboard_core::words::warming_halted(halt)));
                 }
                 if let Some(failed) = &state.warm.failed {
-                    return Some(format!("The last warm-up came to nothing: {failed}"));
+                    return Some(words::warm_up_failed(failed));
                 }
                 let (account, at) = overview.next(seen.now)?;
-                Some(if at <= seen.now {
-                    format!("Warming up {account} now.")
-                } else {
-                    format!("Next warm-up: {account} at {}.", seen.clock(at))
-                })
+                let at = (at > seen.now).then(|| seen.clock(at));
+                Some(words::next_warm_up(account, at.as_deref()))
             })
     });
     WarmShown {
-        title: "Warm up limits".into(),
-        none_enrolled: accounts
-            .is_empty()
-            .then(|| "No Claude Code account is enrolled yet.".into()),
+        title: words::WARM_UP_LIMITS.into(),
+        none_enrolled: accounts.is_empty().then(|| words::NONE_TO_WARM.into()),
         from: range.from(),
         to: range.to(),
         range_label: words::warm_hours(range.from(), range.to(), |minutes| {
@@ -306,9 +301,7 @@ fn warm(seen: &Seen) -> WarmShown {
         .unwrap_or_else(|| range.to_string()),
         accounts,
         standing,
-        note: "Pitboard starts each account’s five-hour period as soon as the last one resets, \
-               within these hours, while the app is open."
-            .into(),
+        note: words::WARM_UP_NOTE.into(),
         enabled: overview.is_some(),
         terms: terms(),
     }
@@ -317,73 +310,43 @@ fn warm(seen: &Seen) -> WarmShown {
 fn terms() -> TermsShown {
     TermsShown {
         sentence: words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS),
-        link_title: "Is this allowed?".into(),
+        link_title: words::IS_THIS_ALLOWED.into(),
         link: pitboard_core::words::IS_THIS_ALLOWED_URL.into(),
     }
 }
-
-// How soon running sessions follow is promised only while the last read found no file behind
-// the store.
-const AT_LIMIT: &str = "When a limit reaches";
 
 fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
     let choice = state.preferences.at_limit();
-    let follows = if state
-        .warnings
-        .iter()
-        .any(|warning| warning.code == "fallback_login")
-    {
-        format!(
-            "While a login file is left behind {}, Claude Code sessions already running {}.",
-            pitboard_core::words::store_in_front(seen.os),
-            words::typeset(pitboard_core::words::kept_until_renewed())
-        )
-    } else {
-        format!(
-            "Sessions already running follow within about {} seconds.",
-            pitboard_core::switch::ADOPTION_CEILING_SECONDS
-        )
-    };
-    let note = match choice {
-        AtLimit::Nothing => None,
-        AtLimit::Notify => Some(format!(
-            "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
-             is open."
-        )),
-        AtLimit::Switch => Some(format!(
-            "Pitboard switches Claude Code once a limit of the account in use reaches {at}%, never \
-             back by itself, and notifies you of Codex. {follows}"
-        )),
-    };
+    let follows = words::sessions_follow(
+        seen.os,
+        state
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "fallback_login"),
+        pitboard_core::switch::ADOPTION_CEILING_SECONDS,
+    );
+    let note = words::at_limit_note(choice, at, &follows);
     let switching = choice == AtLimit::Switch;
     AtLimitShown {
-        title: "Before an account runs out".into(),
+        title: words::BEFORE_RUNNING_OUT.into(),
         choice,
-        choices: [
-            (AtLimit::Nothing, "Do Nothing", "Do nothing"),
-            (AtLimit::Notify, "Notify Me", "Notify me"),
-            (
-                AtLimit::Switch,
-                "Switch Automatically",
-                "Switch automatically",
-            ),
-        ]
-        .into_iter()
-        .map(|(choice, title, sentence)| AtLimitChoice {
-            choice,
-            title: words::titled(seen.os, title, sentence),
-        })
-        .collect(),
+        choices: [AtLimit::Nothing, AtLimit::Notify, AtLimit::Switch]
+            .into_iter()
+            .map(|choice| AtLimitChoice {
+                choice,
+                title: words::at_limit_choice(seen.os, choice),
+            })
+            .collect(),
         at,
         lowest: Threshold::LOWEST,
         highest: Threshold::HIGHEST,
         enabled: state.preferences_have_been_read(),
         share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,
-        heading: AT_LIMIT.into(),
-        at_label: format!("{AT_LIMIT} {at}%"),
-        share_label: "Share of a limit".into(),
+        heading: words::AT_LIMIT.into(),
+        at_label: words::at_limit_label(at),
+        share_label: words::SHARE_OF_A_LIMIT.into(),
         share_range: words::share_range(Threshold::LOWEST, Threshold::HIGHEST),
         note,
         standing: state
@@ -560,7 +523,7 @@ fn command_line(seen: &Seen) -> CommandLineShown {
         found: machine.command_line.clone(),
         in_terminal: machine.command_line.as_ref().map(|found| match found {
             FoundCommandLine::Bundled { path } | FoundCommandLine::Another { path } => path.clone(),
-            FoundCommandLine::Nowhere => "Not installed".into(),
+            FoundCommandLine::Nowhere => words::NOT_INSTALLED.into(),
         }),
         update_note: match machine.command_line {
             Some(FoundCommandLine::Bundled { .. }) => Some(words::update_note(true).to_owned()),
@@ -624,21 +587,30 @@ mod tests {
     // The summary said 06:00 to 22:00 beside time pickers in AM and PM.
     #[test]
     fn the_range_is_said_on_the_persons_clock() {
-        assert_eq!(hours(6 * 60, 22 * 60, &Twelve), "6:00 AM to 10:00 PM");
-        assert_eq!(hours(22 * 60 + 30, 6 * 60, &Twelve), "10:30 PM to 6:00 AM");
-        assert_eq!(hours(0, 12 * 60, &Twelve), "12:00 AM to 12:00 PM");
-        assert_eq!(hours(6 * 60, 22 * 60, &Utc), "06:00 to 22:00");
+        let on = |from: u16, to: u16, clock: &dyn LocalTime| {
+            words::warm_hours(from, to, |minutes| clock.time_of_day(minutes).ok())
+        };
+        for (from, to) in [(6 * 60, 22 * 60), (22 * 60 + 30, 6 * 60), (6 * 60, 24 * 60)] {
+            assert_eq!(
+                hours(from, to, &Twelve),
+                on(from, to, &Twelve).expect("a clock")
+            );
+            assert_eq!(hours(from, to, &Utc), on(from, to, &Utc).expect("a clock"));
+        }
+        assert_eq!(
+            hours(6 * 60, 0, &Utc),
+            on(6 * 60, 24 * 60, &Utc).expect("a clock"),
+            "a range to 00:00 ends at the end of the day"
+        );
         assert_eq!(
             hours(6 * 60, 22 * 60, &Unreadable),
-            "06:00 to 22:00",
+            Range::new(6 * 60, 22 * 60).expect("a span").to_string(),
             "as the core writes it where the clock cannot say"
         );
-    }
-
-    #[test]
-    fn a_range_to_the_end_of_the_day_ends_at_midnight() {
-        assert_eq!(hours(6 * 60, 24 * 60, &Twelve), "6:00 AM to midnight");
-        assert_eq!(hours(6 * 60, 0, &Utc), "06:00 to midnight");
+        assert_eq!(
+            hours(0, 24 * 60, &Unreadable),
+            on(0, 24 * 60, &Unreadable).expect("the whole day needs no clock")
+        );
     }
 
     #[test]
@@ -650,14 +622,8 @@ mod tests {
                 .warm
                 .none_enrolled
                 .as_deref(),
-            Some("No Claude Code account is enrolled yet.")
+            Some(words::NONE_TO_WARM)
         );
-    }
-
-    #[test]
-    fn a_range_of_the_whole_day_is_all_day() {
-        assert_eq!(hours(0, 24 * 60, &Twelve), "All day");
-        assert_eq!(hours(0, 24 * 60, &Unreadable), "All day");
     }
 
     fn checks(checks: &[(&str, &str, Level, &str, &str)]) -> ChecksShown {
@@ -707,125 +673,16 @@ mod tests {
         assert_eq!(level(&[]), Level::Ok);
     }
 
-    fn names(checks: &[(&str, &str)]) -> Vec<String> {
-        let checks: Vec<_> = checks
-            .iter()
-            .map(|&(code, name)| (code, name, Level::Ok, "", ""))
-            .collect();
-        lines(&checks).into_iter().map(|line| line.name).collect()
-    }
-
-    // Doctor names a check for a terminal's table: "account personal", "config file".
+    // Each line says its check in the apps' words, and what to do only where it did not pass.
     #[test]
-    fn each_check_is_named_in_sentence_case() {
-        assert_eq!(
-            names(&[
-                ("config_file", "config file"),
-                ("parked_login", "account personal"),
-                ("interrupted_switch", "interrupted switch"),
-                ("claude_version", "Claude Code build"),
-                ("no_argv", "PITBOARD_NO_ARGV"),
-                ("machine_id", "machine id"),
-                ("schedule_proxy", "renewal schedule's proxy"),
-            ]),
-            [
-                "Config file",
-                "Account personal",
-                "Interrupted switch",
-                "Claude Code build",
-                "PITBOARD_NO_ARGV",
-                "Machine ID",
-                "Renewal schedule’s proxy",
-            ]
-        );
-    }
-
-    #[test]
-    fn storage_v5_is_named_for_what_it_is() {
-        assert_eq!(
-            names(&[("storage_v5", "storage v5")]),
-            ["Claude Code’s new login storage"]
-        );
-    }
-
-    #[test]
-    fn a_prose_detail_starts_with_a_capital_and_data_keeps_its_case() {
-        let details: Vec<String> = lines(&[
-            ("storage_v5", "storage v5", Level::Ok, "inactive", ""),
-            ("state", "accounts", Level::Ok, "none enrolled yet", ""),
-            (
-                "network",
-                "network",
-                Level::Ok,
-                "direct: no variable names a proxy",
-                "",
-            ),
-            (
-                "desktop_settings",
-                "Claude settings",
-                Level::Ok,
-                "config.json read",
-                "",
-            ),
-            (
-                "home",
-                "Pitboard home",
-                Level::Ok,
-                r"C:\Users\dana\AppData\Local\Pitboard",
-                "",
-            ),
-            (
-                "identity",
-                "identity",
-                Level::Ok,
-                "dana@example.com · org 1f2e",
-                "",
-            ),
-            (
-                "claude_version",
-                "Claude Code build",
-                Level::Ok,
-                "2.1.299",
-                "",
-            ),
-            ("state", "accounts", Level::Ok, "1 enrolled", ""),
-            (
-                "pending_parks",
-                "parks being reclaimed",
-                Level::Ok,
-                "none outstanding",
-                "",
-            ),
-        ])
-        .into_iter()
-        .map(|line| line.detail)
-        .collect();
-        assert_eq!(
-            details,
-            [
-                "Inactive",
-                "None enrolled yet",
-                "Direct: no variable names a proxy",
-                "config.json read",
-                r"C:\Users\dana\AppData\Local\Pitboard",
-                "dana@example.com · org 1f2e",
-                "2.1.299",
-                "1 enrolled",
-                "None outstanding",
-            ]
-        );
-    }
-
-    // A terminal marks a command with backticks; an app shows them as typed.
-    #[test]
-    fn no_check_line_says_a_backtick() {
+    fn a_check_line_says_its_check_in_the_apps_words() {
         let shown = lines(&[
             (
-                "identity",
-                "identity",
-                Level::Warn,
-                "Claude Code has not recorded a signed-in account",
-                "It writes this after its first successful call. Run `claude` once.",
+                "storage_v5",
+                "storage v5",
+                Level::Ok,
+                "inactive",
+                "Nothing to do.",
             ),
             (
                 "desktop_login",
@@ -834,18 +691,45 @@ mod tests {
                 "`work` is recorded in use and also holds a parked login",
                 "Run `pitboard enroll work --sign-in`.",
             ),
+            ("state", "accounts", Level::Fail, "unreadable", ""),
         ]);
+        let said: Vec<_> = shown
+            .iter()
+            .map(|line| {
+                (
+                    line.id,
+                    line.name.clone(),
+                    line.spoken_level.clone(),
+                    line.detail.clone(),
+                    line.advice.clone(),
+                )
+            })
+            .collect();
         assert_eq!(
-            shown[0].advice.as_deref(),
-            Some("It writes this after its first successful call. Run claude once.")
-        );
-        assert_eq!(
-            shown[1].detail,
-            "work is recorded in use and also holds a parked login"
-        );
-        assert_eq!(
-            shown[1].advice.as_deref(),
-            Some("Run pitboard enroll work --sign-in.")
+            said,
+            [
+                (
+                    0,
+                    words::check_name("storage_v5", "storage v5"),
+                    words::spoken_level(Level::Ok).to_owned(),
+                    words::check_text("inactive"),
+                    None
+                ),
+                (
+                    1,
+                    words::check_name("desktop_login", "Claude Desktop in use"),
+                    words::spoken_level(Level::Warn).to_owned(),
+                    words::check_text("`work` is recorded in use and also holds a parked login"),
+                    Some(words::check_text("Run `pitboard enroll work --sign-in`."))
+                ),
+                (
+                    2,
+                    words::check_name("state", "accounts"),
+                    words::spoken_level(Level::Fail).to_owned(),
+                    words::check_text("unreadable"),
+                    None
+                ),
+            ]
         );
     }
 
@@ -861,18 +745,16 @@ mod tests {
                 .schedule
                 .about
         };
-        let claude_code_alone = about(vec![account(Some("work")).signed_in().build()]);
         assert_eq!(
-            claude_code_alone,
-            "Your Mac’s own scheduler renews your parked logins once a day, so one you leave \
-             alone doesn’t expire."
+            about(vec![account(Some("work")).signed_in().build()]),
+            words::renewal_about(Os::MacOs, false)
         );
         assert_eq!(
             about(vec![
                 account(Some("work")).signed_in().build(),
                 desktop_account("work", true)
             ]),
-            format!("{claude_code_alone} A parked Claude Desktop login is never renewed.")
+            words::renewal_about(Os::MacOs, true)
         );
     }
 
@@ -913,11 +795,7 @@ mod tests {
                 "with its plan, as the menu names it"
             );
             assert_eq!(windows.standing, said, "{on}");
-            assert_eq!(
-                windows.note,
-                "Pitboard starts each account’s five-hour period as soon as the last one resets, \
-                 within these hours, while the app is open."
-            );
+            assert_eq!(windows.note, words::WARM_UP_NOTE);
         }
     }
 }
