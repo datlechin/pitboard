@@ -21,6 +21,7 @@ import {
   menuLine,
   menuTitle,
   notes,
+  warmsAgainNote,
   toolAccounts,
   toolsOn,
 } from "../lib/words.ts";
@@ -111,7 +112,7 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
           inUse,
           action: inUse ? null : "Use",
           limits: a.limits.map((l) => limitRow(l, w)),
-          notes: notes(a, w),
+          notes: notes(a, w, warmsAgainNote(a)),
         };
       }),
     })),

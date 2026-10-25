@@ -41,9 +41,8 @@ export function span(seconds: number): string {
   return `${days}d ${hours}h`;
 }
 
-// words.rs `limit_column` and `limit_name`, by the length a limit runs.
-export function limitColumn(limit: Limit): string {
-  const s = limit.lengthSeconds;
+// words.rs `limit_column`, `limit_name` and `scoped_limit_name`, by the length a limit runs.
+function lengthColumn(s: number): string {
   if (s === WEEK) return "week";
   if (s === DAY) return "day";
   if (s % DAY === 0) return `${s / DAY}d`;
@@ -51,6 +50,11 @@ export function limitColumn(limit: Limit): string {
   if (s % MINUTE === 0) return `${s / MINUTE}m`;
   return `${s}s`;
 }
+
+export const limitColumn = (limit: Limit) =>
+  limit.scope
+    ? `${lengthColumn(limit.lengthSeconds)} · ${limit.scope}`
+    : lengthColumn(limit.lengthSeconds);
 
 export function limitName(limit: Limit): string {
   const s = limit.lengthSeconds;
@@ -61,6 +65,9 @@ export function limitName(limit: Limit): string {
   if (s % MINUTE === 0) return `${s / MINUTE}-minute`;
   return `${s}-second`;
 }
+
+export const scopedLimitName = (limit: Limit) =>
+  limit.scope ? `${limitName(limit)} ${limit.scope}` : limitName(limit);
 
 // words.rs `resets`
 export const resets = (at: number, now: number) =>
@@ -83,12 +90,12 @@ export interface Pace {
 // pace.rs `of`
 export function paceOf(
   used: number,
-  resetsAt: number,
+  resetsAt: number | null,
   length: number,
   readAt: number,
   now: number,
 ): Pace | null {
-  if (!(length > 0)) return null;
+  if (!(length > 0) || resetsAt === null) return null;
   const at = Math.min(readAt, now);
   const left = resetsAt - at;
   if (resetsAt <= now || left > length || used >= 100) return null;
@@ -238,13 +245,14 @@ export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: n
   return first;
 }
 
-// present/accounts.rs `limits_said`: the line under an account in the menu.
+// present/accounts.rs `limits_said`: the line under an account in the menu, or its email where
+// nothing is read of it yet.
 export function menuLine(a: Account, w: World): string {
-  if (a.limits.length === 0) return "No usage read";
+  if (a.limits.length === 0) return a.tool === "desktop" ? "No usage read" : a.email;
   const first = runsOutFirst(a, w);
   const said = a.limits.map((l) => {
     const runs = first?.limit === l ? ` (${runsOutIn(first.inSeconds)})` : "";
-    return `${limitName(l)} ${figure(l.percent)}${runs}`;
+    return `${scopedLimitName(l)} ${figure(l.percent)}${runs}`;
   });
   return capitalised(said.join(", "));
 }
@@ -266,7 +274,7 @@ export function limitRow(limit: Limit, w: World): LimitRow {
     percent: limit.percent,
     figure: figure(limit.percent),
     level: level(limit.percent),
-    resets: resets(limit.resetsAt, w.now),
+    resets: limit.resetsAt === null ? "" : resets(limit.resetsAt, w.now),
     pace: p && { expected: p.expected, standing: p.standing, said: paceColumn(p) },
   };
 }
@@ -301,7 +309,7 @@ export const trayTip = (w: World) =>
 // The notification once a limit of the account in use reaches the share (present/notices.rs
 // `at_limit_notice`): personal's weekly limit, with work's room in it.
 export const headsUpTitle = (label: string, limit: Limit, used: number) =>
-  `${label} has used ${used}% of its ${limitName(limit)} limit`;
+  `${label} has used ${used}% of its ${scopedLimitName(limit)} limit`;
 const weekly = (label: string) => account(label).limits.find((l) => l.lengthSeconds === WEEK)!;
 export const headsUp = {
   account: "personal",
@@ -314,22 +322,28 @@ export const headsUp = {
 // The limit that runs out first, in the sentence the window's note and `pitboard` say it in.
 export function runsOutNote(a: Account, w: World): string | null {
   const first = runsOutFirst(a, w);
-  return first ? runsOut(limitName(first.limit), first.inSeconds) : null;
+  return first ? runsOut(scopedLimitName(first.limit), first.inSeconds) : null;
 }
 
-// present/accounts.rs `item`'s notes under an account in the window, the warm-up's last.
-export function notes(a: Account, w: World): string[] {
+// present/accounts.rs `item`'s notes under an account in the window, then where it stands for
+// warm-ups, where it is turned on for them.
+export function notes(a: Account, w: World, warm: string | null): string[] {
   const on = isInUse(a, w);
   const runs = runsOutNote(a, w);
-  const fiveHour = a.limits.find((l) => l.lengthSeconds === 5 * HOUR);
   return [
     on && a.readAt !== undefined ? `Read ${span(w.now - a.readAt)} ago, with Claude closed` : null,
     runs && capitalised(runs),
     on ? null : (parkedLife(a.refreshExpiresAt, w.now) ?? sessionLife(a.sessionExpiresAt, w.now)),
-    a.tool === "claude" && warmUp.accounts.includes(a.label) && fiveHour
-      ? `Warms up again at ${hm(fiveHour.resetsAt)}`
-      : null,
+    warm,
   ].filter((n): n is string => n !== null);
+}
+
+// The world's warm-up note: personal's period runs until its five hours reset.
+export function warmsAgainNote(a: Account): string | null {
+  const period = a.limits.find((l) => l.lengthSeconds === 5 * HOUR && !l.scope);
+  return a.tool === "claude" && warmUp.accounts.includes(a.label) && period?.resetsAt
+    ? `Warms up again at ${hm(period.resetsAt)}`
+    : null;
 }
 
 const tinted = (cls: string, html: string) => (html ? `<span class="${cls}">${html}</span>` : "");
@@ -384,7 +398,9 @@ export function statusLines(w: World, tool: Tool): string[] {
   const emailWidth = width((a) => [a.email]);
   const planWidth = width((a) => [a.plan ?? ""]);
   const nameWidth = width((a) => a.limits.map(limitColumn));
-  const resetsWidth = width((a) => a.limits.map((l) => resets(l.resetsAt, w.now)));
+  const resetsWidth = width((a) =>
+    a.limits.flatMap((l) => (l.resetsAt === null ? [] : [resets(l.resetsAt, w.now)])),
+  );
   const lines: string[] = [];
   rows.forEach((a, i) => {
     if (i > 0 && a.limits.length > 0) lines.push("");
@@ -394,7 +410,7 @@ export function statusLines(w: World, tool: Tool): string[] {
     );
     for (const l of a.limits) {
       const p = pace(l, w);
-      const said = resets(l.resetsAt, w.now);
+      const said = l.resetsAt === null ? "" : resets(l.resetsAt, w.now);
       const after = p
         ? `${tinted("dim", pad(said, resetsWidth))}  ${tinted(p.standing === "over" ? "r" : p.standing === "under" ? "g" : "dim", paceColumn(p))}`
         : tinted("dim", said);

@@ -10,6 +10,7 @@ import {
   menuBarClock,
   menuLine,
   notes,
+  warmsAgainNote,
   paceColumn,
   paceOf,
   parkedLife,
@@ -273,7 +274,7 @@ test("the world's times give every word the figures were drawn with", () => {
     "5-hour 59%, weekly 73% (runs out in 11h 05m)",
   );
   assert.equal(runsOutFirst(account("personal"), moments.after), null);
-  const all = (w: World) => accounts.map((a) => notes(a, w));
+  const all = (w: World) => accounts.map((a) => notes(a, w, warmsAgainNote(a)));
   assert.deepEqual(all(before), [
     ["Weekly limit runs out in 11h 05m at this pace", "Warms up again at 22:00"],
     ["Parked login good for 26 more days"],

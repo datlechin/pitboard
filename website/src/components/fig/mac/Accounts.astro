@@ -3,7 +3,7 @@
 import Button from "./Button.astro";
 import Window from "./Window.astro";
 import { moments, tools, type Moment, type Tool } from "../../../data/world.ts";
-import { hm, isInUse, limitRow, listed, notes, whole } from "../../../lib/words.ts";
+import { hm, isInUse, limitRow, listed, notes, warmsAgainNote, whole } from "../../../lib/words.ts";
 
 interface Props {
   moment: Moment;
@@ -60,6 +60,7 @@ const sub = "text-u-12/15 text-mac-window-sub";
       </div>
       {listed(world, tool).map((a) => {
         const on = isInUse(a, world);
+        const said = notes(a, world, warmsAgainNote(a));
         // each row's rule starts under its name
         return <div class="ml-34 pt-8 pb-7.5 inset-shadow-mac-window-b">
           <div class="-ml-34 flex items-center gap-8">
@@ -163,7 +164,7 @@ const sub = "text-u-12/15 text-mac-window-sub";
             })}
           </div>}
           {/* a note's line runs past its descent, so a row that ends in one has more under it */}
-          {notes(a, world).map((n) => <p class:list={["mt-6 last:pb-1.5", sub]}>{n}</p>)}
+          {said.map((n) => <p class:list={["mt-6 last:pb-1.5", sub]}>{n}</p>)}
         </div>;
       })}
     </>

@@ -28,14 +28,18 @@ export const WEEK = 7 * DAY;
 export const ZONE = 7 * HOUR;
 const at = (local: string) => Date.parse(`${local}+07:00`) / 1000;
 
-// A reading of one limit (core::usage::Window): the share used, when it resets and how long it runs.
+// A reading of one limit (core::usage::Window): the share used, when it resets, where a period
+// runs, how long it runs, and the model it is limited to, where it is one model's.
 export interface Limit {
   percent: number;
-  resetsAt: number;
+  resetsAt: number | null;
   lengthSeconds: number;
+  scope?: string;
 }
 
 export interface Account {
+  // Account::id, which stays through a rename
+  id: string;
   tool: Tool;
   label: string;
   // none for Claude Desktop: Pitboard cannot ask claude.ai whose its login is
@@ -48,6 +52,8 @@ export interface Account {
   // session ends while it is parked (session_expires_at)
   readAt?: number;
   sessionExpiresAt?: number;
+  // enrolled since the last read, so no usage is known yet
+  unread?: boolean;
 }
 
 // A five-hour period starts and resets on a ten-minute mark (concepts/usage#when-a-period-starts):
@@ -57,6 +63,7 @@ const personalPeriodEnds = at("2026-10-13T22:00:00");
 
 export const accounts: Account[] = [
   {
+    id: "personal",
     tool: "claude",
     label: "personal",
     email: "me@example.com",
@@ -68,6 +75,7 @@ export const accounts: Account[] = [
     refreshExpiresAt: at("2026-11-09T01:00:00"),
   },
   {
+    id: "work",
     tool: "claude",
     label: "work",
     email: "me@company.com",
@@ -79,6 +87,7 @@ export const accounts: Account[] = [
     refreshExpiresAt: at("2026-11-09T01:00:00"),
   },
   {
+    id: "main",
     tool: "codex",
     label: "main",
     email: "me@example.com",
@@ -86,6 +95,7 @@ export const accounts: Account[] = [
     limits: [{ percent: 7, resetsAt: at("2026-10-19T15:00:00"), lengthSeconds: WEEK }],
   },
   {
+    id: "spare",
     tool: "codex",
     label: "spare",
     email: "me@company.com",
@@ -94,6 +104,7 @@ export const accounts: Account[] = [
     limits: [{ percent: 0, resetsAt: at("2026-10-14T01:50:00"), lengthSeconds: fiveHours }],
   },
   {
+    id: "home",
     tool: "desktop",
     label: "home",
     email: "",
@@ -102,6 +113,7 @@ export const accounts: Account[] = [
     readAt: at("2026-10-13T18:45:00"),
   },
   {
+    id: "office",
     tool: "desktop",
     label: "office",
     email: "",
