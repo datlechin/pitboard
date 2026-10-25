@@ -37,6 +37,8 @@ export interface MenuOptions {
   choose: (item: HTMLElement) => void;
   // the menu has opened or closed, and with `refocus` focus goes back to what opened it
   shown: (open: boolean, refocus: boolean) => void;
+  // Left or Right where neither opens nor closes a submenu: a menu bar's next menu
+  across?: (by: -1 | 1) => void;
 }
 
 export const usable = (item: HTMLElement) => item.getAttribute("aria-disabled") !== "true";
@@ -237,7 +239,8 @@ export class Menu {
 
   #release(target: EventTarget | null) {
     const item = this.#itemOf(target);
-    if (!item || !usable(item)) return;
+    // an item whose submenu is the system's, which the page does not draw, chooses nothing
+    if (!item || !usable(item) || item.hasAttribute("data-more")) return;
     const sub = this.subs.get(item);
     if (sub) this.#openSub(sub, "pointer");
     else this.#chosen(item);
@@ -286,6 +289,9 @@ export class Menu {
         if (sub) {
           e.preventDefault();
           this.#openSub(sub, "keyboard");
+        } else if (this.o.across) {
+          e.preventDefault();
+          this.o.across(1);
         }
         return;
       }
@@ -294,6 +300,9 @@ export class Menu {
           e.preventDefault();
           this.close();
           this.opener!.focus({ preventScroll: true });
+        } else if (this.o.across) {
+          e.preventDefault();
+          this.o.across(-1);
         }
         return;
       case "Escape":
@@ -312,7 +321,7 @@ export class Menu {
       // falls through: Space chooses as Return does
       case "Enter": {
         e.preventDefault();
-        if (!at || i < 0 || e.repeat) return;
+        if (!at || i < 0 || e.repeat || at.hasAttribute("data-more")) return;
         const sub = this.subs.get(at);
         if (sub) this.#openSub(sub, "keyboard");
         else if (mac) this.#chosen(at);
@@ -358,6 +367,19 @@ export class Menu {
     items
       .find((item) => named(item).some((n) => n.startsWith(typed)))
       ?.focus({ preventScroll: true });
+  }
+}
+
+// A separator in `menu` marked `data-after` a section shows only between two sections that are there,
+// in the order the separators name them.
+export function sectioned(menu: HTMLElement, sections: Record<string, boolean>) {
+  const order = Object.keys(sections);
+  for (const sep of menu.querySelectorAll<HTMLElement>("[data-after]")) {
+    const i = order.indexOf(sep.dataset.after!);
+    shown(
+      sep,
+      order.slice(0, i + 1).some((k) => sections[k]) && order.slice(i + 1).some((k) => sections[k]),
+    );
   }
 }
 

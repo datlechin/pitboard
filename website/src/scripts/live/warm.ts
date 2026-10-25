@@ -56,6 +56,11 @@ class Warm extends LiveFigure {
     super.connectedCallback();
   }
 
+  // Settings has no Refresh, and its window neither minimizes nor zooms
+  protected windowMenus() {
+    return { account: null, refresh: null, resizes: false };
+  }
+
   protected render(s: State) {
     this.#from.set(s.warm.from);
     this.#to.set(s.warm.to);

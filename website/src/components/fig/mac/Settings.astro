@@ -2,8 +2,10 @@
 // The top of the Limits pane as macOS 27 draws it, in the words machine.rs gives
 // LimitsSettings.swift; each height cuts the window 8 points below its first group, and a working
 // figure 8 points below the footer of Before an account runs out at its tallest, Switch
-// Automatically's. Its controls carry the names machine.rs gives them, and their ids start
-// `prefix`. Every choice's words are drawn, those of the choice not shown hidden.
+// Automatically's, under the menu bar the app puts up while Settings is in front. Its controls carry
+// the names machine.rs gives them, and their ids start `prefix`. Every choice's words are drawn,
+// those of the choice not shown hidden.
+import AppMenuBar from "./AppMenuBar.astro";
 import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock, moments, share, warmUp } from "../../../data/world.ts";
@@ -19,7 +21,7 @@ import {
   warm,
 } from "../../../data/limits.ts";
 import { atLimitNote, type AtLimit } from "../../../lib/model.ts";
-import { hm, toolAccounts } from "../../../lib/words.ts";
+import { hm, menuBarClock, toolAccounts } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -78,11 +80,13 @@ const menuRow =
   inert
   data-output
 >
+  <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} room="clock" />
   <div
     class:list={[
       "absolute top-24 left-1/2 w-500 -translate-x-1/2 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window live:relative live:top-0 live:-mb-[calc(var(--u)*12+2px)] live:overflow-visible",
       frame[show],
     ]}
+    data-part="window"
   >
     <div class="relative flex h-80 justify-center gap-0.5 pt-32">
       <Lights window closeOnly class="top-9.5 left-8.75" />

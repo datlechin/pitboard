@@ -45,6 +45,11 @@ class Settings extends LiveFigure {
     super.connectedCallback();
   }
 
+  // Settings has no Refresh, and its window neither minimizes nor zooms
+  protected windowMenus() {
+    return { account: null, refresh: null, resizes: false };
+  }
+
   protected render(s: State) {
     const p = s.preferences;
     this.#choice.set(p.atLimit);

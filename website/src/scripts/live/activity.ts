@@ -32,6 +32,16 @@ class ActivityPane extends LiveFigure {
   // the pane draws what it read, whatever changes after
   protected render() {}
 
+  protected windowMenus() {
+    return { account: null, refresh: { title: "Refresh", enabled: true }, resizes: true };
+  }
+
+  protected fromMenuBar(does: string): boolean {
+    if (does !== "refresh") return false;
+    this.#read(model.get());
+    return true;
+  }
+
   #read(s: State) {
     const rows = [...this.querySelector('[data-part="log"]')!.children] as HTMLElement[];
     const read = activity(s.log, this.#system);

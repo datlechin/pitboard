@@ -4,7 +4,7 @@ import tray from "../../../apps/windows/Icon/icon-16.svg?raw";
 import trayPlenty from "../../../apps/windows/Icon/tray-plenty-16.svg?raw";
 import trayLow from "../../../apps/windows/Icon/tray-low-16.svg?raw";
 import trayOut from "../../../apps/windows/Icon/tray-out-16.svg?raw";
-import { bar, fluent, heavy, line, symbolic } from "../data/glyphs.ts";
+import { bar, fluent, heavy, line, menuSymbol, symbolic } from "../data/glyphs.ts";
 
 const paths = [...template.matchAll(/<path\b[^>]*?\sd="([^"]+)"/g)];
 if (paths.length !== 2) throw new Error("template.svg is not the kit's two paths");
@@ -73,6 +73,9 @@ const trays = {
       d="M10 2.4a7.6 7.6 0 1 1 0 15.2 7.6 7.6 0 0 1 0-15.2ZM10 5.8a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2ZM5.6 15c1-1.5 2.6-2.3 4.4-2.3s3.4.8 4.4 2.3a6.6 6.6 0 0 1-8.8 0Z"
     ></path>
   </symbol>
+  {Object.entries(menuSymbol).map(([id, body]) => (
+    <symbol id={id} viewBox="0 0 20 20" set:html={body} />
+  ))}
   {Object.entries(bar).map(([id, g]) => (
     <symbol id={id} viewBox={g.viewBox} set:html={g.body} />
   ))}

@@ -10,7 +10,9 @@ import { closeDialog, isOpen, openDialog, type Cancelled } from "./dialog.ts";
 import { LiveFigure } from "./figure.ts";
 import { Grid } from "./grid.ts";
 import { hold } from "./hold.ts";
-import { INSET, Menu } from "./menu.ts";
+import { INSET, Menu, sectioned } from "./menu.ts";
+import { expired, offersOf } from "./offers.ts";
+import type { WindowMenus } from "./appmenu.ts";
 import { say } from "./say.ts";
 import {
   cancelSignIn,
@@ -26,7 +28,6 @@ import {
   switchFromApp,
   typed,
   warmNote,
-  warmStanding,
   warmUp,
   type State,
 } from "../../lib/model.ts";
@@ -52,7 +53,6 @@ import {
   inAppWaiting,
   labelTaken,
   noticeOf,
-  openSite,
   park,
   parkToAdd,
   parkToSignInAgain,
@@ -67,10 +67,8 @@ import {
   signInMessage,
   signInToAgain,
   signingInTo,
-  siteOf,
   typeAName,
   unusableName,
-  useOffer,
   waitingToQuit,
   RENAME,
   CANCEL,
@@ -84,9 +82,6 @@ const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
   in_.querySelector<T>(`[data-part="${name}"]`);
 const accountOf = (s: State, id: string | undefined) => s.accounts.find((a) => a.id === id);
-// a parked login past its life signs in again in place of a switch
-const expired = (a: Account, s: State) =>
-  !isInUse(a, s) && a.refreshExpiresAt !== undefined && a.refreshExpiresAt <= s.now;
 
 export class AccountsWindow extends LiveFigure {
   system: System = "macos";
@@ -103,7 +98,7 @@ export class AccountsWindow extends LiveFigure {
   connectedCallback() {
     const drawing = this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? "";
     this.system = drawing.endsWith("windows") ? "windows" : "macos";
-    this.window = this.firstElementChild as HTMLElement;
+    this.window = this.querySelector<HTMLElement>(':scope > [data-part="window"]')!;
     const grid = this.querySelector<HTMLElement>('[role="grid"]')!;
     this.#grid = new Grid({
       system: this.system,
@@ -221,6 +216,15 @@ export class AccountsWindow extends LiveFigure {
       else this.#openMenu(row, null, null);
     });
     hold(grid, '[role="row"]', (row, x, y) => this.#openMenu(row, x, y));
+    // ⌘⌫, the Account menu's Forget…, wherever focus is in the window but a field
+    this.addEventListener("keydown", (e) => {
+      const at = e.target as Element;
+      if (this.system !== "macos" || e.defaultPrevented || !e.metaKey || e.key !== "Backspace")
+        return;
+      if (at.closest("dialog, input") || !this.#grid.selected) return;
+      e.preventDefault();
+      this.#ask("forget", this.#grid.selected);
+    });
     // ⌘C and Ctrl+C copy the account's email, with nothing on screen saying so
     grid.addEventListener("copy", (e) => {
       const row =
@@ -286,43 +290,31 @@ export class AccountsWindow extends LiveFigure {
   // only what applies to the account, as the shortcut menu leaves out the rest (present/accounts.rs
   // `offers`; AccountCommands.swift; AccountMenu.cs)
   #fillMenu(a: Account, s: State) {
-    const on = isInUse(a, s);
-    const sections: Record<string, boolean> = {};
+    const o = offersOf(a, s);
     const offer = (name: string, applies: boolean, words?: string) => {
       const item = this.#menu.el.querySelector<HTMLElement>(`[data-offer="${name}"]`)!;
       shown(item, applies);
       if (words !== undefined) text(part(item, "title") ?? item, words);
       return applies;
     };
-    const switches = !on && !expired(a, s) && !s.switching;
-    sections.offers = [
-      offer("use", switches, useOffer(a.label)),
-      offer("sign-in-again", !s.signing),
-      offer("rename", true),
-      offer("warm", a.tool === "claude" && warmStanding(s, a, "now").stands === "due"),
-    ].some(Boolean);
-    const site = siteOf(a.tool);
-    sections.open = offer("open", site !== null, site ? openSite(site) : "");
-    sections.copy = offer("copy", a.email !== "");
-    sections.forget = offer("forget", !on);
-    // a separator only between two sections that are there
-    const order = ["offers", "open", "copy", "forget"];
-    for (const sep of this.#menu.el.querySelectorAll<HTMLElement>("[data-after]")) {
-      const i = order.indexOf(sep.dataset.after!);
-      shown(
-        sep,
-        order.slice(0, i + 1).some((k) => sections[k]) &&
-          order.slice(i + 1).some((k) => sections[k]),
-      );
-    }
+    sectioned(this.#menu.el, {
+      offers: [
+        offer("use", o.use.enabled, o.use.title),
+        offer("sign-in-again", o.signInAgain),
+        offer("rename", o.rename),
+        offer("warm", !!o.warm?.enabled),
+      ].some(Boolean),
+      open: offer("open", o.open !== null, o.open ?? ""),
+      copy: offer("copy", o.copy),
+      forget: offer("forget", o.forget),
+    });
   }
 
-  #offer(what: string) {
-    const s = model.get();
-    const a = accountOf(s, this.#menuFor ?? undefined);
+  #offer(what: string, a = accountOf(model.get(), this.#menuFor ?? undefined)) {
     if (!a) return;
     switch (what) {
       case "use":
+        if (!offersOf(a, model.get()).use.enabled) return;
         this.#saying = a.tool;
         return switchFromApp(a.tool, a.label, this.system);
       case "sign-in-again":
@@ -338,6 +330,41 @@ export class AccountsWindow extends LiveFigure {
       case "forget":
         return sheets(this.system)?.forget(this, a);
     }
+  }
+
+  // The menu bar's Account menu, Edit's Copy and Delete and View's Refresh act on the list's
+  // selection.
+  protected windowMenus(): WindowMenus {
+    const s = model.get();
+    return {
+      account: accountOf(s, this.#grid.selected?.dataset.account) ?? null,
+      refresh: { title: "Refresh", enabled: s.reading === null },
+      resizes: true,
+    };
+  }
+
+  protected fromMenuBar(does: string): boolean {
+    const row = this.#grid.selected;
+    const a = accountOf(model.get(), row?.dataset.account);
+    if (does.startsWith("offer:")) {
+      this.#offer(does.slice("offer:".length), a);
+      return true;
+    }
+    switch (does) {
+      case "add":
+        sheets(this.system)?.signIn(this, null, null);
+        return true;
+      case "refresh":
+        refreshFromApp(this.system);
+        return true;
+      case "copy":
+        if (a?.email) void navigator.clipboard?.writeText(a.email).catch(() => {});
+        return true;
+      case "delete":
+        if (row) this.#ask("forget", row);
+        return true;
+    }
+    return false;
   }
 
   // after Forget the row has gone and nothing is selected; macOS's list keeps focus, and Windows

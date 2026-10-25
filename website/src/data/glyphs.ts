@@ -45,6 +45,38 @@ export const bar: Record<"ic-batt" | "ic-wifi" | "ic-cc", { viewBox: string; bod
   },
 };
 
+// What macOS 26 draws before the system's own items in the menus of an app's menu bar, as the app's
+// UI tests' pictures show them, drawn 20 points square. Each body strokes or fills currentColor.
+const stroke =
+  'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"';
+const rect = 'x="2.75" y="4.25" width="14.5" height="11.5" rx="2.4"';
+export const menuSymbol: Record<string, string> = {
+  "mi-hide": `<rect ${rect} ${stroke} stroke-dasharray="2.4 2.1"/>`,
+  "mi-windows": `<path d="M6 6.75V5.9a1.9 1.9 0 0 1 1.9-1.9h7.2A1.9 1.9 0 0 1 17 5.9v5.7a1.9 1.9 0 0 1-1.9 1.9h-.85" ${stroke}/><rect x="3" y="7.25" width="11" height="8.75" rx="1.9" ${stroke}/>`,
+  "mi-quit": `<rect ${rect} ${stroke}/><path d="m7.6 7.6 4.8 4.8m0-4.8-4.8 4.8" ${stroke}/>`,
+  "mi-close": `<path d="m5.5 5.5 9 9m0-9-9 9" ${stroke}/>`,
+  "mi-undo": `<path d="M7 5.25 3.5 8.75 7 12.25M3.75 8.75h8.5a4 4 0 0 1 0 8H10" ${stroke}/>`,
+  "mi-redo": `<path d="M13 5.25l3.5 3.5-3.5 3.5M16.25 8.75h-8.5a4 4 0 0 0 0 8H10" ${stroke}/>`,
+  "mi-cut": `<circle cx="6" cy="14.5" r="2.4" ${stroke}/><circle cx="14" cy="14.5" r="2.4" ${stroke}/><path d="M7.5 12.6 14 3.25M12.5 12.6 6 3.25" ${stroke}/>`,
+  "mi-copy": `<rect x="6.75" y="6.25" width="9.5" height="11.5" rx="1.9" ${stroke}/><path d="M4.25 13.25V4.2a1.9 1.9 0 0 1 1.9-1.95h6.1" ${stroke}/>`,
+  "mi-paste": `<rect x="4.25" y="3.75" width="11.5" height="14" rx="1.9" ${stroke}/><path d="M7.5 3.75V2.6h5v1.15M7.5 3.75v1.5h5v-1.5" ${stroke}/>`,
+  "mi-trash": `<path d="M3.75 5.5h12.5M8 5.5V3.75h4V5.5M5.25 5.5l.75 10.7a1.6 1.6 0 0 0 1.6 1.5h4.8a1.6 1.6 0 0 0 1.6-1.5l.75-10.7M8.25 8.5v6M11.75 8.5v6" ${stroke}/>`,
+  "mi-select-all": `<rect ${rect} ${stroke} stroke-dasharray="2.4 2.1"/><path d="m7.4 13 2.6-5.9 2.6 5.9M8.3 11h3.4" ${stroke}/>`,
+  "mi-autofill": `<rect x="2.25" y="6.25" width="15.5" height="8.5" rx="1.9" ${stroke}/><path d="M5.25 10.5h.01M7.75 10.5h.01M10.25 10.5h.01" ${stroke} stroke-width="1.8"/><path d="m13.6 12.8 4.4-4.4 1.3 1.3-4.4 4.4-1.7.4Z" ${stroke}/>`,
+  "mi-mic": `<rect x="7.25" y="2.5" width="5.5" height="9.25" rx="2.75" ${stroke}/><path d="M4.5 9.25a5.5 5.5 0 0 0 11 0M10 14.75v2.75" ${stroke}/>`,
+  "mi-emoji": `<circle cx="10" cy="10" r="7.5" ${stroke}/><path d="M7.5 8.25v.5M12.5 8.25v.5" ${stroke} stroke-width="1.8"/><path d="M6.6 11.75a3.9 3.9 0 0 0 6.8 0" ${stroke}/>`,
+  "mi-full-screen": `<rect ${rect} ${stroke}/><path d="M6 10.5V7.75h2.75M14 9.5v2.75h-2.75" ${stroke}/>`,
+  "mi-minimize": `<rect ${rect} ${stroke}/><path d="M7 12.75h6" ${stroke}/>`,
+  "mi-zoom": `<path d="M2.75 7.5V6.5a2.25 2.25 0 0 1 2.25-2.25h1.5M13.5 4.25H15a2.25 2.25 0 0 1 2.25 2.25v1M17.25 12.5v1a2.25 2.25 0 0 1-2.25 2.25h-1.5M6.5 15.75H5a2.25 2.25 0 0 1-2.25-2.25v-1" ${stroke}/><rect x="6.5" y="7.5" width="7" height="5" rx="1" ${stroke}/>`,
+  "mi-fill": `<rect ${rect} ${stroke}/><rect x="5" y="6.5" width="10" height="7" rx="1" fill="currentColor"/>`,
+  "mi-center": `<rect ${rect} ${stroke}/><rect x="7" y="7.75" width="6" height="4.5" rx="1" fill="currentColor"/>`,
+  "mi-move": `<rect ${rect} ${stroke}/><rect x="5" y="6.5" width="4.75" height="7" rx="1" fill="currentColor"/><rect x="11.25" y="6.5" width="3.75" height="3" rx=".8" fill="currentColor"/>`,
+  "mi-tile": `<rect ${rect} ${stroke}/><path d="M10 4.5v11" ${stroke}/>`,
+  "mi-remove": `<rect ${rect} ${stroke}/><path d="M7.25 10h5.5" ${stroke}/>`,
+  "mi-front": `<path d="M10 2.75 17 6.6 10 10.45 3 6.6Z" ${stroke}/><path d="m3 10.05 7 3.85 7-3.85M3 13.5l7 3.85 7-3.85" ${stroke}/>`,
+  "mi-search": `<circle cx="8.75" cy="8.75" r="5.25" ${stroke}/><path d="m12.6 12.6 4.4 4.4" ${stroke}/>`,
+};
+
 // GNOME's symbolic icons in a header bar, 16 pixels square, drawn after Adwaita's.
 export const symbolic: Record<
   "adw-tab-new" | "adw-pan-down" | "adw-grid" | "adw-menu" | "adw-close",

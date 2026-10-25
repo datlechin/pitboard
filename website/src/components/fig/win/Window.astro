@@ -39,6 +39,7 @@ const items: [Pane, string][] = [
       "grid w-704 grid-cols-[calc(var(--spacing)*48)_1fr] grid-rows-[calc(var(--spacing)*48)_1fr] overflow-hidden rounded-u-8 [anchor-name:var(--window)] bg-win-base font-win text-u-14/20 text-win-text shadow-win-window",
       crop ? "absolute top-24 left-8" : "relative",
     ]}
+    data-part="window"
   >
     {/* TitleBar, which UI Automation names after the window; focus lands on it after Forget */}
     {/* departs from the apps: After Forget on Windows the page draws a focus ring on the title bar */}

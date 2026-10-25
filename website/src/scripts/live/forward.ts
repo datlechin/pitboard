@@ -23,7 +23,9 @@ export function bringForward(window: Shown, system: "macos" | "windows", sheet?:
   if (sheet && presents.present) presents.present(sheet);
   else
     figure
-      .querySelector<HTMLElement>('[tabindex="0"], button:not(:disabled)')
+      .querySelector<HTMLElement>(
+        ':scope > [data-part="window"] :is([tabindex="0"], button:not(:disabled))',
+      )
       ?.focus({ preventScroll: true });
 }
 

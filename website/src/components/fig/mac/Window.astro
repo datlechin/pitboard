@@ -1,9 +1,14 @@
 ---
 // As MainWindow.swift lays it out at its minimum width of 640, and as macOS 27 draws it, measured
-// on docs/images/window.png; a `crop` desk shows the window's top, a `fit` one all of it. Its
-// title's id starts `prefix`, and each toolbar button is named as its Label names it. The `desk`
-// slot holds what the window opens over the desk: its shortcut menu and its sheets.
+// on docs/images/window.png, under the menu bar Pitboard puts up while the window is in front; a
+// `crop` desk shows the window's top, a `fit` one all of it. Its title's id starts `prefix`, and
+// each toolbar button is named as its Label names it. The `desk` slot holds what the window opens
+// over the desk: its shortcut menu and its sheets. With `templates`, the menu bar's menus are drawn
+// here for every window's.
+import AppMenuBar from "./AppMenuBar.astro";
 import Lights from "./Lights.astro";
+import { clock } from "../../../data/world.ts";
+import { menuBarClock } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -13,8 +18,18 @@ interface Props {
   tools: [icon: string, label: string, does: string][];
   crop?: boolean;
   fit?: boolean;
+  templates?: boolean;
 }
-const { prefix, pane, title, subtitle, tools, crop = false, fit = false } = Astro.props;
+const {
+  prefix,
+  pane,
+  title,
+  subtitle,
+  tools,
+  crop = false,
+  fit = false,
+  templates = false,
+} = Astro.props;
 const Root = pane === "accounts" ? "pb-accounts" : "pb-activity";
 const panes = [
   ["accounts", "Accounts", "sf-people"],
@@ -30,17 +45,19 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
   id={prefix}
   class:list={[
     "desk [anchor-name:var(--desk)] [--units:680]",
-    crop ? "block h-348" : "flex items-center justify-center py-20",
+    crop ? "block h-348" : "flex items-center justify-center pt-44 pb-20",
     { "min-h-540": pane === "accounts" && !crop && !fit, "min-h-250": log },
   ]}
   inert
   data-output
 >
+  <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} templates={templates} />
   <div
     class:list={[
       "grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-16 [anchor-name:var(--window)] bg-mac-window-bg text-mac-window-text shadow-mac-window",
       crop ? "absolute top-24 left-1/2 -translate-x-1/2" : "relative",
     ]}
+    data-part="window"
   >
     <div class="relative bg-mac-window-side px-10 pt-52">
       <Lights window class="top-19 left-19" />
