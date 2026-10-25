@@ -14,8 +14,8 @@
 //! functions answer at once from what they are given, apart from `can_run`, which asks the
 //! file system about one path, `launch_refusal`, which asks the system how this process runs,
 //! `download_destination`, which asks the file system whether each name it tries is taken, and
-//! `unschedule_app`, which asks the system's scheduler and may take the renewal task away.
-//! Timestamps are epoch seconds.
+//! `unschedule_app`, which asks the system's scheduler and may take the watch and renewal
+//! tasks away. Timestamps are epoch seconds.
 //!
 //! The model and what it presents came from the macOS app's Swift. Where a comment here
 //! names a Swift file the app no longer has, such as `AppModel.swift`, `MachineModel.swift`
