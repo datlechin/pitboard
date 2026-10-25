@@ -167,6 +167,42 @@ fn uninstall_refuses_while_the_app_runs() {
     eventually("the app let go", || terminal.uninstall().is_ok());
 }
 
+// The app removes Pitboard holding app.lock, and nothing asked after writes the directory again.
+#[test]
+fn after_uninstall_nothing_writes_pitboards_directory_again() {
+    let world = World::new("uninstall-from-app");
+    world.enrolled("work", "here", 42.0);
+    world.parked("spare", "there", 10.0);
+    let told = Arc::new(Told::default());
+    let model = model(&world.core(), &told);
+    model.send(Intent::Start);
+    told.until("the accounts read", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| !last.reading && labels(last) == ["work", "spare"])
+    });
+
+    model.send(Intent::Uninstall);
+    told.until("Pitboard removed", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| last.removal == Some(crate::RemovalShown::Done))
+    });
+    assert!(!world.pitboard_dir().exists());
+    for intent in [
+        Intent::Refresh { asked: true },
+        Intent::Woke,
+        Intent::Glanced,
+        Intent::SwitchTo {
+            qualified: "claude/spare".into(),
+        },
+    ] {
+        model.send(intent);
+    }
+    model.shutdown();
+    assert!(!world.pitboard_dir().exists());
+}
+
 /// A change another front end makes, here a rename typed in a terminal, reaches the
 /// listener within a look or two, read from what is already known: nobody is asked.
 #[test]

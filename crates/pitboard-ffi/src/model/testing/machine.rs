@@ -12,7 +12,8 @@ use crate::model::state::{Answer, Cadence, Job, Msg, Now, State};
 use crate::model::{AppControl, Intent, RunOutNotice, Snapshot};
 use crate::{
     AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, FoundCommandLine, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Tool, WarmRefused, Warning,
+    Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Tool, Uninstalled,
+    WarmRefused, Warning,
 };
 use pitboard_core::state::Key;
 use pitboard_core::switch::warm::Apart;
@@ -183,6 +184,9 @@ pub(crate) struct Stub {
     /// Every change to which accounts are warmed up, in order, and the span.
     pub warm_turned: Vec<(String, bool)>,
     pub warm_ranges: Vec<(u16, u16)>,
+    // what uninstalling gives, and how many times it was asked
+    pub removing: Result<Uninstalled, Refusal>,
+    pub removals: usize,
 }
 
 /// What the core says of warming up where nothing has been set: the default span, nobody.
@@ -272,6 +276,8 @@ impl Stub {
             warmed: Vec::new(),
             warm_turned: Vec::new(),
             warm_ranges: Vec::new(),
+            removing: Ok(Uninstalled::Removed),
+            removals: 0,
         }
     }
 
@@ -676,6 +682,10 @@ impl Stub {
                     found: self.command_line.clone(),
                     own: self.own,
                 }
+            }
+            Job::Uninstall => {
+                self.removals += 1;
+                Answer::Uninstalled(self.removing.clone().map_err(|refused| refused.error()))
             }
         }
     }

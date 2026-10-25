@@ -105,7 +105,9 @@ public sealed class ModelTests
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
-            AccountWindows: NoWindows());
+            AccountWindows: NoWindows(),
+            Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
+            Removal: null);
 
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],

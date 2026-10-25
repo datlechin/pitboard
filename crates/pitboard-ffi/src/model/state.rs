@@ -38,6 +38,7 @@
 //! the Swift model's tests reached with gates are reached here without a thread.
 
 use super::advice::{Advice, HeadsUp, Told, rename_told};
+use super::lanes::Lane;
 use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
@@ -48,14 +49,14 @@ use super::{
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::words::{
     COULD_NOT_CHANGE_WARM, COULD_NOT_GIVE_UP, COULD_NOT_STOW, COULD_NOT_TELL_WHOSE,
-    COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_forget, could_not_rename,
-    could_not_sign_in, could_not_switch, could_not_warm, signed_in_now,
+    COULD_NOT_UNINSTALL, COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_forget,
+    could_not_rename, could_not_sign_in, could_not_switch, could_not_warm, signed_in_now,
 };
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
-    Tool, Usage, WarmRefused, Warning,
+    Tool, Uninstalled, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{
@@ -277,6 +278,18 @@ pub(crate) enum Job {
     ReadLog { limit: u32 },
     /// Look for the `pitboard` a terminal would run.
     FindCommandLine,
+    /// Remove Pitboard from this machine, with the app's own hold on its directory.
+    Uninstall,
+}
+
+impl Job {
+    // Answered once, by a lane that may write Pitboard's directory, which an uninstall waits for.
+    fn writes(&self) -> bool {
+        matches!(
+            self.lane(),
+            Lane::Reads | Lane::Changes | Lane::Warm | Lane::Kept
+        )
+    }
 }
 
 /// A read under way, as things stood when it started.
@@ -343,6 +356,7 @@ pub(crate) enum After {
         again: Option<String>,
         from: Option<Sheet>,
     },
+    Uninstall,
 }
 
 // What an add of an account of a tool that signs in inside its app does.
@@ -558,10 +572,74 @@ pub(crate) enum Answer {
     /// A stop that found no tool to stop: one that had not started, or had stopped saying
     /// anything, or one a stop before had stopped.
     Stopped,
+    Uninstalled(Result<Uninstalled, PitboardError>),
     /// The job stopped with a panic, or a sign-in's thread could not be started, and it came
     /// to nothing. The lane goes on, and the model goes on as though the job had answered
     /// with nothing new.
     Lost(Job),
+}
+
+impl Answer {
+    // The answer of a job `Job::writes` counts.
+    fn of_a_write(&self) -> bool {
+        match self {
+            Answer::Read { .. }
+            | Answer::ReadOffline { .. }
+            | Answer::Looked { .. }
+            | Answer::AutoLooked { .. }
+            | Answer::ScheduleRead { .. }
+            | Answer::Checked { .. }
+            | Answer::Logged { .. }
+            | Answer::LookedLeft(_)
+            | Answer::Switched { .. }
+            | Answer::AutoSwitched { .. }
+            | Answer::Abandoned(_)
+            | Answer::Enrolled { .. }
+            | Answer::Renamed { .. }
+            | Answer::Forgot { .. }
+            | Answer::ConfigUpdated(_)
+            | Answer::Stowed { .. }
+            | Answer::Repaired { .. }
+            | Answer::ScheduleSet { .. }
+            | Answer::WarmSet { .. }
+            | Answer::WarmedUp { .. }
+            | Answer::Kept { .. }
+            | Answer::Saved
+            | Answer::WindowsKept { .. }
+            | Answer::SharedChecked { .. }
+            | Answer::Uninstalled(_) => true,
+            Answer::Lost(job) => job.writes(),
+            Answer::Installed { .. }
+            | Answer::Held { .. }
+            | Answer::Quit { .. }
+            | Answer::Opened { .. }
+            | Answer::SignInStarted { .. }
+            | Answer::SignInSaid { .. }
+            | Answer::SignInQuiet { .. }
+            | Answer::SignInFinished { .. }
+            | Answer::SignInStopped { .. }
+            | Answer::Posted { .. }
+            | Answer::CommandLineFound { .. }
+            | Answer::Pasted
+            | Answer::Stopped => false,
+        }
+    }
+}
+
+// Removing Pitboard from this machine, once somebody confirmed Uninstall Pitboard.
+#[derive(Debug)]
+pub(crate) enum Removing {
+    // `app`: one holding a saved sign-in is quitting first; (tool, copy) of it opens after.
+    Ending {
+        app: bool,
+        reopen: Option<(String, String)>,
+    },
+    Running {
+        reopen: Option<(String, String)>,
+    },
+    // the account windows' stores go before it is said
+    Clearing(Uninstalled),
+    Done(Uninstalled),
 }
 
 /// A timer of the model's.
@@ -678,6 +756,21 @@ impl Refused {
             warnings: Vec::new(),
         }
     }
+}
+
+// What the windows and Try Again send while Pitboard is being removed.
+fn taken_while_removing(intent: &Intent) -> bool {
+    matches!(
+        intent,
+        Intent::Uninstall
+            | Intent::Show { .. }
+            | Intent::DismissFailure
+            | Intent::WindowOpened { .. }
+            | Intent::WindowClosed { .. }
+            | Intent::StoreDeleted { .. }
+            | Intent::StoreHeld { .. }
+            | Intent::DownloadEnded { .. }
+    )
 }
 
 pub(crate) fn in_its_app(provider: &str) -> bool {
@@ -995,6 +1088,9 @@ pub(crate) struct State {
     pub(crate) machine: MachineState,
     /// The account windows' bookkeeping.
     pub(crate) windows: Windows,
+    pub(crate) removing: Option<Removing>,
+    // jobs `Job::writes` counts, until each has answered
+    at_work: u32,
 }
 
 impl State {
@@ -1065,6 +1161,8 @@ impl State {
             standing_in: false,
             machine: MachineState::default(),
             windows: Windows::new(cadence.arming),
+            removing: None,
+            at_work: 0,
         }
     }
 
@@ -1073,12 +1171,33 @@ impl State {
     pub(crate) fn apply(&mut self, msg: Msg, now: Now) -> Vec<Job> {
         let mut jobs = Vec::new();
         match msg {
-            Msg::Intent(intent) => self.intent(intent, now, &mut jobs),
-            Msg::Done(answer) => self.answer(answer, now, &mut jobs),
+            Msg::Intent(intent) => {
+                if self.removing.is_none() || taken_while_removing(&intent) {
+                    self.intent(intent, now, &mut jobs);
+                }
+            }
+            Msg::Done(answer) => {
+                if answer.of_a_write() {
+                    self.at_work = self.at_work.saturating_sub(1);
+                }
+                self.answer(answer, now, &mut jobs);
+            }
             Msg::Tick | Msg::Stop => {}
         }
         self.go_off(now, &mut jobs);
         self.follow_windows(now, &mut jobs);
+        if self.removing.is_some() {
+            jobs.retain(|job| {
+                !matches!(
+                    job,
+                    Job::KeepTold { .. } | Job::KeepPreferences { .. } | Job::Post { .. }
+                )
+            });
+        }
+        let writes = jobs.iter().filter(|job| job.writes()).count();
+        self.at_work += u32::try_from(writes).unwrap_or(u32::MAX);
+        self.uninstall_once_idle(&mut jobs);
+        self.cleared();
         jobs
     }
 
@@ -1263,7 +1382,7 @@ impl State {
                 if let Some(quitting) = self.quitting.as_mut().filter(|quitting| quitting.asked) {
                     quitting.asked = false;
                     let from = match &quitting.then {
-                        After::Switch => None,
+                        After::Switch | After::Uninstall => None,
                         After::SignIn { from, .. } | After::Enrol { from, .. } => from.clone(),
                     };
                     self.saved(from.as_ref());
@@ -1442,7 +1561,131 @@ impl State {
             Intent::DownloadSaving { id, file } => self.windows.download_saving(&id, file),
             Intent::DownloadEnded { id, end } => self.windows.download_ended(&id, end),
             Intent::ClearDownloads { store } => self.windows.clear_downloads(&store),
+            Intent::Uninstall => self.uninstall(jobs),
         }
+    }
+
+    // Once more where the folder stayed, never once it is gone.
+    pub(crate) fn may_uninstall(&self) -> bool {
+        let again = match &self.removing {
+            None => true,
+            Some(Removing::Done(stayed)) => *stayed != Uninstalled::Removed,
+            Some(_) => false,
+        };
+        again
+            && self.signing_in.is_none()
+            && self.switch_under_way().is_none()
+            && self.changing == 0
+    }
+
+    // Claude holding a saved sign-in quits first: the core deletes that only while it is closed.
+    fn uninstall(&mut self, jobs: &mut Vec<Job>) {
+        if !self.may_uninstall() {
+            return;
+        }
+        let app = self.status.as_ref().and_then(|read| {
+            read.accounts
+                .iter()
+                .find(|account| in_its_app(&account.provider) && account.parked.is_some())
+                .map(|account| account.provider.clone())
+                .or_else(|| {
+                    read.awaiting
+                        .first()
+                        .map(|awaiting| awaiting.provider.clone())
+                })
+        });
+        match app {
+            Some(tool) => self.ask_before(new_account(&tool), After::Uninstall, jobs),
+            None => self.end(false),
+        }
+    }
+
+    // Nothing runs by itself from here on; `quitting`: an app is asked to quit first.
+    fn end(&mut self, quitting: bool) {
+        self.drop_question();
+        for timer in [
+            &mut self.look,
+            &mut self.timed_read,
+            &mut self.decide,
+            &mut self.warm_timer,
+        ] {
+            *timer = Timer::Off;
+        }
+        self.windows.close_all(true);
+        self.removing = Some(Removing::Ending {
+            app: quitting,
+            reopen: None,
+        });
+    }
+
+    // Asked for once nothing that writes Pitboard's directory is under way.
+    fn uninstall_once_idle(&mut self, jobs: &mut Vec<Job>) {
+        let Some(Removing::Ending { app: false, reopen }) = self.removing.as_mut() else {
+            return;
+        };
+        // A read waits on the tools found, and a sign-in enrols on a thread of its own.
+        if self.at_work > 0 || self.asking_installed || self.sign_in_holding.is_some() {
+            return;
+        }
+        self.removing = Some(Removing::Running {
+            reopen: reopen.take(),
+        });
+        self.at_work += 1;
+        jobs.push(Job::Uninstall);
+    }
+
+    // The stores go once the core has removed the accounts; one refused leaves both as they were.
+    fn uninstalled(
+        &mut self,
+        done: Result<Uninstalled, Option<PitboardError>>,
+        now: Now,
+        jobs: &mut Vec<Job>,
+    ) {
+        if let Some(Removing::Running {
+            reopen: Some((tool, location)),
+        }) = self.removing.take()
+        {
+            jobs.push(Job::Open {
+                location,
+                tool,
+                front: false,
+            });
+        }
+        match done {
+            Ok(stayed) => {
+                self.removing = Some(Removing::Clearing(stayed));
+                self.windows.remove_all(jobs);
+            }
+            Err(error) => {
+                self.resume(now);
+                let title = COULD_NOT_UNINSTALL.into();
+                self.present(match error {
+                    Some(error) => Refused::of(title, error),
+                    None => Refused::lost(title),
+                });
+            }
+        }
+    }
+
+    // Said once the app has deleted every store, or said it could not.
+    fn cleared(&mut self) {
+        if let Some(Removing::Clearing(stayed)) = self.removing
+            && self.windows.stores_gone()
+        {
+            self.removing = Some(Removing::Done(stayed));
+        }
+    }
+
+    // Uninstalling stopped before the core removed anything: what runs by itself runs again.
+    fn resume(&mut self, now: Now) {
+        self.removing = None;
+        self.windows.close_all(false);
+        if self.started {
+            self.look = Timer::Due(now.running);
+            self.timed_read = Timer::Due(now.running);
+        }
+        self.decide_later(now);
+        self.warm_later(now);
     }
 
     /// A pane of the main window is shown, or its button asks for what it shows again: what
@@ -1691,6 +1934,18 @@ impl State {
                 self.changing += 1;
                 self.ask_for_sign_in(jobs);
             }
+            After::Uninstall => {
+                if !quit {
+                    if self.may_uninstall() {
+                        self.end(false);
+                    }
+                } else if let Some(Removing::Ending { app, reopen: kept }) = self.removing.as_mut()
+                {
+                    *app = false;
+                    *kept = reopen
+                        .map(|copy| (Key::parse(&qualified).provider.code().to_owned(), copy));
+                }
+            }
             After::Enrol {
                 provider,
                 again,
@@ -1897,6 +2152,9 @@ impl State {
         // Nothing to do but be shown again, at the time it is now.
         if matches!(self.tick, Timer::Due(at) if at <= now.running) {
             self.tick = Timer::Due(now.running + self.cadence.tick_every);
+        }
+        if self.removing.is_some() {
+            return;
         }
         if matches!(self.look, Timer::Due(at) if at <= now.running) {
             self.look = Timer::Running;
@@ -2117,7 +2375,7 @@ impl State {
     /// on, and every `decide_every`. The look reads files alone and claims nothing, so it is
     /// asked whatever else is under way.
     fn look_to_switch(&mut self, jobs: &mut Vec<Job>) {
-        if !self.preferences_read || !self.switches() {
+        if !self.preferences_read || !self.switches() || self.removing.is_some() {
             self.decide = Timer::Off;
             return;
         }
@@ -2318,7 +2576,7 @@ impl State {
     /// every `decide_every`, after a change to which accounts are warmed up, and once a
     /// warm-up has started a period, for the next.
     fn warm_tick(&mut self, now: Now, jobs: &mut Vec<Job>) {
-        if !self.started || !self.warm.any_on() {
+        if !self.started || !self.warm.any_on() || self.removing.is_some() {
             self.warm_timer = Timer::Off;
             return;
         }
@@ -2522,7 +2780,7 @@ impl State {
                 question,
                 outcome,
                 then,
-            } => self.quit_over(question, outcome, then, jobs),
+            } => self.quit_over(question, outcome, then, now, jobs),
             Answer::Switched {
                 qualified,
                 reopen,
@@ -2660,6 +2918,7 @@ impl State {
                 self.machine.command_line = Some(found);
                 self.machine.own = Some(own);
             }
+            Answer::Uninstalled(done) => self.uninstalled(done.map_err(Some), now, jobs),
             Answer::Lost(job) => match job {
                 Job::Read { ticket, .. } => self.landed(ticket, now),
                 Job::ReadOffline { why } => self.known(why, None, now, jobs),
@@ -2669,7 +2928,7 @@ impl State {
                 Job::Holding { qualified, then } => self.held(qualified, None, then, jobs),
                 // Nothing is switched under an app nobody saw go.
                 Job::Quit { question, then } => {
-                    self.quit_over(question, QuitOutcome::StillRunning, then, jobs);
+                    self.quit_over(question, QuitOutcome::StillRunning, then, now, jobs);
                 }
                 Job::Switch { qualified, reopen } => {
                     self.switched(&qualified, reopen, Err(None), now, jobs);
@@ -2760,6 +3019,7 @@ impl State {
                 Job::SetSchedule { .. } => jobs.push(Job::ReadSchedule { after_change: true }),
                 Job::Check => self.machine.checked(None, now.epoch()),
                 Job::ReadLog { .. } | Job::FindCommandLine => {}
+                Job::Uninstall => self.uninstalled(Err(None), now, jobs),
             },
         }
     }
@@ -3341,6 +3601,12 @@ impl State {
                 self.hold(from.as_ref());
                 self.recording = Some((from.clone(), provider.clone(), Recording::Quitting));
             }
+            After::Uninstall => {
+                if !self.may_uninstall() {
+                    return;
+                }
+                self.end(true);
+            }
         }
         jobs.push(Job::Quit { question, then });
     }
@@ -3359,6 +3625,7 @@ impl State {
         question: QuitQuestion,
         outcome: QuitOutcome,
         then: After,
+        now: Now,
         jobs: &mut Vec<Job>,
     ) {
         let QuitQuestion {
@@ -3405,6 +3672,10 @@ impl State {
                 self.saved(from.as_ref());
                 let title = could_not_sign_in(again.as_deref());
                 self.save_failed(from.as_ref(), failed(title, other));
+            }
+            After::Uninstall => {
+                self.resume(now);
+                self.present(failed(COULD_NOT_UNINSTALL.into(), other));
             }
         }
         // Here, once a switch this quit was for has let go: one asked meanwhile holds it back.

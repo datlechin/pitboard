@@ -55,6 +55,8 @@ pub(crate) const COULD_NOT_STOW: &str = "Couldn’t put the login away";
 
 pub(crate) const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts are warmed up";
 
+pub(crate) const COULD_NOT_UNINSTALL: &str = "Couldn’t uninstall Pitboard";
+
 pub(crate) fn could_not_warm(qualified: &str) -> String {
     format!("Couldn’t warm up {}", Key::parse(qualified).label)
 }
@@ -1174,6 +1176,48 @@ pub(crate) fn show_diagnostics(os: Os) -> String {
     titled(os, "Show Diagnostics", "Show diagnostics")
 }
 
+// Windows' ellipsis is for a command that asks for more than a yes.
+pub(crate) fn uninstall_pitboard(os: Os) -> String {
+    titled(os, "Uninstall Pitboard…", "Uninstall Pitboard")
+}
+
+pub(crate) const UNINSTALL_QUESTION: &str = "Uninstall Pitboard?";
+
+pub(crate) const UNINSTALL_SAYS: &str = "Pitboard deletes its saved sign-ins, settings and \
+                                         account windows. Each tool stays signed in to the \
+                                         account in use; other accounts need signing in again.";
+
+pub(crate) const UNINSTALL: &str = "Uninstall";
+
+pub(crate) const UNINSTALLING: &str = "Uninstalling Pitboard…";
+
+pub(crate) const KEPT_ITS_FOLDER: &str = "Pitboard couldn’t remove everything";
+
+// Why Pitboard's folder stayed, which the command line says with its paths.
+pub(crate) fn folder_kept(stayed: crate::Uninstalled) -> Option<String> {
+    Some(match stayed {
+        crate::Uninstalled::Removed => return None,
+        crate::Uninstalled::Pending(1) => {
+            "A saved sign-in couldn’t be deleted yet, so Pitboard kept its folder. Try again \
+             in a moment."
+                .into()
+        }
+        crate::Uninstalled::Pending(count) => format!(
+            "{count} saved sign-ins couldn’t be deleted yet, so Pitboard kept its folder. Try \
+             again in a moment."
+        ),
+        crate::Uninstalled::WarmingUp => {
+            "An account is warming up, so Pitboard kept its folder. Try again once it’s done."
+                .into()
+        }
+        crate::Uninstalled::HeldOpen => {
+            "Another program has a file in Pitboard’s folder open, so Pitboard kept it. Quit \
+             that program, then try again."
+                .into()
+        }
+    })
+}
+
 pub(crate) fn warm_up_now(os: Os) -> String {
     titled(os, "Warm Up Now", "Warm up now")
 }
@@ -1736,6 +1780,21 @@ pub(crate) fn quit_to_sign_in(name: &str, again: Option<&str>) -> String {
         Some(label) => format!("Quit {name} to sign in to {label} again?"),
         None => format!("Quit {name} to add an account?"),
     }
+}
+
+pub(crate) fn quit_to_uninstall(name: &str) -> String {
+    format!("Quit {name} to uninstall Pitboard?")
+}
+
+pub(crate) fn quit_to_delete(name: &str) -> String {
+    format!(
+        "{} It quits {name}, uninstalls, and opens {name} again.",
+        only_while_closed(name, &format!("deletes the sign-ins it saved for {name}"))
+    )
+}
+
+pub(crate) fn quit_and_uninstall(os: Os, name: &str) -> String {
+    quit_and(os, name, "Uninstall", "uninstall")
 }
 
 // `label` was added already, and gets a new login.
@@ -3790,6 +3849,68 @@ mod tests {
         assert_eq!(
             both(&|os| quit_and_record(os, "Claude", false)),
             pair("Quit Claude and Add", "Quit Claude and add")
+        );
+        assert_eq!(
+            quit_to_uninstall("Claude"),
+            "Quit Claude to uninstall Pitboard?"
+        );
+        assert_eq!(
+            quit_to_delete("Claude"),
+            "Pitboard deletes the sign-ins it saved for Claude only while Claude is closed. It \
+             quits Claude, uninstalls, and opens Claude again."
+        );
+        assert_eq!(
+            both(&|os| quit_and_uninstall(os, "Claude")),
+            pair("Quit Claude and Uninstall", "Quit Claude and uninstall")
+        );
+    }
+
+    #[test]
+    fn uninstalling_is_said_in_these_words() {
+        assert_eq!(
+            (
+                uninstall_pitboard(Os::MacOs),
+                uninstall_pitboard(Os::Windows)
+            ),
+            ("Uninstall Pitboard…".into(), "Uninstall Pitboard".into())
+        );
+        assert_eq!(UNINSTALL_QUESTION, "Uninstall Pitboard?");
+        assert_eq!(
+            UNINSTALL_SAYS,
+            "Pitboard deletes its saved sign-ins, settings and account windows. Each tool stays \
+             signed in to the account in use; other accounts need signing in again."
+        );
+        assert_eq!(UNINSTALL, "Uninstall");
+        assert_eq!(UNINSTALLING, "Uninstalling Pitboard…");
+        assert_eq!(COULD_NOT_UNINSTALL, "Couldn’t uninstall Pitboard");
+        assert_eq!(KEPT_ITS_FOLDER, "Pitboard couldn’t remove everything");
+        assert_eq!(folder_kept(crate::Uninstalled::Removed), None);
+        assert_eq!(
+            folder_kept(crate::Uninstalled::Pending(1)).as_deref(),
+            Some(
+                "A saved sign-in couldn’t be deleted yet, so Pitboard kept its folder. Try again \
+                 in a moment."
+            )
+        );
+        assert_eq!(
+            folder_kept(crate::Uninstalled::Pending(2)).as_deref(),
+            Some(
+                "2 saved sign-ins couldn’t be deleted yet, so Pitboard kept its folder. Try again \
+                 in a moment."
+            )
+        );
+        assert_eq!(
+            folder_kept(crate::Uninstalled::WarmingUp).as_deref(),
+            Some(
+                "An account is warming up, so Pitboard kept its folder. Try again once it’s done."
+            )
+        );
+        assert_eq!(
+            folder_kept(crate::Uninstalled::HeldOpen).as_deref(),
+            Some(
+                "Another program has a file in Pitboard’s folder open, so Pitboard kept it. Quit \
+                 that program, then try again."
+            )
         );
     }
 

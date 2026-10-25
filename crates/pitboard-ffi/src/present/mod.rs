@@ -32,6 +32,7 @@
 mod accounts;
 mod machine;
 mod notices;
+mod removal;
 mod setup;
 mod sheets;
 mod windows;
@@ -45,6 +46,7 @@ pub use machine::{
     CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
     WarmShown,
 };
+pub use removal::RemovalShown;
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
 pub use windows::{
@@ -868,6 +870,8 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         failure_alert: state.presented.as_ref().map(sheets::failure_alert),
         machine: machine::machine(&seen),
         account_windows: windows::account_windows(&seen),
+        uninstall: removal::uninstall(&seen),
+        removal: removal::removal(&seen),
     }
 }
 

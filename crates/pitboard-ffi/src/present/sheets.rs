@@ -454,6 +454,11 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
             message: words::quit_to_read(name, again.as_deref()),
             confirm: words::quit_and_record(seen.os, name, again.is_some()),
         },
+        After::Uninstall => Question {
+            title: words::quit_to_uninstall(name),
+            message: words::quit_to_delete(name),
+            confirm: words::quit_and_uninstall(seen.os, name),
+        },
     }
 }
 

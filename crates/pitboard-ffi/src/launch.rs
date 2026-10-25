@@ -287,6 +287,33 @@ pub(crate) enum AutoLooked {
     Act,
 }
 
+// What uninstalling came to, where the core did not refuse it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Uninstalled {
+    // Pitboard's directory is gone
+    Removed,
+    // the directory stays, for `n` saved sign-ins not deleted yet
+    Pending(usize),
+    WarmingUp,
+    // another program holds a file in the directory open
+    HeldOpen,
+}
+
+impl Uninstalled {
+    // In the order the command line says them.
+    fn of(removed: &switch::Removed) -> Uninstalled {
+        if removed.pending > 0 {
+            Uninstalled::Pending(removed.pending)
+        } else if removed.warming_up {
+            Uninstalled::WarmingUp
+        } else if !removed.home_kept_by.is_empty() || !removed.home_removed {
+            Uninstalled::HeldOpen
+        } else {
+            Uninstalled::Removed
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum EnrolledAs {
     /// The account signed in now.
@@ -736,8 +763,8 @@ impl Kept {
 /// as `Kept` keeps it.
 pub(crate) struct AppCore {
     made: Kept,
-    // Held from the first core made for as long as the app runs, so `uninstall` refuses then.
-    open: std::sync::OnceLock<Option<pitboard_core::app::Open>>,
+    // Held until the app quits or uninstalls, so `pitboard uninstall` refuses meanwhile.
+    open: std::sync::OnceLock<Mutex<Option<pitboard_core::app::Open>>>,
 }
 
 impl AppCore {
@@ -788,7 +815,7 @@ impl AppCore {
     }
 
     fn held(&self, made: Arc<Made>) -> Arc<Made> {
-        self.open.get_or_init(|| made.core.hold_open());
+        self.open.get_or_init(|| Mutex::new(made.core.hold_open()));
         made
     }
 
@@ -984,6 +1011,19 @@ impl AppCore {
             ))
         })?;
         changed(self.core().core.warm_range(range), |_, _| ())
+    }
+
+    // With the app's own hold on Pitboard's directory, which goes with the directory.
+    pub(crate) fn uninstall(&self) -> Result<Uninstalled, PitboardError> {
+        let made = self.core();
+        let mut own = self
+            .open
+            .get_or_init(|| Mutex::new(made.core.hold_open()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        changed(made.core.uninstall_from_app(&mut own), |removed, _| {
+            Uninstalled::of(&removed)
+        })
     }
 
     /// Enroll the account `provider`'s tool has signed in now, under `naming`.

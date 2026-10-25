@@ -94,7 +94,8 @@ impl Job {
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::SetWarm { .. }
-            | Job::SetWarmRange { .. } => Lane::Changes,
+            | Job::SetWarmRange { .. }
+            | Job::Uninstall => Lane::Changes,
             Job::WarmUp | Job::WarmNow { .. } => Lane::Warm,
             Job::Holding { .. } | Job::Quit { .. } | Job::Open { .. } => Lane::Processes,
             // Where the login shell's `PATH` is asked, as the Swift service asked it for
@@ -826,6 +827,7 @@ impl Worker {
                 found: core.command_line(),
                 own: core.own_command_line(),
             },
+            Job::Uninstall => Answer::Uninstalled(core.uninstall()),
             // Typed back as the Swift model typed it, whatever comes of it: the tool says
             // itself whether it took the code.
             Job::PasteCode { id, code } => {

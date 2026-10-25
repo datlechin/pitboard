@@ -29,7 +29,9 @@ internal static class Snapshots
                 NoLink: new EmptyList(
                     Title: "No link to open",
                     Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."),
-                Held: []));
+                Held: []),
+            Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
+            Removal: null);
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(

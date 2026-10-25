@@ -57,6 +57,8 @@ mod presenting;
 #[cfg(test)]
 mod reading;
 #[cfg(test)]
+mod removing;
+#[cfg(test)]
 mod signing;
 #[cfg(test)]
 mod stowing;
@@ -74,8 +76,8 @@ mod windowing;
 use crate::account_windows::AlertText;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
-    MachineShown, MenuBarText, MenuNotices, PanelNotice, SetupStep, SheetText, SigningInText,
-    StowText, WindowQuestion, present,
+    ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, RemovalShown, SetupStep,
+    SheetText, SigningInText, StowText, WindowQuestion, present,
 };
 use crate::{AppCore, Warning};
 use lanes::Lanes;
@@ -394,6 +396,8 @@ pub enum Intent {
     DownloadEnded { id: String, end: DownloadEnd },
     /// Somebody cleared the downloads of the window whose store is `store` that have ended.
     ClearDownloads { store: String },
+    /// Once `Snapshot::uninstall` was confirmed: nothing more is read or written until it ends.
+    Uninstall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -616,6 +620,9 @@ pub struct Snapshot {
     /// the windows to close and the stores to delete, the link waiting for an account, and
     /// the downloads.
     pub account_windows: AccountWindowsShown,
+    // Uninstall Pitboard…, with its question
+    pub uninstall: ItemOffer,
+    pub removal: Option<RemovalShown>,
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements

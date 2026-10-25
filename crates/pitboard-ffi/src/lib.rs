@@ -57,10 +57,10 @@ pub use present::{
     AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
     DownloadState, EmptyList, FailureText, Footing, ItemAction, ItemOffer, LimitKind, LimitRow,
     LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing, NameCheck, NoteKind,
-    NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount, PickerShown, Question, RowEnd,
-    ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool, SigningInText,
-    StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmDetail, WarmShown,
-    WindowOffer, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount, PickerShown, Question,
+    RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity, SheetText, SheetTool,
+    SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown, WarmDetail,
+    WarmShown, WindowOffer, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 
 mod account_windows;
@@ -78,7 +78,8 @@ pub use account_windows::{
 mod launch;
 pub(crate) use launch::{
     Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched, WarmRefused,
+    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched, Uninstalled,
+    WarmRefused,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]

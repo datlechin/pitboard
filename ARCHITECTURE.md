@@ -421,6 +421,11 @@ keeps it is in the header of the module named.
 - A notice's button is a change of the app's own, never a switch: updating Claude Code's
   config is refused where another account is in use by then, and **Put Away** puts away only
   the file its sheet looked at (`model/changing.rs`, `model/stowing.rs`).
+- Uninstalling from the app stops what runs by itself and closes every account window, and asks
+  the core only once nothing that writes Pitboard's directory is under way, holding the app's
+  `app.lock` until the directory goes. Nothing writes it after, and a refusal before anything
+  went starts the model again (`model/removing.rs`,
+  `after_uninstall_nothing_writes_pitboards_directory_again`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).

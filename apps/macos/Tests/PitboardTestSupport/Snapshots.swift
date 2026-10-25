@@ -93,5 +93,8 @@ package func snapshot(
                     sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
                     linkTitle: "Is this allowed?",
                     link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"))),
-        accountWindows: windows)
+        accountWindows: windows,
+        uninstall: ItemOffer(
+            title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
+        removal: nil)
 }
