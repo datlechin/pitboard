@@ -415,10 +415,12 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     PerSystem {
         name: "windows_browser_open",
         macos: NotRead(
-            "off Windows a cancel stops the tool alone, so how it opens a browser decides nothing",
+            "off Windows a cancel stops the tool alone and a folder a program runs in can be \
+             removed, so how it opens a browser decides nothing",
         ),
         linux: NotRead(
-            "off Windows a cancel stops the tool alone, so how it opens a browser decides nothing",
+            "off Windows a cancel stops the tool alone and a folder a program runs in can be \
+             removed, so how it opens a browser decides nothing",
         ),
         windows: Read(WINDOWS_VERIFIED_AGAINST),
     },
@@ -1711,16 +1713,28 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
     Assumption {
         name: "windows_browser_open",
         fact: "on Windows `claude auth login` opens its sign-in page once it has printed its \
-               prompt by starting `rundll32 url,OpenURL <address>`, a child of its own, which \
-               hands the address to the shell; where its settings or `BROWSER` name a program, \
-               it starts that with the address instead. A browser that was not running starts \
-               from inside whatever job Claude Code runs in",
+               prompt by starting `rundll32 url,OpenURL <address>`, a child of its own given no \
+               working folder, so it runs in Claude Code's, which hands the address to the \
+               shell; where its settings or `BROWSER` name a program, it starts that with the \
+               address instead. A browser that was not running starts from inside whatever job \
+               Claude Code runs in. Edge, the runners' browser for `http`, started that way from \
+               a fresh folder with no browser running, ran every process in its own program \
+               folder, and the folder could be removed while Edge stayed open. Where no browser \
+               answers for `http`, the shell started `OpenWith.exe` in another folder (RF-F3, \
+               windows-facts runs 40140023267, 40140838594 and 40142612998). Firefox, started as \
+               Codex starts a browser, keeps the folder it starts in \
+               (codex_windows_browser_open); started by the shell it is not measured, since no \
+               runner may make it the browser for `http`",
         read_from: "the opener `startOAuthFlow` calls after its prompt, which checks the address \
                     is `http` or `https` and starts `rundll32` on win32, in the win32-x64 and \
-                    win32-arm64 builds of 2.1.300, read as bytes on 2026-10-16",
+                    win32-arm64 builds of 2.1.300, read as bytes on 2026-10-16, and in the \
+                    win32-x64 build of 2.1.303 on 2026-10-25, where it passes the exec helper \
+                    `{}` and so no `cwd`",
         verified_against: "2.1.300",
         depends: "host::windows::job, which ends only the tool's own programs on a cancel, so a \
-                  browser its sign-in opened keeps running (RF-F2)",
+                  browser its sign-in opened keeps running (RF-F2), and \
+                  switch::enroll::signin_work_dir, where a sign-in runs, kept once it ends so \
+                  `signin` goes while such a browser stays",
         probe: &["[\"url,OpenURL\","],
         absent: &[],
     },

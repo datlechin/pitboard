@@ -227,8 +227,8 @@ impl Provider for Claude {
 
     // `CLAUDE_SECURESTORAGE_CONFIG_DIR` would pin the slot back to a real one, and
     // `CLAUDE_CODE_FORCE_WINDOWS_CREDMAN` the login into Credential Manager
-    // (`windows_backend_choice`). Started in `dir`, it takes no project's settings
-    // (`project_settings_folder`).
+    // (`windows_backend_choice`). Started in the empty `signin-work`, it takes no project's
+    // settings (`project_settings_folder`).
     fn sign_in(
         &self,
         ctx: &Context,
@@ -241,7 +241,7 @@ impl Provider for Claude {
             .env("CLAUDE_CONFIG_DIR", dir)
             .env_remove("CLAUDE_SECURESTORAGE_CONFIG_DIR")
             .env_remove("CLAUDE_CODE_FORCE_WINDOWS_CREDMAN")
-            .current_dir(dir);
+            .current_dir(switch::enroll::signin_work_dir(ctx));
         Ok(command)
     }
 

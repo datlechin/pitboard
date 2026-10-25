@@ -1170,6 +1170,7 @@ function Measure-FreshUser($User, $Result, [string] $Bun, [string] $X64) {
         }
         $r
     }
+    Invoke-Row $Result 'rf_f3' { Measure-BrowserFolder $User (Join-Path $s 'f3') }
     Invoke-Row $Result 'rf_h1' {
         $h1 = Join-Path $User.RunDir 'h1'
         $copies = [ordered]@{ lower = (Join-Path $h1 'a\codex.exe'); mixed = (Join-Path $h1 'b\Codex.EXE') }
@@ -1680,7 +1681,47 @@ function Measure-SettingChange($Result) {
     }
 }
 
-# The job user's rows: RF-E1's, RF-E6's, RF-E3, RF-D2's and RF-F2.
+$browserImages = 'msedge', 'chrome', 'firefox'
+
+function Stop-Browsers {
+    Stop-Process -Name ($browserImages + 'OpenWith') -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+}
+
+# RF-F3: whether the browser a sign-in opens keeps the folder the sign-in ran in, the page
+# opened as Claude Code's sign-in and as Codex's open theirs, each with no browser running
+# first, then by each other browser the image has, started as Codex starts the http
+# association's program. The probe ends the browsers it saw start; any left are ended here.
+function Measure-BrowserFolder($User, [string] $In) {
+    $r = [ordered]@{}
+    $runs = [ordered]@{ claude = @('--as', 'claude'); codex = @('--as', 'codex') }
+    foreach ($name in 'chrome', 'firefox') {
+        $key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$name.exe"
+        $path = (Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue).'(default)'
+        if ($path -and (Test-Path -LiteralPath $path.Trim('"'))) {
+            $runs["codex_$name"] = @('--as', 'codex', '--browser', $path.Trim('"'))
+        }
+    }
+    try {
+        foreach ($run in $runs.Keys) {
+            Stop-Browsers
+            $probeArgs = @('browser-folder', '--scratch', (Join-Path $In $run)) + $runs[$run]
+            $r[$run] = if ($User) {
+                Invoke-AsUser $User "f3-$run" $probeArgs -TimeoutSeconds 300
+            } else {
+                Invoke-Probe "f3-$run" $probeArgs -TimeoutSeconds 300
+            }
+            $r[$run].browser_processes_left = @(Get-Process -Name $browserImages -ErrorAction SilentlyContinue).Count
+            Save-Report
+        }
+    } finally {
+        Stop-Browsers
+        Remove-Item -Recurse -Force -LiteralPath $In -ErrorAction SilentlyContinue
+    }
+    $r
+}
+
+# The job user's rows: RF-E1's, RF-E6's, RF-E3, RF-D2's, RF-F2 and RF-F3.
 function Measure-JobUser($Result) {
     $s = Join-Path $scratch 'job'
     Invoke-Row $Result 'rf_e1' {
@@ -1756,6 +1797,7 @@ function Measure-JobUser($Result) {
         }
         $r
     }
+    Invoke-Row $Result 'rf_f3' { Measure-BrowserFolder $null (Join-Path $s 'f3') }
 }
 
 # L2, L3, L4 and L8: the command line as Scoop, winget, a folder on the user PATH and

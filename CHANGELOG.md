@@ -140,8 +140,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `CLAUDE_CODE_USE_MANTLE`, managed settings that require the Cloud gateway, or an Anthropic
   profile named in the environment or in the `env` of Claude Code's settings or `~/.claude.json`
   make Claude Code sign in another way.
-- Pitboard starts Claude Code's sign-in in its own private folder, as it starts Codex's, so a
+- Pitboard starts Claude Code's sign-in in a folder of its own, as it starts Codex's, so a
   project's `.claude/settings.json` in the folder you run Pitboard from no longer reaches it.
+- On Windows, Pitboard removes its `signin` folder as a Codex sign-in ends, instead of leaving it
+  until the Firefox window the sign-in opened closes.
 - On Linux, Pitboard and its install script work as root where root owns every folder they write
   in, as on a server whose only user is root, and refuse only under `sudo` or as root in a folder
   another user owns.

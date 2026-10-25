@@ -50,6 +50,7 @@ pub mod guard;
 pub mod hashes;
 pub mod images;
 pub mod logon;
+pub mod loopback;
 pub mod names;
 pub mod pe;
 pub mod redact;
@@ -68,8 +69,8 @@ pub const PROBE_PREFIX: &str = "pitboard-probe-";
 /// write there.
 pub const MARKER_FILE: &str = "pitboard-probe-throwaway.marker";
 
-/// The local stand-in page block F2 opens in the default browser: the only page the probe
-/// ever opens, and no site.
+/// The local stand-in page block F2 opens in the default browser. Beside it the probe opens
+/// only the page it serves itself on loopback ([`loopback`]), and no site.
 pub const STANDIN_PAGE: &str = "pitboard-probe-standin.html";
 
 #[cfg(test)]

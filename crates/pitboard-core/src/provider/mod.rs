@@ -600,8 +600,9 @@ pub(crate) trait Provider: Send + Sync + std::fmt::Debug {
     /// absence is worth saying before anybody opens a browser.
     fn program(&self, ctx: &Context) -> Option<std::path::PathBuf>;
 
-    // Pointed at `dir`, private and there already, so the live login is never touched; only
-    // with the Permit, since `codex login` revokes whatever login its home holds.
+    // Pointed at `dir`, private and there already, so the live login is never touched, and
+    // started in the sign-in's working folder; only with the Permit, since `codex login`
+    // revokes whatever login its home holds.
     fn sign_in(
         &self,
         ctx: &Context,
@@ -1153,9 +1154,10 @@ mod tests {
     }
 
     // The program's folder first would change which `node` an npm script finds from the
-    // terminal's.
+    // terminal's. Not in `dir`, which a browser the sign-in opens may keep as its own
+    // working folder (`codex_windows_browser_open`).
     #[test]
-    fn a_sign_in_runs_in_its_private_folder_the_program_found_with_the_search_path_as_it_is() {
+    fn a_sign_in_runs_in_a_folder_that_outlives_it_with_the_search_path_as_it_is() {
         let prefix = Prefix::new();
         let search = joined(&[&prefix.nowhere(), &prefix.bin()]);
         let ctx = Context::new(std::path::PathBuf::from("/nowhere"))
@@ -1167,7 +1169,11 @@ mod tests {
                 .expect("found");
             let program = prefix.program(tool);
             assert_eq!(command.get_program(), program.as_os_str(), "{tool}");
-            assert_eq!(command.get_current_dir(), Some(dir), "{tool}");
+            assert_eq!(
+                command.get_current_dir(),
+                Some(crate::home::dir(&ctx).join("signin-work").as_path()),
+                "{tool}"
+            );
             assert_eq!(env_of(&command, "PATH"), Some(search.as_os_str()), "{tool}");
             assert_eq!(document(tool).program(&ctx), Some(program), "{tool}");
         }

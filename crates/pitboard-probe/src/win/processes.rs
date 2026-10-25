@@ -71,7 +71,7 @@ pub(super) fn open_query(pid: u32) -> Result<Owned, u32> {
         .ok_or_else(ffi::last_error)
 }
 
-fn image_path(h: HANDLE) -> Option<String> {
+pub(super) fn image_path(h: HANDLE) -> Option<String> {
     let mut buf = vec![0u16; 1024];
     let mut len = buf.len() as u32;
     // SAFETY: `h` is open for limited queries; `buf` holds `len` units.

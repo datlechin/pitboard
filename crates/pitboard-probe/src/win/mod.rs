@@ -10,6 +10,7 @@
 pub mod ffi;
 
 mod acl;
+mod browserfolder;
 mod console;
 mod credman;
 mod daemon;
@@ -164,6 +165,17 @@ pub fn run(command: &Command, out: Option<&Path>) -> Outcome {
             wait_seconds,
             open,
         } => job::job_browser(scratch, *end, *wait_seconds, *open),
+        C::BrowserFolder {
+            scratch,
+            opener,
+            wait_seconds,
+            browser,
+        } => browserfolder::browser_folder(scratch, *opener, *wait_seconds, browser.as_deref()),
+        C::BrowserFolderOpen {
+            url,
+            opener,
+            browser,
+        } => return browserfolder::open(url, *opener, browser.as_deref()),
         C::JobLeaf { job_name } => return job::job_leaf(job_name),
         C::JobMid {
             job_name,

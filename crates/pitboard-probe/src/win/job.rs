@@ -46,7 +46,7 @@ const NO_JOB: u8 = 12;
 const LEAF_UNKNOWN: u8 = 13;
 const BREAKAWAY_REFUSED: u8 = 14;
 const IN_AN_OUTER_JOB_ONLY: u8 = 15;
-const NOT_A_BROWSER: u8 = 4;
+const NEITHER_BROWSER_NOR_SHELL: u8 = 4;
 const STILL_ACTIVE: u32 = 259;
 
 fn create_job(name: &str) -> Result<Owned, u32> {
@@ -91,7 +91,7 @@ fn assign(job: &Owned, child: &std::process::Child) -> Result<(), u32> {
     }
 }
 
-fn guarded(block: &'static str, scratch: &Path) -> Result<(), Report> {
+pub(super) fn guarded(block: &'static str, scratch: &Path) -> Result<(), Report> {
     if let Some(reason) = ffi::refuse_write(scratch) {
         return Err(Report::refused(block, logon_now(), reason));
     }
@@ -341,7 +341,8 @@ pub(super) fn job_mid(job_name: &str, breakaway: bool) -> Outcome {
     }
 }
 
-fn http_open_command() -> Option<String> {
+// The HRESULT where nothing answers for `http`.
+pub(super) fn http_open_command() -> Result<String, i32> {
     let http = ffi::wide("http");
     let mut buf = vec![0u16; 1024];
     let mut len = buf.len() as u32;
@@ -356,29 +357,42 @@ fn http_open_command() -> Option<String> {
             &mut len,
         )
     };
-    (hr == 0).then(|| ffi::from_wide_buf(&buf))
+    if hr == 0 {
+        Ok(ffi::from_wide_buf(&buf))
+    } else {
+        Err(hr)
+    }
 }
 
-// Codex's route through webbrowser 1.2.4: the association's program, started by std, so it
-// is a child of this process and inside its job.
 fn open_by_association(page: &Path) -> u8 {
-    let Some(cmdline) = http_open_command() else {
+    start_association(&crate::assoc::file_url(&page.display().to_string()))
+}
+
+// Codex's route through webbrowser 1.2.4: the association's program, started by std with no
+// folder of its own, so it is a child of this process, inside its job and in its folder. Where
+// no browser answers for `http`, that program is the shell's `OpenWith.exe`.
+pub(super) fn start_association(url: &str) -> u8 {
+    let Ok(cmdline) = http_open_command() else {
         return 1;
     };
-    let url = crate::assoc::file_url(&page.display().to_string());
-    let args = crate::assoc::command_args(&cmdline, &url);
+    let args = crate::assoc::command_args(&cmdline, url);
     let Some((program, rest)) = args.split_first() else {
         return 1;
     };
-    let is_browser = Path::new(program)
+    start_as_codex(Path::new(program), rest)
+}
+
+// A browser or the shell's program, started as webbrowser 1.2.4 starts the association's.
+pub(super) fn start_as_codex(program: &Path, args: &[String]) -> u8 {
+    let startable = program
         .file_name()
         .and_then(|n| n.to_str())
-        .is_some_and(images::is_browser_image);
-    if !is_browser {
-        return NOT_A_BROWSER;
+        .is_some_and(|n| images::is_browser_image(n) || images::is_shell_image(n));
+    if !startable {
+        return NEITHER_BROWSER_NOR_SHELL;
     }
     let spawned = Command::new(program)
-        .args(rest)
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -462,7 +476,7 @@ fn browsers() -> BTreeSet<u32> {
         .unwrap_or_default()
 }
 
-fn alive(pid: u32) -> bool {
+pub(super) fn alive(pid: u32) -> bool {
     open_query(pid).is_ok_and(|h| {
         let mut code = 0u32;
         // SAFETY: an open process handle; `code` is a valid out-param.
@@ -599,6 +613,7 @@ pub(super) fn job_browser(
             "end": format!("{end:?}"),
             "open": format!("{open:?}"),
             "association_program": http_open_command()
+                .ok()
                 .map(|c| crate::assoc::command_args(&c, "u"))
                 .and_then(|a| a.first().cloned())
                 .and_then(|p| Path::new(&p).file_name().map(|n| n.to_string_lossy().into_owned()))
