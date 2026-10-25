@@ -269,7 +269,7 @@ function menuBar(assets: Assets, c: Colors, width: number): El {
     },
     item(
       [
-        img(icon, pt(16), pt(16), { marginRight: pt(4) }),
+        img(icon, pt(16), pt(16), { marginRight: pt(2.25) }),
         h("div", {}, menuBarTitle("after")),
         menu(c),
       ],
