@@ -7,7 +7,7 @@ Removing the program alone leaves every parked login on the machine.
 
 ## Delete parked logins first
 
-`pitboard uninstall` turns off daily renewal, deletes every parked login this Pitboard wrote, then deletes the Pitboard directory, `~/.pitboard`. On Windows, the directory is `%USERPROFILE%\AppData\Local\Pitboard`.
+`pitboard uninstall` stops the watch service, turns off daily renewal, deletes every parked login this Pitboard wrote, then deletes the Pitboard directory, `~/.pitboard`. On Windows, the directory is `%USERPROFILE%\AppData\Local\Pitboard`.
 
 <Warning>
   `pitboard uninstall` cannot be undone. Each tool stays signed in to the account in use. Every other account needs a sign-in again before you can use it.
@@ -56,7 +56,7 @@ Turned off the daily renewal schedule.
 
 On Windows, the last line names the directory in full, such as `C:\Users\me\AppData\Local\Pitboard`.
 
-Deleting the directory by hand leaves daily renewal on, which `pitboard schedule uninstall` turns off. On Linux and Windows, the parked logins are files in the directory and go with it.
+Deleting the directory by hand leaves daily renewal and the watch service in place. `pitboard schedule uninstall` and `pitboard watch uninstall` remove them. On Linux and Windows, the parked logins are files in the directory and go with it.
 
 On macOS, deleting `~/.pitboard` by hand leaves the parked logins of Claude Code and OpenAI's Codex CLI in the keychain, still valid. Nothing else names them, so `pitboard uninstall` cannot find them. If you already deleted it, delete the `pitboard-park-` items in Keychain Access.
 
