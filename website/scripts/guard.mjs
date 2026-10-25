@@ -363,6 +363,16 @@ export function checkImage(name, all, read) {
   return problems;
 }
 
+// /og.png, the one image before each card was named by its hash, serves the home page's card.
+export function checkOldImage(home, read) {
+  const content = home.find((e) => e.tag === "meta" && e.attrs.property === "og:image")?.attrs
+    .content;
+  const card = content ? read(URL.parse(content)?.pathname.slice(1) ?? "") : null;
+  const old = read("og.png");
+  if (!old) return ["dist has no og.png"];
+  return card && old.equals(card) ? [] : ["og.png is not the home page's card"];
+}
+
 function gz(file) {
   return gzipSync(readFileSync(file)).length;
 }
@@ -443,6 +453,7 @@ function main() {
     ...checkVersions(pages),
     ...checkSigningPolicy(pages),
     ...checkDocsToSite(pages, docs),
+    ...checkOldImage(pages.get("index.html")?.all ?? [], readDist),
   );
 
   console.log(

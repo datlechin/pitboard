@@ -124,19 +124,24 @@
   --color-mac-window-sub: light-dark(#6e6e73, #a1a1a6);
   --color-mac-window-sep: light-dark(#e3e3e6, #333335);
   --color-mac-window-track: light-dark(#ebebed, #38383a);
-  --color-mac-window-tl: light-dark(#dcdcde, #4a4a4c);
-  --color-mac-window-btn: light-dark(#e8e8ea, #3a3a3c);
+  /* a key window's close, minimize and zoom buttons, measured on docs/images/window.png */
+  --color-mac-window-close: #f87a71;
+  --color-mac-window-minimize: #fdc636;
+  --color-mac-window-zoom: #7fd458;
+  --color-mac-window-btn: light-dark(#ececec, #3a3a3c);
   --color-mac-window-btn-edge: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.5));
   --color-mac-window-green: light-dark(#34c759, #30d158);
   --color-mac-window-orange: light-dark(#f29200, #ff9f0a);
-  --color-mac-window-red: light-dark(#ff3b30, #ff453a);
+  --color-mac-window-red: light-dark(#ff383c, #ff453a);
   --color-mac-window-blue: light-dark(#007aff, #0a84ff);
-  --color-mac-window-side: light-dark(#f2f2f4, #262628);
-  --color-mac-window-pick: light-dark(#dcdce0, #3a3a3c);
+  --color-mac-window-side: light-dark(#ececed, #262628);
+  --color-mac-window-pick: light-dark(#d7d7d7, #3a3a3c);
+  /* macOS 27's glass under a toolbar's buttons, and the edge it draws around a gauge */
+  --color-mac-window-glass: light-dark(rgb(246 246 246 / 0.5), rgb(80 80 82 / 0.5));
+  --color-mac-window-glass-edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
+  --color-mac-window-gauge-edge: light-dark(rgb(0 0 0 / 0.13), rgb(255 255 255 / 0.1));
   --color-mac-window-form: light-dark(#f2f2f4, #1a1a1a);
   --color-mac-window-stripe: light-dark(#f5f5f7, #232325);
-  --color-mac-window-green-text: light-dark(#248a3d, #30d158);
-  --color-mac-window-red-text: light-dark(#d70015, #ff6961);
   /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
@@ -277,8 +282,10 @@
   --radius-u-6: calc(6 * var(--u));
   --radius-u-8: calc(8 * var(--u));
   --radius-u-10: calc(10 * var(--u));
+  --radius-u-11: calc(11 * var(--u));
   --radius-u-12: calc(12 * var(--u));
   --radius-u-15: calc(15 * var(--u));
+  --radius-u-16: calc(16 * var(--u));
   --radius-u-18: calc(18 * var(--u));
 
   --shadow-mac-menu:
@@ -327,6 +334,9 @@
   --shadow-mac-knob: 0 calc(0.5 * var(--u)) calc(1.5 * var(--u)) rgb(0 0 0 / 0.3);
   --shadow-mac-group: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-sep);
   --shadow-mac-list: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-edge);
+  --shadow-mac-glass:
+    0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-glass-edge),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) rgb(0 0 0 / 0.05);
 
   /* hairlines half a point wide: on the bottom (b), top (t), left (l) or right (r) edge */
   --inset-shadow-mac-window-b: inset 0 calc(-0.5 * var(--u)) var(--color-mac-window-sep);

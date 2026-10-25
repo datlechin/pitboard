@@ -1,14 +1,17 @@
 ---
-// The run-out notification, the only one with a button (MacPlatform.swift).
+// The notification once a limit reaches the share (MacPlatform.swift); macOS cuts a title longer
+// than the banner's one line at its end.
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
-import { clock } from "../../../data/world.ts";
+import { clock, share } from "../../../data/world.ts";
+import { headsUp } from "../../../lib/words.ts";
 ---
 
 <div class="desk h-160" aria-hidden="true" data-output>
-  <MenuBar clock={clock.runOut}>
+  <MenuBar clock={clock.warned}>
     <MenuItem>
-      <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg> personal 100%
+      <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg>
+      {`${headsUp.account} ${share}%`}
     </MenuItem>
   </MenuBar>
   <div
@@ -16,14 +19,14 @@ import { clock } from "../../../data/world.ts";
   >
     <img class="size-38 flex-none" src="/icon-192.png" alt="" width="38" height="38" />
     <span class="min-w-0 flex-1 text-u-13/16">
-      <b class="flex justify-between gap-6 font-bold whitespace-nowrap"
-        >personal has no weekly limit
-        left<span class="text-u-12 font-normal text-mac-menu-sub">now</span></b
+      <b class="flex gap-6 font-bold whitespace-nowrap"
+        ><span class="min-w-0 truncate">{headsUp.title}</span
+        ><span class="ml-auto text-u-12 font-normal text-mac-menu-sub">now</span></b
       >
-      Claude Code<br />work has 60% of its own left.
+      {headsUp.tool}<br />{headsUp.body}
     </span>
     <span class="flex flex-none items-center self-stretch pl-10 font-medium inset-shadow-mac-menu-l"
-      >Switch</span
+      >{headsUp.button}</span
     >
   </div>
 </div>

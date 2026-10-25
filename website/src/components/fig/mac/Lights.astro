@@ -1,14 +1,20 @@
 ---
+// A key window's buttons on macOS 27, 14 points across and 23 apart, as docs/images/window.png
+// draws them; `class` places them.
 interface Props {
   window?: boolean;
+  class?: string;
 }
-const { window = false } = Astro.props;
-const light = [
-  "size-12 rounded-circle inset-shadow-mac-light",
-  window ? "bg-mac-window-tl" : "bg-mac-term-tl",
-];
+const { window = false, class: place = "top-12 left-12" } = Astro.props;
+const fills = window
+  ? ["bg-mac-window-close", "bg-mac-window-minimize", "bg-mac-window-zoom"]
+  : ["bg-mac-term-tl", "bg-mac-term-tl", "bg-mac-term-tl"];
 ---
 
-<span class:list={["flex gap-8", { "absolute top-13 left-13 z-1": window }]}
-  ><i class:list={light}></i><i class:list={light}></i><i class:list={light}></i></span
+<span class:list={["flex", window ? ["absolute z-1 gap-9", place] : "gap-8"]}
+  >{fills.map((fill) => (
+    <i
+      class:list={["rounded-circle inset-shadow-mac-light", window ? "size-14" : "size-12", fill]}
+    ></i>
+  ))}</span
 >

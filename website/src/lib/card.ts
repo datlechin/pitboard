@@ -205,7 +205,7 @@ function menu(c: Colors): El {
       left: 0,
       flexDirection: "column",
       padding: `${pt(5)}px 0`,
-      borderRadius: pt(10),
+      borderRadius: pt(11),
       backgroundColor: c["mac-menu-bg"],
       boxShadow: [
         `0 0 0 ${pt(0.5)}px ${c["mac-menu-edge"]}`,

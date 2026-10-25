@@ -57,9 +57,10 @@ its copies, so change them together:
 - `favicon.svg`, `favicon-dark.svg` and `logo/` in this folder: the site icons and header logos.
 - `apps/windows/Icon/`: the drawings `make-ico.py` turns into the Windows app's `Pitboard.ico`
   and the share package's logos.
-- `website/public/`: `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, the `icon-*.png`
-  files and `og.png`.
-- `website/src/assets/logo/`: the lockup in the site's header and the mark in its drawn menu bar.
+- `website/public/`: `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` and the `icon-*.png`
+  files.
+- `website/src/assets/logo/`: the lockup in the site's header and its preview images, and the mark
+  in its drawn menu bar.
 
 A page that moves needs a redirect in `docs.json`, so links from outside the site keep
 working. Markdown files in the repository, such as `README.md`, `SECURITY.md`, `CHANGELOG.md`

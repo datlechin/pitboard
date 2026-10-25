@@ -4,6 +4,7 @@ import Block from "../components/Block.astro";
 import Disclosure from "../components/Disclosure.astro";
 import Icons from "../components/Icons.astro";
 import InstallTabs from "../components/InstallTabs.astro";
+import Part from "../components/Part.astro";
 import Accounts from "../components/fig/mac/Accounts.astro";
 import Activity from "../components/fig/mac/Activity.astro";
 import Desk from "../components/fig/mac/Desk.astro";
@@ -23,6 +24,7 @@ import { sessions } from "../data/sessions.ts";
 import { DOCS, REPO, TAGLINE } from "../data/site.ts";
 import { longDate } from "../lib/changelog.ts";
 import { highlight, siteData } from "../lib/data.ts";
+import type { Platform } from "../lib/platform.ts";
 import { application } from "../lib/schema.ts";
 import { recentReleases } from "../lib/shown.ts";
 import { tools, type Tool } from "../data/world.ts";
@@ -52,10 +54,14 @@ const marks: Record<Tool, { src: string; class: string }[]> = {
   desktop: [sparkMark],
 };
 
-const faq = [
+const faq: { q: string; a: string | { on: Platform[]; a: string }[] }[] = [
   {
     q: "Does it work with API keys?",
     a: `No. Pitboard switches only logins to a Claude or ChatGPT account, not API keys or <a href="${DOCS}/concepts/limits#tools-and-sign-ins-pitboard-does-not-support">other providers</a>.`,
+  },
+  {
+    q: "Does it work on a computer my company manages?",
+    a: `Yes, within the company's settings: Pitboard refuses a switch or sign-in they rule out, and <a href="${DOCS}/reference/maintenance-commands#doctor"><code>pitboard doctor</code> names each setting</a>.`,
   },
   {
     q: "Is this allowed?",
@@ -70,16 +76,26 @@ const faq = [
     a: `No. Pitboard <a href="${DOCS}/concepts/limits#rules">never sees a tool's requests</a>.`,
   },
   {
-    q: "Does it run on Windows or Linux?",
-    a: `Yes. The app runs on macOS and Windows, and <a href="${DOCS}/install#what-you-need">the command line on all three</a>.`,
-  },
-  {
     q: "What happens if I uninstall it?",
     a: `Each tool stays signed in to the account in use. <a href="${DOCS}/install/remove#delete-parked-logins-first">The other accounts need signing in again</a>.`,
   },
   {
     q: "Can I script it?",
     a: `Yes. With <code>--json</code>, <a href="${DOCS}/reference/json-output#the-envelope">every command prints JSON</a>.`,
+  },
+  {
+    q: "Does it have keyboard shortcuts?",
+    // each system's own answer, both shown where no JavaScript chooses one
+    a: [
+      {
+        on: ["macos", "linux"],
+        a: `Yes. On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Forget</b> on <a href="${DOCS}/reference/mac-app#keyboard-shortcuts">Command-Delete</a>.`,
+      },
+      {
+        on: ["windows"],
+        a: `Yes. On Windows, <a href="${DOCS}/reference/windows-app#keyboard-shortcuts">Pitboard's keyboard shortcuts</a> include F2 to rename the account selected, Delete to forget it and Ctrl+C to copy its email address.`,
+      },
+    ],
   },
   {
     q: "Is Pitboard made by Anthropic or OpenAI?",
@@ -99,8 +115,8 @@ const jsonLd = [
 ---
 
 <Base
-  title="Pitboard: switch AI coding accounts and see their usage"
-  description="Switch AI coding accounts without signing out and see their usage, on macOS, Windows and Linux."
+  title="Pitboard: switch AI coding tools between your accounts"
+  description="Switch AI coding tools between your accounts without signing out and see their usage, on macOS, Windows and Linux."
   current="home"
   path="/"
   image="home"
@@ -145,7 +161,7 @@ const jsonLd = [
             windows: {
               caption: "Switching accounts from Pitboard's icon on Windows.",
               describe:
-                "Pitboard's menu open from its icon in the notification area. Claude Code has personal, in use, and work; Codex has main, in use, and spare, each with its plan. The pointer rests on work, whose tooltip reads 5-hour 12%, weekly 40%, then chooses it, and the menu closes; the icon's tooltip reads Pitboard, work 40%, Claude Code. The menu opens again with work first and in use. Then the status line of the Claude Code session in Windows Terminal puts work first.",
+                "Pitboard's menu open from its icon in the notification area. Claude Code has personal, in use, and work; Codex has main, in use, and spare, each with its plan and the most it has used of a limit. The pointer rests on work, whose tooltip reads 5-hour 12%, weekly 40%, then chooses it, and the menu closes. The icon's row grows from a short one to a long one, and its tooltip reads Pitboard, then work (Claude Code): 5-hour 12%, weekly 40%, then main (Codex): Weekly 7%. The menu opens again with work first and in use. Then the status line of the Claude Code session in Windows Terminal puts work first.",
             },
           }}
           cli={{
@@ -286,24 +302,26 @@ const jsonLd = [
         >
           Before an account runs out
         </h2>
-        <Row id="offer-title" title="When one runs out">
+        <Row id="offer-title" title="A warning first">
           <p>
-            When the account in use runs out, the app's
-            <a href={`${DOCS}/guides/switch#when-an-account-runs-out`}>notification</a> offers
-            another with room left.
+            While the app is open, its
+            <a href={`${DOCS}/guides/switch#get-a-notification-before-a-limit-runs-out`}
+              >notification</a
+            >
+            offers another account with room left once the account in use reaches 95% of a limit.
           </p>
           <Figure
             slot="fig"
             app={{
               macos: {
-                caption: "The notification on macOS when an account runs out.",
+                caption: "The notification on macOS at 95%.",
                 describe:
-                  "A notification from Pitboard: personal has no weekly limit left. Claude Code. work has 60% of its own left. It has a Switch button.",
+                  "A notification from Pitboard: personal has used 95% of its weekly limit. Claude Code. work has 60% of its own left. It has a Switch button. The menu bar shows personal 95%.",
               },
               windows: {
-                caption: "The notification on Windows when an account runs out.",
+                caption: "The notification on Windows at 95%.",
                 describe:
-                  "A notification from Pitboard in the corner of the screen: personal has no weekly limit left. Claude Code. work has 60% of its own left. It has a Switch button.",
+                  "A notification from Pitboard in the corner of the screen: personal has used 95% of its weekly limit. Claude Code. work has 60% of its own left. It has a Switch button.",
               },
             }}
           >
@@ -313,9 +331,9 @@ const jsonLd = [
         </Row>
         <Row id="auto-title" title="Automatic switch" flip>
           <p>
-            Pitboard can
-            <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a> once a
-            limit of the account in use reaches a set share.
+            Pitboard can also
+            <a href={`${DOCS}/guides/automatic-switching`}>switch Claude Code by itself</a>, from
+            the app or from a background service that <code>pitboard watch install</code> sets up.
           </p>
           <Figure
             slot="fig"
@@ -333,15 +351,25 @@ const jsonLd = [
             }}
             cli={{
               macos: {
-                caption: "The same from a terminal.",
+                caption: "The same in the background, from a terminal.",
                 describe:
-                  "<code>pitboard watch</code> prints that it switches to another account once a limit of the one in use reaches 95%, and warms up personal from 07:00 to 23:00, then: Watching work: 40% of its weekly limit, as of 20:50.",
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the file of its LaunchAgent, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+              linux: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints that your user's systemd runs it while you are signed in, then the file of its systemd user service, then that Anthropic's terms may cover automatic switching and warm-ups.",
+              },
+              windows: {
+                caption: "The same in the background, from a terminal.",
+                describe:
+                  "<code>pitboard watch install</code> prints that Pitboard watches Claude Code in the background at once and at each sign-in, switching once a limit of the account in use reaches 95% and warming up the accounts <code>pitboard warm on</code> turned on. Then it prints the path of its task in Task Scheduler, then that Anthropic's terms may cover automatic switching and warm-ups.",
               },
             }}
           >
             <Settings show="switch" />
             <WinSettings slot="win" show="switch" />
-            <Term slot="cli" session={sessions.watch} />
+            <Term slot="cli" session={sessions.watchInstall} />
           </Figure>
         </Row>
         <Row id="warm-title" title="Warm-up">
@@ -396,7 +424,7 @@ const jsonLd = [
           windows: {
             caption: "Opening claude.ai as an account from Pitboard's icon on Windows.",
             describe:
-              "Pitboard's menu open from its icon in the notification area, with Open claude.ai showing personal and work.",
+              "Pitboard's menu open from its icon in the notification area, with Open claude.ai showing work, in use, then personal.",
           },
         }}
       >
@@ -472,7 +500,13 @@ const jsonLd = [
     <Block titleId="faq-title" title="Questions">
       <div>
         {faq.map((item) => <Disclosure summary={item.q}>
-          <p set:html={item.a} />
+          {typeof item.a === "string" ? (
+            <p set:html={item.a} />
+          ) : (
+            item.a.map((part) => <Part on={part.on} label={false}>
+              <p set:html={part.a} />
+            </Part>)
+          )}
         </Disclosure>)}
       </div>
     </Block>

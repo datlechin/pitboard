@@ -1,5 +1,6 @@
 ---
-// AccountPicker.swift, with crates/pitboard-ffi/src/present/windows.rs's words.
+// AccountPicker.swift, with crates/pitboard-ffi/src/present/windows.rs's words. Corners as the
+// main window's; no picture measures its title bar.
 import Lights from "./Lights.astro";
 import Button from "./Button.astro";
 
@@ -8,17 +9,17 @@ const account = "rounded-u-5 pt-4 px-8 pb-5";
 
 <div class="desk flex min-h-300 items-center justify-center py-20" aria-hidden="true" data-output>
   <div
-    class="relative w-440 overflow-hidden rounded-u-12 bg-mac-window-bg text-mac-window-text shadow-mac-window"
+    class="relative w-440 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
   >
     <div class="relative h-28 bg-mac-window-side">
-      <Lights window />
+      <Lights window class="top-7 left-12" />
       <span class="pointer-events-none absolute inset-x-0 top-6 text-center font-bold"
         >Open Link</span
       >
     </div>
     <div class="grid gap-12 p-20">
       <span class="font-bold">Open this claude.ai link as:</span>
-      <span class="truncate text-u-12 text-mac-window-blue"
+      <span class="truncate font-mono text-u-12"
         >claude.ai/project/0199c2f4-8e3b-7a51-b6d0-4f2e9c7a1d38</span
       >
       <div class="rounded-u-6 bg-mac-window-bg p-4 shadow-mac-list">

@@ -1,9 +1,10 @@
 // What the Windows app shows in the site's figures, in its own words: windows.test.ts finds each
 // in the file that says it.
-import { clock, warmUp, type Account, type Limit, type Moment, type Tool } from "./world.ts";
+import { clock, share, warmUp, type Account, type Limit, type Moment, type Tool } from "./world.ts";
 import {
   activity,
   fullest,
+  headsUp,
   isInUse,
   level,
   listed,
@@ -59,7 +60,7 @@ export function iconMenu(moment: Moment, updates: boolean): MenuEntry[][] {
     sites.map(([site, tool]) => ({
       command: `Open ${site}`,
       site,
-      submenu: toolAccounts(tool).map((a) => a.label),
+      submenu: listed(tool, moment).map((a) => a.label),
     })),
     [
       { command: "Open Pitboard", bold: true },
@@ -123,8 +124,6 @@ export function accountsPage(moment: Moment) {
   };
 }
 
-const threshold = 95;
-
 // SettingsPage.xaml's Limits, with machine.rs's words under When a limit reaches, set to Switch
 // automatically, and Warm up limits open on its hours and machine.rs's rows
 export const settingsPage = {
@@ -134,11 +133,11 @@ export const settingsPage = {
     header: "When a limit reaches",
     choice: "Switch automatically",
     standing: `Watching work: 40% of its weekly limit, as of ${clock.read}.`,
-    note: `Pitboard switches Claude Code once a limit of the account in use reaches ${threshold}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`,
+    note: `Pitboard switches Claude Code once a limit of the account in use reaches ${share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`,
     terms: "Anthropic’s terms may cover automatic switching and warm-ups.",
     link: "Is this allowed?",
   },
-  share: { header: "Share of a limit", range: "From 50% to 99%", value: threshold },
+  share: { header: "Share of a limit", range: "From 50% to 99%", value: share },
   warm: {
     header: "Warm up limits",
     range: `${warmUp.from} to ${warmUp.to}`,
@@ -164,11 +163,11 @@ export const activityPage = {
   rows: activity("windows"),
 };
 
-// The run-out notification: title, tool and body, and its one button (WindowsNotifications.cs)
+// The notification at the share: title, tool and body, and its one button (WindowsNotifications.cs)
 export const toast = {
   app,
-  title: "personal has no weekly limit left",
-  tool: "Claude Code",
-  body: "work has 60% of its own left.",
-  button: "Switch",
+  title: headsUp.title,
+  tool: headsUp.tool,
+  body: headsUp.body,
+  button: headsUp.button,
 };

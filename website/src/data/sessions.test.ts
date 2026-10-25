@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { printed, sessions, type Session } from "./sessions.ts";
 import { account } from "./world.ts";
 import { plainText } from "../lib/changelog.ts";
-import { platforms } from "../lib/platform.ts";
+import { platforms, type Platform } from "../lib/platform.ts";
 import { listed, menuLine, statusHeading, statusLine, statusLines } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -46,29 +46,42 @@ test("pitboard use work prints what the Quickstart prints", () => {
   assert.deepEqual(ours, block(docs("quickstart.mdx"), ours[0], ours.length));
 });
 
-test("pitboard watch starts with the line the command line writes", () => {
+test("pitboard watch install prints what watch.rs writes, and where each system keeps the service", () => {
   const source = joined(repo("crates/pitboard/src/watch.rs"));
-  assert.ok(source.includes("limit of the one in use reaches {}%{}. {}"));
-  assert.ok(source.includes('"Stop with Ctrl-C."'));
-  assert.ok(source.includes('", and warms up {} from {}"'));
-  const [start, watching] = text(printed(sessions.watch, "macos"));
-  assert.match(
-    start,
-    /^Watching Claude Code\. Pitboard switches to another of your accounts once a limit of the one in use reaches \d+%, and warms up \w+ from \d\d:\d\d to \d\d:\d\d\. Stop with Ctrl-C\.$/,
-  );
-  const unwarmed = start.replace(/, and warms up .+ to \d\d:\d\d/, "").replace(/\d+%/, "90%");
-  assert.ok(docs("guides/automatic-switching.mdx").split("\n").includes(unwarmed));
-  for (const p of platforms) {
-    assert.deepEqual(text(printed(sessions.watch, p)), [start, watching], p);
-  }
-  const shape =
-    /^\d\d:\d\d:\d\d Watching \w+: \d+% of its (5-hour|weekly) limit, as of \d\d:\d\d\.$/;
-  assert.match(watching, shape);
+  const words = repo("crates/pitboard-core/src/words.rs").replace(/=\s+"/g, '= "');
+  const [first, ...rest] = text(printed(sessions.watchInstall, "linux"));
+  assert.ok(source.includes(`"${first.replace(/\d+%/, "{}%")}\\n{}{location}\\n\\n{}\\n",`));
+  assert.ok(source.includes(`"${rest[0]}\\n"`));
+  const terms = rest.at(-1)!;
+  const [said, url] = terms.split(": ");
+  assert.ok(words.includes(`pub const TERMS_MAY_COVER_THIS: &str = "${said}";`));
+  assert.ok(words.includes(`pub const IS_THIS_ALLOWED_URL: &str = "${url}";`));
+
+  const where = (p: Platform) => text(printed(sessions.watchInstall, p)).at(-3)!;
   assert.ok(
-    docs("guides/automatic-switching.mdx")
-      .split("\n")
-      .some((l) => shape.test(l.trim())),
+    repo("crates/pitboard-core/src/host/macos/launchd.rs").includes(
+      'const WATCH_LABEL: &str = "com.datlechin.pitboard.watch";',
+    ),
   );
+  assert.equal(where("macos"), "/Users/me/Library/LaunchAgents/com.datlechin.pitboard.watch.plist");
+  const systemd = repo("crates/pitboard-core/src/host/linux/systemd.rs");
+  assert.ok(systemd.includes('const WATCH: &str = "pitboard-watch.service";'));
+  assert.ok(systemd.includes('ctx.home().join(".config/systemd/user")'));
+  assert.equal(where("linux"), "/home/me/.config/systemd/user/pitboard-watch.service");
+  const task = repo("crates/pitboard-core/src/host/task.rs");
+  const sid = /const SID: &str = "(S-[\d-]+)";/.exec(task)![1];
+  assert.ok(task.includes('Job::Watch => format!("Watch {sid}"),'));
+  assert.ok(task.includes('path(Job::Watch, SID), format!(r"\\Pitboard\\Watch {SID}")'));
+  assert.equal(where("windows"), `\\Pitboard\\Watch ${sid}`);
+
+  // the reference's sample, from macOS at --at 90
+  const macos = text(printed(sessions.watchInstall, "macos")).map((l) => l.replace(/\d+%/, "90%"));
+  assert.deepEqual(macos, block(docs("reference/account-commands.mdx"), macos[0], macos.length));
+  for (const p of platforms) {
+    const lines = text(printed(sessions.watchInstall, p));
+    assert.equal(lines.length, p === "linux" ? 5 : 4, p);
+    assert.equal(lines.at(-2), "", p);
+  }
 });
 
 test("pitboard warm lists accounts as the warm-up guide does", () => {

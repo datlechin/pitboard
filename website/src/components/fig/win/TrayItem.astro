@@ -1,10 +1,19 @@
 ---
-// An icon in the notification area: a 32 by 40 pixel button, its backplate shown while `on`.
+// Pitboard's icon in the notification area: a 32 by 40 pixel button, its backplate shown while
+// `on`. Its row is as long as what is left of the menu bar's limit; in the demo, `was` is the
+// level before the switch.
+import type { level } from "../../../lib/words.ts";
+
+type Level = ReturnType<typeof level>;
 interface Props {
+  level: Level;
+  was?: Level;
   on?: boolean;
   class?: string;
 }
-const { on = false, class: extra } = Astro.props;
+const { level: now, was = now, on = false, class: extra } = Astro.props;
+const tray = { g: "plenty", y: "low", r: "out" } as const;
+const icon = "size-16 shrink-0";
 ---
 
 <span
@@ -14,5 +23,10 @@ const { on = false, class: extra } = Astro.props;
     extra,
   ]}
 >
-  <slot />
+  {was !== now && <svg class={`${icon} hidden demo-before:block`}>
+    <use href={`#pb-tray-${tray[was]}`} />
+  </svg>}
+  <svg class:list={[icon, { "demo-before:hidden": was !== now }]}>
+    <use href={`#pb-tray-${tray[now]}`} />
+  </svg>
 </span>

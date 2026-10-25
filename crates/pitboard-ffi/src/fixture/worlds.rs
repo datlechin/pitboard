@@ -984,15 +984,10 @@ fn uses(machine: &Stage, person: &Person) {
             ],
         );
     } else if *person == codex_main() {
-        machine.has_used(
-            person,
-            &[
-                ("five_hour", 18.0, session, 12_000),
-                ("seven_day", 7.0, week, 500_000),
-            ],
-        );
+        // A Pro plan has no five-hour limit, as docs/concepts/usage.mdx says.
+        machine.has_used(person, &[("seven_day", 7.0, week, 500_000)]);
     } else if *person == codex_spare() {
-        machine.has_used(person, &[("five_hour", 0.0, session, session)]);
+        machine.has_used(person, &[("seven_day", 0.0, week, week)]);
     }
 }
 

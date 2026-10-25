@@ -8,7 +8,7 @@ import TrayItem from "./TrayItem.astro";
 import { session } from "../../../data/desk.ts";
 import { accountTip } from "../../../data/windows.ts";
 import { windowsClock } from "../../../data/world.ts";
-import { statusLine, trayTip } from "../../../lib/words.ts";
+import { menuBarLevel, statusLine, trayTip } from "../../../lib/words.ts";
 
 interface Props {
   demo?: boolean;
@@ -58,9 +58,12 @@ const rowTip = updates ? "bottom-450" : "bottom-418";
     <div set:html={`  ${status}`} />
   </Terminal>
   <Taskbar time={windowsClock.taskbar.time} date={windowsClock.taskbar.date}>
-    <TrayItem on class={demo ? "demo-shut:bg-transparent demo-reach:bg-win-subtle" : undefined}>
-      <svg class="size-16 shrink-0"><use href="#pb-tray"></use></svg>
-    </TrayItem>
+    <TrayItem
+      on
+      level={menuBarLevel("after")}
+      was={demo ? menuBarLevel("before") : undefined}
+      class={demo ? "demo-shut:bg-transparent demo-reach:bg-win-subtle" : undefined}
+    />
   </Taskbar>
   <IconMenu
     class="absolute right-6 bottom-48 z-3"

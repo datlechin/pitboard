@@ -17,6 +17,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Code's, and the accounts whose organisation it leaves out.
 - `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginMethod` of Claude
   Code's set to `console`, under which Pitboard refuses a Claude Code sign-in.
+- On macOS, Pitboard's refusals and `pitboard doctor` follow Claude Code's managed settings from
+  a configuration profile too, as Claude Code does.
 - A Codex switch on Linux names the ChatGPT app among what still runs Codex, and says to quit it
   and open it again.
 - `pitboard watch install` has the system's own service manager run `pitboard watch` from each

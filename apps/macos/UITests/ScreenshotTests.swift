@@ -1,7 +1,8 @@
 import AppKit
 import XCTest
 
-/// Pictures for the docs, which `scripts/docs-screenshots.sh` takes from the result bundle.
+/// Pictures for the docs, which `scripts/docs-screenshots.sh` takes from the result bundle, and
+/// the scenes usepitboard.com's figures are checked against, which its `--figures` keeps.
 final class ScreenshotTests: FixtureTestCase {
     @MainActor
     func testTheMenuAndTheWindowForTheDocs() {
@@ -32,6 +33,70 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(app.accountRow("codex/spare").waitForExistence(timeout: 5))
         XCTAssertTrue(app.text("BEGINSWITH", "5-hour limit, 42").waitForExistence(timeout: 5))
         keep(cutOut(window, cornerRadius: 16), as: "window")
+
+        keep(item.screenshot().pngRepresentation, as: "status-item")
+
+        app.descendants(matching: .any)["sidebar.activity"].click()
+        XCTAssertTrue(app.text("Switch").waitForExistence(timeout: 5))
+        keep(cutOut(window, cornerRadius: 16), as: "activity")
+
+        app.openSettings()
+        app.toolbars.buttons["Limits"].click()
+        let settings = app.windows["Limits"]
+        let atLimit = app.popUpButtons["settings.atLimit"]
+        XCTAssertTrue(atLimit.waitForExistence(timeout: 5))
+        XCTAssertTrue(atLimit.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        choose("Switch Automatically", in: atLimit)
+        XCTAssertTrue(app.control("settings.autoSwitchStanding").waitForExistence(timeout: 5))
+        keep(cutOut(settings, cornerRadius: 16), as: "limits-switch")
+
+        // Last, since it switches, and to personal, whose five-hour limit is used up: switching
+        // automatically would switch away from it again.
+        choose("Notify Me", in: atLimit)
+        settings.buttons[XCUIIdentifierCloseWindow].click()
+        XCTAssertTrue(settings.waitForNonExistence(timeout: 5))
+        app.descendants(matching: .any)["sidebar.accounts"].click()
+        let personal = app.accountRow("claude/personal")
+        XCTAssertTrue(personal.waitForExistence(timeout: 5))
+        personal.buttons["Use personal (Claude Code)"].click()
+        let notice = app.descendants(matching: .any)["notice.switch/claude"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        keep(cutOut(window, cornerRadius: 16), as: "switch-notice")
+    }
+
+    /// The fixture's personal warms up as the app starts.
+    @MainActor
+    func testWarmingUpForTheSite() {
+        let app = launch(.warmUp)
+        app.openWindow()
+        let warmed = app.text("BEGINSWITH", "Warms up again at ")
+        XCTAssertTrue(warmed.waitForExistence(timeout: 30))
+        app.openSettings()
+        app.toolbars.buttons["Limits"].click()
+        XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
+        keep(cutOut(app.windows["Limits"], cornerRadius: 16), as: "limits-warm")
+    }
+
+    @MainActor
+    func testClaudeDesktopForTheSite() {
+        let app = launch(.claudeDesktop)
+        app.openWindow()
+        let window = app.windows["main"]
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+        app.putTheTipsAway()
+        let last = app.accountRow("desktop/work")
+        XCTAssertTrue(last.waitForExistence(timeout: 5))
+        // Moving the pointer over a row scrolls it into sight.
+        if !last.isHittable { last.hover() }
+        XCTAssertTrue(last.isHittable)
+        keep(cutOut(window, cornerRadius: 16), as: "desktop")
+    }
+
+    @MainActor
+    private func choose(_ title: String, in popUp: XCUIElement) {
+        popUp.click()
+        popUp.menuItems[title].click()
+        XCTAssertTrue(popUp.wait(until: "value == '\(title)'", timeout: 5))
     }
 
     @MainActor

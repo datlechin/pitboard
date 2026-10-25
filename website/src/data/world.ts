@@ -1,4 +1,5 @@
-// Each plan's limits as Pitboard measured them (the register's `usage_answer_lists_every_limit`).
+// Max 20x shows two of its three limits (the register's `usage_answer_lists_every_limit`), and Codex
+// Pro its weekly limit alone, as docs/concepts/usage.mdx says.
 import { platforms, type Platform } from "../lib/platform.ts";
 
 export type Tool = "claude" | "codex" | "desktop";
@@ -66,10 +67,7 @@ export const accounts: Account[] = [
     label: "main",
     email: "me@example.com",
     plan: "Pro",
-    limits: [
-      { kind: "5h", used: 18, even: 34, resets: "3h 19m" },
-      { kind: "week", used: 7, even: 18, resets: "5d 18h" },
-    ],
+    limits: [{ kind: "week", used: 7, even: 18, resets: "5d 18h" }],
   },
   {
     tool: "codex",
@@ -111,16 +109,20 @@ export const clock = {
   desktopSwitched: "18:46",
   warmed: "17:00",
   warmsAgain: "22:00",
-  // when personal, left in use, runs out of its weekly limit
-  runOut: "Wed 14 Oct 07:56",
+  // when personal, left in use, reaches the share of its weekly limit at the pace it runs out at
+  warned: "Wed 14 Oct 05:53",
 };
 
 // The same moments as Windows says them in the en-GB regional format: its taskbar's time over its
 // date, and the app's "t" and "g" (WindowsLocalTime.cs).
 export const windowsClock = {
   taskbar: { time: "20:51", date: "13/10/2026" },
-  runOut: { time: "07:56", date: "14/10/2026" },
+  warned: { time: "05:53", date: "14/10/2026" },
 };
+
+// The share of a limit the app notifies or switches at until someone sets another
+// (autoswitch.rs `Threshold::DEFAULT`).
+export const share = 95;
 
 // The accounts turned on for warm-up, alike on every system.
 export const warmUp = { from: "07:00", to: "23:00", accounts: ["personal"] };

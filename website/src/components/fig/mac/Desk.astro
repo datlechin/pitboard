@@ -3,7 +3,7 @@
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import Terminal from "./Terminal.astro";
-import { session } from "../../../data/desk.ts";
+import { menuCommands, session } from "../../../data/desk.ts";
 import { clock, tools, type Moment } from "../../../data/world.ts";
 import {
   isInUse,
@@ -19,21 +19,6 @@ interface Props {
 }
 const { demo = false } = Astro.props;
 const moments: Moment[] = demo ? ["before", "after"] : ["after"];
-const actions: ({ title: string; sub?: string; keys?: string; more?: boolean } | null)[] = [
-  { title: "Add Account…", keys: "⌘N" },
-  { title: "Refresh", sub: `Updated ${clock.read}`, keys: "⌘R" },
-  null,
-  { title: "Open claude.ai", more: true },
-  { title: "Open chatgpt.com", more: true },
-  null,
-  { title: "Open Pitboard", keys: "⌘0" },
-  { title: "Settings…", keys: "⌘," },
-  { title: "Check for Updates…" },
-  null,
-  { title: "About Pitboard" },
-  { title: "Pitboard Help" },
-  { title: "Quit Pitboard", keys: "⌘Q" },
-];
 // one state, or both with the moments that show each
 // The session's status line follows the switch after the menu does.
 const either = (
@@ -76,7 +61,7 @@ const rule =
         <span set:html={either(menuBarTitle("before"), menuBarTitle("after"))} />
       </MenuItem>
       <div
-        class="absolute top-26 left-0 w-max rounded-u-10 bg-mac-menu-bg py-5 whitespace-nowrap text-mac-menu-text normal-nums shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 demo-shut:opacity-0"
+        class="absolute top-26 left-0 w-max rounded-u-11 bg-mac-menu-bg py-5 whitespace-nowrap text-mac-menu-text normal-nums shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 demo-shut:opacity-0"
       >
         {moments.map((moment) => <div
           class:list={[
@@ -124,7 +109,7 @@ const rule =
           ))}
         </div>)}
         <div class={sep}></div>
-        {actions.map((a) =>
+        {menuCommands.map((a) =>
           a === null ? (
             <div class={sep} />
           ) : (

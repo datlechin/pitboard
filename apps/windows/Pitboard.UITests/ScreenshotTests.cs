@@ -48,7 +48,7 @@ public sealed partial class ScreenshotTests
         launched.Select("pane.machine");
         var frame = Frame(window);
         HiddenWindows.OpenMenu(launched.Process, frame.Left + 40, frame.Top + 60);
-        var main = launched.Find(found => found.ByName("main · Pro · 18%").And(found.ByControlType(ControlType.MenuItem)), "the menu's main");
+        var main = launched.Find(found => found.ByName("main · Pro · 7%").And(found.ByControlType(ControlType.MenuItem)), "the menu's main");
         var menu = Around(main, ControlType.Menu);
         Keep(Drawn(() => Capture.Element(menu), "the menu"), pictures, "menu");
     }

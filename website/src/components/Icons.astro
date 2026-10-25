@@ -1,15 +1,29 @@
 ---
 import template from "../assets/logo/template.svg?raw";
 import tray from "../../../apps/windows/Icon/icon-16.svg?raw";
+import trayPlenty from "../../../apps/windows/Icon/tray-plenty-16.svg?raw";
+import trayLow from "../../../apps/windows/Icon/tray-low-16.svg?raw";
+import trayOut from "../../../apps/windows/Icon/tray-out-16.svg?raw";
 import { bar, fluent, line, symbolic } from "../data/glyphs.ts";
 
 const paths = [...template.matchAll(/<path\b[^>]*?\sd="([^"]+)"/g)];
 if (paths.length !== 2) throw new Error("template.svg is not the kit's two paths");
 const [board, dim] = paths.map((m) => m[1]);
 const dimOpacity = /fill-opacity="([^"]+)"/.exec(template)?.[1] ?? "0.35";
-// the Windows app's colour icon, its gradient's id made the page's own
-const trayBody = /<svg[^>]*>([\s\S]*)<\/svg>/.exec(tray)?.[1].replaceAll("face", "pb-tray-face");
-if (!trayBody) throw new Error("icon-16.svg has no body");
+// an icon's drawing, its gradient's id made the page's own
+const body = (svg: string, id: string) => {
+  const drawn = /<svg[^>]*>([\s\S]*)<\/svg>/.exec(svg)?.[1].replaceAll("face", `${id}-face`);
+  if (!drawn) throw new Error(`${id} has no body`);
+  return drawn;
+};
+// the Windows app's colour icon, and its icon in the notification area at each level a figure
+// draws (Shell.cs `NotificationIcon`)
+const trays = {
+  "pb-tray": tray,
+  "pb-tray-plenty": trayPlenty,
+  "pb-tray-low": trayLow,
+  "pb-tray-out": trayOut,
+};
 ---
 
 <svg class="absolute size-0 overflow-hidden" aria-hidden="true" focusable="false">
@@ -47,7 +61,9 @@ if (!trayBody) throw new Error("icon-16.svg has no body");
   {Object.entries(symbolic).map(([id, body]) => (
     <symbol id={id} viewBox="0 0 16 16" set:html={body} />
   ))}
-  <symbol id="pb-tray" viewBox="0 0 16 16" set:html={trayBody} />
+  {Object.entries(trays).map(([id, svg]) => (
+    <symbol id={id} viewBox="0 0 16 16" set:html={body(svg, id)} />
+  ))}
   {Object.entries(fluent).map(([id, d]) => <symbol id={id} viewBox="0 0 20 20">
     <path d={d} fill="currentColor"></path>
   </symbol>)}

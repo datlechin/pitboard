@@ -11,7 +11,7 @@ import {
   toast,
 } from "./windows.ts";
 import { tools } from "./world.ts";
-import { trayTip } from "../lib/words.ts";
+import { menuBarLevel, trayTip } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const views = (file: string) => repo(`apps/windows/Pitboard.Views/${file}`);
@@ -66,7 +66,7 @@ test("the menu heads each tool's accounts with its name, and names each account 
   const checked = menu(false).filter((e) => "account" in e && e.checked);
   assert.deepEqual(
     checked.map((e) => ("account" in e ? e.account : "")),
-    ["work · Max 20x · 40%", "main · Pro · 18%"],
+    ["work · Max 20x · 40%", "main · Pro · 7%"],
   );
 });
 
@@ -85,14 +85,17 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
   assert.equal(work.tip, "5-hour 12%, weekly 40%");
 });
 
-test("a site with several accounts' windows is a submenu of their labels", () => {
+test("a site with several accounts' windows is a submenu of their labels, the one in use first", () => {
   const source = repo("crates/pitboard-ffi/src/account_windows/accounts.rs");
   assert.ok(source.includes('title: format!("Open {}", site.name()),'));
+  // in the accounts' order, which the status gives with the signed-in account first
+  assert.ok(source.includes("let windows = window_accounts(accounts);"));
+  assert.ok(core("status.rs").includes("rows.sort_by_key(|r| (rank(r.provider), !r.signed_in));"));
   const sites = menu(false).flatMap((e) => ("command" in e && e.submenu ? [e] : []));
   assert.deepEqual(
     sites.map((e) => ("command" in e ? [e.command, e.submenu] : [])),
     [
-      ["Open claude.ai", ["personal", "work"]],
+      ["Open claude.ai", ["work", "personal"]],
       ["Open chatgpt.com", ["main", "spare"]],
     ],
   );
@@ -107,8 +110,21 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
   assert.ok(present("words.rs").includes('format!("{label} ({tool})")'));
   assert.equal(
     trayTip("after"),
-    "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): 5-hour 18%, weekly 7%",
+    "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): Weekly 7%",
   );
+});
+
+test("the icon in the notification area draws the menu bar's level, from Tray's drawings", () => {
+  assert.ok(shell("Shell.cs").includes('"Tray", $"{look.Level?.ToString() ?? "None"}.ico"'));
+  const make = repo("apps/windows/Icon/make-ico.py");
+  assert.ok(make.includes('for level in ("Plenty", "Low", "Out", "None"):'));
+  assert.ok(make.includes('f"tray-{level.lower()}-{grid}.svg"'));
+  for (const file of ["plenty", "low", "out"]) {
+    assert.match(repo(`apps/windows/Icon/tray-${file}-16.svg`), /^<svg /);
+  }
+  assert.ok(present("accounts.rs").includes(".map(|limit| crate::usage_level(limit.percent)),"));
+  assert.equal(menuBarLevel("before"), "y");
+  assert.equal(menuBarLevel("after"), "g");
 });
 
 test("the window and its panes are named as MainWindow.xaml names them", () => {
@@ -259,20 +275,48 @@ test("Activity lists Windows' changes in the app's words, dated as the regional 
   );
 });
 
-test("the run-out notification says what WindowsNotifications.cs builds from notices.rs", () => {
+test("the notification at the share says what WindowsNotifications.cs builds from notices.rs", () => {
   const source = shell("WindowsNotifications.cs");
   assert.ok(source.includes('public const string DisplayName = "Pitboard";'));
   assert.ok(source.includes("new AppNotificationButton(button.Title)"));
   assert.ok(present("words.rs").includes('pub(crate) const SWITCH: &str = "Switch";'));
-  assert.ok(present("notices.rs").includes("button(words::SWITCH.into(),"));
-  const words = present("words.rs");
-  assert.ok(words.includes('format!("{account} has no {limit} limit left")'));
-  assert.ok(words.includes('Some(left) => format!("{account} has {left}% of its own left."),'));
+  const notices = present("notices.rs");
+  assert.ok(notices.includes("button(words::SWITCH.into(),"));
+  // short of 100%, the title says how much of the limit the account has used
+  assert.match(
+    notices,
+    /said::has_used\(\s*&words::quoted\(&heads_up\.ran\),\s*&said::share_of_limit\(&limit\),/,
+  );
+  const said = core("words.rs");
+  assert.ok(said.includes('format!("{account} has used {used}")'));
+  assert.ok(said.includes('format!("{} of its {name} limit", figure(limit.percent))'));
+  assert.ok(
+    present("words.rs").includes(
+      'Some(left) => format!("{account} has {left}% of its own left."),',
+    ),
+  );
+  assert.ok(core("duty/autoswitch.rs").includes("pub const DEFAULT: Threshold = Threshold(95);"));
   assert.deepEqual(toast, {
     app: "Pitboard",
-    title: "personal has no weekly limit left",
+    title: "personal has used 95% of its weekly limit",
     tool: "Claude Code",
     body: "work has 60% of its own left.",
     button: "Switch",
   });
+});
+
+test("the questions' Windows shortcuts are AccountKeys.cs's: F2, Delete and Ctrl+C", () => {
+  const keys = shell("AccountKeys.cs");
+  assert.ok(keys.includes("VirtualKey.F2 when item.Offers.FirstOrDefault(Renames)"));
+  assert.ok(keys.includes("Intent: Intent.PresentSheet { Sheet: Sheet.Rename }"));
+  assert.ok(keys.includes("VirtualKey.Delete when item.Forget is { Enabled: true }"));
+  assert.ok(keys.includes("key == VirtualKey.C && control && item.Email.Length > 0 ? item.Email"));
+  const page = views("AccountsPage.xaml.cs");
+  assert.ok(page.includes("AccountKeys.Copied(args.Key, control, shown.Item)"));
+  assert.ok(page.includes("AccountKeys.Pressed(args.Key, shown.Item)"));
+  assert.ok(
+    repo("website/src/pages/index.astro").includes(
+      "include F2 to rename the account selected, Delete to forget it and Ctrl+C to copy its email address.",
+    ),
+  );
 });
