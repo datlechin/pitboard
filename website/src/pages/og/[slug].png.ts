@@ -1,8 +1,8 @@
 import type { APIRoute, GetStaticPaths } from "astro";
-import { ogImages } from "../../lib/og.ts";
+import { ogImages, socialPreview } from "../../lib/og.ts";
 
 export const getStaticPaths = (async () =>
-  (await ogImages()).map(({ slug, png }) => ({
+  [...(await ogImages()), await socialPreview()].map(({ slug, png }) => ({
     params: { slug },
     props: { png },
   }))) satisfies GetStaticPaths;

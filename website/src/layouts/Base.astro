@@ -5,7 +5,7 @@ import interUrl from "../assets/fonts/Inter-4.1-opsz-wght.woff2?url";
 import monoUrl from "../assets/fonts/JetBrainsMono-2.304-wght.woff2?url";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
-import { HEIGHT, WIDTH } from "../lib/card.ts";
+import { OPEN_GRAPH } from "../lib/card.ts";
 import { siteData } from "../lib/data.ts";
 import { ogImage, type CardName } from "../lib/og.ts";
 
@@ -81,8 +81,8 @@ const og = await ogImage(image);
     {canonical && <meta property="og:url" content={canonical} />}
     <meta property="og:image" content={new URL(og.path, Astro.site).href} />
     <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content={String(WIDTH)} />
-    <meta property="og:image:height" content={String(HEIGHT)} />
+    <meta property="og:image:width" content={String(OPEN_GRAPH.width)} />
+    <meta property="og:image:height" content={String(OPEN_GRAPH.height)} />
     <meta property="og:image:alt" content={og.alt} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image:alt" content={og.alt} />

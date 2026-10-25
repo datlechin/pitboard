@@ -4,8 +4,8 @@ import { test } from "node:test";
 import sharp from "sharp";
 import { TAGLINE } from "../data/site.ts";
 import {
-  HEIGHT,
-  WIDTH,
+  GITHUB,
+  OPEN_GRAPH,
   cards,
   darkColors,
   describe,
@@ -42,10 +42,19 @@ test("draws each card as an opaque 1200 by 630 PNG under 300 KB", async () => {
   for (const card of Object.values(cards) as Card[]) {
     const png = await render(card, assets);
     const meta = await sharp(png).metadata();
-    assert.deepEqual([meta.format, meta.width, meta.height], ["png", WIDTH, HEIGHT]);
+    assert.deepEqual(
+      [meta.format, meta.width, meta.height],
+      ["png", OPEN_GRAPH.width, OPEN_GRAPH.height],
+    );
     assert.equal(meta.hasAlpha, false);
     assert.ok(png.length < 300_000, `${card.kind} is ${png.length} bytes`);
   }
+});
+
+test("draws the home card at 2:1 for GitHub's social preview", async () => {
+  const meta = await sharp(await render(cards.home, assets, GITHUB)).metadata();
+  assert.deepEqual([meta.width, meta.height], [1280, 640]);
+  assert.equal(meta.hasAlpha, false);
 });
 
 test("describes the accounts the home card's menu shows", () => {
@@ -65,9 +74,11 @@ test("describes the accounts the home card's menu shows", () => {
 
 test("sets the tagline on the home card in three lines, the last on the menu's bottom edge", async () => {
   assert.equal(TAGLINE, "Switch AI coding tools between your accounts.");
-  const svg = await layout(cards.home, assets, { embedFont: false });
-  const lines = new Set(
-    [...svg.matchAll(/<text [^>]*y="([\d.]+)"[^>]*font-size="56"/g)].map((m) => m[1]),
-  );
-  assert.equal(lines.size, 3);
+  for (const size of [OPEN_GRAPH, GITHUB]) {
+    const svg = await layout(cards.home, assets, { embedFont: false, size });
+    const lines = new Set(
+      [...svg.matchAll(/<text [^>]*y="([\d.]+)"[^>]*font-size="56"/g)].map((m) => m[1]),
+    );
+    assert.equal(lines.size, 3, `${size.width} by ${size.height}`);
+  }
 });

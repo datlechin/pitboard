@@ -9,7 +9,7 @@ import mono from "../assets/fonts/JetBrainsMono-2.304-500.ttf?inline";
 import lockup from "../assets/logo/lockup-color.svg?raw";
 import template from "../assets/logo/template.svg?raw";
 import css from "../styles/global.css?raw";
-import { cards, describe, render, type Assets, type Card } from "./card.ts";
+import { GITHUB, cards, describe, render, type Assets, type Card } from "./card.ts";
 
 export type CardName = keyof typeof cards;
 
@@ -35,17 +35,26 @@ const assets: Assets = {
   ],
 };
 
+const slug = (name: string, png: Buffer) =>
+  `${name}-${createHash("sha256").update(png).digest("hex").slice(0, 8)}`;
+
 let drawing: Promise<OgImage[]> | null = null;
 
 export function ogImages(): Promise<OgImage[]> {
   drawing ??= Promise.all(
     (Object.entries(cards) as [CardName, Card][]).map(async ([name, card]) => {
       const png = await render(card, assets);
-      const slug = `${name}-${createHash("sha256").update(png).digest("hex").slice(0, 8)}`;
-      return { name, slug, path: `/og/${slug}.png`, png, alt: describe(card) };
+      const named = slug(name, png);
+      return { name, slug: named, path: `/og/${named}.png`, png, alt: describe(card) };
     }),
   );
   return drawing;
+}
+
+// The repository's social preview, which GitHub takes only as an upload in its settings
+export async function socialPreview(): Promise<{ slug: string; png: Buffer }> {
+  const png = await render(cards.home, assets, GITHUB);
+  return { slug: slug("github", png), png };
 }
 
 export async function ogImage(name: CardName): Promise<OgImage> {
