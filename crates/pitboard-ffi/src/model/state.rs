@@ -1630,10 +1630,13 @@ impl State {
             .map_or(0, |glancing| glancing.revision)
     }
 
-    // Kept only where it changed, and not once Pitboard is being removed.
+    // Kept where it changed, once the accounts are read, and not once Pitboard is being removed.
     pub(crate) fn glanced(&mut self, text: String) -> Option<Job> {
         let glancing = self.glancing.as_mut()?;
-        if self.removing.is_some() || glancing.written.as_ref() == Some(&text) {
+        if self.status.is_none()
+            || self.removing.is_some()
+            || glancing.written.as_ref() == Some(&text)
+        {
             return None;
         }
         glancing.written = Some(text.clone());

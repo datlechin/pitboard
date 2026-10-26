@@ -67,6 +67,16 @@ fn nothing_is_written_without_a_glance_file() {
     assert_eq!(model.count(glances), 0);
 }
 
+// A widget reading between the launch and the first read would show no accounts.
+#[test]
+fn nothing_is_written_before_the_accounts_are_read() {
+    let mut model = Hand::new();
+    model.state.glance_to_a_file();
+    model.send(Intent::Start);
+    assert_eq!(model.publish().glance_revision, 0);
+    assert_eq!(model.count(glances), 0);
+}
+
 #[test]
 fn the_glance_is_written_once_per_change_and_never_by_the_minute() {
     let mut machine = Stub::reading(Ok(two(10.0)));
