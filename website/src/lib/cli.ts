@@ -29,12 +29,10 @@ import {
   rename as renamed,
   setSchedule,
   setWarmRange,
-  shareOfLimit,
   turnWarmUp,
   typed,
   uninstallWatch,
   use as switched,
-  warmSaid,
   warmStanding,
   warmUp,
   watchInTerminal,
@@ -44,12 +42,16 @@ import {
 } from "./model.ts";
 import {
   escaped,
+  joined,
   moment,
+  notSwitching,
   renewalDue,
+  shareOfLimit,
   stamp,
   statusHeading,
   statusLine,
   statusLines,
+  warmSaid,
   whole,
 } from "./words.ts";
 import { DAY, ZONE, toolOn, tools, type Account, type Tool } from "../data/world.ts";
@@ -719,26 +721,6 @@ function watchUninstall(): Report {
   );
 }
 
-// words.rs `listed`
-const listed = (names: string[]) =>
-  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-
-// words.rs `not_switching`, at the share a watch switches at.
-function notSwitchingAt(why: Extract<Decision, { decided: "hold" }>["why"], share: number) {
-  switch (why.code) {
-    case "no_room": {
-      const room = `no other Claude Code account has room below ${share}% in every limit`;
-      return why.unread.length
-        ? `${room}, and there is no reading of ${listed(why.unread)} from Anthropic yet`
-        : room;
-    }
-    case "already_switched":
-      return "this limit was switched away from once already, and is not again before it resets";
-    case "settling":
-      return "the account was put in use less than 5 minutes ago";
-  }
-}
-
 // watch.rs `event`: what a decision came to, as a person reads it.
 function decisionLine(d: Decision, s: State, share: number): string | null {
   const from = s.accounts.find((a) => a.tool === "claude" && a.label === s.inUse.claude);
@@ -755,7 +737,7 @@ function decisionLine(d: Decision, s: State, share: number): string | null {
     }
     case "hold": {
       const until = d.why.code === "settling" ? ` It decides again at ${at(d.why.until)}.` : "";
-      return `${b(from!.label)} has used ${plain(shareOfLimit(d.limit))}. Pitboard is not switching: ${plain(notSwitchingAt(d.why, share))}.${until}`;
+      return `${b(from!.label)} has used ${plain(shareOfLimit(d.limit))}. Pitboard is not switching: ${plain(notSwitching(d.why, share))}.${until}`;
     }
     case "switch":
       return null;
@@ -777,7 +759,7 @@ const stamped = (s: State, line: string) => {
 function watchRun(s: State, share: number): Step {
   const on = s.accounts.filter((a) => a.tool === "claude" && s.warm.on.includes(a.id));
   const warms = on.length
-    ? `, and warms up ${listed(on.map((a) => b(a.label)))} from ${span(s)}`
+    ? `, and warms up ${joined(on.map((a) => b(a.label)))} from ${span(s)}`
     : "";
   // watch.rs `Told`
   let told = new Set<string>();

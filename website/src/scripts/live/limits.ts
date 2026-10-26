@@ -10,8 +10,6 @@ import { macShare, numberBox, type Share } from "./spin.ts";
 import { datePicker, timePicker, type Time } from "./time.ts";
 import { atLabel, warmHours } from "../../data/limits.ts";
 import {
-  atLimitNote,
-  autoStandingSaid,
   model,
   nextWarmUp,
   setChoice,
@@ -22,7 +20,7 @@ import {
   type AtLimit,
   type State,
 } from "../../lib/model.ts";
-import { menuTitle } from "../../lib/words.ts";
+import { atLimitNote, autoStandingSaid, menuTitle } from "../../lib/words.ts";
 
 const said = (el: Element | null, text: string) => {
   if (el && el.textContent!.trim() !== text) el.textContent = text;
