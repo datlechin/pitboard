@@ -53,7 +53,7 @@ private func settle() async {
     }
 }
 
-// What the inspector's own command, Option-Command-I, sends.
+// What the inspector's own command, Control-Command-I, sends.
 @MainActor
 private func splitView(in view: NSView?) -> NSSplitViewController? {
     guard let view else { return nil }

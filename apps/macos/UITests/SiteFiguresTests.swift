@@ -247,7 +247,8 @@ final class SiteFiguresTests: FixtureTestCase {
             }
         }
         let everyMenu = bar.filter { $0 != "Apple" }
-        look(everyMenu, "none")
+        // At first the window selects the account in use, work.
+        look(everyMenu, "first")
         personal.click()
         look(everyMenu, "personal")
         app.accountRow("claude/work").click()
@@ -266,27 +267,27 @@ final class SiteFiguresTests: FixtureTestCase {
             bar,
             ["Apple", "Pitboard", "File", "Edit", "View", "Go", "Account", "Window", "Help"])
         XCTAssertEqual(
-            titles("Pitboard none"),
+            titles("Pitboard first"),
             [
                 "About Pitboard", "Settings…", "Services", "Hide Pitboard", "Hide Others",
                 "Show All", "Quit Pitboard",
             ])
-        XCTAssertEqual(dimmed("Pitboard none"), ["Show All"])
+        XCTAssertEqual(dimmed("Pitboard first"), ["Show All"])
         XCTAssertEqual(
-            titles("File none"),
+            titles("File first"),
             ["Add Account…", "Open claude.ai", "Remove Website Data…", "Close", "Close All"])
-        XCTAssertEqual(dimmed("File none"), ["Remove Website Data…"])
+        XCTAssertEqual(dimmed("File first"), ["Remove Website Data…"])
         XCTAssertEqual(
-            titles("View none"),
-            ["Refresh", "Actual Size", "Zoom In", "Zoom Out", "Enter Full Screen"])
+            titles("View first"),
+            [
+                "Refresh", "Actual Size", "Zoom In", "Zoom Out", "Hide Inspector",
+                "Enter Full Screen",
+            ])
         XCTAssertEqual(
-            dimmed("View none"), ["Actual Size", "Zoom In", "Zoom Out", "Enter Full Screen"])
-        XCTAssertEqual(titles("Go none"), ["Back", "Forward"])
-        XCTAssertEqual(dimmed("Go none"), ["Back", "Forward"])
-        XCTAssertEqual(titles("Help none"), ["Pitboard Help"])
-        XCTAssertEqual(
-            titles("Account none"), ["Switch", "Sign In Again…", "Rename…", "Remove Account…"])
-        XCTAssertEqual(dimmed("Account none"), titles("Account none"))
+            dimmed("View first"), ["Actual Size", "Zoom In", "Zoom Out", "Enter Full Screen"])
+        XCTAssertEqual(titles("Go first"), ["Back", "Forward"])
+        XCTAssertEqual(dimmed("Go first"), ["Back", "Forward"])
+        XCTAssertEqual(titles("Help first"), ["Pitboard Help"])
         XCTAssertEqual(
             titles("Account personal"),
             [
@@ -303,12 +304,13 @@ final class SiteFiguresTests: FixtureTestCase {
         )
         XCTAssertEqual(
             dimmed("Account work"), ["Switch to work", "Warm Up Now", "Remove Account…"])
+        XCTAssertEqual(titles("Account first"), titles("Account work"))
+        XCTAssertEqual(dimmed("Account first"), dimmed("Account work"))
         XCTAssertEqual(
-            dimmed("Edit none"),
-            ["Undo", "Redo", "Cut", "Copy", "Paste", "Delete", "Select All"])
+            dimmed("Edit first"), ["Undo", "Redo", "Cut", "Paste", "Select All"])
         XCTAssertEqual(dimmed("Edit personal"), ["Undo", "Redo", "Cut", "Paste", "Select All"])
-        XCTAssertEqual(dimmed("Window none"), ["Full Screen Tile", "Remove Window from Set"])
-        XCTAssertEqual(dimmed("Help none"), [])
+        XCTAssertEqual(dimmed("Window first"), ["Full Screen Tile", "Remove Window from Set"])
+        XCTAssertEqual(dimmed("Help first"), [])
         XCTAssertFalse(asked)
     }
 

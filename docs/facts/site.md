@@ -223,18 +223,19 @@ names runs was read in those alone.
   Find ›, Spelling and Grammar ›, Substitutions ›, Transformations ›, Speech ›; AutoFill ›,
   Start Dictation… fn D, Emoji & Symbols fn E. Undo, Redo, Cut, Paste and Select All are dimmed.
   Copy and Delete are dimmed with no account selected, and enabled with one. Delete shows no key.
-- View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Enter Full Screen fn F. Actual
-  Size, Zoom In, Zoom Out and Enter Full Screen are dimmed.
+- View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Hide Inspector ⌃⌘I, Enter Full
+  Screen fn F. Actual Size, Zoom In, Zoom Out and Enter Full Screen are dimmed. Hide Inspector is
+  `InspectorCommands`' own, with a symbol before it (run 40404550549).
 - Go: Back ⌘[, Forward ⌘]. Back and Forward are dimmed.
 - Account, with no account selected: Switch, Sign In Again…, Rename…, Remove Account… ⌘⌫, all
-  dimmed. With personal selected: Switch to personal, Sign In Again…, Rename…, Warm Up Now,
-  dimmed; Open claude.ai; Remove Account… ⌘⌫. With work, the account in use, selected: the same
-  with Switch to work, Warm Up Now and Remove Account… dimmed, and ⌘⌫ asks nothing. No item is
-  red.
-- Window is macOS's own: Minimize ⌘M, Zoom, Fill ⌃fn F, Center ⌃fn C; Move & Resize ›; Full
-  Screen Tile; Remove Window from Set; Pitboard; Bring All to Front. Full Screen Tile and Remove
-  Window from Set are dimmed. Under ⌥, Minimize All, Zoom All and Arrange in Front take their
-  places.
+  dimmed. The window selects work, the account in use, as it opens, so at first the menu is work's
+  (run 40404550549). With personal selected: Switch to personal, Sign In Again…, Rename…, Warm Up
+  Now, dimmed; Open claude.ai; Remove Account… ⌘⌫. With work, the account in use, selected: the same
+  with Switch to work, Warm Up Now and Remove Account… dimmed, and ⌘⌫ asks nothing. No item is red.
+- Window: Minimize ⌘M, Zoom, Fill ⌃fn F, Center ⌃fn C; Move & Resize ›; Full Screen Tile; Remove
+  Window from Set; Accounts, Diagnostics, Activity, the app's windows, with no symbol (run
+  40404550549); Bring All to Front. Full Screen Tile and Remove Window from Set are dimmed. Under ⌥,
+  Minimize All, Zoom All and Arrange in Front take their places.
 - Help: macOS's search field, then Pitboard Help.
 - About Pitboard opens the standard About panel, a dialog of 284 by 170 points whose close
   button alone is enabled: the app's icon, "Pitboard" in bold, and the version and build,
@@ -261,9 +262,10 @@ names runs was read in those alone.
   `testSelectingAndTypingInTheAccountList` and read from source before a run of it). A click
   selects a row, in the accent colour with white text, and the inspector shows that account. Up
   and Down move the selection. Typing an account's name selects it: "w" selects work.
-- The window has no sidebar: Diagnostics and Activity are windows of their own in the Window
-  menu. Option-Command-I and the toolbar's Inspector hide the inspector and show it again, and the
-  list keeps the keyboard (`testTheInspectorHidesAndTheListKeepsTheKeyboard`).
+- The window has no sidebar: Diagnostics and Activity are windows of their own in the Window menu.
+  Control-Command-I, the View menu's Hide Inspector in run 40404550549, and the toolbar's Inspector
+  hide the inspector and show it again, and the list keeps the keyboard
+  (`testTheInspectorHidesAndTheListKeepsTheKeyboard`).
 - **Switch** switches without selecting its row.
 - A right click on a row not selected leaves the selection where it was and draws an accent
   outline round the row clicked. The shortcut menu acts on that row: Switch to personal, Sign In

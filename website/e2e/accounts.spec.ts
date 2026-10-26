@@ -337,7 +337,7 @@ test.describe("on macOS", () => {
     await expect(inspector.getByRole("button", { name: "Switch to spare" })).toBeHidden();
   });
 
-  test("the toolbar's Inspector and ⌥⌘I hide the inspector and show it again", async ({ page }) => {
+  test("the toolbar's Inspector and ⌃⌘I hide the inspector and show it again", async ({ page }) => {
     const { fig, grid } = await accounts(page, "macos");
     const inspector = fig.locator('[data-part="inspector"]');
     const button = fig.getByRole("button", { name: "Inspector" });
@@ -346,7 +346,7 @@ test.describe("on macOS", () => {
     await expect(inspector).toBeHidden();
     await expect(button).toHaveAttribute("aria-expanded", "false");
     await grid.focus();
-    await page.keyboard.press("Alt+Meta+KeyI");
+    await page.keyboard.press("Control+Meta+KeyI");
     await expect(inspector).toBeVisible();
     await expect(button).toHaveAttribute("aria-expanded", "true");
   });

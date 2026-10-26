@@ -62,7 +62,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
   switched until that limit resets.
 - The macOS app's window has an inspector of the selected account, shown at first and hidden or
-  shown with Option-Command-I: its email, each limit's reset and the time left to it, its
+  shown with Control-Command-I: its email, each limit's reset and the time left to it, its
   sign-in, its warm-up with **Warm-Up Settings**, and what its shortcut menu offers.
 - The macOS menu offers to sign in again to each account that needs it, above the accounts.
 - The macOS app opens a welcome at its first launch, before the accounts, which says Pitboard

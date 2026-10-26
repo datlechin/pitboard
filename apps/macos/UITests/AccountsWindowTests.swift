@@ -369,7 +369,7 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(switchTo.waitForNonExistence(timeout: 5), "not to the account in use")
     }
 
-    // The list keeps the keyboard beside the inspector, which Option-Command-I hides.
+    // The list keeps the keyboard beside the inspector, which Control-Command-I hides.
     @MainActor
     func testTheInspectorHidesAndTheListKeepsTheKeyboard() {
         let app = launch(.oneTool)
@@ -389,7 +389,7 @@ final class AccountsWindowTests: FixtureTestCase {
             personal.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 10),
             "Return switches")
 
-        app.typeKey("i", modifierFlags: [.command, .option])
+        app.typeKey("i", modifierFlags: [.command, .control])
         XCTAssertTrue(inspector.waitForNonExistence(timeout: 5))
         let toggle = app.accountsWindow.toolbars.buttons["toolbar.inspector"]
         XCTAssertTrue(toggle.exists)

@@ -357,10 +357,10 @@ export class AccountsWindow extends LiveFigure {
       e.preventDefault();
       this.#ask("forget", this.#grid.selected);
     });
-    // ⌥⌘I, InspectorCommands' Show and Hide Inspector
+    // ⌃⌘I, InspectorCommands' Show and Hide Inspector
     this.addEventListener("keydown", (e) => {
       if (this.system !== "macos" || e.defaultPrevented || !this.#inspectorPanel()) return;
-      if (!e.metaKey || !e.altKey || e.code !== "KeyI") return;
+      if (!e.metaKey || !e.ctrlKey || e.code !== "KeyI") return;
       e.preventDefault();
       this.#showInspector(this.window.dataset.state === "collapsed");
     });
@@ -678,7 +678,7 @@ export class AccountsWindow extends LiveFigure {
     return this.querySelector<HTMLElement>('[data-part="inspector"]');
   }
 
-  // ⌥⌘I and the toolbar's Inspector
+  // ⌃⌘I and the toolbar's Inspector
   #showInspector(on: boolean) {
     if (!this.#inspectorPanel()) return;
     if (on) delete this.window.dataset.state;
