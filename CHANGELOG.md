@@ -39,7 +39,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
-- The macOS menu bar mark has a dot while the menu opens on something that needs attention.
+- The macOS menu bar mark carries a badge while the menu opens on something that needs
+  attention.
 - The Windows app's icon shows how much of its limit the account in use has left, none before it
   has a reading, and Windows' warning symbol while its menu opens on something that needs
   attention.

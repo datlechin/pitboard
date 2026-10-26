@@ -18,7 +18,9 @@ struct MenuBarLabel: View {
         // first, and an item that is only text is the widest thing up there. A Label would
         // render as the icon alone, so both are placed by hand.
         HStack(spacing: 4) {
-            Image(nsImage: model.menuBar.attention ? MenuBarMark.attention : MenuBarMark.image)
+            // Hierarchical draws the board's second row dimmed, as the app icon has it.
+            Image(model.menuBar.symbol)
+                .symbolRenderingMode(.hierarchical)
             if !title.isEmpty {
                 Text(title).monospacedDigit()
             }
@@ -45,4 +47,9 @@ struct MenuBarLabel: View {
             }
         }
     }
+}
+
+// Symbols in the app's asset catalog; the badge says the menu has something to look at.
+extension MenuBarText {
+    var symbol: String { attention ? "pitboard.badge.exclamationmark" : "pitboard" }
 }
