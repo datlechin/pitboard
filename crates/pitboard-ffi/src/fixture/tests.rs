@@ -115,7 +115,11 @@ fn each_fixture_starts_where_its_tests_expect() {
                 "codex/main, in use",
                 "codex/spare",
             ],
-            World::OneTool | World::Stuck | World::WarmUp | World::LeftInFile => {
+            World::OneTool
+            | World::Stuck
+            | World::WarmUp
+            | World::LeftInFile
+            | World::SwitchedByItself => {
                 vec![work, "claude/personal"]
             }
             World::LoginReplaced => vec!["claude/personal, in use", "claude/work, login_replaced"],
@@ -222,8 +226,34 @@ fn the_ui_tests_name_every_fixture_as_the_app_does() {
             "warmUp",
             "leftInFile",
             "loginReplaced",
+            "switchedByItself",
         ]
     );
+}
+
+/// Work is at 97% of its five-hour limit and personal has room, so the app switches Claude
+/// Code to personal by itself as it starts, and its notice offers Switch Back.
+#[test]
+fn an_account_at_its_limit_is_switched_away_from_as_the_app_starts() {
+    let launched = made(World::SwitchedByItself);
+    let (model, told) = started(&launched);
+    let switched = told.last_where("personal in use, with Switch Back", |snapshot| {
+        uses(snapshot, "claude/personal")
+            && snapshot.notices.iter().any(|notice| {
+                notice
+                    .actions
+                    .iter()
+                    .any(|action| matches!(action.intent, Intent::SwitchBack { .. }))
+            })
+    });
+    let notice = switched
+        .notices
+        .iter()
+        .find(|notice| notice.id == "switch/claude")
+        .expect("the switch's notice");
+    assert_eq!(notice.title, words::switched_to(None, "personal"));
+    assert_eq!(notice.actions[0].title, words::switch_back(OS));
+    model.shutdown();
 }
 
 /// An account turned on for warm-ups whose five-hour period is not running is warmed up as

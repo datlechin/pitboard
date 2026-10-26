@@ -18,6 +18,7 @@ enum Fixture: String {
     case warmUp
     case leftInFile
     case loginReplaced
+    case switchedByItself
 }
 
 /// Every UI test case: a test stops at its first failure, and starts the app only here.
