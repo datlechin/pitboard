@@ -26,7 +26,7 @@ struct AccountPicker: View {
                     noLink.title, systemImage: Symbol.site, description: Text(noLink.detail))
                 HStack {
                     Spacer()
-                    Button("Close") { dismissWindow() }
+                    Button(words.window.close) { dismissWindow() }
                         .keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("picker.close")
                 }
@@ -75,7 +75,7 @@ struct AccountPicker: View {
             Text(reason).explanatory()
                 .accessibilityIdentifier("picker.detail")
             buttons {
-                Button("OK") { dismiss() }
+                Button(words.window.ok) { dismiss() }
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("picker.ok")
             }
@@ -131,7 +131,7 @@ struct AccountPicker: View {
     }
 
     private var cancelButton: some View {
-        Button("Cancel", role: .cancel) { dismiss() }
+        Button(words.window.cancel, role: .cancel) { dismiss() }
             .keyboardShortcut(.cancelAction)
             .accessibilityIdentifier("picker.cancel")
     }
@@ -168,7 +168,7 @@ private struct LinkLine: View {
             .truncationMode(.middle)
             .textSelection(.enabled)
             .help(url)
-            .accessibilityLabel("Link")
+            .accessibilityLabel(words.accountWindow.link ?? "")
             .accessibilityValue(url)
     }
 }

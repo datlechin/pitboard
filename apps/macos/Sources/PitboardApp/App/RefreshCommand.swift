@@ -17,7 +17,7 @@ struct RefreshCommands: Commands {
 
     var body: some Commands {
         CommandGroup(before: .toolbar) {
-            Button(refresh?.title ?? "Refresh") { refresh?.perform() }
+            Button(refresh?.title ?? words.menu.refresh) { refresh?.perform() }
                 .keyboardShortcut("r")
                 .disabled(refresh == nil || refresh?.disabled == true)
             Divider()

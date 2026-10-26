@@ -9,7 +9,7 @@ struct AccountWindowScene: Scene {
     let windows: AccountWindows
 
     var body: some Scene {
-        WindowGroup("Account", id: Self.id, for: UUID.self) { $store in
+        WindowGroup(words.menu.account, id: Self.id, for: UUID.self) { $store in
             AccountWindowView(windows: windows, store: store)
         }
         .defaultSize(width: 1100, height: 800)
@@ -27,29 +27,29 @@ struct AccountWindowCommands: Commands {
             Divider()
             SiteMenuItems(windows: windows)
             Divider()
-            Button("Remove Website Data…") { session?.removalAsked = true }
+            Button(words.accountWindow.removeWebsiteData) { session?.removalAsked = true }
                 .disabled(session == nil)
         }
         // Edit > Find, which a window's find bar answers.
         TextEditingCommands()
         CommandGroup(after: .toolbar) {
-            Button("Actual Size") { session?.page.zoom(.actualSize) }
+            Button(words.accountWindow.actualSize) { session?.page.zoom(.actualSize) }
                 .keyboardShortcut("0")
                 .disabled(session == nil)
-            Button("Zoom In") { session?.page.zoom(.zoomIn) }
+            Button(words.accountWindow.zoomIn) { session?.page.zoom(.zoomIn) }
                 .keyboardShortcut("+")
                 .disabled(session == nil)
-            Button("Zoom Out") { session?.page.zoom(.zoomOut) }
+            Button(words.accountWindow.zoomOut) { session?.page.zoom(.zoomOut) }
                 .keyboardShortcut("-")
                 .disabled(session == nil)
             Divider()
         }
         // Finder's Go menu, with Safari's shortcuts for going back and forward.
-        CommandMenu("Go") {
-            Button("Back") { session?.page.goBack() }
+        CommandMenu(words.accountWindow.go) {
+            Button(words.accountWindow.back) { session?.page.goBack() }
                 .keyboardShortcut("[")
                 .disabled(session?.page.canGoBack != true)
-            Button("Forward") { session?.page.goForward() }
+            Button(words.accountWindow.forward) { session?.page.goForward() }
                 .keyboardShortcut("]")
                 .disabled(session?.page.canGoForward != true)
         }

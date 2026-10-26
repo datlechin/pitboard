@@ -88,7 +88,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if !menu.items.isEmpty { menu.addItem(.separator()) }
         let main = NSMenuItem(
-            title: "Open Pitboard", action: #selector(openMainWindow), keyEquivalent: "")
+            title: words.menu.openPitboard, action: #selector(openMainWindow),
+            keyEquivalent: "")
         main.target = self
         menu.addItem(main)
         return menu
@@ -133,7 +134,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = question.title
         alert.informativeText = question.message
         alert.addButton(withTitle: question.confirm)
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: words.window.cancel)
         // Quit is often chosen from the menu bar item's menu, which leaves the app behind
         // whatever is in front, and an alert from it would come up behind as well.
         NSApp.activate()
