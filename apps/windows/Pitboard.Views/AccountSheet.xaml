@@ -3,6 +3,7 @@
     x:Class="Pitboard.Views.AccountSheet"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shown="using:Pitboard.Windows"
     Style="{StaticResource DefaultContentDialogStyle}"
     AutomationProperties.AutomationId="sheet"
     PrimaryButtonClick="OnPrimaryButtonClick"
@@ -37,20 +38,20 @@
         </Grid>
         <RadioButtons
             x:Name="ToolPicker"
-            Header="Tool"
+            Header="{x:Bind shown:Words.Sheet.Tool}"
             AutomationProperties.AutomationId="sheet.tool"
             SelectionChanged="OnToolChanged" />
         <StackPanel x:Name="AccountPart">
           <!-- Labelled as a field's header is, and selectable as read-only text is: Microsoft's text box guidance. -->
           <TextBlock
-              Text="Account"
+              Text="{x:Bind shown:Words.Sheet.Account}"
               Margin="{StaticResource TextBoxTopHeaderMargin}"
               Foreground="{ThemeResource TextControlHeaderForeground}" />
           <TextBlock x:Name="AccountText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
         </StackPanel>
         <TextBox
             x:Name="NameField"
-            Header="Name"
+            Header="{x:Bind shown:Words.Sheet.Name}"
             AutomationProperties.AutomationId="sheet.name"
             AutomationProperties.IsRequiredForForm="True"
             TextChanged="OnNameChanged" />
@@ -59,17 +60,17 @@
           <TextBlock x:Name="WorkingText" VerticalAlignment="Center" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel x:Name="Link" Spacing="8">
-          <TextBlock Text="Sign-in page" />
+          <TextBlock Text="{x:Bind shown:Words.Sheet.SignInPage}" />
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <Button x:Name="CopyLink" Content="Copy link" AutomationProperties.AutomationId="sheet.copyLink" Click="OnCopyLink" />
-            <Button x:Name="OpenLink" Content="Open" AutomationProperties.AutomationId="sheet.openLink" Click="OnOpenLink" />
+            <Button x:Name="CopyLink" Content="{x:Bind shown:Words.Sheet.CopyLink}" AutomationProperties.AutomationId="sheet.copyLink" Click="OnCopyLink" />
+            <Button x:Name="OpenLink" Content="{x:Bind shown:Words.Sheet.Open}" AutomationProperties.AutomationId="sheet.openLink" Click="OnOpenLink" />
           </StackPanel>
         </StackPanel>
         <StackPanel x:Name="CodePart">
           <TextBox
               x:Name="CodeField"
-              Header="Code"
-              PlaceholderText="Paste the code from your browser"
+              Header="{x:Bind shown:Words.Sheet.Code}"
+              PlaceholderText="{x:Bind shown:Words.Sheet.PasteCode}"
               IsSpellCheckEnabled="False"
               IsTextPredictionEnabled="False"
               AutomationProperties.AutomationId="sheet.code"

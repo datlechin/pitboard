@@ -269,7 +269,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         RefusedBar.Margin = new Thickness(0, text.Refused is null ? 0 : 8, 0, 0);
         RefusedBar.IsOpen = text.Refused is not null;
         Describe(CodeField, text.CodeNote);
-        PrimaryButtonText = running.WantsCode ? "Submit code" : "";
+        PrimaryButtonText = running.WantsCode ? Words.Sheet.SubmitCode : "";
         SecondaryButtonText = text.Undo?.Title ?? "";
         DefaultButton = running.WantsCode ? ContentDialogButton.Primary : ContentDialogButton.None;
         Announce(text.Announce);

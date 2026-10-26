@@ -15,5 +15,7 @@ public static class Words
 
     public static SettingsWords Settings => All.Settings;
 
+    public static SheetWords Sheet => All.Sheet;
+
     public static AccountWindowWords AccountWindow => All.AccountWindow;
 }
