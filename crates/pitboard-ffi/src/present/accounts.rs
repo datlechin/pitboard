@@ -261,11 +261,12 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         Some(RowEnd::Switching {
             spoken: words::SWITCHING.into(),
         })
-    } else if in_use {
+    } else if in_use && action.is_none() {
         Some(RowEnd::InUse {
             title: words::in_use(seen.os),
         })
     } else {
+        // The login in use has an action only while it has no name: Add.
         action.clone().map(|action| RowEnd::Button { action })
     };
     let warm_note = warm_note(seen, account);

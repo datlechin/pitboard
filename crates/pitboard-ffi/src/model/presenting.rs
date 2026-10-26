@@ -640,6 +640,14 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         })
     );
     assert_eq!(
+        unnamed.end,
+        unnamed
+            .action
+            .clone()
+            .map(|action| RowEnd::Button { action }),
+        "added from its row, where In use would stand"
+    );
+    assert_eq!(
         unnamed.action.map(|action| (action.title, action.spoken)),
         Some((
             words::add_account_signed_in(None),

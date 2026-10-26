@@ -15,7 +15,7 @@ use crate::model::{
 };
 use crate::present::testing::Utc;
 use crate::present::words;
-use crate::present::{AccountItem, AccountsShown, Footing};
+use crate::present::{AccountItem, AccountsShown, Footing, RowEnd};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::{self, ProviderId};
@@ -1221,11 +1221,14 @@ fn the_login_in_use_is_offered_a_name() {
     let launched = made(World::Unnamed);
     let (model, told) = started(&launched);
     let shown = told.last_where("the accounts read", read_in);
+    let Some(RowEnd::Button { action }) = &shown.sections[0].accounts[0].end else {
+        panic!("no button on the row");
+    };
     assert_eq!(
-        (shown.sections[0].accounts[0].action.as_ref()).map(|action| &action.intent),
-        Some(&Intent::Enrol {
+        action.intent,
+        Intent::Enrol {
             provider: "claude".into()
-        })
+        }
     );
     model.send(Intent::Enrol {
         provider: "claude".into(),
