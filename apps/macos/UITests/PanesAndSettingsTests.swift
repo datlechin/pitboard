@@ -133,9 +133,9 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testWarmingUpAccounts() {
         let app = launch(.warmUp)
         app.openWindow()
-        let personal = app.accountRow("claude/personal")
-        XCTAssertTrue(personal.waitForExistence(timeout: 5))
-        personal.click()
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
         let warmed = app.control("inspector").text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30), "personal is warmed up")
 
