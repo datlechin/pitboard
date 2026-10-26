@@ -238,7 +238,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         Some((None, at)) => (at, true),
         None => (None, false),
     };
-    let life = until.map(|at| words::saved_until(&seen.date_and_time_of(at), lapses));
+    let life = until.map(|at| words::saved_until(&seen.date_of(at), lapses));
     let expiring = until
         .filter(|_| account.standing == status::Standing::Expiring)
         .map(|at| words::sign_in_expires(at - seen.now, lapses));

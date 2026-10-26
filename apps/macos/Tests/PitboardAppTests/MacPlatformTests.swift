@@ -111,6 +111,22 @@ private final class Opened: @unchecked Sendable {
     #expect(try !twentyFour.sameDay(first: at, second: at + 10 * 3600), "past midnight in UTC")
 }
 
+// "Saved sign-in valid until Nov 20": the person's calendar orders the day and its month.
+@Test func aDateIsItsDayAndShortMonth() throws {
+    let utc = TimeZone(identifier: "UTC")!
+    // 14:05 UTC on Wednesday 14 January 2026.
+    let at: Int64 = 1_768_399_500
+    let american = MacLocalTime(
+        locale: Locale(identifier: "en_US"), calendar: Calendar(identifier: .gregorian),
+        timeZone: utc)
+    let british = MacLocalTime(
+        locale: Locale(identifier: "en_GB"), calendar: Calendar(identifier: .gregorian),
+        timeZone: utc)
+
+    #expect(try american.date(epoch: at) == "Jan 14")
+    #expect(try british.date(epoch: at) == "14 Jan")
+}
+
 /// The warm-up hours are said on the clock the time pickers beside them show.
 @Test func aTimeOfDayIsTheClocks() throws {
     let utc = TimeZone(identifier: "UTC")!

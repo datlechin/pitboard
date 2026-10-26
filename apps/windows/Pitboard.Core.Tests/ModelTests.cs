@@ -30,6 +30,8 @@ public sealed class ModelTests
 
         public string TimeOfDay(ushort minutes) =>
             TimeSpan.FromMinutes(minutes).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+
+        public string Date(long epoch) => At(epoch).ToString("MMM d", CultureInfo.InvariantCulture);
     }
 
     private sealed class Posting : Notifications

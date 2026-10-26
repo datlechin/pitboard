@@ -570,6 +570,10 @@ mod tests {
             let half = if hours < 12 { "AM" } else { "PM" };
             Ok(format!("{}:{minutes:02} {half}", (hours + 11) % 12 + 1))
         }
+
+        fn date(&self, epoch: i64) -> Result<String, PlatformError> {
+            Utc.date(epoch)
+        }
     }
 
     fn hours(from: u16, to: u16, clock: &dyn LocalTime) -> String {

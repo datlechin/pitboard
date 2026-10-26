@@ -454,7 +454,7 @@ fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
             email: Some("spare@example.com".into()),
             plan: Some("Max 5x".into()),
             signed_in_until: Some(lasting),
-            sign_in: Some(words::saved_until("Tue 12:00", false)),
+            sign_in: Some(words::saved_until("Feb 3", false)),
             warm: None,
             read_at: Some(NOON - 300),
             read: Some(words::updated("11:55")),
@@ -1294,7 +1294,7 @@ fn a_saved_sign_ins_life_is_said_only_of_an_account_not_in_use() {
     let spare = described(account(Some("spare")).parked_until(parking).build());
     assert_eq!(
         spare.detail.sign_in,
-        Some(words::saved_until("Sat 12:01", false))
+        Some(words::saved_until("Jan 17", false))
     );
     assert!(
         spare.lines.is_empty(),

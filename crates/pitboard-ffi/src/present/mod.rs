@@ -234,7 +234,7 @@ pub struct AccountDetail {
     pub plan: Option<String>,
     // when its parked login stops working, for an account not in use
     pub signed_in_until: Option<i64>,
-    // "In Use", "Saved sign-in valid until Nov 20, 2026 at 3:45 PM", "Sign-in expired"
+    // "In use", "Saved sign-in valid until Nov 20", "Sign-in expired"
     pub sign_in: Option<String>,
     // for a Claude Code account Pitboard can warm up
     pub warm: Option<WarmDetail>,
@@ -730,9 +730,8 @@ impl<'a> Seen<'a> {
         clock_of(self.local, at, self.now)
     }
 
-    // A moment as the person's calendar and clock say it, or in UTC where they can't.
-    pub(crate) fn date_and_time_of(&self, at: i64) -> String {
-        (self.local.date_and_time(at)).unwrap_or_else(|_| words::utc_clock(at, self.now))
+    pub(crate) fn date_of(&self, at: i64) -> String {
+        (self.local.date(at)).unwrap_or_else(|_| words::utc_date(at))
     }
 
     pub(crate) fn time_of_day(&self, minutes: u16) -> Option<String> {
@@ -1035,6 +1034,18 @@ mod tests {
         let seen = Seen::new(&state, MIDDAY, &Unreadable, OS);
         assert_eq!(seen.clock(MIDDAY + 2 * 3600), "14:00 UTC");
         assert_eq!(seen.clock(MIDDAY + 3 * 86_400), "Sat 12:00 UTC");
+    }
+
+    // A day is the person's calendar's, and UTC's, named so, where the app's code can't say it.
+    #[test]
+    fn a_date_is_the_persons_or_utcs_named_so() {
+        let state = State::new(Cadence::APP);
+        let at = MIDDAY + 37 * 86_400;
+        assert_eq!(Seen::new(&state, MIDDAY, &Utc, OS).date_of(at), "Feb 20");
+        assert_eq!(
+            Seen::new(&state, MIDDAY, &Unreadable, OS).date_of(at),
+            "Feb 20 UTC"
+        );
     }
 
     /// The log keeps local time with its offset. The same moment written in three time zones

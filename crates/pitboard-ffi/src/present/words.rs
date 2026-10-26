@@ -842,6 +842,17 @@ pub(crate) fn utc_clock(epoch: i64, now: i64) -> String {
     format!("{weekday} {time}")
 }
 
+// A day where the person's calendar could not say it, as `utc_clock` says its time: "Nov 20 UTC".
+pub(crate) fn utc_date(epoch: i64) -> String {
+    jiff::Timestamp::from_second(epoch)
+        .map(|at| {
+            at.to_zoned(jiff::tz::TimeZone::UTC)
+                .strftime("%b %-d UTC")
+                .to_string()
+        })
+        .unwrap_or_default()
+}
+
 /// How a sentence names the machine the app runs on, as the account windows' alerts do.
 pub(crate) fn this_machine(os: Os) -> &'static str {
     crate::account_windows::this_machine(os)
@@ -3243,13 +3254,14 @@ mod tests {
         );
         assert_eq!(sign_in_expires(-1, true), "Sign-in may have expired");
         assert_eq!(
-            saved_until("Nov 20, 2026 at 3:45 PM", false),
-            "Saved sign-in valid until Nov 20, 2026 at 3:45 PM"
+            saved_until("Nov 20", false),
+            "Saved sign-in valid until Nov 20"
         );
         assert_eq!(
-            saved_until("Nov 20, 2026 at 3:45 PM", true),
-            "Saved sign-in may expire after Nov 20, 2026 at 3:45 PM"
+            saved_until("Nov 20", true),
+            "Saved sign-in may expire after Nov 20"
         );
+        assert_eq!(utc_date(1_795_132_800), "Nov 20 UTC");
     }
 
     #[test]

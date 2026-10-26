@@ -1930,6 +1930,10 @@ impl LocalTime for Twelve {
     fn time_of_day(&self, minutes: u16) -> Result<String, PlatformError> {
         Utc.time_of_day(minutes)
     }
+
+    fn date(&self, epoch: i64) -> Result<String, PlatformError> {
+        Utc.date(epoch)
+    }
 }
 
 /// This PC said when Anthropic named the account in use in the command line's 24 hours,

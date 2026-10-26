@@ -342,6 +342,16 @@ impl LocalTime for Utc {
     fn time_of_day(&self, minutes: u16) -> Result<String, PlatformError> {
         Ok(format!("{:02}:{:02}", minutes / 60, minutes % 60))
     }
+
+    fn date(&self, epoch: i64) -> Result<String, PlatformError> {
+        let at = jiff::Timestamp::from_second(epoch).map_err(|error| PlatformError::Failed {
+            reason: error.to_string(),
+        })?;
+        Ok(at
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .strftime("%b %-d")
+            .to_string())
+    }
 }
 
 /// A person's clock that the app's own code cannot read, as one whose formatter throws.
@@ -367,6 +377,12 @@ impl LocalTime for Unreadable {
     }
 
     fn time_of_day(&self, _minutes: u16) -> Result<String, PlatformError> {
+        Err(PlatformError::Failed {
+            reason: "no formatter".into(),
+        })
+    }
+
+    fn date(&self, _epoch: i64) -> Result<String, PlatformError> {
         Err(PlatformError::Failed {
             reason: "no formatter".into(),
         })

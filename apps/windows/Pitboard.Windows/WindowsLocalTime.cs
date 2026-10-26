@@ -23,4 +23,8 @@ public sealed class WindowsLocalTime(CultureInfo? culture = null, TimeZoneInfo? 
     public string DateAndTime(long epoch) => At(epoch).ToString("g", Culture);
 
     public string TimeOfDay(ushort minutes) => DateTime.MinValue.AddMinutes(minutes).ToString("t", Culture);
+
+    // The culture's own order of day and month, its month abbreviated: "Nov 20", "20 Nov".
+    public string Date(long epoch) =>
+        At(epoch).ToString(Culture.DateTimeFormat.MonthDayPattern.Replace("MMMM", "MMM", StringComparison.Ordinal), Culture);
 }

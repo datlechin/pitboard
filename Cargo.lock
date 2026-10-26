@@ -1376,6 +1376,7 @@ dependencies = [
 name = "pitboard-ffi"
 version = "1.0.0-beta.5"
 dependencies = [
+ "jiff",
  "pitboard-core",
  "pitboard-sites",
  "serde",
