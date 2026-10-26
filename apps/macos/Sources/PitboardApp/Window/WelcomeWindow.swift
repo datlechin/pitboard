@@ -107,7 +107,6 @@ private struct WelcomeToolRow: View {
                 Text(account)
             }
         }
-        .accessibilityIdentifier("welcome.tool.\(tool.code)")
     }
 }
 
