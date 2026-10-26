@@ -335,8 +335,8 @@ final class SiteFiguresTests: FixtureTestCase {
     func testReturnInTheForgetAlert() {
         let app = launch(.oneTool)
         let personal = askToForgetPersonal(app)
-        let forget = app.alert.buttons["Remove"]
-        let cancel = app.alert.buttons["Cancel"]
+        let forget = app.alertAnswer
+        let cancel = app.alertCancel
         let sheet = app.sheets["alert"].exists
         let dialogs = app.dialogs.count
         let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Remove" : "Remove, Cancel"
@@ -367,7 +367,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let keptAfterPeriod = personal.exists
         if period {
             app.typeKey(.delete, modifierFlags: .command)
-            XCTAssertTrue(app.alert.buttons["Remove"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
         }
         app.typeKey(.escape, modifierFlags: [])
         let escape = app.alert.waitForNonExistence(timeout: 3)
@@ -386,7 +386,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testWhereFocusGoesAfterForget() {
         let app = launch(.oneTool)
         let personal = askToForgetPersonal(app)
-        app.alert.buttons["Remove"].click()
+        app.alertAnswer.click()
         XCTAssertTrue(personal.waitForNonExistence(timeout: 5))
         sleep(1)
         let window = app.windows["main"]
@@ -480,21 +480,23 @@ final class SiteFiguresTests: FixtureTestCase {
         let window = app.windows["main"]
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
-        let use = personal.buttons["Switch to personal"]
+        let use = personal.buttons["account.action"]
         XCTAssertTrue(use.waitForExistence(timeout: 5))
+        let inUseLabel = personal.descendants(matching: .any)["account.inUse"]
         var switching = false
         let start = Date()
         use.click()
         let clicked = Date()
-        while !personal.staticTexts["In Use"].exists, Date().timeIntervalSince(start) < 10 {
-            switching = switching || app.text("Switching…").exists
+        while !inUseLabel.exists, Date().timeIntervalSince(start) < 10 {
+            switching =
+                switching || personal.descendants(matching: .any)["account.switching"].exists
         }
         let switched = Date()
-        let inUse = personal.staticTexts["In Use"].exists
+        let inUse = inUseLabel.exists
         let selected = selectedAccounts(in: window)
         keep(window, as: "site-after-use")
 
-        let refresh = app.toolbars.buttons["Refresh"]
+        let refresh = app.toolbars.buttons["toolbar.refresh"]
         var dimmed = false
         let asked = Date()
         refresh.click()
@@ -761,7 +763,7 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         personal.click()
         app.typeKey(.delete, modifierFlags: .command)
-        XCTAssertTrue(app.alert.buttons["Remove"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
         return personal
     }
 

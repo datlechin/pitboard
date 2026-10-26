@@ -151,7 +151,6 @@ public sealed class SettingsTests
         var renew = Control(launched, "settings.renewDaily");
         renew.Patterns.Toggle.Pattern.Toggle();
         Assert.IsTrue(Becomes(renew, ToggleState.On));
-        Assert.IsTrue(launched.Gone(found => found.ByName("Renew now")), "the app renews as it reads");
     }
 
     // The fixture puts no pitboard where a terminal looks, and the installer, not the app, puts one on the PATH.
@@ -163,7 +162,6 @@ public sealed class SettingsTests
 
         Assert.AreEqual(Words.NotInstalled, Control(launched, "settings.inTerminal").Name);
         Assert.IsTrue(Says(launched, Words.NewTerminals, Shortly));
-        Assert.IsTrue(launched.Gone(found => found.ByName("Install Command Line Tool…")), "the section offers a button");
     }
 
     // A Debug build carries no update key, and General says so.

@@ -1,6 +1,4 @@
-// What the UI tests still find by its words: a menu's items, which SwiftUI gives no identifier
-// (docs/facts/macos-app.md), a pop-up's choices, the Settings window's panes and two sentences.
-// present/words.rs pins the model's; a change there changes it here.
+// What SwiftUI gives no identifier (docs/facts/macos-app.md), found by the words words.rs pins.
 enum Words {
     // The menu bar item's menu and the app's own menus.
     static let openPitboard = "Open Pitboard"
