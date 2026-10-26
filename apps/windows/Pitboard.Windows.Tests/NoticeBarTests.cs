@@ -55,12 +55,12 @@ public sealed class NoticeBarTests
     public async Task ANoticeLinksToWhereTheDocsExplainIt()
     {
         var opened = new List<Uri>();
-        var notice = Items.Notice("warning/claude") with { Learn = new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors#auth_overridden") };
+        var notice = Items.Notice("warning/claude") with { Learn = new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors#warning-codes") };
         var bar = await Views.Shown(new NoticeBar(notice, _ => { }, opened.Add, TimeProvider.System));
 
         new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(bar, "notice.learn")).Invoke();
 
-        Assert.AreEqual(new Uri("https://docs.usepitboard.com/reference/errors#auth_overridden"), opened.Single());
+        Assert.AreEqual(new Uri("https://docs.usepitboard.com/reference/errors#warning-codes"), opened.Single());
         Assert.AreEqual(Visibility.Collapsed, Views.Element<HyperlinkButton>(await Views.Shown(new NoticeBar(Items.Notice("read"), _ => { }, _ => { }, TimeProvider.System)), "notice.learn").Visibility);
     }
 
