@@ -138,6 +138,7 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         keep(window, as: "macos-sheet-rename")
 
+        name.click()
         name.typeKey("a", modifierFlags: .command)
         name.typeText("claude/third")
         XCTAssertTrue(app.staticTexts["sheet.problem"].waitForExistence(timeout: 5))

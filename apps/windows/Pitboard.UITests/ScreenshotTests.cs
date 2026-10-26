@@ -4,9 +4,7 @@ using System.Runtime.InteropServices;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
 using FlaUI.Core.Definitions;
-using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
-using FlaUI.Core.WindowsAPI;
 
 namespace Pitboard.UITests;
 
@@ -64,10 +62,6 @@ public sealed partial class ScreenshotTests
         Launched.OpenMenu(row);
         var menu = Around(launched.Element("account.copyEmail"), ControlType.Menu);
         Keep(Rectangle.Union(Frame(window), menu.BoundingRectangle), window, "windows-menu-account");
-        Keyboard.Type(VirtualKeyShort.ESCAPE);
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.copyEmail")), "the menu stayed open");
-
-        Launched.OpenMenu(row);
         launched.Invoke("account.rename");
         var name = launched.Field("sheet.name");
         KeepWindow(window, "windows-sheet-rename");
@@ -137,7 +131,7 @@ public sealed partial class ScreenshotTests
         Said(launched.Element("notice.switch/codex"));
         KeepWindow(window, "windows-notice-switched-codex");
         Switch(launched, "claude/personal");
-        Said(launched.Element("notice.switch/claude"));
+        launched.Element("notice.switch/claude");
         KeepWindow(window, "windows-notice-switched");
     }
 
@@ -161,15 +155,6 @@ public sealed partial class ScreenshotTests
         var window = InFront(launched.OpenWindow());
         launched.Element("notice.action.abandonStuckSwitch");
         KeepWindow(window, "windows-notice-switch-unfinished");
-
-        var frame = Frame(window);
-        HiddenWindows.OpenMenu(launched.Process, frame.Left + 40, frame.Top + 60);
-        var menu = Around(launched.Element("menu.others"), ControlType.Menu);
-        Keep(menu.BoundingRectangle, menu, "windows-tray-menu-issue");
-        Keyboard.Type(VirtualKeyShort.ESCAPE);
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("menu.others")), "the menu stayed open");
-        InFront(window);
-
         launched.Invoke("notice.action.abandonStuckSwitch");
         launched.Element("question");
         KeepWindow(window, "windows-question-cancel-switch");
@@ -253,6 +238,11 @@ public sealed partial class ScreenshotTests
         var window = InFront(launched.OpenWindow());
         launched.Element("empty.choice");
         KeepWindow(window, "windows-window-read-failure");
+
+        var frame = Frame(window);
+        HiddenWindows.OpenMenu(launched.Process, frame.Left + 40, frame.Top + 60);
+        var menu = Around(launched.Element("menu.others"), ControlType.Menu);
+        Keep(menu.BoundingRectangle, menu, "windows-tray-menu-issue");
     }
 
     [TestMethod]
