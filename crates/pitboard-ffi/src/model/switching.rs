@@ -930,6 +930,20 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
         words::still_open("ChatGPT", "switch again"),
         "{failure:?}"
     );
+    // Claude's own page about an app left open is not ChatGPT's.
+    let next = model.shown().failure_alert.and_then(|alert| alert.next);
+    assert_eq!(
+        next,
+        Some(crate::NextStep::Act {
+            choice: crate::Choice {
+                title: words::try_again(OS),
+                intent: Intent::SwitchTo {
+                    qualified: "codex/spare".into(),
+                },
+                enabled: true,
+            },
+        })
+    );
 }
 
 #[test]

@@ -55,6 +55,13 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&str>) -> N
                 provider: key.provider.code().into(),
             },
         ),
+        // Pitboard asked ChatGPT to quit before a switch, and it stayed open.
+        ("app_open", Some(key)) if key.provider != ProviderId::Desktop => act(
+            words::try_again(os),
+            Intent::SwitchTo {
+                qualified: key.qualified(),
+            },
+        ),
         (
             "home_unwritable"
             | "state_unreadable"
@@ -339,6 +346,18 @@ mod tests {
                 link: SetupLink {
                     title: words::learn_more(Os::MacOs),
                     link: format!("{ERRORS}#claude-desktop"),
+                },
+            }
+        );
+        assert_eq!(
+            of_failure(Os::Windows, Some("app_open"), Some("codex/work")),
+            NextStep::Act {
+                choice: Choice {
+                    title: words::try_again(Os::Windows),
+                    intent: Intent::SwitchTo {
+                        qualified: "codex/work".into(),
+                    },
+                    enabled: true,
                 },
             }
         );
