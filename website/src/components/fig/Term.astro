@@ -42,15 +42,8 @@ const lines = (p: Platform) => [
   ...printed(session, p).map((line) => line || " "),
 ];
 const desk = "desk flex min-h-0 items-center justify-center";
-// Where the pointer is coarse, the window keeps the scale that sets its text at 16 px, which iOS
-// zooms no field of, and scrolls sideways in its desk above the commands to tap (question 20).
-const coarse =
-  "pointer-coarse:flex-col pointer-coarse:items-center-safe pointer-coarse:overflow-x-auto";
-const scale: Record<Platform, string> = {
-  macos: "pointer-coarse:[--u:calc(16px/11)]",
-  windows: "pointer-coarse:[--u:1px]",
-  linux: "pointer-coarse:[--u:calc(16px/15)]",
-};
+// where the pointer is coarse, the commands to tap sit under the window (question 20)
+const coarse = "pointer-coarse:flex-col";
 // the page rests after the hero's switch
 const { accounts, inUse } = moments.after;
 const other = accounts.find((a) => a.tool === "claude" && a.label !== inUse.claude);
@@ -63,7 +56,7 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
 <div class={shownOn("macos", drawn)} data-drawing="cli macos">
   <pb-term
     id={`${prefix}-macos`}
-    class:list={[desk, "py-20", coarse, scale.macos]}
+    class:list={[desk, "py-20", coarse]}
     inert
     data-output
     data-command={session.command}
@@ -82,7 +75,7 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
 {drawn.includes("windows") && <div class={shownOn("windows", drawn)} data-drawing="cli windows">
   <pb-term
     id={`${prefix}-windows`}
-    class:list={[desk, "py-24 desk-px-820", coarse, scale.windows]}
+    class:list={[desk, "py-24 desk-px-820", coarse]}
     inert
     data-output
     data-command={session.command}
@@ -101,7 +94,7 @@ const keys = "Tab completes a command. Escape, then Tab, moves on.";
 {drawn.includes("linux") && <div class={shownOn("linux", drawn)} data-drawing="cli linux">
   <pb-term
     id={`${prefix}-linux`}
-    class:list={[desk, "py-24 desk-px-780", coarse, scale.linux]}
+    class:list={[desk, "py-24 desk-px-780", coarse]}
     inert
     data-output
     data-command={session.command}

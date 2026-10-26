@@ -21,12 +21,6 @@ const win = Astro.slots.has("win");
 if (win !== (app.windows !== undefined)) throw new Error("a Windows drawing needs its own words");
 if (app.linux) throw new Error("Linux has no app to draw");
 const drawn: Platform[] = win ? ["macos", "windows"] : ["macos"];
-// Under a coarse pointer each desk keeps its smallest target 24 pixels, a macOS menu row of 22
-// points and a WinUI menu item of 28, and scrolls sideways in the figure (answer 20 a); a desk
-// whose menu hangs from the screen's right starts scrolled to it, as a right-to-left scroller does.
-// departs from the apps: Under a coarse pointer each desk is drawn large enough that a menu row is 24 pixels tall
-const coarse =
-  "pointer-coarse:overflow-x-auto pointer-coarse:[--desk-max:none] pointer-coarse:has-data-[scroll=end]:[direction:rtl] pointer-coarse:*:[direction:ltr]";
 const onApp = both ? "block surface-cli:hidden" : "block";
 const onCli = "block surface-app:hidden no-js:mt-6";
 // each surface's words, for each platform that has its own
@@ -58,20 +52,8 @@ const said = (sides: Sides) => {
   )}
   <div class="@container">
     <div class={onApp}>
-      <div
-        class:list={[shownOn("macos", drawn), coarse, "pointer-coarse:[--u-coarse:calc(24px/22)]"]}
-        data-drawing="app macos"
-      >
-        <slot />
-      </div>
-      {win && <div
-        class:list={[
-          shownOn("windows", drawn),
-          coarse,
-          "pointer-coarse:[--u-coarse:calc(24px/28)]",
-        ]}
-        data-drawing="app windows"
-      >
+      <div class={shownOn("macos", drawn)} data-drawing="app macos"><slot /></div>
+      {win && <div class={shownOn("windows", drawn)} data-drawing="app windows">
         <slot name="win" />
       </div>}
     </div>

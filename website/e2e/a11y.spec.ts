@@ -26,11 +26,10 @@ for (const colorScheme of schemes) {
   test.describe(`${colorScheme}`, () => {
     test.use({ colorScheme });
 
-    test("without JavaScript", async ({ page, isMobile }) => {
+    test("without JavaScript", async ({ page }) => {
       await withoutScripts(page);
       await page.goto("/");
-      // a phone scrolls a drawing that does not work by touch alone (docs/facts/site.md)
-      expect(await everything(page, isMobile ? ["scrollable-region-focusable"] : [])).toEqual([]);
+      expect(await everything(page)).toEqual([]);
     });
 
     for (const platform of platforms) {

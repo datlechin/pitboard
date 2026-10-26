@@ -63,10 +63,7 @@ function play() {
 }
 
 function watch() {
-  // each desk's drawing, which on a phone is narrower than the desk it scrolls
-  const desks = [...document.querySelectorAll<HTMLElement>("[data-demo-desk]")].map(
-    (d) => d.closest<HTMLElement>("[data-drawing]") ?? d,
-  );
+  const desks = [...document.querySelectorAll<HTMLElement>("[data-demo-desk]")];
   const figure = desks[0]?.closest("figure");
   if (!figure) return;
   const ratios = new Map<Element, number>();
