@@ -27,6 +27,7 @@ public partial class App : Application, IIconTargets
     private Lifetime? _lifetime;
     private MenuHost? _menu;
     private MainWindow? _window;
+    private WelcomeWindow? _welcome;
     private AccountWindows? _accountWindows;
     private WindowsNotifications? _notifications;
 
@@ -232,6 +233,13 @@ public partial class App : Application, IIconTargets
     {
         if (_requests.Opens(request))
         {
+            // The first launch's welcome is a window of its own, in place of the main window.
+            if (request.Place is Place.Welcome)
+            {
+                ShowWelcome();
+                return;
+            }
+
             ShowWindow();
         }
 
@@ -258,6 +266,23 @@ public partial class App : Application, IIconTargets
         }
 
         _window.Bring();
+    }
+
+    private void ShowWelcome()
+    {
+        if (_model is null || _startAtSignIn is null)
+        {
+            return;
+        }
+
+        if (_welcome is null)
+        {
+            var welcome = new WelcomeWindow(_model, _startAtSignIn, page => _ = Launcher.LaunchUriAsync(page));
+            welcome.Closed += (_, _) => _welcome = null;
+            _welcome = welcome;
+        }
+
+        _welcome.Bring();
     }
 
     // Closed first, where the main window keeps its placement.

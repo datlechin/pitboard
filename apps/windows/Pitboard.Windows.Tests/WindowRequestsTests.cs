@@ -30,6 +30,5 @@ public sealed class WindowRequestsTests
         Assert.AreEqual(new Place.Activity(), requests.PlaceFor(new WindowRequest(3, new Place.Activity())));
         Assert.AreEqual(
             new Place.Settings(SettingsSection.Limits), requests.PlaceFor(new WindowRequest(4, new Place.Settings(SettingsSection.Limits))));
-        Assert.AreEqual(new Place.Accounts(), requests.PlaceFor(new WindowRequest(5, new Place.Welcome())), "no welcome yet");
     }
 }

@@ -27,6 +27,8 @@
     <Content Include="Pitboard.ico" CopyToOutputDirectory="PreserveNewest" />
     <!-- The notification area's icon at each level, drawn in ../Icon and loaded as files at the size it draws. -->
     <Content Include="Tray/**/*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The welcome's large icon, drawn at any size from its SVG where an ICO's first frame is 16 px. -->
+    <Content Include="../Icon/icon-48.svg" Link="Pitboard.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />

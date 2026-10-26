@@ -208,6 +208,10 @@ public sealed partial class ScreenshotTests
     public void TheFirstLaunch()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        var welcome = InFront(launched.Window(Words.Welcome));
+        launched.Element("welcome.done");
+        KeepWindow(welcome, "windows-welcome");
+        launched.Invoke("welcome.done");
         var window = InFront(launched.Window("Pitboard"));
         launched.Tip(Words.UseWithCodex);
         KeepWindow(window, "windows-window-first-launch");

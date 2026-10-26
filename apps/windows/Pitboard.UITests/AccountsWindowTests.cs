@@ -306,13 +306,18 @@ public sealed class AccountsWindowTests
         launched.Row("claude/work");
     }
 
+    // Plan 4.12: the first launch opens the welcome in place of the window, which Get started opens.
     [TestMethod]
-    public void TheFirstLaunchOpensTheWindow()
+    public void TheFirstLaunchOpensTheWelcomeAlone()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
 
-        launched.Window("Pitboard");
+        var welcome = launched.Window(Words.Welcome);
 
+        Assert.IsEmpty(launched.Windows("Pitboard"), "the window opened under the welcome");
+        Launched.Within(welcome, found => found.ByAutomationId("welcome.done"), "Get started").AsButton().Invoke();
+        launched.Window("Pitboard");
+        Assert.IsTrue(Retry.WhileTrue(() => welcome.IsAvailable, TimeSpan.FromSeconds(10)).Result, "the welcome stayed open");
         launched.Tip(Words.UseWithCodex);
     }
 }

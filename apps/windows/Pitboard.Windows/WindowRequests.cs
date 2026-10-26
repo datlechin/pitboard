@@ -28,7 +28,6 @@ public sealed class WindowRequests
         }
 
         _shown = request.Serial;
-        // The welcome has no window of its own yet, so it opens on the accounts.
-        return request.Place is Place.Welcome ? new Place.Accounts() : request.Place;
+        return request.Place;
     }
 }

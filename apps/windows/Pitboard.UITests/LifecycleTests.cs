@@ -23,7 +23,7 @@ public sealed partial class LifecycleTests
     {
         var before = Foreground.Window();
         var clock = Stopwatch.StartNew();
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
 
         var window = launched.Window("Pitboard");
         TestContext.WriteLine($"CF5: the window was up {clock.ElapsedMilliseconds} ms after the start");
@@ -47,7 +47,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void AWinUIElementIsFoundAndInvokedByItsAutomationId()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
 
         var settings = launched.Window("Pitboard").FindFirstDescendant(found => found.ByAutomationId("SettingsItem"));
 
@@ -60,7 +60,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void TheWindowCarriesPitboardsIcon()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
 
         var handle = launched.Window("Pitboard").Properties.NativeWindowHandle.Value;
 
@@ -86,7 +86,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void ClosingTheWindowLeavesPitboardRunning()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
 
         window.Close();
@@ -98,7 +98,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void AClosedWindowOpensWhereItWasAtItsSize()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
         var transform = window.Patterns.Transform.Pattern;
         transform.Move(120, 90);
@@ -114,7 +114,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void AMaximizedWindowOpensMaximizedAgain()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
         Show(window, WindowVisualState.Maximized);
         Close(window);
@@ -128,7 +128,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void AWindowMinimizedFromMaximizedComesBackMaximized()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
         Show(window, WindowVisualState.Maximized);
         Show(window, WindowVisualState.Minimized);
@@ -141,7 +141,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void CtrlWClosesTheWindowAndPitboardKeepsRunning()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
         Foreground.Require(window);
 
@@ -151,11 +151,11 @@ public sealed partial class LifecycleTests
         Assert.IsFalse(launched.Process.WaitForExit(TimeSpan.FromSeconds(3)), "Pitboard quit with its window");
     }
 
-    // firstLaunch's page starts with its command bar's buttons, accounts.refresh and accounts.add.
+    // empty's page starts with its command bar's buttons, accounts.refresh and accounts.add.
     [TestMethod]
     public void F6MovesFocusBetweenThePaneAndThePage()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
         Foreground.Require(window);
         window.FindFirstDescendant(found => found.ByAutomationId("pane.accounts"))!.Focus();
@@ -176,7 +176,7 @@ public sealed partial class LifecycleTests
     [TestMethod]
     public void ASecondLaunchOpensTheWindowAgain()
     {
-        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
         window.Close();
         Assert.IsTrue(Retry.WhileTrue(() => window.IsAvailable, TimeSpan.FromSeconds(10)).Result, "the window stayed open");

@@ -4,6 +4,8 @@ namespace Pitboard.UITests;
 // there changes it here.
 internal static class Words
 {
+    public const string Welcome = "Welcome to Pitboard";
+
     public const string WarmsUpAgain = "Warms up again at ";
 
     public const string NotNow = "Not now";

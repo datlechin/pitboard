@@ -69,6 +69,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   them.
 - A failure in the Windows app offers what to do about it as its button, such as **Sign in
   again…**, or links **Learn more**, and so does an account's note.
+- The Windows app opens a welcome at its first launch, in place of its window: what Pitboard
+  does, where its icon is with **Taskbar settings**, each tool found with **Add**, **Start when
+  you sign in to Windows** and **Get started**.
 - The Windows app's **Settings** > **Advanced** has **Uninstall Pitboard**, which asks first,
   deletes Pitboard's saved sign-ins and settings, then uninstalls the app as **Settings** >
   **Apps** does.
