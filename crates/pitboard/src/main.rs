@@ -2353,12 +2353,17 @@ mod tests {
     }
 
     #[test]
-    // windows: macOS and Linux print this help, tree and zsh script; Windows' are the test below
+    // windows: macOS and Linux print this help, tree and these scripts; Windows' are the test below
     #[cfg(not(windows))]
-    fn the_command_tree_help_and_zsh_completions_read_as_they_did_off_windows() {
+    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_off_windows() {
         insta::assert_json_snapshot!("command_tree", command_tree());
         insta::assert_snapshot!("help_in_80_columns", every_help_typed());
         insta::assert_snapshot!("completions_zsh", completions(clap_complete::Shell::Zsh));
+        insta::assert_snapshot!("completions_fish", completions(clap_complete::Shell::Fish));
+        insta::assert_snapshot!(
+            "completions_elvish",
+            completions(clap_complete::Shell::Elvish)
+        );
     }
 
     #[test]

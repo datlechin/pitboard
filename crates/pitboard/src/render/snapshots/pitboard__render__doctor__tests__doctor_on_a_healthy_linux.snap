@@ -1,0 +1,34 @@
+---
+source: crates/pitboard/src/render/doctor.rs
+expression: "printed(&world::doctor_on_a_healthy_linux())"
+---
+✓ config file                        /home/me/.claude.json  (1 keys)
+✓ identity                           me@example.com  ·  org 8b2d4e61-3c5a-4f7e-a1d9-6c0e2b7f5a34
+✓ in use                             `personal`, as Anthropic said 20:50
+✓ slot                               default  ·  Claude Code-credentials  ·  account me
+✓ credential store                   plaintext file  ·  /home/me/.claude/.credentials.json
+✓ credential                         refresh fcda3e5dfe80953d  ·  good for 26d 4h  ·  keys ["claudeAiOauth"]
+✓ Pitboard home                      /home/me/.pitboard
+✓ logins on disk                     nothing holding a login is readable by anyone else
+✓ accounts                           4 enrolled
+✓ account personal                   signed in; parked when you switch away
+✓ account work                       parked, good for 26d 4h
+✓ storage v5                         inactive
+✓ Claude Code daemon                 none has run here
+✓ parks being reclaimed              none outstanding
+✓ Claude Code build                  2.1.284, which is what Pitboard's facts were read from
+✓ what a session authenticates with  the stored login, which is what Pitboard moves
+✓ asking Anthropic and OpenAI        nothing is being held back
+✓ network                            direct: no variable names a proxy
+
+Codex
+✓ Codex login store    file (Codex's default)  ·  /home/me/.codex/auth.json
+                       Pitboard does not read a project's own `.codex/config.toml`, which applies only inside that project: in a trusted project that sets `cli_auth_credentials_store`, Codex keeps its login somewhere else.
+✓ Codex login file     /home/me/.codex/auth.json  ·  mode 600
+✓ Codex login          me@example.com  ·  account a1e5c9d3-6f2b-4c8a-8e7d-3b0f5a9c1e26  ·  refresh a551afc0bc23fb53
+✓ account codex/main   signed in; parked when you switch away
+✓ account codex/spare  parked
+✓ Codex build          0.164.0, which is what Pitboard's facts were read from
+✓ running Codex        none
+
+Everything Pitboard checks is in order.
