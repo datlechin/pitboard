@@ -13,13 +13,14 @@ public sealed class WindowsNotificationsTests
     private const string Icon = @"C:\Users\Dana Lee\AppData\Local\Programs\Pitboard\Pitboard.ico";
 
     private static readonly RunOutNotice RunOut = new(
-        Id: "claude/personal/session/-1800018000", Title: "personal has no 5-hour limit left", Subtitle: "Claude Code",
-        Body: "work has 58% of its own left.", Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work"));
+        Id: "claude/personal/session/-1800018000", Title: "5-hour limit reached", Subtitle: "Claude Code",
+        Body: "personal has used 100%. work has used 42%.", Clicked: "accounts",
+        Button: new NotificationButton("Switch to work", "switch/claude/work"));
 
     // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-ffi/src/model/warming.rs).
     private static readonly RunOutNotice WarmFailed = new(
         Id: "warm-failed/personal/warm_up_not_started",
-        Title: "Pitboard couldn’t warm up an account", Subtitle: null,
+        Title: "Warm-up didn’t start", Subtitle: "Claude Code",
         Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
         Clicked: "limits", Button: null);
 
@@ -33,10 +34,10 @@ public sealed class WindowsNotificationsTests
         var notification = WindowsNotifications.Notification(RunOut);
         var toast = XElement.Parse(notification.Payload);
 
-        string[] said = ["personal has no 5-hour limit left", "Claude Code", "work has 58% of its own left."];
+        string[] said = ["5-hour limit reached", "Claude Code", "personal has used 100%. work has used 42%."];
         CollectionAssert.AreEqual(said, toast.Descendants("text").Select(text => text.Value).ToArray());
         var button = toast.Descendants("action").Single();
-        Assert.AreEqual("Switch", (string?)button.Attribute("content"));
+        Assert.AreEqual("Switch to work", (string?)button.Attribute("content"));
         Assert.AreEqual("clicked=switch/claude/work", (string?)button.Attribute("arguments"));
         Assert.AreEqual("clicked=accounts", (string?)toast.Attribute("launch"));
         Assert.AreEqual(WindowsNotifications.Tag(RunOut.Id), notification.Tag);
@@ -48,7 +49,7 @@ public sealed class WindowsNotificationsTests
         var notification = WindowsNotifications.Notification(WarmFailed);
         var toast = XElement.Parse(notification.Payload);
 
-        Assert.HasCount(2, toast.Descendants("text"));
+        Assert.HasCount(3, toast.Descendants("text"));
         Assert.IsEmpty(toast.Descendants("actions"));
         Assert.AreEqual(WindowsNotifications.Tag(WarmFailed.Id), notification.Tag);
     }
@@ -73,7 +74,7 @@ public sealed class WindowsNotificationsTests
     {
         foreach (var clicked in new[] { "switch/claude/work", "switch/codex/a;b=c%3B", "sign-in-again/claude/Zoë & <Ö>'s \"team\"" })
         {
-            var notice = RunOut with { Button = new NotificationButton("Switch", clicked) };
+            var notice = RunOut with { Button = new NotificationButton("Switch to work", clicked) };
             var arguments = (string)Toast(notice).Descendants("action").Single().Attribute("arguments")!;
 
             Assert.AreEqual(new Intent.NotificationClicked(clicked), WindowsNotifications.Read(Decoded(arguments)), arguments);

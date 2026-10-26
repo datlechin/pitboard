@@ -89,6 +89,20 @@ public sealed class ModelTests
                 return [.. _calls];
             }
         }
+
+        public T? First(Func<T, bool> matching, TimeSpan patience)
+        {
+            var until = DateTime.UtcNow + patience;
+            lock (_calls)
+            {
+                for (var left = patience; !_calls.Any(matching) && left > TimeSpan.Zero; left = until - DateTime.UtcNow)
+                {
+                    Monitor.Wait(_calls, left);
+                }
+
+                return _calls.FirstOrDefault(matching);
+            }
+        }
     }
 
     private static Snapshot Read(ulong revision) =>
@@ -954,6 +968,29 @@ public sealed class ModelTests
             "and Pitboard has no sign-in saved for work.",
             notice.Body);
         Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
+    }
+
+    // Plan 4.13: whom it switched to, under the tool, and Switch Back, which switches to the account it left.
+    [TestMethod]
+    public void AnAutomaticSwitchIsPostedWithSwitchBack()
+    {
+        NeedsFixtures();
+        var waiting = new Waiting();
+        var posting = new Posting();
+        using var model = PitboardModel.FixtureIn("switchedByItself", _own, waiting, new StandInApps(), posting, new InUtc());
+        Start(model, waiting);
+
+        var notice = posting.Posted.First(posted => posted.Id.StartsWith("auto/", StringComparison.Ordinal), Patience);
+        Assert.IsNotNull(notice, "no automatic switch was posted");
+        Assert.AreEqual("Switched to personal", notice.Title);
+        Assert.AreEqual("Claude Code", notice.Subtitle);
+        Assert.AreEqual(OperatingSystem.IsWindows() ? "Switch back" : "Switch Back", notice.Button?.Title);
+
+        model.Send(new Intent.NotificationClicked(notice.Button!.Clicked));
+        var back = waiting.Until(snapshot => Uses(snapshot, "claude/work"), Patience);
+        model.Shutdown();
+
+        Assert.IsNotNull(back, "Switch Back left Claude Code on personal");
     }
 
     [TestMethod]
