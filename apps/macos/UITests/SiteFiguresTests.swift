@@ -29,7 +29,7 @@ final class SiteFiguresTests: FixtureTestCase {
         keep(menu, as: "site-status-menu")
         keep(XCUIScreen.main.screenshot(), as: "site-status-menu-screen")
         XCTAssertTrue(highlighted)
-        XCTAssertEqual(item.title, "Pitboard, work 42%, Claude Code")
+        XCTAssertEqual(item.title, "Pitboard, work 42%, Claude Code, needs attention")
         XCTAssertEqual(shown.map(\.title), Self.statusMenu)
         XCTAssertEqual(shown.filter { !$0.enabled }.map(\.title), Self.headings)
     }
