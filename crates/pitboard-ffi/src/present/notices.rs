@@ -616,7 +616,7 @@ pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
             symbol: "arrow.uturn.backward".into(),
         },
         NotificationButtonKind {
-            title: words::sign_in_again(OS, false),
+            title: words::sign_in_again_button(OS),
             opens_window: true,
             symbol: "person.crop.circle".into(),
         },
@@ -711,7 +711,7 @@ pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutN
     RunOutNotice {
         button: again.and_then(|qualified| {
             button(
-                words::sign_in_again(OS, false),
+                words::sign_in_again_button(OS),
                 &Clicked::SignInAgain(qualified.to_owned()),
             )
         }),
@@ -731,7 +731,7 @@ pub(crate) fn unusable_notice(account: &Account) -> RunOutNotice {
     RunOutNotice {
         button: account.qualified.as_ref().and_then(|qualified| {
             button(
-                words::sign_in_again(OS, false),
+                words::sign_in_again_button(OS),
                 &Clicked::SignInAgain(qualified.clone()),
             )
         }),

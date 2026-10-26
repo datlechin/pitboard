@@ -2482,7 +2482,7 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
             words::sign_in_replaced(OS),
             words::in_app_warning(OS, &replaced).expect("the app's words"),
             Some(NotificationButton {
-                title: words::sign_in_again(OS, false),
+                title: words::sign_in_again_button(OS),
                 clicked: "sign-in-again/claude/work".into(),
             })
         )]

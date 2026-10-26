@@ -960,7 +960,7 @@ public sealed class ModelTests
         var posted = posting.Posted.Until(2, Patience);
         model.Shutdown();
 
-        var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
+        var again = OperatingSystem.IsWindows() ? "Sign in again…" : "Sign In Again";
         var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
         Assert.AreEqual(OperatingSystem.IsWindows() ? "Sign-in replaced" : "Sign-In Replaced", notice.Title);
         Assert.AreEqual(

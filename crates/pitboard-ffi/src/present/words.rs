@@ -344,6 +344,12 @@ pub(crate) fn sign_in_again(os: Os, asks: bool) -> String {
     }
 }
 
+// A notification's button, which opens the sign-in: Windows ends a command that asks for more
+// with an ellipsis, a toast's too, where a macOS action is a short term.
+pub(crate) fn sign_in_again_button(os: Os) -> String {
+    sign_in_again(os, matches!(os, Os::Windows))
+}
+
 pub(crate) fn add_account_shown(os: Os, app: &str, asks: bool) -> String {
     let (title, sentence) = (
         format!("Add the Account {app} Shows"),
@@ -4313,6 +4319,10 @@ mod tests {
         assert_eq!(
             both(&|os| sign_in_again(os, false)),
             pair("Sign In Again", "Sign in again")
+        );
+        assert_eq!(
+            both(&sign_in_again_button),
+            pair("Sign In Again", "Sign in again…")
         );
         assert_eq!(
             both(&|os| add_account_shown(os, "Claude", true)),
