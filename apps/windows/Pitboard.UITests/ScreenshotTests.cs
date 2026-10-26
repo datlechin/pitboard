@@ -302,9 +302,9 @@ public sealed partial class ScreenshotTests
 
         launched.Select("SettingsItem");
         Expand(launched.Element("settings.warm"));
-        var standing = launched.Element("settings.warmStanding");
-        var scroll = Scroller(standing).Patterns.Scroll.Pattern;
-        while (standing.IsOffscreen && scroll.VerticalScrollPercent.Value < 100)
+        var personal = launched.Element("settings.warm.claude/personal");
+        var scroll = Scroller(personal).Patterns.Scroll.Pattern;
+        while (personal.IsOffscreen && scroll.VerticalScrollPercent.Value < 100)
         {
             scroll.Scroll(ScrollAmount.NoAmount, ScrollAmount.LargeIncrement);
         }
@@ -372,10 +372,11 @@ public sealed partial class ScreenshotTests
     // is done, so the rings in sight are left out of that comparison.
     private static CaptureImage Drawn(Rectangle area, AutomationElement scope, string what)
     {
-        var rings = scope.FindAllDescendants(found => found.ByClassName("ProgressRing"))
-            .Where(ring => !ring.IsOffscreen)
+        // A ring's class name may carry WinUI's namespace, and its arc's antialiased edge can spill past its bounds.
+        var rings = scope.FindAllDescendants()
+            .Where(found => found.Properties.ClassName.ValueOrDefault?.EndsWith("ProgressRing", StringComparison.Ordinal) == true)
             .Select(ring => ring.BoundingRectangle)
-            .Select(ring => new Rectangle(ring.X - area.X, ring.Y - area.Y, ring.Width, ring.Height))
+            .Select(ring => Rectangle.Inflate(new Rectangle(ring.X - area.X, ring.Y - area.Y, ring.Width, ring.Height), 2, 2))
             .ToArray();
         var deadline = DateTime.UtcNow + Patience;
         var taken = Capture.Rectangle(area);
