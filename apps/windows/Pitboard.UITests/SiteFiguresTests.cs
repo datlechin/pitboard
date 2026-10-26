@@ -138,7 +138,7 @@ public sealed partial class SiteFiguresTests
         RequireForeground(window);
 
         toggle.Focus();
-        Until(() => FocusedName(launched) == row.Name);
+        Until(() => FocusedId(launched) == "ExpanderToggleButton");
         var focused = Focused(launched);
         Press(VirtualKeyShort.DELETE);
         Launched.Within(launched.Element("question"), found => found.ByAutomationId("PrimaryButton"), "the dialog's Remove");
