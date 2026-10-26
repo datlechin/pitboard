@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
     {
         _model = model;
         InitializeComponent();
+        Title = Words.AppName;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         WindowChrome.Apply(this);

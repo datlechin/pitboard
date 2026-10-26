@@ -30,7 +30,7 @@ public sealed class NotifyIcon(INotificationArea area, nint window, nint image, 
 
     private Guid? _guid = iconGuid;
     private nint _image = image;
-    private string _tip = "Pitboard";
+    private string _tip = Words.AppName;
     private bool _added;
 
     public static string Tip(string tip) =>

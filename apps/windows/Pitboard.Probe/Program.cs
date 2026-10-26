@@ -102,8 +102,11 @@ public static class Program
 
     private static bool Registered(WindowsNotifications notifications)
     {
-        Console.WriteLine(notifications.Off is { } off ? $"Not registered: {off}" : "Registered.");
-        return notifications.Off is null;
+        Console.WriteLine(
+            notifications.Off is { } off ? $"Not registered: {off}"
+            : notifications.Unoffered ? "Not registered: Windows offers this process no app notifications."
+            : "Registered.");
+        return notifications.Off is null && !notifications.Unoffered;
     }
 
     private static string Said(Intent? intent) =>

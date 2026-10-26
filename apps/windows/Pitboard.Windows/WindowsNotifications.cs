@@ -12,6 +12,7 @@ public sealed record NotificationsBlocked(string Why, bool InSettings);
 
 public sealed class WindowsNotifications(Build build, Func<IAppNotifications> system, string icon) : Notifications
 {
+    // What Windows registers the app's notifications under; the probe registers it with no core to ask.
     public const string DisplayName = "Pitboard";
 
     public const string IconFile = "Pitboard.ico";
@@ -21,9 +22,12 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     private readonly Lock _lock = new();
     private IAppNotifications? _registered;
 
-    // Why Windows posts nothing, once Start has asked. A Debug build registers nothing and says nothing of it, or its
-    // settings would say it in the docs' pictures.
+    // Why Windows refused to register them, once Start has asked. A Debug build registers nothing and says nothing of
+    // it, or its settings would say it in the docs' pictures.
     public string? Off { get; private set; }
+
+    // Windows offers this process no notifications at all; the settings say so in the model's words.
+    public bool Unoffered { get; private set; }
 
     // Register takes the icon as a file, which Pitboard.exe carries beside it.
     public static WindowsNotifications For(Build build, string folder) =>
@@ -42,7 +46,7 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
         {
             if (!notifications.IsSupported())
             {
-                Off = Words.Settings.NotificationsUnoffered;
+                Unoffered = true;
                 return null;
             }
 
@@ -93,6 +97,11 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     // At each settings visit, since the person turns them off and on in Settings while Pitboard runs.
     public NotificationsBlocked? Read()
     {
+        if (Unoffered)
+        {
+            return Blocked(AppNotificationSetting.Unsupported);
+        }
+
         if (Off is { } off)
         {
             return new(off, InSettings: false);

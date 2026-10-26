@@ -160,7 +160,8 @@ public sealed class WindowsNotificationsTests
         notifications.Stop();
 
         Assert.AreEqual("supported", string.Join(", ", system.Asked));
-        Assert.IsNotNull(notifications.Off);
+        Assert.IsTrue(notifications.Unoffered);
+        Assert.AreEqual(new NotificationsBlocked(Words.Settings.NotificationsUnoffered!, InSettings: false), notifications.Read());
     }
 
     [TestMethod]
