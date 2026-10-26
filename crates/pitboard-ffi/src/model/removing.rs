@@ -4,7 +4,7 @@ use super::state::{After, Job};
 use super::testing::machine::{Hand, Stub, any_read, desktop_machine};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CLAUDE, DANA, refusal, status};
-use super::{Intent, Place};
+use super::{Intent, OutsideAnswer, OutsideAsk, Place};
 use crate::account_windows::records::{Entry, Records};
 use crate::account_windows::stores::derive;
 use crate::present::testing::{account, desktop_account};
@@ -40,7 +40,7 @@ fn claude_store(uuid: &str) -> String {
 }
 
 // Claude open, `home`'s login saved in Pitboard.
-fn claude_holding_home() -> Stub {
+pub(super) fn claude_holding_home() -> Stub {
     let mut machine = desktop_machine(true);
     machine.answer = Ok(status(vec![
         desktop_account("work", true),
@@ -294,4 +294,31 @@ fn a_refused_uninstall_says_why_and_pitboard_goes_on() {
     model.later(Duration::from_secs(300));
     model.tick();
     assert_eq!(model.count(any_read), reads + 1);
+}
+
+// A widget or a shortcut waits on its request's answer.
+#[test]
+fn a_request_from_outside_while_uninstalling_is_answered() {
+    let mut machine = two_accounts();
+    let mut model = started(&mut machine);
+    model.send(Intent::Uninstall);
+    for (request, ask) in [
+        (1, OutsideAsk::Refresh),
+        (
+            2,
+            OutsideAsk::Switch {
+                account: crate::present::glance_id("claude:p"),
+            },
+        ),
+    ] {
+        model.send(Intent::Outside { request, ask });
+    }
+    let answered = |request| OutsideAnswer {
+        request,
+        done: false,
+        said: words::BEING_UNINSTALLED.into(),
+    };
+    assert_eq!(model.shown().answers, [answered(1), answered(2)]);
+    model.run(&mut machine);
+    assert!(machine.switched_to.is_empty());
 }

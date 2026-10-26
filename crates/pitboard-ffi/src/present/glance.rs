@@ -47,7 +47,8 @@ struct GlanceLimit {
     resets_at: Option<i64>,
 }
 
-// Neither may change: a widget or a shortcut keeps an account by it, across renames.
+// The "glance" name and the stores' namespace never change: a widget keeps an account by this
+// id across renames.
 pub(crate) fn id(account: &str) -> String {
     derive("glance", account)
 }
@@ -150,7 +151,9 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
                 Answered::Busy => (false, words::SWITCH_UNDER_WAY.into()),
                 Answered::AppOpen { app } => (false, words::open_pitboard_to_switch(app)),
                 Answered::Replace { label } => (false, words::open_pitboard_to_replace(label)),
-                Answered::Failed { message } => (false, message.clone()),
+                Answered::Asking => (false, words::QUESTION_OPEN.into()),
+                Answered::Uninstalling => (false, words::BEING_UNINSTALLED.into()),
+                Answered::Failed { title } => (false, words::failed_outside(title)),
             };
             OutsideAnswer {
                 request: *request,

@@ -580,6 +580,15 @@ pub(crate) fn open_pitboard_to_replace(label: &str) -> String {
     format!("Open Pitboard to switch to {label}.")
 }
 
+pub(crate) const QUESTION_OPEN: &str = "Answer Pitboard’s question first, then try again.";
+
+pub(crate) const BEING_UNINSTALLED: &str = "Pitboard is being uninstalled.";
+
+// `title` names what failed; the app says why, since the core's words can name an email or a path.
+pub(crate) fn failed_outside(title: &str) -> String {
+    format!("{title}. Open Pitboard to try again.")
+}
+
 pub(crate) const READING: &str = "Reading…";
 
 pub(crate) const NOT_READ_YET: &str = "Not read yet";

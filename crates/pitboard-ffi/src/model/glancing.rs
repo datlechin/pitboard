@@ -297,13 +297,14 @@ fn a_switch_from_outside_that_would_quit_an_app_asks_nothing_and_says_so() {
     );
 }
 
+// What the core says can name an email or a path, and Shortcuts may speak an answer aloud.
 #[test]
-fn a_switch_from_outside_the_core_refuses_says_why_and_shows_no_alert() {
+fn a_switch_from_outside_the_core_refuses_says_only_that_it_failed_and_shows_no_alert() {
     let mut machine = Stub::reading(Ok(two(10.0)));
     let mut model = glancing(&mut machine);
     machine.switched = Err(refusal(
-        "parked_login_expired",
-        "personal needs signing in again.",
+        "parked_login_belongs_elsewhere",
+        "personal's saved sign-in belongs to dana@example.com.",
         Vec::new(),
     ));
     model.send(Intent::Outside {
@@ -312,12 +313,70 @@ fn a_switch_from_outside_the_core_refuses_says_why_and_shows_no_alert() {
     });
     model.run(&mut machine);
     assert_eq!(model.shown().failure_alert, None);
+    let said = words::failed_outside(&words::could_not_switch("claude/personal"));
+    assert!(!said.contains('@') && !said.contains('/'), "{said}");
     assert_eq!(
         answers(&model),
         [OutsideAnswer {
             request: 5,
             done: false,
-            said: "personal needs signing in again.".into(),
+            said,
+        }]
+    );
+}
+
+#[test]
+fn a_refresh_from_outside_that_fails_says_only_that_it_failed() {
+    let mut machine = Stub::reading(Ok(two(10.0)));
+    let mut model = glancing(&mut machine);
+    machine.answer = Err(refusal(
+        "state_unreadable",
+        "/Users/dana/.pitboard/state.json could not be read.",
+        Vec::new(),
+    ));
+    model.send(Intent::Outside {
+        request: 6,
+        ask: OutsideAsk::Refresh,
+    });
+    model.run(&mut machine);
+    assert_eq!(
+        answers(&model),
+        [OutsideAnswer {
+            request: 6,
+            done: false,
+            said: words::failed_outside(words::COULD_NOT_READ_USAGE),
+        }]
+    );
+}
+
+// A widget tapped while the person answers a question at the Mac leaves the question up.
+#[test]
+fn a_switch_from_outside_waits_behind_a_question_the_person_has_open() {
+    let mut machine = super::removing::claude_holding_home();
+    let mut model = Hand::new();
+    model.state.glance_to_a_file();
+    model.send(Intent::Start);
+    model.run(&mut machine);
+    model.send(Intent::Uninstall);
+    model.run(&mut machine);
+    let asked = model.shown().quit_question.expect("asked first");
+    let home = (model.state.status.as_ref())
+        .and_then(|read| read.accounts.iter().find(|account| !account.signed_in))
+        .map(|account| account.id.clone())
+        .expect("home");
+    model.send(Intent::Outside {
+        request: 2,
+        ask: switch_to(&home),
+    });
+    model.run(&mut machine);
+    assert_eq!(model.shown().quit_question, Some(asked));
+    assert!(machine.switched_to.is_empty());
+    assert_eq!(
+        answers(&model),
+        [OutsideAnswer {
+            request: 2,
+            done: false,
+            said: words::QUESTION_OPEN.into(),
         }]
     );
 }

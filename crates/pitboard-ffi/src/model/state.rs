@@ -48,9 +48,10 @@ use super::{
 };
 use crate::account_windows::records::{Entry, Loaded};
 use crate::present::words::{
-    COULD_NOT_CANCEL, COULD_NOT_CHANGE_WARM, COULD_NOT_CLEAN_UP, COULD_NOT_TELL_WHOSE,
-    COULD_NOT_UNINSTALL, COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT, could_not_remove,
-    could_not_rename, could_not_sign_in, could_not_switch, could_not_warm, signed_in_now,
+    COULD_NOT_CANCEL, COULD_NOT_CHANGE_WARM, COULD_NOT_CLEAN_UP, COULD_NOT_READ_USAGE,
+    COULD_NOT_TELL_WHOSE, COULD_NOT_UNINSTALL, COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT,
+    could_not_remove, could_not_rename, could_not_sign_in, could_not_switch, could_not_warm,
+    signed_in_now,
 };
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
@@ -659,7 +660,11 @@ pub(crate) enum Answered {
     AppOpen { app: String },
     // its login in use is refused for good, which only the app asks to replace
     Replace { label: String },
-    Failed { message: String },
+    // a question the person has open at the Mac would go
+    Asking,
+    Uninstalling,
+    // under `title`; why stays in the app, since the core's words can name an email or a path
+    Failed { title: String },
 }
 
 // The glance's last text written, and how many times it changed.
@@ -1215,6 +1220,8 @@ impl State {
             Msg::Intent(intent) => {
                 if self.removing.is_none() || taken_while_removing(&intent) {
                     self.intent(intent, now, &mut jobs);
+                } else if let Intent::Outside { request, .. } = intent {
+                    self.answer_outside(request, Answered::Uninstalling);
                 }
             }
             Msg::Done(answer) => {
@@ -1662,6 +1669,8 @@ impl State {
             Some(Answered::Unusable { label })
         } else if self.switch_under_way().is_some() || self.sign_in_under_way() {
             Some(Answered::Busy)
+        } else if self.quitting.is_some() {
+            Some(Answered::Asking)
         } else {
             None
         };
@@ -2827,8 +2836,8 @@ impl State {
         }
         if let Some(request) = ticket.request {
             let answered = match &self.failure {
-                Some(failure) => Answered::Failed {
-                    message: failure.message.clone(),
+                Some(_) => Answered::Failed {
+                    title: COULD_NOT_READ_USAGE.into(),
                 },
                 None => Answered::Updated {
                     at: self
@@ -3917,8 +3926,8 @@ impl State {
                 self.keep(&refused.warnings, jobs);
                 match outside {
                     Some(request) => {
-                        let message = refused.message;
-                        self.answer_outside(request, Answered::Failed { message });
+                        let title = refused.title;
+                        self.answer_outside(request, Answered::Failed { title });
                     }
                     None => self.present(refused),
                 }
