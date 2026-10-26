@@ -10,8 +10,9 @@ namespace Pitboard.Views;
 // the bars and figures line up whatever each limit is called; WinUI shares no column widths across controls.
 public sealed partial class LimitLines : UserControl
 {
+    // Not an array: XAML's type info would then write setters for LimitRow's init-only properties, which do not compile.
     public static readonly DependencyProperty LimitsProperty = DependencyProperty.Register(
-        nameof(Limits), typeof(LimitRow[]), typeof(LimitLines),
+        nameof(Limits), typeof(IEnumerable<LimitRow>), typeof(LimitLines),
         new PropertyMetadata(Array.Empty<LimitRow>(), (lines, _) => ((LimitLines)lines).Show()));
 
     private readonly Grid _grid = new() { ColumnSpacing = 8, RowSpacing = 4 };
@@ -30,9 +31,9 @@ public sealed partial class LimitLines : UserControl
         Content = _grid;
     }
 
-    public LimitRow[] Limits
+    public IEnumerable<LimitRow> Limits
     {
-        get => (LimitRow[])GetValue(LimitsProperty);
+        get => (IEnumerable<LimitRow>)GetValue(LimitsProperty);
         set => SetValue(LimitsProperty, value);
     }
 
@@ -68,10 +69,9 @@ public sealed partial class LimitLines : UserControl
     {
         _grid.Children.Clear();
         _grid.RowDefinitions.Clear();
-        Visibility = Limits.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        for (var row = 0; row < Limits.Length; row++)
+        var row = 0;
+        foreach (var limit in Limits)
         {
-            var limit = Limits[row];
             _grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var name = Column(limit.Short);
             // Narrator reads the limit once, as a sentence, and not the bar and each figure on their own.
@@ -83,7 +83,10 @@ public sealed partial class LimitLines : UserControl
             figure.TextAlignment = TextAlignment.Right;
             Place(Unspoken(figure), row, 2);
             Place(Unspoken(Column(limit.Resets)), row, 3);
+            row++;
         }
+
+        Visibility = row > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Place(FrameworkElement element, int row, int column)
