@@ -47,6 +47,12 @@ pub struct WindowWords {
     pub close: String,
     pub ok: String,
     pub dismiss: String,
+    // a check's detail's own menu, on Windows
+    pub copy: Option<String>,
+    pub select_all: Option<String>,
+    // what Narrator calls the checks, and the ring while they run
+    pub checks: Option<String>,
+    pub checking: Option<String>,
 }
 
 // The activity list's columns and toolbar.
@@ -97,6 +103,16 @@ pub struct SettingsWords {
     pub command_line: String,
     pub install_command_line: Option<String>,
     pub link_failed: Option<String>,
+    pub cannot_link_command_line: Option<String>,
+    // what Narrator calls the ring while the Windows page looks for one
+    pub looking_for_command_line: Option<String>,
+    // a Windows copy that cannot update itself
+    pub update_key_invalid: Option<String>,
+    pub win_sparkle_missing: Option<String>,
+    pub notifications_unoffered: Option<String>,
+    // what Narrator calls the warm-up hours' pickers
+    pub warm_from: Option<String>,
+    pub warm_to: Option<String>,
     pub from: String,
     pub to: String,
     pub help: String,
@@ -147,6 +163,61 @@ pub struct AccountWindowWords {
     // "Show in Finder", "Show in folder"
     pub show_file: String,
     pub show_file_help: String,
+    pub could_not_open: Option<String>,
+    // what VoiceOver calls the link the Open Link window opens
+    pub link: Option<String>,
+}
+
+#[uniffi::export]
+pub fn install_update(version: String) -> String {
+    format!("Install Pitboard {version}…")
+}
+
+#[uniffi::export]
+pub fn ready_to_install(version: String) -> String {
+    format!("Pitboard {version} is ready to install.")
+}
+
+// A copy that knows no version is Pitboard alone.
+#[uniffi::export]
+pub fn named_version(version: String) -> String {
+    if version.is_empty() {
+        "Pitboard".into()
+    } else {
+        format!("Pitboard {version}")
+    }
+}
+
+// What Install Command Line Tool… does, on macOS.
+#[uniffi::export]
+pub fn links_to(target: String) -> String {
+    format!(
+        "Links {target} to the one inside this app. macOS asks for an administrator’s password."
+    )
+}
+
+#[uniffi::export]
+pub fn already_there(link: String) -> String {
+    format!("{link} is already there and isn’t a link, so it was kept.")
+}
+
+// Windows' Run key holds a command of up to `characters`.
+#[uniffi::export]
+pub fn path_too_long(characters: u32) -> String {
+    format!(
+        "Windows starts a program when you sign in only from a path of up to {characters} \
+         characters, and Pitboard’s is longer."
+    )
+}
+
+// `have`: the WebView2 Runtime's version, none where it is not installed.
+#[uniffi::export]
+pub fn webview_runtime_too_old(minimum: String, have: Option<String>) -> String {
+    let have = have.map_or_else(|| "none".into(), |version| format!("version {version}"));
+    format!(
+        "This window needs the Microsoft Edge WebView2 Runtime {minimum} or later, and this PC \
+         has {have}. Windows Update keeps it up to date."
+    )
 }
 
 #[uniffi::export]
@@ -190,6 +261,10 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             close: "Close".into(),
             ok: "OK".into(),
             dismiss: words::DISMISS.into(),
+            copy: windows("Copy"),
+            select_all: windows("Select all"),
+            checks: windows("Checks"),
+            checking: windows("Checking"),
         },
         activity: ActivityWords {
             date: "Date".into(),
@@ -261,6 +336,21 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             command_line: titled(os, "Command Line", "Command line"),
             install_command_line: mac("Install Command Line Tool…"),
             link_failed: mac("The link couldn’t be made."),
+            cannot_link_command_line: mac(
+                "This copy of Pitboard can’t link the command line inside it.",
+            ),
+            looking_for_command_line: windows("Looking for pitboard"),
+            update_key_invalid: windows(
+                "This copy of Pitboard can’t update itself: the update key it was built with isn’t \
+                 a valid key. Install a later version by hand.",
+            ),
+            win_sparkle_missing: windows(
+                "This copy of Pitboard can’t update itself: WinSparkle.dll, which updates it, is \
+                 missing. Install Pitboard again.",
+            ),
+            notifications_unoffered: windows("Windows offers this process no app notifications."),
+            warm_from: windows("Warm up from"),
+            warm_to: windows("Warm up to"),
             from: "From".into(),
             to: "To".into(),
             help: titled(os, "Pitboard Help", "Pitboard help"),
@@ -312,6 +402,8 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
                 Os::MacOs | Os::Linux => "Show the file in Finder",
             }
             .into(),
+            could_not_open: windows("Couldn’t open this window"),
+            link: mac("Link"),
         },
     }
 }
@@ -359,8 +451,9 @@ mod tests {
     // Past a sentence's first word, a capital is a name's, or a Settings page's the words name.
     #[test]
     fn windows_says_every_control_in_sentence_case() {
-        const NAMES: [&str; 14] = [
+        const NAMES: [&str; 15] = [
             "Pitboard",
+            "WinSparkle.dll",
             "Windows",
             "GitHub",
             "Apache",
@@ -387,6 +480,42 @@ mod tests {
                 assert!(mechanism_words(&said).is_empty(), "{said}");
             }
         }
+    }
+
+    #[test]
+    fn a_sentence_with_a_value_is_made_here_not_in_a_view() {
+        assert_eq!(install_update("1.1.0".into()), "Install Pitboard 1.1.0…");
+        assert_eq!(
+            ready_to_install("1.1.0".into()),
+            "Pitboard 1.1.0 is ready to install."
+        );
+        assert_eq!(
+            (named_version("1.1.0".into()), named_version(String::new())),
+            ("Pitboard 1.1.0".into(), "Pitboard".into())
+        );
+        assert_eq!(
+            links_to("/usr/local/bin/pitboard".into()),
+            "Links /usr/local/bin/pitboard to the one inside this app. macOS asks for an \
+             administrator’s password."
+        );
+        assert_eq!(
+            already_there("/usr/local/bin/pitboard".into()),
+            "/usr/local/bin/pitboard is already there and isn’t a link, so it was kept."
+        );
+        assert_eq!(
+            path_too_long(220),
+            "Windows starts a program when you sign in only from a path of up to 220 characters, \
+             and Pitboard’s is longer."
+        );
+        assert_eq!(
+            webview_runtime_too_old("144.0.3719.77".into(), None),
+            "This window needs the Microsoft Edge WebView2 Runtime 144.0.3719.77 or later, and \
+             this PC has none. Windows Update keeps it up to date."
+        );
+        assert!(
+            webview_runtime_too_old("144.0.3719.77".into(), Some("120.0".into()))
+                .contains("this PC has version 120.0.")
+        );
     }
 
     #[test]

@@ -47,7 +47,8 @@ pub(crate) mod testing;
 
 pub use app_words::{
     AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
-    app_words,
+    already_there, app_words, install_update, links_to, named_version, path_too_long,
+    ready_to_install, webview_runtime_too_old,
 };
 #[cfg(test)]
 pub(crate) use glance::glance_on;
