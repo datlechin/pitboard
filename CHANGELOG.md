@@ -183,6 +183,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Uninstall Pitboard?**, which waits to be read.
 - A question or failure that comes while the Windows app's dialog is up takes the dialog over
   until it is answered, and the dialog then goes back to its step, where it was a bar inside it.
+- The Windows installer starts Pitboard once a first install is done, which opens its welcome,
+  where it started Pitboard only after an update.
 
 ### Removed
 
