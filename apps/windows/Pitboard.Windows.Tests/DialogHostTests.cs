@@ -101,7 +101,8 @@ public sealed class DialogHostTests
         foreach (var (confirmIsDefault, expected) in new[] { (true, ContentDialogButton.Primary), (false, ContentDialogButton.None) })
         {
             var asked = dialogs.Confirm(new Question(
-                "Remove “spare”?", "Its saved sign-in is deleted.", "Remove", Destructive: true, ConfirmIsDefault: confirmIsDefault));
+                "Remove “spare”?", "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your browser.", "Remove",
+                Destructive: true, ConfirmIsDefault: confirmIsDefault));
             await Views.Until(() => dialogs.Open is not null, "the question did not show");
             var shown = dialogs.Open!;
 

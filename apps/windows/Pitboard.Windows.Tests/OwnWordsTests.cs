@@ -36,24 +36,8 @@ public sealed partial class OwnWordsTests
         ("WindowsApps.cs", "register process  with Restart Manager"),
     ];
 
-    private static string Apps
-    {
-        get
-        {
-            for (var folder = new DirectoryInfo(AppContext.BaseDirectory); folder is not null; folder = folder.Parent)
-            {
-                if (Directory.Exists(Path.Combine(folder.FullName, "Pitboard.Views")))
-                {
-                    return folder.FullName;
-                }
-            }
-
-            throw new InvalidOperationException($"no apps/windows above {AppContext.BaseDirectory}");
-        }
-    }
-
     private static IEnumerable<string> Sources(string pattern) =>
-        Projects.SelectMany(project => Directory.EnumerateFiles(Path.Combine(Apps, project), pattern));
+        Projects.SelectMany(project => Directory.EnumerateFiles(Repository.Path("apps", "windows", project), pattern));
 
     [TestMethod]
     public void NoXamlSaysWordsOfItsOwn()

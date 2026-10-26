@@ -171,7 +171,7 @@ public sealed class AccountsPageTests
         var spare = Row(page, "claude/spare");
 
         var texts = Views.Texts(spare);
-        foreach (var said in new[] { "spare", "Max 5x", "5-hour", "100%", "Resets 10:10 AM", "Weekly", "61%", "Resets Thu 2:00 PM", "Sign-in expires in 2 days" })
+        foreach (var said in new[] { "spare", "Max 5x", "5-hour", "100%", "Resets 3:45 PM", "Weekly", "61%", "Resets Thu 2:00 PM", "Sign-in expires in 2 days" })
         {
             Assert.Contains(said, texts);
         }
@@ -180,7 +180,7 @@ public sealed class AccountsPageTests
         Assert.DoesNotContain("In use", texts);
         Assert.Contains("In use", Views.Texts(Row(page, "claude/work")));
         var use = Views.Element<Button>(spare, "account.action");
-        Assert.AreEqual("Use spare", AutomationProperties.GetName(use));
+        Assert.AreEqual("Switch to spare", AutomationProperties.GetName(use));
         Views.Press(use);
         Assert.Contains(new Intent.SwitchTo("claude/spare"), model.Sent);
     }
@@ -214,7 +214,7 @@ public sealed class AccountsPageTests
         Assert.AreEqual(Spare().Spoken, AutomationProperties.GetName(spare));
         var spoken = Views.Visible<TextBlock>(spare).Single(text => text.Text == "5-hour");
         Assert.AreEqual(Spare().Limits[0].Spoken, AutomationProperties.GetName(spoken));
-        foreach (var unspoken in Views.Visible<TextBlock>(spare).Where(text => text.Text is "100%" or "Resets 10:10 AM"))
+        foreach (var unspoken in Views.Visible<TextBlock>(spare).Where(text => text.Text is "100%" or "Resets 3:45 PM"))
         {
             Assert.AreEqual(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(unspoken));
         }

@@ -48,7 +48,7 @@ public sealed class AccountSheetTests
         picker.SelectedIndex = 1;
         Views.Press(up.Part("PrimaryButton"));
 
-        Assert.Contains("Pitboard opens Codex’s own sign-in in your browser.", Views.Texts(up.Sheet));
+        Assert.Contains("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", Views.Texts(up.Sheet));
         await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn("codex", null)), "no sign-in to Codex");
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went before the model closed it");
     }
@@ -331,7 +331,7 @@ public sealed class AccountSheetTests
         ((ISelectionItemProvider)new RadioButtonAutomationPeer(codex)).Select();
 
         await Views.Until(() => picker.SelectedIndex == 1, "Codex was not picked");
-        Assert.Contains("Pitboard opens Codex’s own sign-in in your browser.", Views.Texts(up.Sheet));
+        Assert.Contains("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", Views.Texts(up.Sheet));
     }
 
     // A code is no word to check or predict, and what to paste is said under the field, as a field's description.

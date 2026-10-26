@@ -16,8 +16,8 @@ public sealed class SheetPageTests
         var text = Items.AddAccount(Items.Tool("claude", "Claude Code"), Items.Tool("codex", "Codex"));
         var form = (SheetPage.Form)Shown(Snapshots.Read(1) with { Sheet = Add, SheetText = text })!;
 
-        Assert.AreEqual("Pitboard opens Codex’s own sign-in in your browser.", form.Message("codex"));
-        Assert.AreEqual("Sign in", form.Confirm("codex"));
+        Assert.AreEqual("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", form.Message("codex"));
+        Assert.AreEqual("Sign in…", form.Confirm("codex"));
         Assert.AreEqual(text.Message, form.Message("desktop"), "a tool the picker does not offer");
     }
 

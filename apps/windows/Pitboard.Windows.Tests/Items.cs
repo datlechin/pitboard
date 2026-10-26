@@ -2,7 +2,8 @@ using Pitboard.Core;
 
 namespace Pitboard.Windows.Tests;
 
-// What the model presents, made by hand, so each view test says only what it is about.
+// What the model presents, made by hand, so each view test says only what it is about, in the model's words as
+// present/words.rs pins them for these labels, which StandInsTests checks.
 internal static class Items
 {
     public static AccountItem Account(string provider, string label, bool inUse = false) =>
@@ -17,7 +18,7 @@ internal static class Items
                     Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
                     ReadAt: null, Read: null),
                 Help: null, Limits: [], Offers: [], Windows: [], Forget: null, Actions: []),
-            inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")));
+            inUse ? null : new ItemAction("Switch", $"Switch to {label}", new Intent.SwitchTo($"{provider}/{label}")));
 
     // What pressing it does, and the button at its row's end that does it.
     public static AccountItem Acting(AccountItem item, ItemAction? action) =>
@@ -48,8 +49,8 @@ internal static class Items
             Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5-hour", Percent: percent,
             Figure: $"{percent:0}%", Used: $"{percent:0}% used",
             Level: percent >= 90 ? UsageLevel.Out : percent >= 70 ? UsageLevel.Low : UsageLevel.Plenty,
-            ResetsAt: 1_800_007_800, Resets: "Resets 10:10 AM", ResetsIn: "in 2 hr 10 min",
-            Spoken: $"5-hour limit, {percent:0} percent used, resets 10:10 AM");
+            ResetsAt: 1_800_007_799, Resets: "Resets 3:45 PM", ResetsIn: "in 2 hr 9 min",
+            Spoken: $"5-hour limit, {percent:0} percent used, resets 3:45 PM");
 
     // What an account's own menu and expanded row offer to do to it.
     public static AccountAction Action(ActionKind kind, string title, Intent intent, bool enabled = true, Question? confirm = null) =>
@@ -61,15 +62,18 @@ internal static class Items
     public static AccountAction RemoveAction(string qualified, bool enabled = true) =>
         Action(
             ActionKind.Remove, "Remove account…", new Intent.Forget(qualified), enabled,
-            new Question("Remove “spare”?", "Its saved sign-in is deleted.", "Remove", Destructive: true, ConfirmIsDefault: true));
+            new Question(
+                "Remove “spare”?", "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your browser.", "Remove",
+                Destructive: true, ConfirmIsDefault: true));
 
     public static AccountAction WindowAction(WindowAccount window) =>
         new(ActionKind.OpenWindow, $"Open {window.Site.Name}", Intent: null, window, Enabled: true, Confirm: null);
 
     public static PanelNotice Notice(string id, params NoticeAction[] actions) =>
         new(
-            Id: id, Severity: Severity.Info, SpokenSeverity: "Note", Title: "Switched Codex to spare",
-            Lines: ["Any codex session started before this switch keeps using main."], Until: null, UntilLabel: null,
+            Id: id, Severity: Severity.Info, SpokenSeverity: "Note", Title: "Switched to work",
+            Lines: ["Any codex session started before this switch keeps using personal until it is quit and started again."],
+            Until: null, UntilLabel: null,
             Actions: actions, Learn: null);
 
     public static NextStep LearnMore =>
@@ -82,22 +86,26 @@ internal static class Items
         new(Id: provider, Heading: heading, Accounts: accounts);
 
     public static SheetTool Tool(string code, string name, Missing? missing = null) =>
-        new(Code: code, Name: name, Message: $"Pitboard opens {name}’s own sign-in in your browser.", Confirm: "Sign in", Missing: missing);
+        new(
+            Code: code, Name: name,
+            Message: $"Pitboard opens {name}’s sign-in in your browser, where you sign in to the account you’re adding.",
+            Confirm: "Sign in…", Missing: missing);
 
     public static Missing CodexCliMissing() =>
         new(
             Title: "Pitboard can’t find the Codex CLI on this PC.",
-            Detail: "Adding a Codex account runs the Codex CLI’s own sign-in. Pitboard doesn’t use the copy inside the ChatGPT app. Install the CLI, then come back to this window.",
+            Detail: "Adding a Codex account runs the Codex CLI’s sign-in, not the copy inside the ChatGPT app. Install the CLI, then come back to this window.",
             LinkTitle: "How to install the Codex CLI", Link: "https://developers.openai.com/codex/cli");
 
     public static SheetText AddAccount(params SheetTool[] tools) =>
         new(
-            Title: "Add account", Message: "Pitboard opens Claude Code’s own sign-in in your browser.", Tools: tools,
-            Tool: "claude", Account: null, Name: "", Prompt: "work", Confirm: "Sign in", Saving: false, Progress: null);
+            Title: "Add account",
+            Message: "Pitboard opens Claude Code’s sign-in in your browser, where you sign in to the account you’re adding.",
+            Tools: tools, Tool: "claude", Account: null, Name: "", Prompt: "work", Confirm: "Sign in…", Saving: false, Progress: null);
 
     public static SheetText Rename(string label) =>
         new(
-            Title: $"Rename “{label}”", Message: "The account keeps its parked login.", Tools: [], Tool: "claude",
+            Title: $"Rename “{label}”", Message: "Only its name changes, here and in the command line.", Tools: [], Tool: "claude",
             Account: null, Name: label, Prompt: label, Confirm: "Rename", Saving: false, Progress: null);
 
     public static RunningSignIn Running(string? url = null, bool wantsCode = false) =>
@@ -116,7 +124,7 @@ internal static class Items
     public static StowText Stow(string? found = null) =>
         new(
             Title: "Clean up the leftover sign-in file",
-            Message: found ?? "Clean Up deletes the sign-in file Claude Code left behind Credential Manager.",
+            Message: found ?? "Clean Up deletes the sign-in file Claude Code left behind Credential Manager, and keeps any sign-in an account needs.",
             Looking: found is null ? "Finding out whose sign-in it is…" : null, Confirm: "Clean up",
             CanConfirm: found is not null, Saving: false);
 }

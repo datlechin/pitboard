@@ -15,7 +15,7 @@ public sealed class SettingsViewModelTests
     private static readonly string[] AtLimitChoices = ["Do nothing", "Notify me", "Switch automatically"];
 
     private static readonly WarmShown TwoWarmed = new(
-        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
@@ -248,7 +248,7 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("When a limit reaches 95%", shown.AtLimitLabel);
         CollectionAssert.AreEqual(AtLimitChoices, shown.AtLimitTitles);
         Assert.AreEqual(2, shown.AtLimitIndex);
-        Assert.AreEqual("Share of a limit", shown.ShareTitle);
+        Assert.AreEqual("At", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
         Assert.IsTrue(shown.ShowsShare);

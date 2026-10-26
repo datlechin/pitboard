@@ -20,7 +20,7 @@ public sealed class SettingsPageTests
     private static readonly string[] Sections = ["General", "Limits", "Advanced", "Troubleshoot", "About"];
 
     private static readonly WarmShown TwoWarmed = new(
-        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
@@ -267,7 +267,7 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         var choice = Views.Element<ComboBox>(page, "settings.atLimit");
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
 
         Assert.IsTrue(choice.IsEnabled);
@@ -300,7 +300,7 @@ public sealed class SettingsPageTests
     {
         var unread = With(1, machine => machine with { AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false } });
         var page = await Shown(new AppModel(new StandInModel(unread)));
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
 
         Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
         Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
@@ -326,8 +326,8 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.warm", "No Claude Code account is enrolled yet.");
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.warm", "Add a Claude Code account to warm it up.");
+        await Expand(page, "settings.atLimitGroup", "At");
         var sent = model.Sent.Count;
 
         app.Apply(With(2, machine => machine with
@@ -362,7 +362,7 @@ public sealed class SettingsPageTests
         var texts = Views.Texts(page);
         Assert.Contains("Warms up again at 22:50", texts);
         Assert.Contains("Next warm-up: personal at 22:50.", texts);
-        Assert.DoesNotContain("No Claude Code account is enrolled yet.", texts);
+        Assert.DoesNotContain("Add a Claude Code account to warm it up.", texts);
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
 
         Views.Element<ToggleSwitch>(page, "settings.warm.claude/work").IsOn = true;
@@ -374,7 +374,7 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
 
-        await Expand(page, "settings.warm", "No Claude Code account is enrolled yet.");
+        await Expand(page, "settings.warm", "Add a Claude Code account to warm it up.");
 
         Assert.IsFalse(Views.Element<TimePicker>(page, "settings.warmFrom").IsEnabled);
         Assert.IsFalse(Views.Element<TimePicker>(page, "settings.warmTo").IsEnabled);
@@ -636,7 +636,7 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
         var card = Card(Views.Element<NumberBox>(page, "settings.atLimitShare"));
 
         Assert.AreEqual(Visibility.Visible, card.Visibility);
@@ -656,7 +656,7 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
@@ -665,9 +665,9 @@ public sealed class SettingsPageTests
             AtLimit = machine.AtLimit with { At = 90, AtLabel = "When a limit reaches 90%" },
         }));
 
-        Assert.AreEqual("Share of a limit", card.Header);
+        Assert.AreEqual("At", card.Header);
         Assert.AreEqual("From 50% to 99%", card.Description);
-        Assert.AreEqual("Share of a limit", AutomationProperties.GetName(share));
+        Assert.AreEqual("At", AutomationProperties.GetName(share));
         Assert.AreEqual("When a limit reaches 90%", AutomationProperties.GetName(Views.Element<ComboBox>(page, "settings.atLimit")));
         Assert.AreEqual(90.0, share.Value);
     }

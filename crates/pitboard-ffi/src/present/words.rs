@@ -4355,6 +4355,11 @@ mod tests {
              you’re adding."
         );
         assert_eq!(
+            sign_in_message("Claude Code", None),
+            "Pitboard opens Claude Code’s sign-in in your browser, where you sign in to the \
+             account you’re adding."
+        );
+        assert_eq!(
             sign_in_message("Codex", Some("work")),
             "Pitboard opens Codex’s sign-in in your browser, where you sign in to work again."
         );
@@ -4438,6 +4443,11 @@ mod tests {
             code_note("Claude Code"),
             "Claude Code takes the code shown after you sign in, whether or not your browser \
              came back to it."
+        );
+        assert_eq!(
+            code_note("Codex"),
+            "Codex takes the code shown after you sign in, whether or not your browser came back \
+             to it."
         );
         assert_eq!(
             code_refused("Claude Code"),
@@ -4690,6 +4700,10 @@ mod tests {
         assert_eq!(in_bar("work", "42%"), "work 42%");
         assert_eq!(bar_spoken(None, None, false), "Pitboard");
         assert_eq!(
+            bar_spoken(Some("work 42%"), None, false),
+            "Pitboard, work 42%"
+        );
+        assert_eq!(
             bar_spoken(Some("work 42%"), Some("Codex"), true),
             "Pitboard, work 42%, Codex, needs attention"
         );
@@ -4698,6 +4712,10 @@ mod tests {
             "Pitboard, needs attention"
         );
         assert_eq!(bar_tip(false, []), "Pitboard");
+        assert_eq!(
+            bar_tip(false, [("work".into(), "5-hour 42% used".into())]),
+            "Pitboard\nwork: 5-hour 42% used"
+        );
         assert_eq!(
             bar_tip(
                 true,
@@ -4711,6 +4729,7 @@ mod tests {
         assert_eq!(nameless_login(true), "Sign-in Pitboard can’t use");
         assert_eq!(nameless_login(false), "Unknown sign-in");
         assert_eq!(row_spoken("work", None, false, None), "work");
+        assert_eq!(row_spoken("work", None, true, None), "work, in use");
         assert_eq!(
             row_spoken("work", Some("Team 5x"), true, None),
             "work, Team 5x, in use"

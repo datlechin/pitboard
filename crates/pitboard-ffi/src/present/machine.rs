@@ -529,6 +529,23 @@ mod tests {
         );
     }
 
+    // A sentence of the core's as the apps say one: its apostrophe curled and a full stop.
+    #[test]
+    fn the_terms_are_said_in_one_sentence_beside_their_link() {
+        let terms = super::terms();
+        assert_eq!(
+            terms.sentence,
+            "Anthropic’s terms may cover automatic switching and warm-ups."
+        );
+        assert_eq!(
+            (terms.link_title.as_str(), terms.link.as_str()),
+            (
+                words::IS_THIS_ALLOWED,
+                pitboard_core::words::IS_THIS_ALLOWED_URL
+            )
+        );
+    }
+
     #[test]
     fn warm_up_says_so_while_no_claude_code_account_is_enrolled() {
         let state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
