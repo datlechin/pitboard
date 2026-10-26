@@ -486,8 +486,6 @@ fn a_halt_is_said_under_the_setting() {
     let model = started(&mut machine);
     assert_eq!(
         model.shown().machine.warm.standing,
-        Some(words::typeset(&pitboard_core::words::warming_halted(
-            &Halt::ProgramMissing
-        )))
+        Some(words::warming_halted(&Halt::ProgramMissing))
     );
 }

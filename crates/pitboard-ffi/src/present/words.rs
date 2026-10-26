@@ -1418,7 +1418,8 @@ pub(crate) const UNINSTALL_QUESTION: &str = "Uninstall Pitboard?";
 
 pub(crate) const UNINSTALL_SAYS: &str = "Pitboard deletes its saved sign-ins, settings and \
                                          account windows. Each tool stays signed in to the \
-                                         account in use; other accounts need signing in again.";
+                                         account in use, and you sign in to the others again to \
+                                         use them.";
 
 pub(crate) const UNINSTALL: &str = "Uninstall";
 
@@ -2121,9 +2122,7 @@ pub(crate) fn warm_standing(
 pub(crate) fn not_watching(why: &pitboard_core::duty::autoswitch::Blind) -> String {
     use pitboard_core::duty::autoswitch::Blind;
     match why {
-        Blind::SwitchInterrupted => {
-            "a switch didn’t finish, and the next change you make finishes it".into()
-        }
+        Blind::SwitchInterrupted => SWITCH_NOT_FINISHED.into(),
         Blind::NothingSignedIn => "Claude Code isn’t signed in".into(),
         Blind::NotEnrolled { email } => {
             format!("Claude Code is signed in to {email}, an account you haven’t added")
@@ -2133,6 +2132,19 @@ pub(crate) fn not_watching(why: &pitboard_core::duty::autoswitch::Blind) -> Stri
         }
         other => pitboard_core::words::not_watching(other),
     }
+}
+
+const SWITCH_NOT_FINISHED: &str =
+    "a switch didn’t finish, and the next change you make finishes it";
+
+// Why Pitboard isn't warming up accounts, in the app's words.
+pub(crate) fn warming_halted(halt: &pitboard_core::duty::warm::Halt) -> String {
+    use pitboard_core::duty::warm::Halt;
+    let why = match halt {
+        Halt::SwitchInterrupted => SWITCH_NOT_FINISHED.into(),
+        other => pitboard_core::words::not_warming(other),
+    };
+    typeset(&format!("Pitboard isn’t warming up accounts: {why}."))
 }
 
 // Why a row's numbers are old or its account can't be used, in the app's words.
@@ -2601,10 +2613,36 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             detail,
             ..
         } if !cause.worth_retrying() && *cause != Cause::AnswerNotUnderstood => format!(
-            "Pitboard couldn’t confirm with {} whose sign-in is saved for {1} ({detail}), so \
-             nothing has changed. Choose Sign In Again… on {1}’s row.",
+            "Pitboard couldn’t confirm with {} whose sign-in is saved for {} ({detail}), so \
+             nothing has changed.",
             tool.service(),
             bare(label)
+        ),
+        Error::IdentityUnverifiable {
+            tool,
+            login: Unidentified::NewSignIn,
+            cause,
+            detail,
+            ..
+        } => format!(
+            "Pitboard couldn’t confirm with {} whose account you signed in to ({detail}), so \
+             nothing was added. {}",
+            tool.service(),
+            match cause {
+                Cause::Unreachable => "Check the connection and try again.",
+                Cause::RateLimited => "Try again in a few minutes.",
+                Cause::ServerError => "Try again later.",
+                _ => "Sign in again.",
+            }
+        ),
+        Error::AccountOnHold {
+            tool,
+            login: Unidentified::NewSignIn,
+            ..
+        } => format!(
+            "{0} has put the account you signed in to on hold. Follow {0}’s instructions for it, \
+             then try again.",
+            tool.service()
         ),
         Error::IdentityUnverifiable {
             tool,
@@ -2931,6 +2969,25 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             label.as_deref().map_or_else(|| "a sign-in".into(), bare),
             path.display()
         ),
+        CoreWarning::MoveSettled(settled) => {
+            use pitboard_core::state::Half;
+            use pitboard_core::switch::Ended;
+            let label = bare(&settled.label);
+            match (settled.half, settled.ended) {
+                (Half::Leave, Ended::Undone) => {
+                    format!("Pitboard undid it, and {label} is in use.")
+                }
+                (Half::Leave, Ended::Finished) => {
+                    format!("Pitboard saved {label}’s sign-in, and {app} is signed out.")
+                }
+                (Half::Arrive, Ended::Undone) => {
+                    format!("Pitboard saved {label}’s sign-in again, and {app} is signed out.")
+                }
+                (Half::Arrive, Ended::Finished) => {
+                    format!("The switch to {label} had finished after all.")
+                }
+            }
+        }
         CoreWarning::MoveWaiting { label, .. } => format!(
             "A switch to {} didn’t finish. Quit {app}, then switch to any {} account: Pitboard \
              finishes the earlier switch first.",
@@ -2955,6 +3012,19 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
     use pitboard_core::provider::Held;
     let inside = |tool: &ProviderId| in_its_app(tool.code());
     Some(match warning {
+        CoreWarning::Recovered(recovered) => {
+            let from = if recovered.from.is_empty() {
+                String::new()
+            } else {
+                format!(" from {}", bare(&recovered.from))
+            };
+            let to = bare(&recovered.to);
+            if recovered.finished {
+                format!("The switch{from} to {to} had finished after all, and nothing was lost.")
+            } else {
+                format!("The switch{from} to {to} hadn’t finished, and nothing was lost.")
+            }
+        }
         CoreWarning::LoginReplaced {
             tool, label, now, ..
         } if !inside(tool) => replaced(*tool, label, now),
@@ -2967,9 +3037,10 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
              change."
         ),
         CoreWarning::ParkedLoginRefused { tool, label } => format!(
-            "{} no longer accepts {}’s saved sign-in, so it needs signing in to again.",
+            "{} no longer accepts {}’s saved sign-in. {}",
             tool.service(),
-            bare(label)
+            bare(label),
+            sign_in_to_keep(&bare(label))
         ),
         CoreWarning::LockCompromised { tool } => format!(
             "{} took back its lock during this change and may have written a sign-in at the same \
@@ -2982,7 +3053,7 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             held: Held::Login,
         } => format!(
             "{} holds another {} sign-in, which sessions already running keep after a switch. \
-             Clean Up keeps it for its account, then deletes the file.",
+             Cleaning up keeps it for its account, then deletes the file.",
             path.display(),
             tool.name()
         ),
@@ -2992,7 +3063,7 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             held: Held::NoLogin,
         } => format!(
             "{} holds no {} sign-in, and sessions already running don’t follow a switch while it’s \
-             there. Clean Up deletes it.",
+             there. Cleaning up deletes it.",
             path.display(),
             tool.name()
         ),
@@ -4766,7 +4837,7 @@ mod tests {
         assert_eq!(
             UNINSTALL_SAYS,
             "Pitboard deletes its saved sign-ins, settings and account windows. Each tool stays \
-             signed in to the account in use; other accounts need signing in again."
+             signed in to the account in use, and you sign in to the others again to use them."
         );
         assert_eq!(UNINSTALL, "Uninstall");
         assert_eq!(UNINSTALLING, "Uninstalling Pitboard…");
@@ -5153,9 +5224,9 @@ mod tests {
             in_app_refusal(Os::MacOs, &untold(Cause::Refused)).as_deref(),
             Some(
                 "Pitboard couldn’t confirm with Anthropic whose sign-in is saved for dtg \
-                 (Anthropic answered 400), so nothing has changed. Choose Sign In Again… on \
-                 dtg’s row."
-            )
+                 (Anthropic answered 400), so nothing has changed."
+            ),
+            "the failure's Sign In Again is the way on"
         );
         assert_eq!(
             in_app_refusal(Os::MacOs, &untold(Cause::Unreachable)).as_deref(),
@@ -5785,5 +5856,138 @@ mod tests {
                 "{sentence}"
             );
         }
+    }
+
+    #[test]
+    fn a_new_sign_in_pitboard_could_not_name_or_that_is_on_hold_says_nothing_was_added() {
+        let untold = |cause| Error::IdentityUnverifiable {
+            tool: ProviderId::Claude,
+            login: Unidentified::NewSignIn,
+            cause,
+            detail: "Anthropic answered 400".into(),
+            spelling: pitboard_core::words::Spelling::Bare,
+        };
+        assert_eq!(
+            in_app_refusal(Os::Windows, &untold(Cause::Refused)).as_deref(),
+            Some(
+                "Pitboard couldn’t confirm with Anthropic whose account you signed in to \
+                 (Anthropic answered 400), so nothing was added. Sign in again."
+            )
+        );
+        assert_eq!(
+            in_app_refusal(Os::MacOs, &untold(Cause::RateLimited)).as_deref(),
+            Some(
+                "Pitboard couldn’t confirm with Anthropic whose account you signed in to \
+                 (Anthropic answered 400), so nothing was added. Try again in a few minutes."
+            )
+        );
+        let held = Error::AccountOnHold {
+            tool: ProviderId::Codex,
+            login: Unidentified::NewSignIn,
+            link: None,
+        };
+        assert_eq!(
+            in_app_refusal(Os::MacOs, &held).as_deref(),
+            Some(
+                "OpenAI has put the account you signed in to on hold. Follow OpenAI’s \
+                 instructions for it, then try again."
+            )
+        );
+    }
+
+    #[test]
+    fn a_switch_or_a_move_that_did_not_finish_is_said_in_the_apps_words() {
+        use pitboard_core::state::Half;
+        use pitboard_core::switch::{Ended, MoveSettled, Recovered};
+        let recovered = |from: &str, finished| {
+            CoreWarning::Recovered(Recovered {
+                from: from.into(),
+                to: "home".into(),
+                finished,
+            })
+        };
+        let said = |warning: &CoreWarning| in_app_warning(Os::MacOs, warning).expect("the app's");
+        assert_eq!(
+            said(&recovered("work", true)),
+            "The switch from work to home had finished after all, and nothing was lost."
+        );
+        assert_eq!(
+            said(&recovered("", false)),
+            "The switch to home hadn’t finished, and nothing was lost."
+        );
+        let settled = |half, ended| {
+            said(&CoreWarning::MoveSettled(MoveSettled {
+                tool: ProviderId::Desktop,
+                label: "desktop/work".into(),
+                half,
+                ended,
+            }))
+        };
+        assert_eq!(
+            [
+                settled(Half::Leave, Ended::Undone),
+                settled(Half::Leave, Ended::Finished),
+                settled(Half::Arrive, Ended::Undone),
+                settled(Half::Arrive, Ended::Finished),
+            ],
+            [
+                "Pitboard undid it, and work is in use.",
+                "Pitboard saved work’s sign-in, and Claude is signed out.",
+                "Pitboard saved work’s sign-in again, and Claude is signed out.",
+                "The switch to work had finished after all.",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_saved_sign_in_its_service_refuses_or_a_file_left_behind_says_what_to_do() {
+        assert_eq!(
+            in_app_warning(
+                Os::Windows,
+                &CoreWarning::ParkedLoginRefused {
+                    tool: ProviderId::Claude,
+                    label: "work".into(),
+                }
+            )
+            .as_deref(),
+            Some(
+                "Anthropic no longer accepts work’s saved sign-in. Sign in to work again to keep \
+                 switching to it."
+            )
+        );
+        let fallback = |held| CoreWarning::FallbackLogin {
+            tool: ProviderId::Claude,
+            path: std::path::PathBuf::from("/h/.claude/.credentials.json"),
+            held,
+        };
+        assert_eq!(
+            in_app_warning(Os::Windows, &fallback(pitboard_core::provider::Held::Login)).as_deref(),
+            Some(
+                "/h/.claude/.credentials.json holds another Claude Code sign-in, which sessions \
+                 already running keep after a switch. Cleaning up keeps it for its account, then \
+                 deletes the file."
+            )
+        );
+        assert_eq!(
+            in_app_warning(
+                Os::Windows,
+                &fallback(pitboard_core::provider::Held::NoLogin)
+            )
+            .as_deref(),
+            Some(
+                "/h/.claude/.credentials.json holds no Claude Code sign-in, and sessions already \
+                 running don’t follow a switch while it’s there. Cleaning up deletes it."
+            )
+        );
+    }
+
+    #[test]
+    fn warm_ups_held_back_by_a_switch_say_it_as_automatic_switching_does() {
+        use pitboard_core::duty::warm::Halt;
+        assert_eq!(
+            warming_halted(&Halt::SwitchInterrupted),
+            "Pitboard isn’t warming up accounts: a switch didn’t finish, and the next change you \
+             make finishes it."
+        );
     }
 }

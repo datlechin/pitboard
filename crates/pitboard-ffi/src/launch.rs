@@ -1566,6 +1566,17 @@ mod tests {
             },
         ];
         let found = [
+            service::Warning::Recovered(pitboard_core::switch::Recovered {
+                from: "home".into(),
+                to: label(),
+                finished: true,
+            }),
+            service::Warning::MoveSettled(pitboard_core::switch::MoveSettled {
+                tool: ProviderId::Desktop,
+                label: "desktop/home".into(),
+                half: pitboard_core::state::Half::Leave,
+                ended: pitboard_core::switch::Ended::Finished,
+            }),
             service::Warning::ParkedLoginRefused {
                 tool: codex,
                 label: "codex/work".into(),

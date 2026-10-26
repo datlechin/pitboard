@@ -280,7 +280,7 @@ fn warm(seen: &Seen) -> WarmShown {
             .filter(|_| state.warm.any_on())
             .and_then(|overview| {
                 if let Some(halt) = &overview.halted {
-                    return Some(words::typeset(&pitboard_core::words::warming_halted(halt)));
+                    return Some(words::warming_halted(halt));
                 }
                 if let Some(failed) = &state.warm.failed {
                     return Some(words::warm_up_failed(failed));
@@ -777,12 +777,7 @@ mod tests {
         };
         for (on, said) in [
             (false, None),
-            (
-                true,
-                Some(words::typeset(&pitboard_core::words::warming_halted(
-                    &Halt::ProgramMissing,
-                ))),
-            ),
+            (true, Some(words::warming_halted(&Halt::ProgramMissing))),
         ] {
             state.warm.overview = Some(overview(on));
             let windows = present_on(Os::Windows, &state, 0, &Utc).machine.warm;
