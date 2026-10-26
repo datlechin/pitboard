@@ -126,7 +126,8 @@ public sealed partial class MainWindow : Window
     private void Navigate(Type page, NavigationTransitionInfo? transition = null)
     {
         Navigation.SelectedItem = page == typeof(AccountsPage) ? AccountsItem : Navigation.SettingsItem;
-        if (Pages.CurrentSourcePageType != page)
+        // Not CurrentSourcePageType, which did not come back as the page just navigated to (run 40413073866).
+        if (Pages.Content?.GetType() != page)
         {
             Pages.Navigate(page, _context, transition);
         }
