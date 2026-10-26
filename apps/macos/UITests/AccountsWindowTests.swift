@@ -390,7 +390,8 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(inspector.waitForNonExistence(timeout: 5))
         let toggle = app.accountsWindow.toolbars.buttons["toolbar.inspector"]
         XCTAssertTrue(toggle.exists)
-        app.typeKey(.upArrow, modifierFlags: [])
+        // The account in use is listed first, so personal now is and work is under it.
+        app.typeKey(.downArrow, modifierFlags: [])
         app.typeKey("c", modifierFlags: .command)
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@work.example")
         toggle.click()
