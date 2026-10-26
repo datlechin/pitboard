@@ -69,8 +69,8 @@ package func snapshot(
             schedule: ScheduleShown(
                 on: false, enabled: true, note: nil, failed: nil, about: ""),
             checks: ChecksShown(
-                lines: [], summary: nil, level: .ok, checking: false, checked: nil,
-                waiting: nil),
+                groups: [], summary: nil, verdict: nil, level: .ok, checking: false,
+                checked: nil, waiting: nil, report: nil),
             activity: ActivityShown(lines: [], empty: nil),
             commandLine: CommandLineShown(
                 found: nil, inTerminal: nil, updateNote: nil, offersLink: false,

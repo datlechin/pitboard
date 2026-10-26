@@ -1796,7 +1796,7 @@ fn the_machine_is_kept_over_the_real_core() {
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks", |last| {
-        !last.machine.checks.lines.is_empty() && !last.machine.checks.checking
+        !last.machine.checks.lines().is_empty() && !last.machine.checks.checking
     });
     assert!(checked.machine.checks.summary.is_some());
     assert!(checked.machine.checks.checked.is_some());

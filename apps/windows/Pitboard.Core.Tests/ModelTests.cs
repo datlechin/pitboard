@@ -128,7 +128,9 @@ public sealed class ModelTests
         Schedule: new ScheduleShown(
             On: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
-        Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…"),
+        Checks: new ChecksShown(
+            Groups: [], Summary: null, Verdict: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…",
+            Report: null),
         Activity: new ActivityShown(
             Lines: [], Empty: new EmptyList(Title: "No Activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
@@ -238,7 +240,7 @@ public sealed class ModelTests
             Assert.AreEqual("", first.MenuBar.NameAndUsage);
             Assert.AreEqual("", first.UpdatedWindow);
             Assert.IsFalse(first.Machine.Schedule.On);
-            Assert.IsEmpty(first.Machine.Checks.Lines);
+            Assert.IsEmpty(first.Machine.Checks.Groups);
             Assert.IsNotNull(first.Machine.Checks.Waiting);
             Assert.IsNotNull(first.Machine.Activity.Empty);
             Assert.IsNull(first.Machine.CommandLine.Found);
@@ -636,7 +638,9 @@ public sealed class ModelTests
     {
         var keychain = new CheckLine(
             Id: 0, Name: "Keychain", Level: Level.Fail, SpokenLevel: "Failed", Detail: "locked",
-            Advice: "Unlock the login keychain.");
+            Advice: "Unlock the login keychain.", Action: null,
+            Learn: new SetupLink(Title: "Learn More", Link: "https://docs.usepitboard.com/reference/maintenance-commands#doctor"));
+        var pitboard = new CheckGroup(Id: "pitboard", Heading: "Pitboard", Lines: [keychain]);
         var switched = new ActivityLine(
             Id: 0, Date: "Oct 5, 2026 at 2:05 PM", Change: "Switch", Account: "codex/spare",
             Result: "Nothing parked", Done: false, AskedBy: "Pitboard app");
@@ -646,8 +650,8 @@ public sealed class ModelTests
                 On: true, Enabled: true, Note: null, Failed: null,
                 About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
             Checks = new ChecksShown(
-                Lines: [keychain], Summary: "1 broken: do not switch accounts until fixed.", Level: Level.Fail,
-                Checking: false, Checked: "Checked at 14:05", Waiting: null),
+                Groups: [pitboard], Summary: "1 Issue", Verdict: "Don’t switch accounts until the failed check is fixed.",
+                Level: Level.Fail, Checking: false, Checked: "Checked at 14:05", Waiting: null, Report: "{}"),
             Activity = new ActivityShown(Lines: [switched], Empty: null),
             CommandLine = new CommandLineShown(
                 Found: new FoundCommandLine.Bundled(Path: "/usr/local/bin/pitboard"),
@@ -658,10 +662,10 @@ public sealed class ModelTests
         var snapshot = Read(7) with { Machine = machine };
 
         Assert.IsTrue(snapshot.Machine.Schedule.On);
-        Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Lines[0].Level);
-        Assert.AreEqual("Failed", snapshot.Machine.Checks.Lines[0].SpokenLevel);
-        Assert.AreEqual(0UL, snapshot.Machine.Checks.Lines[0].Id);
-        Assert.AreEqual(keychain, snapshot.Machine.Checks.Lines[0]);
+        Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Groups[0].Lines[0].Level);
+        Assert.AreEqual("Failed", snapshot.Machine.Checks.Groups[0].Lines[0].SpokenLevel);
+        Assert.AreEqual(0UL, snapshot.Machine.Checks.Groups[0].Lines[0].Id);
+        Assert.AreEqual(keychain, snapshot.Machine.Checks.Groups[0].Lines[0]);
         Assert.AreEqual(0UL, snapshot.Machine.Activity.Lines[0].Id);
         Assert.IsFalse(snapshot.Machine.Activity.Lines[0].Done);
         Assert.IsNull(snapshot.Machine.Activity.Empty);
@@ -669,10 +673,10 @@ public sealed class ModelTests
             new FoundCommandLine.Bundled("/usr/local/bin/pitboard"), snapshot.Machine.CommandLine.Found);
         Assert.IsFalse(snapshot.Machine.CommandLine.OffersLink);
         Assert.AreNotEqual(
-            machine, machine with { Checks = machine.Checks with { Lines = [keychain] } },
+            machine, machine with { Checks = machine.Checks with { Groups = [pitboard] } },
             "its lists are arrays, compared by reference");
         Assert.AreEqual(Unread(), Unread(), "every list made with [], so the same array");
-        Assert.AreSame(Unread().Checks.Lines, Unread().Checks.Lines);
+        Assert.AreSame(Unread().Checks.Groups, Unread().Checks.Groups);
     }
 
     [TestMethod]
@@ -964,12 +968,13 @@ public sealed class ModelTests
         Assert.HasCount(2, posting.Posted.Until(2, Patience));
 
         model.Send(new Intent.PaneShown(Pane.Checks));
-        var checkedIn = waiting.Until(
-            snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Name == "Notifications", Patience);
+        static CheckLine? Refused(Snapshot snapshot) =>
+            snapshot.Machine.Checks.Groups.SelectMany(group => group.Lines).FirstOrDefault(line => line.Name == "Notifications");
+        var checkedIn = waiting.Until(snapshot => Refused(snapshot) is not null, Patience);
         model.Shutdown();
 
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
-        var line = checkedIn.Machine.Checks.Lines[^1];
+        var line = Refused(checkedIn)!;
         Assert.AreEqual(Level.Warn, line.Level);
         Assert.StartsWith($"“{LimitReached}” not posted at ", line.Detail);
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);

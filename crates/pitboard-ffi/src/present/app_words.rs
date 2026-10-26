@@ -42,6 +42,8 @@ pub struct WindowWords {
     pub add_account_help: String,
     pub check_again: String,
     pub check_again_help: String,
+    pub copy_report: String,
+    pub copy_report_help: String,
     pub open_link: String,
     pub cancel: String,
     pub close: String,
@@ -256,6 +258,10 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             add_account_help: "Sign in to another account".into(),
             check_again: titled(os, "Check Again", "Check again"),
             check_again_help: "Make every check again".into(),
+            copy_report: titled(os, "Copy Report", "Copy report"),
+            copy_report_help: "Copy the checks for a bug report, with email addresses and \
+                               account identifiers hidden"
+                .into(),
             open_link: titled(os, "Open Link", "Open link"),
             cancel: words::CANCEL.into(),
             close: "Close".into(),
@@ -328,11 +334,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             beta_updates: windows(
                 "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.",
             ),
-            keep_saved_sign_ins_fresh: titled(
-                os,
-                "Keep Saved Sign-Ins Fresh",
-                "Keep saved sign-ins fresh",
-            ),
+            keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(os),
             command_line: titled(os, "Command Line", "Command line"),
             install_command_line: mac("Install Command Line Tool…"),
             link_failed: mac("The link couldn’t be made."),

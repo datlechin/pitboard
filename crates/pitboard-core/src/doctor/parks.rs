@@ -30,6 +30,10 @@ impl ParkFact {
     pub(super) fn typed(&self) -> String {
         self.name.clone()
     }
+
+    pub(super) fn key(&self) -> crate::state::Key {
+        crate::state::Key::new(self.provider, crate::state::Key::parse(&self.name).label)
+    }
 }
 
 pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
@@ -92,17 +96,20 @@ pub(super) fn judge_dormant(park: &ParkFact, now: i64) -> Option<Check> {
     if dormant_for < A_TOKEN_LIFETIME {
         return None;
     }
-    Some(warn(
-        account_code(
-            park.provider,
-            "dormant_account",
-            "codex_dormant_account",
-            "desktop_dormant_account",
-        ),
-        format!("account {}", park.typed()),
-        words::not_switched_to_for(dormant_for),
-        words::forget_if_not_coming_back(&park.typed()),
-    ))
+    Some(
+        warn(
+            account_code(
+                park.provider,
+                "dormant_account",
+                "codex_dormant_account",
+                "desktop_dormant_account",
+            ),
+            format!("account {}", park.typed()),
+            words::not_switched_to_for(dormant_for),
+            words::forget_if_not_coming_back(&park.typed()),
+        )
+        .about(&park.key()),
+    )
 }
 
 // `CryptUnprotectData`'s code after an administrator resets the password
@@ -163,6 +170,10 @@ pub(super) fn lost_parks(facts: &Facts) -> Vec<&ParkFact> {
 }
 
 pub(super) fn judge_park(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -> Check {
+    park_judged(fact, now, moment).about(&fact.key())
+}
+
+fn park_judged(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -> Check {
     let code = account_code(
         fact.provider,
         "parked_login",

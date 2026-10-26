@@ -437,7 +437,7 @@ fn doctor(pitboard: &Pitboard) -> Report {
         }),
         ..Report::done(
             "doctor",
-            render::doctor::json(&diagnosis),
+            diagnosis.report(),
             render::doctor::human(&diagnosis.checks),
         )
     }

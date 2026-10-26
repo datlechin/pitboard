@@ -11,8 +11,8 @@ use crate::model::preferences::Preferences;
 use crate::model::state::{Answer, Cadence, Job, Msg, Now, State};
 use crate::model::{AppControl, Intent, RunOutNotice, Snapshot};
 use crate::{
-    AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, FoundCommandLine, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Tool, Uninstalled,
+    AutoLooked, AutoSwitched, Change, Check, Doctored, Enrolled, EnrolledAs, FoundCommandLine,
+    GaveUp, Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Tool, Uninstalled,
     WarmRefused, Warning,
 };
 use pitboard_core::state::Key;
@@ -165,6 +165,8 @@ pub(crate) struct Stub {
     pub own: OwnCommandLine,
     /// Doctor's checks.
     pub checks: Vec<Check>,
+    // what Copy Report copies
+    pub report: String,
     pub doctor_asks: usize,
     /// What Pitboard has changed, oldest first, as the core's log keeps it.
     pub history: Vec<Change>,
@@ -267,6 +269,7 @@ impl Stub {
             repair_asks: 0,
             own: OwnCommandLine::default(),
             checks: Vec::new(),
+            report: String::new(),
             doctor_asks: 0,
             history: Vec::new(),
             log_limits: Vec::new(),
@@ -666,7 +669,10 @@ impl Stub {
             Job::Check => {
                 self.doctor_asks += 1;
                 Answer::Checked {
-                    checks: Some(self.checks.clone()),
+                    doctored: Some(Doctored {
+                        checks: self.checks.clone(),
+                        report: self.report.clone(),
+                    }),
                 }
             }
             Job::ReadLog { limit } => {

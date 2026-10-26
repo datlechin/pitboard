@@ -42,7 +42,9 @@ internal static class Snapshots
         Schedule: new ScheduleShown(
             On: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
-        Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…"),
+        Checks: new ChecksShown(
+            Groups: [], Summary: null, Verdict: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…",
+            Report: null),
         Activity: new ActivityShown(
             Lines: [], Empty: new EmptyList(Title: "No activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(

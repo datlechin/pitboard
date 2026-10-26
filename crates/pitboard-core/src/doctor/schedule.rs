@@ -188,6 +188,7 @@ pub(super) fn judge_schedule_proxy(facts: &Facts) -> Option<Check> {
             level: Level::Ok,
             detail,
             advice: words::THE_APPS_OWN_ENVIRONMENT.into(),
+            account: None,
         });
     }
     // Installed again from here, it would be given a SOCKS proxy that fails its requests.

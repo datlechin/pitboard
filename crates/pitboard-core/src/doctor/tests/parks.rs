@@ -119,6 +119,8 @@ fn every_parked_login_is_judged_and_a_way_back_is_offered() {
     ] {
         let c = named(&checks, name);
         assert_eq!(c.level, level, "{name}: {}", c.detail);
+        let label = name.trim_start_matches("account ");
+        assert_eq!(c.account, Some(format!("claude/{label}")), "{name}");
         if level != Level::Ok {
             let label = name.trim_start_matches("account ");
             assert_eq!(c.advice, words::sign_in_again(label));
@@ -287,7 +289,8 @@ fn advice_names_a_codex_account_the_way_it_is_typed() {
     assert_eq!(dormant.len(), 2);
     for typed in ["codex/work", "claude/work"] {
         assert!(dormant.iter().any(|c| c.name == format!("account {typed}")
-            && c.advice == words::forget_if_not_coming_back(typed)));
+            && c.advice == words::forget_if_not_coming_back(typed)
+            && c.account.as_deref() == Some(typed)));
     }
 }
 

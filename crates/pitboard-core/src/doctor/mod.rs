@@ -56,6 +56,17 @@ pub struct Check {
     pub detail: String,
     /// What the user should do. Empty when there is nothing to do.
     pub advice: String,
+    // the account it is about, `claude/work`, for an app that names it its own way
+    pub account: Option<String>,
+}
+
+impl Check {
+    pub(crate) fn about(self, key: &crate::state::Key) -> Check {
+        Check {
+            account: Some(key.qualified()),
+            ..self
+        }
+    }
 }
 
 // Everything read from the machine, so judging it touches nothing.
@@ -249,6 +260,7 @@ fn ok(code: &'static str, name: impl Into<String>, detail: impl Into<String>) ->
         level: Level::Ok,
         detail: detail.into(),
         advice: String::new(),
+        account: None,
     }
 }
 
@@ -264,6 +276,7 @@ fn warn(
         level: Level::Warn,
         detail: detail.into(),
         advice: advice.into(),
+        account: None,
     }
 }
 
@@ -279,6 +292,7 @@ fn fail(
         level: Level::Fail,
         detail: detail.into(),
         advice: advice.into(),
+        account: None,
     }
 }
 
@@ -418,6 +432,14 @@ pub fn section(code: &str) -> Option<ProviderId> {
         })
 }
 
+// For an app that groups checks by tool: Claude Code's own and its accounts' too, unlike `section`.
+pub fn tool_of(code: &str) -> Option<ProviderId> {
+    section(code).or_else(|| {
+        (CLAUDE_CODES_OWN.contains(&code) || matches!(code, "parked_login" | "dormant_account"))
+            .then_some(ProviderId::Claude)
+    })
+}
+
 // Claude Code's codes as they always were, every other tool's under its own prefix.
 fn account_code(
     provider: ProviderId,
@@ -443,6 +465,23 @@ pub struct Diagnosis {
     pub environment: Value,
     /// What must not leave this machine in a report a person pastes elsewhere.
     pub redaction: crate::redact::Sheet,
+}
+
+impl Diagnosis {
+    // `pitboard doctor --json`'s data, which the app's Copy Report copies too.
+    pub fn report(&self) -> Value {
+        let report = json!({
+            "environment": self.environment,
+            "checks": self.checks.iter().map(|c| json!({
+                "code": c.code,
+                "name": c.name,
+                "level": match c.level { Level::Ok => "ok", Level::Warn => "warn", Level::Fail => "fail" },
+                "detail": c.detail,
+                "advice": c.advice,
+            })).collect::<Vec<_>>(),
+        });
+        self.redaction.over_json(&report)
+    }
 }
 
 pub(crate) fn run(ctx: &Context, moment: &dyn Fn(i64, i64) -> String) -> Diagnosis {

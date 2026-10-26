@@ -11,7 +11,7 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
 
     private ChecksShown Checks => model.Machine.Checks;
 
-    public CheckLine[] Lines => Checks.Lines;
+    public CheckLine[] Lines => [.. Checks.Groups.SelectMany(group => group.Lines)];
 
     public bool HasSummary => Checks.Summary is not null;
 
@@ -67,7 +67,7 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
             return;
         }
 
-        if (!Structural.Equal(checks.Lines, before.Lines))
+        if (!Structural.Equal(checks.Groups, before.Groups))
         {
             Tell(nameof(Lines));
         }

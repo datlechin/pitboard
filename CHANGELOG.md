@@ -143,6 +143,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An account's row offers **Sign In…** where it said **Sign In Again…**.
 - The app's **Clean Up** sheet, its notices, and the questions before **Remove Account** and
   **Cancel Switch** say one sentence each.
+- The app's checks of the machine say what each found in the app's words, under the tool they
+  are about, and show a check that passed only where it says something to look for.
 
 ### Removed
 

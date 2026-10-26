@@ -380,6 +380,15 @@ pub(crate) struct Check {
     pub(crate) detail: String,
     /// Empty when there is nothing to do.
     pub(crate) advice: String,
+    // `claude/work`, for a check of one account
+    pub(crate) account: Option<String>,
+}
+
+// Doctor's checks, and its report as `pitboard doctor --json` gives it, for Copy Report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Doctored {
+    pub(crate) checks: Vec<Check>,
+    pub(crate) report: String,
 }
 
 fn enrolled(enrolment: switch::Enrolment, warnings: Vec<Warning>) -> Enrolled {
@@ -1277,12 +1286,14 @@ impl AppCore {
     /// (`pitboard_core::release`), which makes no check, as `pitboard doctor` there makes
     /// none. A home that is not a full path is doctor's own to say, as its `homes` check,
     /// failed, and nothing else.
-    pub(crate) fn doctor(&self, local: &dyn crate::LocalTime) -> Option<Vec<Check>> {
+    pub(crate) fn doctor(&self, local: &dyn crate::LocalTime) -> Option<Doctored> {
         pitboard_core::release::check().ok()?;
-        let checks = self
+        let diagnosis = self
             .core()
             .core
-            .doctor_with(&|at, now| crate::present::clock_of(local, at, now))
+            .doctor_with(&|at, now| crate::present::clock_of(local, at, now));
+        let report = serde_json::to_string_pretty(&diagnosis.report()).unwrap_or_default();
+        let checks = diagnosis
             .checks
             .into_iter()
             .map(|c| Check {
@@ -1295,9 +1306,10 @@ impl AppCore {
                 },
                 detail: c.detail,
                 advice: c.advice,
+                account: c.account,
             })
             .collect();
-        Some(checks)
+        Some(Doctored { checks, report })
     }
 }
 
@@ -1834,9 +1846,15 @@ mod tests {
             assert!(core.whole("nobody") && !core.moving("nobody"));
             assert!(installed(&core).is_empty(), "{variable}");
             assert_eq!(core.command_line(), FoundCommandLine::Nowhere);
-            let checks = core
+            let Doctored { checks, report } = core
                 .doctor(&crate::present::testing::Utc)
                 .expect("doctor's own to say");
+            let report: serde_json::Value = serde_json::from_str(&report).expect("JSON");
+            assert_eq!(
+                report["checks"].as_array().map(Vec::len),
+                Some(checks.len()),
+                "what `pitboard doctor --json` gives"
+            );
             let homes = checks
                 .iter()
                 .find(|check| check.code == "homes")

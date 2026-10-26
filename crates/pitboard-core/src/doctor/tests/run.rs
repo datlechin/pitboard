@@ -34,6 +34,27 @@ fn section_names_the_tool_whose_checks_these_are() {
 }
 
 #[test]
+fn every_check_is_pitboards_own_or_one_tools() {
+    for code in [
+        "state",
+        "schedule",
+        "network",
+        "home",
+        "notification_not_posted",
+    ] {
+        assert_eq!(tool_of(code), None, "{code}");
+    }
+    for code in CLAUDE_CODES_OWN
+        .iter()
+        .chain(&["parked_login", "dormant_account"])
+    {
+        assert_eq!(tool_of(code), Some(ProviderId::Claude), "{code}");
+    }
+    assert_eq!(tool_of("codex_parked_login"), Some(ProviderId::Codex));
+    assert_eq!(tool_of("desktop_move"), Some(ProviderId::Desktop));
+}
+
+#[test]
 fn a_healthy_machine_reports_no_failures() {
     let checks = evaluate(&facts());
     assert!(checks.iter().all(|c| c.level != Level::Fail));

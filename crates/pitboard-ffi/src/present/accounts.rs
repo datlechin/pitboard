@@ -416,7 +416,7 @@ pub(crate) fn standing_of(account: &Account, switching: bool) -> AccountStanding
     }
 }
 
-fn offer_of(action: &AccountAction) -> Option<ItemOffer> {
+pub(crate) fn offer_of(action: &AccountAction) -> Option<ItemOffer> {
     Some(ItemOffer {
         title: action.title.clone(),
         intent: action.intent.clone()?,

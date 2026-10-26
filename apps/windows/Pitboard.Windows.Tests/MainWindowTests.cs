@@ -43,9 +43,9 @@ public sealed class MainWindowTests
                     Lines: [new ActivityLine(0, "15/01/2027 09:00", "Switch", "claude/work", "done", Done: true, AskedBy: "pitboard")],
                     Empty: null),
                 Checks = new ChecksShown(
-                    Lines: [new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null)],
-                    Summary: "Everything looks right.", Level: Level.Ok, Checking: false, Checked: "Checked at 09:00",
-                    Waiting: null),
+                    Groups: [new CheckGroup("claude", "Claude Code", [new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null, Action: null, Learn: null)])],
+                    Summary: "Everything looks right.", Verdict: null, Level: Level.Ok, Checking: false, Checked: "Checked at 09:00",
+                    Waiting: null, Report: null),
             },
         };
     }

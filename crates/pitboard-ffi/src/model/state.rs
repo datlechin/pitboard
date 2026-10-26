@@ -55,7 +55,7 @@ use crate::present::words::{
 };
 use crate::present::{Clicked, UNUSABLE};
 use crate::{
-    Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs,
+    Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
     Tool, Uninstalled, Usage, WarmRefused, Warning,
 };
@@ -561,7 +561,7 @@ pub(crate) enum Answer {
     },
     /// Doctor's checks, or `None` where this build makes none.
     Checked {
-        checks: Option<Vec<Check>>,
+        doctored: Option<Doctored>,
     },
     /// The newest changes Pitboard made, oldest first, as the core keeps them.
     Logged {
@@ -3046,7 +3046,7 @@ impl State {
                     jobs.push(Job::ReadSchedule { after_change: true });
                 }
             }
-            Answer::Checked { checks } => self.machine.checked(checks, now.epoch()),
+            Answer::Checked { doctored } => self.machine.checked(doctored, now.epoch()),
             Answer::Logged { changes } => self.machine.logged(changes),
             Answer::CommandLineFound { found, own } => {
                 self.machine.command_line = Some(found);

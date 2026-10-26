@@ -1777,31 +1777,21 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks made", |snapshot| {
-        !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
+        !snapshot.machine.checks.lines().is_empty() && !snapshot.machine.checks.checking
     });
-    let interrupted = checked
-        .machine
-        .checks
-        .lines
-        .iter()
-        .find(|line| line.name == words::check_name("interrupted_switch", "interrupted switch"))
+    let lines = checked.machine.checks.lines();
+    let interrupted = (lines.iter())
+        .find(|line| line.name == words::check_name(OS, "interrupted_switch", ""))
         .expect("doctor's check");
     assert_eq!(interrupted.level, crate::Level::Warn);
-    assert!(
-        checked
-            .machine
-            .checks
-            .lines
-            .iter()
-            .all(|line| line.name != "Keychain")
+    assert_eq!(
+        interrupted.action.as_ref().map(|cancel| &cancel.intent),
+        Some(&Intent::AbandonStuckSwitch)
     );
     assert_eq!(
         checked.machine.checks.summary,
-        Some(words::typeset(&pitboard_core::words::doctor_summary([
-            pitboard_core::doctor::Level::Warn,
-            pitboard_core::doctor::Level::Warn
-        ]))),
-        "personal's parked login, and the switch"
+        Some(words::check_issues(OS, 2)),
+        "personal's saved sign-in, and the switch"
     );
 
     model.send(Intent::AbandonStuckSwitch);
@@ -1848,55 +1838,39 @@ fn this_mac_shows_the_cores_checks() {
     let (model, told) = started(&launched);
     model.send(Intent::PaneShown { pane: Pane::Checks });
     let shown = told.last_where("the checks made", |snapshot| {
-        !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
+        !snapshot.machine.checks.lines().is_empty() && !snapshot.machine.checks.checking
     });
     let checks = shown.machine.checks;
-    assert!(
-        checks.lines.iter().all(|line| line.name != "Keychain"),
-        "{:#?}",
-        checks.lines
-    );
-    let worth_looking_at: Vec<&str> = checks
-        .lines
-        .iter()
+    let lines = checks.lines();
+    let worth_looking_at: Vec<&str> = (lines.iter())
         .filter(|line| line.level != crate::Level::Ok)
         .map(|line| line.name.as_str())
         .collect();
-    assert_eq!(
-        worth_looking_at,
-        [words::check_name("parked_login", "account personal")],
-        "{:#?}",
-        checks.lines
-    );
-    // Every account's parked login is a check of its own under one code, and each is a line
+    assert_eq!(worth_looking_at, ["personal"], "{lines:#?}");
+    // Every account's saved sign-in is a check of its own under one code, and each is a line
     // with its own id, which the pane lists them by.
-    let parked: Vec<&str> = checks
-        .lines
-        .iter()
-        .filter(|line| {
-            line.name
-                .starts_with(&words::check_name("parked_login", "account "))
-        })
+    let claude = (checks.groups.iter())
+        .find(|group| group.id == ProviderId::Claude.code())
+        .expect("Claude Code's checks");
+    let accounts: Vec<&str> = (claude.lines.iter())
         .map(|line| line.name.as_str())
+        .filter(|name| ["work", "personal"].contains(name))
         .collect();
-    assert!(parked.len() > 1, "{:#?}", checks.lines);
-    let ids: std::collections::BTreeSet<u64> = checks.lines.iter().map(|line| line.id).collect();
-    assert_eq!(ids.len(), checks.lines.len(), "{:#?}", checks.lines);
-    let personal = checks
-        .lines
-        .iter()
-        .find(|line| line.name == words::check_name("parked_login", "account personal"))
+    assert_eq!(accounts, ["work", "personal"], "{lines:#?}");
+    let ids: std::collections::BTreeSet<u64> = lines.iter().map(|line| line.id).collect();
+    assert_eq!(ids.len(), lines.len(), "{lines:#?}");
+    let personal = (lines.iter())
+        .find(|line| line.name == "personal")
         .expect("personal's");
     assert!(
-        personal.detail.starts_with("Its parked login expires in "),
+        personal.detail.starts_with("Saved sign-in valid until "),
         "{personal:?}"
     );
     assert_eq!(
-        checks.summary,
-        Some(words::typeset(&pitboard_core::words::doctor_summary([
-            pitboard_core::doctor::Level::Warn
-        ])))
+        personal.action.as_ref().map(|again| again.title.clone()),
+        Some(words::sign_in_again(OS, true))
     );
+    assert_eq!(checks.summary, Some(words::check_issues(OS, 1)));
     model.shutdown();
 }
 
@@ -1933,8 +1907,7 @@ impl LocalTime for Twelve {
     }
 }
 
-/// This PC said when Anthropic named the account in use in the command line's 24 hours,
-/// "as Anthropic said 05:48", under "Checked at 6:14 AM" on a PC that reads 12.
+// Doctor's moments, which Copy Report copies, read on the person's 12-hour clock.
 #[test]
 fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
     let launched = made(World::OneTool);
@@ -1947,17 +1920,16 @@ fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
     told.last_where("the accounts read", read_in);
     model.send(Intent::PaneShown { pane: Pane::Checks });
     let shown = told.last_where("the checks made", |snapshot| {
-        !snapshot.machine.checks.lines.is_empty() && !snapshot.machine.checks.checking
+        !snapshot.machine.checks.lines().is_empty() && !snapshot.machine.checks.checking
     });
-    let in_use = shown
-        .machine
-        .checks
-        .lines
-        .iter()
-        .find(|line| line.name == words::check_name("in_use", "in use"))
+    let report = shown.machine.checks.report.expect("doctor's report");
+    let report: serde_json::Value = serde_json::from_str(&report).expect("JSON");
+    let in_use = (report["checks"].as_array().into_iter().flatten())
+        .find(|check| check["code"] == "in_use")
         .expect("the account in use");
-    let said = in_use
-        .detail
+    let said = in_use["detail"]
+        .as_str()
+        .unwrap_or_default()
         .rsplit_once("as Anthropic said ")
         .map(|(_, when)| when)
         .unwrap_or_else(|| panic!("{in_use:?}"));
@@ -2531,17 +2503,15 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     eventually("posted both", || posted.posted().len() == 2);
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
+    let refused = |snapshot: &Snapshot| {
+        (snapshot.machine.checks.lines().into_iter()).find(|line| line.name == words::NOTIFICATIONS)
+    };
     let checked = told.last_where("the checks with the refusal", |snapshot| {
-        snapshot
-            .machine
-            .checks
-            .lines
-            .last()
-            .is_some_and(|line| line.name == words::NOTIFICATIONS)
+        refused(snapshot).is_some()
     });
     model.shutdown();
 
-    let line = checked.machine.checks.lines.last().expect("a line");
+    let line = refused(&checked).expect("a line");
     assert_eq!(line.level, crate::Level::Warn);
     // Said at the clock time it was refused, which the test cannot know to the minute.
     let said = words::check_text(&words::not_posted(
@@ -2557,7 +2527,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     );
 }
 
-// Plan.md section 3, in every world; a check's detail is doctor's report, as Copy Report copies.
+// Plan.md section 3, in every world; doctor's report alone, which Copy Report copies, says them.
 #[test]
 fn no_word_on_screen_is_park_put_away_give_up_enrol_record_or_settle() {
     use crate::present::testing::{mechanism_words, strings_of};
@@ -2579,16 +2549,13 @@ fn no_word_on_screen_is_park_put_away_give_up_enrol_record_or_settle() {
         let shown = told.last_where("the checks, the activity and the sheet", |snapshot| {
             let machine = &snapshot.machine;
             !machine.checks.checking
-                && !machine.checks.lines.is_empty()
+                && !machine.checks.lines().is_empty()
                 && (!machine.activity.lines.is_empty() || machine.activity.empty.is_some())
                 && snapshot.sheet_text.is_some()
         });
         model.shutdown();
         let mut shown = shown;
-        for line in &mut shown.machine.checks.lines {
-            line.detail.clear();
-            line.advice = None;
-        }
+        shown.machine.checks.report = None;
         for text in strings_of(&shown) {
             let found = mechanism_words(&text);
             if !found.is_empty() && !said.iter().any(|(_, kept, _)| *kept == text) {

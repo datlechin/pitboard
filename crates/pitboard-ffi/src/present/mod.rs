@@ -31,6 +31,7 @@
 
 mod accounts;
 mod app_words;
+mod checks;
 mod glance;
 mod machine;
 pub(crate) mod next;
@@ -50,13 +51,13 @@ pub use app_words::{
     already_there, app_words, install_update, links_to, named_version, path_too_long,
     ready_to_install, webview_runtime_too_old,
 };
+pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
 pub(crate) use glance::{glance, id as glance_id};
 pub use machine::{
-    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
-    CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
-    WarmShown,
+    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
+    MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
 };
 pub use removal::RemovalShown;
 pub use sheets::check_name;

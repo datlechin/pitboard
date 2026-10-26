@@ -12,16 +12,18 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class MachinePageTests
 {
+    private static readonly CheckLine Home = new(
+        1, "Pitboard home", Level.Warn, "Worth looking at",
+        @"C:\Users\dana\AppData\Local\Temp\pitboard-fixture\home\AppData\Local\Pitboard is readable by others",
+        "Make it yours alone.", Action: null, Learn: null);
+
     private static readonly ChecksShown TwoChecks = new(
-        Lines:
+        Groups:
         [
-            new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
-            new CheckLine(
-                1, "Pitboard home", Level.Warn, "Worth looking at",
-                @"C:\Users\dana\AppData\Local\Temp\pitboard-fixture\home\AppData\Local\Pitboard is readable by others",
-                "Make it yours alone."),
+            new CheckGroup("pitboard", "Pitboard", [new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null, Action: null, Learn: null), Home]),
         ],
-        Summary: "One thing is worth looking at.", Level: Level.Warn, Checking: false, Checked: "Checked at 09:00", Waiting: null);
+        Summary: "One thing is worth looking at.", Verdict: null, Level: Level.Warn, Checking: false, Checked: "Checked at 09:00",
+        Waiting: null, Report: null);
 
     private static Snapshot With(Snapshot snapshot, ChecksShown checks) =>
         snapshot with { Machine = snapshot.Machine with { Checks = checks } };
@@ -36,12 +38,16 @@ public sealed class MachinePageTests
     public async Task ThisPCSaysEachCheckUnderDoctorsLastLine()
     {
         var checks = new ChecksShown(
-            Lines:
+            Groups:
             [
-                new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
-                new CheckLine(1, "account personal", Level.Warn, "Warning", "lapses in 2 days", "Use it to renew it."),
+                new CheckGroup("claude", "Claude Code",
+                [
+                    new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null, Action: null, Learn: null),
+                    new CheckLine(1, "account personal", Level.Warn, "Warning", "lapses in 2 days", "Use it to renew it.", Action: null, Learn: null),
+                ]),
             ],
-            Summary: "One thing is worth looking at.", Level: Level.Warn, Checking: false, Checked: "Checked at 09:00", Waiting: null);
+            Summary: "One thing is worth looking at.", Verdict: null, Level: Level.Warn, Checking: false, Checked: "Checked at 09:00",
+            Waiting: null, Report: null);
         var model = new StandInModel(With(Snapshots.Read(1), checks));
         var page = await Views.Navigated<MachinePage>(Views.Context(new AppModel(model)));
 
@@ -58,7 +64,9 @@ public sealed class MachinePageTests
     [UITestMethod]
     public async Task CheckAgainIsHeldBackWhileTheChecksRun()
     {
-        var checks = new ChecksShown(Lines: [], Summary: "Everything looks right.", Level: Level.Ok, Checking: true, Checked: null, Waiting: null);
+        var checks = new ChecksShown(
+            Groups: [], Summary: "Everything looks right.", Verdict: null, Level: Level.Ok, Checking: true, Checked: null, Waiting: null,
+            Report: null);
         var page = await Views.Navigated<MachinePage>(Views.Context(new AppModel(new StandInModel(With(Snapshots.Read(1), checks)))));
 
         Assert.IsFalse(Views.Element<AppBarButton>(page, "machine.check").IsEnabled);
@@ -128,7 +136,7 @@ public sealed class MachinePageTests
             Views.Context(new AppModel(new StandInModel(With(Snapshots.Read(1), TwoChecks))), copy: copied.Add));
         var row = Views.Visible<ListViewItem>(page).ElementAt(1);
         var detail = Views.Visible<TextBlock>(row).Single(text => text.IsTextSelectionEnabled);
-        Assert.AreNotEqual(TwoChecks.Lines[1].Detail, detail.Text, "the path is shown as it is");
+        Assert.AreNotEqual(Home.Detail, detail.Text, "the path is shown as it is");
 
         detail.SelectAll();
         var menu = (MenuFlyout)detail.ContextFlyout;
@@ -136,7 +144,7 @@ public sealed class MachinePageTests
         await Views.Until(() => menu.IsOpen, "the detail's menu did not open");
         new MenuFlyoutItemAutomationPeer((MenuFlyoutItem)menu.Items[0]).Invoke();
 
-        Assert.AreEqual(TwoChecks.Lines[1].Detail, copied.Single());
+        Assert.AreEqual(Home.Detail, copied.Single());
     }
 
     [UITestMethod]
