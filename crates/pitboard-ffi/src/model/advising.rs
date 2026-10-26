@@ -547,12 +547,16 @@ fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
     );
 
     let button = posted.button.expect("a Switch button");
-    assert!(
-        crate::notification_buttons()
-            .iter()
-            .any(|kind| kind.title == button.title && !kind.opens_window),
-        "a switch needs no window"
-    );
+    assert_eq!(button.title, words::switch_button(OS, "personal"));
+    // macOS draws the button from the category registered under its title; a toast takes any.
+    if OS != Os::Windows {
+        assert!(
+            crate::notification_buttons()
+                .iter()
+                .any(|kind| kind.title == button.title && !kind.opens_window),
+            "a switch needs no window"
+        );
+    }
     machine.switched = switched("claude", "work", "personal", Vec::new());
     model.send(Intent::NotificationClicked {
         argument: button.clicked,
