@@ -192,12 +192,12 @@ Microsoft's documentation.
 - The code WinUI 2.3.9's XAML compiler writes for a OneWay `x:Bind` function calls it again,
   as a path in its argument changes, only for a value that is not null (`AccountRow.g.cs`,
   `Update_Account_Item_Plan`). So a row the list gave an account without a plan kept the tag
-  of the account before, and a function there takes the account item, which is never null
-  (`AccountRowTests.ARowGivenAnAccountWithoutAPlanHasNoTag`). The same compiler
+  of the account before, and the functions an account's row binds take the account item, which
+  is never null (`AccountsPageTests.ARowGivenAnAccountWithoutAPlanSaysNone`). The same compiler
   stops on WMC9999 where a template's `x:Bind` names both a member of its `x:DataType` and an
   element its page names: it goes to warn and finds no resources for the warning
   (`BindPathListener.ResolveNameOnRoot` in microsoft-ui-xaml's main, read on 16 October 2026).
-  So each page names its title row `PageHeader`, which no template binds.
+  So no page names an element after a member its templates bind.
 - A Selector's `IsSynchronizedWithCurrentItem` is null by default, which keeps its selection on
   a collection view's current item ([Selector.IsSynchronizedWithCurrentItem](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.primitives.selector.issynchronizedwithcurrentitem)).
   The Accounts page groups its rows through a CollectionViewSource, so twoTools opened with a

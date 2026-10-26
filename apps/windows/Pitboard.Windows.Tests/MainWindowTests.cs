@@ -307,8 +307,9 @@ public sealed class MainWindowTests
                 Assert.AreSame(navigation.SettingsItem, navigation.SelectedItem, $"over {page.GetType().Name}");
                 Assert.IsTrue(titleBar.IsBackButtonVisible, $"no way back from {page.GetType().Name}");
 
-                var settings = Views.Descendants(page).OfType<BreadcrumbBarItem>().First();
-                new BreadcrumbBarItemAutomationPeer(settings).Invoke();
+                // The bar holds an item for its ellipsis too, so Settings' is found by what it says.
+                var crumb = Views.Visible<TextBlock>(page).Single(text => text.Text == "Settings");
+                new BreadcrumbBarItemAutomationPeer(Look.Ancestor<BreadcrumbBarItem>(crumb)!).Invoke();
 
                 await Views.Until(() => Pages(window).Content is SettingsPage { IsLoaded: true }, $"Settings did not show from {page.GetType().Name}");
                 Assert.IsFalse(titleBar.IsBackButtonVisible, "a way back from Settings");

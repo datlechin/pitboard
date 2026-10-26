@@ -59,6 +59,10 @@ public sealed class AccountsPageTests
     private static Rect Bounds(FrameworkElement element, UIElement within) =>
         element.TransformToVisual(within).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
+    // What a page's open popups hold, a TeachingTip's among them, which no visual parent reaches.
+    private static IEnumerable<DependencyObject> Popped(Page page) =>
+        VisualTreeHelper.GetOpenPopupsForXamlRoot(page.XamlRoot).Select(popup => popup.Child).OfType<DependencyObject>().SelectMany(Views.Descendants);
+
     private static async Task Open(SettingsExpander row, string inside)
     {
         row.IsExpanded = true;
@@ -251,7 +255,7 @@ public sealed class AccountsPageTests
         Views.Press(Views.Element<Button>(spare, "detail.rename"));
 
         Assert.AreEqual("spare@example.com", copied.Single());
-        Assert.AreEqual(Items.Window("claude", "spare"), opened.Single());
+        Assert.IsTrue(Structural.Equal(Items.Window("claude", "spare"), opened.Single()), "another window opened");
         Assert.Contains(new Intent.Show(new Place.Settings(SettingsSection.Limits)), model.Sent);
         Assert.Contains(new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), model.Sent);
         Assert.AreEqual(
@@ -390,7 +394,7 @@ public sealed class AccountsPageTests
         Assert.AreEqual("setup.onlyOne", AutomationProperties.GetAutomationId(tip));
         Assert.IsFalse(Views.Descendants(page).OfType<InfoBar>().Any(bar => bar.IsOpen), "the step in an InfoBar");
 
-        var close = VisualTreeHelper.GetOpenPopupsForXamlRoot(page.XamlRoot).SelectMany(Views.Descendants).OfType<Button>()
+        var close = Popped(page).OfType<Button>()
             .Single(button => button.Name == "CloseButton");
         Views.Press(close);
 
@@ -412,7 +416,7 @@ public sealed class AccountsPageTests
         await Views.Until(() => tip.IsOpen, "the tip did not open");
 
         Assert.IsNull(tip.Target);
-        var action = VisualTreeHelper.GetOpenPopupsForXamlRoot(page.XamlRoot).SelectMany(Views.Descendants).OfType<Button>()
+        var action = Popped(page).OfType<Button>()
             .Single(button => button.Name == "ActionButton");
         Views.Press(action);
 
