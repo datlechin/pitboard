@@ -30,26 +30,26 @@ function typeset(core: string): string {
 }
 
 // words.rs `check_name`: the app's own names for doctor's checks, by their codes, which the
-// printed checks name as doctor does; doctor's own name for the rest
+// printed checks name as doctor does, in macOS's title case; doctor's own name for the rest
 export const appNames: [code: string, doctor: string, app: string][] = [
-  ["storage_v5", "storage v5", "Claude Code’s new sign-in storage"],
+  ["storage_v5", "storage v5", "New Sign-In Storage"],
   ["machine_id", "machine id", "Machine ID"],
-  ["vault", "parked logins", "Saved sign-ins"],
-  ["pending_parks", "parks being reclaimed", "Saved sign-ins being deleted"],
-  ["discarded", "old parked logins", "Old saved sign-ins"],
-  ["desktop_parks_folder", "parked Claude Desktop logins", "Saved Claude Desktop sign-ins"],
-  ["desktop_set_aside", "folders set aside", "Claude Desktop folders moved out of the way"],
-  ["desktop_move", "interrupted Claude Desktop move", "Switch in Claude that didn’t finish"],
-  ["interrupted_switch", "interrupted switch", "Switch that didn’t finish"],
-  ["credential", "credential", "Sign-in"],
-  ["credential_store", "credential store", "Sign-in store"],
-  ["credential_size", "login size", "Sign-in size"],
-  ["fallback_login", "fallback login", "Leftover sign-in file"],
-  ["codex_login", "Codex login", "Codex sign-in"],
-  ["codex_auth_file", "Codex login file", "Codex sign-in file"],
-  ["codex_backend", "Codex login store", "Codex sign-in store"],
-  ["private_on_disk", "logins on disk", "Sign-ins on disk"],
-  ["desktop_awaiting", "awaited sign-in", "Sign-in in Claude"],
+  ["vault", "parked logins", "Saved Sign-Ins"],
+  ["pending_parks", "parks being reclaimed", "Saved Sign-Ins Being Deleted"],
+  ["discarded", "old parked logins", "Old Saved Sign-Ins"],
+  ["desktop_parks_folder", "parked Claude Desktop logins", "Saved Sign-Ins"],
+  ["desktop_set_aside", "folders set aside", "Folders Moved Out of the Way"],
+  ["desktop_move", "interrupted Claude Desktop move", "Switch That Didn’t Finish"],
+  ["interrupted_switch", "interrupted switch", "Switch That Didn’t Finish"],
+  ["credential", "credential", "Sign-In"],
+  ["credential_store", "credential store", "Sign-In Store"],
+  ["credential_size", "login size", "Sign-In Size"],
+  ["fallback_login", "fallback login", "Leftover Sign-In File"],
+  ["codex_login", "Codex login", "Signed-In Account"],
+  ["codex_auth_file", "Codex login file", "Sign-In File"],
+  ["codex_backend", "Codex login store", "Sign-In Store"],
+  ["private_on_disk", "logins on disk", "Sign-Ins on Disk"],
+  ["desktop_awaiting", "awaited sign-in", "Sign-In in Claude"],
 ];
 const checkName = (name: string) =>
   appNames.find(([, doctor]) => doctor === name)?.[2] ?? typeset(capitalised(name));

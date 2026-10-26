@@ -150,15 +150,25 @@ test("This Mac words doctor's checks as present/machine.rs does", () => {
     advice: null,
   });
   assert.equal(lines.find((l) => l.name === "In use")?.detail, "personal, as Anthropic said 20:50");
-  assert.equal(lines.find((l) => l.name.startsWith("Claude Code’s new"))?.detail, "Inactive");
+  assert.equal(lines.find((l) => l.name === "New Sign-In Storage")?.detail, "Inactive");
   // advice under a check that passed is not shown
-  assert.equal(lines.find((l) => l.name === "Codex sign-in store")?.advice, null);
-  // the app's own names, by doctor's codes, and the name doctor prints for each
-  const checkName = words.slice(words.indexOf("fn check_name("), words.indexOf("fn check_text("));
   assert.deepEqual(
-    appNames.map(([code, , app]) => [code, app]),
-    [...checkName.matchAll(/"(\w+)" => "([^"]+)",/g)].map(([, code, name]) => [code, name]),
+    lines.filter((l) => l.name === "Sign-In Store").map((l) => l.advice),
+    [null, null],
   );
+  // the app's own names, by doctor's codes, in macOS's title case, and the name doctor prints
+  // for each
+  const checkName = words
+    .slice(words.indexOf("fn check_name("), words.indexOf("fn check_text("))
+    .replace(/\s+/g, " ");
+  const titles = new Map(
+    [
+      ...checkName.matchAll(/((?:"\w+" \| )*"\w+") => (?:\{ )?\( ?"([^"]+)", "[^"]+",? ?\)/g),
+    ].flatMap(([, codes, title]) =>
+      [...codes.matchAll(/"(\w+)"/g)].map(([, code]) => [code, title] as const),
+    ),
+  );
+  for (const [code, , app] of appNames) assert.equal(titles.get(code), app, code);
   const doctor = ["claude.rs", "codex.rs", "desktop.rs", "machine.rs", "parks.rs"]
     .map((f) => repo(`crates/pitboard-core/src/doctor/${f}`))
     .join("\n")
