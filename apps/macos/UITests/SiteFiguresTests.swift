@@ -6,9 +6,10 @@ import XCTest
 // before it asserts what it read.
 final class SiteFiguresTests: FixtureTestCase {
     private static let statusMenu = [
-        "Sign In to old Again…", "Claude Code", "work", "old", "personal", "Codex", "main",
-        "spare", "Add Account…", "Refresh", "Open claude.ai", "Open chatgpt.com",
-        "Open Pitboard", "Settings…", "About Pitboard", "Pitboard Help", "Quit Pitboard",
+        "Sign In to old (Claude Code) Again…", "Claude Code", "work", "old", "personal",
+        "Codex", "main", "spare", "Add Account…", "Refresh", "Open claude.ai",
+        "Open chatgpt.com", "Open Pitboard", "Settings…", "About Pitboard", "Pitboard Help",
+        "Quit Pitboard",
     ]
     private static let headings = ["Claude Code", "Codex"]
 
@@ -29,7 +30,7 @@ final class SiteFiguresTests: FixtureTestCase {
         keep(menu, as: "site-status-menu")
         keep(XCUIScreen.main.screenshot(), as: "site-status-menu-screen")
         XCTAssertTrue(highlighted)
-        XCTAssertEqual(item.title, "Pitboard, work 42%, Claude Code")
+        XCTAssertEqual(item.title, "Pitboard, work 42%, Claude Code, needs attention")
         XCTAssertEqual(shown.map(\.title), Self.statusMenu)
         XCTAssertEqual(shown.filter { !$0.enabled }.map(\.title), Self.headings)
     }

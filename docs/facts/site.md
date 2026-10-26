@@ -180,18 +180,18 @@ names runs was read in those alone.
 ### macOS: the menu bar item
 
 - The item draws highlighted while its menu is open. Its accessibility title is "Pitboard, work
-  42%, Claude Code".
-- In `twoTools` the menu reads, top to bottom: Sign In to old Again…; the heading Claude Code,
-  work, old, personal; the heading Codex, main, spare; Add Account… ⌘N, Refresh ⌘R; Open
-  claude.ai ›, Open chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help,
-  Quit Pitboard ⌘Q. A separator divides each group. The headings are dimmed; each tool's account
-  in use is checked. Its items carry no symbols and no tooltips. The redone menu's order and
-  names are asserted by `testTheStatusMenuListsItsItemsInOrder`, and were read from
-  `MenuBarContent.swift` before a run of it.
-- Opened with a click, the menu highlights nothing. The first Down highlights work, the first
-  enabled item; Down and Up pass over headings and separators. Down stops at Quit Pitboard: the
-  menu does not wrap. With nothing highlighted, the first Up goes to Quit Pitboard. Home and
-  Page Up go to work, End and Page Down to Quit Pitboard.
+  42%, Claude Code, needs attention" in `twoTools`, whose old needs a sign-in (run 40404550549).
+- In `twoTools` the menu reads, top to bottom: Sign In to old (Claude Code) Again…; the heading
+  Claude Code, work, old, personal; the heading Codex, main, spare; Add Account… ⌘N, Refresh ⌘R;
+  Open claude.ai ›, Open chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help,
+  Quit Pitboard ⌘Q. A separator divides each group. The headings are dimmed; each tool's account in
+  use is checked. Its items carry no symbols and no tooltips. The redone menu's order and names are
+  asserted by `testTheStatusMenuListsItsItemsInOrder`, and were read in run 40404550549.
+- Opened with a click, the menu highlights nothing. The first Down highlights the first enabled
+  item, Sign In to old (Claude Code) Again… in run 40404550549; Down and Up pass over headings and
+  separators. Down stops at Quit Pitboard: the menu does not wrap. With nothing highlighted, the
+  first Up goes to Quit Pitboard. Home and Page Up go to the first enabled item, End and Page
+  Down to Quit Pitboard.
 - Typing goes to the first item whose title or subtitle starts with what is typed, in any case:
   "spa" goes to spare, "Open P" to Open Pitboard and "o" to old. "Needs" went to old while
   its subtitle was "Needs signing in again", and still did in run 40292624691, where the subtitle

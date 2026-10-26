@@ -231,18 +231,13 @@ final class ScreenshotTests: FixtureTestCase {
         let tool = app.popUpButtons["sheet.tool"]
         XCTAssertTrue(tool.waitForExistence(timeout: 5))
         tool.click()
-        // Its own item, not the menu bar item's Codex heading.
-        tool.menuItems["Codex"].click()
-        let sheet = app.sheets.firstMatch
-        let missing = sheet.descendants(matching: .any)["sheet.missing"]
-        XCTAssertTrue(missing.waitForExistence(timeout: 5))
-        keep(window, as: "macos-sheet-add-missing-tool")
-        tool.click()
         tool.menuItems["Claude Desktop"].click()
-        XCTAssertTrue(missing.waitForNonExistence(timeout: 5))
+        let sheet = app.sheets.firstMatch
+        let confirm = sheet.buttons["sheet.confirm"]
+        XCTAssertTrue(confirm.wait(until: "label == 'Continue'", timeout: 5))
         keep(window, as: "macos-sheet-add-claude-desktop")
 
-        app.buttons["sheet.confirm"].click()
+        confirm.click()
         XCTAssertTrue(sheet.buttons["sheet.undo"].waitForExistence(timeout: 10))
         keep(window, as: "macos-sheet-add-claude-desktop-waiting")
         sheet.buttons["sheet.cancel"].click()
@@ -369,7 +364,7 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
         keep(settings, as: "macos-alert-uninstall")
         app.alertAnswer.click()
-        let trash = app.buttons[Words.moveToTrash]
+        let trash = app.dialog.buttons[Words.moveToTrash]
         XCTAssertTrue(trash.waitForExistence(timeout: 30))
         keep(XCUIScreen.main.screenshot().pngRepresentation, as: "macos-alert-move-to-trash")
         trash.click()
@@ -396,6 +391,9 @@ final class ScreenshotTests: FixtureTestCase {
         app.menuItem(Words.openPitboard).click()
         XCTAssertTrue(app.control("accounts.noTool").waitForExistence(timeout: 5))
         keep(app.accountsWindow, as: "macos-window-no-tool")
+        app.toolbars.buttons["toolbar.addAccount"].click()
+        XCTAssertTrue(app.control("sheet.missing").waitForExistence(timeout: 5))
+        keep(app.accountsWindow, as: "macos-sheet-add-missing-tool")
     }
 
     @MainActor

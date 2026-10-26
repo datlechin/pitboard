@@ -189,7 +189,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
         uninstall.click()
         XCTAssertTrue(app.alertCancel.waitForExistence(timeout: 5))
         app.alertAnswer.click()
-        let trash = app.buttons[Words.moveToTrash]
+        let trash = app.dialog.buttons[Words.moveToTrash]
         XCTAssertTrue(trash.waitForExistence(timeout: 30))
         trash.click()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))

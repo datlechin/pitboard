@@ -59,18 +59,15 @@ final class AccountsWindowTests: FixtureTestCase {
     /// A tool Pitboard did not find says what to install, and cannot be signed in to.
     @MainActor
     func testAToolPitboardDidNotFindSaysWhatToInstall() {
-        // Claude Code and Claude Desktop, and no Codex CLI.
-        let app = launch(.claudeDesktop)
+        // No tool at all, so the sheet starts on Claude Code, with no picker of one tool.
+        let app = launch(.noClaudeCode)
         app.openWindow()
         app.toolbars.buttons["toolbar.addAccount"].click()
-        let tool = app.popUpButtons["sheet.tool"]
-        XCTAssertTrue(tool.waitForExistence(timeout: 5))
-        tool.click()
-        tool.menuItems["Codex"].click()
         let sheet = app.sheets.firstMatch
         XCTAssertTrue(
             sheet.descendants(matching: .any)["sheet.missing"].waitForExistence(timeout: 5))
         XCTAssertTrue(sheet.descendants(matching: .any)["sheet.missing.link"].exists)
+        XCTAssertFalse(app.popUpButtons["sheet.tool"].exists)
         XCTAssertFalse(app.buttons["sheet.confirm"].isEnabled)
     }
 

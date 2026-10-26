@@ -104,6 +104,11 @@ extension XCUIApplication {
         alert.buttons["action-button-2"]
     }
 
+    // An alert of the app's own, over no window, as before Pitboard moves itself to the Trash.
+    var dialog: XCUIElement {
+        dialogs["alert"]
+    }
+
     /// A text anywhere in the app whose words are `words`. A table keeps a cell's words in
     /// its value, which a subscript does not look at.
     func text(_ words: String) -> XCUIElement {
