@@ -85,7 +85,7 @@ fn a_tool_with_an_account_added_says_so() {
             name: "Claude Code".into(),
             account: Some("work@example.com".into()),
             step: WelcomeStep::Added {
-                said: words::ADDED.into()
+                said: words::added_as("work")
             },
         }]
     );
@@ -161,8 +161,12 @@ fn the_welcome_offers_open_at_login_as_the_system_says_and_continues_to_the_acco
             link: "ms-settings:taskbar".into(),
         })
     );
+    assert_eq!(
+        windows.tools_heading.as_deref(),
+        Some(words::FOUND_ON_THIS_PC)
+    );
     let welcome = model.on_a_mac().welcome;
-    assert_eq!(welcome.icon_link, None);
+    assert_eq!((welcome.icon_link, welcome.tools_heading), (None, None));
     assert_eq!(welcome.title, words::WELCOME);
     assert_eq!(welcome.lines[1], words::where_it_lives(Os::MacOs));
     assert_eq!(

@@ -145,6 +145,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Cancel Switch** say one sentence each.
 - The app's checks of the machine say what each found in the app's words, under the tool they
   are about, and show a check that passed only where it says something to look for.
+- The Windows icon's tooltip goes on in lower case after an account's name, as **work: weekly
+  18% used**.
 
 ### Removed
 

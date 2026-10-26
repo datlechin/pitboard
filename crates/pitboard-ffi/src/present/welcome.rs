@@ -11,6 +11,8 @@ pub struct WelcomeShown {
     pub lines: Vec<String>,
     // beside the line that says where the icon is, on Windows, where it can be kept in view
     pub icon_link: Option<SetupLink>,
+    // over the tools, on Windows
+    pub tools_heading: Option<String>,
     // each tool found, in the order the apps list tools; Claude Code's install link where none is
     pub tools: Vec<WelcomeTool>,
     pub open_at_login: WelcomeLogin,
@@ -55,6 +57,7 @@ pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
             title: words::TASKBAR_SETTINGS.into(),
             link: "ms-settings:taskbar".into(),
         }),
+        tools_heading: (seen.os == Os::Windows).then(|| words::FOUND_ON_THIS_PC.into()),
         tools: tools(seen),
         open_at_login: WelcomeLogin {
             title: title.into(),
@@ -104,7 +107,7 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
                 (Some(added), _) => (
                     Some(added.email.clone()).filter(|email| !email.is_empty()),
                     WelcomeStep::Added {
-                        said: words::ADDED.into(),
+                        said: words::added_as(added.label.as_deref().unwrap_or_default()),
                     },
                 ),
                 (None, Some(login)) if code == claude => {

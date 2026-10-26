@@ -635,10 +635,11 @@ pub(crate) fn bar_tip(
     if attention {
         tip.push("Needs attention".into());
     }
+    // A line goes on after its colon, in Windows' sentence case.
     tip.extend(
         in_use
             .into_iter()
-            .map(|(name, line)| format!("{name}: {line}")),
+            .map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),
     );
     tip.join("\n")
 }
@@ -1545,7 +1546,12 @@ pub(crate) fn welcome_done(os: Os) -> String {
 
 pub(crate) const CONTINUE: &str = "Continue";
 
-pub(crate) const ADDED: &str = "Added";
+pub(crate) fn added_as(label: &str) -> String {
+    format!("Added as {label}")
+}
+
+// Over the welcome's tools on Windows, whose mockup heads them.
+pub(crate) const FOUND_ON_THIS_PC: &str = "Found on this PC";
 
 pub(crate) const ADD: &str = "Add";
 
@@ -4687,10 +4693,10 @@ mod tests {
                 true,
                 [
                     ("work".into(), "5-hour 12%".into()),
-                    ("job".into(), "5-hour 71%".into())
+                    ("main".into(), "Weekly 18% used".into())
                 ]
             ),
-            "Pitboard\nNeeds attention\nwork: 5-hour 12%\njob: 5-hour 71%"
+            "Pitboard\nNeeds attention\nwork: 5-hour 12%\nmain: weekly 18% used"
         );
         assert_eq!(nameless_login(true), "Sign-in Pitboard can’t use");
         assert_eq!(nameless_login(false), "Unknown sign-in");
@@ -4859,7 +4865,8 @@ mod tests {
             )
         );
         assert_eq!(both(&welcome_done), pair("Continue", "Get started"));
-        assert_eq!(ADDED, "Added");
+        assert_eq!(added_as("work"), "Added as work");
+        assert_eq!(FOUND_ON_THIS_PC, "Found on this PC");
         assert_eq!((ADD, ADD_ASKING), ("Add", "Add…"));
         assert_eq!(both(&sign_in_asking), pair("Sign In…", "Sign in…"));
         assert_eq!(TASKBAR_SETTINGS, "Taskbar settings");
