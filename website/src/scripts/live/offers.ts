@@ -1,6 +1,4 @@
-// What an account offers, as present/accounts.rs `offers` and its item's windows and Forget say:
-// a shortcut or context menu shows only what applies now, and macOS's Account menu shows all of it,
-// dimming what does not (AccountCommands.swift).
+// What an account offers (present/accounts.rs `offers`, AccountCommands.swift).
 import { warmStanding, type State } from "../../lib/model.ts";
 import { isInUse } from "../../lib/words.ts";
 import { openSite, siteOf, useOffer } from "../../data/window.ts";

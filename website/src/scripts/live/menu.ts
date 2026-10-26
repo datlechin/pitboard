@@ -1,12 +1,5 @@
-// A menu as NSMenu and WinUI's MenuFlyout run one, in WAI-ARIA's menu pattern, with the system's
-// keys (plan 3.1, 3.2 and section 6; docs/facts/site.md). On macOS the highlighted item is the one
-// with focus, the pointer moves it, arrows stop at the ends, Home and End go to them, Return and
-// Space choose as the key goes down, typing goes to the first item whose title or subtitle starts
-// with it, a chosen item blinks before the menu fades, and a submenu opens as the pointer reaches
-// its item. In WinUI the pointer paints what it is over and leaves focus alone, arrows wrap, Enter
-// and Space choose as the key comes up, Tab, Home, End and letters do nothing, a choice runs once
-// the menu has closed, and a submenu opens once the pointer rests on its item. On both, dimmed
-// items are skipped.
+// A menu as NSMenu and WinUI's MenuFlyout run one, in WAI-ARIA's menu pattern, with each system's
+// keys (docs/facts/site.md).
 
 import { keyed, shown, text } from "./draw.ts";
 import type { State } from "../../lib/model.ts";
@@ -87,7 +80,6 @@ export class Menu {
     );
   }
 
-  // the items shown, in order
   items(): HTMLElement[] {
     return this.#own(ITEMS).filter((i) => i.getClientRects().length > 0);
   }
@@ -144,7 +136,6 @@ export class Menu {
     this.el.style.setProperty("--y", `${y - box.top}px`);
   }
 
-  // this menu and every submenu it has open
   close() {
     clearTimeout(this.#rest);
     this.#over = null;

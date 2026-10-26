@@ -1,6 +1,4 @@
-// The share's controls as each system draws them: on macOS a text field with its stepper beside it,
-// two controls on one value, and on Windows WinUI's NumberBox, a spinbutton with its spin buttons
-// inline. Both step by one within LOWEST to HIGHEST and give back text that is no figure.
+// The share's controls: on macOS a field with a stepper beside it, on Windows WinUI's NumberBox.
 import { HIGHEST, LOWEST } from "../../lib/model.ts";
 
 export interface Share {

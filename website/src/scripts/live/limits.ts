@@ -1,9 +1,5 @@
-// Settings' Limits controls on macOS or Windows, wherever a figure draws them: When a limit reaches,
-// whose choice and share are the model's preferences, saved at once, and Warm up limits, whose
-// hours and accounts are the model's warm state, its accounts the page's Claude Code accounts in the
-// order they were added. The words under each are machine.rs's for the state. Each finds its
-// controls by the ids that start `prefix`, and the words it says under them inside `root`, and takes them back to how they started on
-// Reset: closed pop-ups and flyouts, and each expander as it was drawn.
+// Settings' Limits controls on either system, wherever a figure draws them; the words under each
+// are machine.rs's for the state.
 import { combobox, type Combobox } from "./combobox.ts";
 import { disclosure } from "./disclosure.ts";
 import { macShare, numberBox, type Share } from "./spin.ts";

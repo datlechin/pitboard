@@ -1,6 +1,5 @@
 // What the menus open that has no figure of its own (answer 3 a): the About panel and an account's
-// window, each over the desk it is asked from, as a window opens on the screen it is asked on. An
-// account's window follows its account's name, and goes with it, with Quit, and on Reset.
+// window, each over the desk it is asked from.
 import { cloned, text } from "./draw.ts";
 import { closeWindow, model, type State } from "../../lib/model.ts";
 import { siteOf } from "../../data/window.ts";

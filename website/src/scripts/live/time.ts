@@ -1,8 +1,5 @@
-// A time of day as each system picks it. macOS's NSDatePicker with its stepper: the hour and the
-// minute each take focus, the arrows step the one with focus round, digits typed set it, and the
-// stepper steps the one last selected. WinUI's TimePicker: a button whose flyout holds a looping
-// column each for the hour and the minute, changed only once Accept takes them. Both are
-// WAI-ARIA spinbuttons, one for the hour and one for the minute.
+// A time of day as each system picks it: macOS's NSDatePicker with its stepper, or WinUI's
+// TimePicker, whose flyout changes the time only once Accept takes it.
 import { STEPPER_DELAY, STEPPER_EVERY, holding } from "./spin.ts";
 
 export interface Time {

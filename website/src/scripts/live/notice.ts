@@ -1,10 +1,5 @@
-// <pb-notice>: the notification row on macOS or Windows, in its own moment (lib/moment.ts), which
-// follows the page's choice, share and accounts. Pitboard sets no alert style and no duration, so
-// macOS shows a Temporary banner and Windows a toast that each go after the system's time: it
-// arrives once the row is 60% in view, once for each notification the moment posts, and stays
-// while the pointer is over it or focus is inside it (plan 3.6 and 3.7; question 2). On Windows the
-// taskbar's clock opens Notification Center, where the notification waits once its toast has gone,
-// until it is acted on, dismissed or cleared (answer 2 a).
+// <pb-notice>: the notification row, in its own moment (lib/moment.ts). Pitboard sets no alert style
+// or duration, so each system's banner goes after the system's time (plan 3.6, 3.7; answer 2 a).
 // departs from the apps: The Mac's clock opens nothing
 import { attr, shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";

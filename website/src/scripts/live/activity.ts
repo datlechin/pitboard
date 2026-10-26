@@ -1,7 +1,5 @@
-// The Activity pane and page (plan 3.8, answer 14): the log as the app reads it, when the pane
-// shows and on its Refresh, and not as it changes (ActivityPane.swift, state.rs's one ReadLog).
-// Newest first, in the rows the window has room for, as a table that has more scrolls them out of
-// sight; no selection and no sorting, as the app takes neither.
+// The Activity pane and page (plan 3.8): the log is read when the pane shows and on Refresh,
+// not as it changes, as ActivityPane.swift reads it.
 import { shown, text } from "./draw.ts";
 import type { State } from "../../lib/model.ts";
 import { activity } from "../../lib/words.ts";

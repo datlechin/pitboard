@@ -1,6 +1,4 @@
-// A shell's prompt line: the native field Term.astro draws, with the cursor each terminal draws at
-// its caret, the shell's history on Up and Down, its line-editing keys and Tab. Shift+Tab, and
-// Escape then Tab, leave it, so a keyboard is never kept inside (plan section 5).
+// A shell's prompt line: the native field Term.astro draws, under the cursor each terminal draws.
 import { edit, freshTab, keys, type Line, type Shell, type TabState } from "../../lib/shell.ts";
 
 // Enter and Ctrl+C take the line as typed, and leave the field to what is typed next; Tab reads
@@ -80,7 +78,6 @@ export class Prompt {
     this.draft = "";
   }
 
-  // The line typed, taken from the field.
   private take(): string {
     const text = this.field.value;
     this.reset();
@@ -105,7 +102,6 @@ export class Prompt {
     this.draw();
   }
 
-  // The drawn cursor at the caret, over the character there.
   draw() {
     const { value, caret } = this.value;
     this.line.style.setProperty("--at", String(caret));

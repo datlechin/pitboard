@@ -1,15 +1,9 @@
 // The account list as SwiftUI's List(selection:) and WinUI's ListView run it, in WAI-ARIA's grid
-// pattern with focus on the row (plan 3.3, 3.4 and section 6). One row is selected at a time, and
-// none at first; a click selects, a right click does not. On macOS Up and Down move the selection
-// and typing a name selects it; on Windows the selection follows focus, Ctrl with an arrow moves
-// focus alone, and Home, End and the page keys go to the first and last row. Return or Enter and
-// a double click do the row's action. Only the current row and its button are Tab stops, as a
-// ListViewItem's local Tab navigation has it, so Tab goes from the row to its button and out.
+// pattern with focus on the row (plan 3.3, 3.4 and section 6).
 
 export interface GridOptions {
   system: "macos" | "windows";
   grid: HTMLElement;
-  // the rows shown, in order
   rows: () => HTMLElement[];
   act: (row: HTMLElement) => void;
   forget: (row: HTMLElement) => void;

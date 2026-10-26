@@ -1,10 +1,5 @@
-// The hero's opening demo: CSS frames over the two moments its desks draw, set as data-demo on the
-// root, 3.8 s in all (plan section 4). It plays once, the first time a desk is shown and 60% of it
-// is in view, and at the frame that picks work it makes that switch in the state, as the app. With
-// the Command line tab shown, the switch is made once the hero is in view, and under reduced motion
-// at once, so the hero draws its last frame from the first; a touch on a working figure before the
-// demo began makes it too. A press, key or focus in a working figure stops the demo, and each desk
-// then draws the state as it stands, from the frame it stopped at.
+// The hero's opening demo (plan section 4): it plays once, makes its switch in the state, and stops
+// at a touch on a working figure.
 import { settle, use } from "../../lib/model.ts";
 
 export type Frame = "start" | "move" | "hl" | "pick" | "shut" | "reach" | null;

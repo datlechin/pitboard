@@ -1,6 +1,5 @@
-// The Accounts window on both systems (plan 3.3 to 3.5): its list, each row's shortcut or context
-// menu, its panes, and on Windows its Settings page. Every view of the window on the page, the cut
-// ones too, follows the one state; sheets.ts asks what its menus and keys ask.
+// The Accounts window on both systems (plan 3.3 to 3.5); every view of it, the cut ones too,
+// follows the one state.
 import { attr, cloned, keyed, shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";
 import { Grid } from "./grid.ts";

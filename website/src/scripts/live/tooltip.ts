@@ -1,7 +1,4 @@
-// A control's tooltip in WAI-ARIA's tooltip pattern: each owner names its own `role="tooltip"` by
-// aria-describedby, hidden until it shows. It shows after the system's delay at the pointer or,
-// where the system shows one for keyboard focus, at its owner; the markup places it from there as
-// its system does.
+// A control's tooltip in WAI-ARIA's tooltip pattern, shown after its system's delay.
 // departs from the apps: Tooltips stay while the pointer is over them and Escape closes them
 
 export interface TipOptions {

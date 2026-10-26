@@ -1,5 +1,5 @@
-// The Forget alert, the Rename sheet and the sign-in sheet of each system: drawn once with the
-// window's top view, and opened over whichever window asks.
+// The Forget alert, the Rename sheet and the sign-in sheet of each system, drawn once and opened
+// over whichever window asks.
 import { combobox, type Combobox } from "./combobox.ts";
 import { closeDialog, isOpen, openDialog, type Cancelled } from "./dialog.ts";
 import { attr, shown, text } from "./draw.ts";
@@ -296,7 +296,6 @@ class Sheets {
     return true;
   }
 
-  // the sign-in under way, as the state has it
   render(s: State) {
     const sign = this.#signing;
     if (!sign || !isOpen(this.signInDialog)) return;

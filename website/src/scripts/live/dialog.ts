@@ -1,6 +1,5 @@
-// A sheet, an alert or a ContentDialog as HTML's modal dialog (answer 15). A macOS sheet or alert
-// sits in the middle of its window and dims it, as macOS 26 draws one; a ContentDialog sits in
-// the middle of its desk over WinUI's smoke (docs/facts/site.md).
+// A sheet, an alert or a ContentDialog as HTML's modal dialog (answer 15), placed and dimmed as
+// docs/facts/site.md reads each system's.
 // departs from the apps: A sheet, an alert or a ContentDialog blocks the whole page
 
 export type Cancelled = "key" | "button";

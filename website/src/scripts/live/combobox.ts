@@ -1,8 +1,5 @@
-// A select-only combobox (WAI-ARIA APG) with the keys and pointer rules of the control it draws:
-// macOS's pop-up button, whose menu opens on the press with the choice over the button and chooses
-// on the release, or WinUI's ComboBox, whose arrows change the choice while it is closed. Focus
-// stays on the box: the option the keys are on is its aria-activedescendant and aria-selected, and
-// the pop-up's check mark is aria-checked on the choice.
+// A select-only combobox (WAI-ARIA APG) with the keys and pointer rules of macOS's pop-up button
+// or WinUI's ComboBox. Focus stays on the box.
 
 export type Kind = "popup" | "combobox";
 

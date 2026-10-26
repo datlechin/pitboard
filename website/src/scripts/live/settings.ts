@@ -1,8 +1,5 @@
-// <pb-settings> and <pb-warm>: macOS's Settings window at Limits, cut at When a limit reaches or at
-// Warm up limits (answer 4 a). Its toolbar's tabs show General, Limits and Advanced, as
-// SettingsView.swift's TabView does: the window takes each pane's height, and the desk keeps its
-// own, cutting it. General and Advanced are cloned the first time they show from the templates the
-// page draws once, and follow the one state: General's own settings, the renewal schedule.
+// <pb-settings> and <pb-warm>: macOS's Settings window, cut at When a limit reaches or at Warm up
+// limits, its tabs as SettingsView.swift's TabView shows them (answer 4 a).
 import { combobox, type Combobox } from "./combobox.ts";
 import { attr, cloned, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";

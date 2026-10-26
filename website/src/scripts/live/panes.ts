@@ -1,9 +1,5 @@
-// A window's panes (answer 4 a): macOS's sidebar, a SwiftUI List whose selection is the pane, and
-// WinUI's NavigationView, in WAI-ARIA's tabs pattern. On macOS Up and Down select as they move and
-// stop at the ends; in WinUI they move focus alone, wrapping, and Enter or Space selects, as
-// NavigationView's SelectionFollowsFocus is off by default. The window keeps its size as its pane
-// changes, as an app's window does, and what the pane holds scrolls in it. On macOS the sidebar
-// button hides the sidebar and shows it again.
+// A window's panes (answer 4 a): macOS's sidebar and WinUI's NavigationView, in WAI-ARIA's tabs
+// pattern.
 
 export interface PanesOptions {
   system: "macos" | "windows";
@@ -96,7 +92,6 @@ export class Panes {
     if (focus) tab.focus({ preventScroll: true });
   }
 
-  // as it started: on its first pane, its sidebar shown
   restart() {
     this.show(this.first);
     const toggle = this.o.window.querySelector<HTMLButtonElement>('[data-does="sidebar"]');

@@ -1,5 +1,4 @@
-// The WAI-ARIA toolbar pattern: one Tab stop, Left and Right move along its buttons, Home and End
-// to its ends, and the button last used keeps the stop.
+// The WAI-ARIA toolbar pattern: one Tab stop, which the button last used keeps.
 export function toolbar(bar: HTMLElement, act: (button: HTMLButtonElement) => void) {
   const buttons = () => [...bar.querySelectorAll<HTMLButtonElement>("button")];
   const stop = (to: HTMLButtonElement, focus: boolean) => {

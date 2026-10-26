@@ -1,9 +1,5 @@
-// A figure that works: the light-DOM custom element a figure component renders around its drawing,
-// inert until its live module defines it (plan 2.4). Each draws the one state on every change; once
-// defined it speaks for itself, so the caption's description of its drawing goes, and the caption's
-// Reset shows while anything on the page has changed. Reset in any caption brings every figure's
-// own controls back to their start too. A macOS window's figure has the menu bar the app puts up
-// while the window is in front, which answers for the app what the window leaves to it.
+// A figure that works: the custom element around its drawing, inert until its module defines it
+// (plan 2.4).
 import { appMenus, type AppMenus, type WindowMenus } from "./appmenu.ts";
 import { shown, text } from "./draw.ts";
 import { bringForward, help } from "./forward.ts";

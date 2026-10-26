@@ -1,7 +1,5 @@
-// The terminals: each window a shell of its own, which starts with the session it draws and its
-// history holding that command. A line runs `pitboard` against the one state, through
-// src/lib/cli.ts, and the shell's built-ins through src/lib/shell.ts; output goes into the log
-// above the prompt line, which grows with it to the terminal's rows, then scrolls.
+// The terminals: each window a shell of its own, which runs `pitboard` against the one state
+// through lib/cli.ts.
 import { LiveFigure } from "./figure.ts";
 import { Prompt } from "./prompt.ts";
 import { toolbar } from "./toolbar.ts";
@@ -125,7 +123,6 @@ class Term extends LiveFigure {
     return `<span class="${dim}">${escaped(said)}</span> `;
   }
 
-  // Reset puts every terminal back to its session
   protected restart() {
     this.running?.stop();
     this.running = null;

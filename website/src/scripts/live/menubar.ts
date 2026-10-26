@@ -1,7 +1,5 @@
 // The hero's macOS desk: Pitboard's menu bar item and its menu, as MenuBarExtra's menu style runs
-// them (plan 3.1). A press on the item opens the menu at once, and a release over an item chooses
-// it; a click leaves it open, and a click on an item chooses. Each moment after the switch follows
-// the one state, as does the clock and the status line of the Claude Code session behind it.
+// them (plan 3.1).
 import { attr, cloned, html, keyed, shown, text } from "./draw.ts";
 import { handOver } from "./demo.ts";
 import { LiveFigure } from "./figure.ts";

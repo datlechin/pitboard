@@ -1,6 +1,5 @@
-// What a live figure writes into the markup Astro drew (plan 2.4, rule 2): an attribute, text the
-// model owns, words.ts's HTML, the order of nodes, and clones of the templates it drew. Each writes
-// only what changed, so a figure redrawn every second keeps focus and selection.
+// What a live figure writes into the markup Astro drew (plan 2.4, rule 2), only where it changed,
+// so a figure redrawn every second keeps focus and selection.
 
 // text, kept between the white space Astro's source lays it out in, so the same words are the same
 // markup
@@ -39,7 +38,6 @@ export function placeAt(parent: Element, el: Element, index: number) {
   if (at !== el) parent.insertBefore(el, at);
 }
 
-// a copy of a template's first element
 export function cloned<T extends Element = HTMLElement>(template: HTMLTemplateElement | null): T {
   if (!template?.content.firstElementChild) throw new Error("a figure lacks a template it needs");
   return template.content.firstElementChild.cloneNode(true) as T;

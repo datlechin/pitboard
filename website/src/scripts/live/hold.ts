@@ -1,8 +1,5 @@
-// A touch held still on a row opens its shortcut menu (plan 2.5), as Android's long press sends
-// contextmenu and iOS Safari's sends none: 500 ms within 10 px, until measured on a phone (plan
-// section 10). A move, a lift or the browser taking the touch for a scroll ends it, and the click
-// a hold's lift brings is swallowed. Whichever of the hold and contextmenu comes first opens the
-// menu; the other finds it open.
+// A touch held still on a row opens its shortcut menu, as iOS Safari sends no contextmenu: 500 ms
+// within 10 px, until measured on a phone (plan section 10).
 
 const HOLD_MS = 500;
 const SLOP_PX = 10;

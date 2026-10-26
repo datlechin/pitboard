@@ -1,11 +1,6 @@
-// The menu bar of a Pitboard window in front on macOS (plan section 6 and answer 5 a). A press on a
-// title opens its menu at once and a release over an item chooses it; a click leaves it open, and
-// while one is open the pointer moving along the bar opens the menu under it, as NSMenu's menu bar
+// The menu bar of a Pitboard window in front on macOS (answer 5 a), tracked as NSMenu's menu bar
+// tracks the pointer.
 // departs from the apps: The macOS window's menu bar is a Tab stop
-// tracks. For the keyboard it is WAI-ARIA's menubar: one Tab stop, Left and Right along the bar,
-// Down, Return or Space to open a menu, and Left and Right from an open menu to the next. Each menu
-// is cloned the first time it opens from the templates AppMenuBar.astro draws once, and follows the
-// window: the account selected, the window's Refresh, and what each tool's site offers.
 import { attr, shown, text } from "./draw.ts";
 import { Menu, drawSites, sectioned, type How } from "./menu.ts";
 import { offersOf } from "./offers.ts";
@@ -187,7 +182,6 @@ export class AppMenus {
     if (item.dataset.does) this.o.choose(item.dataset.does, item);
   }
 
-  // The menu open, as the window and the state stand.
   render(s: State) {
     const menu = this.#current();
     if (!menu?.el) return;

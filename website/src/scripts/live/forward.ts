@@ -1,5 +1,4 @@
-// The page stands for one Mac or PC (plan question 3): what opens one of Pitboard's windows brings
-// that window's figure into view, and focus into it once the figure works.
+// The page stands for one Mac or PC (plan question 3).
 // departs from the apps: Open Pitboard, Settings on Windows and the tray icon bring the page's figure into view
 import { DOCS } from "../../data/site.ts";
 

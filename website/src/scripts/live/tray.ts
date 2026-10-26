@@ -1,8 +1,5 @@
-// The hero's Windows desk: Pitboard's notification area icon and its MenuFlyout (plan 3.2). A
-// click, Enter or Space on the icon opens the window; a right click, Shift+F10 or the Menu key opens
-// the menu, its right edge at the point Explorer hands the app and its bottom on the taskbar's top
-// (docs/facts/site.md). The icon, its tooltip and the moment after the switch follow the one state,
-// as do the taskbar's clock and the status line of the Claude Code session behind it.
+// The hero's Windows desk: Pitboard's notification area icon and its MenuFlyout (plan 3.2), the
+// menu placed where Explorer hands the app its point (docs/facts/site.md).
 import { attr, cloned, html, keyed, shown, text } from "./draw.ts";
 import { handOver } from "./demo.ts";
 import { LiveFigure } from "./figure.ts";
