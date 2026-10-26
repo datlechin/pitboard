@@ -64,6 +64,10 @@ pub use present::{
     WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool, WindowOffer,
     WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
+pub use present::{
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
+    app_words,
+};
 
 mod account_windows;
 pub use account_windows::{

@@ -375,7 +375,11 @@ impl LocalTime for Unreadable {
 
 // Every string in `shown`'s `{:?}`, but ids and codes: what a person may read of it.
 pub(crate) fn strings_of(shown: &impl std::fmt::Debug) -> Vec<String> {
-    let debugged = format!("{shown:?}");
+    strings_in(&format!("{shown:?}"))
+}
+
+// Every string quoted in `debugged`, as `{:?}` writes one, but ids and codes.
+pub(crate) fn strings_in(debugged: &str) -> Vec<String> {
     let mut strings = Vec::new();
     let mut chars = debugged.chars();
     while chars.by_ref().any(|c| c == '"') {
@@ -395,6 +399,19 @@ pub(crate) fn strings_of(shown: &impl std::fmt::Debug) -> Vec<String> {
         }
     }
     strings
+}
+
+// Each capital past a sentence's first word that is none of `names`, which sentence case has not.
+pub(crate) fn title_cased(said: &str, names: &[&str]) -> Vec<String> {
+    let words: Vec<&str> = said.split_whitespace().collect();
+    words
+        .windows(2)
+        .filter(|pair| !pair[0].ends_with(['.', '?', '!', ':']))
+        .map(|pair| pair[1].trim_matches(|c: char| !c.is_alphanumeric()))
+        .map(|word| word.strip_suffix("’s").unwrap_or(word))
+        .filter(|word| word.starts_with(char::is_uppercase) && !names.contains(word))
+        .map(str::to_owned)
+        .collect()
 }
 
 // The core's words for how it works, which the apps leave to the command line and its docs.

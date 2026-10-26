@@ -30,6 +30,7 @@
 //! Finder. So "Add Account…" is said in both places.
 
 mod accounts;
+mod app_words;
 mod glance;
 mod machine;
 pub(crate) mod next;
@@ -44,6 +45,10 @@ pub(crate) mod words;
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub use app_words::{
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
+    app_words,
+};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
 pub(crate) use glance::{glance, id as glance_id};
@@ -923,7 +928,12 @@ mod tests {
     #[test]
     fn windows_says_its_controls_in_sentence_case() {
         use crate::model::Sheet;
-        use crate::present::testing::{claude_code, read, status};
+        use crate::model::testing::records::warning;
+        use crate::present::testing::{
+            account, claude_code, claude_desktop, codex, desktop_account, read, status, strings_of,
+            title_cased,
+        };
+        use pitboard_core::status::Standing;
         let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
         state.sheet = Some(Sheet::Add { provider: None });
         let words = |os| {
@@ -952,6 +962,52 @@ mod tests {
             words(Os::Windows),
             "each system its own case"
         );
+        let mut accounts = vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("old"))
+                .standing(Standing::LoginExpired)
+                .build(),
+            account(None).of("codex").signed_in().uuid("u").build(),
+        ];
+        accounts.push(desktop_account("home", false));
+        let mut state = read(
+            status(accounts, vec![warning("fallback_login", "")]),
+            vec![claude_code(), codex(), claude_desktop()],
+        );
+        state.sheet = Some(Sheet::Add { provider: None });
+        let names = [
+            "Pitboard",
+            "Claude",
+            "Code",
+            "Codex",
+            "Desktop",
+            "ChatGPT",
+            "Windows",
+            "Credential",
+            "Manager",
+            "PC",
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sun",
+            "Gmail",
+            "Google",
+            "Drive",
+            "Calendar",
+            "Continue",
+            "Taskbar",
+            "Share",
+        ];
+        let mut found = Vec::new();
+        for said in strings_of(&present_on(Os::Windows, &state, MIDDAY, &Utc)) {
+            if !title_cased(&said, &names).is_empty() {
+                found.push(said);
+            }
+        }
+        assert!(found.is_empty(), "{found:#?}");
     }
 
     /// A moment later today is a clock time, and one on another day names its day as well,
