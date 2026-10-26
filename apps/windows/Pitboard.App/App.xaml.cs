@@ -233,8 +233,9 @@ public partial class App : Application, IIconTargets
     {
         if (_requests.Opens(request))
         {
-            // The first launch's welcome is a window of its own, in place of the main window.
-            if (request.Place is Place.Welcome)
+            // The first launch's welcome is a window of its own, which stands in for the main window while it is open: the
+            // launch's own request for the window can come after it.
+            if (request.Place is Place.Welcome || (request.Place is null && _welcome is not null))
             {
                 ShowWelcome();
                 return;

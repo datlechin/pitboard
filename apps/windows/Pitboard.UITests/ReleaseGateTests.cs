@@ -56,6 +56,9 @@ public sealed class ReleaseGateTests
         var unregistered = false;
         try
         {
+            // A fresh account's first launch, whose welcome's Get started opens the window.
+            var welcome = launched.Window(Words.Welcome);
+            Launched.Within(welcome, found => found.ByAutomationId("welcome.done"), "Get started").AsButton().Invoke();
             var window = launched.Window("Pitboard");
             launched.Select("SettingsItem");
             var toggle = launched.Find(found => found.ByAutomationId("settings.startAtSignIn"), "settings.startAtSignIn");
