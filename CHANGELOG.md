@@ -171,6 +171,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app's icon menu opens on **Open Pitboard** and ends with **Exit**, as Windows'
   guidance orders it, and says **Install Pitboard 1.2.0…** in place of **Check for updates** once
   an update is found.
+- The Windows app's questions answer Enter with their verb, drawn as the accent button, except
+  **Uninstall Pitboard?**, which waits to be read.
 
 ### Removed
 

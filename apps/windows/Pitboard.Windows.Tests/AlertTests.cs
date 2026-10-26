@@ -72,6 +72,22 @@ public sealed class AlertTests
     }
 
     [UITestMethod]
+    public async Task TheWindowsQuestionAnswersEnterWithItsVerb()
+    {
+        var model = new StandInModel(Snapshots.Read(1) with { QuitQuestion = QuitChatGPT });
+        var app = new AppModel(model);
+        var (dialogs, _) = await Window(app);
+        using var alerts = new WindowAlerts(app, dialogs);
+
+        await Views.Until(() => dialogs.Open is not null, "no dialog for the question");
+        Assert.AreEqual("Quit ChatGPT and switch", dialogs.Open!.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.Primary, dialogs.Open.DefaultButton);
+        dialogs.Open.Hide();
+
+        await Views.Until(() => model.Sent.Contains(new Intent.KeepAppOpen()), "closing it did not decline");
+    }
+
+    [UITestMethod]
     public async Task AnAlertTheModelDropsIsTakenDownUnanswered()
     {
         var first = Snapshots.Read(1) with { QuitQuestion = QuitChatGPT };

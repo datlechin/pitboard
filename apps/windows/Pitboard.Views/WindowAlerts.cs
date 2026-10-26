@@ -71,24 +71,21 @@ public sealed partial class WindowAlerts : IDisposable
 
     private static ContentDialog Dialog(WindowAlert alert)
     {
-        var (dialog, id) = alert switch
+        switch (alert)
         {
-            WindowAlert.Failed failed => (new ContentDialog
-            {
-                Title = failed.Text.Title,
-                Content = failed.Text.Message,
-                CloseButtonText = "OK",
-            }, "failure"),
-            WindowAlert.Asking asked => (new ContentDialog
-            {
-                Title = asked.Question.Title,
-                Content = asked.Question.Message,
-                PrimaryButtonText = asked.Question.Confirm,
-                CloseButtonText = "Cancel",
-            }, "question"),
-            _ => throw new ArgumentOutOfRangeException(nameof(alert)),
-        };
-        AutomationProperties.SetAutomationId(dialog, id);
-        return dialog;
+            case WindowAlert.Failed failed:
+                var dialog = new ContentDialog
+                {
+                    Title = failed.Text.Title,
+                    Content = failed.Text.Message,
+                    CloseButtonText = Words.Window.Ok,
+                };
+                AutomationProperties.SetAutomationId(dialog, "failure");
+                return dialog;
+            case WindowAlert.Asking asked:
+                return DialogHost.Asking(asked.Question);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(alert));
+        }
     }
 }
