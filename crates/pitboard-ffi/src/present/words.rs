@@ -2690,6 +2690,10 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             Key::parse(label).provider.name(),
             bare(label)
         ),
+        Error::LabelTaken { label, who } => format!(
+            "{} is already the name of {who}. Type another name.",
+            bare(label)
+        ),
         Error::NothingParked { tool, label } => format!(
             "{} has no saved sign-in to switch to: the last one went back into use and {} has \
              moved on from it.",
@@ -3276,6 +3280,28 @@ mod tests {
         assert_eq!(capitalised("5-hour 12%"), "5-hour 12%");
         assert_eq!(capitalised("éclair"), "Éclair");
         assert_eq!(capitalised("e\u{301}clair"), "E\u{301}clair");
+    }
+
+    // The sheet asks for a name, so its refusal says name where the command line says label.
+    #[test]
+    fn a_name_already_taken_is_refused_as_a_name() {
+        let taken = |who: &str| {
+            in_app_refusal(
+                Os::Windows,
+                &Error::LabelTaken {
+                    label: "claude/work".into(),
+                    who: who.into(),
+                },
+            )
+        };
+        assert_eq!(
+            taken("dana@work.example").as_deref(),
+            Some("work is already the name of dana@work.example. Type another name.")
+        );
+        assert_eq!(
+            taken("another Claude Desktop account").as_deref(),
+            Some("work is already the name of another Claude Desktop account. Type another name.")
+        );
     }
 
     #[test]
