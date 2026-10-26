@@ -281,11 +281,12 @@ names runs was read in those alone.
   stops at 50 and 99, and a click past a bound changes nothing.
 - On Return the field clamps a typed share to 50 to 99, puts back the last share for text that
   does not parse, and takes "90" without "%". The Up arrow in the field changes nothing.
-- The field also takes each key as it is typed: "7" with no Return set the share to 50 within a
-  second (recorded, runs 40204121073 to 40247375339), and a share clamped while typing can
-  rewrite the text under the caret: "80%" typed with no Return left "50%0%" in the field (run
-  40196222517). Its `share` binding in `LimitsSettings.swift` clamps and sends every value the
-  field hands it.
+- The field took each key as it was typed until run 40404550549: "7" with no Return set the share
+  to 50 within a second (recorded, runs 40204121073 to 40247375339), a share clamped while typing
+  could rewrite the text under the caret, "80%" typed with no Return leaving "50%0%" in the field
+  (run 40196222517), and "120" then Return left "120" in the field over a share of 99 (run
+  40404550549). Since, `ShareField` in `LimitsSettings.swift` sends a typed share on Return or as
+  the field loses focus, as the site does.
 - The warm-up toggles are switches, and From and To are time fields with a stepper beside each.
   How fast their steppers repeat was not read: the site repeats them as the share's.
 
@@ -376,8 +377,6 @@ says so in a comment naming its line here, which `website/src/scripts/departures
 - Open Pitboard, Settings on Windows, Warm-Up Settings and the tray icon bring the page's figure
   into view, where the app brings a window forward.
 - Check Now and Uninstall Pitboard do nothing: the page updates and removes no app.
-- The macOS share field takes a typed share on Return or as focus leaves. The app's binding
-  clamps each key as it is typed, which can rewrite the text under the caret.
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
 - The Mac's clock opens nothing: macOS's Notification Center was not read.

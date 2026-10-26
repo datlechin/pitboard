@@ -563,7 +563,7 @@ final class SiteFiguresTests: FixtureTestCase {
             shares[what] = Int(said.filter(\.isNumber))
             seen.append("\(what): \(said)")
         }
-        func typed(_ text: String, _ what: String, expecting expected: Int) {
+        func typed(_ text: String, _ what: String, expecting expected: Int?) {
             field.click()
             field.typeKey("a", modifierFlags: .command)
             field.typeText(text)
@@ -591,12 +591,11 @@ final class SiteFiguresTests: FixtureTestCase {
         read("up at the highest", expecting: 99)
         down.press(forDuration: 4)
         _ = share(in: field, expecting: 50)
-        // Typed from the lowest, so the first digit, clamped, changes nothing.
         typed("120\r", "typed 120", expecting: 99)
         typed("10\r", "typed 10", expecting: 50)
         typed("90\r", "typed 90", expecting: 90)
         typed("abc\r", "typed abc", expecting: 90)
-        typed("7", "typed 7, no Return", expecting: 50)
+        typed("7", "typed 7, no Return", expecting: nil)
         keep(app.windows["Limits"], as: "site-limits-share")
         field.typeKey(.return, modifierFlags: [])
         read("then Return", expecting: 50)
@@ -617,8 +616,7 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(shares["typed 10"], 50)
         XCTAssertEqual(shares["typed 90"], 90)
         XCTAssertEqual(shares["typed abc"], 90)
-        // "typed 7, no Return" is kept, not asserted: the field's binding clamps each key as it
-        // is typed, which the site does not copy (docs/facts/site.md).
+        XCTAssertEqual(shares["typed 7, no Return"], 7)
         XCTAssertEqual(shares["then Return"], 50)
         XCTAssertEqual(shares["Up arrow in the field"], 50)
     }

@@ -34,12 +34,9 @@ struct LimitsSettings: View {
                     LabeledContent(atLimit.shareLabel) {
                         HStack {
                             // The HIG pairs a stepper with a field where large changes are likely.
-                            TextField(atLimit.shareLabel, value: share, format: .percent)
-                                .labelsHidden()
-                                .textFieldStyle(.roundedBorder)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: shareWidth)
-                                .accessibilityIdentifier("settings.atLimitShareField")
+                            ShareField(atLimit: atLimit, width: shareWidth) {
+                                model.send(.setAtLimit(choice: atLimit.choice, at: $0))
+                            }
                             Stepper(
                                 atLimit.shareLabel, value: share,
                                 in: Int(atLimit.lowest)...Int(atLimit.highest)
@@ -110,6 +107,36 @@ struct LimitsSettings: View {
             .disabled(!warm.enabled)
         }
         .formStyle(.grouped)
+    }
+}
+
+// Sent on Return or as focus leaves: a share clamped at each key left "120" in the field over 99.
+private struct ShareField: View {
+    let atLimit: AtLimitShown
+    let width: CGFloat
+    let send: (UInt8) -> Void
+    @State private var typed = 0
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        TextField(atLimit.shareLabel, value: $typed, format: .percent)
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing)
+            .frame(width: width)
+            .focused($editing)
+            .onSubmit(take)
+            .onChange(of: editing) {
+                if !editing { take() }
+            }
+            .onChange(of: atLimit.at, initial: true) { typed = Int(atLimit.at) }
+            .accessibilityIdentifier("settings.atLimitShareField")
+    }
+
+    private func take() {
+        let share = LimitsSettings.share(typed, of: atLimit)
+        typed = Int(share)
+        if share != atLimit.at { send(share) }
     }
 }
 
