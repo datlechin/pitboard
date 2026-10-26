@@ -12,7 +12,7 @@ import {
   toast,
 } from "./windows.ts";
 import { moments, tools } from "./world.ts";
-import { menuBarLevel, trayTip } from "../lib/words.ts";
+import { TIP_LENGTH, menuBarLevel, shellTip, trayTip } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const views = (file: string) => repo(`apps/windows/Pitboard.Views/${file}`);
@@ -113,6 +113,17 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
     trayTip(moments.after),
     "Pitboard\nwork (Claude Code): 5-hour 12%, weekly 40%\nmain (Codex): Weekly 7%",
   );
+});
+
+test("the Shell holds 127 UTF-16 units of the icon's tooltip, cut never inside a surrogate pair", () => {
+  const icon = shell("NotifyIcon.cs");
+  assert.ok(icon.includes(`public const int TipLength = ${TIP_LENGTH};`));
+  assert.ok(icon.includes("char.IsHighSurrogate(tip[TipLength - 1]) ? TipLength - 1 : TipLength"));
+  const tip = trayTip(moments.after);
+  assert.equal(shellTip(tip), tip);
+  assert.equal(shellTip("a".repeat(200)).length, 127);
+  // a name of 126 letters and a face: the face's two units would end past the 127th
+  assert.equal(shellTip(`${"a".repeat(126)}😀`), "a".repeat(126));
 });
 
 test("the icon in the notification area draws the menu bar's level, from Tray's drawings", () => {

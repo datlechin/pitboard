@@ -98,6 +98,12 @@
   --color-mac-menu-dim: light-dark(rgb(0 0 0 / 0.26), rgb(255 255 255 / 0.42));
   --color-mac-menu-sep: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.12));
   --color-mac-menu-hl: light-dark(#2d6fe0, #1f5fcf);
+  /* a menu item's tooltip, approx until read on macOS 27 */
+  --color-mac-tip: light-dark(#f2f2f2, #2c2c2c);
+  /* an alert's ground and a destructive button's pale red fill, from the Forget alert's picture on
+     macOS 26 */
+  --color-mac-alert: light-dark(#f2f2f2, #323232);
+  --color-mac-destructive: light-dark(rgb(255 56 60 / 0.16), rgb(255 69 58 / 0.22));
   --color-mac-term-bg: light-dark(#ffffff, #161817);
   --color-mac-term-bar: light-dark(#f0f1f1, #222423);
   --color-mac-term-sep: light-dark(rgb(0 0 0 / 0.09), rgb(0 0 0 / 0.6));
@@ -154,6 +160,13 @@
   --color-mac-window-off: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.1));
   --color-mac-window-off-edge: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.2));
   --color-mac-window-stripe: light-dark(#f4f5f5, #232325);
+  /* a link in a window, a control's dimmed text, and the ring around the control with keyboard focus */
+  --color-mac-window-link: light-dark(#0068da, #419cff);
+  --color-mac-window-dim: light-dark(rgb(0 0 0 / 0.25), rgb(255 255 255 / 0.25));
+  /* over a window with a sheet up, and its close button then: read in light on macOS 26.6 */
+  --color-mac-window-scrim: light-dark(rgb(172 172 172 / 0.62), rgb(0 0 0 / 0.4));
+  --color-mac-window-close-off: light-dark(#dcdcdc, #5a5a5a);
+  --color-mac-window-focus: light-dark(rgb(0 122 255 / 0.5), rgb(10 132 255 / 0.5));
   /* Ptyxis's GNOME palette in a libadwaita 1.8 window, light or dark as the site is, as Ptyxis follows the system */
   --color-linux-bar-bg: light-dark(#ffffff, #2e2e32);
   --color-linux-bar-text: light-dark(#333333, #ffffff);
@@ -195,6 +208,11 @@
   --color-win-subtle: light-dark(rgb(0 0 0 / 0.035), rgb(255 255 255 / 0.059));
   --color-win-subtle-2: light-dark(rgb(0 0 0 / 0.024), rgb(255 255 255 / 0.039));
   --color-win-divider: light-dark(rgb(0 0 0 / 0.059), rgb(255 255 255 / 0.082));
+  /* a ContentDialog's: its top's LayerFillColorAlt, its edge's SurfaceStrokeColorDefault, and the
+     SmokeFillColorDefault over its window */
+  --color-win-layer-alt: light-dark(#ffffff, rgb(255 255 255 / 0.054));
+  --color-win-surface-edge: rgb(117 117 117 / 0.4);
+  --color-win-smoke: rgb(0 0 0 / 0.3);
   --color-win-group-rule: light-dark(rgb(0 0 0 / 0.2), rgb(255 255 255 / 0.2));
   --color-win-success: light-dark(#0f7b0f, #6ccb5f);
   --color-win-caution: light-dark(#9d5d00, #fce100);
@@ -205,6 +223,13 @@
   --color-win-shadow-tight: light-dark(transparent, rgb(0 0 0 / 0.2));
   --color-win-taskbar: light-dark(#eeeeee, #1c1c1c);
   --color-win-window-edge: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.08));
+  /* ControlFillColorInputActive under a focused text box, and ControlFillColorDisabled */
+  --color-win-field-active: light-dark(#ffffff, #1e1e1e);
+  --color-win-control-off: light-dark(rgb(249 249 249 / 0.302), rgb(255 255 255 / 0.043));
+  /* ControlFillColorTertiary under a pressed control */
+  --color-win-control-3: light-dark(rgb(249 249 249 / 0.302), rgb(255 255 255 / 0.031));
+  /* FocusStrokeColorOuter, the system focus visual's outer stroke */
+  --color-win-focus: light-dark(rgb(0 0 0 / 0.894), #ffffff);
   /* Windows Terminal's dark theme and Campbell scheme, the same in both of the site's */
   --color-win-term-bar: #202020;
   --color-win-term-bg: #0c0c0c;
@@ -214,6 +239,7 @@
   --color-win-term-green: #13a10e;
   --color-win-term-yellow: #c19c00;
   --color-win-term-red: #c50f1f;
+  --color-win-term-bright-red: #e74856;
 
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -286,6 +312,7 @@
   --text-u-14: calc(14 * var(--u));
   --text-u-15: calc(15 * var(--u));
   --text-u-16: calc(16 * var(--u));
+  --text-u-20: calc(20 * var(--u));
   --text-u-28: calc(28 * var(--u));
 
   --radius-u-2: calc(2 * var(--u));
@@ -305,6 +332,9 @@
     inset 0 0 0 calc(0.5 * var(--u)) var(--color-mac-menu-rim),
     0 calc(12 * var(--u)) calc(36 * var(--u)) calc(-4 * var(--u)) var(--color-mac-menu-shadow),
     0 calc(2 * var(--u)) calc(8 * var(--u)) calc(-2 * var(--u)) var(--color-mac-menu-shadow);
+  --shadow-mac-tip:
+    0 0 0 calc(0.5 * var(--u)) var(--color-mac-menu-edge),
+    0 calc(2 * var(--u)) calc(6 * var(--u)) var(--color-mac-menu-shadow);
   --shadow-mac-banner:
     0 0 0 calc(0.5 * var(--u)) var(--color-mac-menu-edge),
     0 calc(10 * var(--u)) calc(30 * var(--u)) calc(-6 * var(--u)) var(--color-mac-menu-shadow);
@@ -342,6 +372,11 @@
   --shadow-win-field:
     inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge),
     inset 0 calc(-1 * var(--u)) var(--color-win-strong);
+  /* a focused text box's edge, its bottom in the accent 2 pixels deep, and a disabled one's */
+  --shadow-win-field-active:
+    inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge),
+    inset 0 calc(-2 * var(--u)) var(--color-win-accent);
+  --shadow-win-field-off: inset 0 0 0 calc(1 * var(--u)) var(--color-win-control-edge);
   --shadow-mac-knob: 0 calc(0.5 * var(--u)) calc(1.5 * var(--u)) rgb(0 0 0 / 0.3);
   --shadow-mac-list: 0 0 0 calc(0.5 * var(--u)) var(--color-mac-window-edge);
   --shadow-mac-glass:
@@ -458,15 +493,18 @@
 }
 
 /* a figure's desk, --units wide in units of --u, which every spacing utility inside counts: on macOS
-   600 points of at most 1.25 pixels, and desk-px-* for a desk of pixels no larger than the page's */
+   600 points of at most 1.25 pixels, and desk-px-* for a desk of pixels no larger than the page's.
+   Under a coarse pointer a figure sets --u-coarse, the least that keeps its targets 24 pixels, and
+   --desk-max, so its desk can outgrow the page and scroll in the figure */
 @utility desk {
-  --u: min(var(--u-max, 1.25px), 100cqi / var(--units, 600));
+  --u: max(min(var(--u-max, 1.25px), 100cqi / var(--units, 600)), var(--u-coarse, 0px));
   --spacing: var(--u);
   position: relative;
   width: calc(var(--units, 600) * var(--u));
-  max-width: 100%;
+  max-width: var(--desk-max, 100%);
   margin-inline: auto;
-  overflow: hidden;
+  /* a screen: what it does not show it clips, and nothing scrolls it, focus on a cut row neither */
+  overflow: clip;
   border: 1px solid var(--color-desk-edge);
   border-radius: var(--radius-md);
   background-color: var(--color-wall-b);
@@ -484,6 +522,21 @@
   -moz-osx-font-smoothing: auto;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* the ring each system draws around the control with keyboard focus in a figure: macOS's, and
+   WinUI's focus visual 2 pixels wide, 1 pixel off the control */
+@utility focus-mac {
+  &:focus-visible {
+    outline: calc(3.5 * var(--u)) solid var(--color-mac-window-focus);
+    outline-offset: 0;
+  }
+}
+@utility focus-win {
+  &:focus-visible {
+    outline: calc(2 * var(--u)) solid var(--color-win-focus);
+    outline-offset: calc(1 * var(--u));
+  }
 }
 
 @utility desk-px-* {

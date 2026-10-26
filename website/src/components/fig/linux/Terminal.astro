@@ -1,6 +1,7 @@
 ---
 // Ptyxis 49 in a libadwaita 1.8 window, 80 columns of 11 point type; output colours spans g, y, r, dim.
-// Its output is a log its title names.
+// Its output is a log its title names; live, it grows with its output to Ptyxis's 24 rows, then
+// scrolls.
 interface Props {
   title: string;
   id: string;
@@ -43,7 +44,7 @@ const icon = "size-16 shrink-0";
     </span>
   </div>
   <div
-    class="flex flex-col px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre-wrap text-linux-term-text ligatures-none *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow"
+    class="flex flex-col px-6 pt-7 pb-3 font-mono text-u-15/20 whitespace-pre-wrap text-linux-term-text ligatures-none live:max-h-[calc(24lh+var(--spacing)*3)] live:min-h-(--min) live:overflow-y-auto live:select-text *:min-h-20 [&_.dim]:text-linux-term-dim [&_.g]:text-linux-term-green [&_.r]:text-linux-term-red [&_.y]:text-linux-term-yellow"
     role="log"
     aria-labelledby={`${id}-title`}
   >

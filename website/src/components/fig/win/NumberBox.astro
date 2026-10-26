@@ -1,28 +1,41 @@
 ---
-// WinUI's NumberBox with its spin buttons inline, at least 120 pixels wide: a spinbutton, its spin
-// buttons out of the Tab order and unspoken, as WinUI keeps them.
+// WinUI's NumberBox with its spin buttons inline, at least 120 pixels wide: a spinbutton on its
+// text box, the spin buttons out of the Tab order and unspoken, as WinUI keeps them. Focused, its
+// box takes the accent's bottom edge; its id is `prefix`'s.
 interface Props {
+  prefix: string;
   value: number;
   label: string;
 }
-const { value, label } = Astro.props;
-const spin = "flex h-24 w-26 items-center justify-center";
+const { prefix, value, label } = Astro.props;
+const spin =
+  "flex h-24 w-26 items-center justify-center rounded-u-4 live:hover:bg-win-subtle live:active:bg-win-subtle-2 data-[state=off]:text-win-text-off live:data-[state=off]:bg-transparent";
 ---
 
 <span
-  class="flex h-32 min-w-120 items-center justify-between rounded-u-4 bg-win-control pr-4 pl-11 text-u-14/20 tabular-nums shadow-win-field"
-  role="spinbutton"
-  aria-label={label}
-  aria-valuenow={value}
-  aria-valuemin="50"
-  aria-valuemax="99"
+  class="group/box flex h-32 min-w-120 items-center justify-between rounded-u-4 bg-win-control pr-4 pl-11 text-u-14/20 tabular-nums shadow-win-field focus-within:bg-win-field-active focus-within:shadow-win-field-active has-[:disabled]:bg-win-control-off has-[:disabled]:text-win-text-off has-[:disabled]:shadow-win-field-off"
 >
-  {value}
-  <span class="flex text-win-text-2" aria-hidden="true">
-    <span class={spin}
+  {/* the value as drawn, and once the figure works the text box itself */}
+  <span class="live:hidden">{value}</span>
+  <input
+    class="hidden w-full min-w-0 outline-none select-text live:block"
+    id={`${prefix}-share`}
+    type="text"
+    inputmode="numeric"
+    enterkeyhint="done"
+    autocomplete="off"
+    role="spinbutton"
+    aria-label={label}
+    aria-valuenow={value}
+    aria-valuemin="50"
+    aria-valuemax="99"
+    value={value}
+  />
+  <span class="flex text-win-text-2 group-has-[:disabled]/box:text-win-text-off" aria-hidden="true">
+    <span class={spin} data-spin="up"
       ><svg class="size-12"><use href="#fl-chevron-up"></use></svg></span
     >
-    <span class={spin}
+    <span class={spin} data-spin="down"
       ><svg class="size-12"><use href="#fl-chevron-down"></use></svg></span
     >
   </span>

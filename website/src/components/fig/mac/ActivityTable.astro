@@ -1,0 +1,36 @@
+---
+// The Activity pane, with the entries sessions.ts's `pitboard log` prints, in the app's words; the
+// table stripes the rows the window has room for past them, as a macOS 27 table does. With
+// live/activity.ts it reads the page's log as the pane does: when it shows, and on Refresh.
+import { logged } from "../../../data/world.ts";
+import { activity } from "../../../lib/words.ts";
+
+const rows = [...activity(logged, "macos"), null, null];
+---
+
+<table class="w-full border-separate border-spacing-0 whitespace-nowrap tabular-nums">
+  <thead
+    class="*:*:relative *:*:h-28.5 *:*:pt-7 *:*:pr-1 *:*:pb-8.5 *:*:pl-11 *:*:text-left *:*:align-top *:*:text-u-11/13 *:*:font-normal *:*:shadow-[inset_0_calc(var(--spacing)*-1.5)_var(--color-mac-window-sep)] *:*:not-first:before:absolute *:*:not-first:before:top-6 *:*:not-first:before:left-0 *:*:not-first:before:h-16 *:*:not-first:before:w-1 *:*:not-first:before:bg-mac-window-sep *:*:first:pl-18"
+  >
+    <tr>
+      <th>Date</th>
+      <th>Change</th>
+      <th>Account</th>
+      <th>Result</th>
+      <th>Asked By</th>
+    </tr>
+  </thead>
+  {/* a stripe stops 10 points short of each side, where its outer cells' borders are clear */}
+  <tbody
+    data-part="log"
+    class="before:table-row before:h-4.5 *:*:h-24 *:*:border-transparent *:*:bg-clip-padding *:*:pr-1 *:*:pl-9 *:*:first:rounded-l-u-16 *:*:first:border-l-10 *:*:first:pl-7 *:*:last:rounded-r-u-16 *:*:last:border-r-10 *:*:last:pr-7 *:even:*:bg-mac-window-stripe"
+  >
+    {rows.map((e) => <tr aria-hidden={e ? undefined : "true"}>
+      <td>{e?.date}</td>
+      <td>{e?.change}</td>
+      <td>{e?.account}</td>
+      <td class="text-mac-window-sub">{e?.result}</td>
+      <td class="text-mac-window-sub">{e?.by}</td>
+    </tr>)}
+  </tbody>
+</table>

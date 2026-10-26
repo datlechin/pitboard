@@ -1,104 +1,25 @@
 ---
-// SettingsPage.xaml scrolled to Limits: When a limit reaches, open on its share, or Warm up limits,
-// open on its hours and accounts. Each control is named as the XAML names it; each expander's
-// button shows and hides its items, and their ids start `prefix`.
-import ComboBox from "./ComboBox.astro";
-import NumberBox from "./NumberBox.astro";
-import TimePicker from "./TimePicker.astro";
-import Toggle from "./Toggle.astro";
-import Window from "./Window.astro";
+// The Pitboard window on its Settings page, scrolled to Limits: When a limit reaches, open on its
+// share, or Warm up limits, open on its hours and accounts, as LimitsSections.astro draws them. A
+// working window keeps the size its tallest needs.
+import Accounts from "./Accounts.astro";
+import LimitsSections from "./LimitsSections.astro";
 import { settingsPage as page } from "../../../data/windows.ts";
-import { DOCS } from "../../../data/site.ts";
 
 interface Props {
   prefix: string;
   show: "switch" | "warm";
 }
 const { prefix, show } = Astro.props;
-const items = `${prefix}-items`;
-const caption = "text-u-12/16 text-win-text-2";
-const header =
-  "flex min-h-68 items-center gap-16 rounded-t-u-4 bg-win-card p-16 inset-shadow-win-layer-edge";
-// DefaultSettingsExpanderItemStyle's card, the last one rounded at the foot
-const item = "flex items-center gap-16 bg-win-card-2 py-8 pr-44 pl-58 inset-shadow-win-layer-edge";
 ---
 
-<Window prefix={prefix} pane="settings">
-  <div class="px-24 text-u-28/36 font-semibold">{page.title}</div>
-  <div class="mt-24 px-24 pb-24">
-    <div class="ml-1 pb-6 font-semibold">{page.section}</div>
-    {show === "switch" && (
-      <>
-        <div class={header}>
-          <span class="min-w-0 flex-1">
-            <span class="block">{page.atLimit.header}</span>
-            <span class:list={["block", caption]}>{page.atLimit.standing}</span>
-            <span class:list={["block", caption]}>{page.atLimit.note}</span>
-            <span class:list={["block", caption]}>{page.atLimit.terms}</span>
-            <a
-              class:list={["block no-underline", caption, "text-win-accent-text"]}
-              href={`${DOCS}/concepts/limits#is-this-allowed`}
-              >{page.atLimit.link}</a
-            >
-          </span>
-          <ComboBox value={page.atLimit.choice} label={page.atLimit.label} />
-          <button
-            class="flex size-32 shrink-0 items-center justify-center rounded-u-4"
-            type="button"
-            aria-label={page.atLimit.header}
-            aria-expanded="true"
-            aria-controls={items}
-          >
-            <svg class="size-12"><use href="#fl-chevron-up"></use></svg>
-          </button>
-        </div>
-        <div class:list={[item, "rounded-b-u-4"]} id={items}>
-          <span class="min-w-0 flex-1">
-            <span class="block">{page.share.header}</span>
-            <span class:list={["block", caption]}>{page.share.range}</span>
-          </span>
-          <NumberBox value={page.share.value} label={page.share.header} />
-        </div>
-      </>
-    )}
-    {show === "warm" && (
-      <>
-        <div class={header}>
-          <span class="min-w-0 flex-1">
-            <span class="block">{page.warm.header}</span>
-            <span class:list={["block", caption]}>{page.warm.range}</span>
-            <span class:list={["block", caption]}>{page.warm.standing}</span>
-          </span>
-          <button
-            class="flex size-32 shrink-0 items-center justify-center rounded-u-4"
-            type="button"
-            aria-label={page.warm.header}
-            aria-expanded="true"
-            aria-controls={items}
-          >
-            <svg class="size-12"><use href="#fl-chevron-up"></use></svg>
-          </button>
-        </div>
-        <div id={items}>
-          {page.warm.hours.map(([name, at]) => <div class:list={[item, "min-h-48"]}>
-            <span class="min-w-0 flex-1">{name}</span>
-            <TimePicker at={at} />
-          </div>)}
-          {page.warm.accounts.map((a, i) => <div
-            class:list={[
-              item,
-              "min-h-48",
-              { "rounded-b-u-4": i === page.warm.accounts.length - 1 },
-            ]}
-          >
-            <span class="min-w-0 flex-1">
-              <span class="block">{a.title}</span>
-              {a.standing && <span class:list={["block", caption]}>{a.standing}</span>}
-            </span>
-            <Toggle on={a.on} aria-label={a.title} />
-          </div>)}
-        </div>
-      </>
-    )}
+<Accounts prefix={prefix} moment="after" pane="settings">
+  <div slot="settings">
+    <div class="px-24 text-u-28/36 font-semibold">{page.title}</div>
+    <div class:list={["mt-24 px-24 pb-24", { "live:min-h-282": show === "switch" }]}>
+      <div class="ml-1 pb-6 font-semibold">{page.section}</div>
+      <LimitsSections prefix={prefix} show={show} />
+    </div>
   </div>
-</Window>
+  {show === "warm" && <LimitsSections slot="desk" prefix={prefix} show="warm" flyouts />}
+</Accounts>

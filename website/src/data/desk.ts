@@ -1,27 +1,39 @@
 import { clock } from "./world.ts";
-import { hm } from "../lib/words.ts";
+import { updated } from "../lib/words.ts";
 
-// MenuBarContent.swift's commands under the accounts, a null between two sections. A debug build
-// has no Check for Updates….
+// MenuBarContent.swift's commands under the accounts, a null between two sections, each with what
+// choosing it does on the page. A debug build has no Check for Updates….
+export type Does =
+  | "add"
+  | "refresh"
+  | "claude.ai"
+  | "chatgpt.com"
+  | "open"
+  | "settings"
+  | "updates"
+  | "about"
+  | "help"
+  | "quit";
 export const menuCommands: ({
   title: string;
+  does: Does;
   sub?: string;
   keys?: string;
   more?: boolean;
 } | null)[] = [
-  { title: "Add Account…", keys: "⌘N" },
-  { title: "Refresh", sub: `Updated ${hm(clock.read)}`, keys: "⌘R" },
+  { title: "Add Account…", does: "add", keys: "⌘N" },
+  { title: "Refresh", does: "refresh", sub: updated(clock.read), keys: "⌘R" },
   null,
-  { title: "Open claude.ai", more: true },
-  { title: "Open chatgpt.com", more: true },
+  { title: "Open claude.ai", does: "claude.ai", more: true },
+  { title: "Open chatgpt.com", does: "chatgpt.com", more: true },
   null,
-  { title: "Open Pitboard" },
-  { title: "Settings…", keys: "⌘," },
-  { title: "Check for Updates…" },
+  { title: "Open Pitboard", does: "open" },
+  { title: "Settings…", does: "settings", keys: "⌘," },
+  { title: "Check for Updates…", does: "updates" },
   null,
-  { title: "About Pitboard" },
-  { title: "Pitboard Help" },
-  { title: "Quit Pitboard", keys: "⌘Q" },
+  { title: "About Pitboard", does: "about" },
+  { title: "Pitboard Help", does: "help" },
+  { title: "Quit Pitboard", does: "quit", keys: "⌘Q" },
 ];
 
 // The Claude Code session behind the menu, a terminal row a line; each desk sizes the elbow to its type.

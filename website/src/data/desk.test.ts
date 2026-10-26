@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { menuCommands } from "./desk.ts";
+import { READING, SWITCHING, openSiteAs, updated } from "../lib/words.ts";
+import { clock } from "./world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const menu = repo("apps/macos/Sources/PitboardApp/MenuBar/MenuBarContent.swift");
@@ -41,4 +43,18 @@ test("the questions' macOS shortcuts are AccountCommands.swift's: the Account me
     ),
   );
   assert.ok(page.includes('/reference/mac-app#keyboard-shortcuts">Command-Delete</a>'));
+});
+
+test("the menus say what the app says while a switch or a read runs, and of a site's one account", () => {
+  const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+  assert.ok(present("accounts.rs").includes(`return Some("${SWITCHING}".into());`));
+  assert.ok(present("setup.rs").includes(`return "${READING}".into();`));
+  assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
+  assert.equal(updated(clock.read), "Updated 20:50");
+  assert.ok(
+    repo("crates/pitboard-ffi/src/account_windows/accounts.rs").includes(
+      'title: format!("Open {} as {}", site.name(), window.label),',
+    ),
+  );
+  assert.equal(openSiteAs("claude.ai", "work"), "Open claude.ai as work");
 });

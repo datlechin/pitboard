@@ -12,12 +12,13 @@ const DOCS_RULES = join(DOCS, "AGENTS.md");
 const BUDGETS = {
   html: {
     // its figures drawn for each platform: the size measured with them, and a fifth more
-    "index.html": 57_250,
+    "index.html": 114_800,
     "download.html": 30_000,
     "404.html": 30_000,
     "changelog.html": 80_000,
   },
-  css: 20_000,
+  // the figures' live states: the size measured with them, and a fifth more
+  css: 24_100,
   fonts: { files: 2, bytes: 90_000, preloads: 2 },
   // WhatsApp drops a larger preview image
   image: 300_000,

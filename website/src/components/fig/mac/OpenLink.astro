@@ -1,8 +1,12 @@
 ---
-// AccountPicker.swift, with crates/pitboard-ffi/src/present/windows.rs's words. Corners as the
-// main window's; no picture measures its title bar. Its controls stay drawn: Open loads claude.ai.
+// AccountPicker.swift, with crates/pitboard-ffi/src/present/windows.rs's words, under the menu bar
+// the app puts up while it is in front. Corners as the main window's; no picture measures its title
+// bar. Its controls stay drawn: Open loads claude.ai.
+import AppMenuBar from "./AppMenuBar.astro";
 import Lights from "./Lights.astro";
 import Button from "./Button.astro";
+import { clock } from "../../../data/world.ts";
+import { menuBarClock } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -11,12 +15,13 @@ const { prefix } = Astro.props;
 const account = "rounded-u-5 pt-4 px-8 pb-5";
 ---
 
-<pb-open-link
+<pb-account-picker
   id={prefix}
-  class="desk flex min-h-300 items-center justify-center py-20"
+  class="desk flex min-h-300 items-center justify-center pt-44 pb-20"
   inert
   data-output
 >
+  <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} room="clock" />
   <div
     class="relative w-440 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
   >
@@ -45,4 +50,8 @@ const account = "rounded-u-5 pt-4 px-8 pb-5";
       </div>
     </div>
   </div>
-</pb-open-link>
+</pb-account-picker>
+
+<script>
+  import "../../../scripts/live/picker.ts";
+</script>

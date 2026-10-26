@@ -1,22 +1,49 @@
 ---
 // WinUI's ComboBox closed on its choice, at least 200 pixels wide as SettingsPage.xaml sets it: a
-// select-only combobox, its value the choice.
+// select-only combobox, its value the choice. Every option's title is drawn in the box, those not
+// chosen hidden, and its popup opens with the choice over the box; ids start `prefix`.
 interface Props {
+  prefix: string;
+  options: { value: string; title: string }[];
   value: string;
   label: string;
+  listLabel: string;
 }
-const { value, label } = Astro.props;
+const { prefix, options, value, label, listLabel } = Astro.props;
 ---
 
-<span
-  role="combobox"
-  aria-label={label}
-  aria-haspopup="listbox"
-  aria-expanded="false"
-  class="flex h-32 min-w-200 items-center justify-between gap-8 rounded-u-4 bg-win-control pr-11 pl-11 text-u-14/20 whitespace-nowrap shadow-win-control"
->
-  {value}
-  <svg class="size-12 shrink-0 text-win-text-2" aria-hidden="true">
-    <use href="#fl-chevron-down"></use>
-  </svg>
+<span class="relative flex">
+  <span
+    class="flex h-32 min-w-200 items-center justify-between gap-8 rounded-u-4 bg-win-control pr-11 pl-11 text-u-14/20 whitespace-nowrap shadow-win-control focus-win live:hover:bg-win-control-2"
+    id={`${prefix}-at`}
+    role="combobox"
+    tabindex="0"
+    aria-label={label}
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    aria-controls={`${prefix}-choices`}
+  >
+    {options.map((o) => <span data-value={o.value} hidden={o.value !== value}>{o.title}</span>)}
+    <svg class="size-12 shrink-0 text-win-text-2" aria-hidden="true">
+      <use href="#fl-chevron-down"></use>
+    </svg>
+  </span>
+  {/* ComboBoxItem: 11 pixels in, 5 from the popup's edge, 36 apart; the selected one has its pill */}
+  <span
+    class="absolute top-[calc(var(--u)*(-4_-_36*var(--at,0)))] -left-5 z-10 w-[calc(100%+var(--u)*10)] rounded-u-8 bg-win-flyout py-2 text-u-14/20 whitespace-nowrap text-win-text shadow-win-flyout"
+    id={`${prefix}-choices`}
+    role="listbox"
+    aria-label={listLabel}
+    hidden
+  >
+    {options.map((o) => <span
+      class="relative mx-5 my-2 flex h-32 items-center rounded-u-4 px-11 before:absolute before:top-8 before:left-0 before:hidden before:h-16 before:w-3 before:rounded-pill before:bg-win-accent hover:bg-win-subtle aria-selected:bg-win-subtle aria-selected:before:block"
+      id={`${prefix}-choice-${o.value}`}
+      role="option"
+      aria-selected="false"
+      data-value={o.value}
+    >
+      {o.title}
+    </span>)}
+  </span>
 </span>

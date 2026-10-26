@@ -159,8 +159,10 @@ and Chrome and Firefox on Linux, by hand. Of the keys the figures draw or a shel
 
 How the apps' own menus, dialogs, lists and Settings controls behave, as the figures draw them,
 read by the apps' UI tests in the `twoTools`, `oneTool`, `onlyOne` and `warmUp` fixtures on CI's
-runners. Each test asserts what it reads, and keeps it with a picture under a name starting
-`site-`, in the run's `macos-app-pictures` and `site-figures-*` artifacts:
+runners. Each test keeps what it reads, with a picture, under a name starting `site-` in the
+run's `macos-app-pictures` and `site-figures-*` artifacts, which GitHub keeps for 7 days, and
+asserts what the figures draw. What the site rests on is copied here. A timing, a reading that
+only a picture shows, and the share field's keys are recorded and not asserted, and say so:
 
 - macOS: `apps/macos/UITests/SiteFiguresTests.swift`, the debug build on the `macos-26` image's
   macOS 26.6.2, on a screen of 1024 by 768 points. No runner has macOS 27, which the site draws.
@@ -170,8 +172,9 @@ runners. Each test asserts what it reads, and keeps it with a picture under a na
   user's keeps the foreground, as [Windows runners](windows-runners.md) says, so what needs a key
   was read on windows-2025 alone.
 
-Runs 40204121073 and 40206476781 read and assert them, on 25 October 2026, after run
-40196222517 read most of them first. A line that names runs was read in those alone.
+Runs 40204121073 and 40206476781 read them on 25 October 2026, after run 40196222517 read most
+of them first, and runs 40211517451 and 40247375339 read them again. A line that names runs was
+read in those alone.
 
 ### macOS: the menu bar item
 
@@ -190,7 +193,8 @@ Runs 40204121073 and 40206476781 read and assert them, on 25 October 2026, after
   "spa" goes to spare · Pro, "Open P" to Open Pitboard, "o" to old, and "Needs" to old, whose
   subtitle is "Needs signing in again". With a pause of 0.5 s between keys they make one name,
   and with 1 s a new one starts: "o" then "p" goes to Open claude.ai after 0.5 s and to personal
-  after 1 s (runs 40204121073 and 40206476781).
+  after 1 s, 1.5 s and 3 s. The pauses measured 500 to 505 ms and 1007 to 1014 ms (runs
+  40204121073, 40206476781, 40211517451 and 40247375339).
 - Space chooses the highlighted item and closes the menu: on Open Pitboard it opened the
   Accounts window.
 - ⌘, and ⌘N choose their items while the menu is open, and close it: Settings comes forward, or
@@ -199,44 +203,51 @@ Runs 40204121073 and 40206476781 read and assert them, on 25 October 2026, after
   closes it and leaves Open claude.ai highlighted (run 40206476781). The menu stands at the
   screen's right edge, so the submenu opens to its left.
 - Resting the pointer on Open claude.ai opens its submenu within 0.34 s of the pointer starting
-  to move there (runs 40204121073 and 40206476781).
-- On the fixture a switch is quicker than the test can see: In Use showed 0.12 to 0.13 s after
+  to move there (recorded, runs 40204121073 and 40206476781).
+- On the fixture a switch is quicker than the test can see: In Use showed 0.11 to 0.13 s after
   the click on **Use** returned, and no "Switching…" was seen. Refresh was never seen dimmed
-  (runs 40204121073 and 40206476781).
+  (recorded, runs 40204121073, 40206476781, 40211517451 and 40247375339).
 
 ### macOS: the menu bar with the Accounts window in front
 
 - The bar: the Apple menu, Pitboard, File, Edit, View, Go, Account, Window, Help.
 - Pitboard: About Pitboard; Settings… ⌘,; Services ›; Hide Pitboard ⌘H, Hide Others ⌥⌘H, Show
-  All; Quit Pitboard ⌘Q. Every item but About has a symbol before it.
-- File: Add Account… ⌘N; Open claude.ai ›; Remove Website Data…, dimmed; Close ⌘W, with Close
-  All in its place under ⌥.
+  All; Quit Pitboard ⌘Q. Show All is dimmed. Every item but About has a symbol before it.
+- File: Add Account… ⌘N; Open claude.ai ›; Remove Website Data…; Close ⌘W, with Close All in its
+  place under ⌥. Remove Website Data… is dimmed.
 - Edit is macOS's own: Undo ⌘Z, Redo ⇧⌘Z; Cut ⌘X, Copy ⌘C, Paste ⌘V, Delete, Select All ⌘A;
   Find ›, Spelling and Grammar ›, Substitutions ›, Transformations ›, Speech ›; AutoFill ›,
-  Start Dictation… fn D, Emoji & Symbols fn E. Copy and Delete are dimmed with no account
-  selected, and enabled with one. Delete shows no key.
-- View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−, dimmed; Enter Full Screen fn F,
-  dimmed.
-- Go: Back ⌘[ and Forward ⌘], dimmed.
+  Start Dictation… fn D, Emoji & Symbols fn E. Undo, Redo, Cut, Paste and Select All are dimmed.
+  Copy and Delete are dimmed with no account selected, and enabled with one. Delete shows no key.
+- View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Enter Full Screen fn F. Actual
+  Size, Zoom In, Zoom Out and Enter Full Screen are dimmed.
+- Go: Back ⌘[, Forward ⌘]. Back and Forward are dimmed.
 - Account, with no account selected: Use, Sign In Again…, Rename…, Forget… ⌘⌫, all dimmed.
   With personal selected: Use personal, Sign In Again…, Rename…, Warm Up Now, dimmed; Open
   claude.ai; Forget… ⌘⌫. With work, the account in use, selected: the same with Use work, Warm
   Up Now and Forget… dimmed, and ⌘⌫ asks nothing. No item is red.
 - Window is macOS's own: Minimize ⌘M, Zoom, Fill ⌃fn F, Center ⌃fn C; Move & Resize ›; Full
-  Screen Tile; Remove Window from Set; Pitboard; Bring All to Front. Under ⌥, Minimize All, Zoom
-  All and Arrange in Front take their places.
+  Screen Tile; Remove Window from Set; Pitboard; Bring All to Front. Full Screen Tile and Remove
+  Window from Set are dimmed. Under ⌥, Minimize All, Zoom All and Arrange in Front take their
+  places.
 - Help: macOS's search field, then Pitboard Help.
 - About Pitboard opens the standard About panel, a dialog of 284 by 170 points whose close
   button alone is enabled: the app's icon, "Pitboard" in bold, and the version and build,
   "0.0.0 (1)" in a debug build, with no "Version" before them.
 
-### macOS: the Forget alert
+### macOS: the Forget alert and the sheets
 
 - A sheet on the Accounts window: the title "Forget “personal”?", the message, then Cancel and
   Forget, in that order and of one width. Forget's title is red on a pale red fill, Cancel's
   grey; neither is drawn as the default button.
 - Return presses neither button, where AppKit's own rule gives Return to an alert's first
   button. ⌘. and Escape press Cancel.
+- The alert and the Add Account sheet each sit in the middle of the window, across and down. The
+  window under either is drawn over: in light, its white reads 204 and its sidebar's grey 242
+  reads 199, as rgb(172, 172, 172) at 62% over it would leave them, and its labels grey further.
+  Its close button greys to 220 while minimize and zoom keep their colours (recorded, pictures
+  `site-forget-alert-window` and `site-status-menu-key-equivalents`, against
+  `site-focus-after-forget`, run 40247375339). Dark was not read.
 
 ### macOS: the account list
 
@@ -254,15 +265,19 @@ Runs 40204121073 and 40206476781 read and assert them, on 25 October 2026, after
 
 - The pop-up opens its menu with the chosen item, checked, over the button: Do Nothing, Notify
   Me, Switch Automatically.
-- The stepper steps by 1 a click and repeats while held: from 50, 17 steps in a hold of 1 s. It
+- The stepper steps by 1 a click and repeats while held: from 50, 6 steps in a hold of 0.5 s, 16
+  to 17 in 1 s and 36 in 2 s. That is one step at the press, then 20 a second from 0.3 s on
+  (recorded, runs 40206476781 to 40252330837, the holds of 0.5 and 2 s in 40252330837 alone). It
   stops at 50 and 99, and a click past a bound changes nothing.
 - On Return the field clamps a typed share to 50 to 99, puts back the last share for text that
   does not parse, and takes "90" without "%". The Up arrow in the field changes nothing.
 - The field also takes each key as it is typed: "7" with no Return set the share to 50 within a
-  second (run 40204121073), and a share clamped while typing can rewrite the text under the
-  caret: "80%" typed with no Return left "50%0%" in the field (run 40196222517). Its `share`
-  binding in `LimitsSettings.swift` clamps and sends every value the field hands it.
+  second (recorded, runs 40204121073 to 40247375339), and a share clamped while typing can
+  rewrite the text under the caret: "80%" typed with no Return left "50%0%" in the field (run
+  40196222517). Its `share` binding in `LimitsSettings.swift` clamps and sends every value the
+  field hands it.
 - The warm-up toggles are switches, and From and To are time fields with a stepper beside each.
+  How fast their steppers repeat was not read: the site repeats them as the share's.
 
 ### Windows: the icon's menu
 
@@ -280,7 +295,8 @@ cannot tell apart:
   account is a toggle item, on for its tool's account in use. The tooltips are the items' help
   text: "5-hour 42%, weekly 12%", "Needs signing in again", "Updated 3:10 PM" on Refresh, none
   on the headings.
-- It opens with focus on work · 42%, the first enabled item, whose tooltip then shows. The first
+- It opens with focus on work · 42%, the first enabled item, whose tooltip then shows (recorded,
+  picture `site-tray-menu-mid-screen` of run 40206476781). The first
   Down goes to old. Down and Up pass over the headings and wrap: Down from Exit goes to work, and
   the first Up after opening to Exit. Home, End, a letter and Tab move nothing.
 
@@ -297,7 +313,7 @@ cannot tell apart:
   list: Down moves nothing.
 - On the fixture, In use showed 0.19 to 0.37 s after **Use** was invoked on windows-2025 and
   0.25 s on windows-11-arm, and no "Switching" was seen. Refresh was disabled for 14 to 24 ms
-  (runs 40204121073 and 40206476781).
+  (recorded, runs 40204121073 and 40206476781).
 
 ### Windows: Settings, windows and Notification Center
 
@@ -306,7 +322,7 @@ cannot tell apart:
   its Decrease; a share set past a bound is clamped to it.
 - An account window is titled "work" until its page has a title, then "claude.ai stand-in -
   work", the page's title first. For its first moments it has its XAML's title, "Account", until
-  it reads its account: run 40208954337 saw it at 73 ms.
+  it reads its account: run 40208954337 saw it at 73 ms (recorded).
 - Windows+N opens Notification Center on the right of the work area, 360 wide and as tall as
   it, with keyboard focus. In it, 12 from the edges, a card 336 wide holds "Notifications"
   and its Do Not Disturb button, and under it a card 100 high holds the date and Focus's
@@ -323,5 +339,41 @@ cannot tell apart:
 - Whether a disabled menu item shows its tooltip.
 - macOS 27's own drawing: the chosen item's blink, the alert, and the red of a destructive
   button.
+- A macOS window under a sheet in dark. The site draws black at 40% over it until it is read.
 - What eyes or a phone judge: the blink's timing, tooltip delays, VoiceOver and NVDA, how long a
   banner stays on macOS 27, and a long press.
+
+## Where the site departs from the apps
+
+Each is the price of a web page or a WCAG rule, or something the page cannot do. Code that departs
+says so in a comment naming its line here, which `website/src/scripts/departures.test.ts` checks.
+
+- Shift+Tab leaves the PowerShell prompt, where PSReadLine binds it to `TabCompletePrevious`:
+  no keyboard trap (WCAG 2.1.2).
+- Escape then Tab leaves every prompt, where zsh puts a tab in, bash runs
+  `dynamic-complete-history` and PowerShell reverts the line: the way forward out of a field
+  that binds Tab, which each prompt names to a screen reader.
+- Ctrl+R's history search is not drawn: each shell draws a search line of its own.
+- The bell is silent: a page that beeps would surprise.
+- Tooltips stay while the pointer is over them and Escape closes them, where a native one goes
+  once the pointer leaves its owner (WCAG 1.4.13).
+- The macOS window's menu bar is a Tab stop, which macOS's never is: without it Rename, Sign In
+  Again, Open claude.ai and Warm Up Now would need a pointer (WCAG 2.1.1).
+- A sheet, an alert or a ContentDialog blocks the whole page, where the app blocks only its
+  window: HTML's modal dialog does.
+- A simulated sign-in keeps Copy Link and Open dimmed, shows no Code field, and draws no Claude
+  window while Claude Desktop's waits: the page loads no sign-in page.
+- Open Pitboard, Settings on Windows and the tray icon bring the page's figure into view, where
+  the app brings a window forward.
+- The macOS share field takes a typed share on Return or as focus leaves. The app's binding
+  clamps each key as it is typed, which can rewrite the text under the caret.
+- After Forget on Windows the page draws a focus ring on the title bar, where WinUI draws none
+  (WCAG 2.4.7).
+- The Mac's clock opens nothing: macOS's Notification Center was not read.
+- This PC stays on its spinner, and Check again is held back: the page draws no PC's checks yet.
+- `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn
+  from the page's state yet.
+- Under a coarse pointer each desk is drawn large enough that a menu row is 24 pixels tall, and
+  scrolls sideways in its figure (WCAG 2.5.8). A terminal's line is 16 pixels, which iOS zooms
+  no field of. Without JavaScript a phone scrolls a figure by touch alone: its drawing is inert,
+  and its caption says what it shows.

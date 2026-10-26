@@ -320,6 +320,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 2
       # The newest Xcode on macos-26. Development uses 27.1, which GitHub has only on its
       # preview xcode-27 image.
       - run: |
@@ -365,7 +366,9 @@ jobs:
       # images are built to allow it and check that they do, and a runner that did not
       # would hang until the test timed out, so that is said first and plainly. Each test
       # fails alone after two minutes, five times the slowest one's 22 s in CI, and the rest
-      # still run.
+      # still run. SiteFiguresTests read the app for the site's facts, so a pull request that
+      # changes neither the app nor those facts skips them; its checkout is the merge commit,
+      # whose first parent is the base.
       - id: ui
         run: |
           mode=$(automationmodetool)
@@ -374,11 +377,17 @@ jobs:
             *"DOES NOT REQUIRE"*) ;;
             *) echo "this runner asks for a password before UI tests can run" >&2; exit 1 ;;
           esac
+          skip=()
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] && git diff --quiet HEAD^1 HEAD -- \
+            apps crates docs/facts/site.md .github/workflows/ci.yml; then
+            echo "nothing SiteFiguresTests read changed"
+            skip=(-skip-testing:PitboardUITests/SiteFiguresTests)
+          fi
           xcodebuild test -project apps/macos/Pitboard.xcodeproj -scheme Pitboard \
             -destination 'platform=macOS' -derivedDataPath apps/macos/build/UITestData \
             -clonedSourcePackagesDirPath apps/macos/build/SourcePackages \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 120 \
-            -resultBundlePath "$RUNNER_TEMP/UITests.xcresult"
+            -resultBundlePath "$RUNNER_TEMP/UITests.xcresult" "${skip[@]}"
       # The result bundle has what the log cannot: a screenshot and the tree of elements at
       # the moment a test failed. Nobody needs it when they all pass.
       - if: failure() && steps.ui.outcome == 'failure'
@@ -878,7 +887,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-app-pictures
-          path: ${{ runner.temp }}/app-tests/Pitboard.UITests/**/*.png
+          path: |
+            ${{ runner.temp }}/app-tests/Pitboard.UITests/**/*.png
+            !${{ runner.temp }}/app-tests/Pitboard.UITests/**/site-*.png
           if-no-files-found: error
           retention-days: 7
       # SiteFiguresTests' readings and pictures, which docs/facts/site.md records for usepitboard.com's figures, from
@@ -1040,10 +1051,27 @@ jobs:
   # The site in Chromium, WebKit and Firefox and on two phones, served by wrangler with its CSP
   # enforced: e2e/ checks the figures' markup, axe, and in Chromium how each figure looks against
   # baselines made here. It builds from the recorded releases, which a new release leaves alone.
+  # One job a Playwright project, each with the one browser it runs.
   website-browsers:
+    name: website-browsers (${{ matrix.project }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium
+            browser: chromium
+          - project: webkit
+            browser: webkit
+          - project: firefox
+            browser: firefox
+          - project: iphone
+            browser: webkit
+          - project: pixel
+            browser: chromium
     runs-on: ubuntu-latest
-    # the website job's ten minutes, and five for the browsers' install: apt once took seven
-    timeout-minutes: 15
+    # the test step's ten minutes, and seven for the steps before it, the browser's install with
+    # apt having once taken them all
+    timeout-minutes: 17
     defaults:
       run:
         working-directory: website
@@ -1070,20 +1098,25 @@ jobs:
       - if: steps.touched.outputs.run
         run: npm ci
       - if: steps.touched.outputs.run
-        run: npx playwright install --with-deps chromium webkit firefox
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: npx playwright install --with-deps "$BROWSER"
       - if: steps.touched.outputs.run
         env:
           PITBOARD_SITE_OFFLINE: "1"
         run: npm run build
-      # the 3 minutes 18 seconds the suite took, and half again
+      # the slowest project, WebKit, ran 112 of its 113 tests in 6 minutes 12 seconds, and half
+      # again makes ten
       - if: steps.touched.outputs.run
-        timeout-minutes: 5
-        run: npm run test:browser
+        timeout-minutes: 10
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: npm run test:browser -- --project="$PROJECT"
       # the report, and the drawing of a figure with no baseline yet, written where it belongs
       - if: failure() && steps.touched.outputs.run
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: website-browsers
+          name: website-browsers-${{ matrix.project }}
           path: |
             website/playwright-report
             website/test-results

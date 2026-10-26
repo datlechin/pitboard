@@ -45,14 +45,14 @@ export type MenuEntry =
   | { command: string; bold?: boolean; site?: string; submenu?: string[] };
 
 // the site each tool's accounts have windows on, in pitboard_sites::ALL's order
-const sites: [site: string, tool: Tool][] = [
+export const sites: [site: string, tool: Tool][] = [
   ["claude.ai", "claude"],
   ["chatgpt.com", "codex"],
 ];
 
 // An item has one line, so the figure the menu bar would show of the account ends it (words.rs
 // `named_in_menu`).
-const itemTitle = (a: Account) =>
+export const itemTitle = (a: Account) =>
   a.limits.length > 0 ? `${menuTitle(a)} · ${fullest(a)}%` : menuTitle(a);
 
 // IconMenu.cs `Entries`, a group between each two separators. A beta's menu has no Check for updates.
@@ -109,6 +109,7 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
       rows: listed(w, tool).map((a) => {
         const inUse = isInUse(a, w);
         return {
+          id: a.id,
           label: a.label,
           plan: a.plan,
           email: a.email,

@@ -1,10 +1,11 @@
 ---
-// A page's title, a caption under it, and its commands as AppBarButtons with labels to the right.
+// A page's title, a caption under it, and its commands as AppBarButtons with labels to the right,
+// each known to a live page by what it does.
 interface Props {
   prefix: string;
   title: string;
   subtitle?: string;
-  commands?: [icon: string, label: string][];
+  commands?: [icon: string, label: string, does?: string][];
 }
 const { prefix, title, subtitle, commands = [] } = Astro.props;
 ---
@@ -12,11 +13,14 @@ const { prefix, title, subtitle, commands = [] } = Astro.props;
 <div class="flex items-center gap-12 px-24">
   <span class="min-w-0 flex-1">
     <span class="block text-u-28/36 font-semibold" id={`${prefix}-title`}>{title}</span>
-    {subtitle && <span class="block text-u-12/16 text-win-text-2">{subtitle}</span>}
+    {subtitle && <span class="block text-u-12/16 text-win-text-2" data-part="updated"
+      >{subtitle}</span
+    >}
   </span>
-  {commands.map(([icon, label]) => <button
-    class="flex h-40 items-center gap-8 px-12 whitespace-nowrap"
+  {commands.map(([icon, label, does]) => <button
+    class="flex h-40 items-center gap-8 rounded-u-4 px-12 whitespace-nowrap outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text live:cursor-default live:hover:bg-win-subtle live:active:bg-win-subtle-2 live:disabled:text-win-text-off live:disabled:hover:bg-transparent"
     type="button"
+    data-does={does}
   >
     <svg class="size-16 shrink-0"><use href={`#${icon}`}></use></svg>
     {label}

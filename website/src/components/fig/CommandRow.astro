@@ -1,0 +1,26 @@
+---
+// The commands a phone runs in a terminal with a tap (questions 12 and 20): a toolbar under the
+// window, shown where the pointer is coarse. A tap runs its command as a paste and Return would,
+// and leaves focus on the button, so no keyboard opens. Its sizes are the page's, not the desk's.
+interface Props {
+  id: string;
+  commands: string[];
+}
+const { id, commands } = Astro.props;
+---
+
+<div
+  class="sticky left-0 mt-[calc(var(--u)*16)] hidden flex-wrap justify-center gap-2 self-stretch px-4 [--spacing:0.25rem] pointer-coarse:flex"
+  role="toolbar"
+  aria-label="Commands"
+  aria-controls={`${id}-line`}
+  data-commands
+>
+  {commands.map((command, i) => <button
+    class="min-h-8 rounded-sm border border-grid bg-page px-3 py-1 font-mono text-label font-medium whitespace-nowrap text-strong live:active:bg-sunken"
+    type="button"
+    tabindex={i === 0 ? 0 : -1}
+  >
+    {command}
+  </button>)}
+</div>

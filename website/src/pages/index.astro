@@ -35,6 +35,11 @@ import blossomWhite from "../assets/logos/openai-blossom-white.svg?url";
 const { versions, downloads } = await siteData();
 // a beta's icon menu has no Check for updates
 const updates = !downloads.windows.release.prerelease;
+// what each app's About and Settings name
+const version = {
+  macos: downloads.macos.release.version,
+  windows: downloads.windows.release.version,
+};
 const recent = recentReleases(versions).map((v) => ({ ...v, highlight: highlight(v.version) }));
 // a row is one string: on a phone its cells run inline, where whitespace between them would show
 const cell = "border-b border-grid py-3.5 text-left align-baseline max-sm:border-0 max-sm:p-0";
@@ -217,8 +222,8 @@ const jsonLd = [
           },
         }}
       >
-        <Accounts prefix="switch-mac" moment="after" crop />
-        <WinAccounts slot="win" prefix="switch-win" moment="after" crop />
+        <Accounts prefix="switch-mac" moment="after" crop version={version.macos} />
+        <WinAccounts slot="win" prefix="switch-win" moment="after" crop version={version.windows} />
         <Term slot="cli" prefix="switch-cli" session={sessions.use} />
       </Figure>
     </Feature>
@@ -367,7 +372,7 @@ const jsonLd = [
               },
             }}
           >
-            <Settings prefix="auto-mac" show="switch" />
+            <Settings prefix="auto-mac" show="switch" version={version.macos} />
             <WinSettings slot="win" prefix="auto-win" show="switch" />
             <Term slot="cli" prefix="auto-cli" session={sessions.watchInstall} />
           </Figure>

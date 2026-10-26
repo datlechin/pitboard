@@ -1,54 +1,81 @@
 ---
 // The icon's MenuFlyout as IconMenuFlyout.cs builds it from IconMenu.cs, on its narrow padding, with
-// a menu's roles: a group per tool headed by a disabled item, as WinUI shows the heading.
-import { iconMenu, type MenuEntry } from "../../../data/windows.ts";
-import { moments, type Moment } from "../../../data/world.ts";
+// a menu's roles: a group per tool headed by a disabled item, as WinUI shows the heading. With
+// `live`, the moment after the switch is the one live/tray.ts keeps to the state, and every node a
+// state shows is drawn: each site's single item, and a template for an account a visitor adds.
+import { iconMenu, sites, type MenuEntry } from "../../../data/windows.ts";
+import { account, moments, type Moment, type Tool } from "../../../data/world.ts";
+import { toolsOn } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
   // the icon that opens it, which names it
   owner: string;
   demo?: boolean;
+  live?: boolean;
   updates?: boolean;
   submenu?: string;
   class?: string;
 }
-const { prefix, owner, demo = false, updates = false, submenu, class: extra } = Astro.props;
+const {
+  prefix,
+  owner,
+  demo = false,
+  live = false,
+  updates = false,
+  submenu,
+  class: extra,
+} = Astro.props;
 const shown: Moment[] = demo ? ["before", "after"] : ["after"];
 const flyout =
   "rounded-u-8 bg-win-flyout py-2 font-win text-u-14/20 whitespace-nowrap text-win-text shadow-win-flyout";
 const item = "flex h-28 items-center rounded-u-4 pr-11 pl-39";
 const row = `relative mx-4 my-2 ${item}`;
+// an item WinUI paints while the pointer is over it and pressed, and frames while it has keyboard
+// focus; a disabled one takes neither
+const works =
+  "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text live:hover:bg-win-subtle live:active:bg-win-subtle-2 aria-disabled:text-win-text-off live:aria-disabled:hover:bg-transparent";
 // the row the demo's pointer chooses, and the site whose submenu is open
 const picked = (e: MenuEntry, moment: Moment) =>
   demo && moment === "before" && "account" in e && e.label === "work";
 const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site === submenu;
+// each tool's group comes first, in the order the tools are listed
+const groupTool = (i: number): Tool | undefined => toolsOn("windows")[i]?.[0];
+const siteTool = (site: string) => sites.find(([s]) => s === site)![1];
+const tip = (key: string) => `${prefix}-tip-${key}`;
 ---
 
 <div
   class:list={[
-    "min-w-210 transition-opacity duration-200",
+    "min-w-210 transition-opacity duration-200 outline-none",
     flyout,
-    { "demo-shut:opacity-0": demo },
+    { "demo-shut:opacity-0 live:cursor-default": demo || live },
     extra,
   ]}
   id={`${prefix}-menu`}
   role="menu"
   aria-labelledby={owner}
+  tabindex={live ? "-1" : undefined}
 >
   {shown.map((moment) => <div
     class:list={[
       { "hidden demo-before:block": demo && moment === "before" },
       { "demo-before:hidden": demo && moment === "after" },
     ]}
+    data-moment={live ? moment : undefined}
   >
     {iconMenu(moments[moment], updates).map((group, i) => {
       const heading = group.find((e) => "heading" in e);
       const id = heading && `${prefix}-${moment}-${i}`;
+      const own = live && moment === "after";
       return (
         <>
           {i > 0 && <div class="my-1 h-1 bg-win-divider" role="separator" />}
-          <div role={id ? "group" : "none"} aria-labelledby={id}>
+          <div
+            role={id ? "group" : "none"}
+            aria-labelledby={id}
+            data-tool={own && heading ? groupTool(i) : undefined}
+          >
             {group.map((e) =>
               "heading" in e ? (
                 <div
@@ -70,43 +97,95 @@ const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site ==
                         moment,
                       ),
                     },
+                    { [works]: own },
                   ]}
                   role="menuitemradio"
                   aria-checked={e.checked ? "true" : "false"}
-                  aria-describedby={picked(e, moment) ? `${prefix}-tip` : undefined}
+                  aria-describedby={
+                    picked(e, moment)
+                      ? `${prefix}-tip`
+                      : own
+                        ? tip(account(e.label, groupTool(i)!).id)
+                        : undefined
+                  }
+                  tabindex={own ? "-1" : undefined}
+                  data-account={own ? account(e.label, groupTool(i)!).id : undefined}
                 >
                   <span
                     class="absolute top-1/2 left-14 -mt-2.5 hidden size-5 rounded-circle bg-win-text-2 group-aria-checked/item:block"
                   />
-                  {e.account}
+                  <span data-part="title">{e.account}</span>
                 </div>
               ) : e.submenu ? (
-                // the item and the menu it opens side by side, as a menu item holds no other
+                // the item and the menu it opens side by side, as a menu item holds no other; with
+                // one account on the site, one item opens its window instead
                 <div class="relative mx-4 my-2" role="none">
                   <div
-                    class:list={[item, { "bg-win-subtle": open(e) }]}
+                    class:list={[
+                      item,
+                      { "bg-win-subtle": open(e) },
+                      { [`${works} aria-expanded:bg-win-subtle`]: own },
+                    ]}
                     id={`${prefix}-${moment}-${e.site}`}
                     role="menuitem"
                     aria-haspopup="menu"
                     aria-expanded={open(e) ? "true" : "false"}
+                    aria-controls={own ? `${prefix}-${e.site}-menu` : undefined}
+                    tabindex={own ? "-1" : undefined}
+                    data-does={own ? e.site : undefined}
                   >
                     <span class="flex-1">{e.command}</span>
                     <svg class="ml-24 size-12 shrink-0 text-win-text-2">
                       <use href="#fl-chevron-right" />
                     </svg>
                   </div>
-                  {open(e) && <div
-                    class:list={["absolute -top-4 right-full", flyout]}
+                  {own && <div
+                    class:list={[item, works]}
+                    role="menuitem"
+                    tabindex="-1"
+                    data-does={e.site}
+                    data-one
+                    hidden
+                  >
+                    <span class="flex-1" data-part="title"></span>
+                  </div>}
+                  {(open(e) || own) && <div
+                    class:list={[
+                      "absolute",
+                      flyout,
+                      own
+                        ? "top-(--y) left-(--x) w-max min-w-120 outline-none"
+                        : "-top-4 left-full",
+                    ]}
+                    id={own ? `${prefix}-${e.site}-menu` : undefined}
                     role="menu"
                     aria-labelledby={`${prefix}-${moment}-${e.site}`}
+                    tabindex={own ? "-1" : undefined}
+                    hidden={own}
                   >
-                    {e.submenu.map((label) => <div class:list={[row, "pl-11"]} role="menuitem">
-                      {label}
+                    {e.submenu.map((label) => <div
+                      class:list={[row, "pl-11", { [works]: own }]}
+                      role="menuitem"
+                      tabindex={own ? "-1" : undefined}
+                      data-account={own ? account(label, siteTool(e.site!)).id : undefined}
+                    >
+                      <span data-part="title">{label}</span>
                     </div>)}
+                    {own && <template data-part="account">
+                      <div class:list={[row, "pl-11", works]} role="menuitem" tabindex="-1">
+                        <span data-part="title"></span>
+                      </div>
+                    </template>}
                   </div>}
                 </div>
               ) : (
-                <div class:list={[row, { "font-semibold": e.bold }]} role="menuitem">
+                <div
+                  class:list={[row, { "font-semibold": e.bold }, { [works]: own }]}
+                  role="menuitem"
+                  aria-describedby={own && e.command === "Refresh" ? tip("refresh") : undefined}
+                  tabindex={own ? "-1" : undefined}
+                  data-does={own ? e.command : undefined}
+                >
                   <span class="flex-1">{e.command}</span>
                 </div>
               ),
@@ -116,4 +195,18 @@ const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site ==
       );
     })}
   </div>)}
+  {/* an account a visitor adds, in its tool's group */}
+  {live && <template data-part="account">
+    <div
+      class:list={[row, "group/item", works]}
+      role="menuitemradio"
+      aria-checked="false"
+      tabindex="-1"
+    >
+      <span
+        class="absolute top-1/2 left-14 -mt-2.5 hidden size-5 rounded-circle bg-win-text-2 group-aria-checked/item:block"
+      />
+      <span data-part="title"></span>
+    </div>
+  </template>}
 </div>

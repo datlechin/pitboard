@@ -103,7 +103,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let o = typed("o")
         let subtitle = typed("Needs")
         let quick = typed("o", then: "p")
-        for pause in [0.5, 1.0, 1.5] { _ = typed("o", then: "p", after: pause) }
+        let paused = [0.5, 1.0, 1.5].map { typed("o", then: "p", after: $0) }
         let slow = typed("o", then: "p", after: 3)
         record(seen.joined(separator: "\n"), as: "site-status-menu-type-select")
 
@@ -112,6 +112,7 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(o, "old")
         XCTAssertEqual(subtitle, "old", "a subtitle is not matched")
         XCTAssertEqual(quick, "Open claude.ai")
+        XCTAssertEqual(paused, ["Open claude.ai", "personal", "personal"])
         XCTAssertEqual(slow, "personal")
     }
 
@@ -270,6 +271,7 @@ final class SiteFiguresTests: FixtureTestCase {
                 "About Pitboard", "Settings…", "Services", "Hide Pitboard", "Hide Others",
                 "Show All", "Quit Pitboard",
             ])
+        XCTAssertEqual(dimmed("Pitboard none"), ["Show All"])
         XCTAssertEqual(
             titles("File none"),
             ["Add Account…", "Open claude.ai", "Remove Website Data…", "Close", "Close All"])
@@ -299,10 +301,12 @@ final class SiteFiguresTests: FixtureTestCase {
             ]
         )
         XCTAssertEqual(dimmed("Account work"), ["Use work", "Warm Up Now", "Forget…"])
-        XCTAssertTrue(dimmed("Edit none").contains("Copy"))
-        XCTAssertTrue(dimmed("Edit none").contains("Delete"))
-        XCTAssertFalse(dimmed("Edit personal").contains("Copy"))
-        XCTAssertFalse(dimmed("Edit personal").contains("Delete"))
+        XCTAssertEqual(
+            dimmed("Edit none"),
+            ["Undo", "Redo", "Cut", "Copy", "Paste", "Delete", "Select All"])
+        XCTAssertEqual(dimmed("Edit personal"), ["Undo", "Redo", "Cut", "Paste", "Select All"])
+        XCTAssertEqual(dimmed("Window none"), ["Full Screen Tile", "Remove Window from Set"])
+        XCTAssertEqual(dimmed("Help none"), [])
         XCTAssertFalse(asked)
     }
 
@@ -318,6 +322,8 @@ final class SiteFiguresTests: FixtureTestCase {
         let texts =
             shown ? panel.staticTexts.allElementsBoundByIndex.map { "\($0.value ?? "")" } : []
         let icon = shown && panel.images.firstMatch.exists
+        let enabled = panel.buttons.allElementsBoundByIndex.filter(\.isEnabled).map(
+            \.identifier)
         record(
             "shown: \(shown), at \(frame(of: panel))\n\(tree(of: panel))",
             as: "site-about-panel")
@@ -327,6 +333,8 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertTrue(icon)
         XCTAssertEqual(texts.filter { !$0.isEmpty }.first, "Pitboard")
         XCTAssertEqual(texts.filter { $0.hasSuffix(")") }.count, 1, "no version and build")
+        XCTAssertEqual(frame(of: panel).size, CGSize(width: 284, height: 170))
+        XCTAssertEqual(enabled, ["_XCUI:CloseWindow"])
     }
 
     @MainActor
@@ -386,7 +394,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let personal = askToForgetPersonal(app)
         app.alert.buttons["Forget"].click()
         XCTAssertTrue(personal.waitForNonExistence(timeout: 5))
-        sleep(1)
+        XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
         let window = app.windows["main"]
         let after = selectedAccounts(in: window)
         keep(window, as: "site-focus-after-forget")
@@ -417,6 +425,7 @@ final class SiteFiguresTests: FixtureTestCase {
         seen.append(("Down", selectedAccounts(in: window)))
         type("w", in: app)
         seen.append(("typed w", selectedAccounts(in: window)))
+        // Long enough apart that "p" starts a new name.
         sleep(2)
         type("p", in: app)
         seen.append(("typed p", selectedAccounts(in: window)))
@@ -547,55 +556,51 @@ final class SiteFiguresTests: FixtureTestCase {
         let down = stepper.decrementArrows.firstMatch
         var seen: [String] = []
         var shares: [String: Int] = [:]
-        func read(_ what: String) {
-            let said = shareSaid(app)
+        // Waits for the share the step should leave, where there is one, then reads it.
+        func read(_ what: String, expecting expected: Int? = nil) {
+            let said = share(app, expecting: expected)
             shares[what] = Int(said.filter(\.isNumber))
             seen.append("\(what): field \(field.value ?? "-"), says \(said)")
         }
-        func typed(_ text: String, _ what: String) {
+        func typed(_ text: String, _ what: String, expecting expected: Int) {
             field.click()
             field.typeKey("a", modifierFlags: .command)
             field.typeText(text)
-            sleep(1)
-            read(what)
+            read(what, expecting: expected)
         }
-        read("at first")
+        read("at first", expecting: 95)
         up.click()
-        sleep(1)
-        read("up from 95")
+        read("up from 95", expecting: 96)
         down.click()
-        sleep(1)
-        read("down from 96")
+        read("down from 96", expecting: 95)
         down.press(forDuration: 4)
-        sleep(1)
-        read("down held 4 s")
+        read("down held 4 s", expecting: 50)
         down.click()
-        sleep(1)
-        read("down at the lowest")
-        up.press(forDuration: 1)
-        sleep(1)
-        read("up held 1 s")
+        read("down at the lowest", expecting: 50)
+        // How fast a hold repeats, each from the lowest.
+        for (held, name) in [(0.5, "0.5 s"), (1, "1 s"), (2, "2 s")] {
+            up.press(forDuration: held)
+            read("up held \(name)")
+            down.press(forDuration: 4)
+            _ = share(app, expecting: 50)
+        }
         up.press(forDuration: 4)
-        sleep(1)
-        read("up held 4 s more")
+        read("up held 4 s", expecting: 99)
         up.click()
-        sleep(1)
-        read("up at the highest")
+        read("up at the highest", expecting: 99)
         down.press(forDuration: 4)
-        sleep(1)
+        _ = share(app, expecting: 50)
         // Typed from the lowest, so the first digit, clamped, changes nothing.
-        typed("120\r", "typed 120")
-        typed("10\r", "typed 10")
-        typed("90\r", "typed 90")
-        typed("abc\r", "typed abc")
-        typed("7", "typed 7, no Return")
+        typed("120\r", "typed 120", expecting: 99)
+        typed("10\r", "typed 10", expecting: 50)
+        typed("90\r", "typed 90", expecting: 90)
+        typed("abc\r", "typed abc", expecting: 90)
+        typed("7", "typed 7, no Return", expecting: 50)
         keep(app.windows["Limits"], as: "site-limits-share")
         field.typeKey(.return, modifierFlags: [])
-        sleep(1)
-        read("then Return")
+        read("then Return", expecting: 50)
         field.typeKey(.upArrow, modifierFlags: [])
-        sleep(1)
-        read("Up arrow in the field")
+        read("Up arrow in the field", expecting: 50)
         record(seen.joined(separator: "\n"), as: "site-limits-share")
 
         XCTAssertEqual(shares["at first"], 95)
@@ -604,13 +609,15 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(shares["down held 4 s"], 50)
         XCTAssertEqual(shares["down at the lowest"], 50)
         XCTAssertGreaterThan(shares["up held 1 s"] ?? 0, 51, "holding did not repeat")
-        XCTAssertEqual(shares["up held 4 s more"], 99)
+        XCTAssertGreaterThan(shares["up held 2 s"] ?? 0, shares["up held 1 s"] ?? 99)
+        XCTAssertEqual(shares["up held 4 s"], 99)
         XCTAssertEqual(shares["up at the highest"], 99)
         XCTAssertEqual(shares["typed 120"], 99)
         XCTAssertEqual(shares["typed 10"], 50)
         XCTAssertEqual(shares["typed 90"], 90)
         XCTAssertEqual(shares["typed abc"], 90)
-        XCTAssertEqual(shares["typed 7, no Return"], 50, "the field waits for Return")
+        // "typed 7, no Return" is kept, not asserted: the field's binding clamps each key as it
+        // is typed, which the site does not copy (docs/facts/site.md).
         XCTAssertEqual(shares["then Return"], 50)
         XCTAssertEqual(shares["Up arrow in the field"], 50)
     }
@@ -693,6 +700,7 @@ final class SiteFiguresTests: FixtureTestCase {
         (try? element.snapshot().frame) ?? .zero
     }
 
+    // Polled every 50 ms, as the submenu's reading times what it waits for.
     @MainActor
     private func eventually(within seconds: TimeInterval, _ condition: () -> Bool) -> Bool {
         let end = Date().addingTimeInterval(seconds)
@@ -771,11 +779,16 @@ final class SiteFiguresTests: FixtureTestCase {
         return choice
     }
 
-    // The share as the pop-up's spoken name says it.
+    // The share as the pop-up's spoken name says it, once it says `expected` or two seconds on.
     @MainActor
-    private func shareSaid(_ app: XCUIApplication) -> String {
+    private func share(_ app: XCUIApplication, expecting expected: Int? = nil) -> String {
         let named = NSPredicate(format: "label BEGINSWITH %@", "When a limit reaches ")
-        return app.descendants(matching: .any).matching(named).firstMatch.label
+        let element = app.descendants(matching: .any).matching(named).firstMatch
+        if let expected {
+            _ = element.wait(
+                for: \.label, toEqual: "When a limit reaches \(expected)%", timeout: 2)
+        }
+        return element.label
     }
 
     // One key at a time, as typeText asks for a focused element and a menu has none.
