@@ -302,11 +302,13 @@ public sealed partial class ScreenshotTests
 
         launched.Select("SettingsItem");
         Expand(launched.Element("settings.warm"));
+        // In view once its bottom is above the page's, which IsOffscreen did not say in run 40286313084.
         var personal = launched.Element("settings.warm.claude/personal");
-        var scroll = Scroller(personal).Patterns.Scroll.Pattern;
-        while (personal.IsOffscreen && scroll.VerticalScrollPercent.Value < 100)
+        var scroller = Scroller(personal);
+        var scroll = scroller.Patterns.Scroll.Pattern;
+        while (personal.BoundingRectangle.Bottom > scroller.BoundingRectangle.Bottom && scroll.VerticalScrollPercent.Value < 100)
         {
-            scroll.Scroll(ScrollAmount.NoAmount, ScrollAmount.LargeIncrement);
+            scroll.Scroll(ScrollAmount.NoAmount, ScrollAmount.SmallIncrement);
         }
 
         KeepWindow(window, "windows-settings-warm-up");
