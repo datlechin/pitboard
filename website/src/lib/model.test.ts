@@ -468,6 +468,22 @@ test("a simulated enrolment reads nothing until the next read, which finds nothi
   assert.equal(enroll("claude", "side"), "label_taken");
 });
 
+test("an added Codex account says no lifetime for its parked login, as the core gives it none", () => {
+  reset();
+  assert.ok(
+    core("provider/codex/engine.rs").includes(
+      'access_token"]\n                .as_str()\n                .and_then(jwt::expires_at),\n            refresh_expires_at: None,',
+    ),
+  );
+  assert.equal(enroll("codex", "extra"), "ok");
+  const extra = model.get().accounts.find((a) => a.tool === "codex" && a.label === "extra")!;
+  assert.equal(extra.refreshExpiresAt, undefined);
+  assert.deepEqual(notes(extra, model.get(), null), []);
+  assert.equal(enroll("claude", "side"), "ok");
+  const side = model.get().accounts.find((a) => a.label === "side")!;
+  assert.equal(side.refreshExpiresAt, model.get().now + SIGN_IN_LASTS);
+});
+
 test("signing in again gives a parked login another 30 days, said in whole days a second on", () => {
   reset();
   signInAgain("claude", "work");

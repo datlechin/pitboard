@@ -877,7 +877,8 @@ export function enroll(tool: Tool, label: string, caller: Caller = "app"): Outco
       return "ok";
     }
     a.unread = true;
-    a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
+    // codex/engine.rs `expiry`: Codex states no refresh lifetime, so its parks keep none
+    if (tool === "claude") a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
     s.accounts.push(a);
     record(s, caller, "enroll", subject);
     return "ok";
