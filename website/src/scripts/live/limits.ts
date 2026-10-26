@@ -16,7 +16,7 @@ import {
   type AtLimit,
   type State,
 } from "../../lib/model.ts";
-import { atLimitNote, autoStandingSaid, menuTitle } from "../../lib/words.ts";
+import { atLimitNote, autoStandingSaid } from "../../lib/words.ts";
 
 const said = (el: Element | null, text: string) => {
   if (el && el.textContent!.trim() !== text) el.textContent = text;
@@ -87,12 +87,9 @@ export class AtLimitControls {
     }
     for (const el of this.root.querySelectorAll<HTMLElement>("[data-terms]"))
       el.hidden = p.atLimit !== "switch";
-    // Windows turns Share of a limit's card off with its NumberBox
+    // Windows shows At only where something happens at the share
     const card = this.root.querySelector<HTMLElement>("[data-share-card]");
-    if (card) {
-      if (p.atLimit === "nothing") card.dataset.state = "off";
-      else delete card.dataset.state;
-    }
+    if (card) card.hidden = p.atLimit === "nothing";
   }
 }
 
@@ -174,7 +171,8 @@ export class WarmControls {
         if (!row) row = this.#added(a.id);
         if (this.#rows.children[i] !== row)
           this.#rows.insertBefore(row, this.#rows.children[i] ?? null);
-        const title = menuTitle(a);
+        // present/machine.rs `warm` names each by its label
+        const title = a.label;
         said(row.querySelector("[data-title]"), title);
         const note = warmNote(s, a);
         const noteLine = row.querySelector<HTMLElement>("[data-note]")!;

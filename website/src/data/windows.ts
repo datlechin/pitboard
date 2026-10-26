@@ -23,7 +23,6 @@ import {
   limitRow,
   listed,
   menuLine,
-  menuTitle,
   rowNote,
   signInExpired,
   switchSpoken,
@@ -203,7 +202,8 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
 }
 
 // SettingsPage.xaml's Limits, with machine.rs's words under When a limit reaches, set to Switch
-// automatically, and Warm-up open on its hours and machine.rs's rows
+// automatically, with Is this allowed? alone after them, and Warm-up open on its hours and
+// machine.rs's rows, what it does under its name and its hours beside it
 export const settingsPage = {
   title: "Settings",
   section: "Limits",
@@ -214,12 +214,12 @@ export const settingsPage = {
     choice: "Switch automatically",
     standing: `Watching work: 40% of its weekly limit, as of ${hm(clock.read)}.`,
     note: `Pitboard switches Claude Code at ${share}%, and its running sessions follow within about 33 seconds.`,
-    terms: "Anthropic’s terms may cover automatic switching and warm-ups.",
     link: "Is this allowed?",
   },
   share: { header: "At", range: "From 50% to 99%", value: share },
   warm: {
     header: "Warm-up",
+    note: "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, while it’s open.",
     range: `${warmUp.from} to ${warmUp.to}`,
     standing: `Next warm-up: ${warmUp.accounts[0]} at ${hm(clock.warmsAgain)}.`,
     hours: [
@@ -229,7 +229,7 @@ export const settingsPage = {
     accounts: toolAccounts(moments.after, "claude").map((a) => {
       const on = warmUp.accounts.includes(a.label);
       return {
-        title: menuTitle(a),
+        title: a.label,
         standing: on ? `Warms up again at ${hm(clock.warmsAgain)}` : null,
         on,
       };

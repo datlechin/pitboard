@@ -365,8 +365,11 @@ test("an account's note is its most pressing, a saved sign-in's only once it exp
 test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs say", () => {
   const s = settingsPage;
   const xaml = views("SettingsPage.xaml");
-  assert.ok(xaml.includes(`Text="${s.title}"`));
-  assert.ok(xaml.includes(`Text="${s.section}"`));
+  assert.ok(xaml.includes('Text="{x:Bind shown:Words.Settings.Title}"'));
+  assert.ok(xaml.includes('Text="{x:Bind shown:Words.Settings.Limits}"'));
+  assert.ok(owned(s.title) && owned(s.section));
+  // When a limit reaches with its icon, SpeedHigh, the site's Fluent top speed
+  assert.ok(xaml.includes('<FontIcon Glyph="&#xEC4A;" />'));
   assert.ok(
     xaml.includes(
       '<toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}"',
@@ -408,13 +411,20 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(machine.includes("pitboard_core::switch::ADOPTION_CEILING_SECONDS,"));
   assert.ok(core("switch/mod.rs").includes("pub const ADOPTION_CEILING_SECONDS: u32 = 33;"));
   assert.equal(s.atLimit.note, note);
-  // The apps curl the core's apostrophe, as words.rs's typeset does.
-  assert.ok(core("words.rs").includes(`"${s.atLimit.terms.slice(0, -1).replace("’", "'")}";`));
-  assert.ok(
-    machine.includes("sentence: words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS),"),
-  );
+  // Is this allowed? alone after the note, the terms' own sentence left to the page it opens
   assert.ok(machine.includes("link_title: words::IS_THIS_ALLOWED.into(),"));
   assert.ok(words.includes(`pub(crate) const IS_THIS_ALLOWED: &str = "${s.atLimit.link}";`));
+  assert.ok(xaml.includes('Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"'));
+  assert.ok(
+    !xaml.includes("Terms.Sentence") && !shell("SettingsViewModel.cs").includes("Terms.Sentence"),
+  );
+  // At, only where something happens at the share
+  assert.ok(xaml.includes('Visibility="{x:Bind ViewModel.ShowsShare, Mode=OneWay}"'));
+  assert.ok(
+    shell("SettingsViewModel.cs").includes(
+      "public bool ShowsShare => AtLimit.Choice != Core.AtLimit.Nothing;",
+    ),
+  );
 });
 
 test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say", () => {
@@ -423,8 +433,20 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
   assert.ok(xaml.includes('Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"'));
   assert.ok(present("machine.rs").includes("title: words::warm_up(seen.os),"));
   assert.ok(present("words.rs").includes(`titled(os, "Warm-Up", "${w.header}")`));
+  // what a warm-up does under its name, its hours beside it, and its icon, Brightness
+  assert.ok(xaml.includes('<TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" />'));
+  assert.ok(present("machine.rs").includes("note: words::WARM_UP_NOTE.into(),"));
+  assert.ok(owned(w.note));
+  assert.ok(
+    xaml.includes(
+      '<TextBlock Text="{x:Bind ViewModel.WarmRange, Mode=OneWay}" AutomationProperties.AutomationId="settings.warmRange" />',
+    ),
+  );
+  assert.ok(xaml.includes('<FontIcon Glyph="&#xE706;" />'));
   for (const [name] of w.hours) {
-    assert.ok(xaml.includes(`<toolkit:SettingsCard Header="${name}"`), name);
+    const field = name === "From" ? "From" : "To";
+    assert.ok(xaml.includes(`Header="{x:Bind shown:Words.Settings.${field}}"`), name);
+    assert.ok(owned(name), name);
   }
   assert.ok(present("words.rs").includes('Some(format!("{} to {to}", time_of_day(from)?))'));
   assert.equal(w.range, "07:00 to 23:00");
@@ -432,19 +454,24 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
     present("words.rs").includes('Some(at) => format!("Next warm-up: {account} at {at}."),'),
   );
   assert.equal(w.standing, "Next warm-up: personal at 22:00.");
-  assert.ok(present("machine.rs").includes("title: words::named_in_menu("));
+  assert.ok(present("machine.rs").includes("title: choice.account.clone(),"));
   assert.ok(shell("WarmAccountRow.cs").includes("public string Title => _account.Title;"));
   assert.deepEqual(w.accounts, [
-    { title: "personal · Max 20x", standing: "Warms up again at 22:00", on: true },
-    { title: "work · Max 20x", standing: null, on: false },
+    { title: "personal", standing: "Warms up again at 22:00", on: true },
+    { title: "work", standing: null, on: false },
   ]);
 });
 
 test("Activity lists Windows' changes in the app's words, dated as the regional format's g", () => {
   const page = activityPage;
   const xaml = views("ActivityPage.xaml");
-  assert.ok(xaml.includes(`Text="${page.title}"`));
-  assert.ok(xaml.includes(`Label="${page.command}"`));
+  assert.ok(
+    xaml.includes(
+      '<local:SettingsBreadcrumb VerticalAlignment="Center" Title="{x:Bind shown:Words.Window.Activity}"',
+    ),
+  );
+  assert.ok(xaml.includes('Label="{x:Bind shown:Words.Window.Refresh}"'));
+  assert.ok(owned(page.title) && owned(page.command));
   assert.ok(shell("WindowsLocalTime.cs").includes('At(epoch).ToString("g", Culture)'));
   const words = present("words.rs");
   assert.ok(words.includes('"use" | "switch" => "Switch".into(),'));

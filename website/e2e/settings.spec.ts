@@ -180,8 +180,8 @@ test.describe("Windows", () => {
     await expect(fig.locator("[data-standing]")).toHaveText(watching);
     await page.keyboard.press("Home");
     await expect(chosen(box)).toHaveText("Do nothing");
-    await expect(page.locator("#auto-win-share")).toBeDisabled();
-    await expect(fig.locator("[data-share-card]")).toHaveAttribute("data-state", "off");
+    // At shows only while something happens at the share
+    await expect(fig.locator("[data-share-card]")).toBeHidden();
     await page.keyboard.press("Alt+ArrowDown");
     await expect(page.locator("#auto-win-choices")).toBeVisible();
     await page.keyboard.press("ArrowDown");

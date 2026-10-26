@@ -14,6 +14,7 @@ import PageHeader from "./PageHeader.astro";
 import ProgressRing from "./ProgressRing.astro";
 import Window from "./Window.astro";
 import { accountsPage, switchNotice } from "../../../data/windows.ts";
+import { winAdvanced } from "../../../data/settings.ts";
 import {
   CANCEL,
   NAME,
@@ -201,6 +202,13 @@ const radio =
             <span aria-hidden="true" data-part="resets"></span>
           </span>
         </template>
+        {/* Settings > Advanced's question before Uninstall Pitboard, whose answer is no default */}
+        <ContentDialog id="win-accounts-uninstall" alert>
+          <Fragment slot="buttons">
+            <Button value="uninstall" type="submit">{winAdvanced.uninstall.confirm}</Button>
+            <Button data-does="cancel">{CANCEL}</Button>
+          </Fragment>
+        </ContentDialog>
         <ContentDialog id="win-accounts-forget" alert>
           <Fragment slot="buttons">
             <Button value="forget" type="submit">{REMOVE}</Button>

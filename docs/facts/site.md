@@ -373,6 +373,8 @@ says so in a comment naming its line here, which `website/src/scripts/departures
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
+- Uninstall Pitboard on Windows quits Pitboard until Reset, after its question: the page removes
+  nothing and starts no installer.
 - Diagnostics stays on its spinner, and Check again and Copy report are held back: the page draws
   no PC's checks yet.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn

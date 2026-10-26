@@ -14,6 +14,7 @@ import { Panes } from "./panes.ts";
 import { disclosure } from "./disclosure.ts";
 import { AtLimitControls, WarmControls } from "./limits.ts";
 import { showAccountWindow } from "./windows.ts";
+import { closeDialog, openDialog } from "./dialog.ts";
 import { say } from "./say.ts";
 import { sheets } from "./sheets.ts";
 import {
@@ -21,6 +22,7 @@ import {
   dismissNotice,
   model,
   openWindow,
+  quit,
   refreshFromApp,
   setGeneral,
   setSchedule,
@@ -53,6 +55,7 @@ import {
   type System,
 } from "../../data/window.ts";
 import { detail, rowAction, signInSaid } from "../../data/windows.ts";
+import { winAdvanced } from "../../data/settings.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
 const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
@@ -228,7 +231,31 @@ export class AccountsWindow extends LiveFigure {
       const now = model.get();
       if (control.dataset.setting === "login")
         setGeneral({ opensAtLogin: !now.general.opensAtLogin });
+      if (control.dataset.setting === "updates")
+        setGeneral({ checksForUpdates: !now.general.checksForUpdates });
       if (control.dataset.setting === "renew") setSchedule(!now.schedule, "app");
+      if (control.dataset.setting === "uninstall") this.#uninstall();
+    });
+  }
+
+  // Uninstall Pitboard asks first, its answer no default, as SettingsPage.xaml.cs does
+  // departs from the apps: Uninstall Pitboard on Windows quits Pitboard until Reset
+  #uninstall() {
+    const d = document.querySelector<HTMLDialogElement>("#win-accounts-uninstall");
+    if (!d) return;
+    text(part(d, "title"), winAdvanced.uninstall.question);
+    text(part(d, "message"), winAdvanced.uninstall.says);
+    openDialog(d, {
+      system: this.system,
+      window: this.window,
+      desk: this,
+      answer: (value) => {
+        if (value !== "uninstall") return;
+        closeDialog(d);
+        quit();
+      },
+      cancel: () => true,
+      focus: d.querySelector<HTMLElement>('[data-does="cancel"]'),
     });
   }
 
@@ -576,6 +603,7 @@ export class AccountsWindow extends LiveFigure {
     if (settings) {
       for (const [name, on] of [
         ["login", s.general.opensAtLogin],
+        ["updates", s.general.checksForUpdates],
         ["renew", s.schedule],
       ] as const) {
         const toggle = settings.querySelector(`[data-setting="${name}"]`);
