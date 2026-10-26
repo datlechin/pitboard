@@ -11,6 +11,8 @@ import {
   type World,
 } from "./world.ts";
 import {
+  SIGN_IN_EXPIRED,
+  SWITCHING,
   accountSpoken,
   activity,
   fullest,
@@ -22,6 +24,7 @@ import {
   menuLine,
   menuTitle,
   rowLines,
+  signInExpired,
   switchSpoken,
   warmsAgainNote,
   toolAccounts,
@@ -49,38 +52,53 @@ export const sites: [site: string, tool: Tool][] = [
   ["chatgpt.com", "codex"],
 ];
 
-// An item has one line, so the figure the menu bar would show of the account ends it (words.rs
-// `named_in_menu`).
-export const itemTitle = (a: Account) =>
-  a.limits.length > 0 ? `${menuTitle(a)} · ${fullest(a)}%` : menuTitle(a);
+// An item has one line: the account's label, then the figure the menu bar would show of it, or why
+// it can't be switched to (present/words.rs `named_in_menu`).
+export function itemTitle(a: Account, w: World, switching = false): string {
+  const aside = switching
+    ? SWITCHING
+    : signInExpired(a, w)
+      ? SIGN_IN_EXPIRED
+      : a.limits.length > 0
+        ? `${fullest(a)}%`
+        : null;
+  return aside ? `${a.label} (${aside.charAt(0).toLowerCase()}${aside.slice(1)})` : a.label;
+}
 
-// IconMenu.cs `Entries`, a group between each two separators. A beta's menu has no Check for updates.
-// An account's tooltip is the line the menu bar app shows under it, in sentence case.
+// IconMenu.cs `Entries` in Microsoft's order, Open Pitboard first and in bold and Exit last, a
+// group between each two separators but each tool's accounts, which follow on under their heading.
+// A beta's menu has no Check for updates. An account's tooltip is the line the menu bar app shows
+// under it, in sentence case.
 export function iconMenu(w: World, updates: boolean): MenuEntry[][] {
   return [
+    [{ command: "Open Pitboard", bold: true }],
     ...toolsOn("windows").map(([tool, name]) => [
       { heading: name },
       ...listed(w, tool).map((a) => ({
-        account: itemTitle(a),
+        account: itemTitle(a, w),
         label: a.label,
         checked: isInUse(a, w),
         tip: menuLine(a, w, "windows"),
       })),
     ]),
-    [{ command: "Add account…" }, { command: "Refresh" }],
+    [{ command: "Add account…" }],
     sites.map(([site, tool]) => ({
       command: `Open ${site}`,
       site,
       submenu: listed(w, tool).map((a) => a.label),
     })),
     [
-      { command: "Open Pitboard", bold: true },
       { command: "Settings" },
       ...(updates ? [{ command: "Check for updates" }] : []),
+      { command: "Pitboard help" },
     ],
-    [{ command: "Pitboard help" }, { command: "Exit" }],
+    [{ command: "Exit" }],
   ];
 }
+
+// A tool's accounts follow the tool before them with no separator, as one group of IconMenu.cs.
+export const joinsTheGroupBefore = (group: MenuEntry[], before: MenuEntry[] | undefined) =>
+  !!before && "heading" in group[0] && "heading" in before[0];
 
 // The tooltip of an account's row in the icon's menu.
 export function accountTip(label: string, w: World): string {

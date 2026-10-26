@@ -6,6 +6,7 @@ import {
   activityPage,
   app,
   iconMenu,
+  joinsTheGroupBefore,
   panes,
   settingsPage,
   switchNotice,
@@ -21,58 +22,93 @@ const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`
 const core = (file: string) => repo(`crates/pitboard-core/src/${file}`);
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
+// app_words.rs and words.rs, where every word the Windows views draw is the model's: each holds
+// the words as a literal, and a view binds the field of app_words() that gives it.
+const said = joined(present("app_words.rs") + present("words.rs"));
+const owned = (words: string) => said.includes(`"${words}"`);
 
 const headings = new Set(tools.map(([, name]) => name));
 const menu = (updates: boolean) => iconMenu(moments.after, updates).flat();
 
-test("the icon's menu says what IconMenu.cs gives it, in its order", () => {
+test("the icon's menu says what IconMenu.cs gives it, in Microsoft's order, Open Pitboard first and Exit last", () => {
   const source = shell("IconMenu.cs");
   const commands = menu(true).flatMap((e) => ("command" in e && !e.submenu ? [e.command] : []));
   assert.deepEqual(commands, [
-    "Add account…",
-    "Refresh",
     "Open Pitboard",
+    "Add account…",
     "Settings",
     "Check for updates",
     "Pitboard help",
     "Exit",
   ]);
-  for (const c of commands) assert.ok(source.includes(`new IconMenuEntry.Command("${c}"`), c);
+  for (const c of commands) assert.ok(owned(c), c);
+  // in the order IconMenu.cs's groups take app_words()' menu words, Check for updates among
+  // Updates' and the accounts and sites between
+  const at = (part: string) => source.indexOf(part);
+  const order = [
+    "words.OpenPitboard",
+    "Accounts(model.Sections),",
+    "words.AddAccount",
+    "Sites(model.AccountWindows),",
+    "words.Settings",
+    ".. Updates(updates),",
+    "words.Help",
+    "words.Quit",
+  ];
+  for (const part of order) assert.ok(at(part) > 0, part);
+  assert.deepEqual(
+    order.map(at),
+    order.map(at).toSorted((a, b) => a - b),
+  );
+  assert.ok(source.includes("Words.Menu.CheckForUpdates"));
   assert.ok(
     menu(true).some((e) => "command" in e && e.command === "Open Pitboard" && e.bold),
     "the click's default is bold",
   );
   assert.match(
     source,
-    /"Open Pitboard", new IconCommand\.Send\(new Intent\.Show\(Place: null\)\)\)\s*\{\s*Default = true,/,
+    /words\.OpenPitboard, new IconCommand\.Send\(new Intent\.Show\(Place: null\)\)\)\s*\{\s*Default = true,/,
   );
 });
 
 test("a beta's menu has no Check for updates, as IconMenu.cs offers it only beside a release", () => {
-  assert.ok(shell("IconMenu.cs").includes("updates.Available && !updates.Beta"));
+  assert.ok(shell("IconMenu.cs").includes("return updates.Beta"));
   assert.ok(!menu(false).some((e) => "command" in e && e.command === "Check for updates"));
 });
 
-test("the menu heads each tool's accounts with its name, and names each account with its plan and the menu bar's figure", () => {
+test("the menu heads each tool's accounts with its name, one group of them, and names each account with how much it has used", () => {
   const words = present("words.rs");
-  assert.ok(words.includes("said.extend(plan);"));
-  assert.ok(words.includes("if matches!(os, Os::Windows) {\n        said.extend(figure);"));
+  assert.ok(
+    words.includes('(Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),'),
+  );
+  assert.ok(
+    present("accounts.rs").includes(
+      "let menu_title = words::named_in_menu(seen.os, &title, why_not.or(figure.as_deref()));",
+    ),
+  );
   assert.ok(present("accounts.rs").includes(".map(|limit| said::figure(limit.percent));"));
   for (const e of menu(false)) {
     if ("heading" in e) assert.ok(headings.has(e.heading), e.heading);
-    if ("account" in e) assert.match(e.account, /^\w+ · (Max 20x|Pro|Plus) · \d+%$/);
+    if ("account" in e) assert.match(e.account, /^\w+ \(\d+%\)$/);
   }
   assert.ok(!menu(false).some((e) => "heading" in e && e.heading === "Claude Desktop"));
   const checked = menu(false).filter((e) => "account" in e && e.checked);
   assert.deepEqual(
     checked.map((e) => ("account" in e ? e.account : "")),
-    ["work · Max 20x · 40%", "main · Pro · 7%"],
+    ["work (40%)", "main (7%)"],
   );
+  // each tool's accounts follow the one before with no separator, as IconMenu.cs makes them one
+  // group
+  const groups = iconMenu(moments.after, false);
+  const tools = groups.filter((g) => "heading" in g[0]);
+  assert.equal(tools.length, 2);
+  assert.ok(joinsTheGroupBefore(tools[1], tools[0]));
+  assert.ok(!joinsTheGroupBefore(tools[0], groups[0]));
 });
 
 test("an account's tooltip in the icon's menu is the line the menu bar app shows under it", () => {
   assert.ok(shell("IconMenu.cs").includes("Lines(item.Summary, item.Help)"));
-  assert.ok(views("IconMenuFlyout.cs").includes("ToolTipService.SetToolTip(item, detail);"));
+  assert.ok(views("IconMenuFlyout.cs").includes("ToolTipService.SetToolTip(radio, detail);"));
   assert.ok(
     present("accounts.rs").includes(
       "in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))",
@@ -113,7 +149,7 @@ test("a site with several accounts' windows is a submenu of their labels, the on
 test("the icon's tooltip names Pitboard, then each account in use with its tool and its menu line", () => {
   const words = present("words.rs");
   assert.ok(words.includes("let mut tip = vec![PITBOARD.to_owned()];"));
-  assert.ok(words.includes('.map(|(name, line)| format!("{name}: {line}")),'));
+  assert.ok(words.includes('.map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),'));
   assert.ok(
     present("accounts.rs").includes(
       ".map(|account| (seen.name_of(account), summary(seen, account))),",
@@ -122,7 +158,7 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
   assert.ok(words.includes('format!("{label} ({tool})")'));
   assert.equal(
     trayTip(moments.after),
-    "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): Weekly 7% used",
+    "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): weekly 7% used",
   );
 });
 
@@ -137,13 +173,21 @@ test("the Shell holds 127 UTF-16 units of the icon's tooltip, cut never inside a
   assert.equal(shellTip(`${"a".repeat(126)}😀`), "a".repeat(126));
 });
 
-test("the icon in the notification area draws the menu bar's level, from Tray's drawings", () => {
-  assert.ok(shell("Shell.cs").includes('"Tray", $"{look.Level?.ToString() ?? "None"}.ico"'));
+test("the icon in the notification area draws the menu bar's level, from Tray's drawings in the taskbar's ink", () => {
+  assert.ok(
+    shell("Shell.cs").includes(
+      '"Tray", place.LightTaskbar ? "Light" : "Dark", $"{look.Level?.ToString() ?? "None"}.ico"',
+    ),
+  );
   const make = repo("apps/windows/Icon/make-ico.py");
   assert.ok(make.includes('for level in ("Plenty", "Low", "Out", "None"):'));
   assert.ok(make.includes('f"tray-{level.lower()}-{grid}.svg"'));
+  // one ink, which the page's taskbar gives as its text colour, as make-ico.py's stylesheet does
+  assert.ok(make.includes('".ink { color: #ffffff; }"'));
   for (const file of ["plenty", "low", "out"]) {
-    assert.match(repo(`apps/windows/Icon/tray-${file}-16.svg`), /^<svg /);
+    const drawing = repo(`apps/windows/Icon/tray-${file}-16.svg`);
+    assert.match(drawing, /^<svg /);
+    assert.ok(drawing.includes('<g class="ink" fill="currentColor">'), file);
   }
   assert.ok(present("accounts.rs").includes(".map(|limit| crate::usage_level(limit.percent)),"));
   assert.equal(menuBarLevel(moments.before), "y");

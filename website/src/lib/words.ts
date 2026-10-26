@@ -400,13 +400,14 @@ export const accountSpoken = (a: Account, w: World) =>
 export const switchSpoken = (a: Account) => `Switch to ${a.label}`;
 
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
-// the line the menu shows under it (present/words.rs `bar_tip`).
+// the line the menu shows under it, going on in lower case after its colon (present/words.rs
+// `bar_tip`).
 export const trayTip = (w: World) =>
   [
     "Pitboard",
     ...(["claude", "codex"] as Tool[]).map((tool) => {
       const a = inUseOf(w, tool);
-      return `${a.label} (${toolName(tool)}): ${menuLine(a, w, "windows")}`;
+      return `${a.label} (${toolName(tool)}): ${uncapitalised(menuLine(a, w, "windows"))}`;
     }),
   ].join("\n");
 
