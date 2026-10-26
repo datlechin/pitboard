@@ -751,7 +751,7 @@ jobs:
           set -euo pipefail
           version=$(sed -n '/^  Sparkle:$/,/^  [A-Za-z]/s/^    exactVersion: //p' apps/macos/project.yml)
           case $version in
-            2.10.0) pinned=c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c ;;
+            2.10.1) pinned=1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27 ;;
             *)
               echo "apps/macos/project.yml pins Sparkle $version, and release.yml has no SHA-256 for its archive" >&2
               exit 1
