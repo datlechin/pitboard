@@ -9,6 +9,8 @@ use pitboard_core::provider::ProviderId;
 pub struct WelcomeShown {
     pub title: String,
     pub lines: Vec<String>,
+    // beside the line that says where the icon is, on Windows, where it can be kept in view
+    pub icon_link: Option<SetupLink>,
     // each tool found, in the order the apps list tools; Claude Code's install link where none is
     pub tools: Vec<WelcomeTool>,
     pub open_at_login: WelcomeLogin,
@@ -38,8 +40,6 @@ pub struct WelcomeLogin {
     // off until the app's system says it is on
     pub on: bool,
     pub note: String,
-    // on Windows, where the icon can be kept in view
-    pub link: Option<SetupLink>,
 }
 
 pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
@@ -51,15 +51,15 @@ pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
             words::welcome_says(&pitboard_core::words::listed(&names)),
             words::where_it_lives(seen.os).into(),
         ],
+        icon_link: (seen.os == Os::Windows).then(|| SetupLink {
+            title: words::TASKBAR_SETTINGS.into(),
+            link: "ms-settings:taskbar".into(),
+        }),
         tools: tools(seen),
         open_at_login: WelcomeLogin {
             title: title.into(),
             on: seen.state.opens_at_login == Some(true),
             note: note.into(),
-            link: (seen.os == Os::Windows).then(|| SetupLink {
-                title: words::TASKBAR_SETTINGS.into(),
-                link: "ms-settings:taskbar".into(),
-            }),
         },
         done: Choice {
             title: words::welcome_done(seen.os),

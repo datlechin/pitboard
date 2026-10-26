@@ -1308,8 +1308,7 @@ pub(crate) fn open_at_login(os: Os) -> (&'static str, &'static str) {
     match os {
         Os::Windows => (
             "Start when you sign in to Windows",
-            "Pitboard watches your limits only while it’s running. Its icon starts behind the \
-             arrow at the end of the taskbar, and Taskbar settings can keep it in view.",
+            "Pitboard watches your limits only while it’s running.",
         ),
         Os::MacOs | Os::Linux => (
             "Open Pitboard at Login",
@@ -4686,8 +4685,7 @@ mod tests {
             open_at_login(Os::Windows),
             (
                 "Start when you sign in to Windows",
-                "Pitboard watches your limits only while it’s running. Its icon starts behind \
-                 the arrow at the end of the taskbar, and Taskbar settings can keep it in view."
+                "Pitboard watches your limits only while it’s running."
             )
         );
         assert_eq!(WELCOME, "Welcome to Pitboard");

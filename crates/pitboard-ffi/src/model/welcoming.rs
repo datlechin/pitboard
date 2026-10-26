@@ -132,31 +132,37 @@ fn a_machine_with_no_tool_is_shown_where_to_install_claude_code() {
 fn the_welcome_offers_open_at_login_as_the_system_says_and_continues_to_the_accounts() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     let mut model = welcomed(&mut machine);
-    let login = |os, on, link| {
+    let login = |os, on| {
         let (title, note) = words::open_at_login(os);
         WelcomeLogin {
             title: title.into(),
             on,
             note: note.into(),
-            link,
         }
     };
-    let taskbar = Some(SetupLink {
-        title: words::TASKBAR_SETTINGS.into(),
-        link: "ms-settings:taskbar".into(),
-    });
     assert_eq!(
         model.on_a_mac().welcome.open_at_login,
-        login(Os::MacOs, false, None),
+        login(Os::MacOs, false),
         "off until the system says"
     );
     model.send(Intent::OpensAtLogin { on: true });
     assert_eq!(
         model.on_windows().welcome.open_at_login,
-        login(Os::Windows, true, taskbar)
+        login(Os::Windows, true)
     );
 
+    // Where the icon is, said once, with where to keep it in view beside it.
+    let windows = model.on_windows().welcome;
+    assert_eq!(windows.lines[1], words::where_it_lives(Os::Windows));
+    assert_eq!(
+        windows.icon_link,
+        Some(SetupLink {
+            title: words::TASKBAR_SETTINGS.into(),
+            link: "ms-settings:taskbar".into(),
+        })
+    );
     let welcome = model.on_a_mac().welcome;
+    assert_eq!(welcome.icon_link, None);
     assert_eq!(welcome.title, words::WELCOME);
     assert_eq!(welcome.lines[1], words::where_it_lives(Os::MacOs));
     assert_eq!(

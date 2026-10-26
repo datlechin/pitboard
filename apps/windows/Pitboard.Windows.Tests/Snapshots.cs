@@ -33,8 +33,8 @@ internal static class Snapshots
             Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
             Removal: null,
             Welcome: new WelcomeShown(
-                Title: "Welcome to Pitboard", Lines: [], Tools: [],
-                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: "", Link: null),
+                Title: "Welcome to Pitboard", Lines: [], IconLink: null, Tools: [],
+                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: ""),
                 Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
             GlanceRevision: 0, Answers: []);
 
