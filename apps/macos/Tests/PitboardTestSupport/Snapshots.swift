@@ -99,7 +99,8 @@ package func snapshot(
             title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
         removal: nil,
         welcome: WelcomeShown(
-            title: "Welcome to Pitboard", lines: [], iconLink: nil, toolsHeading: nil, tools: [],
+            title: "Welcome to Pitboard", lines: [], iconLink: nil, toolsHeading: nil,
+            tools: [],
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),
