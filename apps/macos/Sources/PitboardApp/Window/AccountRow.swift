@@ -5,6 +5,7 @@ import SwiftUI
 struct AccountRow: View {
     let item: AccountItem
     let perform: (Intent) -> Void
+    let act: (AccountAction) -> Void
     @ScaledMetric(relativeTo: .title2) private var symbolWidth: CGFloat = 26
 
     var body: some View {
@@ -37,10 +38,25 @@ struct AccountRow: View {
             }
             // The most pressing; the inspector says the rest.
             if let note = item.notes.first {
-                Text(note.text)
-                    .explanatory()
-                    .padding(.leading, textInset)
-                    .accessibilityIdentifier("account.note")
+                HStack(alignment: .firstTextBaseline, spacing: Design.iconSpacing) {
+                    Text(note.text)
+                        .explanatory()
+                        .accessibilityIdentifier("account.note")
+                    // Left out where the row's own button does it already.
+                    if let action = note.action, action.intent != offered {
+                        Button(action.title) { act(action) }
+                            .buttonStyle(.link)
+                            .font(.callout)
+                            .disabled(!action.enabled)
+                            .accessibilityIdentifier("account.note.action")
+                    }
+                    if let learn = note.learn, let page = URL(string: learn.link) {
+                        Link(learn.title, destination: page)
+                            .font(.callout)
+                            .accessibilityIdentifier("account.note.learn")
+                    }
+                }
+                .padding(.leading, textInset)
             }
         }
         .padding(.vertical, 4)
@@ -49,6 +65,10 @@ struct AccountRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.spoken)
         .accessibilityIdentifier("account.\(item.qualified ?? item.id)")
+    }
+
+    private var offered: Intent? {
+        if case .button(let action)? = item.end { action.intent } else { nil }
     }
 
     @ViewBuilder private var trailing: some View {

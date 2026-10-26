@@ -186,7 +186,7 @@ struct AccountsWindow: View {
 
     private func rows(of section: AccountSection) -> some View {
         ForEach(section.accounts, id: \.id) { item in
-            AccountRow(item: item) { model.send($0) }
+            AccountRow(item: item, perform: { model.send($0) }, act: act)
                 .tag(item.id)
         }
     }

@@ -164,6 +164,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's sheet says one sentence while you finish signing in in your browser.
 - Adding or signing in again to a Claude Desktop account lists what to do in three steps, with
   **Continue**, where the app said it in a paragraph.
+- The macOS app's sheets put their title and one sentence over their fields, and Cancel and the
+  button that does what they are for in a bar of their own, and fit what they show.
+- The macOS app's **Name This Account** offers only **Done**, since the account is added
+  already.
+- The macOS app no longer draws **Clean Up** as destructive.
+- The macOS app's alerts and sheets that say something went wrong offer what to do next, such
+  as **Sign In Again…** or **Learn More**.
+- An account's row in the macOS app offers what to do about its note, such as **Sign In Again…**
+  for a saved sign-in about to expire, or **Learn More**.
 
 ### Removed
 

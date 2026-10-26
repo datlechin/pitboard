@@ -425,4 +425,24 @@ final class AccountsWindowTests: FixtureTestCase {
         let app = launch(.firstLaunch)
         XCTAssertTrue(app.control("setup.codexUnused").waitForExistence(timeout: 10))
     }
+
+    // Escape is the sheet's Cancel, which stops the tool's sign-in with the sheet.
+    @MainActor
+    func testEscapeStopsASignIn() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        app.toolbars.buttons["toolbar.addAccount"].click()
+        let signIn = app.buttons["sheet.confirm"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.click()
+        XCTAssertTrue(app.textFields["sheet.code"].waitForExistence(timeout: 10))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+
+        app.toolbars.buttons["toolbar.addAccount"].click()
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            signIn.wait(for: \.isEnabled, toEqual: true, timeout: 5),
+            "no sign-in is left running")
+    }
 }

@@ -2,24 +2,13 @@ import AppKit
 import PitboardKit
 import SwiftUI
 
-/// Adds an account, or signs in again to one whose parked login can no longer be used,
-/// through the tool's own sign-in, which the model runs. A new account is named after it.
-///
-/// Claude Code and Codex open the default browser themselves and finish through their own
-/// callback, so the sheet offers the address each prints: to open where no browser opened,
-/// or to copy into another browser or browser profile. The code field appears only for a
-/// tool that reads one, only once it asks, and again once Claude Code has refused the code
-/// typed back. Claude Desktop signs in inside Claude, and the sheet says each step of it.
-/// The sheet stays over the window while the browser or Claude is in front, which a menu
-/// could not: it closed the moment the browser came forward.
+// Stays over the window while the browser or Claude is in front, which a menu could not.
 struct SignInSheet: View {
     let model: AppModel
     let sheet: Sheet
     @State private var provider: String
     @State private var code = ""
-    /// The sign-in this sheet showed last, and what it said, kept while the sheet closes
-    /// after it finishes, when the model has already let it go, so the sheet does not flash
-    /// its form on the way out.
+    // Kept while the sheet closes after the sign-in, so the form does not flash on the way out.
     @State private var shown: (signIn: RunningSignIn, text: SigningInText)?
     @FocusState private var codeFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -28,13 +17,10 @@ struct SignInSheet: View {
     init(model: AppModel, sheet: Sheet) {
         self.model = model
         self.sheet = sheet
-        // Chosen before the first frame, not after it: a picker drawn with a selection none
-        // of its items has logs that it is invalid, and can draw with nothing selected.
+        // A picker drawn with a selection none of its items has can draw with none selected.
         _provider = State(initialValue: model.sheetText?.tool ?? "")
     }
 
-    /// The model runs one sign-in at a time, so a sign-in sheet shows the one running,
-    /// whichever sheet started it.
     var body: some View {
         Group {
             if let signingIn = model.signingIn, let text = model.signingInText {
@@ -49,8 +35,7 @@ struct SignInSheet: View {
             if let running, let text = model.signingInText {
                 shown = (running, text)
             } else if model.sheet != nil {
-                // Over, and the sheet stays: it failed, or it was stopped. Back to the form,
-                // with what went wrong in it.
+                // It failed or was stopped, and the sheet stays: back to the form.
                 shown = nil
             }
         }
@@ -68,13 +53,10 @@ struct SignInSheet: View {
         let chosen = tools.first { $0.code == provider }
         let busy = text?.saving ?? false
         let start = checkName(sheet: sheet, tool: provider, typed: "").intent
-        SheetLayout(
-            title: text?.title ?? "",
-            message: chosen?.message ?? text?.message ?? ""
-        ) {
+        Form {
             Section {
                 if tools.count > 1 {
-                    Picker("Tool", selection: $provider) {
+                    Picker(words.sheet.tool, selection: $provider) {
                         ForEach(tools, id: \.code) { tool in
                             Text(tool.name).tag(tool.code)
                         }
@@ -83,31 +65,41 @@ struct SignInSheet: View {
                     .disabled(busy)
                 }
                 if let account = text?.account {
-                    LabeledContent("Account", value: account)
+                    LabeledContent(words.sheet.account, value: account)
                 }
                 if let working = text?.progress {
-                    ProgressView(working)
-                        .controlSize(.small)
+                    WaitingRow(text: working)
                 }
+            } header: {
+                SheetHeader(
+                    title: text?.title ?? "", message: chosen?.message ?? text?.message ?? "")
             }
-            Steps(steps: chosen?.steps ?? [])
+            if let steps = chosen?.steps, !steps.isEmpty {
+                Section { Steps(steps: steps) }
+            }
             if let missing = chosen?.missing {
                 ToolMissing(missing: missing)
             }
             if let failure = model.sheetFailure {
-                SheetFailure(failure: failure)
+                SheetFailure(failure: failure) { model.send($0) }
             }
-        } buttons: {
-            Button("Cancel", role: .cancel) { dismiss() }
-                .keyboardShortcut(.cancelAction)
-                .disabled(busy)
-                .accessibilityIdentifier("sheet.cancel")
-            Button(chosen?.confirm ?? text?.confirm ?? "", action: signIn)
-                .keyboardShortcut(.defaultAction)
-                .disabled(
-                    start == nil || chosen?.missing != nil || model.signingIn != nil || busy
-                )
-                .accessibilityIdentifier("sheet.confirm")
+        }
+        .sheetForm()
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(words.window.cancel, role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(busy)
+                    .accessibilityIdentifier("sheet.cancel")
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(chosen?.confirm ?? text?.confirm ?? "", action: signIn)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(
+                        start == nil || chosen?.missing != nil || model.signingIn != nil || busy
+                    )
+                    .accessibilityIdentifier("sheet.confirm")
+            }
         }
         .onChange(of: provider) { edited() }
         // Back from installing a tool Pitboard said it could not find.
@@ -134,32 +126,42 @@ struct SignInSheet: View {
 
     private func progress(_ signingIn: RunningSignIn, _ text: SigningInText) -> some View {
         let page = signingIn.url.flatMap(URL.init(string:))
-        return SheetLayout(title: text.title, message: text.message) {
-            Steps(steps: text.steps)
-            if text.offersLink {
-                Section {
-                    LabeledContent("Sign-In Page") {
+        let waiting = WaitingRow(text: text.message, spoken: text.waiting)
+        return Form {
+            Section {
+                if text.steps.isEmpty {
+                    waiting
+                } else {
+                    Steps(steps: text.steps)
+                }
+                if text.offersLink {
+                    LabeledContent(words.sheet.signInPage) {
                         HStack {
-                            Button("Copy Link") {
+                            Button(words.sheet.copyLink) {
                                 if let page { NSPasteboard.general.copy(link: page) }
                             }
                             .accessibilityIdentifier("sheet.copyLink")
-                            Button("Open") {
+                            Button(words.sheet.open) {
                                 if let page { openURL(page) }
                             }
                             .help(page?.absoluteString ?? "")
                             .accessibilityIdentifier("sheet.openLink")
                         }
-                        // Dimmed rather than left out until the tool prints the address, so
-                        // the sheet does not grow a moment after it opens.
+                        // Dimmed until the tool prints the address, so the sheet keeps its size.
                         .disabled(page == nil)
                     }
+                }
+            } header: {
+                SheetHeader(title: text.title)
+            } footer: {
+                if !text.steps.isEmpty {
+                    waiting.footnote()
                 }
             }
             if signingIn.wantsCode {
                 Section {
                     TextField(
-                        "Code", text: $code, prompt: Text("Paste the code from your browser")
+                        words.sheet.code, text: $code, prompt: Text(words.sheet.pasteCode)
                     )
                     .accessibilityIdentifier("sheet.code")
                     .focused($codeFocused)
@@ -173,38 +175,39 @@ struct SignInSheet: View {
                     Text(text.codeNote).footnote()
                 }
             }
-        } status: {
-            // The message says what it waits for, so the spinner goes unlabelled, as the
-            // HIG asks of one on a Mac. VoiceOver still names it.
-            ProgressView()
-                .controlSize(.small)
-                .accessibilityLabel(text.waiting)
-        } buttons: {
-            Button(text.cancel.title, role: text.escapeCancels ? .cancel : nil) {
-                model.send(text.cancel.intent)
-                shown = nil
-                dismiss()
-            }
-            .keyboardShortcut(text.escapeCancels ? .cancelAction : nil)
-            .disabled(!text.cancel.enabled)
-            .accessibilityIdentifier("sheet.cancel")
+        }
+        .sheetForm()
+        .toolbar {
             if let undo = text.undo {
-                Button(undo.title) { model.send(undo.intent) }
-                    .disabled(!undo.enabled)
-                    .accessibilityIdentifier("sheet.undo")
+                ToolbarItem(placement: .automatic) {
+                    Button(undo.title) { model.send(undo.intent) }
+                        .disabled(!undo.enabled)
+                        .accessibilityIdentifier("sheet.undo")
+                }
+            }
+            ToolbarItem(placement: .cancellationAction) {
+                Button(text.cancel.title, role: text.escapeCancels ? .cancel : nil) {
+                    model.send(text.cancel.intent)
+                    shown = nil
+                    dismiss()
+                }
+                .keyboardShortcut(text.escapeCancels ? .cancelAction : nil)
+                .disabled(!text.cancel.enabled)
+                .accessibilityIdentifier("sheet.cancel")
             }
             if signingIn.wantsCode {
-                Button("Submit Code", action: send)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(code.isEmpty)
-                    .accessibilityIdentifier("sheet.submitCode")
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(words.sheet.submitCode, action: send)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(code.isEmpty)
+                        .accessibilityIdentifier("sheet.submitCode")
+                }
             }
         }
-        .interactiveDismissDisabled(!text.escapeCancels)
+        // Escape is the Cancel button's, which stops the sign-in, where the model says so.
+        .interactiveDismissDisabled(true)
     }
 
-    /// The model takes the code without the white space around it, and types it back only
-    /// where the tool asks for one.
     private func send() {
         guard !code.isEmpty else { return }
         model.send(.pasteCode(code: code))
@@ -212,30 +215,8 @@ struct SignInSheet: View {
     }
 }
 
-// A sign-in inside the tool's own app, a numbered line each.
-private struct Steps: View {
-    let steps: [String]
-
-    var body: some View {
-        if !steps.isEmpty {
-            Section {
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                    Label {
-                        Text(step)
-                    } icon: {
-                        Text("\(index + 1).").monospacedDigit()
-                    }
-                }
-            }
-            .accessibilityIdentifier("sheet.steps")
-        }
-    }
-}
-
 extension NSPasteboard {
-    /// Puts `link` here in place of whatever was here, as an address for an app that reads
-    /// one and as text for a field that reads only text, such as a browser's address bar.
-    /// An `NSURL` written alone gives only the address.
+    // As text too, for a browser's address bar: an `NSURL` alone gives only the address.
     func copy(link: URL) {
         let item = NSPasteboardItem()
         item.setString(link.absoluteString, forType: .URL)

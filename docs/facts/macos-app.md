@@ -71,6 +71,18 @@ its own date.
   expected macOS 27 to map `LabeledContent`'s value. `Section` with a title is an item whose
   `isSectionHeader` is true, and a `Toggle` that is on an item whose `state` is `.on`.
   `MenuBarMenuTests` holds the menu as AppKit has it.
+- Measured on macOS 27.0.1 with Swift 6.4 on 27 October 2026, in a program of its own that put
+  a SwiftUI sheet over an offscreen window and sent it key events: a sheet draws its toolbar's
+  `.cancellationAction` and `.confirmationAction` items at the trailing end of a bar of its own,
+  under a separator, and `.automatic` and `.destructiveAction` items at its leading end, while
+  `.primaryAction` draws nothing. Escape closes a sheet without running its Cancel button. Under
+  `interactiveDismissDisabled(true)` it runs the `.cancellationAction` item instead, and nothing
+  where that item's shortcut is `.keyboardShortcut(nil)`. So a sheet whose Cancel stops a
+  sign-in keeps Escape for that button.
+- Measured the same way: a SwiftUI `.alert` gives Return to its first button that is not
+  `.cancel`, whatever `.keyboardShortcut(nil)` says of it. `.keyboardShortcut(.defaultAction)` on
+  Cancel gives Cancel Return, leaves the answer with no key, and leaves Escape to no button. So
+  a question whose answer is not the default, Uninstall's, has Cancel on Return.
 
 ## What the UI tests find a control by
 

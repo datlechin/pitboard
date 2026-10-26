@@ -11,6 +11,7 @@ extension View {
 private struct WindowAlerts: ViewModifier {
     let model: AppModel
     let shown: Bool
+    @Environment(\.openURL) private var openURL
 
     func body(content: Content) -> some View {
         content
@@ -20,8 +21,19 @@ private struct WindowAlerts: ViewModifier {
                     get: { shown && model.failureAlert != nil },
                     set: { if !$0 { model.send(.dismissFailure) } }),
                 presenting: model.failureAlert
-            ) { _ in
+            ) { alert in
+                // First, so Return reads the alert away (docs/facts/macos-app.md).
                 Button(words.window.ok) {}
+                switch alert.next {
+                case .act(let choice)?:
+                    Button(choice.title) { model.send(choice.intent) }
+                case .learn(let link)?:
+                    Button(link.title) {
+                        if let page = URL(string: link.link) { openURL(page) }
+                    }
+                case nil:
+                    EmptyView()
+                }
             } message: { alert in
                 Text(alert.message)
             }
@@ -42,8 +54,7 @@ extension View {
                 set: { if !$0, let asked { model.send(asked.declined) } }),
             presenting: asked
         ) { asked in
-            Button(asked.question.confirm) { model.send(asked.confirmed) }
-            Button(words.window.cancel, role: .cancel) {}
+            Answers(question: asked.question) { model.send(asked.confirmed) }
         } message: { asked in
             Text(asked.question.message)
         }
@@ -65,14 +76,26 @@ extension View {
                 set: { if !$0 { asking.wrappedValue = nil } }),
             presenting: asking.wrappedValue
         ) { asked in
-            Button(
-                asked.question.confirm, role: asked.question.destructive ? .destructive : nil
-            ) {
-                model.send(asked.intent)
-            }
-            Button(words.window.cancel, role: .cancel) {}
+            Answers(question: asked.question) { model.send(asked.intent) }
         } message: { asked in
             Text(asked.question.message)
+        }
+    }
+}
+
+// Return is Cancel's where the answer is not the default (docs/facts/macos-app.md).
+private struct Answers: View {
+    let question: Question
+    let answer: () -> Void
+
+    var body: some View {
+        Button(
+            question.confirm, role: question.destructive ? .destructive : nil, action: answer)
+        if question.confirmIsDefault {
+            Button(words.window.cancel, role: .cancel) {}
+        } else {
+            Button(words.window.cancel, role: .cancel) {}
+                .keyboardShortcut(.defaultAction)
         }
     }
 }
