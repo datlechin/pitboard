@@ -164,6 +164,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   limit runs low.
 - The Windows app shows its setup tips as a teaching tip, pointed at **Add account** where they
   are about adding one, where they were a bar above the accounts.
+- The Windows app's icon is drawn dark on a light taskbar and white on a dark one, as Windows' own
+  icons are, and follows a contrast theme's text colour, where it was a dark board on both.
 - The Windows app's icon menu opens on **Open Pitboard** and ends with **Exit**, as Windows'
   guidance orders it, and says **Install Pitboard 1.2.0…** in place of **Check for updates** once
   an update is found.

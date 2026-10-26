@@ -26,7 +26,7 @@
     <!-- Register takes the icon its notifications show as a file. -->
     <Content Include="Pitboard.ico" CopyToOutputDirectory="PreserveNewest" />
     <!-- The notification area's icon at each level, drawn in ../Icon and loaded as files at the size it draws. -->
-    <Content Include="Tray/*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Tray/**/*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />

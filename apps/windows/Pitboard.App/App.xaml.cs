@@ -63,7 +63,7 @@ public partial class App : Application, IIconTargets
         // Turned off in Windows Settings is a choice made there, which the setup tip does not ask about again.
         startAtSignIn.Changed += (_, _) => model.Send(new Intent.OpensAtLogin(startAtSignIn.On || startAtSignIn.TurnedOff));
         model.PropertyChanged += OnModelChanged;
-        var image = new IconImage(Shell.NotificationIconSize, Shell.NotificationIcon, Shell.DestroyIcon);
+        var image = new IconImage(Shell.NotificationIconPlace, Shell.NotificationIcon, Shell.DestroyIcon);
         _image = image;
         _hidden = new HiddenWindow(
             sessionEnding: () => _lifetime?.EndSession(),

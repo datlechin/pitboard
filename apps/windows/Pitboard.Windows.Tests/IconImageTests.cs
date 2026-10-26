@@ -12,6 +12,11 @@ public sealed class IconImageTests
 {
     private static readonly IconLook Low = new(UsageLevel.Low, Attention: false);
 
+    private static readonly bool[] Taskbars = [true, false];
+
+    // What the notification area draws at 100% to 300%.
+    private static readonly int[] Sizes = [16, 20, 24, 32, 40, 48];
+
     // Microsoft's high DPI guidance loads an image again for a new DPI, and Explorer stretches one of another size.
     [TestMethod]
     public void TheImageIsLoadedAgainOnlyAtANewSize()
@@ -19,11 +24,11 @@ public sealed class IconImageTests
         var size = 16;
         var done = new List<string>();
         var image = new IconImage(
-            () => size,
+            () => new IconPlace(size, LightTaskbar: true),
             (wanted, _) =>
             {
-                done.Add($"load {wanted}");
-                return wanted;
+                done.Add($"load {wanted.Size}");
+                return wanted.Size;
             },
             before => done.Add($"destroy {before}"));
 
@@ -35,13 +40,48 @@ public sealed class IconImageTests
         Assert.AreEqual((nint)24, image.Handle);
     }
 
+    // A change of Windows' mode or of a contrast theme reaches the hidden window as WM_SETTINGCHANGE, which follows.
+    [TestMethod]
+    public void TheImageIsLoadedAgainOnATaskbarOfTheOtherTheme()
+    {
+        var light = true;
+        var done = new List<string>();
+        var image = new IconImage(
+            () => new IconPlace(16, light),
+            (wanted, _) =>
+            {
+                done.Add($"load {(wanted.LightTaskbar ? "light" : "dark")}");
+                return done.Count;
+            },
+            before => done.Add($"destroy {before}"));
+
+        image.Follow(shown => done.Add($"show {shown}"));
+        light = false;
+        image.Follow(shown => done.Add($"show {shown}"));
+
+        Assert.AreEqual("load light, load dark, show 2, destroy 1", string.Join(", ", done));
+    }
+
+    // Windows' mode for the taskbar, read as PowerToys reads it, gives way to a contrast theme's text colour.
+    [TestMethod]
+    public void TheTaskbarsThemeIsWindowsModeOrTheContrastThemes()
+    {
+        Assert.IsTrue(IconPlace.Light(systemUsesLightTheme: 1, contrastText: null));
+        Assert.IsFalse(IconPlace.Light(systemUsesLightTheme: 0, contrastText: null));
+        Assert.IsTrue(IconPlace.Light(systemUsesLightTheme: null, contrastText: null), "no mode set");
+        // A dark contrast theme's white text, a light one's black and a dark blue, as COLORREFs.
+        Assert.IsFalse(IconPlace.Light(systemUsesLightTheme: 1, contrastText: 0x00FFFFFF));
+        Assert.IsTrue(IconPlace.Light(systemUsesLightTheme: 0, contrastText: 0x00000000));
+        Assert.IsTrue(IconPlace.Light(systemUsesLightTheme: 0, contrastText: 0x00800000));
+    }
+
     // What the menu bar says moves far more often than the level or the attention it shows.
     [TestMethod]
     public void TheImageIsLoadedAgainOnlyForANewLook()
     {
         var done = new List<string>();
         var image = new IconImage(
-            () => 16,
+            () => new IconPlace(16, LightTaskbar: true),
             (wanted, look) =>
             {
                 done.Add($"load {look.Level?.ToString() ?? "none"} {look.Attention}");
@@ -68,7 +108,7 @@ public sealed class IconImageTests
         var size = 16;
         var done = new List<string>();
         var image = new IconImage(
-            () => sizeFails is { } failed ? throw failed : size,
+            () => sizeFails is { } failed ? throw failed : new IconPlace(size, LightTaskbar: true),
             (wanted, _) =>
             {
                 if (loadFails is { } failed)
@@ -76,8 +116,8 @@ public sealed class IconImageTests
                     throw failed;
                 }
 
-                done.Add($"load {wanted}");
-                return wanted;
+                done.Add($"load {wanted.Size}");
+                return wanted.Size;
             },
             before => done.Add($"destroy {before}"));
 
@@ -100,20 +140,42 @@ public sealed class IconImageTests
     [TestMethod]
     public void EachLevelIsLoadedAtTheSizeAskedFor()
     {
-        foreach (var level in new UsageLevel?[] { null, UsageLevel.Plenty, UsageLevel.Low, UsageLevel.Out })
+        foreach (var light in Taskbars)
         {
-            foreach (var size in new[] { 16, 20, 24, 32, 40, 48 })
+            foreach (var level in new UsageLevel?[] { null, UsageLevel.Plenty, UsageLevel.Low, UsageLevel.Out })
             {
-                var icon = Shell.NotificationIcon(size, new IconLook(level, Attention: false));
-                try
+                foreach (var size in Sizes)
                 {
-                    Assert.AreEqual(size, Pixels(icon).Length, $"{level} at {size}");
-                }
-                finally
-                {
-                    Shell.DestroyIcon(icon);
+                    var icon = Shell.NotificationIcon(new IconPlace(size, light), new IconLook(level, Attention: false));
+                    try
+                    {
+                        Assert.AreEqual(size, Pixels(icon).Length, $"{level} at {size} on a light taskbar: {light}");
+                    }
+                    finally
+                    {
+                        Shell.DestroyIcon(icon);
+                    }
                 }
             }
+        }
+    }
+
+    // In Fluent's primary text colour on each taskbar, as Windows' own icons are: black at 89.4% on a light one, white on a
+    // dark one. tray-*-16.svg's lit row is at (5, 4).
+    [TestMethod]
+    public void EachTaskbarHasTheDrawingInItsOwnInk()
+    {
+        var onLight = Shell.NotificationIcon(new IconPlace(16, LightTaskbar: true), new IconLook(UsageLevel.Plenty, Attention: false));
+        var onDark = Shell.NotificationIcon(new IconPlace(16, LightTaskbar: false), new IconLook(UsageLevel.Plenty, Attention: false));
+        try
+        {
+            Assert.AreEqual(0xE4000000u, Pixels(onLight)[4][5]);
+            Assert.AreEqual(0xFFFFFFFFu, Pixels(onDark)[4][5]);
+        }
+        finally
+        {
+            Shell.DestroyIcon(onLight);
+            Shell.DestroyIcon(onDark);
         }
     }
 
@@ -121,18 +183,22 @@ public sealed class IconImageTests
     [TestMethod]
     public void NoReadingLeavesTheRowUnlit()
     {
-        var plenty = Shell.NotificationIcon(16, new IconLook(UsageLevel.Plenty, Attention: false));
-        var none = Shell.NotificationIcon(16, new IconLook(null, Attention: false));
-        try
+        foreach (var light in Taskbars)
         {
-            // tray-*-16.svg's row, at (5, 4).
-            Assert.AreEqual(0xF3F4F6u, Pixels(plenty)[4][5] & 0xFFFFFF);
-            Assert.AreEqual(0x4B5158u, Pixels(none)[4][5] & 0xFFFFFF);
-        }
-        finally
-        {
-            Shell.DestroyIcon(plenty);
-            Shell.DestroyIcon(none);
+            var plenty = Shell.NotificationIcon(new IconPlace(16, light), new IconLook(UsageLevel.Plenty, Attention: false));
+            var none = Shell.NotificationIcon(new IconPlace(16, light), new IconLook(null, Attention: false));
+            try
+            {
+                var lit = Pixels(plenty)[4][5];
+                var unlit = Pixels(none)[4][5];
+                Assert.AreEqual(lit & 0xFFFFFF, unlit & 0xFFFFFF, $"one ink on a light taskbar: {light}");
+                Assert.IsLessThan(lit >> 24, unlit >> 24, $"a light taskbar: {light}");
+            }
+            finally
+            {
+                Shell.DestroyIcon(plenty);
+                Shell.DestroyIcon(none);
+            }
         }
     }
 
@@ -141,10 +207,11 @@ public sealed class IconImageTests
     [TestMethod]
     public void AttentionPutsTheStandardWarningOverTheBottomRight()
     {
-        foreach (var size in new[] { 16, 20, 24, 32, 40, 48 })
+        foreach (var place in Taskbars.SelectMany(light => Sizes.Select(size => new IconPlace(size, light))))
         {
-            var plain = Shell.NotificationIcon(size, Low);
-            var flagged = Shell.NotificationIcon(size, Low with { Attention = true });
+            var size = place.Size;
+            var plain = Shell.NotificationIcon(place, Low);
+            var flagged = Shell.NotificationIcon(place, Low with { Attention = true });
             try
             {
                 var before = Pixels(plain);

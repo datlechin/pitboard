@@ -38,8 +38,9 @@ if ($version -cne $MsiVersion) { throw "the MSI's ProductVersion is '$version', 
 Write-Output "The MSI is version $version."
 
 $root = (Resolve-Path -LiteralPath $Folder).Path
-foreach ($name in 'Pitboard.exe', 'Pitboard.dll', 'pitboard_ffi.dll', 'WinSparkle.dll', 'Pitboard.ico', 'Tray\Plenty.ico', 'Tray\Low.ico',
-    'Tray\Out.ico', 'Tray\None.ico', 'bin\pitboard.exe', 'completions\pitboard.ps1') {
+foreach ($name in 'Pitboard.exe', 'Pitboard.dll', 'pitboard_ffi.dll', 'WinSparkle.dll', 'Pitboard.ico', 'Tray\Light\Plenty.ico',
+    'Tray\Light\Low.ico', 'Tray\Light\Out.ico', 'Tray\Light\None.ico', 'Tray\Dark\Plenty.ico', 'Tray\Dark\Low.ico', 'Tray\Dark\Out.ico',
+    'Tray\Dark\None.ico', 'bin\pitboard.exe', 'completions\pitboard.ps1') {
     if (-not (Test-Path -LiteralPath (Join-Path $root $name) -PathType Leaf)) { throw "the MSI lays out no $name beside Pitboard.exe" }
 }
 $bin = @(Get-ChildItem -LiteralPath (Join-Path $root 'bin') -Force | ForEach-Object Name)

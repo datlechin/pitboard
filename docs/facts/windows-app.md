@@ -307,11 +307,24 @@ Microsoft's documentation.
   green in a base icon; the icon shows no title, where the macOS menu bar item shows the
   figure. So the model's `MenuBarText` carries the step of the limit the bar names and
   whether the menu opens on something to look at, and its tooltip as whether it does, which
-  Narrator reads with the icon, then a line for each account in use. `Tray/Plenty.ico`,
+  Narrator reads with the icon, then a line for each account in use. `Tray/*/Plenty.ico`,
   `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16, 20, 24, 32, 40 and 48 px, the
-  sizes `NotificationIconSize` gives up to 300%, light the mark's row in a neutral tone as
-  long as what is left, `None.ico` lights none before a reading, and attention draws the
-  shell's stock `SIID_WARNING` over the bottom right at five eighths of the icon.
+  sizes `NotificationIconSize` gives up to 300%, light the mark's row as long as what is
+  left, `None.ico` lights none before a reading, and attention draws the shell's stock
+  `SIID_WARNING` over the bottom right at five eighths of the icon.
+- Windows' own notification area icons follow the taskbar's light or dark mode. PowerToys'
+  runner (`src/runner/tray_icon.cpp` and `src/common/Themes/theme_helpers.cpp` at
+  da5def38) loads a dark icon or a white one by `SystemUsesLightTheme` under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, light where the
+  value is missing. EarTrumpet (`TaskbarIconSource.cs`, `SystemSettings.cs` and
+  `UI/Themes/Manager.cs` at f492b8fa) reads the same value, colours its icon in
+  `COLOR_WINDOWTEXT` under a contrast theme, and draws again on `WM_SETTINGCHANGE` with
+  `ImmersiveColorSet` or `WindowsThemeElement`. So each drawing is one ink, Fluent's primary
+  text colour on the taskbar it is for, black at 89.4% in `Tray/Light` and white in
+  `Tray/Dark`, `IconPlace.Light` picks by that value or, under a contrast theme, by how dark
+  its text colour is, and `IconImage` loads the other set when `HiddenWindow` hears
+  `WM_SETTINGCHANGE` and the pick has changed (`IconImageTests`). How the icon looks on each
+  taskbar is seen by hand.
   `DrawIconEx` blends into a 32-bit DIB premultiplied, and an icon's pixels are
   straight, so `Shell.NotificationIcon` straightens them before `CreateIconIndirect`
   (`IconImageTests.AttentionPutsTheStandardWarningOverTheBottomRight`, which compares the
