@@ -495,7 +495,9 @@ public sealed class AccountSheetTests
 
         up.App.Apply(Naming with
         {
-            Revision = 2, Sheet = new Sheet.Name("claude", "work", "dana@work.example"), SheetText = Items.Rename("dana"),
+            Revision = 2,
+            Sheet = new Sheet.Name("claude", "work", "dana@work.example"),
+            SheetText = Items.Rename("dana"),
         });
         Assert.AreSame(first, up.Dialogs.Open, "the same sheet was put up again");
         up.App.Apply(Naming with { Revision = 3, Sheet = new Sheet.Name("claude", "home", "dana@home.example") });
