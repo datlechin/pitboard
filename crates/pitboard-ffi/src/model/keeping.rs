@@ -228,6 +228,47 @@ fn the_earlier_store_is_taken_once() {
     );
 }
 
+/// A launch from Windows' Start menu, or by the MSI's first install, asks for the window before
+/// the preferences are in. At the first launch the welcome stands in for it, so the window does
+/// not open under the welcome; at any other it opens once they are in, or once they came to
+/// nothing. A window asked for with a place opens at once.
+#[test]
+fn a_window_asked_for_while_the_preferences_are_read_waits_for_them() {
+    let launch = |machine: &mut Stub, place| {
+        let mut model = Hand::new();
+        model.send(Intent::Start);
+        model.send(Intent::Show { place });
+        let meanwhile = model.shown().window_request;
+        model.run(machine);
+        (meanwhile.serial, model.shown().window_request)
+    };
+    let request = |place| WindowRequest { serial: 1, place };
+
+    let mut machine = one_of_each();
+    assert_eq!(
+        launch(&mut machine, None),
+        (0, request(Some(Place::Welcome))),
+        "the first launch"
+    );
+    assert_eq!(
+        launch(&mut machine, None),
+        (0, request(None)),
+        "a later launch"
+    );
+    assert_eq!(
+        launch(&mut machine, Some(Place::Accounts)),
+        (1, request(Some(Place::Accounts))),
+        "a notification's click"
+    );
+    let mut unreadable = one_of_each();
+    unreadable.preferences_unreadable = true;
+    assert_eq!(
+        launch(&mut unreadable, None),
+        (0, request(None)),
+        "preferences that cannot be read"
+    );
+}
+
 /// A "Not Now" said while the preferences are still being read is kept with what they hold,
 /// once they are in, rather than in place of it.
 #[test]
