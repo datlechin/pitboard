@@ -18,13 +18,14 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     [
         nameof(AppModel.Sheet), nameof(AppModel.SheetText), nameof(AppModel.SigningIn), nameof(AppModel.SigningInText),
         nameof(AppModel.StowText), nameof(AppModel.SheetFailure), nameof(AppModel.FailureAlert),
-        nameof(AppModel.QuitQuestion),
+        nameof(AppModel.QuitQuestion), nameof(AppModel.ReplaceQuestion),
     ];
 
     private readonly AppModel _model;
     private readonly Action<Uri> _open;
     private readonly CancellationTokenSource _withdrawn = new();
     private SheetPage? _page;
+    private WindowAlert? _alert;
     private string _tool = "";
     private bool _filled;
     private SheetTool[]? _tools;
@@ -38,9 +39,9 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         _open = open;
         Sheet = sheet;
         InitializeComponent();
+        CloseButtonText = Words.Window.Cancel;
         // The tool picker marks the focus it takes from the keyboard handled.
         AddHandler(GettingFocusEvent, new TypedEventHandler<UIElement, GettingFocusEventArgs>(OnGettingFocus), handledEventsToo: true);
-        AlertSpace.Content = new AlertBar(model);
         model.PropertyChanged += OnModelChanged;
         Show();
     }
@@ -128,8 +129,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         }
 
         ShowFailure(_model.SheetFailure);
-        AlertSpace.Margin = new Thickness(0, 0, 0, WindowAlert.Of(_model) is null ? 0 : 12);
-        CloseButtonText = signingIn?.Text.Cancel.Title ?? "Cancel";
+        CloseButtonText = signingIn?.Text.Cancel.Title ?? Words.Window.Cancel;
         if (page.Closable)
         {
             ClearValue(CloseButtonStyleProperty);
@@ -140,6 +140,61 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         }
 
         Enable();
+        ShowAlert(WindowAlert.Of(_model));
+    }
+
+    // In place of the step until it is answered, which the step then comes back from as it was left.
+    private void ShowAlert(WindowAlert? alert)
+    {
+        var fresh = !Equals(alert, _alert);
+        _alert = alert;
+        Steps.Visibility = Look.Shown(alert is null);
+        Asked.Visibility = Look.Shown(alert is not null);
+        AutomationProperties.SetAutomationId(this, alert switch
+        {
+            WindowAlert.Asking => "question",
+            WindowAlert.Failed => "failure",
+            _ => "sheet",
+        });
+        switch (alert)
+        {
+            case WindowAlert.Asking asked:
+                Title = asked.Question.Title;
+                AskedMessage.Text = asked.Question.Message;
+                PrimaryButtonText = asked.Question.Confirm;
+                CloseButtonText = Words.Window.Cancel;
+                DefaultButton = DialogHost.DefaultOf(asked.Question);
+                break;
+            case WindowAlert.Failed failed:
+                Title = failed.Text.Title;
+                AskedMessage.Text = failed.Text.Message;
+                PrimaryButtonText = "";
+                CloseButtonText = Words.Window.Ok;
+                DefaultButton = ContentDialogButton.None;
+                break;
+        }
+
+        if (alert is not null)
+        {
+            SecondaryButtonText = "";
+            IsPrimaryButtonEnabled = true;
+            ClearValue(CloseButtonStyleProperty);
+        }
+
+        if (!fresh)
+        {
+            return;
+        }
+
+        if (alert is null)
+        {
+            DispatcherQueue.TryEnqueue(Ui.Guarded(FocusField));
+            return;
+        }
+
+        Say(AskedMessage, $"{Title} {AskedMessage.Text}");
+        var button = DefaultButton == ContentDialogButton.Primary ? "PrimaryButton" : "CloseButton";
+        DispatcherQueue.TryEnqueue(Ui.Guarded(() => (GetTemplateChild(button) as Control)?.Focus(FocusState.Programmatic)));
     }
 
     private void ShowForm(SheetPage.Form form)
@@ -369,6 +424,12 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     private void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         args.Cancel = true;
+        if (_alert is { } alert)
+        {
+            _model.Send(alert.Answered(confirmed: true));
+            return;
+        }
+
         var intent = _page switch
         {
             SheetPage.Form form => form.Start(_tool),
@@ -405,6 +466,14 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
             return;
         }
 
+        // Cancel and OK answer what the window asked, and the step it asked over stays.
+        if (_alert is { } alert)
+        {
+            args.Cancel = true;
+            _model.Send(alert.Answered(confirmed: false));
+            return;
+        }
+
         if (_page is { Closable: false })
         {
             args.Cancel = true;
@@ -420,7 +489,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     // Esc presses the close button, which a sign-in waiting on its app keeps for a click.
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key == VirtualKey.Escape && _page is { EscapeCloses: false })
+        if (args.Key == VirtualKey.Escape && _alert is null && _page is { EscapeCloses: false })
         {
             args.Handled = true;
         }

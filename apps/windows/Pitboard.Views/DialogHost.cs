@@ -61,24 +61,23 @@ public sealed class DialogHost(Func<XamlRoot?> root)
 
     public async Task<bool> Confirm(Question question) => await Show(Asking(question)) == ContentDialogResult.Primary;
 
-    // The default button is the accent one, which Enter presses. WinUI has no destructive style.
     public static ContentDialog Asking(Question question)
     {
-        var dialog = new ContentDialog();
-        Ask(dialog, question);
+        var dialog = new ContentDialog
+        {
+            Title = question.Title,
+            Content = question.Message,
+            PrimaryButtonText = question.Confirm,
+            CloseButtonText = Words.Window.Cancel,
+            DefaultButton = DefaultOf(question),
+        };
         AutomationProperties.SetAutomationId(dialog, "question");
         return dialog;
     }
 
-    public static void Ask(ContentDialog dialog, Question question)
-    {
-        dialog.Title = question.Title;
-        dialog.Content = question.Message;
-        dialog.PrimaryButtonText = question.Confirm;
-        dialog.SecondaryButtonText = "";
-        dialog.CloseButtonText = Words.Window.Cancel;
-        dialog.DefaultButton = question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.None;
-    }
+    // The default button is the accent one, which Enter presses. WinUI has no destructive style.
+    public static ContentDialogButton DefaultOf(Question question) =>
+        question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.None;
 
     // A dialog draws in a popup, which takes no theme from its window's content, so it is given the content's, as the WinUI
     // Gallery gives one its page's, and follows it while it is up.

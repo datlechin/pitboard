@@ -18,6 +18,11 @@ public sealed class AccountSheetTests
 
     private static readonly Sheet Add = new Sheet.Add(Provider: null);
 
+    private static readonly WindowQuestion QuitChatGPT = new(
+        new Question("Quit ChatGPT to sign in?", "ChatGPT signs in again.", "Quit ChatGPT and continue", Destructive: false, ConfirmIsDefault: true),
+        Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+        Declined: new Intent.KeepAppOpen());
+
     // The account just added, which the model saved under the name it starts on.
     private static readonly Snapshot Naming = Snapshots.Read(1) with
     {
@@ -522,6 +527,83 @@ public sealed class AccountSheetTests
 
         Assert.Contains("The file holds work’s login, signed in 2 days ago.", Views.Texts(up.Sheet));
         await Views.Until(() => up.Model.Sent.Contains(new Intent.Stow()), "nothing was put away");
+    }
+
+    // A window shows one ContentDialog at a time, so the question the sign-in asks is the sheet's, where it was a bar inside it.
+    [UITestMethod]
+    public async Task AQuestionDuringASignInTakesTheDialogOver()
+    {
+        var signingIn = Snapshots.Read(1) with
+        {
+            Sheet = new Sheet.Add(Provider: "codex"),
+            SheetText = Items.AddAccount(),
+            SigningIn = Items.Running(),
+            SigningInText = Items.SigningIn("Codex"),
+        };
+        await using var up = await Up.Over(signingIn);
+
+        up.App.Apply(signingIn with { Revision = 2, QuitQuestion = QuitChatGPT });
+
+        await Views.Until(() => up.Sheet.Title as string == "Quit ChatGPT to sign in?", "the question did not take the sheet over");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "a second dialog");
+        Assert.AreEqual("question", AutomationProperties.GetAutomationId(up.Sheet));
+        Assert.Contains("ChatGPT signs in again.", Views.Texts(up.Sheet));
+        Assert.DoesNotContain("Finish signing in in your browser. This closes once Codex says you’re in.", Views.Texts(up.Sheet));
+        Assert.AreEqual("Quit ChatGPT and continue", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.Primary, up.Sheet.DefaultButton);
+        Assert.AreEqual("Cancel", up.Sheet.CloseButtonText);
+
+        Views.Press(up.Part("PrimaryButton"));
+
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.QuitAndSwitch("codex/spare")), "the answer did not reach the model");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the question");
+    }
+
+    // Cancel declines the question, and the step it was asked over comes back as it was left.
+    [UITestMethod]
+    public async Task CancelingAQuestionInTheSheetGivesTheStepBack()
+    {
+        var renaming = Snapshots.Read(1) with
+        {
+            Sheet = new Sheet.Rename("claude", "personal"),
+            SheetText = Items.Rename("personal"),
+            QuitQuestion = QuitChatGPT,
+        };
+        await using var up = await Up.Over(renaming);
+        await Views.Until(() => up.Sheet.Title as string == "Quit ChatGPT to sign in?", "the question did not take the sheet over");
+
+        Views.Press(up.Part("CloseButton"));
+
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.KeepAppOpen()), "Cancel did not decline the question");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the question");
+        Assert.DoesNotContain(new Intent.CloseSheet(), up.Model.Sent.ToArray());
+
+        up.App.Apply(renaming with { Revision = 2, QuitQuestion = null });
+
+        await Views.Until(() => up.Sheet.Title as string == "Rename “personal”", "the step did not come back");
+        Assert.AreEqual("sheet", AutomationProperties.GetAutomationId(up.Sheet));
+        Assert.AreEqual("personal", up.Element<TextBox>("sheet.name").Text);
+        Assert.AreEqual("Rename", up.Sheet.PrimaryButtonText);
+    }
+
+    // A failure of something done elsewhere, such as a switch from the icon's menu, is read in the sheet and then put away.
+    [UITestMethod]
+    public async Task AFailureDuringASheetIsReadInItAndOkGivesTheStepBack()
+    {
+        var naming = Naming with { FailureAlert = new AlertText("Couldn’t switch to spare", "Claude Code is signing in.", null) };
+        await using var up = await Up.Over(naming);
+        await Views.Until(() => up.Sheet.Title as string == "Couldn’t switch to spare", "the failure did not take the sheet over");
+        Assert.AreEqual("failure", AutomationProperties.GetAutomationId(up.Sheet));
+        Assert.Contains("Claude Code is signing in.", Views.Texts(up.Sheet));
+        Assert.AreEqual("OK", up.Sheet.CloseButtonText);
+        Assert.AreEqual("", up.Sheet.PrimaryButtonText);
+
+        Views.Press(up.Part("CloseButton"));
+
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.DismissFailure()), "OK did not put the failure away");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the failure");
+        up.App.Apply(naming with { Revision = 2, FailureAlert = null });
+        await Views.Until(() => up.Sheet.Title as string == "Name this account", "the step did not come back");
     }
 
     // The sheet over a window's content, up once it is in front, and taken down after each test, since one dialog shows at a time.

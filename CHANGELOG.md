@@ -173,6 +173,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an update is found.
 - The Windows app's questions answer Enter with their verb, drawn as the accent button, except
   **Uninstall Pitboard?**, which waits to be read.
+- A question or failure that comes while the Windows app's dialog is up takes the dialog over
+  until it is answered, and the dialog then goes back to its step, where it was a bar inside it.
 
 ### Removed
 
