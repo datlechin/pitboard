@@ -823,7 +823,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         words::at_limit_choice(Os::Windows, AtLimit::Notify)
     );
     assert_eq!(shown.at_limit.title, words::BEFORE_RUNNING_OUT);
-    assert_eq!(shown.warm.title, words::warm_up(OS));
+    assert_eq!(shown.warm.title, words::warm_up(Os::MacOs));
     // The field beside the heading shows the share, and the choice is named with it.
     assert_eq!(shown.at_limit.heading, words::AT_LIMIT);
     assert_eq!(shown.at_limit.at_label, words::at_limit_label(95));
