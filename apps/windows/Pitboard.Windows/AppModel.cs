@@ -104,6 +104,8 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public string? MenuAccountsNote => Part<string?>();
 
+    public long? UpdatedAt => Part<long?>();
+
     public string UpdatedMenu => Part<string>();
 
     public string UpdatedWindow => Part<string>();
@@ -119,6 +121,16 @@ public sealed class AppModel : INotifyPropertyChanged
     public MachineShown Machine => Part<MachineShown>();
 
     public AccountWindowsShown AccountWindows => Part<AccountWindowsShown>();
+
+    public ItemOffer Uninstall => Part<ItemOffer>();
+
+    public RemovalShown? Removal => Part<RemovalShown?>();
+
+    public WelcomeShown Welcome => Part<WelcomeShown>();
+
+    public ulong GlanceRevision => Part<ulong>();
+
+    public OutsideAnswer[] Answers => Part<OutsideAnswer[]>();
 
     private T Part<T>([CallerMemberName] string name = "") => (T)_parts[name]!;
 }
