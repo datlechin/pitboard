@@ -329,10 +329,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             "stowed".into(),
             Severity::Info,
             words::CLEANED_UP.into(),
-            words::cleaned_up_lines(seen.os, stowed)
-                .iter()
-                .map(|line| words::typeset(line))
-                .collect(),
+            vec![words::cleaned_up(stowed)],
             vec![dismiss(Intent::DismissStowed)],
         ));
     }

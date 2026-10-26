@@ -102,10 +102,11 @@ internal static class Items
             Cancel: new Choice("Cancel", new Intent.CancelSignIn(), Enabled: true), EscapeCancels: true, Undo: null,
             Announce: null);
 
-    public static StowText Stow(params string[] lines) =>
+    // `found`: what the look said the file holds, none while it looks.
+    public static StowText Stow(string? found = null) =>
         new(
-            Title: "Put away the login left in a file",
-            Message: "Claude Code left a login in a file behind the keychain.", Lines: lines,
-            Looking: lines.Length == 0 ? "Finding out whose login it is…" : null, Confirm: "Put away",
-            CanConfirm: lines.Length > 0, Saving: false);
+            Title: "Clean up the leftover sign-in file",
+            Message: found ?? "Clean Up deletes the sign-in file Claude Code left behind Credential Manager.",
+            Looking: found is null ? "Finding out whose sign-in it is…" : null, Confirm: "Clean up",
+            CanConfirm: found is not null, Saving: false);
 }

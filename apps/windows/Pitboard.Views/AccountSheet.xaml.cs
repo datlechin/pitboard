@@ -28,7 +28,6 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     private string _tool = "";
     private bool _filled;
     private SheetTool[]? _tools;
-    private string[]? _lines;
     private ulong? _failureShown;
     private string? _announced;
     private bool _told;
@@ -100,7 +99,6 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         AccountPart.Visibility = Look.Shown(form is { Text.Account: not null });
         NameField.Visibility = Look.Shown(page is SheetPage.Naming);
         Working.Visibility = Look.Shown((form?.Text.Progress ?? stowing?.Text.Looking) is not null);
-        Lines.Visibility = Look.Shown(stowing is { Text.Lines.Length: > 0 });
         Link.Visibility = Look.Shown(signingIn is { Text.OffersLink: true });
         CodePart.Visibility = Look.Shown(signingIn is { SignIn.WantsCode: true });
         MissingBar.Visibility = Look.Shown(form is not null);
@@ -224,16 +222,6 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         Title = text.Title;
         Message.Text = text.Message;
         WorkingText.Text = text.Looking ?? "";
-        if (!Structural.Equal(_lines, text.Lines))
-        {
-            _lines = text.Lines;
-            Lines.Children.Clear();
-            foreach (var line in text.Lines)
-            {
-                Lines.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
-            }
-        }
-
         PrimaryButtonText = text.Confirm;
         SecondaryButtonText = "";
         DefaultButton = ContentDialogButton.Primary;

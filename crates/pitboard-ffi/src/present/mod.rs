@@ -601,11 +601,8 @@ pub struct SheetText {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct StowText {
     pub title: String,
-    /// What putting it away is for.
+    // one sentence: what Clean Up does, and once it has looked, with what the file holds
     pub message: String,
-    /// What the look found, a paragraph each. Empty while it looks, and where it could not
-    /// look, which the sheet's failure says.
-    pub lines: Vec<String>,
     /// What the sheet says while it looks: "Finding out whose sign-in it is…".
     pub looking: Option<String>,
     /// What its default button says: "Clean Up".

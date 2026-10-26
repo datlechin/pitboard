@@ -59,7 +59,6 @@
         <ProgressRing Width="20" Height="20" IsActive="True" AutomationProperties.AccessibilityView="Raw" />
         <TextBlock x:Name="WorkingText" VerticalAlignment="Center" TextWrapping="Wrap" />
       </StackPanel>
-      <StackPanel x:Name="Lines" Spacing="8" />
       <StackPanel x:Name="Link" Spacing="8">
         <TextBlock Text="Sign-in page" />
         <StackPanel Orientation="Horizontal" Spacing="8">

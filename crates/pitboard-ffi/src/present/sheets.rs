@@ -270,25 +270,22 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
         return None;
     }
     let saving = state.saving.contains(&Sheet::Stow);
-    let (lines, looking, can_confirm) = match state.left.as_ref() {
+    let unknown = || words::clean_up_message(seen.os);
+    let (message, looking, can_confirm) = match state.left.as_ref() {
         None | Some(Leftover::Looking) => {
-            (Vec::new(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
+            (unknown(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
         }
-        Some(Leftover::Unknown) => (Vec::new(), None, false),
-        Some(Leftover::Found(None)) => (vec![words::nothing_to_clean_up(seen.os)], None, false),
+        Some(Leftover::Unknown) => (unknown(), None, false),
+        Some(Leftover::Found(None)) => (words::nothing_to_clean_up(seen.os), None, false),
         Some(Leftover::Found(Some(left))) => (
-            words::clean_up_lines(seen.os, left)
-                .iter()
-                .map(|line| words::typeset(line))
-                .collect(),
+            words::clean_up_found(seen.os, left),
             None,
             !saving && !matches!(left.login, Foreseen::NotEnrolled(_)),
         ),
     };
     Some(StowText {
         title: words::clean_up_title(seen.os),
-        message: words::clean_up_message(seen.os),
-        lines,
+        message,
         looking,
         confirm: words::clean_up(seen.os, false),
         can_confirm,

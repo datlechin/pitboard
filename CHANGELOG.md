@@ -141,6 +141,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The menu bar mark and the Windows icon flag that something needs attention while an account
   needs a sign-in.
 - An account's row offers **Sign In…** where it said **Sign In Again…**.
+- The app's **Clean Up** sheet, its notices, and the questions before **Remove Account** and
+  **Cancel Switch** say one sentence each.
 
 ### Removed
 

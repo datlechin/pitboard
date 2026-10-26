@@ -593,12 +593,11 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
         // The core refuses it.
         enabled: !account.signed_in,
         confirm: Some(Question {
+            title: words::remove_title(spoken_name),
+            message: forget_message_on(seen.os, account, seen.accounts()),
+            confirm: words::REMOVE.into(),
             destructive: true,
-            ..Question::asking(
-                words::remove_title(spoken_name),
-                forget_message_on(seen.os, account, seen.accounts()),
-                words::REMOVE.into(),
-            )
+            confirm_is_default: true,
         }),
     })
 }

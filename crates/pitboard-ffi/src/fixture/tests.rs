@@ -1288,11 +1288,11 @@ fn the_login_left_in_a_file_is_put_away_from_its_sheet() {
             .as_ref()
             .is_some_and(|text| text.can_confirm)
     });
-    let lines = looked.stow_text.map(|text| text.lines).unwrap_or_default();
-    assert!(
-        lines.iter().any(|line| line.contains("personal")),
-        "{lines:?}"
-    );
+    let said = looked
+        .stow_text
+        .map(|text| text.message)
+        .unwrap_or_default();
+    assert!(said.contains("personal"), "{said:?}");
     model.send(Intent::Stow);
 
     told.last_where("put away, and said", |snapshot| {

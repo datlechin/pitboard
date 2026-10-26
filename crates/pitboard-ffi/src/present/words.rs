@@ -234,21 +234,25 @@ pub(crate) fn move_waits_too(tool: &str, program: &str) -> String {
 
 // `moving`: each tool whose switch in its app waits, with its program.
 pub(crate) fn cancel_stuck(moving: &[(String, &str)]) -> String {
-    let kept = "Every sign-in is kept, and nothing is deleted";
     if moving.is_empty() {
-        return format!("{kept}.");
+        return "Every sign-in is kept, and nothing is deleted.".into();
     }
-    let tools: Vec<&str> = moving.iter().map(|(tool, _)| tool.as_str()).collect();
     let mut programs: Vec<&str> = Vec::new();
     for &(_, program) in moving {
         if !programs.contains(&program) {
             programs.push(program);
         }
     }
+    let quits = if programs.len() == 1 { "quits" } else { "quit" };
+    let its = if moving.len() == 1 {
+        "its switch is"
+    } else {
+        "their switches are"
+    };
     format!(
-        "{kept}. With {} quit, the {} switch that didn’t finish is finished or cancelled too.",
-        listed(&programs),
-        listed(&tools)
+        "Every sign-in is kept and nothing is deleted, and once {} {quits}, {its} finished or \
+         cancelled too.",
+        listed(&programs)
     )
 }
 
@@ -277,9 +281,7 @@ pub(crate) const CANCEL_SWITCH_QUESTION: &str = "Cancel the switch that didn’t
 pub(crate) const CANCEL_MOVE_QUESTION: &str = "Cancel the switch in Claude that didn’t finish?";
 
 pub(crate) fn cancel_move(app: &str) -> String {
-    format!(
-        "Every folder is kept and nothing is deleted. Whatever is in {app}’s folder stays there."
-    )
+    format!("Every folder is kept, {app}’s included, and nothing is deleted.")
 }
 
 pub(crate) const SWITCH_CANCELLED: &str = "Switch cancelled";
@@ -1942,10 +1944,11 @@ pub(crate) fn clean_up_title(os: Os) -> String {
     )
 }
 
+// What the Clean Up sheet says until it has looked.
 pub(crate) fn clean_up_message(os: Os) -> String {
     format!(
-        "Claude Code left a sign-in file behind {}, so sessions already running don’t follow a \
-         switch. Pitboard keeps the sign-in where an account needs it, then deletes the file.",
+        "Clean Up deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
+         account needs.",
         pitboard_core::words::store_in_front(os)
     )
 }
@@ -2215,146 +2218,68 @@ pub(crate) fn stale_explanation(row: &pitboard_core::status::Row) -> Option<Stri
     })
 }
 
-// What the Clean Up sheet says the file behind Claude Code's store holds, and what Clean Up does.
-pub(crate) fn clean_up_lines(os: Os, left: &pitboard_core::switch::Left) -> Vec<String> {
+// The Clean Up sheet's one sentence once it has looked: what the file holds, and what Clean Up does.
+pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> String {
     use pitboard_core::switch::{Foreseen, Kept};
-    let path = left.path.display();
-    let login = match &left.login {
-        Foreseen::Kept(kept) => match kept_saying(kept, false) {
-            Some(said) => format!("{path} holds {said}"),
-            None => return pitboard_core::words::left_lines(os, left),
-        },
-        Foreseen::NotEnrolled(owner) => {
-            return vec![format!(
-                "{path} holds {}’s sign-in, an account you haven’t added, so Pitboard can’t clean \
-                 it up. Add that account first.",
-                owner.email
-            )];
+    let only = "so Clean Up only deletes";
+    match &left.login {
+        Foreseen::Kept(Kept::NoLogin) => format!("The file holds no sign-in, {only} it."),
+        Foreseen::Kept(Kept::Refused) => {
+            format!("The file holds a sign-in that no longer works, {only} it.")
         }
-        Foreseen::Untold => format!(
-            "{path} holds a Claude Code sign-in whose access has expired. Cleaning up refreshes \
-             it first, then asks Anthropic whose it is, and goes on only for an account you’ve \
-             added."
+        Foreseen::Kept(Kept::Stored { label: Some(label) }) => format!(
+            "The file holds {label}’s sign-in, which Claude Code keeps too, {only} the file."
         ),
-    };
-    let held = left.login != Foreseen::Kept(Kept::NoLogin);
-    std::iter::once(login)
-        .chain(other_keys(os, &left.dropped, false))
-        .chain(std::iter::once(once_cleaned_up(os, held)))
-        .collect()
+        Foreseen::Kept(Kept::Stored { label: None }) => {
+            format!("The file holds the sign-in Claude Code keeps too, {only} the file.")
+        }
+        Foreseen::Kept(Kept::AlreadyParked { label }) => {
+            format!("The file holds {label}’s saved sign-in, {only} the file.")
+        }
+        Foreseen::Kept(Kept::SecondSignIn { label }) => format!(
+            "The file holds a second sign-in of {label}, the account in use, which Clean Up \
+             deletes with the file."
+        ),
+        Foreseen::Kept(Kept::ParkedNow { label }) => format!(
+            "The file holds {label}’s sign-in, which Clean Up saves for {label} before it deletes \
+             the file."
+        ),
+        Foreseen::Kept(Kept::ParkKept { label }) => format!(
+            "The file holds another sign-in of {label}, which Clean Up deletes with the file."
+        ),
+        Foreseen::NotEnrolled(owner) => format!(
+            "The file holds {}’s sign-in, an account you haven’t added, so add it before you \
+             clean up.",
+            owner.email
+        ),
+        Foreseen::Untold => "The file’s sign-in has expired, so Clean Up renews it first and goes \
+                             on only for an account you’ve added."
+            .into(),
+        _ => clean_up_message(os),
+    }
 }
 
-// What cleaning up did with the sign-in the file held.
-pub(crate) fn cleaned_up_lines(os: Os, stowed: &pitboard_core::switch::Stowed) -> Vec<String> {
+// The notice's one sentence once the file is gone.
+pub(crate) fn cleaned_up(stowed: &pitboard_core::switch::Stowed) -> String {
     use pitboard_core::switch::Kept;
-    let path = stowed.path.display();
-    let Some(said) = kept_saying(&stowed.kept, true) else {
-        return pitboard_core::words::stowed_lines(os, stowed);
-    };
-    let deleted = match &stowed.kept {
+    let stays = |kept: &str| format!("Deleted the file, and {kept} stays.");
+    match &stowed.kept {
+        Kept::NoLogin => "Deleted the file, which held no sign-in.".into(),
+        Kept::Refused => "Deleted the file and the sign-in in it that no longer worked.".into(),
+        Kept::Stored { label: Some(label) } => {
+            format!("Deleted the file, and {label}’s sign-in stays where Claude Code keeps it.")
+        }
+        Kept::Stored { label: None } => stays("the sign-in Claude Code keeps"),
+        Kept::AlreadyParked { label } | Kept::ParkKept { label } => {
+            stays(&format!("{label}’s saved sign-in"))
+        }
+        Kept::SecondSignIn { label } => {
+            format!("Deleted the file and the second sign-in of {label} in it.")
+        }
         Kept::ParkedNow { label } => {
-            format!("Saved the sign-in {path} held for {label}, then deleted the file.")
+            format!("Saved {label}’s sign-in from the file, then deleted the file.")
         }
-        _ => format!("Deleted {path}, which held {said}"),
-    };
-    std::iter::once(deleted)
-        .chain(other_keys(os, &stowed.dropped, true))
-        .chain(std::iter::once(once_cleaned_up(
-            os,
-            stowed.kept != Kept::NoLogin,
-        )))
-        .collect()
-}
-
-// What the file holds and what cleaning up does or did with it, after "holds" or "held".
-fn kept_saying(kept: &pitboard_core::switch::Kept, done: bool) -> Option<String> {
-    use pitboard_core::switch::Kept;
-    let does = |doing: &str, did: &str| {
-        if done {
-            did.to_owned()
-        } else {
-            doing.to_owned()
-        }
-    };
-    Some(match kept {
-        Kept::NoLogin => format!(
-            "no Claude Code sign-in.{}",
-            does(" Cleaning up deletes it.", "")
-        ),
-        Kept::Refused => format!(
-            "a Claude Code sign-in Anthropic no longer accepts.{}",
-            does(" Cleaning up deletes it.", "")
-        ),
-        Kept::Stored { label } => format!(
-            "the sign-in Claude Code has stored{}. {}",
-            label
-                .as_deref()
-                .map_or_else(String::new, |label| format!(", {label}’s")),
-            does(
-                "Cleaning up deletes the file, and that sign-in stays.",
-                "That sign-in stays."
-            )
-        ),
-        Kept::AlreadyParked { label } => format!(
-            "the sign-in Pitboard saved for {label}.{}",
-            does(
-                " Cleaning up deletes the file, and the saved sign-in stays.",
-                ""
-            )
-        ),
-        Kept::SecondSignIn { label } => format!(
-            "a second sign-in of {label}, the account in use. {}",
-            does(
-                "Cleaning up drops it with the file.",
-                "The one Claude Code has stored stays."
-            )
-        ),
-        Kept::ParkedNow { label } => format!(
-            "{label}’s sign-in, and Pitboard has none saved for {label}. Cleaning up saves this \
-             one for {label}, then deletes the file."
-        ),
-        Kept::ParkKept { label } => format!(
-            "another sign-in of {label}, which keeps the one Pitboard saved for it.{}",
-            does(" Cleaning up deletes the file.", "")
-        ),
-        _ => return None,
-    })
-}
-
-fn other_keys(os: Os, keys: &[String], gone: bool) -> Option<String> {
-    let (holds, goes, them) = match (gone, keys.len()) {
-        (_, 0) => return None,
-        (false, 1) => ("holds", "goes", "it"),
-        (false, _) => ("holds", "go", "them"),
-        (true, 1) => ("held", "went", "it"),
-        (true, _) => ("held", "went", "them"),
-    };
-    let count = match keys.len() {
-        1 => "1 other key".to_owned(),
-        count => format!("{count} other keys"),
-    };
-    Some(format!(
-        "It also {holds} {count}, {}, which {goes} with the file: Pitboard doesn’t move {them}, \
-         and Claude Code’s document in {} keeps its own.",
-        listed(keys.iter().map(|key| quoted(key))),
-        pitboard_core::words::store_in_front(os)
-    ))
-}
-
-fn once_cleaned_up(os: Os, held_a_login: bool) -> String {
-    let follow = format!(
-        "Once the file is gone, Claude Code sessions already running follow a switch within {} \
-         seconds again",
-        pitboard_core::switch::ADOPTION_CEILING_SECONDS
-    );
-    let over_ssh = match os {
-        Os::MacOs | Os::Linux => "one over SSH",
-        Os::Windows => "one in a sign-in over SSH with a key",
-    };
-    if held_a_login {
-        format!("{follow}, and one that signed in with it, such as {over_ssh}, is signed out.")
-    } else {
-        format!("{follow}.")
+        _ => "Deleted the leftover sign-in file.".into(),
     }
 }
 
@@ -3076,8 +3001,7 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             path,
             held: Held::Login,
         } => format!(
-            "{} holds another {} sign-in, which sessions already running keep after a switch. \
-             Cleaning up keeps it for its account, then deletes the file.",
+            "{} holds another {} sign-in, which sessions already running keep after a switch.",
             path.display(),
             tool.name()
         ),
@@ -3087,7 +3011,7 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             held: Held::NoLogin,
         } => format!(
             "{} holds no {} sign-in, and sessions already running don’t follow a switch while it’s \
-             there. Cleaning up deletes it.",
+             there.",
             path.display(),
             tool.name()
         ),
@@ -3096,8 +3020,8 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             held: Held::Unreadable,
             ..
         } => format!(
-            "{} is there, and Pitboard couldn’t read it. Sessions already running don’t follow a \
-             switch while it is.",
+            "Pitboard couldn’t read {}, and sessions already running don’t follow a switch while \
+             it’s there.",
             path.display()
         ),
         CoreWarning::SessionsStillRunning { from, holding } => format!(
@@ -3988,8 +3912,8 @@ mod tests {
         );
         assert_eq!(
             cancel_stuck(&[("Claude Desktop".into(), "Claude")]),
-            "Every sign-in is kept, and nothing is deleted. With Claude quit, the Claude Desktop \
-             switch that didn’t finish is finished or cancelled too."
+            "Every sign-in is kept and nothing is deleted, and once Claude quits, its switch is \
+             finished or cancelled too."
         );
         assert_eq!(
             move_waits_too("Claude Desktop", "Claude"),
@@ -4006,8 +3930,7 @@ mod tests {
         );
         assert_eq!(
             cancel_move("Claude"),
-            "Every folder is kept and nothing is deleted. Whatever is in Claude’s folder stays \
-             there."
+            "Every folder is kept, Claude’s included, and nothing is deleted."
         );
         assert_eq!(
             has_used("work", "96% of its 5-hour limit"),
@@ -4280,9 +4203,8 @@ mod tests {
         );
         assert_eq!(
             clean_up_message(Os::Windows),
-            "Claude Code left a sign-in file behind Credential Manager, so sessions already \
-             running don’t follow a switch. Pitboard keeps the sign-in where an account needs it, \
-             then deletes the file."
+            "Clean Up deletes the sign-in file Claude Code left behind Credential Manager, and \
+             keeps any sign-in an account needs."
         );
         assert_eq!(
             finish_in_browser(Some("work"), "Codex"),
@@ -6032,8 +5954,7 @@ mod tests {
             in_app_warning(Os::Windows, &fallback(pitboard_core::provider::Held::Login)).as_deref(),
             Some(
                 "/h/.claude/.credentials.json holds another Claude Code sign-in, which sessions \
-                 already running keep after a switch. Cleaning up keeps it for its account, then \
-                 deletes the file."
+                 already running keep after a switch."
             )
         );
         assert_eq!(
@@ -6044,9 +5965,135 @@ mod tests {
             .as_deref(),
             Some(
                 "/h/.claude/.credentials.json holds no Claude Code sign-in, and sessions already \
-                 running don’t follow a switch while it’s there. Cleaning up deletes it."
+                 running don’t follow a switch while it’s there."
             )
         );
+        assert_eq!(
+            in_app_warning(
+                Os::Windows,
+                &fallback(pitboard_core::provider::Held::Unreadable)
+            )
+            .as_deref(),
+            Some(
+                "Pitboard couldn’t read /h/.claude/.credentials.json, and sessions already \
+                 running don’t follow a switch while it’s there."
+            )
+        );
+    }
+
+    // Plan 4.4: the sheet and the notice after it say one sentence each.
+    #[test]
+    fn clean_up_says_in_one_sentence_what_it_found_and_what_it_did() {
+        use pitboard_core::provider::Owner;
+        use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
+        let label = || "work".to_owned();
+        let left = |login| Left {
+            path: "/h/.claude/.credentials.json".into(),
+            seen: String::new(),
+            login,
+            dropped: vec!["mcpOAuth".into()],
+        };
+        let found = [
+            (
+                Kept::NoLogin,
+                "The file holds no sign-in, so Clean Up only deletes it.",
+            ),
+            (
+                Kept::Refused,
+                "The file holds a sign-in that no longer works, so Clean Up only deletes it.",
+            ),
+            (
+                Kept::Stored {
+                    label: Some(label()),
+                },
+                "The file holds work’s sign-in, which Claude Code keeps too, so Clean Up only \
+                 deletes the file.",
+            ),
+            (
+                Kept::Stored { label: None },
+                "The file holds the sign-in Claude Code keeps too, so Clean Up only deletes the \
+                 file.",
+            ),
+            (
+                Kept::AlreadyParked { label: label() },
+                "The file holds work’s saved sign-in, so Clean Up only deletes the file.",
+            ),
+            (
+                Kept::SecondSignIn { label: label() },
+                "The file holds a second sign-in of work, the account in use, which Clean Up \
+                 deletes with the file.",
+            ),
+            (
+                Kept::ParkedNow { label: label() },
+                "The file holds work’s sign-in, which Clean Up saves for work before it deletes \
+                 the file.",
+            ),
+            (
+                Kept::ParkKept { label: label() },
+                "The file holds another sign-in of work, which Clean Up deletes with the file.",
+            ),
+        ];
+        for (kept, said) in found {
+            assert_eq!(clean_up_found(Os::MacOs, &left(Foreseen::Kept(kept))), said);
+        }
+        assert_eq!(
+            clean_up_found(
+                Os::MacOs,
+                &left(Foreseen::NotEnrolled(Owner {
+                    account_uuid: "u".into(),
+                    email: "dana@home.example".into(),
+                    organization_uuid: "o".into(),
+                }))
+            ),
+            "The file holds dana@home.example’s sign-in, an account you haven’t added, so add \
+             it before you clean up."
+        );
+        assert_eq!(
+            clean_up_found(Os::MacOs, &left(Foreseen::Untold)),
+            "The file’s sign-in has expired, so Clean Up renews it first and goes on only for \
+             an account you’ve added."
+        );
+        let did = [
+            (Kept::NoLogin, "Deleted the file, which held no sign-in."),
+            (
+                Kept::Refused,
+                "Deleted the file and the sign-in in it that no longer worked.",
+            ),
+            (
+                Kept::Stored {
+                    label: Some(label()),
+                },
+                "Deleted the file, and work’s sign-in stays where Claude Code keeps it.",
+            ),
+            (
+                Kept::Stored { label: None },
+                "Deleted the file, and the sign-in Claude Code keeps stays.",
+            ),
+            (
+                Kept::AlreadyParked { label: label() },
+                "Deleted the file, and work’s saved sign-in stays.",
+            ),
+            (
+                Kept::SecondSignIn { label: label() },
+                "Deleted the file and the second sign-in of work in it.",
+            ),
+            (
+                Kept::ParkedNow { label: label() },
+                "Saved work’s sign-in from the file, then deleted the file.",
+            ),
+            (
+                Kept::ParkKept { label: label() },
+                "Deleted the file, and work’s saved sign-in stays.",
+            ),
+        ];
+        for (kept, said) in did {
+            let stowed = Stowed {
+                path: "/h/.claude/.credentials.json".into(),
+                kept,
+                dropped: Vec::new(),
+            };
+            assert_eq!(cleaned_up(&stowed), said);
+        }
     }
 
     #[test]

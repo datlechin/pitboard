@@ -513,7 +513,7 @@ public sealed class AccountSheetTests
     {
         var stowing = Snapshots.Read(1) with { Sheet = new Sheet.Stow(), StowText = Items.Stow() };
         await using var up = await Up.Over(stowing);
-        Assert.Contains("Finding out whose login it is…", Views.Texts(up.Sheet));
+        Assert.Contains("Finding out whose sign-in it is…", Views.Texts(up.Sheet));
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled, "Put away before the look");
 
         up.App.Apply(stowing with { Revision = 2, StowText = Items.Stow("The file holds work’s login, signed in 2 days ago.") });
