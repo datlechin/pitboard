@@ -373,7 +373,6 @@ says so in a comment naming its line here, which `website/src/scripts/departures
 - This PC stays on its spinner, and Check again is held back: the page draws no PC's checks yet.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn
   from the page's state yet.
-- Under a coarse pointer each desk is drawn large enough that a menu row is 24 pixels tall, and
-  scrolls sideways in its figure (WCAG 2.5.8). A terminal's line is 16 pixels, which iOS zooms
-  no field of. Without JavaScript a phone scrolls a figure by touch alone: its drawing is inert,
-  and its caption says what it shows.
+- On a phone each figure fits the page's width, so a macOS menu row on a 390 pixel phone is 13
+  pixels tall (WCAG 2.5.8). A terminal's field takes no tap there, since iOS zooms into a field
+  under 16 pixels: a phone runs a terminal's commands from the buttons under it.

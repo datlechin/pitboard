@@ -64,14 +64,8 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
 
 <Root
   id={prefix}
-  class:list={[
-    "desk block desk-px-720",
-    updates ? "h-572" : "h-540",
-    // a drawing that never works has no target to keep large on a phone
-    !live && "[--u-coarse:0px]",
-  ]}
+  class:list={["desk block desk-px-720", updates ? "h-572" : "h-540"]}
   data-demo-desk={demo ? "" : undefined}
-  data-scroll="end"
   inert
   data-output
 >

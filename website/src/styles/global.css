@@ -493,15 +493,13 @@
 }
 
 /* a figure's desk, --units wide in units of --u, which every spacing utility inside counts: on macOS
-   600 points of at most 1.25 pixels, and desk-px-* for a desk of pixels no larger than the page's.
-   Under a coarse pointer a figure sets --u-coarse, the least that keeps its targets 24 pixels, and
-   --desk-max, so its desk can outgrow the page and scroll in the figure */
+   600 points of at most 1.25 pixels, and desk-px-* for a desk of pixels no larger than the page's */
 @utility desk {
-  --u: max(min(var(--u-max, 1.25px), 100cqi / var(--units, 600)), var(--u-coarse, 0px));
+  --u: min(var(--u-max, 1.25px), 100cqi / var(--units, 600));
   --spacing: var(--u);
   position: relative;
   width: calc(var(--units, 600) * var(--u));
-  max-width: var(--desk-max, 100%);
+  max-width: 100%;
   margin-inline: auto;
   /* a screen: what it does not show it clips, and nothing scrolls it, focus on a cut row neither */
   overflow: clip;

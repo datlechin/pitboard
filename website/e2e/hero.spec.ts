@@ -490,28 +490,3 @@ test.describe("on a phone", () => {
     );
   });
 });
-
-test.describe("on a phone, each system's desk", () => {
-  test.skip(({ isMobile }) => !isMobile, "a touch screen");
-
-  for (const [platform, desk, menu, item] of [
-    ["macos", "#hero-mac", mac.menu, mac.item],
-    ["windows", "#hero-win", win.menu, win.icon],
-  ] as const)
-    test(`on ${platform}, keeps its menu's rows 24 pixels and starts scrolled to its menu`, async ({
-      page,
-    }) => {
-      await choose(page.context(), { platform });
-      await page.goto("/");
-      const scroller = page.locator(desk).locator("..");
-      // down to the figure, which leaves its desk's own scroll as it is
-      await scroller.evaluate((el) => el.closest("figure")!.scrollIntoView({ block: "start" }));
-      await expect(page.locator(item)).toBeInViewport();
-      expect(await scroller.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
-      const rows = await page
-        .locator(`${menu} [role^="menuitem"]:visible`)
-        .evaluateAll((all) => all.map((el) => el.getBoundingClientRect().height));
-      expect(rows.length).toBeGreaterThan(0);
-      for (const height of rows) expect(height).toBeGreaterThanOrEqual(23.9);
-    });
-});

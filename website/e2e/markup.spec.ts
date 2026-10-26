@@ -96,3 +96,32 @@ test.describe("with JavaScript", () => {
     });
   }
 });
+
+test.describe("on a phone", () => {
+  test.skip(({ isMobile }) => !isMobile, "a phone's width");
+
+  for (const platform of platforms)
+    for (const surface of ["app", "cli"] as const)
+      test(`on ${platform}, every ${surface} figure fits the page and scrolls nothing sideways`, async ({
+        page,
+      }) => {
+        await choose(page.context(), { platform, surface });
+        await page.goto("/");
+        const over = await page.locator(roots).evaluateAll((all) =>
+          all
+            .filter((root) => root.checkVisibility())
+            .filter((root) => {
+              const box = root.getBoundingClientRect();
+              const scrolls = [root, root.closest("[data-drawing]")!].some((el) =>
+                /auto|scroll/.test(getComputedStyle(el).overflowX),
+              );
+              return scrolls || box.left < 0 || box.right > innerWidth;
+            })
+            .map((root) => root.id),
+        );
+        expect(over).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          await page.evaluate(() => innerWidth),
+        );
+      });
+});
