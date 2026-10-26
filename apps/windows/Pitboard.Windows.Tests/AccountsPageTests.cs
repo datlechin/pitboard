@@ -64,6 +64,15 @@ public sealed class AccountsPageTests
     private static IEnumerable<DependencyObject> Popped(Page page) =>
         VisualTreeHelper.GetOpenPopupsForXamlRoot(page.XamlRoot).Select(popup => popup.Child).OfType<DependencyObject>().SelectMany(Views.Descendants);
 
+    // WinUI's TeachingTip opens its popup at the frame after IsOpen.
+    private static async Task<Button> TipButton(Page page, string name)
+    {
+        Button? found = null;
+        await Views.Until(
+            () => (found = Popped(page).OfType<Button>().SingleOrDefault(button => button.Name == name)) is not null, $"the tip showed no {name}");
+        return found!;
+    }
+
     private static async Task Open(SettingsExpander row, string inside)
     {
         row.IsExpanded = true;
@@ -421,9 +430,7 @@ public sealed class AccountsPageTests
         Assert.AreEqual("setup.onlyOne", AutomationProperties.GetAutomationId(tip));
         Assert.IsFalse(Views.Descendants(page).OfType<InfoBar>().Any(bar => bar.IsOpen), "the step in an InfoBar");
 
-        var close = Popped(page).OfType<Button>()
-            .Single(button => button.Name == "CloseButton");
-        Views.Press(close);
+        Views.Press(await TipButton(page, "CloseButton"));
 
         Assert.Contains(notNow.Intent, model.Sent);
     }
@@ -443,9 +450,7 @@ public sealed class AccountsPageTests
         await Views.Until(() => tip.IsOpen, "the tip did not open");
 
         Assert.IsNull(tip.Target);
-        var action = Popped(page).OfType<Button>()
-            .Single(button => button.Name == "ActionButton");
-        Views.Press(action);
+        Views.Press(await TipButton(page, "ActionButton"));
 
         Assert.Contains(settings.Intent, model.Sent);
         Assert.IsFalse(tip.IsOpen, "the tip stayed up over Settings");
