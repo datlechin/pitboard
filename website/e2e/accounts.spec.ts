@@ -479,7 +479,8 @@ test.describe("on a phone", () => {
     const { row, menu } = await accounts(page, "macos");
     const box = (await row("personal").boundingBox())!;
     const cdp = await page.context().newCDPSession(page);
-    const point = { x: box.x + box.width / 2, y: box.y + 10 };
+    // on its label, which the phone shows where the row runs past it
+    const point = { x: box.x + 40, y: box.y + 10 };
     await cdp.send("Input.synthesizeTapGesture", { ...point, duration: 800 });
     await expect(menu).toBeVisible();
     await expect(row("personal")).toHaveAttribute("aria-selected", "false");
