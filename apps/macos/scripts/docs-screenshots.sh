@@ -2,9 +2,9 @@
 # Takes the documentation's pictures of the menu and the window from the debug build in the
 # twoTools fixture, with the UI test ScreenshotTests, and writes them at the sizes the docs
 # use. With --figures <dir>, it also writes every picture the test kept into <dir>, at full
-# size and under the name the test gave it: the scenes usepitboard.com's figures are checked
-# against. Needs what the UI tests need: build-xcframework.sh --fixture, then xcodegen. The
-# pictures take this Mac's appearance.
+# size and under the name the test gave it, the scenes usepitboard.com's figures are checked
+# against among them. Needs what the UI tests need: build-xcframework.sh --fixture, then
+# xcodegen. The pictures take this Mac's appearance.
 set -eu
 
 usage() {
@@ -76,8 +76,8 @@ picture() {
     echo "$file"
 }
 
-menu=$(picture menu)
-window=$(picture window)
+menu=$(picture macos-menu-accounts)
+window=$(picture macos-window-accounts)
 sips --resampleWidth 600 "$menu" --out docs/images/menu.png >/dev/null
 cp docs/images/menu.png .github/media/menu.png
 sips --resampleWidth 1520 "$window" --out docs/images/window.png >/dev/null

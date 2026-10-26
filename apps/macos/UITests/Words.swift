@@ -36,6 +36,9 @@ enum Words {
     static let switchAutomatically = "Switch Automatically"
     static let doNothing = "Do Nothing"
 
+    // What Name and Rename say under an empty field.
+    static let typeAName = "Type a name for this account."
+
     // What a row and a download say once something is over, which nothing else shows.
     static let warmsUpAgain = "Warms up again at "
     static let downloaded = "Downloaded"

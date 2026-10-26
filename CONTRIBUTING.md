@@ -249,8 +249,9 @@ them again, writes them at the sizes the docs use and unregisters the build:
 ```
 
 With `--figures <dir>`, it also writes every picture the test kept into `<dir>`, at full size
-and under the name the test gave it. Those are the scenes usepitboard.com's macOS figures are
-checked against.
+and under the name the test gave it: one of each surface, `macos-<surface>-<state>`, the scenes
+usepitboard.com's macOS figures are checked against among them. CI keeps them as the artifact
+`macos-app-pictures`.
 
 ### Unregister a build
 
@@ -517,9 +518,9 @@ the release's `verify-windows-signatures.ps1` on the signed one's MSI, on copies
 changed and on the package the job signed. The MSI takes its version from
 `windows-versions.sh`, which `test-release.py` tests.
 
-The pictures of the Windows app for the docs come from the UI test `ScreenshotTests`, in the
-`twoTools` fixture. The job keeps the ones `windows-2025` takes for seven days, as the artifact
-`windows-app-pictures`:
+The pictures of the Windows app come from the UI test `ScreenshotTests`: one of each surface,
+`windows-<surface>-<state>`, in the fixtures, the docs' two in `twoTools`. The job keeps the
+ones `windows-2025` takes for seven days, as the artifact `windows-app-pictures`:
 
 ```sh
 gh run download <run id> -n windows-app-pictures
