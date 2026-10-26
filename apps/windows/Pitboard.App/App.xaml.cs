@@ -214,7 +214,7 @@ public partial class App : Application, IIconTargets
     void IIconTargets.ShowSettings()
     {
         ShowWindow();
-        _window?.Select(null);
+        _window?.ShowSettings();
     }
 
     Task<bool> IIconTargets.MayQuit() => _accountWindows?.MayQuit() ?? Task.FromResult(true);
@@ -228,14 +228,9 @@ public partial class App : Application, IIconTargets
             ShowWindow();
         }
 
-        if (_window is { } window)
+        if (_window is not null && _requests.PlaceFor(request) is { } place)
         {
-            var (pane, limits) = _requests.PaneFor(request, window.Selected);
-            window.Select(pane);
-            if (limits)
-            {
-                window.ShowLimits();
-            }
+            _window.Show(place);
         }
     }
 

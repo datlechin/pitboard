@@ -257,11 +257,11 @@ public sealed class AccountsWindowTests
 
     // The window goes to the accounts, where the sheet comes up.
     [TestMethod]
-    public void CtrlNAddsAnAccountFromAnyPane()
+    public void CtrlNAddsAnAccountFromAnyPage()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
-        launched.Select("pane.activity");
+        launched.OpenFromSettings(window, "settings.activity");
         Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
 
         Foreground.Require(window);

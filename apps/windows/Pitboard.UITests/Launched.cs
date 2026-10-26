@@ -5,6 +5,7 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Conditions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
+using FlaUI.Core.WindowsAPI;
 using FlaUI.UIA3;
 
 // One Pitboard at a time: they share the fixture's folder, the mouse and the foreground.
@@ -282,6 +283,17 @@ internal sealed class Launched : IDisposable
 
     public void Select(string pane) =>
         Find(found => found.ByAutomationId(pane), pane).Patterns.SelectionItem.Pattern.Select();
+
+    // One of Settings' own pages, from its card as a person opens it: a SettingsCard takes Enter, and gives UI Automation
+    // no Invoke.
+    public void OpenFromSettings(Window window, string card)
+    {
+        Select("SettingsItem");
+        var found = Element(card);
+        Foreground.Require(window);
+        found.Focus();
+        Keyboard.Type(VirtualKeyShort.ENTER);
+    }
 
     public bool Selected(string pane) =>
         Retry.WhileFalse(

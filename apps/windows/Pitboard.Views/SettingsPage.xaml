@@ -15,26 +15,15 @@
     </ResourceDictionary>
   </Page.Resources>
   <Grid Padding="0,16,0,0" RowSpacing="24">
-    <VisualStateManager.VisualStateGroups>
-      <VisualStateGroup x:Name="Sides">
-        <VisualState x:Name="Wide" />
-        <VisualState x:Name="Minimal">
-          <VisualState.Setters>
-            <Setter Target="PageHeader.Margin" Value="{StaticResource PageHeaderMarginMinimal}" />
-            <Setter Target="Scroller.Padding" Value="{StaticResource PageContentPaddingMinimal}" />
-          </VisualState.Setters>
-        </VisualState>
-      </VisualStateGroup>
-    </VisualStateManager.VisualStateGroups>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <TextBlock x:Name="PageHeader" MaxWidth="1064" Margin="{StaticResource PageHeaderMargin}" Text="Settings" Style="{StaticResource PageTitleTextBlockStyle}" />
+    <TextBlock MaxWidth="1064" Margin="{StaticResource PageHeaderMargin}" Text="Settings" Style="{StaticResource PageTitleTextBlockStyle}" />
     <!-- The WinUI Gallery's settings page: SettingsCards and SettingsExpanders in sections, the switch at each card's right. -->
-    <ScrollViewer x:Name="Scroller" Grid.Row="1" Padding="{StaticResource PageContentPadding}">
+    <ScrollViewer Grid.Row="1" Padding="{StaticResource PageContentPadding}">
       <StackPanel MaxWidth="1064" Spacing="{StaticResource SettingsCardSpacing}">
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Margin="1,0,0,6" Text="General" />
+        <TextBlock x:Name="GeneralHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Margin="1,0,0,6" Text="General" />
         <!-- The toolkit's own sample puts a HyperlinkButton in a card's description, which the card's template styles. -->
         <toolkit:SettingsCard Header="Start when you sign in to Windows">
           <toolkit:SettingsCard.Description>
@@ -221,7 +210,7 @@
           </toolkit:SettingsExpander.ItemsFooter>
         </toolkit:SettingsExpander>
 
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Advanced" />
+        <TextBlock x:Name="AdvancedHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Advanced" />
         <toolkit:SettingsCard Header="Keep saved sign-ins fresh">
           <toolkit:SettingsCard.Description>
             <StackPanel>
@@ -265,6 +254,29 @@
                 Visibility="{x:Bind ViewModel.LookingForCommandLine, Mode=OneWay}"
                 AutomationProperties.Name="Looking for pitboard" />
           </Grid>
+        </toolkit:SettingsCard>
+
+        <!-- As Windows Settings keeps Troubleshoot: a clickable card for each page of its own. -->
+        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.Troubleshoot}" />
+        <toolkit:SettingsCard
+            Header="{x:Bind shown:Words.Window.Diagnostics}"
+            Description="{x:Bind shown:Words.Settings.DiagnosticsAbout}"
+            IsClickEnabled="True"
+            AutomationProperties.AutomationId="settings.diagnostics"
+            Click="OnShowDiagnostics">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE9D9;" />
+          </toolkit:SettingsCard.HeaderIcon>
+        </toolkit:SettingsCard>
+        <toolkit:SettingsCard
+            Header="{x:Bind shown:Words.Window.Activity}"
+            Description="{x:Bind shown:Words.Settings.ActivityAbout}"
+            IsClickEnabled="True"
+            AutomationProperties.AutomationId="settings.activity"
+            Click="OnShowActivity">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE81C;" />
+          </toolkit:SettingsCard.HeaderIcon>
         </toolkit:SettingsCard>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="About" />

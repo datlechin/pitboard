@@ -17,7 +17,7 @@ public sealed class SettingsPageTests
 {
     private const string Watching = "Pitboard watches work: 42% used at 09:00.";
 
-    private static readonly string[] Sections = ["General", "Limits", "Advanced", "About"];
+    private static readonly string[] Sections = ["General", "Limits", "Advanced", "Troubleshoot", "About"];
 
     private static readonly WarmShown TwoWarmed = new(
         Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
@@ -65,24 +65,42 @@ public sealed class SettingsPageTests
         Views.Visible<TextBlock>(page).SingleOrDefault(shown => shown.Text == text)
         ?? throw new AssertFailedException($"'{text}' is not among: {string.Join(", ", Views.Texts(page))}");
 
-    // A notice about a limit, or the tip about one, opens the page on Limits, wherever it was scrolled to.
+    // A notice about a limit, or the tip about one, opens the page on Limits, and a check's fix on Advanced, wherever it
+    // was scrolled to.
     [UITestMethod]
-    public async Task ShowingTheLimitsBringsTheirSectionToTheTop()
+    public async Task ShowingASectionBringsItToTheTop()
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
         page.Height = 300;
         page.UpdateLayout();
         var scroller = Views.Descendants(page).OfType<ScrollViewer>().First();
-        var limits = Said(page, "Limits");
 
-        page.ShowLimits();
+        foreach (var (section, heading) in new[] { (SettingsSection.Limits, "Limits"), (SettingsSection.Advanced, "Advanced"), (SettingsSection.General, "General") })
+        {
+            var header = Said(page, heading);
+            page.Show(section);
 
-        await Views.Until(
-            () => scroller.VerticalOffset > 0 && Bounds(limits, scroller).Top is > -1 and < 60,
-            () => $"Limits at {Bounds(limits, scroller).Top}, scrolled {scroller.VerticalOffset}");
+            await Views.Until(
+                () => Bounds(header, scroller).Top is > -1 and < 60,
+                () => $"{heading} at {Bounds(header, scroller).Top}, scrolled {scroller.VerticalOffset}");
+        }
     }
 
-    // The macOS Settings' three panes, then About.
+    // As Windows Settings keeps Troubleshoot: a card for each of the pages that look into Pitboard, which open them.
+    [UITestMethod]
+    public async Task TroubleshootHasACardForDiagnosticsAndActivity()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
+
+        SettingsCard[] cards = [Views.Element<SettingsCard>(page, "settings.diagnostics"), Views.Element<SettingsCard>(page, "settings.activity")];
+
+        Assert.AreEqual(
+            "Diagnostics: Check how Pitboard, Claude Code and Codex are set up on this PC. | Activity: Every switch and change Pitboard made.",
+            string.Join(" | ", cards.Select(card => $"{card.Header}: {card.Description}")));
+        Assert.IsTrue(cards.All(card => card.IsClickEnabled), "a card that does not open its page");
+    }
+
+    // The macOS Settings' three panes, Troubleshoot, then About.
     [UITestMethod]
     public async Task ThePageHasTheSectionsOfTheMacOSPanes()
     {

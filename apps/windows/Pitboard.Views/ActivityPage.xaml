@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:core="using:Pitboard.Core"
     xmlns:local="using:Pitboard.Views"
+    xmlns:shown="using:Pitboard.Windows"
     xmlns:toolkit="using:CommunityToolkit.WinUI"
     NavigationCacheMode="Required">
   <Page.Resources>
@@ -63,15 +64,6 @@
   </Page.Resources>
   <Grid x:Name="Root" Padding="0,16,0,0" RowSpacing="24">
     <VisualStateManager.VisualStateGroups>
-      <VisualStateGroup x:Name="Sides">
-        <VisualState x:Name="Wide" />
-        <VisualState x:Name="Minimal">
-          <VisualState.Setters>
-            <Setter Target="PageHeader.Margin" Value="{StaticResource PageHeaderMarginMinimal}" />
-            <Setter Target="Lines.Padding" Value="{StaticResource PageContentPaddingMinimal}" />
-          </VisualState.Setters>
-        </VisualState>
-      </VisualStateGroup>
       <!-- Below 720 epx the account column would be narrower than the change column. -->
       <VisualStateGroup x:Name="Layout">
         <VisualState x:Name="Table" />
@@ -90,12 +82,12 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <Grid x:Name="PageHeader" Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
+    <Grid Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
-      <TextBlock VerticalAlignment="Center" Text="Activity" Style="{StaticResource PageTitleTextBlockStyle}" />
+      <local:SettingsBreadcrumb VerticalAlignment="Center" Title="{x:Bind shown:Words.Window.Activity}" Back="OnBack" />
       <CommandBar
           Grid.Column="1"
           VerticalAlignment="Center"
@@ -103,8 +95,9 @@
           DefaultLabelPosition="Right"
           OverflowButtonVisibility="Collapsed">
         <AppBarButton
-            Label="Refresh"
-            ToolTipService.ToolTip="Read the log again"
+            Label="{x:Bind shown:Words.Window.Refresh}"
+            ToolTipService.ToolTip="{x:Bind shown:Words.Activity.RefreshHelp}"
+            AccessKey="R"
             AutomationProperties.AutomationId="activity.refresh"
             Click="OnRefresh">
           <AppBarButton.Icon>
@@ -126,7 +119,7 @@
         ItemTemplate="{StaticResource TableLine}"
         Visibility="{x:Bind ViewModel.Listed, Mode=OneWay}"
         AutomationProperties.AutomationId="activity"
-        AutomationProperties.Name="Activity">
+        AutomationProperties.Name="{x:Bind shown:Words.Window.Activity}">
       <!-- A list with column headers is how WinUI shows a table. The padding is a list item's own. -->
       <ListView.Header>
         <Grid x:Name="Columns" Padding="16,0,12,4" ColumnSpacing="12">
@@ -137,11 +130,11 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
-          <TextBlock Text="Date" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
-          <TextBlock Grid.Column="1" Text="Change" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
-          <TextBlock Grid.Column="2" Text="Account" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
-          <TextBlock Grid.Column="3" Text="Result" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
-          <TextBlock Grid.Column="4" Text="Asked by" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
+          <TextBlock Text="{x:Bind shown:Words.Activity.Date}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
+          <TextBlock Grid.Column="1" Text="{x:Bind shown:Words.Activity.Change}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
+          <TextBlock Grid.Column="2" Text="{x:Bind shown:Words.Activity.Account}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
+          <TextBlock Grid.Column="3" Text="{x:Bind shown:Words.Activity.Result}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
+          <TextBlock Grid.Column="4" Text="{x:Bind shown:Words.Activity.By}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" TextWrapping="WrapWholeWords" />
         </Grid>
       </ListView.Header>
       <ListView.ItemContainerStyle>

@@ -7,22 +7,11 @@
     xmlns:shown="using:Pitboard.Windows"
     NavigationCacheMode="Required">
   <Grid Padding="0,16,0,0" RowSpacing="24">
-    <VisualStateManager.VisualStateGroups>
-      <VisualStateGroup x:Name="Sides">
-        <VisualState x:Name="Wide" />
-        <VisualState x:Name="Minimal">
-          <VisualState.Setters>
-            <Setter Target="PageHeader.Margin" Value="{StaticResource PageHeaderMarginMinimal}" />
-            <Setter Target="AccountList.Padding" Value="{StaticResource PageContentPaddingMinimal}" />
-          </VisualState.Setters>
-        </VisualState>
-      </VisualStateGroup>
-    </VisualStateManager.VisualStateGroups>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <Grid x:Name="PageHeader" Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
+    <Grid Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />

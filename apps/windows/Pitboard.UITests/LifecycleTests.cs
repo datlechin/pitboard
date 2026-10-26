@@ -27,7 +27,7 @@ public sealed partial class LifecycleTests
 
         var window = launched.Window("Pitboard");
         TestContext.WriteLine($"CF5: the window was up {clock.ElapsedMilliseconds} ms after the start");
-        var activity = window.FindFirstDescendant(found => found.ByAutomationId("pane.activity"))!;
+        var settings = window.FindFirstDescendant(found => found.ByAutomationId("SettingsItem"))!;
         var handle = window.Properties.NativeWindowHandle.Value;
         var inFront = Retry.WhileFalse(() => Foreground.Window() == handle, TimeSpan.FromSeconds(5)).Result;
         if (!inFront && before != 0 && Foreground.Window() == before)
@@ -36,10 +36,10 @@ public sealed partial class LifecycleTests
         }
 
         Assert.IsTrue(inFront, $"CF1: the window is not in front, {Foreground.Holder()} is");
-        Mouse.Click(activity.GetClickablePoint());
+        Mouse.Click(settings.GetClickablePoint());
 
         var selected = Retry.WhileFalse(
-            () => activity.Patterns.SelectionItem.Pattern.IsSelected.Value, TimeSpan.FromSeconds(5)).Result;
+            () => settings.Patterns.SelectionItem.Pattern.IsSelected.Value, TimeSpan.FromSeconds(5)).Result;
         Assert.IsTrue(selected, "CF1: the click did not reach the window");
     }
 
@@ -49,11 +49,11 @@ public sealed partial class LifecycleTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
 
-        var machine = launched.Window("Pitboard").FindFirstDescendant(found => found.ByAutomationId("pane.machine"));
+        var settings = launched.Window("Pitboard").FindFirstDescendant(found => found.ByAutomationId("SettingsItem"));
 
-        Assert.IsNotNull(machine, "CF2: no element pane.machine");
-        machine.Patterns.SelectionItem.Pattern.Select();
-        Assert.IsTrue(machine.Patterns.SelectionItem.Pattern.IsSelected.Value, "CF2: pane.machine was not selected");
+        Assert.IsNotNull(settings, "CF2: no element SettingsItem");
+        settings.Patterns.SelectionItem.Pattern.Select();
+        Assert.IsTrue(settings.Patterns.SelectionItem.Pattern.IsSelected.Value, "CF2: SettingsItem was not selected");
     }
 
     // Its title bar, Alt+Tab and a Debug build's taskbar button show it; WinUI's window class has none.

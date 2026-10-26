@@ -40,18 +40,33 @@ Microsoft's documentation.
   `dev/Templates/Source/ProjectTemplates/Desktop/CSharp/NavigationApp`, read on 16 October
   2026) puts a `TitleBar` with the app's icon and the pane toggle above a `NavigationView`
   under `MicaBackdrop`, extends the content into the title bar, asks for the tall one and calls
-  `AppWindow.SetIcon`. `MainWindow` does the same, so Mica reaches the title bar, and its
-  icon names the window in the title bar and Alt+Tab (`LifecycleTests.TheWindowCarriesPitboardsIcon`).
+  `AppWindow.SetIcon`. `MainWindow` does the same but for the height, so Mica reaches the title
+  bar, and its icon names the window in the title bar and Alt+Tab (`LifecycleTests.TheWindowCarriesPitboardsIcon`).
+  The title bar guidance (read on 25 October 2026) gives the standard title bar 32 px and the
+  tall one to a title bar with a search box or a person picture, which Pitboard's has neither
+  of. WinUI 2.3.9's `Themes/generic.xaml` draws a `TitleBar` 32 epx tall in its `CompactHeight`
+  state and 48 in `ExpandedHeight`, and its back button as the template part `PART_BackButton`,
+  which `PanesTests` presses; its `BackRequested` is a `TypedEventHandler<TitleBar, object>`
+  (`Microsoft.WinUI.dll` metadata). `MainWindowTests.TheTitleBarIsTheStandardHeight` holds the
+  height.
   The PRI file indexes `Pitboard.ico` as `Files/Pitboard.ico` (run 38774669459), which
   `ms-appx:///Pitboard.ico` reads. The template's pages own their titles, in
   `TitleTextBlockStyle` at the top of a Grid padded 24,16,24,16 with 24 between its rows, and
-  the NavigationView page (updated 2 October 2026) recommends 12 epx margins for the content
-  in Minimal and 24 otherwise, and navigates its frame only to a page not shown already. So
+  the NavigationView page (updated 2 October 2026) recommends 24 epx margins for the content
+  outside Minimal, where a LeftCompact pane never goes, and navigates its frame only to a page
+  not shown already. So
   `MainWindow` sets no `Header`: each page carries its title as a Level1 heading, its content
-  24 epx under it and the sides the window sets from `DisplayModeChanged`, whose thicknesses
-  `Styles.xaml` holds, and the lists and the settings' scroll viewer reach the window's edges
-  and pad what they hold, which keeps a scroll bar at the edge. Its pages are kept
-  (`NavigationCacheMode.Required`), with no back stack (`MainWindowTests`).
+  24 epx under it and 24 epx from its sides, which `Styles.xaml` holds, and the lists and the
+  settings' scroll viewer reach the window's edges and pad what they hold, which keeps a scroll
+  bar at the edge. Its pages are kept (`NavigationCacheMode.Required`), with no back stack
+  (`MainWindowTests`).
+- WinUI 2.3.9's `Themes/generic.xaml` sizes a `BreadcrumbBar`'s items by the theme resources
+  `BreadcrumbBarItemThemeFontSize` and `BreadcrumbBarItemFontWeight`, and its chevron by
+  `BreadcrumbBarChevronFontSize` and `BreadcrumbBarChevronPadding`, and its
+  `BreadcrumbBarItemAutomationPeer` implements `IInvokeProvider` (`Microsoft.WinUI.dll`
+  metadata). So `SettingsBreadcrumb` sets them in its own resources to head Diagnostics and
+  Activity at a page title's size, as Windows Settings heads a page under another, and
+  `MainWindowTests` presses its Settings item.
 - `AppWindowTitleBar.PreferredTheme`'s reference gives `Legacy` as its default, and WinUI's
   window class carries no icon. So `WindowChrome` gives every window of Pitboard's
   `UseDefaultAppMode` and the app's icon (`WindowChromeTests`,
@@ -322,7 +337,10 @@ Microsoft's documentation.
   (`SettingsCardAutomationPeer.cs`), and WinUI 2.3.9's `ButtonBaseAutomationPeer` implements
   no `IInvokeProvider` (`Microsoft.WinUI.dll` metadata), so UI Automation could not press it:
   the page copies through a Copy button, as Settings > System > About copies its
-  specifications, and links through HyperlinkButtons. `ControlSizeTrigger` is active while
+  specifications, and links through HyperlinkButtons. Troubleshoot's cards to Diagnostics and
+  Activity are clickable, as Windows Settings draws a card that opens a page of its
+  own, and take Enter and Space as a button does, so the UI tests open them from the keyboard
+  (`Launched.OpenFromSettings`). `ControlSizeTrigger` is active while
   `MinWidth <= ActualWidth < MaxWidth` of an element it names (`ControlSizeTrigger.cs`), the
   trigger SettingsCard wraps its own content with; AdaptiveTrigger reads the window's width
   instead, so the Activity page stacks its changes by its own width with it.

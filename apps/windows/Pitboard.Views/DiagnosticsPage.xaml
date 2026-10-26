@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pitboard.Views.DiagnosticsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Pitboard.Views"
+    xmlns:shown="using:Pitboard.Windows"
+    NavigationCacheMode="Required">
+  <Page.Resources>
+    <!-- A detail's own copy would keep the marks that wrap its paths; this one copies what it says. -->
+    <MenuFlyout x:Key="DetailMenu" Opening="OnDetailMenuOpening">
+      <MenuFlyoutItem Text="{x:Bind shown:Words.Window.Copy}" KeyboardAcceleratorTextOverride="Ctrl+C" Click="OnCopyDetail">
+        <MenuFlyoutItem.Icon>
+          <SymbolIcon Symbol="Copy" />
+        </MenuFlyoutItem.Icon>
+      </MenuFlyoutItem>
+      <MenuFlyoutItem Text="{x:Bind shown:Words.Window.SelectAll}" KeyboardAcceleratorTextOverride="Ctrl+A" Click="OnSelectAllDetail">
+        <MenuFlyoutItem.Icon>
+          <SymbolIcon Symbol="SelectAll" />
+        </MenuFlyoutItem.Icon>
+      </MenuFlyoutItem>
+    </MenuFlyout>
+  </Page.Resources>
+  <Grid Padding="0,16,0,0" RowSpacing="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <Grid Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <StackPanel VerticalAlignment="Center">
+        <local:SettingsBreadcrumb Title="{x:Bind shown:Words.Window.Diagnostics}" Back="OnBack" />
+        <!-- When the checks were made, where Accounts says when it read them. -->
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <ProgressRing
+              Width="16"
+              Height="16"
+              IsActive="{x:Bind ViewModel.Checking, Mode=OneWay}"
+              Visibility="{x:Bind ViewModel.Checking, Mode=OneWay}"
+              AutomationProperties.Name="{x:Bind shown:Words.Window.Checking}" />
+          <TextBlock Text="{x:Bind ViewModel.Checked, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
+        </StackPanel>
+      </StackPanel>
+      <CommandBar
+          Grid.Column="1"
+          VerticalAlignment="Center"
+          Background="Transparent"
+          DefaultLabelPosition="Right"
+          OverflowButtonVisibility="Collapsed">
+        <AppBarButton
+            Label="{x:Bind shown:Words.Window.CheckAgain}"
+            ToolTipService.ToolTip="{x:Bind shown:Words.Window.CheckAgainHelp}"
+            AccessKey="C"
+            IsEnabled="{x:Bind ViewModel.CanCheck, Mode=OneWay}"
+            AutomationProperties.AutomationId="machine.check"
+            Click="OnCheckAgain">
+          <AppBarButton.Icon>
+            <SymbolIcon Symbol="Refresh" />
+          </AppBarButton.Icon>
+          <AppBarButton.KeyboardAccelerators>
+            <KeyboardAccelerator Key="F5" />
+            <KeyboardAccelerator Key="R" Modifiers="Control" />
+          </AppBarButton.KeyboardAccelerators>
+        </AppBarButton>
+        <AppBarButton
+            Label="{x:Bind shown:Words.Window.CopyReport}"
+            ToolTipService.ToolTip="{x:Bind shown:Words.Window.CopyReportHelp}"
+            AccessKey="R"
+            IsEnabled="{x:Bind ViewModel.CanCopyReport, Mode=OneWay}"
+            AutomationProperties.AutomationId="machine.copyReport"
+            Click="OnCopyReport">
+          <AppBarButton.Icon>
+            <SymbolIcon Symbol="Copy" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+      </CommandBar>
+    </Grid>
+    <ScrollViewer
+        Grid.Row="1"
+        Padding="{StaticResource PageContentPadding}"
+        AutomationProperties.AutomationId="checks"
+        AutomationProperties.Name="{x:Bind shown:Words.Window.Checks}">
+      <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+        <!-- Doctor's last line over the checks, scrolling with them. -->
+        <InfoBar
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.HasSummary, Mode=OneWay}"
+            Title="{x:Bind ViewModel.Summary, Mode=OneWay}"
+            Message="{x:Bind ViewModel.Verdict, Mode=OneWay}"
+            Severity="{x:Bind local:DiagnosticsPage.Severity(ViewModel.Level), Mode=OneWay}"
+            AutomationProperties.AutomationId="machine.summary" />
+        <!-- Each tool's checks under its name, as the settings page's sections are. -->
+        <StackPanel x:Name="Groups" Spacing="{StaticResource SettingsCardSpacing}" />
+      </StackPanel>
+    </ScrollViewer>
+    <local:EmptyState
+        Grid.Row="1"
+        Busy="True"
+        Visibility="{x:Bind ViewModel.Waiting, Mode=OneWay}"
+        Title="{x:Bind ViewModel.WaitingText, Mode=OneWay}" />
+  </Grid>
+</Page>

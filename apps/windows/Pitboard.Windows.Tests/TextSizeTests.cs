@@ -42,7 +42,7 @@ public sealed class TextSizeTests
         [
             await Views.Shown(new AccountRow { Account = new ShownAccount(Items.Account("claude", "work", inUse: true), _ => { }) }),
             await Views.Navigated<ActivityPage>(Views.Context(new AppModel(new StandInModel(snapshot)))),
-            await Views.Navigated<MachinePage>(Views.Context(new AppModel(new StandInModel(
+            await Views.Navigated<DiagnosticsPage>(Views.Context(new AppModel(new StandInModel(
                 snapshot with { Machine = snapshot.Machine with { Checks = checks } })))),
             await Views.Navigated<AccountsPage>(Views.Context(
                 new AppModel(new StandInModel(snapshot with

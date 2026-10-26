@@ -1,7 +1,7 @@
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pitboard.Core;
 using Pitboard.Windows;
@@ -27,7 +27,6 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         WindowChrome.Apply(this);
         WindowChrome.MinimumSize(this, 640, 500);
         // Where it was closed, partly under the taskbar too, or at Windows' own place for a new application window.
@@ -40,7 +39,7 @@ public sealed partial class MainWindow : Window
         else
         {
             var scale = Shell.Scale(handle);
-            AppWindow.Resize(new SizeInt32((int)(1100 * scale), (int)(720 * scale)));
+            AppWindow.Resize(new SizeInt32((int)(960 * scale), (int)(680 * scale)));
             WindowChrome.Fit(this);
         }
 
@@ -49,6 +48,8 @@ public sealed partial class MainWindow : Window
         {
             OpenWindow = openWindow,
             Notifications = notifications ?? (() => null),
+            Show = Show,
+            Back = ShowSettings,
         };
         // A dialog needs the window's XamlRoot, which its content has once loaded.
         Navigation.Loaded += (_, _) =>
@@ -89,65 +90,75 @@ public sealed partial class MainWindow : Window
         settings.Invoked += (_, args) =>
         {
             args.Handled = true;
-            Select(null);
+            ShowSettings();
         };
         Navigation.KeyboardAccelerators.Add(settings);
-        Select(Pane.Accounts);
+        Show(new Place.Accounts());
     }
 
-    // Null while the settings page is shown.
-    public Pane? Selected =>
-        Navigation.SelectedItem is NavigationViewItem { Tag: string tag } && Enum.TryParse<Pane>(tag, out var pane)
-            ? pane
-            : null;
-
-    public void Select(Pane? pane) =>
-        Navigation.SelectedItem = pane is { } shown
-            ? Navigation.MenuItems.OfType<NavigationViewItem>().First(item => item.Tag as string == shown.ToString())
-            : Navigation.SettingsItem;
-
-    public void ShowLimits()
+    // Diagnostics and Activity are pages of Settings, as Windows Settings keeps Troubleshoot's.
+    public void Show(Place place)
     {
-        if (Pages.Content is SettingsPage page)
+        switch (place)
         {
-            page.ShowLimits();
+            case Place.Settings { Section: var section }:
+                ShowSettings();
+                ((SettingsPage)Pages.Content).Show(section);
+                break;
+            case Place.Checks:
+                Navigate(typeof(DiagnosticsPage), new DrillInNavigationTransitionInfo());
+                break;
+            case Place.Activity:
+                Navigate(typeof(ActivityPage), new DrillInNavigationTransitionInfo());
+                break;
+            default:
+                Navigate(typeof(AccountsPage));
+                break;
         }
     }
 
-    // As NavigationView's own guidance navigates its frame: once, and only to a page not shown already.
-    private void OnSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    // As it was left, scrolled where it was.
+    public void ShowSettings() => Navigate(typeof(SettingsPage));
+
+    // As NavigationView's guidance navigates its frame: only to a page not shown already. Settings' item stays selected
+    // over its own pages.
+    private void Navigate(Type page, NavigationTransitionInfo? transition = null)
     {
-        var page = Selected switch
-        {
-            Pane.Accounts => typeof(AccountsPage),
-            Pane.Activity => typeof(ActivityPage),
-            Pane.Checks => typeof(MachinePage),
-            _ => typeof(SettingsPage),
-        };
+        Navigation.SelectedItem = page == typeof(AccountsPage) ? AccountsItem : Navigation.SettingsItem;
         if (Pages.CurrentSourcePageType != page)
         {
-            Pages.Navigate(page, _context, args.RecommendedNavigationTransitionInfo);
+            Pages.Navigate(page, _context, transition);
         }
     }
 
-    private void OnNavigated(object sender, NavigationEventArgs args) => ShowSides(Navigation.DisplayMode);
-
-    private void OnDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args) =>
-        ShowSides(args.DisplayMode);
-
-    // Each page's sides: NavigationView's guidance gives its content 12 epx in Minimal and 24 otherwise.
-    private void ShowSides(NavigationViewDisplayMode mode)
+    // Each click, also on the item already selected, which takes a page of Settings back to Settings.
+    private void OnItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
-        if (Pages.Content is Page page)
+        if (args.IsSettingsInvoked)
         {
-            VisualStateManager.GoToState(page, mode == NavigationViewDisplayMode.Minimal ? "Minimal" : "Wide", useTransitions: false);
+            ShowSettings();
+        }
+        else
+        {
+            Show(new Place.Accounts());
         }
     }
 
-    private void OnPaneToggleRequested(TitleBar sender, object args) => Navigation.IsPaneOpen = !Navigation.IsPaneOpen;
+    private void OnNavigated(object sender, NavigationEventArgs args) =>
+        AppTitleBar.IsBackButtonVisible = args.SourcePageType == typeof(DiagnosticsPage) || args.SourcePageType == typeof(ActivityPage);
 
-    // Two regions, the navigation pane and the page, so Shift+F6's reverse cycle is F6's. A pane Minimal keeps closed is
-    // reached through the title bar's toggle.
+    private void OnBackRequested(TitleBar sender, object args) => ShowSettings();
+
+    private void OnBack(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (AppTitleBar.IsBackButtonVisible)
+        {
+            args.Handled = true;
+            ShowSettings();
+        }
+    }
+
+    // Two regions, the navigation pane and the page, so Shift+F6's reverse cycle is F6's.
     private void OnNextRegion(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;
@@ -156,9 +167,9 @@ public sealed partial class MainWindow : Window
         {
             (FocusManager.FindFirstFocusableElement(Pages) as UIElement)?.Focus(FocusState.Keyboard);
         }
-        else if (Navigation.SelectedItem is not UIElement selected || !selected.Focus(FocusState.Keyboard))
+        else
         {
-            (FocusManager.FindFirstFocusableElement(AppTitleBar) as UIElement)?.Focus(FocusState.Keyboard);
+            (Navigation.SelectedItem as UIElement)?.Focus(FocusState.Keyboard);
         }
     }
 
@@ -175,7 +186,7 @@ public sealed partial class MainWindow : Window
         _context.Open(new Uri(IconMenu.HelpLink));
     }
 
-    // Ctrl+N adds an account from any pane; the model then shows the accounts.
+    // Ctrl+N adds an account from any page; the model then shows the accounts.
     private void OnAddAccount(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;

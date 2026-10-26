@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Pitboard.Core;
 using Pitboard.Windows;
 
 namespace Pitboard.Views;
@@ -54,12 +55,18 @@ public sealed partial class SettingsPage : Page
         ViewModel.Shown();
     }
 
-    // The page keeps where it was scrolled to, and a notice about a limit opens it on that setting.
-    public void ShowLimits()
+    // The page keeps where it was scrolled to, and what the model asks for opens it on its section.
+    public void Show(SettingsSection section)
     {
+        var header = section switch
+        {
+            SettingsSection.Limits => LimitsHeader,
+            SettingsSection.Advanced => AdvancedHeader,
+            _ => GeneralHeader,
+        };
         if (IsLoaded)
         {
-            BringLimitsIntoView();
+            BringIntoView(header);
             return;
         }
 
@@ -67,13 +74,17 @@ public sealed partial class SettingsPage : Page
         once = (_, _) =>
         {
             Loaded -= once;
-            BringLimitsIntoView();
+            BringIntoView(header);
         };
         Loaded += once;
     }
 
-    private void BringLimitsIntoView() =>
-        LimitsHeader.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+    private static void BringIntoView(TextBlock header) =>
+        header.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+
+    private void OnShowDiagnostics(object sender, RoutedEventArgs args) => Context.Show(new Place.Checks());
+
+    private void OnShowActivity(object sender, RoutedEventArgs args) => Context.Show(new Place.Activity());
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {

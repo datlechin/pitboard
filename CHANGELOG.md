@@ -59,6 +59,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - After switching Claude Code by itself, the app's notification and its notice in the window
   offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
   switched until that limit resets.
+- The Windows app's **Diagnostics** offers each check's fix, or **Learn more**, beside it, and
+  **Copy report** copies the checks for a bug report.
 
 ### Changed
 
@@ -147,6 +149,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are about, and show a check that passed only where it says something to look for.
 - The Windows icon's tooltip goes on in lower case after an account's name, as **work: weekly
   18% used**.
+- The Windows app's window has a title bar of the standard height and a compact pane with
+  **Accounts** and **Settings**, and opens at 960 by 680.
+- The Windows app's **Activity** and **This PC**, now **Diagnostics**, open from **Settings** >
+  **Troubleshoot**, with a back button in the title bar, and Activity's last column is **By**.
 
 ### Removed
 

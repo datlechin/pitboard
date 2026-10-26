@@ -42,9 +42,9 @@ public sealed partial class ScreenshotTests
         Launched.Within(launched.Row("claude/work"), found => found.ByAutomationId("account.inUse"), "work in use");
         KeepWindow(window, "windows-window-accounts");
 
-        launched.Select("pane.machine");
+        launched.OpenFromSettings(window, "settings.diagnostics");
         launched.Element("machine.summary");
-        KeepWindow(window, "windows-checks");
+        KeepWindow(window, "windows-diagnostics");
 
         // The menu opens over the window, as the macOS picture shows it.
         var frame = Frame(window);
@@ -271,7 +271,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = InFront(launched.OpenWindow());
-        launched.Select("pane.activity");
+        launched.OpenFromSettings(window, "settings.activity");
         Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
         KeepWindow(window, "windows-activity");
 
