@@ -1,10 +1,14 @@
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Pitboard.Core;
 using Pitboard.Views;
+using Windows.Foundation;
 
 namespace Pitboard.Windows.Tests;
 
@@ -13,11 +17,51 @@ public sealed class AccountsPageTests
 {
     private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: null)), Enabled: true);
 
-    private static async Task<(AccountsPage Page, StandInModel Model, AppModel App)> Over(Snapshot snapshot)
+    private static async Task<(AccountsPage Page, StandInModel Model, AppModel App)> Over(
+        Snapshot snapshot, double width = double.NaN, Action<string>? copy = null, Action<WindowAccount>? openWindow = null)
     {
         var model = new StandInModel(snapshot);
         var app = new AppModel(model);
-        return (await Views.Navigated<AccountsPage>(Views.Context(app)), model, app);
+        var frame = await Views.Shown(new Frame { IsNavigationStackEnabled = false, Width = width });
+        var context = Views.Context(app, copy: copy) with { OpenWindow = openWindow };
+        return (await Views.Navigate<AccountsPage>(frame, context), model, app);
+    }
+
+    private static Snapshot Listing(params AccountItem[] accounts) =>
+        Snapshots.Read(1) with { Sections = [Items.Section("claude", null, accounts)] };
+
+    // What work and spare look like with both limits read, spare's sign-in about to expire.
+    private static AccountItem Spare() =>
+        Items.Account("claude", "spare") with
+        {
+            Plan = "Max 5x",
+            Limits = [Items.Limit(100), Items.Limit(61) with { Kind = new LimitKind.Weekly(), Short = "Weekly", Resets = "Resets Thu 2:00 PM" }],
+            Notes = [new AccountNote(NoteKind.Expiring, "Sign-in expires in 2 days", Action: null, Learn: null)],
+            Detail = new AccountDetail(
+                Email: "spare@example.com", Plan: "Max 5x", SignedInUntil: 1_800_172_800, SignIn: "Saved sign-in valid until Nov 20",
+                Warm: new WarmDetail(
+                    On: true, Said: "Warms up again at 3:45 PM", NextAt: null, RunningUntil: null,
+                    Settings: new Choice("Warm-up settings", new Intent.Show(new Place.Settings(SettingsSection.Limits)), Enabled: true)),
+                ReadAt: null, Read: null),
+            Actions =
+            [
+                Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare")), Items.RenameAction("claude", "spare"),
+                Items.WindowAction(Items.Window("claude", "spare")), Items.RemoveAction("claude/spare"),
+            ],
+        };
+
+    private static AccountItem Work() =>
+        Items.Account("claude", "work", inUse: true) with { Plan = "Team 5x", Limits = [Items.Limit(42)] };
+
+    private static SettingsExpander Row(Page page, string qualified) => Views.Element<SettingsExpander>(page, $"account.{qualified}");
+
+    private static Rect Bounds(FrameworkElement element, UIElement within) =>
+        element.TransformToVisual(within).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+    private static async Task Open(SettingsExpander row, string inside)
+    {
+        row.IsExpanded = true;
+        await Views.Until(() => Views.Texts(row).Contains(inside), $"{AutomationProperties.GetAutomationId(row)} did not open on '{inside}'");
     }
 
     [UITestMethod]
@@ -60,7 +104,7 @@ public sealed class AccountsPageTests
     [UITestMethod]
     public async Task ShowingThePageReadsAccountsWhoseNumbersAreOld()
     {
-        var (page, model, _) = await Over(Snapshots.Read(1));
+        var (_, model, _) = await Over(Snapshots.Read(1));
 
         Assert.Contains(new Intent.PaneShown(Pane.Accounts), model.Sent);
     }
@@ -80,122 +124,17 @@ public sealed class AccountsPageTests
         var texts = Views.Texts(page);
         Assert.Contains("Claude Code", texts);
         Assert.Contains("Codex", texts);
-        Views.Element<ListViewItem>(page, "account.claude/work");
-        Views.Element<ListViewItem>(page, "account.codex/spare");
+        Row(page, "claude/work");
+        Row(page, "codex/spare");
     }
 
-    // A ListView over a CollectionViewSource follows the view's current item, which starts on a row, so twoTools opened
-    // with a row selected that nobody chose.
+    // One tool's accounts are under no heading, which would take room and say nothing.
     [UITestMethod]
-    public async Task NoRowIsSelectedUntilOneIsChosen()
+    public async Task OneToolsAccountsHaveNoHeading()
     {
-        var two = Snapshots.Read(1) with
-        {
-            Sections =
-            [
-                Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true), Items.Account("claude", "old")),
-                Items.Section("codex", "Codex", Items.Account("codex", "spare")),
-            ],
-        };
-        var (page, _, app) = await Over(two);
-        var list = Views.Element<ListView>(page, "accounts");
-        await Views.Drained();
-        Assert.IsNull(list.SelectedItem);
+        var (page, _, _) = await Over(Listing(Work(), Spare()));
 
-        app.Apply(two with
-        {
-            Revision = 2,
-            Sections =
-            [
-                Items.Section("claude", "Claude Code", Items.Account("claude", "old"), Items.Account("claude", "work", inUse: true)),
-                Items.Section("codex", "Codex", Items.Account("codex", "spare")),
-            ],
-        });
-        await Views.Drained();
-
-        Assert.IsNull(list.SelectedItem);
-    }
-
-    // The model makes every list anew for each snapshot, and the frame keeps the page while another shows; the row the
-    // person selected stays selected.
-    [UITestMethod]
-    public async Task ASelectedRowStaysSelectedAcrossSnapshotsAndPages()
-    {
-        var first = Snapshots.Read(1) with
-        {
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare"))],
-        };
-        var (page, _, app) = await Over(first);
-        var list = Views.Element<ListView>(page, "accounts");
-        list.SelectedIndex = 1;
-        var selected = (ShownAccount)list.SelectedItem;
-
-        app.Apply(first with
-        {
-            Revision = 2,
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare") with { Title = "spare 12%" })],
-        });
-
-        Assert.AreSame(selected, list.SelectedItem);
-        Assert.AreEqual("spare 12%", selected.Item.Title);
-
-        var frame = page.Frame;
-        await Views.Navigate<ActivityPage>(frame, Views.Context(app));
-        app.Apply(first with
-        {
-            Revision = 3,
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare") with { Title = "spare 30%" })],
-        });
-        var back = await Views.Navigate<AccountsPage>(frame, Views.Context(app));
-
-        Assert.AreSame(page, back, "the frame made the accounts page again");
-        Assert.AreSame(selected, list.SelectedItem);
-        Assert.AreEqual("spare 30%", selected.Item.Title);
-    }
-
-    // A rename keeps the account's id, so the row stays the same object in the same container.
-    [UITestMethod]
-    public async Task ARenamedRowIsFoundByItsNewName()
-    {
-        var personal = Items.Account("claude", "personal") with { Id = "claude:same" };
-        var first = Snapshots.Read(1) with
-        {
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), personal)],
-        };
-        var (page, _, app) = await Over(first);
-        Views.Element<ListViewItem>(page, "account.claude/personal");
-
-        app.Apply(first with
-        {
-            Revision = 2,
-            Sections =
-            [
-                Items.Section(
-                    "claude", null, Items.Account("claude", "work", inUse: true),
-                    personal with { Qualified = "claude/home", Title = "home" }),
-            ],
-        });
-        page.UpdateLayout();
-
-        Views.Element<ListViewItem>(page, "account.claude/home");
-    }
-
-    [UITestMethod]
-    public async Task ANoticeAndTheSetupStepComeBeforeTheAccounts()
-    {
-        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
-        var (page, model, _) = await Over(Snapshots.Read(1) with
-        {
-            Notices = [Items.Notice("switch/codex", Items.Dismiss("codex"))],
-            Setup = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]),
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))],
-        });
-
-        Views.Element<InfoBar>(page, "notice.switch/codex");
-        Assert.Contains("Add a second account", Views.Texts(page));
-        Views.Press(Views.Button(page, "Not now"));
-
-        Assert.Contains(notNow.Intent, model.Sent);
+        Assert.IsFalse(Views.Visible<TextBlock>(page).Any(text => AutomationProperties.GetHeadingLevel(text) == AutomationHeadingLevel.Level2));
     }
 
     // Narrator's H goes from the page's title to each tool's accounts.
@@ -216,6 +155,211 @@ public sealed class AccountsPageTests
             .Select(text => text.Text);
 
         Assert.AreEqual("Claude Code, Codex", string.Join(", ", headings));
+    }
+
+    // Plan 4.9: a row is the account, its plan, a line per limit and its one note, with In use or its button at its end.
+    [UITestMethod]
+    public async Task ARowSaysItsLimitsAndItsNoteAndOffersItsAction()
+    {
+        var (page, model, _) = await Over(Listing(Work(), Spare()));
+        var spare = Row(page, "claude/spare");
+
+        var texts = Views.Texts(spare);
+        foreach (var said in new[] { "spare", "Max 5x", "5-hour", "100%", "Resets 10:10 AM", "Weekly", "61%", "Resets Thu 2:00 PM", "Sign-in expires in 2 days" })
+        {
+            Assert.Contains(said, texts);
+        }
+
+        Assert.DoesNotContain("spare@example.com", texts, "the email before the row is opened");
+        Assert.DoesNotContain("In use", texts);
+        Assert.Contains("In use", Views.Texts(Row(page, "claude/work")));
+        var use = Views.Element<Button>(spare, "account.action");
+        Assert.AreEqual("Use spare", AutomationProperties.GetName(use));
+        Views.Press(use);
+        Assert.Contains(new Intent.SwitchTo("claude/spare"), model.Sent);
+    }
+
+    // Narrator reads the row as one sentence, and each limit once, not the bar and each figure on their own.
+    [UITestMethod]
+    public async Task TheRowAndEachLimitAreSpokenOnce()
+    {
+        var (page, _, _) = await Over(Listing(Spare()));
+        var spare = Row(page, "claude/spare");
+
+        Assert.AreEqual(Spare().Spoken, AutomationProperties.GetName(spare));
+        var spoken = Views.Visible<TextBlock>(spare).Single(text => text.Text == "5-hour");
+        Assert.AreEqual(Spare().Limits[0].Spoken, AutomationProperties.GetName(spoken));
+        foreach (var unspoken in Views.Visible<TextBlock>(spare).Where(text => text.Text is "100%" or "Resets 10:10 AM"))
+        {
+            Assert.AreEqual(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(unspoken));
+        }
+
+        Assert.IsTrue(Views.Visible<ProgressBar>(spare).All(bar => AutomationProperties.GetAccessibilityView(bar) == AccessibilityView.Raw));
+    }
+
+    // Plan 10 asks this be measured first: a SettingsExpander holding bars keeps its layout. At the window's narrowest,
+    // every bar is drawn, the bars of two accounts line up, and the button stays at the row's end.
+    [UITestMethod]
+    public async Task AtTheNarrowestTheBarsLineUpAndTheButtonStaysAtTheEnd()
+    {
+        // 640 epx less the compact pane's 48.
+        var (page, _, _) = await Over(Listing(Work(), Spare()), width: 592);
+        var work = Row(page, "claude/work");
+        var spare = Row(page, "claude/spare");
+        var workBar = Views.Visible<ProgressBar>(work).Single();
+        var spareBars = Views.Visible<ProgressBar>(spare).ToArray();
+
+        Assert.HasCount(2, spareBars);
+        Assert.IsTrue(
+            spareBars.Append(workBar).All(bar => bar.ActualWidth >= 80),
+            $"bars {string.Join(", ", spareBars.Append(workBar).Select(bar => bar.ActualWidth))} wide");
+        Assert.AreEqual(Bounds(workBar, page).Left, Bounds(spareBars[0], page).Left, 0.5, "work's bar and spare's do not line up");
+        var button = Views.Element<Button>(spare, "account.action");
+        Assert.IsGreaterThan(Bounds(spareBars[0], page).Right, Bounds(button, page).Left, "the button runs into the bars");
+        Assert.AreEqual(Bounds(work, page).Right, Bounds(spare, page).Right, 0.5);
+    }
+
+    // At the default 960 epx, a bar is as long as the mockup draws it, not the whole row.
+    [UITestMethod]
+    public async Task AWideRowsBarsKeepTheirLength()
+    {
+        var (page, _, _) = await Over(Listing(Spare()), width: 912);
+
+        Assert.IsTrue(Views.Visible<ProgressBar>(page).All(bar => bar.ActualWidth is >= 80 and <= 260.5));
+    }
+
+    // Opened, a row says its email with Copy, its sign-in, its warm-up with a way to its settings, and its commands.
+    [UITestMethod]
+    public async Task AnOpenedRowSaysTheAccountsDetailAndOffersItsCommands()
+    {
+        var copied = new List<string>();
+        var opened = new List<WindowAccount>();
+        var (page, model, _) = await Over(Listing(Spare()), copy: copied.Add, openWindow: opened.Add);
+        var spare = Row(page, "claude/spare");
+        await Open(spare, "Saved sign-in valid until Nov 20");
+
+        var texts = Views.Texts(spare);
+        foreach (var said in new[] { "Email", "spare@example.com", "Sign-in", "Warm-up", "Warms up again at 3:45 PM" })
+        {
+            Assert.Contains(said, texts);
+        }
+
+        Views.Press(Views.Element<Button>(spare, "detail.copyEmail"));
+        new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(spare, "detail.warmUpSettings")).Invoke();
+        Views.Press(Views.Element<Button>(spare, "detail.window.claude.ai"));
+        Views.Press(Views.Element<Button>(spare, "detail.rename"));
+
+        Assert.AreEqual("spare@example.com", copied.Single());
+        Assert.AreEqual(Items.Window("claude", "spare"), opened.Single());
+        Assert.Contains(new Intent.Show(new Place.Settings(SettingsSection.Limits)), model.Sent);
+        Assert.Contains(new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), model.Sent);
+        Assert.AreEqual(
+            "detail.window.claude.ai, detail.rename, detail.remove",
+            string.Join(", ", Views.Visible<Button>(spare).Select(AutomationProperties.GetAutomationId).Where(id => id.StartsWith("detail.window", StringComparison.Ordinal) || id is "detail.rename" or "detail.remove")));
+    }
+
+    // Remove account is dimmed for the account in use, whose record is the only one of who is signed in.
+    [UITestMethod]
+    public async Task TheAccountInUseHasRemoveDimmed()
+    {
+        var work = Work() with { Actions = [Items.RenameAction("claude", "work"), Items.RemoveAction("claude/work", enabled: false)] };
+        var (page, _, _) = await Over(Listing(work));
+        var row = Row(page, "claude/work");
+        await Open(row, "Email");
+
+        Assert.IsFalse(Views.Element<Button>(row, "detail.remove").IsEnabled);
+        Assert.IsTrue(Views.Element<Button>(row, "detail.rename").IsEnabled);
+    }
+
+    // The model makes every list anew for each snapshot, and the frame keeps the page while another shows; the row the
+    // person opened stays open.
+    [UITestMethod]
+    public async Task AnOpenedRowStaysOpenAcrossSnapshotsAndPages()
+    {
+        var first = Listing(Work(), Spare());
+        var (page, _, app) = await Over(first);
+        var spare = Row(page, "claude/spare");
+        await Open(spare, "Email");
+
+        app.Apply(first with { Revision = 2, Sections = [Items.Section("claude", null, Work(), Spare() with { Title = "spare 12%" })] });
+        var frame = page.Frame;
+        await Views.Navigate<ActivityPage>(frame, Views.Context(app));
+        var back = await Views.Navigate<AccountsPage>(frame, Views.Context(app));
+
+        Assert.AreSame(page, back, "the frame made the accounts page again");
+        Assert.IsTrue(Row(back, "claude/spare").IsExpanded);
+        Assert.Contains("spare 12%", Views.Texts(Row(back, "claude/spare")));
+    }
+
+    // A rename keeps the account's id, so the row stays the same object in the same container.
+    [UITestMethod]
+    public async Task ARenamedRowIsFoundByItsNewName()
+    {
+        var personal = Items.Account("claude", "personal") with { Id = "claude:same" };
+        var first = Listing(Items.Account("claude", "work", inUse: true), personal);
+        var (page, _, app) = await Over(first);
+        Row(page, "claude/personal");
+
+        app.Apply(first with
+        {
+            Revision = 2,
+            Sections =
+            [
+                Items.Section(
+                    "claude", null, Items.Account("claude", "work", inUse: true),
+                    personal with { Qualified = "claude/home", Title = "home" }),
+            ],
+        });
+        page.UpdateLayout();
+
+        Row(page, "claude/home");
+    }
+
+    // The name sat in a horizontal StackPanel, which gives it all the width it asks for, so it never cut.
+    [UITestMethod]
+    public async Task ALongNameIsCutAndKeepsItsPlan()
+    {
+        var (page, _, _) = await Over(Listing(Items.Account("claude", "an-account-named-far-too-long-for-its-row-at-the-narrowest") with { Plan = "Max" }), width: 400);
+        var row = Row(page, "claude/an-account-named-far-too-long-for-its-row-at-the-narrowest");
+        var name = Views.Visible<TextBlock>(row).Single(text => text.Name == "TitleText");
+        var plan = Views.Visible<TextBlock>(row).Single(text => text.Name == "PlanText");
+
+        await Views.Until(() => name.IsTextTrimmed, "the name was not cut");
+        Assert.IsGreaterThan(0.0, plan.ActualWidth);
+        Assert.IsLessThanOrEqualTo(Bounds(row, page).Right, Bounds(plan, page).Right, "the plan runs past the row");
+    }
+
+    // The XAML compiler calls an x:Bind function only for an argument that is not null, so a row given another account
+    // kept the plan of the one before.
+    [UITestMethod]
+    public async Task ARowGivenAnAccountWithoutAPlanSaysNone()
+    {
+        var first = Listing(Items.Account("claude", "work", inUse: true) with { Plan = "Pro" });
+        var (page, _, app) = await Over(first);
+
+        app.Apply(first with { Revision = 2, Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))] });
+        await Views.Drained();
+
+        Assert.AreEqual("", Views.Descendants(Row(page, "claude/work")).OfType<TextBlock>().Single(text => text.Name == "PlanText").Text);
+    }
+
+    [UITestMethod]
+    public async Task ANoticeAndTheSetupStepComeBeforeTheAccounts()
+    {
+        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+        var (page, model, _) = await Over(Snapshots.Read(1) with
+        {
+            Notices = [Items.Notice("switch/codex", Items.Dismiss("codex"))],
+            Setup = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]),
+            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))],
+        });
+
+        var notice = Views.Element<InfoBar>(page, "notice.switch/codex");
+        Assert.IsLessThan(Bounds(Row(page, "claude/work"), page).Top, Bounds(notice, page).Bottom);
+        Assert.Contains("Add a second account", Views.Texts(page));
+        Views.Press(Views.Button(page, "Not now"));
+
+        Assert.Contains(notNow.Intent, model.Sent);
     }
 
     // An empty page's one thing to do is its accent button, as Windows' own empty pages have; a retry is not.
@@ -256,25 +400,36 @@ public sealed class AccountsPageTests
         Assert.AreEqual(new Uri("https://claude.com/claude-code"), opened.Single());
     }
 
-    // The row's own button sends what the model offers it.
-    [UITestMethod]
-    public async Task ARowsButtonSendsItsAction()
-    {
-        var (page, model, _) = await Over(Snapshots.Read(1) with
-        {
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare"))],
-        });
-
-        Views.Press(Views.Button(Views.Element<ListViewItem>(page, "account.claude/spare"), "Use"));
-
-        Assert.Contains(new Intent.SwitchTo("claude/spare"), model.Sent);
-    }
-
     [UITestMethod]
     public async Task RefreshIsHeldBackWhileAReadIsUnderWay()
     {
         var (page, _, _) = await Over(Snapshots.Read(1) with { Reading = true });
 
         Assert.IsFalse(Views.Element<AppBarButton>(page, "accounts.refresh").IsEnabled);
+    }
+
+    // Microsoft's access keys guidance, for the page's commands.
+    [UITestMethod]
+    public async Task ThePagesCommandsHaveAccessKeys()
+    {
+        var (page, _, _) = await Over(Snapshots.Read(1));
+
+        string[] commands = ["accounts.refresh", "accounts.add"];
+
+        Assert.AreEqual("R, A", string.Join(", ", commands.Select(id => Views.Element<AppBarButton>(page, id).AccessKey)));
+    }
+
+    // A row's toggle opens and closes it, and its button is the next stop for Tab.
+    [UITestMethod]
+    public async Task ARowsToggleComesBeforeItsButton()
+    {
+        var (page, _, _) = await Over(Listing(Work(), Spare()));
+        var spare = Row(page, "claude/spare");
+        var toggle = Views.Descendants(spare).OfType<ToggleButton>().First();
+
+        Assert.IsTrue(toggle.Focus(FocusState.Keyboard), "the row's toggle took no focus");
+        var next = FocusManager.FindNextElement(FocusNavigationDirection.Next, new FindNextElementOptions { SearchRoot = page.XamlRoot.Content });
+
+        Assert.AreEqual("account.action", AutomationProperties.GetAutomationId((DependencyObject)next));
     }
 }

@@ -61,6 +61,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switched until that limit resets.
 - The Windows app's **Diagnostics** offers each check's fix, or **Learn more**, beside it, and
   **Copy report** copies the checks for a bug report.
+- An account's row in the Windows app opens on its email with **Copy**, until when its saved
+  sign-in is valid, its warm-up with **Warm-up settings**, and **Open claude.ai**, **Rename** and
+  **Remove account**.
+- The Windows app's commands and an account's shortcut menu have access keys.
 
 ### Changed
 
@@ -153,6 +157,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Accounts** and **Settings**, and opens at 960 by 680.
 - The Windows app's **Activity** and **This PC**, now **Diagnostics**, open from **Settings** >
   **Troubleshoot**, with a back button in the title bar, and Activity's last column is **By**.
+- The Windows app shows each account as a row with its name, its plan, a line for each limit and
+  at most one note, and **In use** or its button at its end, its bars in the accent color until a
+  limit runs low.
 
 ### Removed
 
@@ -165,6 +172,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app
   refreshes saved sign-ins as it reads usage, and `pitboard renew` and `pitboard schedule status`
   keep both.
+- The Windows app no longer switches to an account on a double click of its row: Enter on the row
+  or its button does.
 
 ### Fixed
 

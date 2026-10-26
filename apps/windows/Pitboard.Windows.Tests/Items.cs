@@ -51,10 +51,20 @@ internal static class Items
             ResetsAt: 1_800_007_800, Resets: "Resets 10:10 AM", ResetsIn: "in 2 hr 10 min",
             Spoken: $"5-hour limit, {percent:0} percent used, resets 10:10 AM");
 
-    public static ItemOffer Forget(string qualified) =>
-        new(
-            Title: "Forget…", Intent: new Intent.Forget(qualified), Enabled: true,
-            Confirm: new Question("Forget this account?", "Its parked login is deleted.", "Forget", Destructive: true, ConfirmIsDefault: true));
+    // What an account's own menu and expanded row offer to do to it.
+    public static AccountAction Action(ActionKind kind, string title, Intent intent, bool enabled = true, Question? confirm = null) =>
+        new(kind, title, intent, Window: null, enabled, confirm);
+
+    public static AccountAction RenameAction(string provider, string label) =>
+        Action(ActionKind.Rename, "Rename…", new Intent.PresentSheet(new Sheet.Rename(provider, label)));
+
+    public static AccountAction RemoveAction(string qualified, bool enabled = true) =>
+        Action(
+            ActionKind.Remove, "Remove account…", new Intent.Forget(qualified), enabled,
+            new Question("Remove “spare”?", "Its saved sign-in is deleted.", "Remove", Destructive: true, ConfirmIsDefault: true));
+
+    public static AccountAction WindowAction(WindowAccount window) =>
+        new(ActionKind.OpenWindow, $"Open {window.Site.Name}", Intent: null, window, Enabled: true, Confirm: null);
 
     public static PanelNotice Notice(string id, params NoticeAction[] actions) =>
         new(

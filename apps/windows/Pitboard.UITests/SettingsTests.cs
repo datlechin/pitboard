@@ -20,15 +20,7 @@ public sealed class SettingsTests
     private static AutomationElement Control(Launched launched, string automationId) =>
         launched.Find(found => found.ByAutomationId(automationId), automationId);
 
-    // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
-    // name, not its id.
-    private static void Expand(Launched launched, string automationId)
-    {
-        var group = Control(launched, automationId);
-        var expander = group.FindAllDescendants().FirstOrDefault(found => found.Patterns.ExpandCollapse.IsSupported)
-            ?? throw new AssertFailedException($"{automationId} holds nothing that expands");
-        expander.Patterns.ExpandCollapse.Pattern.Expand();
-    }
+    private static void Expand(Launched launched, string automationId) => Launched.Expand(Control(launched, automationId));
 
     private static ToggleState State(AutomationElement toggle) => toggle.Patterns.Toggle.Pattern.ToggleState.Value;
 

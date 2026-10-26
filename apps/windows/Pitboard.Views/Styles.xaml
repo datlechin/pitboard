@@ -22,6 +22,20 @@
   <Style x:Key="FailedMarkStyle" TargetType="FontIcon">
     <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
   </Style>
+  <!-- An account's mark: the one in use is filled as well as in the accent. -->
+  <Style x:Key="AccountMarkStyle" TargetType="FontIcon">
+    <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+  </Style>
+  <Style x:Key="InUseMarkStyle" TargetType="FontIcon">
+    <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+  </Style>
+  <!-- A limit's bar once it is low or out; one with room keeps ProgressBar's accent. -->
+  <Style x:Key="LowLimitBarStyle" TargetType="ProgressBar" BasedOn="{StaticResource DefaultProgressBarStyle}">
+    <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+  </Style>
+  <Style x:Key="OutLimitBarStyle" TargetType="ProgressBar" BasedOn="{StaticResource DefaultProgressBarStyle}">
+    <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+  </Style>
   <Style x:Key="PageTitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
     <Setter Property="AutomationProperties.HeadingLevel" Value="Level1" />
   </Style>

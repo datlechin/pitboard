@@ -5,7 +5,6 @@ internal static class Glyphs
 {
     public const string Account = "\uE77B";
     public const string InUse = "\uEA8C";
-    public const string SignIn = "\uE8D7";
     public const string Warning = "\uE7BA";
     public const string Accounts = "\uE716";
     public const string Terminal = "\uE756";

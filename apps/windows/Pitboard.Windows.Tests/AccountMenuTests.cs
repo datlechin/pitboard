@@ -10,90 +10,88 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountMenuTests
 {
-    private static readonly ItemOffer Use = new("Use spare", new Intent.SwitchTo("claude/spare"), true, null);
-    private static readonly ItemOffer SignInAgain = new("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), false, null);
-    private static readonly ItemOffer Rename = new("Rename…", new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), true, null);
+    private static readonly AccountAction Switch = Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare"));
+    private static readonly AccountAction SignInAgain = Items.Action(
+        ActionKind.SignInAgain, "Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), enabled: false);
+    private static readonly AccountAction Rename = Items.RenameAction("claude", "spare");
 
     // Each item by what UI Automation finds it by, a separator as "-".
     private static string[] Said(MenuFlyout menu) =>
         [.. menu.Items.Select(entry => entry is MenuFlyoutItem item ? AutomationProperties.GetAutomationId(item) : "-")];
 
+    private static MenuFlyout Menu(AccountItem item, Action<string>? copy = null) => AccountMenu.For(item, (_, _) => { }, copy ?? (_ => { }));
+
     // Microsoft's menu guidance removes a context menu's items that do not apply now, as the HIG does.
     [UITestMethod]
-    public void TheMenuOffersWhatTheModelOffersThenCopyingThenForgetting()
+    public void TheMenuOffersWhatTheModelOffersThenCopyingThenRemoving()
     {
-        var item = Items.Account("claude", "spare") with
-        {
-            Offers = [Use, SignInAgain, Rename],
-            Forget = Items.Forget("claude/spare"),
-        };
+        var item = Items.Account("claude", "spare") with { Actions = [Switch, SignInAgain, Rename, Items.RemoveAction("claude/spare")] };
 
-        var menu = AccountMenu.For(item, (_, _) => { });
-
-        Assert.AreEqual(
-            "account.switchTo, account.rename, -, account.copyEmail, -, account.forget", string.Join(", ", Said(menu)));
+        Assert.AreEqual("account.switchTo, account.rename, -, account.copyEmail, -, account.forget", string.Join(", ", Said(Menu(item))));
     }
 
-    // The keys AccountKeys takes on the row, shown beside the items that do the same.
+    // The keys AccountKeys takes on the row, shown beside the items that do the same, and a letter on each item.
     [UITestMethod]
-    public void TheMenuShowsTheRowsKeys()
+    public void TheMenuShowsTheRowsKeysAndAnAccessKeyOnEachItem()
     {
-        var item = Items.Account("claude", "spare") with { Offers = [Use, Rename], Forget = Items.Forget("claude/spare") };
+        var item = Items.Account("claude", "spare") with { Actions = [Switch, Rename, Items.RemoveAction("claude/spare")] };
 
-        var shown = AccountMenu.For(item, (_, _) => { }).Items.OfType<MenuFlyoutItem>()
-            .ToDictionary(entry => AutomationProperties.GetAutomationId(entry), entry => entry.KeyboardAcceleratorTextOverride);
+        var shown = Menu(item).Items.OfType<MenuFlyoutItem>().Select(entry => $"{entry.KeyboardAcceleratorTextOverride} {entry.AccessKey}");
 
-        Assert.AreEqual("F2", shown["account.rename"]);
-        Assert.AreEqual("Ctrl+C", shown["account.copyEmail"]);
-        Assert.AreEqual("Del", shown["account.forget"]);
-        Assert.AreEqual("", shown["account.switchTo"]);
+        Assert.AreEqual(" S, F2 M, Ctrl+C C, Del R", string.Join(", ", shown));
     }
 
     [UITestMethod]
-    public void TheAccountInUseOffersNoForget()
+    public void TheAccountInUseOffersNoRemove()
     {
         var item = Items.Account("claude", "work", inUse: true) with
         {
-            Offers = [Use with { Enabled = false }, Rename],
-            Forget = Items.Forget("claude/work") with { Enabled = false },
+            Actions = [Switch with { Enabled = false }, Rename, Items.RemoveAction("claude/work", enabled: false)],
         };
 
-        Assert.AreEqual("account.rename, -, account.copyEmail", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
+        Assert.AreEqual("account.rename, -, account.copyEmail", string.Join(", ", Said(Menu(item))));
     }
 
     [UITestMethod]
     public void AnAccountWithoutAnAddressOffersNoCopy()
     {
-        var item = Items.Account("claude", "work") with { Email = "", Offers = [Rename] };
+        var item = Items.Account("claude", "work") with { Email = "", Actions = [Rename] };
 
-        Assert.AreEqual("account.rename", string.Join(", ", Said(AccountMenu.For(item, (_, _) => { }))));
+        Assert.AreEqual("account.rename", string.Join(", ", Said(Menu(item))));
     }
 
     [UITestMethod]
-    public void ForgettingCarriesItsQuestion()
+    public void RemovingCarriesItsQuestion()
     {
-        var forget = Items.Forget("claude/spare");
+        var remove = Items.RemoveAction("claude/spare");
         var asked = new List<(Question?, Intent)>();
-        var menu = AccountMenu.For(Items.Account("claude", "spare") with { Forget = forget }, (question, intent) => asked.Add((question, intent)));
+        var menu = AccountMenu.For(Items.Account("claude", "spare") with { Actions = [remove] }, (question, intent) => asked.Add((question, intent)), _ => { });
 
         new MenuFlyoutItemAutomationPeer((MenuFlyoutItem)menu.Items[^1]).Invoke();
 
-        Assert.AreEqual((forget.Confirm, forget.Intent), asked.Single());
+        Assert.AreEqual((remove.Confirm, remove.Intent!), asked.Single());
+    }
+
+    // Through the page's own copy, as Ctrl+C on the row and the expanded row's Copy do.
+    [UITestMethod]
+    public void CopyingGivesTheAddress()
+    {
+        var copied = new List<string>();
+        var menu = Menu(Items.Account("claude", "spare"), copied.Add);
+
+        new MenuFlyoutItemAutomationPeer(menu.Items.OfType<MenuFlyoutItem>().Single()).Invoke();
+
+        Assert.AreEqual("spare@example.com", copied.Single());
     }
 
     [UITestMethod]
-    public void TheAccountsWindowsComeAfterItsOffers()
+    public void TheAccountsWindowsComeAfterWhatItDoes()
     {
         var spare = Items.Window("codex", "spare");
-        var item = Items.Account("codex", "spare") with
-        {
-            Offers = [Rename],
-            Windows = [new WindowOffer("Open chatgpt.com", spare)],
-            Forget = Items.Forget("codex/spare"),
-        };
+        var item = Items.Account("codex", "spare") with { Actions = [Rename, Items.WindowAction(spare), Items.RemoveAction("codex/spare")] };
         var opened = new List<WindowAccount>();
 
-        var menu = AccountMenu.For(item, (_, _) => { }, opened.Add, held: []);
+        var menu = AccountMenu.For(item, (_, _) => { }, _ => { }, opened.Add, held: []);
         new MenuFlyoutItemAutomationPeer((MenuFlyoutItem)menu.Items[2]).Invoke();
 
         Assert.AreEqual(
@@ -105,9 +103,9 @@ public sealed class AccountMenuTests
     public void AWindowWhoseStoreIsHeldCannotBeOpened()
     {
         var spare = Items.Window("codex", "spare");
-        var item = Items.Account("codex", "spare") with { Windows = [new WindowOffer("Open chatgpt.com", spare)] };
+        var item = Items.Account("codex", "spare") with { Actions = [Items.WindowAction(spare)] };
 
-        var menu = AccountMenu.For(item, (_, _) => { }, _ => { }, held: [spare.Store]);
+        var menu = AccountMenu.For(item, (_, _) => { }, _ => { }, _ => { }, held: [spare.Store]);
 
         var entry = menu.Items.OfType<MenuFlyoutItem>().Single(found => AutomationProperties.GetAutomationId(found) == "window.chatgpt.com/spare");
         Assert.IsFalse(entry.IsEnabled);

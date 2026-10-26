@@ -135,6 +135,39 @@ public sealed class AccountsWindowTests
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 
+    // Plan 10 asked this be measured first: a row that is a SettingsExpander keeps the keyboard. Its toggle takes the
+    // focus, F2 renames, Space opens it, Ctrl+C copies its email, Tab goes on to its button, and Enter switches.
+    [TestMethod]
+    public void ARowsKeysActOnItsAccount()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
+        var window = launched.OpenWindow();
+        var personal = launched.Row("claude/personal");
+        var toggle = Launched.Within(personal, found => found.ByAutomationId("ExpanderToggleButton"), "personal's toggle");
+        Foreground.Require(window);
+        string Focused() => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "";
+        bool Becomes(Func<bool> condition) => Retry.WhileFalse(condition, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(100)).Result;
+
+        toggle.Focus();
+        Keyboard.Type(VirtualKeyShort.F2);
+        Assert.AreEqual("personal", launched.Field("sheet.name").Text);
+        launched.Answer("sheet", "CloseButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
+
+        toggle.Focus();
+        Keyboard.Type(VirtualKeyShort.SPACE);
+        Launched.Within(personal, found => found.ByAutomationId("detail.copyEmail"), "personal's email");
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
+        Assert.IsTrue(Becomes(() => ClipboardText.Read() == "dana@home.example"), $"Ctrl+C copied '{ClipboardText.Read()}'");
+
+        Keyboard.Type(VirtualKeyShort.TAB);
+        Assert.IsTrue(Becomes(() => Focused() == "account.action"), $"Tab left the focus on '{Focused()}'");
+
+        toggle.Focus();
+        Keyboard.Type(VirtualKeyShort.ENTER);
+        Launched.Within(personal, found => found.ByAutomationId("account.inUse"), "personal in use");
+    }
+
     // The other tests ask for a row's menu through UI Automation.
     [TestMethod]
     public void ARightClickOpensTheRowsMenu()

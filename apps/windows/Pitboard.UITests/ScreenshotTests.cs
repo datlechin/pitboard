@@ -39,8 +39,12 @@ public sealed partial class ScreenshotTests
         launched.Invoke("setup.action.declineTip");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.atLimitUnchosen")), "the tip stayed");
         launched.Row("codex/spare");
-        Launched.Within(launched.Row("claude/work"), found => found.ByAutomationId("account.inUse"), "work in use");
+        var work = launched.Row("claude/work");
+        Launched.Within(work, found => found.ByAutomationId("account.inUse"), "work in use");
         KeepWindow(window, "windows-window-accounts");
+        Launched.Expand(work);
+        Launched.Within(work, found => found.ByAutomationId("detail.copyEmail"), "work's email");
+        KeepWindow(window, "windows-window-account-detail");
 
         launched.OpenFromSettings(window, "settings.diagnostics");
         launched.Element("machine.summary");
@@ -279,7 +283,7 @@ public sealed partial class ScreenshotTests
         launched.Element("settings.startAtSignIn");
         KeepWindow(window, "windows-settings-general");
         var choice = launched.Element("settings.atLimit").AsComboBox();
-        Expand(launched.Element("settings.atLimitGroup"));
+        Launched.Expand(launched.Element("settings.atLimitGroup"));
         Assert.IsTrue(Launched.Enables(choice), "the choice stayed dimmed");
         // The model's choices, in its order: Do nothing, Notify me, Switch automatically.
         choice.Select(2);
@@ -297,11 +301,12 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "warmUp");
         var window = InFront(launched.OpenWindow());
+        Launched.Expand(launched.Row("claude/personal"));
         Launched.Shows(window, Words.WarmsUpAgain, exact: false, within: TimeSpan.FromSeconds(30));
         KeepWindow(window, "windows-window-warm-up");
 
         launched.Select("SettingsItem");
-        Expand(launched.Element("settings.warm"));
+        Launched.Expand(launched.Element("settings.warm"));
         launched.Element("settings.warmStanding");
         KeepWindow(window, "windows-settings-warm-up");
     }
@@ -330,13 +335,6 @@ public sealed partial class ScreenshotTests
         Assert.IsTrue(
             Retry.WhileFalse(() => Launched.Lines(notice).Count() > 1, Patience, TimeSpan.FromMilliseconds(250), ignoreException: true).Result,
             $"{notice.AutomationId} says nothing: {Launched.Said(notice)}");
-
-    // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
-    // name, not its id.
-    private static void Expand(AutomationElement group) =>
-        (group.FindAllDescendants().FirstOrDefault(found => found.Patterns.ExpandCollapse.IsSupported)
-            ?? throw new AssertFailedException($"{group.AutomationId} holds nothing that expands"))
-            .Patterns.ExpandCollapse.Pattern.Expand();
 
     private static AutomationElement Scroller(AutomationElement inside)
     {

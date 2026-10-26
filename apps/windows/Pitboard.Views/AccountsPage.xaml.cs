@@ -1,10 +1,10 @@
 using System.ComponentModel;
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 using Pitboard.Core;
@@ -16,16 +16,12 @@ namespace Pitboard.Views;
 
 public sealed partial class AccountsPage : Page
 {
-    private readonly CollectionViewSource _grouped = new() { IsSourceGrouped = true };
     private PaneContext? _context;
     private SetupStep? _setup;
 
     public AccountsPage()
     {
         InitializeComponent();
-        // An item's own Enter and Delete come here too, after the list has looked at them.
-        AccountList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
-        AccountList.ContainerContentChanging += NameRow;
         Loaded += (_, _) => ViewModel?.Listen();
         Unloaded += (_, _) => ViewModel?.Stop();
     }
@@ -53,6 +49,54 @@ public sealed partial class AccountsPage : Page
         _ => Glyphs.Switch,
     };
 
+    // Each function below is given the whole item: x:Bind calls a function only for an argument that is not null, so a
+    // part an account lacks would keep what it showed for the one before.
+    public static string RowId(AccountItem item) => $"account.{item.Qualified ?? item.Id}";
+
+    public static string MarkOf(AccountItem item) =>
+        item.Unplaced ? Glyphs.Warning
+        : item.InUse ? Glyphs.InUse
+        : Glyphs.Account;
+
+    public static Style MarkStyle(AccountItem item) => Shared(item.InUse ? "InUseMarkStyle" : "AccountMarkStyle");
+
+    public static string PlanOf(AccountItem item) => item.Plan ?? "";
+
+    // Its most pressing note, the one line a row has room for.
+    public static string NoteOf(AccountItem item) => item.Notes.FirstOrDefault()?.Text ?? "";
+
+    public static Visibility NoteShown(AccountItem item) => Look.Shown(item.Notes.Length > 0);
+
+    public static bool Switching(AccountItem item) => item.End is RowEnd.Switching;
+
+    public static Visibility SwitchingShown(AccountItem item) => Look.Shown(Switching(item));
+
+    public static string SwitchingSpoken(AccountItem item) => (item.End as RowEnd.Switching)?.Spoken ?? "";
+
+    public static Visibility InUseShown(AccountItem item) => Look.Shown(item.End is RowEnd.InUse);
+
+    public static string InUseTitle(AccountItem item) => (item.End as RowEnd.InUse)?.Title ?? "";
+
+    public static Visibility ActionShown(AccountItem item) => Look.Shown(item.End is RowEnd.Button);
+
+    public static string ActionTitle(AccountItem item) => (item.End as RowEnd.Button)?.Action.Title ?? "";
+
+    public static string ActionSpoken(AccountItem item) => (item.End as RowEnd.Button)?.Action.Spoken ?? "";
+
+    public static string EmailOf(AccountItem item) => item.Detail.Email ?? "";
+
+    public static Visibility EmailShown(AccountItem item) => Look.Shown(item.Detail.Email is not null);
+
+    public static string SignInOf(AccountItem item) => item.Detail.SignIn ?? "";
+
+    public static Visibility SignInShown(AccountItem item) => Look.Shown(item.Detail.SignIn is not null);
+
+    public static string WarmOf(AccountItem item) => item.Detail.Warm?.Said ?? "";
+
+    public static Visibility WarmShown(AccountItem item) => Look.Shown(item.Detail.Warm is not null);
+
+    public static string WarmSettingsTitle(AccountItem item) => item.Detail.Warm?.Settings.Title ?? "";
+
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -61,8 +105,6 @@ public sealed partial class AccountsPage : Page
             _context = (PaneContext)e.Parameter;
             ViewModel = new AccountsViewModel(_context.Model, _context.Open);
             ViewModel.PropertyChanged += OnViewModelChanged;
-            _grouped.Source = ViewModel.Sections;
-            AccountList.ItemsSource = ViewModel.Rows;
             Bindings.Update();
         }
 
@@ -70,14 +112,15 @@ public sealed partial class AccountsPage : Page
         ViewModel.Shown();
     }
 
+    private static Style Shared(string key) => (Style)Application.Current.Resources[key];
+
+    // The account whose row holds what was clicked, pressed or asked for a menu.
+    private static ShownAccount? AccountAt(object? source) =>
+        Look.Ancestor<SettingsExpander>(source as DependencyObject)?.DataContext as ShownAccount;
+
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         var all = string.IsNullOrEmpty(args.PropertyName);
-        if (all || args.PropertyName == nameof(AccountsViewModel.Grouped))
-        {
-            AccountList.ItemsSource = ViewModel!.Grouped ? _grouped.View : ViewModel.Rows;
-        }
-
         if (all || args.PropertyName == nameof(AccountsViewModel.Notices))
         {
             ShowNotices();
@@ -88,10 +131,7 @@ public sealed partial class AccountsPage : Page
             ShowSetupChoices();
         }
 
-        if (all || args.PropertyName == nameof(AccountsViewModel.Sections))
-        {
-            NameRows();
-        }
+        Above.Visibility = Look.Shown(Notices.Children.Count > 0 || ViewModel!.HasSetup);
     }
 
     private void ShowNotices() =>
@@ -117,7 +157,7 @@ public sealed partial class AccountsPage : Page
             AutomationProperties.SetAutomationId(button, $"setup.action.{Identifiers.Of(choice.Intent)}");
             if (index == 0)
             {
-                button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                button.Style = Shared("AccentButtonStyle");
             }
 
             button.Click += (_, _) => ViewModel.Send(choice.Intent);
@@ -125,64 +165,31 @@ public sealed partial class AccountsPage : Page
         }
     }
 
-    // A renamed or newly named account keeps its row and its container, which no ContainerContentChanging names again.
-    private void NameRows()
-    {
-        IEnumerable<ShownAccount> rows = ViewModel!.Grouped ? ViewModel.Sections.SelectMany(section => section) : ViewModel.Rows;
-        foreach (var row in rows)
-        {
-            if (AccountList.ContainerFromItem(row) is ListViewItem container)
-            {
-                AutomationProperties.SetAutomationId(container, RowId(row));
-            }
-        }
-    }
-
-    private static string RowId(ShownAccount shown) => $"account.{shown.Item.Qualified ?? shown.Item.Id}";
-
-    private static void NameRow(ListViewBase sender, ContainerContentChangingEventArgs args)
-    {
-        if (!args.InRecycleQueue && args.Item is ShownAccount shown)
-        {
-            AutomationProperties.SetAutomationId(args.ItemContainer, RowId(shown));
-        }
-    }
-
     // Right click, the menu key, Shift+F10 and a long press all ask here.
     private void OnContextRequested(UIElement sender, ContextRequestedEventArgs args)
     {
-        if (Look.Ancestor<ListViewItem>(args.OriginalSource as DependencyObject) is not { Content: ShownAccount shown } item)
+        if (Look.Ancestor<SettingsExpander>(args.OriginalSource as DependencyObject) is not { DataContext: ShownAccount shown } row)
         {
             return;
         }
 
-        var menu = AccountMenu.For(shown.Item, Ask, Context.OpenWindow, ViewModel!.HeldWindows);
-        if (args.TryGetPosition(item, out var point))
+        var menu = AccountMenu.For(shown.Item, Ask, Context.Copy, Context.OpenWindow, ViewModel!.HeldWindows);
+        if (args.TryGetPosition(row, out var point))
         {
-            menu.ShowAt(item, point);
+            menu.ShowAt(row, point);
         }
         else
         {
-            menu.ShowAt(item);
+            menu.ShowAt(row);
         }
 
         args.Handled = true;
     }
 
-    private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    // Enter on a row's own toggle switches to it, where Space opens it; a button in the row takes Enter for itself.
+    private void OnAccountKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        var source = args.OriginalSource as DependencyObject;
-        if (Look.Ancestor<ButtonBase>(source) is null
-            && Look.Ancestor<ListViewItem>(source) is { Content: ShownAccount { Item.Action: not null } shown })
-        {
-            args.Handled = true;
-            shown.Act();
-        }
-    }
-
-    private void OnListKeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        if (args.OriginalSource is not ListViewItem { Content: ShownAccount shown })
+        if (AccountAt(args.OriginalSource) is not { } shown)
         {
             return;
         }
@@ -193,7 +200,8 @@ public sealed partial class AccountsPage : Page
             args.Handled = true;
             Context.Copy(email);
         }
-        else if (AccountKeys.Pressed(args.Key, shown.Item) is var (confirm, intent))
+        else if ((args.Key != VirtualKey.Enter || args.OriginalSource is ToggleButton)
+            && AccountKeys.Pressed(args.Key, shown.Item) is var (confirm, intent))
         {
             args.Handled = true;
             Ask(confirm, intent);
@@ -205,6 +213,42 @@ public sealed partial class AccountsPage : Page
         if (question is null || await Context.Dialogs.Confirm(question))
         {
             ViewModel!.Send(intent);
+        }
+    }
+
+    private void OnAction(object sender, RoutedEventArgs args) => ((sender as FrameworkElement)?.Tag as ShownAccount)?.Act();
+
+    private void OnCopyEmail(object sender, RoutedEventArgs args)
+    {
+        if ((sender as FrameworkElement)?.Tag is ShownAccount { Item.Detail.Email: { } email })
+        {
+            Context.Copy(email);
+        }
+    }
+
+    private void OnWarmUpSettings(object sender, RoutedEventArgs args)
+    {
+        if ((sender as FrameworkElement)?.Tag is ShownAccount { Item.Detail.Warm.Settings: { } settings })
+        {
+            ViewModel!.Send(settings.Intent);
+        }
+    }
+
+    // An account's window opens here; everything else is the model's, after any question it asks first.
+    private void OnCommand(object sender, RoutedEventArgs args)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ShownCommand { Action: var action })
+        {
+            return;
+        }
+
+        if (action.Window is { } window)
+        {
+            Context.OpenWindow?.Invoke(window);
+        }
+        else if (action.Intent is { } intent)
+        {
+            Ask(action.Confirm, intent);
         }
     }
 

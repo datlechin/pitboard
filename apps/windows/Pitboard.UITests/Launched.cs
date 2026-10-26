@@ -284,6 +284,14 @@ internal sealed class Launched : IDisposable
     public void Select(string pane) =>
         Find(found => found.ByAutomationId(pane), pane).Patterns.SelectionItem.Pattern.Select();
 
+    // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
+    // name, not its id.
+    public static AutomationElement Expander(AutomationElement group) =>
+        group.FindAllDescendants().FirstOrDefault(found => found.Patterns.ExpandCollapse.IsSupported)
+            ?? throw new AssertFailedException($"{group.AutomationId} holds nothing that expands");
+
+    public static void Expand(AutomationElement group) => Expander(group).Patterns.ExpandCollapse.Pattern.Expand();
+
     // One of Settings' own pages, from its card as a person opens it: a SettingsCard takes Enter, and gives UI Automation
     // no Invoke.
     public void OpenFromSettings(Window window, string card)
