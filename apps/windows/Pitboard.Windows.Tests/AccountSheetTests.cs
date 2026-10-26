@@ -240,6 +240,8 @@ public sealed class AccountSheetTests
 
         up.Element<RadioButtons>("sheet.tool").SelectedIndex = 1;
         await Views.Until(() => bar.IsOpen, "the missing CLI was not said");
+        // The bar's link joins the tree as the opened bar is laid out.
+        up.Sheet.UpdateLayout();
 
         Assert.AreEqual(missing.Title, bar.Title);
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled, "Sign in to a tool not here");
