@@ -16,7 +16,6 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        About.Description = SettingsViewModel.Copyright;
         foreach (var link in SettingsViewModel.Links)
         {
             var button = new HyperlinkButton { Content = link.Title };

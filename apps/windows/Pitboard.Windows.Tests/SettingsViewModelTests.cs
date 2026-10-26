@@ -90,8 +90,18 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("0.0.0", Versions.Of("0.0.0+3f2a9c1"));
         Assert.AreEqual("1.0.0-beta.1", Versions.Of("1.0.0-beta.1"));
         Assert.AreEqual("", Versions.Of((string?)null));
-        Assert.AreEqual("Pitboard 1.0.0", Versions.Named("1.0.0"));
-        Assert.AreEqual("Pitboard", Versions.Named(""));
+    }
+
+    [TestMethod]
+    public void TheVersionIsNamedAsTheModelNamesItAndAnUpdateFoundAsReadyToInstall()
+    {
+        var updates = new StandInUpdates();
+        var (shown, _, _) = Over(Snapshots.Read(1), updates: updates, version: "1.0.0");
+
+        Assert.AreEqual(PitboardFfiMethods.NamedVersion("1.0.0"), shown.UpdatesState);
+
+        updates.Found("1.0.1");
+        Assert.AreEqual(PitboardFfiMethods.ReadyToInstall("1.0.1"), shown.UpdatesState);
     }
 
     [TestMethod]
@@ -99,15 +109,18 @@ public sealed class SettingsViewModelTests
     {
         Assert.AreEqual(PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
         CollectionAssert.AreEqual(
-            new[] { PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.BetaNote },
+            new[] { PitboardFfiMethods.NoUpdateKey(), Words.Settings.BetaUpdates },
             SettingsViewModel.UpdatesNotes(new NoUpdates(), "1.0.0-beta.1"));
         Assert.IsEmpty(SettingsViewModel.UpdatesNotes(new StandInUpdates(), "1.0.0"));
-        Assert.AreEqual(NoUpdates.BadKey, SettingsViewModel.UpdatesNotes(new NoUpdates(NoUpdates.BadKey), "1.0.0").Single());
+        Assert.AreEqual(
+            Words.Settings.UpdateKeyInvalid,
+            SettingsViewModel.UpdatesNotes(new NoUpdates(Words.Settings.UpdateKeyInvalid), "1.0.0").Single());
 
         var waiting = new StandInUpdates(beta: true);
         waiting.Feed(found: false);
         CollectionAssert.AreEqual(
-            new[] { SparkleUpdates.NoFeed, SettingsViewModel.BetaNote }, SettingsViewModel.UpdatesNotes(waiting, "1.0.0-beta.4"));
+            new[] { Words.Settings.NoReleaseToUpdateTo, Words.Settings.BetaUpdates },
+            SettingsViewModel.UpdatesNotes(waiting, "1.0.0-beta.4"));
     }
 
     // A beta that found no feed when Pitboard started looks again, as 1.0.0 may have come out since.
@@ -238,8 +251,8 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("Share of a limit", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
+        Assert.IsTrue(shown.ShowsShare);
         Assert.IsTrue(shown.HasAtLimitTerms);
-        Assert.AreEqual("Anthropic’s terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
 
         app.Apply(With(2, machine => machine with
         {
@@ -248,6 +261,7 @@ public sealed class SettingsViewModelTests
 
         Assert.AreEqual(0, shown.AtLimitIndex);
         Assert.IsFalse(shown.CanSetShare, "no share while nothing happens at it");
+        Assert.IsFalse(shown.ShowsShare);
         Assert.IsFalse(shown.HasAtLimitNote);
         Assert.IsFalse(shown.HasAtLimitTerms);
     }
@@ -282,7 +296,16 @@ public sealed class SettingsViewModelTests
         var (shown, _, _) = Over(Snapshots.Read(1), start);
 
         Assert.IsFalse(shown.CanStartAtSignIn);
-        Assert.AreEqual("A Debug build never starts when you sign in to Windows.", shown.StartupNote);
+        Assert.AreEqual(Words.Settings.DebugNeverStarts, shown.StartupNote);
+    }
+
+    // As the welcome says under the same switch: what starting at sign-in is for, where nothing holds it back.
+    [TestMethod]
+    public void StartAtSignInSaysWhatItIsFor()
+    {
+        var (shown, _, _) = Over(Snapshots.Read(1));
+
+        Assert.AreEqual(Words.Settings.OpenAtLoginNote, shown.StartupNote);
     }
 
     [TestMethod]
@@ -298,7 +321,7 @@ public sealed class SettingsViewModelTests
 
         Assert.IsFalse(shown.StartsAtSignIn);
         Assert.IsFalse(shown.CanStartAtSignIn);
-        Assert.AreEqual(SettingsViewModel.TurnedOffNote, shown.StartupNote);
+        Assert.AreEqual(Words.Settings.StartupTurnedOff, shown.StartupNote);
         Assert.IsTrue(shown.OffersStartupSettings);
     }
 
@@ -335,17 +358,17 @@ public sealed class SettingsViewModelTests
         on.Shown();
         Assert.IsFalse(on.HasNotificationsOff);
 
-        NotificationsBlocked? blocked = new(WindowsNotifications.Unoffered, InSettings: false);
+        NotificationsBlocked? blocked = new(Words.Settings.NotificationsUnoffered!, InSettings: false);
         var (off, _, _) = Over(Snapshots.Read(1), notifications: () => blocked);
         off.Shown();
 
         Assert.IsTrue(off.HasNotificationsOff);
-        Assert.AreEqual(WindowsNotifications.Unoffered, off.NotificationsOff);
+        Assert.AreEqual(Words.Settings.NotificationsUnoffered, off.NotificationsOff);
         Assert.IsFalse(off.OffersNotificationSettings, "a link to a switch that is not the person's");
 
-        blocked = new(WindowsNotifications.OffForPitboard, InSettings: true);
+        blocked = new(Words.Settings.NotificationsOff, InSettings: true);
         off.ReadWindowsSettings();
-        Assert.AreEqual(WindowsNotifications.OffForPitboard, off.NotificationsOff);
+        Assert.AreEqual(Words.Settings.NotificationsOff, off.NotificationsOff);
         Assert.IsTrue(off.OffersNotificationSettings);
 
         blocked = null;

@@ -11,7 +11,5 @@ public static class Versions
 
     public static string Of(string? informational) => (informational ?? "").Split('+')[0];
 
-    public static string Named(string version) => version.Length == 0 ? "Pitboard" : $"Pitboard {version}";
-
     public static bool IsBeta(string version) => version.Contains('-', StringComparison.Ordinal);
 }

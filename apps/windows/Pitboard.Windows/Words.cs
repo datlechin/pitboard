@@ -7,6 +7,8 @@ public static class Words
 {
     private static readonly AppWords All = PitboardFfiMethods.AppWords();
 
+    public static string AppName => All.AppName;
+
     public static MenuWords Menu => All.Menu;
 
     public static WindowWords Window => All.Window;

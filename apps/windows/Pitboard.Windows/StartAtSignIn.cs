@@ -94,7 +94,7 @@ public sealed class FixtureStartupItem(bool offInSettings = false) : IStartupIte
     {
         if (starts && TurnedOff())
         {
-            throw new InvalidOperationException(SettingsViewModel.TurnedOffNote);
+            throw new InvalidOperationException(Words.Settings.StartupTurnedOff);
         }
 
         if (!TurnedOff())

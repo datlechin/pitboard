@@ -19,23 +19,35 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <TextBlock MaxWidth="1064" Margin="{StaticResource PageHeaderMargin}" Text="Settings" Style="{StaticResource PageTitleTextBlockStyle}" />
-    <!-- The WinUI Gallery's settings page: SettingsCards and SettingsExpanders in sections, the switch at each card's right. -->
+    <TextBlock
+        MaxWidth="1064"
+        Margin="{StaticResource PageHeaderMargin}"
+        Text="{x:Bind shown:Words.Settings.Title}"
+        Style="{StaticResource PageTitleTextBlockStyle}" />
+    <!-- The WinUI Gallery's settings page: SettingsCards and SettingsExpanders in sections, each with its icon, the switch
+         at each card's right. -->
     <ScrollViewer Grid.Row="1" Padding="{StaticResource PageContentPadding}">
       <StackPanel MaxWidth="1064" Spacing="{StaticResource SettingsCardSpacing}">
-        <TextBlock x:Name="GeneralHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Margin="1,0,0,6" Text="General" />
+        <TextBlock
+            x:Name="GeneralHeader"
+            Style="{StaticResource SettingsSectionHeaderTextBlockStyle}"
+            Margin="1,0,0,6"
+            Text="{x:Bind shown:Words.Settings.General}" />
         <!-- The toolkit's own sample puts a HyperlinkButton in a card's description, which the card's template styles. -->
-        <toolkit:SettingsCard Header="Start when you sign in to Windows">
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.OpenAtLogin}">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE7E8;" />
+          </toolkit:SettingsCard.HeaderIcon>
           <toolkit:SettingsCard.Description>
             <StackPanel>
-              <TextBlock Text="{x:Bind ViewModel.StartupNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasStartupNote, Mode=OneWay}" />
+              <TextBlock Text="{x:Bind ViewModel.StartupNote, Mode=OneWay}" AutomationProperties.AutomationId="settings.startupNote" />
               <TextBlock
                   x:Name="StartupFailed"
                   Style="{StaticResource CriticalCaptionTextBlockStyle}"
                   Visibility="Collapsed"
                   AutomationProperties.LiveSetting="Assertive" />
               <HyperlinkButton
-                  Content="Open Startup settings"
+                  Content="{x:Bind shown:Words.Settings.OpenStartupSettings}"
                   Visibility="{x:Bind ViewModel.OffersStartupSettings, Mode=OneWay}"
                   AutomationProperties.AutomationId="settings.startupSettings"
                   Click="OnOpenStartupSettings" />
@@ -45,35 +57,47 @@
               IsOn="{x:Bind ViewModel.StartsAtSignIn, Mode=OneWay}"
               IsEnabled="{x:Bind ViewModel.CanStartAtSignIn, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.startAtSignIn"
-              AutomationProperties.Name="Start when you sign in to Windows"
+              AutomationProperties.Name="{x:Bind shown:Words.Settings.OpenAtLogin}"
               Toggled="OnStartAtSignInToggled" />
         </toolkit:SettingsCard>
+        <!-- A link rather than a clickable card, which UI Automation cannot press (docs/facts/windows-app.md). -->
         <toolkit:SettingsCard
-            Header="Notifications"
+            Header="{x:Bind shown:Words.Settings.Notifications}"
             Visibility="{x:Bind ViewModel.HasNotificationsOff, Mode=OneWay}"
             AutomationProperties.AutomationId="settings.notifications">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE7ED;" />
+          </toolkit:SettingsCard.HeaderIcon>
           <toolkit:SettingsCard.Description>
             <StackPanel>
               <TextBlock Text="{x:Bind ViewModel.NotificationsOff, Mode=OneWay}" />
               <HyperlinkButton
-                  Content="Open notification settings"
+                  Content="{x:Bind shown:Words.Settings.OpenNotificationSettings}"
                   Visibility="{x:Bind ViewModel.OffersNotificationSettings, Mode=OneWay}"
                   AutomationProperties.AutomationId="settings.notificationSettings"
                   Click="OnOpenNotificationSettings" />
             </StackPanel>
           </toolkit:SettingsCard.Description>
         </toolkit:SettingsCard>
-        <toolkit:SettingsCard Header="Check for updates automatically" Visibility="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}">
+        <toolkit:SettingsCard
+            Header="{x:Bind shown:Words.Settings.CheckForUpdatesAutomatically}"
+            Visibility="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE895;" />
+          </toolkit:SettingsCard.HeaderIcon>
           <ToggleSwitch
               IsOn="{x:Bind ViewModel.ChecksAutomatically, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.checkAutomatically"
-              AutomationProperties.Name="Check for updates automatically"
+              AutomationProperties.Name="{x:Bind shown:Words.Settings.CheckForUpdatesAutomatically}"
               Toggled="OnAutomaticChecksToggled" />
         </toolkit:SettingsCard>
-        <toolkit:SettingsCard Header="Check for updates">
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.Version}">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE946;" />
+          </toolkit:SettingsCard.HeaderIcon>
           <toolkit:SettingsCard.Description>
             <StackPanel>
-              <TextBlock Text="{x:Bind ViewModel.UpdatesState, Mode=OneWay}" />
+              <TextBlock Text="{x:Bind ViewModel.UpdatesState, Mode=OneWay}" AutomationProperties.AutomationId="settings.version" />
               <ItemsControl ItemsSource="{x:Bind ViewModel.UpdatesNoteLines, Mode=OneWay}" IsTabStop="False">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="x:String">
@@ -85,14 +109,18 @@
           </toolkit:SettingsCard.Description>
           <Button
               MinWidth="120"
-              Content="Check now"
+              Content="{x:Bind shown:Words.Settings.CheckNow}"
+              AccessKey="C"
               IsEnabled="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.checkNow"
               Click="OnCheckNow" />
         </toolkit:SettingsCard>
 
-        <TextBlock x:Name="LimitsHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Limits" />
+        <TextBlock x:Name="LimitsHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.Limits}" />
         <toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}" AutomationProperties.AutomationId="settings.atLimitGroup">
+          <toolkit:SettingsExpander.HeaderIcon>
+            <FontIcon Glyph="&#xEC4A;" />
+          </toolkit:SettingsExpander.HeaderIcon>
           <toolkit:SettingsExpander.Description>
             <StackPanel>
               <TextBlock
@@ -100,7 +128,6 @@
                   Visibility="{x:Bind ViewModel.HasAutoSwitchStanding, Mode=OneWay}"
                   AutomationProperties.AutomationId="settings.autoSwitchStanding" />
               <TextBlock Text="{x:Bind ViewModel.AtLimitNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasAtLimitNote, Mode=OneWay}" />
-              <TextBlock Text="{x:Bind ViewModel.AtLimitTerms, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasAtLimitTerms, Mode=OneWay}" />
               <HyperlinkButton
                   Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"
                   Visibility="{x:Bind ViewModel.HasAtLimitTerms, Mode=OneWay}"
@@ -118,10 +145,12 @@
               AutomationProperties.Name="{x:Bind ViewModel.AtLimitLabel, Mode=OneWay}"
               SelectionChanged="OnAtLimitChosen" />
           <toolkit:SettingsExpander.Items>
+            <!-- Only where something happens at the share, as the macOS pane shows its field. -->
             <toolkit:SettingsCard
                 Header="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"
                 Description="{x:Bind ViewModel.ShareRange, Mode=OneWay}"
-                IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}">
+                IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.ShowsShare, Mode=OneWay}">
               <NumberBox
                   MinWidth="120"
                   Minimum="{x:Bind ViewModel.LowestShare, Mode=OneWay}"
@@ -137,37 +166,48 @@
             </toolkit:SettingsCard>
           </toolkit:SettingsExpander.Items>
         </toolkit:SettingsExpander>
+        <!-- What a warm-up does under its name and its hours beside it, as the approved mockup draws it. -->
         <toolkit:SettingsExpander
             Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"
             ItemsSource="{x:Bind ViewModel.WarmAccounts}"
             AutomationProperties.AutomationId="settings.warm">
+          <toolkit:SettingsExpander.HeaderIcon>
+            <FontIcon Glyph="&#xE706;" />
+          </toolkit:SettingsExpander.HeaderIcon>
           <toolkit:SettingsExpander.Description>
             <StackPanel>
-              <TextBlock Text="{x:Bind ViewModel.WarmRange, Mode=OneWay}" />
+              <TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" />
               <TextBlock
                   Text="{x:Bind ViewModel.WarmStanding, Mode=OneWay}"
                   Visibility="{x:Bind ViewModel.HasWarmStanding, Mode=OneWay}"
                   AutomationProperties.AutomationId="settings.warmStanding" />
             </StackPanel>
           </toolkit:SettingsExpander.Description>
+          <TextBlock Text="{x:Bind ViewModel.WarmRange, Mode=OneWay}" AutomationProperties.AutomationId="settings.warmRange" />
           <toolkit:SettingsExpander.ItemsHeader>
             <StackPanel>
-              <toolkit:SettingsCard Header="From" Style="{StaticResource DefaultSettingsExpanderItemStyle}" IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}">
+              <toolkit:SettingsCard
+                  Header="{x:Bind shown:Words.Settings.From}"
+                  Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                  IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}">
                 <TimePicker
                     x:Name="WarmFrom"
                     SelectedTime="{x:Bind ViewModel.WarmFrom, Mode=OneWay}"
                     IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}"
                     AutomationProperties.AutomationId="settings.warmFrom"
-                    AutomationProperties.Name="Warm up from"
+                    AutomationProperties.Name="{x:Bind shown:Words.Settings.WarmFrom}"
                     SelectedTimeChanged="OnWarmRangeChanged" />
               </toolkit:SettingsCard>
-              <toolkit:SettingsCard Header="To" Style="{StaticResource DefaultSettingsExpanderItemStyle}" IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}">
+              <toolkit:SettingsCard
+                  Header="{x:Bind shown:Words.Settings.To}"
+                  Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                  IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}">
                 <TimePicker
                     x:Name="WarmTo"
                     SelectedTime="{x:Bind ViewModel.WarmTo, Mode=OneWay}"
                     IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}"
                     AutomationProperties.AutomationId="settings.warmTo"
-                    AutomationProperties.Name="Warm up to"
+                    AutomationProperties.Name="{x:Bind shown:Words.Settings.WarmTo}"
                     SelectedTimeChanged="OnWarmRangeChanged" />
               </toolkit:SettingsCard>
             </StackPanel>
@@ -194,24 +234,21 @@
                   Header="{x:Bind ViewModel.NoWarmAccount, Mode=OneWay}"
                   Style="{StaticResource DefaultSettingsExpanderItemStyle}"
                   Visibility="{x:Bind ViewModel.NoWarmAccounts, Mode=OneWay}" />
-              <toolkit:SettingsCard
-                  ContentAlignment="Left"
-                  Style="{StaticResource DefaultSettingsExpanderItemStyle}">
-                <StackPanel>
-                  <TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
-                  <TextBlock Text="{x:Bind ViewModel.WarmTerms, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
-                  <HyperlinkButton
-                      Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"
-                      AutomationProperties.AutomationId="settings.warmTerms"
-                      Click="OnOpenTerms" />
-                </StackPanel>
+              <toolkit:SettingsCard ContentAlignment="Left" Style="{StaticResource DefaultSettingsExpanderItemStyle}">
+                <HyperlinkButton
+                    Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"
+                    AutomationProperties.AutomationId="settings.warmTerms"
+                    Click="OnOpenTerms" />
               </toolkit:SettingsCard>
             </StackPanel>
           </toolkit:SettingsExpander.ItemsFooter>
         </toolkit:SettingsExpander>
 
-        <TextBlock x:Name="AdvancedHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Advanced" />
-        <toolkit:SettingsCard Header="Keep saved sign-ins fresh">
+        <TextBlock x:Name="AdvancedHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.Advanced}" />
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.KeepSavedSignInsFresh}">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE8D7;" />
+          </toolkit:SettingsCard.HeaderIcon>
           <toolkit:SettingsCard.Description>
             <StackPanel>
               <TextBlock
@@ -229,31 +266,30 @@
               IsOn="{x:Bind ViewModel.RenewsDaily, Mode=OneWay}"
               IsEnabled="{x:Bind ViewModel.CanRenewDaily, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.renewDaily"
-              AutomationProperties.Name="Keep saved sign-ins fresh"
+              AutomationProperties.Name="{x:Bind shown:Words.Settings.KeepSavedSignInsFresh}"
               Toggled="OnRenewDailyToggled" />
         </toolkit:SettingsCard>
         <!-- No button: the installer puts the command line on the PATH, and takes it off again. -->
-        <toolkit:SettingsCard Header="In your terminal" ContentAlignment="Vertical" HorizontalContentAlignment="Left">
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.CommandLine}" AutomationProperties.AutomationId="settings.commandLine">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE756;" />
+          </toolkit:SettingsCard.HeaderIcon>
           <toolkit:SettingsCard.Description>
             <StackPanel>
+              <TextBlock
+                  Text="{x:Bind ViewModel.InTerminal, Mode=OneWay}"
+                  IsTextSelectionEnabled="True"
+                  AutomationProperties.AutomationId="settings.inTerminal" />
               <TextBlock Text="{x:Bind ViewModel.UpdateNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasUpdateNote, Mode=OneWay}" />
               <TextBlock Text="{x:Bind ViewModel.TerminalNote, Mode=OneWay}" Visibility="{x:Bind ViewModel.HasTerminalNote, Mode=OneWay}" />
             </StackPanel>
           </toolkit:SettingsCard.Description>
-          <Grid>
-            <TextBlock
-                Text="{x:Bind ViewModel.InTerminal, Mode=OneWay}"
-                Style="{StaticResource BodyTextBlockStyle}"
-                IsTextSelectionEnabled="True"
-                AutomationProperties.AutomationId="settings.inTerminal" />
-            <ProgressRing
-                Width="16"
-                Height="16"
-                HorizontalAlignment="Left"
-                IsActive="{x:Bind ViewModel.LookingForCommandLine, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.LookingForCommandLine, Mode=OneWay}"
-                AutomationProperties.Name="Looking for pitboard" />
-          </Grid>
+          <ProgressRing
+              Width="16"
+              Height="16"
+              IsActive="{x:Bind ViewModel.LookingForCommandLine, Mode=OneWay}"
+              Visibility="{x:Bind ViewModel.LookingForCommandLine, Mode=OneWay}"
+              AutomationProperties.Name="{x:Bind shown:Words.Settings.LookingForCommandLine}" />
         </toolkit:SettingsCard>
 
         <!-- Windows Settings' own uninstall says how it goes in its row, so this card does too. -->
@@ -282,6 +318,7 @@
                 Content="{x:Bind ViewModel.UninstallChoice.Title, Mode=OneWay}"
                 IsEnabled="{x:Bind ViewModel.UninstallChoice.Enabled, Mode=OneWay}"
                 Visibility="{x:Bind ViewModel.OffersUninstall, Mode=OneWay}"
+                AccessKey="U"
                 AutomationProperties.AutomationId="settings.uninstall"
                 Click="OnUninstall" />
           </Grid>
@@ -294,6 +331,7 @@
             Description="{x:Bind shown:Words.Settings.DiagnosticsAbout}"
             IsClickEnabled="True"
             AutomationProperties.AutomationId="settings.diagnostics"
+            AutomationProperties.HelpText="{x:Bind shown:Words.Settings.DiagnosticsAbout}"
             Click="OnShowDiagnostics">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE9D9;" />
@@ -304,20 +342,22 @@
             Description="{x:Bind shown:Words.Settings.ActivityAbout}"
             IsClickEnabled="True"
             AutomationProperties.AutomationId="settings.activity"
+            AutomationProperties.HelpText="{x:Bind shown:Words.Settings.ActivityAbout}"
             Click="OnShowActivity">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE81C;" />
           </toolkit:SettingsCard.HeaderIcon>
         </toolkit:SettingsCard>
 
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="About" />
+        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.About}" />
         <!-- As the WinUI Gallery's About: the app's icon, name and copyright, its version, and its links under it. -->
         <toolkit:SettingsExpander
             x:Name="About"
             Margin="0,0,0,12"
-            Header="Pitboard"
+            Header="{x:Bind shown:Words.AppName}"
+            Description="{x:Bind shown:Words.Settings.Copyright}"
             AutomationProperties.AutomationId="settings.about"
-            AutomationProperties.Name="About Pitboard">
+            AutomationProperties.Name="{x:Bind shown:Words.Menu.About}">
           <toolkit:SettingsExpander.HeaderIcon>
             <ImageIcon Source="ms-appx:///Pitboard.ico" />
           </toolkit:SettingsExpander.HeaderIcon>

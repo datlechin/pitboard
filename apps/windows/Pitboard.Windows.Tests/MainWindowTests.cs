@@ -240,7 +240,7 @@ public sealed class MainWindowTests
             Assert.AreEqual(Visibility.Collapsed, notifications.Visibility);
 
             key.Approvals["Pitboard"] = [0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-            blocked = new(WindowsNotifications.OffForPitboard, InSettings: true);
+            blocked = new(Words.Settings.NotificationsOff, InSettings: true);
             UnitTestApp.Window!.Activate();
             window.Activate();
 

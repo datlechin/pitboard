@@ -101,8 +101,8 @@ public sealed class WindowsNotificationsTests
         notifications.Post(RunOut);
         notifications.Stop();
 
-        Assert.AreEqual("A Debug build posts no notifications.", notifications.Off);
-        Assert.IsNull(notifications.Refusal, "the settings would say a Debug build's own off");
+        Assert.IsNull(notifications.Off, "the settings would say a Debug build's own off");
+        Assert.IsNull(notifications.Read());
     }
 
     [TestMethod]
@@ -189,7 +189,7 @@ public sealed class WindowsNotificationsTests
 
         CollectionAssert.AreEqual(new[] { "supported", "listen", $"register Pitboard {Icon}" }, system.Asked);
         Assert.AreEqual("Access is denied.", notifications.Off);
-        Assert.AreEqual("Access is denied.", notifications.Refusal);
+        Assert.AreEqual(new NotificationsBlocked("Access is denied.", InSettings: false), notifications.Read());
     }
 
     // Settings > System > Notifications turns them off and on while Pitboard runs, so each settings visit reads again.
@@ -204,11 +204,11 @@ public sealed class WindowsNotificationsTests
 
         (AppNotificationSetting Setting, NotificationsBlocked Said)[] blocked =
         [
-            (AppNotificationSetting.DisabledForApplication, new(WindowsNotifications.OffForPitboard, InSettings: true)),
-            (AppNotificationSetting.DisabledForUser, new(WindowsNotifications.OffForEveryApp, InSettings: true)),
-            (AppNotificationSetting.DisabledByGroupPolicy, new(WindowsNotifications.OffByPolicy, InSettings: false)),
-            (AppNotificationSetting.DisabledByManifest, new(WindowsNotifications.Unoffered, InSettings: false)),
-            (AppNotificationSetting.Unsupported, new(WindowsNotifications.Unoffered, InSettings: false)),
+            (AppNotificationSetting.DisabledForApplication, new(Words.Settings.NotificationsOff, InSettings: true)),
+            (AppNotificationSetting.DisabledForUser, new(Words.Settings.NotificationsOffForEveryApp!, InSettings: true)),
+            (AppNotificationSetting.DisabledByGroupPolicy, new(Words.Settings.NotificationsOffByPolicy!, InSettings: false)),
+            (AppNotificationSetting.DisabledByManifest, new(Words.Settings.NotificationsUnoffered!, InSettings: false)),
+            (AppNotificationSetting.Unsupported, new(Words.Settings.NotificationsUnoffered!, InSettings: false)),
         ];
         foreach (var (setting, said) in blocked)
         {

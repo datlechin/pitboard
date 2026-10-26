@@ -107,7 +107,7 @@ public sealed class SettingsTests
         Assert.IsTrue(Names(choice, 96), "the model did not take the share");
 
         choice.Select(DoNothing);
-        Assert.IsTrue(Enables(share, false));
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.atLimitShare")), "the share shows while nothing happens at it");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")));
     }
 

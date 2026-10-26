@@ -10,26 +10,23 @@ public sealed record SettingsLink(string Title, string Url);
 // model says, so a control set to the model's value sends nothing.
 public sealed partial class SettingsViewModel : INotifyPropertyChanged
 {
-    public const string TurnedOffNote = "Turned off in Settings > Apps > Startup, where you can turn it on again.";
-
     // Settings > Apps > Startup and System > Notifications, by the URIs Microsoft's "Launch the Windows Settings app" lists.
     public const string StartupSettings = "ms-settings:startupapps";
 
     public const string NotificationSettings = "ms-settings:notifications";
 
-    public const string BetaNote = "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.";
-
-    public const string Copyright = "Copyright 2026 the Pitboard authors";
-
     private const int MinutesInADay = 24 * 60;
 
+    private const string Site = "https://usepitboard.com";
+
+    // The site's own link says its name.
     public static readonly SettingsLink[] Links =
     [
-        new("usepitboard.com", "https://usepitboard.com"),
-        new("Pitboard help", IconMenu.HelpLink),
-        new("Source code on GitHub", "https://github.com/datlechin/pitboard"),
-        new("Report a problem", "https://github.com/datlechin/pitboard/issues"),
-        new("Apache License 2.0", "https://github.com/datlechin/pitboard/blob/main/LICENSE"),
+        new(new Uri(Site).Host, Site),
+        new(Words.Settings.Help, IconMenu.HelpLink),
+        new(Words.Settings.SourceCode, "https://github.com/datlechin/pitboard"),
+        new(Words.Settings.ReportAProblem, "https://github.com/datlechin/pitboard/issues"),
+        new(Words.Settings.License, "https://github.com/datlechin/pitboard/blob/main/LICENSE"),
     ];
 
     private readonly AppModel _model;
@@ -64,9 +61,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanStartAtSignIn => _start.Refusal is null && !_start.TurnedOff;
 
-    public string StartupNote => _start.Refusal ?? (_start.TurnedOff ? TurnedOffNote : "");
-
-    public bool HasStartupNote => StartupNote.Length > 0;
+    // Why it cannot be turned on, as the welcome says it, or what it is for.
+    public string StartupNote =>
+        _start.Refusal ?? (_start.TurnedOff ? Words.Settings.StartupTurnedOff : null) ?? Words.Settings.OpenAtLoginNote;
 
     public string? StartupFailed => _start.Failed;
 
@@ -98,11 +95,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasAtLimitNote => AtLimit.Note is not null;
 
-    public string AtLimitTerms => AtLimit.Terms?.Sentence ?? "";
-
     public bool HasAtLimitTerms => AtLimit.Terms is not null;
-
-    public string WarmTerms => Warm.Terms.Sentence;
 
     // The same page beside switching and beside warm-up.
     public string TermsLinkTitle => Warm.Terms.LinkTitle;
@@ -120,6 +113,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public string ShareRange => AtLimit.ShareRange;
 
     public bool CanSetShare => AtLimit.ShareEnabled;
+
+    public bool ShowsShare => AtLimit.Choice != Core.AtLimit.Nothing;
 
     public string WarmRange => Warm.RangeLabel;
 
@@ -193,14 +188,18 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool ChecksAutomatically => _updates.ChecksAutomatically;
 
-    public string UpdatesState => _updates.Waiting is { } waiting ? $"Pitboard {waiting} is ready to install." : Versions.Named(Version);
+    public string UpdatesState =>
+        _updates.Waiting is { } waiting ? PitboardFfiMethods.ReadyToInstall(waiting) : PitboardFfiMethods.NamedVersion(Version);
 
     public string[] UpdatesNoteLines => UpdatesNotes(_updates, Version);
 
     public string Version { get; }
 
     public static string[] UpdatesNotes(IUpdates updates, string version) =>
-        [.. updates.Refusal is { } refusal ? new[] { refusal } : [], .. Versions.IsBeta(version) ? new[] { BetaNote } : []];
+        [
+            .. updates.Refusal is { } refusal ? new[] { refusal } : [],
+            .. Versions.IsBeta(version) && Words.Settings.BetaUpdates is { } beta ? new[] { beta } : [],
+        ];
 
     // 24:00, the end of a day, shows as midnight, as the macOS pickers show it.
     public static TimeSpan TimeOfDay(ushort minutes) => TimeSpan.FromMinutes(minutes % MinutesInADay);

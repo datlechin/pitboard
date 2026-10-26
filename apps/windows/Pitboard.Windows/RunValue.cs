@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Pitboard.Core;
 
 namespace Pitboard.Windows;
 
@@ -54,7 +55,7 @@ public sealed class RunValue(Build build, string exe, IRunKey key) : IStartupIte
     // What the Run key's documentation allows a command line.
     public const int Longest = 260;
 
-    public string? Refusal => build is Build.Debug ? "A Debug build never starts when you sign in to Windows." : null;
+    public string? Refusal => build is Build.Debug ? Words.Settings.DebugNeverStarts : null;
 
     public static string Command(string exe) => $"\"{exe}\" {Launching.SignIn}";
 
@@ -78,7 +79,7 @@ public sealed class RunValue(Build build, string exe, IRunKey key) : IStartupIte
 
         if (starts && TurnedOff())
         {
-            throw new InvalidOperationException(SettingsViewModel.TurnedOffNote);
+            throw new InvalidOperationException(Words.Settings.StartupTurnedOff);
         }
 
         if (!starts)
@@ -94,8 +95,7 @@ public sealed class RunValue(Build build, string exe, IRunKey key) : IStartupIte
         var command = Command(exe);
         if (command.Length > Longest)
         {
-            throw new InvalidOperationException(
-                $"Windows starts a program when you sign in only from a path of up to {Longest - Command("").Length} characters, and Pitboard’s is longer.");
+            throw new InvalidOperationException(PitboardFfiMethods.PathTooLong((uint)(Longest - Command("").Length)));
         }
 
         key.Write(Name, command);
