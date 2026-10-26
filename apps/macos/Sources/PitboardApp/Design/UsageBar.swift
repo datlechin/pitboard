@@ -38,6 +38,8 @@ struct UsageBar: View {
             }
             .gaugeStyle(.linearCapacity)
             .tint(limit.level.tint)
+            // AppKit's level indicator would keep a click from the list, so its row went unselected.
+            .allowsHitTesting(false)
             .accessibilityHidden(true)
             Text(limit.figure)
                 .monospacedDigit()

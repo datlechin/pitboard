@@ -193,6 +193,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
 - The app lines up the usage bars of every account, where a row that said no pace had wider
   bars.
+- The macOS app selects an account when you click one of its usage bars, where the click
+  selected nothing.
 - On Windows, an update of the app leaves a file in use to be replaced at your next restart,
   instead of restarting Windows by itself.
 - While the app or `pitboard watch` switches Claude Code by itself, the other waits for that

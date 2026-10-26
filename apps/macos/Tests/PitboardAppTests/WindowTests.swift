@@ -132,3 +132,27 @@ import Testing
     #expect(board.string(forType: .URL) == link.absoluteString)
     #expect(board.string(forType: .string) == link.absoluteString)
 }
+
+// A limit's bar is AppKit's level indicator, which took a click on it from the list.
+@MainActor
+@Test func aClickOnALimitsBarReachesItsRow() {
+    let limit = LimitRow(
+        kind: .fiveHour, name: "5-hour limit", short: "5-hour", percent: 60, figure: "60%",
+        used: "60% used", level: .plenty, resetsAt: nil, resets: "Resets 3:22 AM",
+        resetsIn: "in 2 hr", spoken: "5-hour limit, 60 percent used")
+    let bars = NSHostingView(rootView: UsageBars(limits: [limit]).frame(width: 480))
+    let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: bars.fittingSize), styleMask: .borderless,
+        backing: .buffered, defer: true)
+    window.contentView = bars
+    bars.layoutSubtreeIfNeeded()
+
+    let hits = stride(from: 0.0, to: bars.bounds.height, by: 2).flatMap { y in
+        stride(from: 0.0, to: bars.bounds.width, by: 2).compactMap { x in
+            bars.hitTest(NSPoint(x: x, y: y))
+        }
+    }
+
+    #expect(!hits.isEmpty)
+    #expect(hits.allSatisfy { $0 === bars })
+}
