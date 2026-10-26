@@ -1625,8 +1625,13 @@ pub(crate) fn show_diagnostics(os: Os) -> String {
     titled(os, "Show Diagnostics", "Show diagnostics")
 }
 
+// Windows' button sits beside its card's "Uninstall Pitboard".
 pub(crate) fn uninstall_pitboard(os: Os) -> String {
-    titled(os, "Uninstall Pitboard…", "Uninstall Pitboard…")
+    match os {
+        Os::Windows => "Uninstall…",
+        Os::MacOs | Os::Linux => "Uninstall Pitboard…",
+    }
+    .into()
 }
 
 pub(crate) const UNINSTALL_QUESTION: &str = "Uninstall Pitboard?";
@@ -5019,7 +5024,7 @@ mod tests {
                 uninstall_pitboard(Os::MacOs),
                 uninstall_pitboard(Os::Windows)
             ),
-            ("Uninstall Pitboard…".into(), "Uninstall Pitboard…".into()),
+            ("Uninstall Pitboard…".into(), "Uninstall…".into()),
             "it asks before it acts"
         );
         assert_eq!(UNINSTALL_QUESTION, "Uninstall Pitboard?");
