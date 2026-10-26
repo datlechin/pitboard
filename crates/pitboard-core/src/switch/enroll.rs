@@ -27,22 +27,18 @@ pub enum Enrolled {
     InUse { email: String, again: bool },
 }
 
-/// The name an account is enrolled under.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Naming {
-    /// This label of the login's own tool: the account's own, or a new one.
     As(String),
-    /// Its owner's label where it is enrolled already, or else one `label::suggest` makes.
+    // its owner's label where it is enrolled already, or else one `label::suggest` makes
     FromEmail,
 }
 
-/// What enrolling under a [`Naming`] came to.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Enrolment {
-    /// The account the login is filed under.
     pub key: Key,
-    /// Whether this enrolment added the account, rather than one enrolled already.
+    // false where the login's account was enrolled already
     pub added: bool,
     pub enrolled: Enrolled,
 }

@@ -32,7 +32,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it installs into your home, the lines that make zsh load Pitboard's completions.
 - The app's notification that a login was replaced outside Pitboard, and its notice in the
   window, offer **Sign In Again**.
-- The app posts a notification once for each account whose parked login can no longer be used,
+- The app posts a notification once for each account whose saved sign-in can no longer be used,
   with **Sign In Again**.
 - The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
   at first, before it runs out, with **Switch** where another account has room.
@@ -98,8 +98,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sessions have followed the switch.
 - The Windows app's icon tooltip lists each account in use with its limits, after **Needs
   attention** while its menu opens on something to look at.
-- The app's **Settings** say what switching, warm-up and daily renewal do in one or two
-  sentences.
+- The app's **Settings** say what switching, warm-up and keeping saved sign-ins fresh do in one
+  sentence each.
 - An account's shortcut menu leaves out **Warm Up Now** and **Sign In Again** while they cannot
   be chosen, where the Windows app dimmed them.
 - **Open Pitboard** in the macOS app's menu no longer takes Command-0, which is **Actual Size**
@@ -134,9 +134,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Renew parked logins daily** and **Warm up limits**.
 - The app's notifications are titled in the system's case, such as **5-Hour Limit Almost
   Reached** on macOS, under the name of the tool they are about.
-- What the app says went wrong ends with a button that does what to do next, such as **Sign In
-  Again**, **Show Diagnostics** or **Try Again**, or with **Learn More**, and names no
-  `pitboard` command.
+- What the app says went wrong names no `pitboard` command.
 
 ### Removed
 
@@ -147,7 +145,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**
   turns each account's warm-up on and off.
 - The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app
-  renews parked logins as it reads usage, and `pitboard renew` and `pitboard schedule status`
+  refreshes saved sign-ins as it reads usage, and `pitboard renew` and `pitboard schedule status`
   keep both.
 
 ### Fixed
@@ -189,10 +187,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   says the sign-in opens, instead of after.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
-- The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
-  again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
-- The app lines up the usage bars of every account, where a row that said no pace had wider
-  bars.
+- The app marks an account whose saved sign-in Anthropic or OpenAI refused **Sign-in no longer
+  works** and offers **Sign In Again**, in place of a switch to a sign-in that no longer works.
 - The macOS app selects an account when you click one of its usage bars, where the click
   selected nothing.
 - On Windows, an update of the app leaves a file in use to be replaced at your next restart,
@@ -205,8 +201,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app notifies you of a warm-up that came to nothing once for each account and reason until
   that account warms up, as `pitboard watch` says it, where a run of Claude Code that failed in
   other words, or another account warming up, had it notified again.
-- The app says why it could not give up an interrupted Claude Desktop move whose parked login it
-  could not look at, as the command line does.
+- The app says why it could not cancel a Claude Desktop switch that did not finish, whose saved
+  sign-in it could not look at, as the command line does.
 - `pitboard doctor` says how long the Claude Code login in use has left as it says a parked
   login's, says when it has expired, and no longer warns that a login whose expiry is not known
   expires soon.

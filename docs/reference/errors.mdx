@@ -6,7 +6,7 @@ description: "Error, cause, warning and stale codes are stable; each is listed w
 
 Adding a code is not a breaking change; renaming or removing one is.
 
-The command line prints the message after `error:` or `warning:` on standard error. With `--json`, the code is in `error.code` or `warnings[].code`, as [The envelope](/reference/json-output#the-envelope) shows. The app shows the message under a title that names what failed, such as **Couldn't switch to work**, with a button that does what to do next, or **Learn More**, which opens the part of this page that lists the code.
+The command line prints the message after `error:` or `warning:` on standard error. With `--json`, the code is in `error.code` or `warnings[].code`, as [The envelope](/reference/json-output#the-envelope) shows. The app shows the message under a title that names what failed, such as **Couldn't switch to work**.
 
 [Exit codes](/reference/commands#exit-codes) says what each exit status means. `label_unusable` appears only in [`pitboard log`](/reference/maintenance-commands#log).
 

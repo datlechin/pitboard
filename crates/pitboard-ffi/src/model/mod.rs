@@ -252,10 +252,7 @@ pub enum Intent {
     AbandonStuckSwitch,
     /// Somebody has read what giving up on an interrupted switch kept, and put it away.
     DismissAbandoned,
-    /// Sign in to `provider`'s tool, a `Tool`'s code: again to the account `again` names, or to
-    /// a new one, which the core adds under a name from its email as the sign-in finishes and
-    /// `Sheet::Name` then offers to change. One at a time; a tool that signs in inside its app
-    /// asks the quit question first.
+    /// A new account is added under a name from its email, which `Sheet::Name` offers to change.
     SignIn {
         provider: String,
         again: Option<String>,
@@ -406,14 +403,14 @@ pub enum Intent {
     ClearDownloads { store: String },
     /// Once `Snapshot::uninstall` was confirmed: nothing more is read or written until it ends.
     Uninstall,
-    /// From a widget, a control or an intent, which `Snapshot::answers` answers by `request`.
+    /// From a widget, a control or an intent, answered by `request` in `Snapshot::answers`.
     Outside { request: u64, ask: OutsideAsk },
 }
 
-/// What a widget, a control or an intent asks, never more than a click in the app does.
+/// Never more than a click in the app does.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum OutsideAsk {
-    /// Switch to the account the glance names by `account`, its id there.
+    /// `account`: its id in the glance
     Switch {
         account: String,
     },

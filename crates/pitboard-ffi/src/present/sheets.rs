@@ -537,9 +537,7 @@ mod tests {
         }
     }
 
-    // What each sheet's default button sends, so neither app maps a sheet to an intent. A sheet
-    // that signs in takes no name, and naming an account just added renames it only where the
-    // name changed.
+    // Neither app maps a sheet to an intent; naming an account just added renames it on a change.
     #[test]
     fn a_name_comes_with_what_its_sheet_sends() {
         let sends = |sheet: Sheet, tool: &str, typed: &str| {
