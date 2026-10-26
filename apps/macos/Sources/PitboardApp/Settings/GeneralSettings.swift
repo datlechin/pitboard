@@ -9,10 +9,11 @@ struct GeneralSettings: View {
     @AppStorage(DefaultsKey.menuBarShows) private var shows = MenuBarShows.nameAndUsage
 
     var body: some View {
+        let said = words.settings
         Form {
             Section {
                 Toggle(
-                    "Open Pitboard at login",
+                    said.openAtLogin,
                     isOn: Binding(
                         get: { openAtLogin.state != .disabled },
                         set: { openAtLogin.set($0) })
@@ -21,48 +22,54 @@ struct GeneralSettings: View {
                 LoginItemApproval(openAtLogin: openAtLogin)
                 if notifications.off {
                     LabeledContent {
-                        Button("Open Notification Settings…") {
+                        Button(said.openNotificationSettings) {
                             notifications.openSystemSettings()
                         }
                     } label: {
-                        Text("Notifications from Pitboard are turned off in System Settings.")
-                            .explanatory()
+                        Text(said.notifications)
+                        Text(said.notificationsOff)
                     }
                     .accessibilityIdentifier("settings.notificationsOff")
                 }
-                Picker("Menu bar shows", selection: $shows) {
+                Picker(said.menuBarShows ?? "", selection: $shows) {
                     ForEach(MenuBarShows.allCases) { option in
                         Text(option.title).tag(option)
                     }
                 }
             }
-            if updates.available {
-                Section {
+            Section {
+                if updates.available {
                     Toggle(
-                        "Check for updates automatically",
+                        said.checkForUpdatesAutomatically,
                         isOn: Binding(
                             get: { updates.checksAutomatically },
                             set: { updates.checksAutomatically = $0 }))
                     Toggle(
-                        "Download and install updates automatically",
+                        said.downloadAndInstallAutomatically ?? "",
                         isOn: Binding(
                             get: { updates.installsAutomatically },
                             set: { updates.installsAutomatically = $0 })
                     )
                     .disabled(!updates.checksAutomatically)
-                    LabeledContent {
-                        Button("Check Now") { updates.check() }
-                    } label: {
-                        Text(
-                            updates.waiting.map { "Pitboard \($0) is ready to install." }
-                                ?? AppVersion.named())
+                }
+                LabeledContent {
+                    HStack {
+                        Text(AppVersion.whole() ?? "")
+                        if updates.available {
+                            Button(said.checkNow) { updates.check() }
+                        }
+                    }
+                } label: {
+                    Text(said.version)
+                    if let waiting = updates.waiting {
+                        Text(readyToInstall(version: waiting))
                     }
                 }
-            } else {
-                Section {
-                    LabeledContent("Version", value: AppVersion.named())
-                } footer: {
-                    // Without this, a build with no update key would look broken.
+            } header: {
+                Text(said.updates)
+            } footer: {
+                // Without this, a build with no update key would look broken.
+                if !updates.available {
                     Text(noUpdateKey()).footnote()
                         .accessibilityIdentifier("settings.noUpdateKey")
                 }

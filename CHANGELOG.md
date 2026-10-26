@@ -36,7 +36,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with **Sign In Again**.
 - The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
   at first, before it runs out, with **Switch** where another account has room.
-- The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
+- The app's **Settings** link **Is this allowed?** beside switching automatically, and the Windows
+  app's beside warm-up too.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
 - The macOS menu bar mark carries a badge while the menu opens on something that needs
@@ -179,9 +180,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as **Sign In Again…** or **Learn More**.
 - An account's row in the macOS app offers what to do about its note, such as **Sign In Again…**
   for a saved sign-in about to expire, or **Learn More**.
+- The macOS app's **Settings** open in the middle of the screen, where they opened at its top.
+- The macOS app's **Settings** name each setting in title case, such as **Open Pitboard at Login**
+  and **Menu Bar Shows**, and show the version under **Updates**.
+- The macOS app's **Settings** > **Limits** lists **At** under **When a limit reaches**, and leaves
+  it out for **Do Nothing**.
+- The macOS app's **Settings** > **Advanced** shows the command line under **Command Line** as its
+  **Path**, where it said **In your terminal**.
 
 ### Removed
 
+- The macOS app's **Settings** no longer say that Anthropic's terms may cover automatic switching
+  and warm-ups before **Is this allowed?**.
 - The app no longer shows a tip to name the account a tool is signed in to: its row offers
   **Add**.
 - The app no longer marks a limit's pace or says when a limit runs out at it: `pitboard status`

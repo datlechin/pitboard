@@ -100,6 +100,7 @@ private struct Summary: View {
             Spacer(minLength: 0)
             if checks.checking {
                 ProgressView().controlSize(.small)
+                    .accessibilityLabel(words.window.checking ?? "")
             }
         }
         .accessibilityElement(children: .combine)

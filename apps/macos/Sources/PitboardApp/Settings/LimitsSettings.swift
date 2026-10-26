@@ -19,57 +19,54 @@ struct LimitsSettings: View {
             })
         Form {
             Section {
-                // Read as the sentence it is: when a limit reaches the share, do what is chosen.
-                LabeledContent(atLimit.heading) {
-                    HStack {
-                        // The HIG pairs a stepper with a field where large changes are likely.
-                        TextField(atLimit.shareLabel, value: share, format: .percent)
-                            .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: shareWidth)
-                            .disabled(!atLimit.shareEnabled)
-                            .accessibilityIdentifier("settings.atLimitShareField")
-                        Stepper(
-                            atLimit.shareLabel, value: share,
-                            in: Int(atLimit.lowest)...Int(atLimit.highest)
-                        )
-                        .labelsHidden()
-                        .disabled(!atLimit.shareEnabled)
-                        .accessibilityIdentifier("settings.atLimitShare")
-                        Picker(
-                            atLimit.atLabel,
-                            selection: Binding(
-                                get: { atLimit.choice },
-                                set: { model.send(.setAtLimit(choice: $0, at: atLimit.at)) })
-                        ) {
-                            ForEach(atLimit.choices, id: \.choice) { choice in
-                                Text(choice.title).tag(choice.choice)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .accessibilityIdentifier("settings.atLimit")
+                Picker(
+                    atLimit.heading,
+                    selection: Binding(
+                        get: { atLimit.choice },
+                        set: { model.send(.setAtLimit(choice: $0, at: atLimit.at)) })
+                ) {
+                    ForEach(atLimit.choices, id: \.choice) { choice in
+                        Text(choice.title).tag(choice.choice)
                     }
                 }
-                .disabled(!atLimit.enabled)
+                .accessibilityIdentifier("settings.atLimit")
+                if atLimit.choice != .nothing {
+                    LabeledContent(atLimit.shareLabel) {
+                        HStack {
+                            // The HIG pairs a stepper with a field where large changes are likely.
+                            TextField(atLimit.shareLabel, value: share, format: .percent)
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: shareWidth)
+                                .accessibilityIdentifier("settings.atLimitShareField")
+                            Stepper(
+                                atLimit.shareLabel, value: share,
+                                in: Int(atLimit.lowest)...Int(atLimit.highest)
+                            )
+                            .labelsHidden()
+                            .accessibilityIdentifier("settings.atLimitShare")
+                        }
+                    }
+                    .disabled(!atLimit.shareEnabled)
+                }
                 if let standing = atLimit.standing {
                     Text(standing)
                         .explanatory()
                         .accessibilityIdentifier("settings.autoSwitchStanding")
                 }
-            } header: {
-                Text(atLimit.title)
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    if let note = atLimit.note { Text(note).footnote() }
-                    if let terms = atLimit.terms { TermsText(terms: terms) }
+                if let terms = atLimit.terms, let page = URL(string: terms.link) {
+                    Link(terms.linkTitle, destination: page)
+                        .accessibilityIdentifier("settings.terms")
                 }
+            } footer: {
+                if let note = atLimit.note { Text(note).footnote() }
             }
+            .disabled(!atLimit.enabled)
 
             Section {
                 DatePicker(
-                    "From",
+                    words.settings.from,
                     selection: timeOfDay(warm.from) {
                         model.send(.setWarmRange(from: $0, to: warm.to))
                     },
@@ -77,7 +74,7 @@ struct LimitsSettings: View {
                 )
                 .accessibilityIdentifier("settings.warmFrom")
                 DatePicker(
-                    "To",
+                    words.settings.to,
                     selection: timeOfDay(warm.to) {
                         model.send(.setWarmRange(from: warm.from, to: $0))
                     },
@@ -108,25 +105,11 @@ struct LimitsSettings: View {
             } header: {
                 Text(warm.title)
             } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(warm.note).footnote()
-                    TermsText(terms: warm.terms)
-                }
+                Text(warm.note).footnote()
             }
             .disabled(!warm.enabled)
         }
         .formStyle(.grouped)
-    }
-}
-
-// The sentence, then the page that says whether the terms allow it, as one text that wraps.
-private struct TermsText: View {
-    let terms: TermsShown
-
-    var body: some View {
-        var link = AttributedString(terms.linkTitle)
-        link.link = URL(string: terms.link)
-        return Text(AttributedString("\(terms.sentence) ") + link).footnote()
     }
 }
 

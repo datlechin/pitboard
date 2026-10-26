@@ -559,9 +559,9 @@ final class SiteFiguresTests: FixtureTestCase {
         var shares: [String: Int] = [:]
         // Waits for the share the step should leave, where there is one, then reads it.
         func read(_ what: String, expecting expected: Int? = nil) {
-            let said = share(app, expecting: expected)
+            let said = share(in: field, expecting: expected)
             shares[what] = Int(said.filter(\.isNumber))
-            seen.append("\(what): field \(field.value ?? "-"), says \(said)")
+            seen.append("\(what): \(said)")
         }
         func typed(_ text: String, _ what: String, expecting expected: Int) {
             field.click()
@@ -583,14 +583,14 @@ final class SiteFiguresTests: FixtureTestCase {
             up.press(forDuration: held)
             read("up held \(name)")
             down.press(forDuration: 4)
-            _ = share(app, expecting: 50)
+            _ = share(in: field, expecting: 50)
         }
         up.press(forDuration: 4)
         read("up held 4 s", expecting: 99)
         up.click()
         read("up at the highest", expecting: 99)
         down.press(forDuration: 4)
-        _ = share(app, expecting: 50)
+        _ = share(in: field, expecting: 50)
         // Typed from the lowest, so the first digit, clamped, changes nothing.
         typed("120\r", "typed 120", expecting: 99)
         typed("10\r", "typed 10", expecting: 50)
@@ -786,16 +786,13 @@ final class SiteFiguresTests: FixtureTestCase {
         return choice
     }
 
-    // The share as the pop-up's spoken name says it, once it says `expected` or two seconds on.
+    // The share as the field shows it, once it says `expected` or two seconds on.
     @MainActor
-    private func share(_ app: XCUIApplication, expecting expected: Int? = nil) -> String {
-        let named = NSPredicate(format: "label BEGINSWITH %@", "When a limit reaches ")
-        let element = app.descendants(matching: .any).matching(named).firstMatch
+    private func share(in field: XCUIElement, expecting expected: Int? = nil) -> String {
         if let expected {
-            _ = element.wait(
-                for: \.label, toEqual: "When a limit reaches \(expected)%", timeout: 2)
+            _ = field.wait(until: "value == '\(expected)%'", timeout: 2)
         }
-        return element.label
+        return field.value as? String ?? "-"
     }
 
     // One key at a time, as typeText asks for a focused element and a menu has none.

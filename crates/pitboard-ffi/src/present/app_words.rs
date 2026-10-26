@@ -63,8 +63,9 @@ pub struct WindowWords {
     // a check's detail's own menu, and an expanded row's email, on Windows
     pub copy: Option<String>,
     pub select_all: Option<String>,
-    // what Narrator calls the checks, and the ring while they run
+    // what Narrator calls the checks
     pub checks: Option<String>,
+    // what VoiceOver and Narrator call the spinner while the checks run
     pub checking: Option<String>,
 }
 
@@ -121,7 +122,7 @@ pub struct SettingsWords {
     pub install_command_line: Option<String>,
     pub link_failed: Option<String>,
     pub cannot_link_command_line: Option<String>,
-    // what Narrator calls the ring while the Windows page looks for one
+    // what VoiceOver and Narrator call the spinner while Settings looks for one
     pub looking_for_command_line: Option<String>,
     // a Windows copy that cannot update itself
     pub update_key_invalid: Option<String>,
@@ -322,7 +323,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             copy: windows("Copy"),
             select_all: windows("Select all"),
             checks: windows("Checks"),
-            checking: windows("Checking"),
+            checking: Some("Checking".into()),
         },
         activity: ActivityWords {
             date: "Date".into(),
@@ -395,7 +396,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             cannot_link_command_line: mac(
                 "This copy of Pitboard can’t link the command line inside it.",
             ),
-            looking_for_command_line: windows("Looking for pitboard"),
+            looking_for_command_line: Some("Looking for pitboard".into()),
             update_key_invalid: windows(
                 "This copy of Pitboard can’t update itself: the update key it was built with isn’t \
                  a valid key. Install a later version by hand.",
@@ -634,6 +635,19 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+    }
+
+    // A spinner says nothing on screen, so each system's screen reader is told what it waits for.
+    #[test]
+    fn a_spinner_is_named_on_each_system() {
+        for os in [Os::MacOs, Os::Windows] {
+            let words = app_words_on(os);
+            assert_eq!(words.window.checking.as_deref(), Some("Checking"));
+            assert_eq!(
+                words.settings.looking_for_command_line.as_deref(),
+                Some("Looking for pitboard")
+            );
+        }
     }
 
     // Plan 6.5: once Pitboard's own data is gone, the macOS app takes itself to the Trash, or

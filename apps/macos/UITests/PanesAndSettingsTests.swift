@@ -74,15 +74,23 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertEqual(toggle.value as? Int, 0)
     }
 
+    // Plan 4.5: titled by the pane it shows, in the middle of the screen, not against its top.
     @MainActor
-    func testSettingsHaveThreePanes() {
+    func testSettingsHaveThreePanesAndOpenCentred() throws {
         let app = launch(.oneTool)
         app.openSettings()
-        let panes = app.windows[Words.general].toolbars.buttons
+        let settings = app.windows[Words.general]
+        let panes = settings.toolbars.buttons
         XCTAssertEqual(panes.count, 3)
         for pane in [Words.general, Words.limits, Words.advanced] {
             XCTAssertTrue(panes[pane].exists, pane)
         }
+        // The first screen's frame, whose top left is where a window's frame is measured from.
+        let screen = try XCTUnwrap(NSScreen.screens.first).frame
+        XCTAssertEqual(settings.frame.midX, screen.midX, accuracy: 2)
+        XCTAssertEqual(settings.frame.midY, screen.midY, accuracy: screen.height / 8)
+        panes[Words.limits].click()
+        XCTAssertTrue(app.windows[Words.limits].waitForExistence(timeout: 5))
     }
 
     /// The model answers a change after the click, so each read after one waits.
@@ -104,6 +112,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
 
         choose(Words.switchAutomatically, in: choice)
         XCTAssertTrue(standing.waitForExistence(timeout: 5), "what the look came to")
+        XCTAssertTrue(app.control("settings.terms").exists, "Is this allowed?")
 
         let typed = app.textFields["settings.atLimitShareField"]
         XCTAssertTrue(typed.exists, "a field beside the stepper")
@@ -118,6 +127,8 @@ final class PanesAndSettingsTests: FixtureTestCase {
 
         choose(Words.doNothing, in: choice)
         XCTAssertTrue(standing.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(share.waitForNonExistence(timeout: 5), "no share to reach")
+        XCTAssertFalse(typed.exists)
     }
 
     @MainActor

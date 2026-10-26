@@ -107,8 +107,6 @@ public struct PitboardScenes: Scene {
                 presence: windows.presence, updates: updates
             )
         }
-        // A taller pane grows the window downward, so it opens at the top of the screen,
-        // where the tallest pane still clears the Dock.
-        .defaultPosition(.top)
+        .defaultPosition(.center)
     }
 }

@@ -28,7 +28,7 @@ private let release = [
 
 @Test func aBetaShowsItsWholeVersion() throws {
     try withApp(beta) { bundle in
-        #expect(AppVersion.named(in: bundle) == "Pitboard 1.0.0-beta.1")
+        #expect(AppVersion.whole(in: bundle) == "1.0.0-beta.1")
         let about = AppVersion.aboutPanel(in: bundle)
         #expect(about.count == 1)
         #expect(about[.applicationVersion] as? String == "1.0.0-beta.1")
@@ -37,20 +37,20 @@ private let release = [
 
 @Test func aReleaseShowsItsVersion() throws {
     try withApp(release) { bundle in
-        #expect(AppVersion.named(in: bundle) == "Pitboard 0.15.0")
+        #expect(AppVersion.whole(in: bundle) == "0.15.0")
         #expect(
             AppVersion.aboutPanel(in: bundle)[.applicationVersion] as? String == "0.15.0"
         )
     }
 }
 
-@Test func aBuildWithNoVersionShowsTheNameAlone() throws {
+@Test func aBuildWithNoVersionShowsNone() throws {
     try withApp([AppVersion.key: ""]) { bundle in
-        #expect(AppVersion.named(in: bundle) == "Pitboard")
+        #expect(AppVersion.whole(in: bundle) == nil)
         #expect(AppVersion.aboutPanel(in: bundle).isEmpty)
     }
     try withApp([:]) { bundle in
-        #expect(AppVersion.named(in: bundle) == "Pitboard")
+        #expect(AppVersion.whole(in: bundle) == nil)
     }
 }
 

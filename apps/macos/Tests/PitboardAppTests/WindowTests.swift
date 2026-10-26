@@ -32,12 +32,13 @@ import Testing
     #expect(!requests.opens(WindowRequest(serial: 2, place: nil)), "an older one")
 }
 
-/// The raw values are what the preference is stored as, so changing one would quietly reset
-/// what everybody chose.
+// The raw values are the stored preference: changing one would reset what everybody chose.
 @Test func theMenuBarChoicesKeepTheirNamesAndTheirStoredValues() {
     #expect(MenuBarShows.allCases == [.nameAndUsage, .usage, .icon])
+    let said = words.settings
     #expect(
-        MenuBarShows.allCases.map(\.title) == ["Account and usage", "Usage only", "Icon only"])
+        MenuBarShows.allCases.map(\.title)
+            == [said.accountAndUsage, said.usageOnly, said.iconOnly].map { $0 ?? "-" })
     #expect(MenuBarShows.allCases.map(\.rawValue) == ["nameAndUsage", "usage", "icon"])
     #expect(MenuBarShows.allCases.allSatisfy { $0.id == $0.rawValue })
     let bar = MenuBarText(
