@@ -117,7 +117,7 @@ test.describe("Windows", () => {
   }) => {
     const fig = await open(page, "windows");
     const work = fig.locator('[data-account="work"]');
-    const toggle = work.getByRole("switch", { name: "work · Max 20x" });
+    const toggle = work.getByRole("switch", { name: "work" });
     await toggle.focus();
     await page.keyboard.press("Enter");
     await expect(toggle).toHaveAttribute("aria-checked", "false");

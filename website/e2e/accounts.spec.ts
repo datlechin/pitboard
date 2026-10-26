@@ -1,6 +1,7 @@
-// The Accounts windows: the list's selection and keys on each system, the shortcut and context
-// menus by mouse, keyboard and touch, the alert, sheets and dialogs they ask in, and the Activity
-// pane that reads the log (plan 3.3 to 3.5, 3.8, section 6).
+// The Accounts windows: the list's selection and keys on each system, the macOS inspector of the
+// account selected, the shortcut and context menus by mouse, keyboard and touch, the alert, sheets
+// and dialogs they ask in, and the Activity window and pane that read the log (plan 3.3 to 3.5,
+// 3.8, section 6; app redo 4.3).
 import type { Locator, Page } from "@playwright/test";
 import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";
 
@@ -112,9 +113,9 @@ test.describe("on macOS", () => {
       "a browser makes a Control-click a right click on a Mac; Playwright's Firefox sends none",
     );
     const { row, menu } = await accounts(page, "macos");
-    await row("personal").click({ modifiers: ["Control"], ...at });
+    await row("work").click({ modifiers: ["Control"], ...at });
     await expect(menu).toBeVisible();
-    await expect(row("personal")).toHaveAttribute("aria-selected", "false");
+    await expect(row("work")).toHaveAttribute("aria-selected", "false");
     await page.keyboard.press("Escape");
     await row("personal").click(at);
     await page.keyboard.press("Shift+F10");
@@ -232,7 +233,10 @@ test.describe("on macOS", () => {
     );
     await confirm.click();
     await expect(sheet).toHaveAccessibleName("Signing In to Codex");
-    await expect(sheet.locator('[data-part="waiting"]')).toBeVisible();
+    await expect(sheet.locator('[data-part="wait-line"]')).toHaveText(
+      "Finish signing in in your browser.",
+    );
+    await expect(sheet.getByRole("img", { name: "Waiting for your browser" })).toBeVisible();
     await page.clock.runFor(3500);
     await expect(sheet).toBeHidden();
     // added under the name the core picks from the email, which the next sheet offers to change
@@ -271,6 +275,13 @@ test.describe("on macOS", () => {
       await expect(sheet.locator('[role="combobox"] [data-value="desktop"]')).toBeVisible();
       const confirm = sheet.locator('[data-part="confirm"]');
       await expect(confirm).toHaveText("Continue");
+      await expect(sheet.locator('[data-part="step"]:not([hidden]) [data-part="said"]')).toHaveText(
+        [
+          "Open Claude.",
+          "Sign in to the account you’re adding.",
+          "Once it shows your chats, quit Claude with Command-Q, and Pitboard adds it.",
+        ],
+      );
       await confirm.click();
       await expect(sheet.locator('[data-does="cancel"]')).toHaveText("Later");
       await expect(sheet.locator('[data-does="put-back"]')).toHaveText("Switch Back to home");
@@ -299,10 +310,48 @@ test.describe("on macOS", () => {
     await expect(notice.locator('[data-part="title"]')).toHaveText("Switched Claude Code to work");
     await notice.getByRole("button", { name: "Dismiss" }).click();
     await expect(notice).toBeHidden();
-    await expect(fig.locator('[data-part="first"]')).toHaveAttribute("data-state", "top");
   });
 
-  test("Activity reads the log as it comes into view and on Refresh, and not as it changes", async ({
+  test("the inspector shows the account selected, and the account in use of the first tool at first", async ({
+    page,
+  }) => {
+    const { fig, row } = await accounts(page, "macos");
+    const inspector = fig.locator('[data-part="inspector"]');
+    await expect(row("personal")).toHaveAttribute("aria-selected", "true");
+    await expect(inspector.getByRole("heading")).toHaveText("personal");
+    await expect(
+      inspector.getByRole("img", { name: /^5-hour limit, 59 percent used/ }),
+    ).toBeVisible();
+    await expect(inspector.locator('[data-part="ins-sign-in"]')).toHaveText(
+      "Saved sign-in valid until 9 Nov",
+    );
+    await expect(inspector.locator('[data-part="ins-warm"]')).toHaveText("Warms up again at 22:00");
+    await row("main").click(at);
+    await expect(inspector.getByRole("heading")).toHaveText("main");
+    await expect(inspector.locator('[data-part="ins-sign-in"]')).toHaveText("In use");
+    await expect(inspector.locator('[data-part="ins-warm-row"]')).toBeHidden();
+    await expect(inspector.getByRole("button", { name: "Switch to main" })).toBeHidden();
+    await row("spare").click(at);
+    await inspector.getByRole("button", { name: "Switch to spare" }).click();
+    await expect(row("spare")).toHaveAttribute("aria-label", "spare, Plus, in use");
+    await expect(inspector.getByRole("button", { name: "Switch to spare" })).toBeHidden();
+  });
+
+  test("the toolbar's Inspector and ⌥⌘I hide the inspector and show it again", async ({ page }) => {
+    const { fig, grid } = await accounts(page, "macos");
+    const inspector = fig.locator('[data-part="inspector"]');
+    const button = fig.getByRole("button", { name: "Inspector" });
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    await button.click();
+    await expect(inspector).toBeHidden();
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await grid.focus();
+    await page.keyboard.press("Alt+Meta+KeyI");
+    await expect(inspector).toBeVisible();
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("the Activity window reads the log as it comes into view and on Refresh, and not as it changes", async ({
     page,
   }) => {
     const { row } = await accounts(page, "macos");
@@ -505,17 +554,17 @@ test.describe("on a phone", () => {
   }) => {
     test.skip(browserName !== "chromium", "Chromium's own long press, sent through CDP");
     const { row, menu } = await accounts(page, "macos");
-    const box = (await row("personal").boundingBox())!;
+    const box = (await row("work").boundingBox())!;
     const cdp = await page.context().newCDPSession(page);
     const point = { x: box.x + box.width / 2, y: box.y + 10 };
     await cdp.send("Input.synthesizeTapGesture", { ...point, duration: 800 });
     await expect(menu).toBeVisible();
-    await expect(row("personal")).toHaveAttribute("aria-selected", "false");
+    await expect(row("work")).toHaveAttribute("aria-selected", "false");
     await cdp.send("Input.synthesizeTapGesture", { x: 5, y: point.y });
     await expect(menu).toBeHidden();
     // Linux's headless shell makes no click of a tap CDP synthesizes
     await page.touchscreen.tap(point.x, point.y);
-    await expect(row("personal")).toHaveAttribute("aria-selected", "true");
+    await expect(row("work")).toHaveAttribute("aria-selected", "true");
   });
 
   test("a touch held still opens it where iOS sends no contextmenu, and the click after is swallowed", async ({
@@ -524,7 +573,7 @@ test.describe("on a phone", () => {
   }) => {
     test.skip(browserName !== "webkit", "iOS Safari's touch");
     const { row, menu } = await accounts(page, "macos");
-    await row("personal").evaluate(async (el) => {
+    await row("work").evaluate(async (el) => {
       const r = el.getBoundingClientRect();
       const at = { clientX: r.left + 40, clientY: r.top + 10, bubbles: true, pointerType: "touch" };
       el.dispatchEvent(new PointerEvent("pointerdown", at));
@@ -533,6 +582,6 @@ test.describe("on a phone", () => {
       el.dispatchEvent(new MouseEvent("click", { ...at, detail: 1 }));
     });
     await expect(menu).toBeVisible();
-    await expect(row("personal")).toHaveAttribute("aria-selected", "false");
+    await expect(row("work")).toHaveAttribute("aria-selected", "false");
   });
 });

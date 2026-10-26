@@ -1,8 +1,9 @@
 ---
-// A sheet as SheetLayout lays one out in the app (AccountSheetView.swift): 440 points wide, its
-// title and message, a grouped form, then a spinner where it waits and its buttons at the end. A
-// <dialog> live/dialog.ts opens in the middle of its window, as macOS 26 puts a sheet; its ids
-// start `id`.
+// A sheet as the app lays one out (AccountSheetView.swift): 400 points wide, a grouped form under
+// its title and one sentence, then a bar of its own under a separator, which holds the toolbar's
+// automatic items at its leading end and Cancel and the sheet's answer at its trailing end
+// (docs/facts/macos-app.md). A <dialog> live/dialog.ts opens in the middle of its window, as macOS
+// 26 puts a sheet; its ids start `id`.
 interface Props {
   id: string;
 }
@@ -10,23 +11,21 @@ const { id } = Astro.props;
 ---
 
 <dialog
-  class="supports-[anchor-name:--a]:m-0 [position-anchor:var(--over)] supports-[anchor-name:--a]:right-auto supports-[anchor-name:--a]:bottom-auto supports-[anchor-name:--a]:top-[anchor(center)] supports-[anchor-name:--a]:left-[anchor(center)] supports-[anchor-name:--a]:-translate-1/2 w-440 overflow-visible rounded-u-18 bg-mac-window-bg font-mac text-u-13/16 text-mac-window-text shadow-mac-window backdrop:bg-transparent"
+  class="supports-[anchor-name:--a]:m-0 [position-anchor:var(--over)] supports-[anchor-name:--a]:right-auto supports-[anchor-name:--a]:bottom-auto supports-[anchor-name:--a]:top-[anchor(center)] supports-[anchor-name:--a]:left-[anchor(center)] supports-[anchor-name:--a]:-translate-1/2 w-400 overflow-visible rounded-u-18 bg-mac-window-bg font-mac text-u-13/16 text-mac-window-text shadow-mac-window backdrop:bg-transparent"
   id={id}
   aria-labelledby={`${id}-title`}
   aria-describedby={`${id}-message`}
 >
   <form method="dialog">
-    <div class="px-20 pt-20">
-      <h2 class="font-bold" id={`${id}-title`} data-part="title"></h2>
-      <p
-        class="mt-6 whitespace-pre-line text-mac-window-sub"
-        id={`${id}-message`}
-        data-part="message"
-      ></p>
+    <div class="flex flex-col gap-10 px-20 pt-20 pb-16">
+      <div class="px-10">
+        <h2 class="font-bold" id={`${id}-title`} data-part="title"></h2>
+        <p class="mt-6 whitespace-pre-line" id={`${id}-message`} data-part="message"></p>
+      </div>
+      <slot />
     </div>
-    <div class="flex flex-col gap-10 px-20 py-14"><slot /></div>
-    <div class="flex items-center gap-8 px-20 pb-20">
-      <slot name="status" />
+    <div class="flex items-center gap-8 border-t border-mac-window-sep px-20 py-12">
+      <slot name="leading" />
       <span class="flex-1"></span>
       <slot name="buttons" />
     </div>

@@ -1,10 +1,10 @@
 ---
 // The top of the Limits pane as macOS 27 draws it, in the words machine.rs gives
 // LimitsSettings.swift; each height cuts the window 8 points below its first group, and a working
-// figure 8 points below the footer of Before an account runs out at its tallest, Switch
-// Automatically's, under the menu bar the app puts up while Settings is in front. Its controls carry
-// the names machine.rs gives them, and their ids start `prefix`. Every choice's words are drawn,
-// those of the choice not shown hidden.
+// figure 8 points below the footer of When a limit reaches at its tallest, Switch Automatically's,
+// under the menu bar the app puts up while Settings is in front. Its controls carry the names
+// machine.rs gives them, and their ids start `prefix`. Every choice's words are drawn, those of the
+// choice not shown hidden.
 import Advanced from "./Advanced.astro";
 import AppMenuBar from "./AppMenuBar.astro";
 import General from "./General.astro";
@@ -12,16 +12,7 @@ import Lights from "./Lights.astro";
 import Switch from "./Switch.astro";
 import { clock, moments, share, warmUp } from "../../../data/world.ts";
 import { settingsPage as page } from "../../../data/windows.ts";
-import {
-  atLabel,
-  choices,
-  heading,
-  section,
-  shareLabel,
-  terms,
-  timeOfDay,
-  warm,
-} from "../../../data/limits.ts";
+import { choices, heading, shareLabel, terms, timeOfDay, warm } from "../../../data/limits.ts";
 import type { AtLimit } from "../../../lib/model.ts";
 import { atLimitNote } from "../../../lib/words.ts";
 import { hm, menuBarClock, toolAccounts } from "../../../lib/words.ts";
@@ -39,7 +30,7 @@ const tabs = [
   ["limits", "Limits", "sf-gauge"],
   ["advanced", "Advanced", "sf-gear2"],
 ];
-const heights = { switch: "h-245", warm: "h-378.5" };
+const heights = { switch: "h-285.5", warm: "h-378.5" };
 // with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
 // needs at least, and Warm-Up as its accounts make it. The cut stays 8 points below, the
 // desk's border counted as a static height counts it.
@@ -48,7 +39,7 @@ const live = {
   switch: "[&:defined]:h-(--locked,auto)",
   warm: "[&:defined]:h-(--locked,auto)",
 };
-const frame = { switch: "live:min-h-330.5", warm: "" };
+const frame = { switch: "live:min-h-328.5", warm: "" };
 const drawn: AtLimit = "switch";
 const minutes = (at: string) => {
   const [h, m] = at.split(":").map(Number);
@@ -140,10 +131,64 @@ const menuRow =
     >
       {show === "switch" && (
         <>
-          <p class={head}>{section}</p>
-          <div class={group}>
-            <div class:list={[row, "h-40.5 items-center pr-14 pb-4.5"]}>
-              <span class="flex-1">{heading}</span>
+          <div class:list={[group, "mt-20"]}>
+            <div class:list={[row, "h-38 items-center pr-14"]}>
+              <span class="flex-1" id={`${prefix}-at-label`}>{heading}</span>
+              <span class="relative flex">
+                {/* a pop-up button, which says its choice as a select-only combobox does */}
+                <span
+                  class="flex items-center rounded-u-6 focus-mac focus-visible:outline-offset-[calc(var(--u)*2)]"
+                  id={`${prefix}-at`}
+                  role="combobox"
+                  tabindex="0"
+                  aria-labelledby={`${prefix}-at-label`}
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls={`${prefix}-choices`}
+                >
+                  {choices.map((c) => <span
+                    class="whitespace-nowrap"
+                    data-value={c.value}
+                    hidden={c.value !== drawn}
+                  >
+                    {c.mac}
+                  </span>)}
+                  <span
+                    class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                  </span>
+                </span>
+                {/* the menu opens with the choice over the button's title */}
+                <span
+                  class="absolute top-[calc(var(--u)*(-6.25_-_24*var(--at,0)))] -left-30 z-10 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-150 data-[state=closing]:pointer-events-none data-[state=closing]:opacity-0"
+                  id={`${prefix}-choices`}
+                  role="listbox"
+                  aria-labelledby={`${prefix}-at-label`}
+                  hidden
+                >
+                  {choices.map((c) => <span
+                    class:list={[menuRow, "group/option"]}
+                    id={`${prefix}-choice-${c.value}`}
+                    role="option"
+                    aria-selected="false"
+                    aria-checked={c.value === drawn ? "true" : "false"}
+                    data-value={c.value}
+                  >
+                    <svg
+                      class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/option:block"
+                    >
+                      <use href="#sf-check-heavy" />
+                    </svg>
+                    {c.mac}
+                  </span>)}
+                </span>
+              </span>
+            </div>
+            {/* the share, which Do Nothing leaves out */}
+            <div class:list={[row, ruled, "h-41 items-center pr-14"]} data-share-row>
+              <span class="flex-1">{shareLabel}</span>
               {/* the field as drawn, and once the figure works the text field itself, whose text
                   Chromium sets a pixel lower than the drawing's */}
               <span
@@ -184,61 +229,20 @@ const menuRow =
                 <path d="M5.4 8.1 10 3.4l4.6 4.7M5.4 15.4l4.6 4.7 4.6-4.7" stroke-width="1.75" />
                 <path d="M3.5 11.75h12.5" stroke-opacity=".16" />
               </svg>
-              <span class="relative ml-21.5 flex">
-                {/* a pop-up button, which says its choice as a select-only combobox does */}
-                <span
-                  class="flex items-center rounded-u-6 focus-mac focus-visible:outline-offset-[calc(var(--u)*2)]"
-                  id={`${prefix}-at`}
-                  role="combobox"
-                  tabindex="0"
-                  aria-label={atLabel(share)}
-                  aria-haspopup="listbox"
-                  aria-expanded="false"
-                  aria-controls={`${prefix}-choices`}
-                >
-                  {choices.map((c) => <span
-                    class="whitespace-nowrap"
-                    data-value={c.value}
-                    hidden={c.value !== drawn}
-                  >
-                    {c.mac}
-                  </span>)}
-                  <span
-                    class="ml-12.5 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
-                    aria-hidden="true"
-                  >
-                    <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
-                  </span>
-                </span>
-                {/* the menu opens with the choice over the button's title */}
-                <span
-                  class="absolute top-[calc(var(--u)*(-6.25_-_24*var(--at,0)))] -left-30 z-10 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-150 data-[state=closing]:pointer-events-none data-[state=closing]:opacity-0"
-                  id={`${prefix}-choices`}
-                  role="listbox"
-                  aria-label={heading}
-                  hidden
-                >
-                  {choices.map((c) => <span
-                    class:list={[menuRow, "group/option"]}
-                    id={`${prefix}-choice-${c.value}`}
-                    role="option"
-                    aria-selected="false"
-                    aria-checked={c.value === drawn ? "true" : "false"}
-                    data-value={c.value}
-                  >
-                    <svg
-                      class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/option:block"
-                    >
-                      <use href="#sf-check-heavy" />
-                    </svg>
-                    {c.mac}
-                  </span>)}
-                </span>
-              </span>
             </div>
-            <div class:list={[row, ruled, "min-h-37 items-center pb-1.5"]} data-standing>
+            <div class:list={[row, ruled, "min-h-37.5 items-center pb-1.5"]} data-standing>
               <span class={small} data-said
                 >Watching work: 40% of its weekly limit, as of {hm(clock.read)}.</span
+              >
+            </div>
+            {/* under Switch Automatically, the one link to what the terms say */}
+            <div class:list={[row, ruled, "h-37 items-center"]} data-terms>
+              <a
+                class="text-mac-window-link no-underline hover:text-mac-window-link focus-mac"
+                href={terms.href}
+                target="_blank"
+                rel="noopener"
+                >{terms.link}</a
               >
             </div>
           </div>
@@ -250,16 +254,6 @@ const menuRow =
                 </p>
               ),
             )}
-            <p class="mt-3.5" data-terms>
-              {terms.sentence}
-              <a
-                class="text-mac-window-link no-underline hover:text-mac-window-link focus-mac"
-                href={terms.href}
-                target="_blank"
-                rel="noopener"
-                >{terms.link}</a
-              >
-            </p>
           </div>
         </>
       )}

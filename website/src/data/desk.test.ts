@@ -7,12 +7,30 @@ import { clock } from "./world.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const menu = repo("apps/macos/Sources/PitboardApp/MenuBar/MenuBarContent.swift");
+// a Rust string literal as it reads once its line continuations are joined
+const appWords = repo("crates/pitboard-ffi/src/present/app_words.rs").replace(/\\\n\s*/g, "");
+// each command's words in app_words(), as the menu takes them, and as app_words.rs makes them
+const said: Record<string, [string, string]> = {
+  "Add Account…": ["addAccount", "add_account: words::add_account(os, true),"],
+  Refresh: ["refresh", "refresh: words::REFRESH.into(),"],
+  "Open Pitboard": ["openPitboard", 'open_pitboard: titled(os, "Open Pitboard", "Open Pitboard"),'],
+  "Settings…": ["settings", 'settings: titled(os, "Settings…", "Settings"),'],
+  "Check for Updates…": [
+    "checkForUpdates",
+    'check_for_updates: titled(os, "Check for Updates…", "Check for updates"),',
+  ],
+  "About Pitboard": ["about", 'about: titled(os, "About Pitboard", "About Pitboard"),'],
+  "Pitboard Help": ["help", 'help: titled(os, "Pitboard Help", "Pitboard help"),'],
+  "Quit Pitboard": ["quit", 'Os::MacOs | Os::Linux => "Quit Pitboard",'],
+};
 
-// From an item's title to the next item: the modifiers SwiftUI gives it.
+// From an item's words to the next item: the modifiers SwiftUI gives it.
 function item(title: string): string {
-  const start = menu.indexOf(`"${title}"`);
+  const [word, made] = said[title];
+  assert.ok(appWords.includes(made), made);
+  const start = menu.indexOf(`words.menu.${word}`);
   assert.ok(start >= 0, `MenuBarContent.swift has ${title}`);
-  const rest = menu.slice(start + title.length + 2);
+  const rest = menu.slice(start + word.length + 11);
   const end = rest.search(/Button[ ({]|Link\(|SiteMenuItems|\/\/ MARK/);
   return rest.slice(0, end < 0 ? undefined : end);
 }
@@ -27,11 +45,12 @@ test("the macOS menu's commands have the keys MenuBarContent.swift gives them, a
 
 test("the questions' macOS shortcuts are AccountCommands.swift's: the Account menu, and Remove Account on Command-Delete", () => {
   const commands = repo("apps/macos/Sources/PitboardApp/Window/AccountCommands.swift");
-  assert.ok(commands.includes('CommandMenu("Account")'));
+  assert.ok(commands.includes("CommandMenu(words.menu.account)"));
+  assert.ok(appWords.includes("account: words::ACCOUNT.into(),"));
   // .delete with SwiftUI's default modifier, Command, on the menu bar's Remove Account
   assert.match(
     commands,
-    /if place == \.menuBar \{\s+Button\(forget\.title, role: \.destructive\) \{ command\.choose\(forget\) \}\s+\.keyboardShortcut\(\.delete\)\n/,
+    /if place == \.menuBar \{\s+Button\(remove\.title, role: \.destructive\) \{ command\.act\(remove\) \}\s+\.keyboardShortcut\(\.delete\)\n/,
   );
   assert.ok(
     repo("crates/pitboard-ffi/src/present/accounts.rs").includes(

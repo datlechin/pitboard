@@ -17,8 +17,6 @@ import {
   menuBarSpoken,
   menuBarTitle,
   menuLine,
-  menuTitle,
-  staleNote,
   statusLine,
 } from "../../../lib/words.ts";
 
@@ -52,12 +50,7 @@ const live =
   "outline-none focus:bg-mac-menu-hl focus:text-white data-[state=blink]:bg-transparent data-[state=blink]:text-inherit aria-disabled:text-mac-menu-dim";
 const sub =
   "group-focus/item:text-white group-data-[state=blink]/item:text-mac-menu-sub group-aria-disabled/item:text-mac-menu-dim";
-const tip = (id: string) => `${prefix}-tip-${id}`;
-const tipLook =
-  "absolute top-(--y) left-(--x) z-4 mt-18 rounded-u-5 bg-mac-tip px-6 pt-2 pb-3 text-u-11/14 whitespace-nowrap text-mac-menu-text shadow-mac-tip";
 const after = moments.after;
-// a tooltip says its words as of the clock the desk shows, where the menu says them as of the read
-const shownAt = { ...after, now: clock.menuBar };
 // a site's accounts, as the menu lists them (account_windows/accounts.rs)
 const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
 ---
@@ -159,7 +152,6 @@ const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
                     ]}
                     role="menuitemradio"
                     aria-checked={isInUse(a, moments[moment]) ? "true" : "false"}
-                    aria-describedby={own ? tip(a.id) : undefined}
                     tabindex={own ? "-1" : undefined}
                     data-account={own ? a.id : undefined}
                   >
@@ -169,7 +161,7 @@ const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
                       <use href="#sf-check-heavy" />
                     </svg>
                     <span class="flex-1">
-                      <span class="block" data-part="title">{menuTitle(a)}</span>
+                      <span class="block" data-part="title">{a.label}</span>
                       <span
                         class:list={[
                           "block text-u-11/15",
@@ -312,15 +304,6 @@ const siteAccounts = (tool: Account["tool"]) => listed(after, tool);
         </div>)}
     </div>
   </MenuBar>
-  {/* each account's tooltip in the menu, its NSMenuItem toolTip: home's note while it is in use */}
-  <div data-part="tips">
-    {after.accounts.map((a) => <span class={tipLook} id={tip(a.id)} role="tooltip" hidden>
-      {staleNote(a, shownAt) ?? ""}
-    </span>)}
-    <template data-part="tip">
-      <span class={tipLook} role="tooltip" hidden></span>
-    </template>
-  </div>
   {demo && <svg
     aria-hidden="true"
     class="pointer-events-none absolute top-12 left-300 z-3 h-21 w-14 data-[state=gone]:opacity-0 origin-[1px_1px] transition-transform duration-800 ease-out demo-start:-translate-x-53 demo-start:translate-y-40 demo-row:translate-x-72 demo-row:translate-y-100 demo-pick:scale-86 demo-pick:duration-100"

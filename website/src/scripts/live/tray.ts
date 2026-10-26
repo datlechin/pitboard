@@ -22,7 +22,6 @@ import {
   listed,
   menuBarLevel,
   menuLine,
-  menuTitle,
   shellTip,
   shortDate,
   statusLine,
@@ -208,7 +207,7 @@ class TrayDesk extends LiveFigure {
   #said(s: State, a: Account) {
     const switching = s.switching?.id === a.id;
     return {
-      title: switching ? menuTitle(a) : itemTitle(a),
+      title: switching ? a.label : itemTitle(a, s),
       tip: switching ? SWITCHING : menuLine(a, s, "windows"),
     };
   }

@@ -20,12 +20,14 @@ import {
   limitRow,
   listed,
   menuLine,
-  menuTitle,
   rowLines,
+  SIGN_IN_EXPIRED,
+  signInExpired,
   switchSpoken,
   warmsAgainNote,
   toolAccounts,
   toolsOn,
+  uncapitalised,
 } from "../lib/words.ts";
 
 export const app = "Pitboard";
@@ -49,10 +51,16 @@ export const sites: [site: string, tool: Tool][] = [
   ["chatgpt.com", "codex"],
 ];
 
-// An item has one line, so the figure the menu bar would show of the account ends it (words.rs
-// `named_in_menu`).
-export const itemTitle = (a: Account) =>
-  a.limits.length > 0 ? `${menuTitle(a)} · ${fullest(a)}%` : menuTitle(a);
+// An item has one line, so the figure the menu bar would show of the account, or why it can't be
+// switched to, ends it (words.rs `named_in_menu`).
+export function itemTitle(a: Account, w: World): string {
+  const aside = signInExpired(a, w)
+    ? SIGN_IN_EXPIRED
+    : a.limits.length > 0
+      ? `${fullest(a)}%`
+      : null;
+  return aside ? `${a.label} (${uncapitalised(aside)})` : a.label;
+}
 
 // IconMenu.cs `Entries`, a group between each two separators. A beta's menu has no Check for updates.
 // An account's tooltip is the line the menu bar app shows under it, in sentence case.
@@ -61,7 +69,7 @@ export function iconMenu(w: World, updates: boolean): MenuEntry[][] {
     ...toolsOn("windows").map(([tool, name]) => [
       { heading: name },
       ...listed(w, tool).map((a) => ({
-        account: itemTitle(a),
+        account: itemTitle(a, w),
         label: a.label,
         checked: isInUse(a, w),
         tip: menuLine(a, w, "windows"),
@@ -151,7 +159,7 @@ export const settingsPage = {
     accounts: toolAccounts(moments.after, "claude").map((a) => {
       const on = warmUp.accounts.includes(a.label);
       return {
-        title: menuTitle(a),
+        title: a.label,
         standing: on ? `Warms up again at ${hm(clock.warmsAgain)}` : null,
         on,
       };

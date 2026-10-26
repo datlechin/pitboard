@@ -16,7 +16,7 @@ import {
   type AtLimit,
   type State,
 } from "../../lib/model.ts";
-import { atLimitNote, autoStandingSaid, menuTitle } from "../../lib/words.ts";
+import { atLimitNote, autoStandingSaid } from "../../lib/words.ts";
 
 const said = (el: Element | null, text: string) => {
   if (el && el.textContent!.trim() !== text) el.textContent = text;
@@ -73,8 +73,15 @@ export class AtLimitControls {
     const p = s.preferences;
     this.#choice.set(p.atLimit);
     this.#share.set(p.share, p.atLimit !== "nothing");
-    if (this.#box.getAttribute("aria-label") !== atLabel(p.share))
+    // Windows' ComboBox says the share in its name; macOS's pop-up is named by its row
+    if (
+      this.#box.hasAttribute("aria-label") &&
+      this.#box.getAttribute("aria-label") !== atLabel(p.share)
+    )
       this.#box.setAttribute("aria-label", atLabel(p.share));
+    // macOS leaves the share's row out under Do Nothing
+    for (const el of this.root.querySelectorAll<HTMLElement>("[data-share-row]"))
+      el.hidden = p.atLimit === "nothing";
     // under Switch Automatically, what switching by itself last came to
     const standing = p.atLimit === "switch" ? s.autoStanding : null;
     for (const el of this.root.querySelectorAll<HTMLElement>("[data-standing]")) {
@@ -174,7 +181,7 @@ export class WarmControls {
         if (!row) row = this.#added(a.id);
         if (this.#rows.children[i] !== row)
           this.#rows.insertBefore(row, this.#rows.children[i] ?? null);
-        const title = menuTitle(a);
+        const title = a.label;
         said(row.querySelector("[data-title]"), title);
         const note = warmNote(s, a);
         const noteLine = row.querySelector<HTMLElement>("[data-note]")!;

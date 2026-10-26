@@ -186,6 +186,12 @@ export const menuBarClock = (epoch: number) => {
   return `${weekdays[d.getUTCDay()]} ${d.getUTCDate()} ${months[d.getUTCMonth()]} ${hm(epoch)}`;
 };
 
+// MacLocalTime `date`: the abbreviated month and its day, in the world's en-GB order
+export const dayAndMonth = (epoch: number) => {
+  const d = local(epoch);
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
+};
+
 // the en-GB regional format's "d", under the taskbar's time
 // Windows' calendar flyout's date, in the en-GB format the taskbar's date is in
 const weekdaysLong = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split(" ");
@@ -231,8 +237,6 @@ export const updated = (readAt: number) => `Updated ${hm(readAt)}`;
 // account_windows/accounts.rs: one item opens a site's one account in place of a submenu
 export const openSiteAs = (site: string, label: string) => `Open ${site} as ${label}`;
 
-export const menuTitle = (a: Account) => (a.plan ? `${a.label} · ${a.plan}` : a.label);
-
 // status.rs `Row::lasts`: which limit of the account in use runs out first at its pace, and in
 // how many seconds, which `pitboard` says under its bars.
 export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: number } | null {
@@ -252,7 +256,7 @@ export type System = Extract<Platform, "macos" | "windows">;
 export const titled = (system: System, mac: string, win: string) =>
   system === "windows" ? win : mac;
 
-const uncapitalised = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+export const uncapitalised = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 // present/words.rs `span`: "2 hr 9 min", "1 day 3 hr", "under a minute".
 export function appSpan(seconds: number): string {
@@ -400,13 +404,14 @@ export const accountSpoken = (a: Account, w: World) =>
 export const switchSpoken = (a: Account) => `Switch to ${a.label}`;
 
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
-// the line the menu shows under it (present/words.rs `bar_tip`).
+// the line the menu shows under it, going on in lower case after its colon (present/words.rs
+// `bar_tip`).
 export const trayTip = (w: World) =>
   [
     "Pitboard",
     ...(["claude", "codex"] as Tool[]).map((tool) => {
       const a = inUseOf(w, tool);
-      return `${a.label} (${toolName(tool)}): ${menuLine(a, w, "windows")}`;
+      return `${a.label} (${toolName(tool)}): ${uncapitalised(menuLine(a, w, "windows"))}`;
     }),
   ].join("\n");
 
@@ -481,6 +486,42 @@ export function rowLines(a: Account, w: World, warm: string | null): string[] {
         : null;
   return [staleNote(a, w), ended, warm].filter((n): n is string => n !== null);
 }
+
+// present/accounts.rs `item`'s notes, as the macOS window's row draws the most pressing alone: a
+// saved sign-in that has expired, or one that soon does, or a Claude Desktop one that may have
+// lapsed.
+export function rowNote(a: Account, w: World): string | null {
+  if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
+  if (isInUse(a, w)) return null;
+  if (a.refreshExpiresAt !== undefined)
+    return renewalDue(a.refreshExpiresAt, w.now)
+      ? signInExpires(a.refreshExpiresAt - w.now, false)
+      : null;
+  return a.sessionExpiresAt !== undefined && a.sessionExpiresAt <= w.now
+    ? signInExpires(a.sessionExpiresAt - w.now, true)
+    : null;
+}
+
+// The inspector's Sign-In: in use, how long a saved sign-in is valid for, or that it expired
+// (present/accounts.rs `item`'s `sign_in`, present/words.rs `saved_until`).
+export function signInSaid(a: Account, w: World): string | null {
+  if (isInUse(a, w)) return "In use";
+  if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
+  if (a.refreshExpiresAt !== undefined)
+    return `Saved sign-in valid until ${dayAndMonth(a.refreshExpiresAt)}`;
+  return a.sessionExpiresAt !== undefined
+    ? `Saved sign-in may expire after ${dayAndMonth(a.sessionExpiresAt)}`
+    : null;
+}
+
+// Under the inspector's limits: when Claude Desktop's login in use was read, or the usage
+// (present/accounts.rs `item`'s `read`).
+export const readSaid = (a: Account, w: World) =>
+  staleNote(a, w) ?? (a.limits.length > 0 ? updated(w.readAt) : null);
+
+// present/words.rs `resets_in`, beside the inspector's reset: "in 2 hr 9 min".
+export const resetsIn = (at: number | null, now: number) =>
+  at !== null && at > now ? `in ${appSpan(at - now)}` : "";
 
 // The world's warm-up note: personal's period runs until its five hours reset.
 export function warmsAgainNote(a: Account): string | null {

@@ -3,35 +3,56 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   buildNumber,
-  inTerminal,
+  macCommandLine,
   macGeneral,
+  macUninstall,
   renew,
   renewalAbout,
   updateNote,
   winAbout,
   winGeneral,
 } from "./settings.ts";
-import { appNames, checksOf, checking, checkedAt, spokenLevel } from "./machine.ts";
-import { rowsOf } from "../lib/doctor.ts";
+import { checking } from "./machine.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
 const win = (file: string) => repo(`apps/windows/${file}`);
 const words = repo("crates/pitboard-ffi/src/present/words.rs");
+// app_words.rs with its string literals' line continuations joined and its code on one line
+const appWords = repo("crates/pitboard-ffi/src/present/app_words.rs")
+  .replace(/\\\n\s*/g, "")
+  .replace(/\s+/g, " ")
+  .replace(/\( /g, "(");
 
-test("macOS's General says what GeneralSettings.swift and MenuBarShows.swift give it", () => {
+test("macOS's General says what app_words.rs gives GeneralSettings.swift and MenuBarShows.swift", () => {
   const general = mac("Settings/GeneralSettings.swift");
-  for (const t of [
-    macGeneral.openAtLogin,
-    macGeneral.menuBarShows,
-    macGeneral.checks,
-    macGeneral.installs,
-    macGeneral.checkNow,
-  ])
-    assert.ok(general.includes(`"${t}"`), t);
+  for (const [word, made, said] of [
+    ["openAtLogin", "open_at_login: words::open_at_login(os).0.into(),", macGeneral.openAtLogin],
+    ["menuBarShows", 'menu_bar_shows: mac("', macGeneral.menuBarShows],
+    ["updates", 'updates: "', macGeneral.updates],
+    [
+      "checkForUpdatesAutomatically",
+      'check_for_updates_automatically: titled(os, "',
+      macGeneral.checks,
+    ],
+    [
+      "downloadAndInstallAutomatically",
+      'download_and_install_automatically: mac("',
+      macGeneral.installs,
+    ],
+    ["version", 'version: "', macGeneral.version],
+    ["checkNow", 'check_now: titled(os, "', macGeneral.checkNow],
+  ]) {
+    assert.ok(general.includes(`said.${word}`), word);
+    assert.ok(appWords.includes(made.endsWith('"') ? `${made}${said}"` : made), said);
+  }
+  assert.ok(words.includes(`"${macGeneral.openAtLogin}",`));
   const shows = mac("MenuBar/MenuBarShows.swift");
-  for (const [value, title] of macGeneral.shows)
-    assert.ok(shows.includes(`case .${value}: "${title}"`), title);
+  for (const [value, title] of macGeneral.shows) {
+    const word = { nameAndUsage: "accountAndUsage", usage: "usageOnly", icon: "iconOnly" }[value];
+    assert.ok(shows.includes(`case .${value}: words.settings.${word}`), title);
+    assert.ok(appWords.includes(`: mac("${title}"),`), title);
+  }
 });
 
 test("Windows' General says what SettingsPage.xaml and the updater give it", () => {
@@ -54,8 +75,19 @@ test("Windows' General says what SettingsPage.xaml and the updater give it", () 
 });
 
 test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and words.rs give it", () => {
-  assert.ok(mac("Settings/AdvancedSettings.swift").includes(`"${renew.macos}"`));
-  assert.ok(mac("Settings/AdvancedSettings.swift").includes(`LabeledContent("${inTerminal}")`));
+  const advanced = mac("Settings/AdvancedSettings.swift");
+  assert.ok(advanced.includes("said.keepSavedSignInsFresh"));
+  assert.ok(appWords.includes("keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(os),"));
+  assert.ok(words.includes(`titled(os, "${renew.macos}", "${renew.windows}")`));
+  assert.ok(advanced.includes("Text(said.commandLine)"));
+  assert.ok(appWords.includes(`command_line: titled(os, "${macCommandLine.heading}", `));
+  assert.ok(advanced.includes("LabeledContent(said.path)"));
+  assert.ok(appWords.includes(`path: "${macCommandLine.path}".into(),`));
+  assert.ok(advanced.includes("LabeledContent(words.settings.uninstall)"));
+  assert.ok(words.includes(`pub(crate) const UNINSTALL: &str = "${macUninstall.title}";`));
+  assert.ok(advanced.includes("Text(words.settings.uninstallNote)"));
+  assert.ok(appWords.includes(`uninstall_note: "${macUninstall.note}"`));
+  assert.ok(words.includes(`Os::MacOs | Os::Linux => "${macUninstall.button}",`));
   assert.ok(win("Pitboard.Views/SettingsPage.xaml").includes(`Header="${renew.windows}"`));
   assert.ok(words.includes(`"${updateNote}"`));
   const joined = words.replace(/\\\n\s*/g, "");
@@ -87,41 +119,7 @@ test("the About panel numbers a build as build-number.sh does", () => {
   );
 });
 
-test("This Mac words doctor's checks as present/machine.rs does", () => {
-  const printed = repo(
-    "crates/pitboard/src/render/snapshots/pitboard__render__doctor__tests__doctor_on_a_healthy_mac.snap",
-  );
-  const { lines, summary } = checksOf(rowsOf(printed));
-  assert.equal(summary, "Everything Pitboard checks is in order.");
-  assert.equal(lines.length, 34);
-  assert.deepEqual(lines[0], {
-    name: "Security tool",
-    level: "ok",
-    detail: "/usr/bin/security",
-    advice: null,
-  });
-  assert.equal(lines.find((l) => l.name === "In use")?.detail, "personal, as Anthropic said 20:50");
-  assert.equal(lines.find((l) => l.name.startsWith("Claude Code’s new"))?.detail, "Inactive");
-  // advice under a check that passed is not shown
-  assert.equal(lines.find((l) => l.name === "Codex sign-in store")?.advice, null);
-  // the app's own names, by doctor's codes, and the name doctor prints for each
-  const checkName = words.slice(words.indexOf("fn check_name("), words.indexOf("fn check_text("));
-  assert.deepEqual(
-    appNames.map(([code, , app]) => [code, app]),
-    [...checkName.matchAll(/"(\w+)" => "([^"]+)",/g)].map(([, code, name]) => [code, name]),
-  );
-  const doctor = ["claude.rs", "codex.rs", "desktop.rs", "machine.rs", "parks.rs"]
-    .map((f) => repo(`crates/pitboard-core/src/doctor/${f}`))
-    .join("\n")
-    .replace(/\s+/g, " ");
-  for (const [code, name] of appNames)
-    assert.ok(
-      doctor.includes(`"${code}", "${name}"`) || doctor.includes(`let name = "${name}";`),
-      code,
-    );
-  assert.ok(words.includes(`Level::Ok => "${spokenLevel.ok}"`));
-  assert.ok(words.includes(`Level::Warn => "${spokenLevel.warn}"`));
-  assert.ok(words.includes('format!("Checked at {clock}")'));
-  assert.equal(checkedAt("20:51"), "Checked at 20:51");
+test("This PC says what present/words.rs `checking` says while it waits", () => {
+  assert.ok(words.includes('format!("Checking {}…", this_machine(os))'));
   assert.equal(checking("windows"), "Checking this PC…");
 });

@@ -1,26 +1,22 @@
 ---
-// As MainWindow.swift lays it out at its minimum width of 640, and as macOS 27 draws it, measured
-// on docs/images/window.png, under the menu bar Pitboard puts up while the window is in front; a
-// `crop` desk shows the window's top, a `fit` one all of it. Its sidebar's panes are tabs, each
-// with its own title and toolbar over it, the pane `pane` shown and the others drawn hidden: the
-// `accounts` and `activity` slots hold theirs, and This Mac's is cloned from the template drawn
-// with `templates`. Ids start `prefix`; each toolbar button is named as its Label names it. The
-// `desk` slot holds what the window opens over the desk: its shortcut menu and its sheets. With
-// `templates`, the menu bar's menus and This Mac are drawn here for every window's.
+// The Accounts window as AccountsWindow.swift lays it out at its default 820 by 560, the list
+// beside the inspector, as macOS 27 draws it, under the menu bar Pitboard puts up while the window
+// is in front; a `crop` desk shows the window's top, a `fit` one all of it. Its toolbar's buttons
+// are named as their Labels name them, and ids start `prefix`. The `list` and `inspector` slots
+// hold the window's two columns, and the `desk` slot what the window opens over the desk: its
+// shortcut menu and its sheets. With `templates`, the menu bar's menus are drawn here for every
+// window's.
 import About from "./About.astro";
 import AccountWindow from "./AccountWindow.astro";
 import AppMenuBar from "./AppMenuBar.astro";
 import Lights from "./Lights.astro";
-import ThisMac from "./ThisMac.astro";
 import { clock } from "../../../data/world.ts";
+import { INSPECTOR } from "../../../data/window.ts";
 import { menuBarClock } from "../../../lib/words.ts";
-
-export type Pane = "accounts" | "activity" | "machine";
 
 interface Props {
   prefix: string;
-  pane: Exclude<Pane, "machine">;
-  // what the Accounts pane's title says under it
+  // what the title says under it
   updated: string;
   crop?: boolean;
   fit?: boolean;
@@ -28,59 +24,18 @@ interface Props {
   // the release the About panel names, where the templates are drawn
   version?: string;
 }
-const {
-  prefix,
-  pane,
-  updated,
-  crop = false,
-  fit = false,
-  templates = false,
-  version = "",
-} = Astro.props;
-// WindowPane.swift's panes, their toolbars as AccountsPane.swift, ActivityPane.swift and
-// MachinePane.swift put them up
-const panes: {
-  id: Pane;
-  name: string;
-  icon: string;
-  tools: [icon: string, label: string, does: string][];
-}[] = [
-  {
-    id: "accounts",
-    name: "Accounts",
-    icon: "sf-people",
-    tools: [
-      ["sf-refresh", "Refresh", "refresh"],
-      ["sf-plus", "Add Account", "add"],
-    ],
-  },
-  {
-    id: "activity",
-    name: "Activity",
-    icon: "sf-clock",
-    tools: [["sf-refresh", "Refresh", "read"]],
-  },
-  {
-    id: "machine",
-    name: "This Mac",
-    icon: "sf-steth",
-    tools: [["sf-refresh", "Check Again", "check"]],
-  },
-];
-const id = (p: Pane, part: string) =>
-  p === "accounts" ? `${prefix}-${part}` : `${prefix}-${p}-${part}`;
-// a pane shown in a window kept at another's size scrolls in it; the first pane is shown at its own
-const scrolls = (p: Pane) => (p === pane ? "" : "overflow-y-auto");
+const { prefix, updated, crop = false, fit = false, templates = false, version = "" } = Astro.props;
 // the toolbar's buttons share one piece of glass, and a button alone is a circle
 const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-mac-glass";
+const tool = "flex w-34.5 justify-center live:cursor-default live:disabled:opacity-35";
 ---
 
 <pb-accounts
   id={prefix}
   class:list={[
-    "desk [anchor-name:var(--desk)] [--units:680]",
+    "desk [anchor-name:var(--desk)] [--units:860]",
     crop ? "block h-348" : "flex items-center justify-center pt-44 pb-20",
-    { "min-h-540": pane === "accounts" && !crop && !fit, "min-h-250": pane === "activity" },
+    { "min-h-600": !crop && !fit },
   ]}
   inert
   data-output
@@ -88,119 +43,61 @@ const glass = "flex h-36 items-center rounded-pill bg-mac-window-glass shadow-ma
   <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} templates={templates} />
   <div
     class:list={[
-      "group/window grid min-h-220 w-640 grid-cols-[calc(var(--spacing)*170)_1fr] overflow-hidden rounded-u-16 [anchor-name:var(--window)] bg-mac-window-bg text-mac-window-text shadow-mac-window data-[state=collapsed]:grid-cols-[0_1fr] live:h-(--locked,auto)",
+      "group/window grid min-h-220 w-820 grid-cols-[1fr_calc(var(--spacing)*260)] overflow-hidden rounded-u-16 [anchor-name:var(--window)] bg-mac-window-bg text-mac-window-text shadow-mac-window data-[state=collapsed]:grid-cols-[1fr_0]",
       crop ? "absolute top-24 left-1/2 -translate-x-1/2" : "relative",
+      { "min-h-540": !crop && !fit },
     ]}
     data-part="window"
   >
     <Lights window class="top-19 left-19" />
-    {/* NavigationSplitView's sidebar button, among the window's own buttons */}
+    <div class="flex min-h-0 min-w-0 flex-col">
+      <div
+        class="flex h-52 flex-none items-center pr-8 pl-92 group-data-[state=collapsed]/window:pr-52"
+      >
+        <span class="flex flex-1 flex-col pb-2.5 text-mac-window-title"
+          ><b class="text-u-13/16 font-bold" id={`${prefix}-title`}>Accounts</b
+          ><span class="text-u-11/13 text-mac-window-sub" data-part="updated">{updated}</span></span
+        >
+        <span class:list={[glass, "px-2"]}>
+          <button class={tool} type="button" aria-label="Refresh" data-does="refresh">
+            <svg class="size-22 shrink-0"><use href="#sf-refresh"></use></svg>
+          </button>
+          <button class={tool} type="button" aria-label="Add Account" data-does="add">
+            <svg class="size-22 shrink-0"><use href="#sf-plus"></use></svg>
+          </button>
+        </span>
+      </div>
+      <div class="min-h-0 flex-1 pb-10" data-part="list">
+        <slot name="list" />
+      </div>
+    </div>
+    {/* the inspector, shown at first, under the toolbar's button that shows and hides it */}
+    <div
+      class="relative min-w-0 overflow-hidden bg-mac-window-inspector pt-52 shadow-[inset_calc(var(--spacing)*1)_0_var(--color-mac-window-sep)] group-data-[state=collapsed]/window:invisible"
+      id={`${prefix}-inspector`}
+    >
+      <slot name="inspector" />
+    </div>
     <button
       class:list={[
         glass,
-        "absolute top-8 left-126 z-1 w-36 justify-center focus-mac live:cursor-default",
+        "absolute top-8 right-8 z-1 w-36 justify-center focus-mac live:cursor-default",
       ]}
       type="button"
-      aria-label="Hide Sidebar"
-      aria-controls={`${prefix}-sidebar`}
-      data-does="sidebar"
+      aria-label={INSPECTOR}
+      aria-controls={`${prefix}-inspector`}
+      aria-expanded="true"
+      aria-keyshortcuts="Alt+Meta+I"
+      data-does="inspector"
     >
-      <svg class="size-20 shrink-0"><use href="#sf-sidebar"></use></svg>
+      <svg class="size-20 shrink-0 -scale-x-100"><use href="#sf-sidebar"></use></svg>
     </button>
-    <div
-      class="overflow-hidden bg-mac-window-side px-10 pt-52 group-data-[state=collapsed]/window:invisible"
-      id={`${prefix}-sidebar`}
-    >
-      <div
-        class="group/side flex flex-col rounded-u-8 outline-none"
-        role="tablist"
-        aria-orientation="vertical"
-        aria-label="Sidebar"
-      >
-        {panes.map((p) => <div
-          class="group/tab flex h-32 items-center gap-5.75 rounded-u-8 px-6.5 whitespace-nowrap text-mac-window-side-text outline-none aria-selected:bg-mac-window-pick aria-selected:font-semibold group-focus-within/side:aria-selected:bg-mac-window-blue group-focus-within/side:aria-selected:text-white live:cursor-default"
-          id={id(p.id, "tab")}
-          role="tab"
-          aria-selected={p.id === pane ? "true" : "false"}
-          aria-controls={id(p.id, "pane")}
-          tabindex="-1"
-          data-pane={p.id}
-        >
-          <svg
-            class="size-24 shrink-0 text-mac-window-blue [--stroke:1.1] group-focus-within/side:group-aria-selected/tab:text-white"
-          >
-            <use href={`#${p.icon}`} />
-          </svg>
-          {p.name}
-        </div>)}
-      </div>
-    </div>
-    <div class="flex min-h-0 min-w-0 flex-col">
-      {panes.map((p) => <div
-        class="flex h-52 flex-none items-center pr-8 pl-20 group-data-[state=collapsed]/window:pl-178"
-        data-head={p.id}
-        hidden={p.id !== pane}
-      >
-        <span class="flex flex-1 flex-col pb-2.5 text-mac-window-title"
-          ><b
-            class:list={
-              p.id === "accounts" ? "text-u-13/16 font-bold" : "text-u-15/18 font-semibold"
-            }
-            id={id(p.id, "title")}
-            >{p.name}</b
-          >{p.id === "accounts" && <span
-            class="text-u-11/13 text-mac-window-sub"
-            data-part="updated"
-            >{updated}</span
-          >}</span
-        >
-        <span class:list={[glass, p.tools.length > 1 ? "px-2" : "w-36 justify-center"]}>
-          {p.tools.map(([icon, label, does]) => <button
-            class="flex w-34.5 justify-center live:cursor-default live:disabled:opacity-35"
-            type="button"
-            aria-label={label}
-            data-does={does}
-          >
-            <svg class="size-22 shrink-0"><use href={`#${icon}`} /></svg>
-          </button>)}
-        </span>
-      </div>)}
-      <div
-        class:list={["min-h-0 flex-1 px-16 pb-10", scrolls("accounts")]}
-        id={id("accounts", "pane")}
-        role="tabpanel"
-        aria-labelledby={id("accounts", "tab")}
-        data-pane-panel="accounts"
-        hidden={pane !== "accounts"}
-      >
-        <slot name="accounts" />
-      </div>
-      <div
-        class:list={["min-h-0 flex-1", scrolls("activity")]}
-        id={id("activity", "pane")}
-        role="tabpanel"
-        aria-labelledby={id("activity", "tab")}
-        data-pane-panel="activity"
-        hidden={pane !== "activity"}
-      >
-        <slot name="activity" />
-      </div>
-      <div
-        class="min-h-0 flex-1 overflow-y-auto"
-        id={id("machine", "pane")}
-        role="tabpanel"
-        aria-labelledby={id("machine", "tab")}
-        data-pane-panel="machine"
-        hidden
-      ></div>
-    </div>
     {/* what macOS 26 draws over a window with a sheet or an alert up */}
     <div class="absolute inset-0 z-1 bg-mac-window-scrim" data-part="smoke" hidden></div>
   </div>
   <slot name="desk" />
   {templates && (
     <>
-      <template data-part="machine"><ThisMac /></template>
       <template data-part="about"><About version={version} /></template>
       <template data-part="account-window"><AccountWindow /></template>
     </>

@@ -5,6 +5,9 @@ import { appMenus, NO_ACCOUNT } from "./appmenu.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
+const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+// a Rust string literal as it reads once its line continuations are joined
+const appWords = present("app_words.rs").replace(/\\\n\s*/g, "");
 const facts = repo("docs/facts/site.md");
 // the facts' section on the menu bar, its lines joined
 const bar = facts
@@ -51,20 +54,40 @@ test("each item is one the UI tests read, with its key, and dimmed where they re
 
 test("the app's own items say what PitboardScenes.swift and its commands give them", () => {
   const scenes = mac("App/PitboardScenes.swift");
-  for (const title of ["About Pitboard", "Check for Updates…", "Add Account…", "Pitboard Help"])
-    assert.ok(scenes.includes(`"${title}"`), title);
+  for (const [word, said] of [
+    ["menu.about", 'about: titled(os, "About Pitboard", "About Pitboard")'],
+    [
+      "menu.checkForUpdates",
+      'check_for_updates: titled(os, "Check for Updates…", "Check for updates")',
+    ],
+    ["menu.addAccount", "add_account: words::add_account(os, true)"],
+    ["menu.help", 'help: titled(os, "Pitboard Help", "Pitboard help")'],
+  ]) {
+    assert.ok(scenes.includes(`(words.${word}`), word);
+    assert.ok(appWords.includes(said), said);
+  }
+  assert.ok(present("words.rs").includes('titled(os, "Add Account…", "Add account…")'));
   assert.ok(scenes.includes('.keyboardShortcut("n")'));
   const windows = mac("AccountWindows/AccountWindowCommands.swift");
-  for (const title of [
-    "Remove Website Data…",
-    "Actual Size",
-    "Zoom In",
-    "Zoom Out",
-    "Back",
-    "Forward",
-  ])
-    assert.ok(windows.includes(`"${title}"`), title);
-  assert.ok(mac("App/RefreshCommand.swift").includes('?? "Refresh"'));
+  for (const [word, title] of [
+    ["removeWebsiteData", "Remove Website Data…"],
+    ["actualSize", "Actual Size"],
+    ["zoomIn", "Zoom In"],
+    ["zoomOut", "Zoom Out"],
+  ]) {
+    assert.ok(windows.includes(`(words.accountWindow.${word})`), word);
+    assert.ok(appWords.includes(`titled(os, "${title}", `), title);
+  }
+  for (const [word, title] of [
+    ["back", "Back"],
+    ["forward", "Forward"],
+  ]) {
+    assert.ok(windows.includes(`(words.accountWindow.${word})`), word);
+    assert.ok(appWords.includes(`${word}: "${title}".into(),`), title);
+  }
+  assert.ok(mac("App/RefreshCommand.swift").includes("?? words.menu.refresh"));
+  assert.ok(appWords.includes("refresh: words::REFRESH.into(),"));
+  assert.ok(present("words.rs").includes('pub(crate) const REFRESH: &str = "Refresh";'));
   // File lists a site's item for each site, the fixture's being claude.ai alone
   assert.ok(
     windows.includes(

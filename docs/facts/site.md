@@ -181,17 +181,19 @@ names runs was read in those alone.
 
 - The item draws highlighted while its menu is open. Its accessibility title is "Pitboard, work
   42%, Claude Code".
-- In `twoTools` the menu reads, top to bottom: the heading Claude Code, work, old, personal; the
-  heading Codex, main · Pro, spare · Pro; Add Account… ⌘N, Refresh ⌘R; Open claude.ai ›, Open
-  chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help, Quit Pitboard ⌘Q.
-  A separator divides each group. The headings are dimmed; each tool's account in use is
-  checked.
+- In `twoTools` the menu reads, top to bottom: Sign In to old Again…; the heading Claude Code,
+  work, old, personal; the heading Codex, main, spare; Add Account… ⌘N, Refresh ⌘R; Open
+  claude.ai ›, Open chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help,
+  Quit Pitboard ⌘Q. A separator divides each group. The headings are dimmed; each tool's account
+  in use is checked. Its items carry no symbols and no tooltips. The redone menu's order and
+  names are asserted by `testTheStatusMenuListsItsItemsInOrder`, and were read from
+  `MenuBarContent.swift` before a run of it.
 - Opened with a click, the menu highlights nothing. The first Down highlights work, the first
   enabled item; Down and Up pass over headings and separators. Down stops at Quit Pitboard: the
   menu does not wrap. With nothing highlighted, the first Up goes to Quit Pitboard. Home and
   Page Up go to work, End and Page Down to Quit Pitboard.
 - Typing goes to the first item whose title or subtitle starts with what is typed, in any case:
-  "spa" goes to spare · Pro, "Open P" to Open Pitboard and "o" to old. "Needs" went to old while
+  "spa" goes to spare, "Open P" to Open Pitboard and "o" to old. "Needs" went to old while
   its subtitle was "Needs signing in again", and still did in run 40292624691, where the subtitle
   reads "Sign-in expired". With a pause of 0.5 s between keys they make one name,
   and with 1 s a new one starts: "o" then "p" goes to Open claude.ai after 0.5 s and to personal
@@ -254,9 +256,14 @@ names runs was read in those alone.
 
 ### macOS: the account list
 
-- At first no row is selected. A click selects a row, in the accent colour with white text; a
-  click on the sidebar leaves it selected in grey. Up and Down move the selection. Typing an
-  account's name selects it: "w" selects work.
+- At first the account in use of the first tool is selected, work in `oneTool`, and the inspector
+  beside the list shows it (`AccountsWindow.swift`'s `onAppear`, asserted by
+  `testSelectingAndTypingInTheAccountList` and read from source before a run of it). A click
+  selects a row, in the accent colour with white text, and the inspector shows that account. Up
+  and Down move the selection. Typing an account's name selects it: "w" selects work.
+- The window has no sidebar: Diagnostics and Activity are windows of their own in the Window
+  menu. Option-Command-I and the toolbar's Inspector hide the inspector and show it again, and the
+  list keeps the keyboard (`testTheInspectorHidesAndTheListKeepsTheKeyboard`).
 - **Switch** switches without selecting its row.
 - A right click on a row not selected leaves the selection where it was and draws an accent
   outline round the row clicked. The shortcut menu acts on that row: Switch to personal, Sign In
@@ -366,14 +373,16 @@ says so in a comment naming its line here, which `website/src/scripts/departures
   window: HTML's modal dialog does.
 - A simulated sign-in keeps Copy Link and Open dimmed, shows no Code field, and draws no Claude
   window while Claude Desktop's waits: the page loads no sign-in page.
-- Open Pitboard, Settings on Windows and the tray icon bring the page's figure into view, where
-  the app brings a window forward.
+- Open Pitboard, Settings on Windows, Warm-Up Settings and the tray icon bring the page's figure
+  into view, where the app brings a window forward.
+- Check Now and Uninstall Pitboard do nothing: the page updates and removes no app.
 - The macOS share field takes a typed share on Return or as focus leaves. The app's binding
   clamps each key as it is typed, which can rewrite the text under the caret.
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
 - This PC stays on its spinner, and Check again is held back: the page draws no PC's checks yet.
+  The macOS figures draw no Diagnostics window, which the page has no figure for.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn
   from the page's state yet.
 - On a phone each figure fits the page's width, so a macOS menu row on a 390 pixel phone is 13

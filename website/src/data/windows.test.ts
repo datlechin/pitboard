@@ -53,20 +53,26 @@ test("a beta's menu has no Check for updates, as IconMenu.cs offers it only besi
   assert.ok(!menu(false).some((e) => "command" in e && e.command === "Check for updates"));
 });
 
-test("the menu heads each tool's accounts with its name, and names each account with its plan and the menu bar's figure", () => {
+test("the menu heads each tool's accounts with its name, and names each account with the menu bar's figure", () => {
   const words = present("words.rs");
-  assert.ok(words.includes("said.extend(plan);"));
-  assert.ok(words.includes("if matches!(os, Os::Windows) {\n        said.extend(figure);"));
+  assert.ok(
+    words.includes('(Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),'),
+  );
+  assert.ok(
+    present("accounts.rs").includes(
+      "let menu_title = words::named_in_menu(seen.os, &title, why_not.or(figure.as_deref()));",
+    ),
+  );
   assert.ok(present("accounts.rs").includes(".map(|limit| said::figure(limit.percent));"));
   for (const e of menu(false)) {
     if ("heading" in e) assert.ok(headings.has(e.heading), e.heading);
-    if ("account" in e) assert.match(e.account, /^\w+ · (Max 20x|Pro|Plus) · \d+%$/);
+    if ("account" in e) assert.match(e.account, /^\w+ \(\d+%\)$/);
   }
   assert.ok(!menu(false).some((e) => "heading" in e && e.heading === "Claude Desktop"));
   const checked = menu(false).filter((e) => "account" in e && e.checked);
   assert.deepEqual(
     checked.map((e) => ("account" in e ? e.account : "")),
-    ["work · Max 20x · 40%", "main · Pro · 7%"],
+    ["work (40%)", "main (7%)"],
   );
 });
 
@@ -113,7 +119,7 @@ test("a site with several accounts' windows is a submenu of their labels, the on
 test("the icon's tooltip names Pitboard, then each account in use with its tool and its menu line", () => {
   const words = present("words.rs");
   assert.ok(words.includes("let mut tip = vec![PITBOARD.to_owned()];"));
-  assert.ok(words.includes('.map(|(name, line)| format!("{name}: {line}")),'));
+  assert.ok(words.includes('.map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),'));
   assert.ok(
     present("accounts.rs").includes(
       ".map(|account| (seen.name_of(account), summary(seen, account))),",
@@ -122,7 +128,7 @@ test("the icon's tooltip names Pitboard, then each account in use with its tool 
   assert.ok(words.includes('format!("{label} ({tool})")'));
   assert.equal(
     trayTip(moments.after),
-    "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): Weekly 7% used",
+    "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): weekly 7% used",
   );
 });
 
@@ -291,11 +297,11 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
     present("words.rs").includes('Some(at) => format!("Next warm-up: {account} at {at}."),'),
   );
   assert.equal(w.standing, "Next warm-up: personal at 22:00.");
-  assert.ok(present("machine.rs").includes("title: words::named_in_menu("));
+  assert.ok(present("machine.rs").includes("title: choice.account.clone(),"));
   assert.ok(shell("WarmAccountRow.cs").includes("public string Title => _account.Title;"));
   assert.deepEqual(w.accounts, [
-    { title: "personal · Max 20x", standing: "Warms up again at 22:00", on: true },
-    { title: "work · Max 20x", standing: null, on: false },
+    { title: "personal", standing: "Warms up again at 22:00", on: true },
+    { title: "work", standing: null, on: false },
   ]);
 });
 
