@@ -349,6 +349,10 @@ final class ScreenshotTests: FixtureTestCase {
     @MainActor
     func testTheFirstLaunch() {
         let app = launch(.firstLaunch)
+        let welcome = app.windows["welcome"]
+        XCTAssertTrue(welcome.buttons["welcome.add.codex"].waitForExistence(timeout: 10))
+        keep(welcome, as: "macos-welcome")
+        welcome.buttons["welcome.done"].click()
         XCTAssertTrue(app.control("setup.codexUnused").waitForExistence(timeout: 10))
         keep(app.accountsWindow, as: "macos-window-first-launch")
     }

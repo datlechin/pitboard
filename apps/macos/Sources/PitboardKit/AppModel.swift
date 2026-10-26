@@ -70,6 +70,7 @@ public final class AppModel {
     /// the windows to close and the stores to delete, the link waiting for an account, and
     /// the downloads.
     public private(set) var accountWindows: AccountWindowsShown
+    public private(set) var welcome: WelcomeShown
 
     /// Told the account windows' part each time a snapshot changes it, once that snapshot is
     /// shown, for what only the app's web code can do: delete the stores the model asks it
@@ -106,6 +107,7 @@ public final class AppModel {
         failureAlert = first.failureAlert
         machine = first.machine
         accountWindows = first.accountWindows
+        welcome = first.welcome
     }
 
     /// The model `make` makes, told of its snapshots through a listener that hands each to
@@ -170,6 +172,7 @@ public final class AppModel {
         update(\.stowText, snapshot.stowText)
         update(\.failureAlert, snapshot.failureAlert)
         update(\.machine, snapshot.machine)
+        update(\.welcome, snapshot.welcome)
         let windowsMoved = accountWindows != snapshot.accountWindows
         update(\.accountWindows, snapshot.accountWindows)
         if windowsMoved { accountWindowsChanged?(accountWindows) }

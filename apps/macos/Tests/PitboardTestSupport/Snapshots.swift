@@ -48,7 +48,9 @@ package func snapshot(
     _ revision: UInt64, updated: String = "", reading: Bool = false,
     windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = [],
     sections: [AccountSection] = [], notices: [PanelNotice] = [],
-    menuNotices: MenuNotices = MenuNotices(install: nil, switches: [], signIns: [], others: nil)
+    menuNotices: MenuNotices = MenuNotices(
+        install: nil, switches: [], signIns: [], others: nil),
+    welcomeTools: [WelcomeTool] = []
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
@@ -103,7 +105,7 @@ package func snapshot(
         removal: nil,
         welcome: WelcomeShown(
             title: "Welcome to Pitboard", lines: [], iconLink: nil, toolsHeading: nil,
-            tools: [],
+            tools: welcomeTools,
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),

@@ -83,6 +83,9 @@ its own date.
   `.cancel`, whatever `.keyboardShortcut(nil)` says of it. `.keyboardShortcut(.defaultAction)` on
   Cancel gives Cancel Return, leaves the answer with no key, and leaves Escape to no button. So
   a question whose answer is not the default, Uninstall's, has Cancel on Return.
+- Measured on macOS 27.0.1 with Swift 6.4 on 27 October 2026, in a SwiftUI app of its own: a
+  `Window` scene's window has the scene's id as its `identifier`, which the UI tests find it
+  by, as `windows["welcome"]`.
 
 ## What the UI tests find a control by
 

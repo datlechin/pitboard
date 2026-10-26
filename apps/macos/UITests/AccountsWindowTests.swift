@@ -420,10 +420,31 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(activity.exists, "a window of its own")
     }
 
+    // Plan 4.7: once, before the accounts, with the login item off until turned on.
     @MainActor
-    func testTheFirstLaunchOpensTheWindow() {
+    func testTheFirstLaunchWelcomesThenOpensTheAccounts() {
         let app = launch(.firstLaunch)
+        let welcome = app.windows["welcome"]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.accountsWindow.exists, "the welcome comes first")
+        let login = welcome.descendants(matching: .any)["welcome.openAtLogin"]
+        XCTAssertTrue(login.waitForExistence(timeout: 5))
+        XCTAssertEqual(login.value as? Int, 0)
+        welcome.buttons["welcome.done"].click()
         XCTAssertTrue(app.control("setup.codexUnused").waitForExistence(timeout: 10))
+        XCTAssertTrue(welcome.waitForNonExistence(timeout: 5))
+    }
+
+    // Nobody is signed in to Codex there, so Add reads that and offers its sign-in.
+    @MainActor
+    func testAddingFromTheWelcomeReadsTheToolOnTheClick() {
+        let app = launch(.firstLaunch)
+        let welcome = app.windows["welcome"]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 10))
+        let add = welcome.buttons["welcome.add.codex"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.click()
+        XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 10))
     }
 
     // Escape is the sheet's Cancel, which stops the tool's sign-in with the sheet.

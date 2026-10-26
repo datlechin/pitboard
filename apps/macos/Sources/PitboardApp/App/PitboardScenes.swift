@@ -65,6 +65,15 @@ public struct PitboardScenes: Scene {
             }
         }
 
+        Window(model.welcome.title, id: PlaceWindow.welcome.id) {
+            WelcomeWindow(model: model, openAtLogin: openAtLogin, presence: windows.presence)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        // Shown once, so not listed in the Window menu.
+        .commandsRemoved()
+
         // Each is listed in the Window menu, as Mail lists its Connection Doctor.
         Window(words.window.diagnostics, id: PlaceWindow.diagnostics.id) {
             DiagnosticsWindow(model: model, presence: windows.presence)

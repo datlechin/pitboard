@@ -107,6 +107,17 @@ private final class Told: @unchecked Sendable {
     #expect(model.accountWindows == windowsShown())
 }
 
+@MainActor
+@Test func theWelcomeIsShown() {
+    let model = AppModel(model: StandInModel(snapshot(0)))
+    let codex = WelcomeTool(
+        code: "codex", name: "Codex", account: nil,
+        step: .add(
+            choice: Choice(title: "Add", intent: .enrol(provider: "codex"), enabled: true)))
+    #expect(model.apply(snapshot(1, welcomeTools: [codex])) == [\.revision, \.welcome])
+    #expect(model.welcome.tools == [codex])
+}
+
 /// What a view asks for reaches the model as it was asked, at once, and the app quitting
 /// stops it.
 @MainActor

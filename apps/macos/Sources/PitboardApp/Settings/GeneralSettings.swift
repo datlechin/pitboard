@@ -18,20 +18,7 @@ struct GeneralSettings: View {
                         set: { openAtLogin.set($0) })
                 )
                 .accessibilityIdentifier("settings.openAtLogin")
-                if openAtLogin.state == .requiresApproval {
-                    LabeledContent {
-                        Button("Open Login Items Settings…") {
-                            openAtLogin.openSystemSettings()
-                        }
-                    } label: {
-                        Text("macOS is waiting for you to allow Pitboard in Login Items.")
-                            .explanatory()
-                    }
-                }
-                if let failed = openAtLogin.failed {
-                    Text(failed).explanatory()
-                        .accessibilityIdentifier("settings.openAtLoginFailed")
-                }
+                LoginItemApproval(openAtLogin: openAtLogin)
                 if notifications.off {
                     LabeledContent {
                         Button("Open Notification Settings…") {
@@ -92,6 +79,27 @@ struct GeneralSettings: View {
                 openAtLogin.read()
                 await notifications.read()
             }
+        }
+    }
+}
+
+// Under the toggle that turns the login item on, in Settings and in the welcome.
+struct LoginItemApproval: View {
+    let openAtLogin: OpenAtLogin
+
+    var body: some View {
+        if openAtLogin.state == .requiresApproval {
+            LabeledContent {
+                Button(words.settings.openLoginItems ?? "") {
+                    openAtLogin.openSystemSettings()
+                }
+            } label: {
+                Text(words.settings.loginItemsWaiting ?? "").explanatory()
+            }
+        }
+        if let failed = openAtLogin.failed {
+            Text(failed).explanatory()
+                .accessibilityIdentifier("settings.openAtLoginFailed")
         }
     }
 }

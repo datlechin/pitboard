@@ -64,6 +64,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shown with Option-Command-I: its email, each limit's reset and the time left to it, its
   sign-in, its warm-up with **Warm-Up Settings**, and what its shortcut menu offers.
 - The macOS menu offers to sign in again to each account that needs it, above the accounts.
+- The macOS app opens a welcome at its first launch, before the accounts, which says Pitboard
+  lives in the menu bar, adds the account each tool has once you choose **Add**, and keeps
+  **Open Pitboard at Login** off until you turn it on.
 
 ### Changed
 

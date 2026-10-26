@@ -5,13 +5,15 @@ enum PlaceWindow: String, CaseIterable {
     case accounts
     case activity
     case diagnostics
+    case welcome
 
-    // No place is the accounts window as it was left, and the welcome has no window yet.
+    // No place is the accounts window as it was left.
     init?(_ place: Place?) {
         switch place {
-        case nil, .accounts?, .welcome?: self = .accounts
+        case nil, .accounts?: self = .accounts
         case .activity?: self = .activity
         case .checks?: self = .diagnostics
+        case .welcome?: self = .welcome
         case .settings?: return nil
         }
     }
