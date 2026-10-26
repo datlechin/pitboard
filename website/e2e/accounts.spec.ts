@@ -350,7 +350,12 @@ test.describe("on Windows", () => {
 
   test("Tab goes from a row's toggle to its button, Space opens it on its cards, and Enter switches", async ({
     page,
+    browserName,
   }) => {
+    test.skip(
+      process.platform === "darwin" && browserName === "webkit",
+      "WebKit on a Mac tabs past buttons, as Safari does until Option-Tab",
+    );
     const { row, toggle } = await accounts(page, "windows");
     await toggle("personal").focus();
     await page.keyboard.press("Tab");
