@@ -20,4 +20,22 @@ internal static class Look
 
         return null;
     }
+
+    public static IEnumerable<T> Descendants<T>(DependencyObject from)
+        where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(from); i++)
+        {
+            var child = VisualTreeHelper.GetChild(from, i);
+            if (child is T found)
+            {
+                yield return found;
+            }
+
+            foreach (var below in Descendants<T>(child))
+            {
+                yield return below;
+            }
+        }
+    }
 }
