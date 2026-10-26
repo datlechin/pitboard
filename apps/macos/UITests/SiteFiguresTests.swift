@@ -6,9 +6,9 @@ import XCTest
 // before it asserts what it read.
 final class SiteFiguresTests: FixtureTestCase {
     private static let statusMenu = [
-        "Claude Code", "work", "old", "personal", "Codex", "main", "spare",
-        "Add Account…", "Refresh", "Open claude.ai", "Open chatgpt.com", "Open Pitboard",
-        "Settings…", "About Pitboard", "Pitboard Help", "Quit Pitboard",
+        "Sign In to old Again…", "Claude Code", "work", "old", "personal", "Codex", "main",
+        "spare", "Add Account…", "Refresh", "Open claude.ai", "Open chatgpt.com",
+        "Open Pitboard", "Settings…", "About Pitboard", "Pitboard Help", "Quit Pitboard",
     ]
     private static let headings = ["Claude Code", "Codex"]
 
@@ -41,8 +41,9 @@ final class SiteFiguresTests: FixtureTestCase {
         app.openMenu()
         XCTAssertTrue(app.menuItem("Quit Pitboard").waitForExistence(timeout: 5))
         let opened = highlighted(in: menu)
+        let enabled = Self.statusMenu.filter { !Self.headings.contains($0) }
         var down: [String] = []
-        for press in 1...16 {
+        for press in 1...enabled.count + 2 {
             app.typeKey(.downArrow, modifierFlags: [])
             down.append(highlighted(in: menu) ?? "-")
             if press == 1 { keep(menu, as: "site-status-menu-first-down") }
@@ -68,11 +69,10 @@ final class SiteFiguresTests: FixtureTestCase {
                 + "Home, End, Page Up, Page Down: \(keys.joined(separator: " | "))",
             as: "site-status-menu-arrows")
 
-        let enabled = Self.statusMenu.filter { !Self.headings.contains($0) }
         XCTAssertNil(opened)
         XCTAssertEqual(down, enabled + ["Quit Pitboard", "Quit Pitboard"])
         XCTAssertEqual(up, ["Quit Pitboard", "Pitboard Help", "About Pitboard", "Settings…"])
-        XCTAssertEqual(keys, ["work", "Quit Pitboard", "work", "Quit Pitboard"])
+        XCTAssertEqual(keys, [enabled[0], "Quit Pitboard", enabled[0], "Quit Pitboard"])
     }
 
     @MainActor

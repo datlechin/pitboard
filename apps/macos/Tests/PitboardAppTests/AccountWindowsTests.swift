@@ -140,13 +140,7 @@ private func windows(
 ) -> (AccountWindows, StandInModel) {
     let standIn = StandInModel(snapshot(0))
     let model = AppModel(model: standIn)
-    let environment = WebEnvironment(
-        scheme: WebEnvironment.fixtureScheme, stores: stores,
-        downloads: FileManager.default.temporaryDirectory, openElsewhere: { _ in },
-        configure: { _ in }, pause: { _ in })
-    let windows = AccountWindows(
-        model: model, environment: environment,
-        presence: AppPresence(apply: { _ in }, bringForward: {}, settle: {}))
+    let windows = standInWindows(model, stores: stores)
     model.apply(snapshot(1, windows: windowsShown(accounts, menus: twoToolsMenus)))
     return (windows, standIn)
 }

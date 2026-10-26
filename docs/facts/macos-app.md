@@ -62,6 +62,15 @@ its own date.
   events, and a block it left called `CFRunLoopStop` on the run loop Swift's main executor
   runs. A window made with `defer: true`, which never reaches the window server, ended none of
   9 runs.
+- Measured on macOS 27.0.1 with Swift 6.4 on 27 October 2026, in an `NSHostingMenu` built
+  against the macOS 27 SDK for macOS 14 and for macOS 27 alike: a `Button` or `Toggle` whose
+  label is two `Text`s is one item, the first its `title` and the second its native `subtitle`.
+  A `LabeledContent` as the label keeps only its label as the title and drops its value, and a
+  `LabeledContent` alone, in a submenu too, is two disabled items, its label and its value. So
+  the menu bar item's menu gives each account its subtitle with two `Text`s, where plan 4.2
+  expected macOS 27 to map `LabeledContent`'s value. `Section` with a title is an item whose
+  `isSectionHeader` is true, and a `Toggle` that is on an item whose `state` is `.on`.
+  `MenuBarMenuTests` holds the menu as AppKit has it.
 
 ## What the UI tests find a control by
 
@@ -73,6 +82,9 @@ made the views and read AppKit's objects.
   whose `identifier` was `menuAction:`, or `ID(id: 5)` for the submenu, and whose
   `accessibilityIdentifier()` was empty. So the macOS UI tests find a menu's items by their
   words, in `apps/macos/UITests/Words.swift`.
+- Measured again on 27 October 2026, the same way: `.id(_:)` and `.accessibilityLabel(_:)`
+  reach no item either. Each item is a `SwiftUIMenuItem` whose `accessibilityLabel()` is its
+  title, whatever label it was given.
 - A SwiftUI `.alert` is an `_NSAlertPanel` attached to its window as a sheet, whose buttons
   AppKit names by their order, whatever `.accessibilityIdentifier` they are given: the first
   declared, the answer, is `action-button-1`, and Cancel after it is `action-button-2`.

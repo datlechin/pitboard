@@ -47,7 +47,8 @@ package func windowsShown(
 package func snapshot(
     _ revision: UInt64, updated: String = "", reading: Bool = false,
     windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = [],
-    sections: [AccountSection] = [], notices: [PanelNotice] = []
+    sections: [AccountSection] = [], notices: [PanelNotice] = [],
+    menuNotices: MenuNotices = MenuNotices(install: nil, switches: [], signIns: [], others: nil)
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
@@ -60,7 +61,7 @@ package func snapshot(
         accountMenu: AccountMenuShown(
             offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
         notices: notices,
-        menuNotices: MenuNotices(install: nil, switches: [], signIns: [], others: nil),
+        menuNotices: menuNotices,
         footing: .ready,
         setup: nil,
         accountsShown: sections.isEmpty ? .reading(title: "Reading accounts…") : .list,

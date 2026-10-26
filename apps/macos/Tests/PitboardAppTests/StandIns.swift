@@ -1,4 +1,5 @@
 import Foundation
+import PitboardKit
 import WebKit
 
 @testable import PitboardApp
@@ -83,6 +84,20 @@ final class StandInStores: WebsiteDataStores {
         stores[id] = nil
         removed.append(id)
     }
+}
+
+// The account windows of `model`, with nothing reaching WebKit's own stores.
+@MainActor
+func standInWindows(_ model: AppModel, stores: StandInStores = StandInStores())
+    -> AccountWindows
+{
+    let environment = WebEnvironment(
+        scheme: WebEnvironment.fixtureScheme, stores: stores,
+        downloads: FileManager.default.temporaryDirectory, openElsewhere: { _ in },
+        configure: { _ in }, pause: { _ in })
+    return AccountWindows(
+        model: model, environment: environment,
+        presence: AppPresence(apply: { _ in }, bringForward: {}, settle: {}))
 }
 
 // A copy of the app with its command line inside, in a folder whose name has a space and a

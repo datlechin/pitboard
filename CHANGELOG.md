@@ -63,6 +63,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app's window has an inspector of the selected account, shown at first and hidden or
   shown with Option-Command-I: its email, each limit's reset and the time left to it, its
   sign-in, its warm-up with **Warm-Up Settings**, and what its shortcut menu offers.
+- The macOS menu offers to sign in again to each account that needs it, above the accounts.
 
 ### Changed
 
@@ -157,6 +158,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app's window lists each account as its name, its plan, a line for each limit and
   at most one line about what needs doing, under the notices and the tip, which no longer sit
   among the accounts.
+- The macOS menu's items carry no symbols or tooltips, and the checkmark is its only mark.
 
 ### Removed
 

@@ -31,15 +31,8 @@ func accountsWindow(_ items: [AccountItem] = sample, notices: [PanelNotice] = []
             1, updated: "Updated 1:36 PM",
             sections: [AccountSection(id: "claude", heading: nil, accounts: items)],
             notices: notices))
-    let environment = WebEnvironment(
-        scheme: WebEnvironment.fixtureScheme, stores: StandInStores(),
-        downloads: FileManager.default.temporaryDirectory, openElsewhere: { _ in },
-        configure: { _ in }, pause: { _ in })
-    let windows = AccountWindows(
-        model: model, environment: environment,
-        presence: AppPresence(apply: { _ in }, bringForward: {}, settle: {}))
     let controller = NSHostingController(
-        rootView: AccountsWindow(model: model, windows: windows))
+        rootView: AccountsWindow(model: model, windows: standInWindows(model)))
     controller.sizingOptions = [.minSize]
     // Deferred: one that reaches the window server lets another test's AppleScript end the run
     // (docs/facts/macos-app.md).
@@ -81,9 +74,9 @@ private func limit(_ kind: LimitKind, _ percent: Double, resets: String, in left
         spoken: "\(name), \(Int(percent)) percent used, \(resets.lowercased())")
 }
 
-private func account(
+func account(
     _ label: String, plan: String, standing: AccountStanding, limits: [LimitRow],
-    note: String? = nil, signIn: String
+    note: String? = nil, signIn: String, summary: String = ""
 ) -> AccountItem {
     let inUse = standing == .inUse
     let qualified = "claude/\(label)"
@@ -112,7 +105,7 @@ private func account(
                     title: "Switch", spoken: "Switch to \(label)", intent: switchTo)
             ),
         action: inUse ? nil : ItemAction(title: "Switch", spoken: label, intent: switchTo),
-        summary: "",
+        summary: summary,
         notes: note.map { [AccountNote(kind: .problem, text: $0, action: nil, learn: nil)] }
             ?? [],
         lines: [],
