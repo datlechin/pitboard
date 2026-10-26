@@ -80,7 +80,13 @@ public sealed class MachineViewModelTests
         Assert.AreEqual("", shown.Checked);
 
         told.Clear();
-        app.Apply(With(3, Checked with { Lines = [Checked.Lines[0]], Summary = "Everything looks right.", Level = Level.Ok }));
+        var first = Checked.Groups[0];
+        app.Apply(With(3, Checked with
+        {
+            Groups = [first with { Lines = [first.Lines[0]] }],
+            Summary = "Everything looks right.",
+            Level = Level.Ok,
+        }));
 
         Assert.AreEqual("Lines, HasSummary, Summary, Level, Checking, CanCheck, Checked", string.Join(", ", told));
         Assert.AreEqual(Level.Ok, shown.Level);
