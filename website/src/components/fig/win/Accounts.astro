@@ -2,7 +2,7 @@
 // AccountsPage.xaml with AccountRow.xaml's rows, the notices NoticeBar.xaml shows after a switch,
 // and the setup step's InfoBar. The ListView is a grid of one row an account, a row group a tool,
 // each named as Narrator hears it. Every node a state shows is drawn: each tool's notice, the
-// step, each row's ends, and templates for a row, a limit and a note; the context menu and the
+// step, each row's ends, and templates for a row, a limit and a line; the context menu and the
 // dialogs wait over the desk. live/accounts.ts follows the one state with them. Shown on another
 // page, the window draws its list's rows once the list shows, and the page shown comes in its slot.
 import ActivityList from "./ActivityList.astro";
@@ -15,11 +15,11 @@ import Window from "./Window.astro";
 import { accountsPage, switchNotice } from "../../../data/windows.ts";
 import {
   CANCEL,
-  FORGET,
-  FORGET_OFFER,
   NAME,
+  REMOVE,
   RENAME,
   RENAME_OFFER,
+  SWITCH,
   TOOL,
   ACCOUNT,
   addAccountAsks,
@@ -28,16 +28,18 @@ import {
   inUse,
   keysOf,
   notNow,
-  signIn,
+  removeAccount,
   signInAgain,
+  signInAsking,
   signInPage,
   sessionsFollowIn,
+  switchBack,
   switchedTo,
   warmUpNow,
   OPEN,
 } from "../../../data/window.ts";
 import { account, moments, type Moment } from "../../../data/world.ts";
-import { toolsOn, whole } from "../../../lib/words.ts";
+import { toolsOn } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -56,7 +58,6 @@ const page = accountsPage(moments[moment], moment === "after" ? switchNotice : n
 const shownTools = toolsOn("windows");
 const fillBy =
   "data-[state=g]:fill-win-success data-[state=y]:fill-win-caution data-[state=r]:fill-win-critical";
-const markBy = "data-[state=under]:stroke-win-success data-[state=over]:stroke-win-critical";
 const caption = "text-u-12/16 text-win-text-2";
 // ListViewItem: hover and selection on SubtleFillColorSecondary, the accent pill on a selected
 // row, and the focus visual on the row with keyboard focus
@@ -99,6 +100,10 @@ const radio =
         <span class="mt-8 block tabular-nums" data-part="countdown" hidden={tool !== "claude"}
           >{page.notice ? page.notice.countdown : `${sessionsFollowIn(name)} 0:21`}</span
         >
+        {/* a switch Pitboard made by itself offers Switch Back, under the message */}
+        <span class="mt-12 flex gap-8" data-part="actions" hidden>
+          <Button data-does="switch-back">{switchBack("windows")}</Button>
+        </span>
       </InfoBar>
     </div>)}
     {/* the setup step's InfoBar (AccountsPage.xaml), which is not closable */}
@@ -175,7 +180,7 @@ const radio =
             </span>
             <span class="self-center">
               <Button aria-label={r.action?.spoken} data-does="use" hidden={!r.action}
-                >{r.action?.title ?? "Use"}</Button
+                >{r.action?.title ?? SWITCH}</Button
               >
               <span
                 class="flex items-center gap-6 text-win-text-2"
@@ -191,7 +196,7 @@ const radio =
             <div class="col-span-2 col-start-2 flex flex-col gap-6">
               <div
                 class:list={[
-                  "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
+                  "grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
                   caption,
                 ]}
                 data-part="limits"
@@ -220,32 +225,15 @@ const radio =
                       data-part="fill"
                       data-state={l.level}
                     />
-                    <line
-                      class:list={["stroke-[calc(var(--spacing)*2)]", markBy]}
-                      x1={whole(l.pace?.expected ?? 0)}
-                      x2={whole(l.pace?.expected ?? 0)}
-                      y2="12"
-                      vector-effect="non-scaling-stroke"
-                      data-part="mark"
-                      data-state={l.pace?.standing ?? "even"}
-                      {...(l.pace && l.pace.standing !== "even" ? {} : { hidden: true })}
-                    />
                   </svg>
                   <span class="min-w-36 text-right" aria-hidden="true" data-part="figure"
                     >{l.figure}</span
                   >
                   <span class="text-right" aria-hidden="true" data-part="resets">{l.resets}</span>
-                  <span
-                    aria-hidden="true"
-                    class="min-w-96 data-[state=over]:text-win-critical"
-                    data-part="pace"
-                    data-state={l.pace?.standing ?? "even"}
-                    >{l.pace?.said}</span
-                  >
                 </div>)}
               </div>
               <div class="contents" data-part="notes">
-                {r.notes.map((n) => <span class={caption}>{n}</span>)}
+                {r.lines.map((n) => <span class={caption}>{n}</span>)}
               </div>
             </div>
           </div>
@@ -284,14 +272,14 @@ const radio =
       </div>
       <div class={sep} role="separator" data-after="copy"></div>
       <div class={item} role="menuitem" tabindex="-1" data-offer="forget">
-        {FORGET_OFFER}<span class={key} aria-hidden="true">Del</span>
+        {removeAccount("windows")}<span class={key} aria-hidden="true">Del</span>
       </div>
     </div>
     {/* the templates and the dialogs every view of the window shares, drawn once with its top
        view's: each opens anchored over the window it is opened from */}
     {crop && (
       <>
-        {/* an account a visitor adds, a limit its first read finds, and a note */}
+        {/* an account a visitor adds, a limit its first read finds, and a line */}
         <template data-part="row">
           <div class={row} role="row" aria-selected="false">
             <div
@@ -325,7 +313,7 @@ const radio =
                 <span class:list={["truncate", caption]} data-part="email"></span>
               </span>
               <span class="self-center">
-                <Button data-does="use">Use</Button>
+                <Button data-does="use">{SWITCH}</Button>
                 <span class="flex items-center gap-6 text-win-text-2" data-part="in-use" hidden
                   ><svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg
                   >{inUse("windows")}</span
@@ -337,7 +325,7 @@ const radio =
               <div class="col-span-2 col-start-2 flex flex-col gap-6">
                 <div
                   class:list={[
-                    "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
+                    "grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
                     caption,
                   ]}
                   data-part="limits"
@@ -372,21 +360,9 @@ const radio =
                 ry="1.5"
                 data-part="fill"
               />
-              <line
-                class:list={["stroke-[calc(var(--spacing)*2)]", markBy]}
-                y2="12"
-                vector-effect="non-scaling-stroke"
-                data-part="mark"
-                {...hide(true)}
-              />
             </svg>
             <span class="min-w-36 text-right" aria-hidden="true" data-part="figure"></span>
             <span class="text-right" aria-hidden="true" data-part="resets"></span>
-            <span
-              aria-hidden="true"
-              class="min-w-96 data-[state=over]:text-win-critical"
-              data-part="pace"
-            ></span>
           </div>
         </template>
         <template data-part="note">
@@ -394,7 +370,7 @@ const radio =
         </template>
         <ContentDialog id="win-accounts-forget" alert>
           <Fragment slot="buttons">
-            <Button value="forget" type="submit">{FORGET}</Button>
+            <Button value="forget" type="submit">{REMOVE}</Button>
             <Button data-does="cancel">{CANCEL}</Button>
           </Fragment>
         </ContentDialog>
@@ -413,7 +389,7 @@ const radio =
             <span class="block" data-part="failure-message"></span>
           </div>
           <Fragment slot="buttons">
-            <Button accent type="submit" value="rename">{RENAME}</Button>
+            <Button accent type="submit" value="rename" data-part="confirm">{RENAME}</Button>
             <Button data-does="cancel">{CANCEL}</Button>
           </Fragment>
         </ContentDialog>
@@ -426,16 +402,6 @@ const radio =
                 {name}
               </label>)}
             </fieldset>
-            <label class="mt-12 block" data-part="name">
-              <span class="mb-8 block">{NAME}</span>
-              <input
-                class={field}
-                name="name"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="work"
-              />
-            </label>
             <div class="mt-12" data-part="account">
               <span class="block">{ACCOUNT}</span>
               <span class="block select-text" data-part="label"></span>
@@ -450,7 +416,7 @@ const radio =
           </div>
           <Fragment slot="buttons">
             <Button accent type="submit" value="sign-in" data-part="confirm"
-              >{signIn("windows")}</Button
+              >{signInAsking("windows")}</Button
             >
             <Button data-does="cancel">{CANCEL}</Button>
           </Fragment>

@@ -139,6 +139,6 @@ export const appMenus = (updates: boolean): AppMenu[] => [
   { id: "help", title: "Help", items: [{ title: "Pitboard Help", does: "help" }] },
 ];
 
-// The Account menu with no account selected: what it would offer, each dimmed, and Forget on ⌘⌫
-// (AccountCommands.swift; the model's `accountMenu`).
-export const NO_ACCOUNT = ["Use", "Sign In Again…", "Rename…"];
+// The Account menu with no account selected: what it would offer, each dimmed, and Remove Account…
+// on ⌘⌫ (AccountCommands.swift; the model's `accountMenu`).
+export const NO_ACCOUNT = ["Switch", "Sign In Again…", "Rename…"];

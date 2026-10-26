@@ -41,7 +41,7 @@ const tabs = [
 ];
 const heights = { switch: "h-245", warm: "h-378.5" };
 // with the window in its flow: When a limit reaches as tall as Switch Automatically's footer
-// needs at least, and Warm up limits as its accounts make it. The cut stays 8 points below, the
+// needs at least, and Warm-Up as its accounts make it. The cut stays 8 points below, the
 // desk's border counted as a static height counts it.
 // Once another tab is shown, the desk keeps its height and cuts the window as it grows.
 const live = {
@@ -265,7 +265,7 @@ const menuRow =
       )}
       {show === "warm" && (
         <>
-          <p class={head}>{warm.title}</p>
+          <p class={head}>{warm.title.macos}</p>
           <div class={group}>
             {hours.map(([label, end, minutes], i) => <div
               class:list={[row, "items-center pb-3", i === 0 ? "h-39" : [ruled, "h-40"]]}

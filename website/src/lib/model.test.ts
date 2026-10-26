@@ -15,6 +15,7 @@ import {
   START_STEP,
   SIGN_IN_MS,
   TAKES_MS,
+  add,
   advance,
   cancelSignIn,
   clamped,
@@ -22,10 +23,10 @@ import {
   decide,
   declineSecond,
   dismissNotice,
-  enroll,
   forget,
   model,
   nameProblem,
+  named,
   nextWarmUp,
   quit,
   refresh,
@@ -38,6 +39,8 @@ import {
   signInAgain,
   signInFromApp,
   start,
+  suggest,
+  switchBackFromApp,
   switchFromApp,
   use,
   warmNote,
@@ -50,6 +53,7 @@ import {
 } from "./model.ts";
 import {
   afterSwitch,
+  appWarmSaid,
   atLimitNote,
   autoStandingSaid,
   notSwitching,
@@ -59,14 +63,23 @@ import {
   limitRow,
   menuBarTitle,
   menuLine,
-  notes,
+  rowLines,
   statusLine,
   statusLines,
   trayTip,
   hm,
 } from "./words.ts";
 import { plainText } from "./changelog.ts";
-import { DAY, HOUR, MINUTE, WEEK, clock, type Account, type Limit } from "../data/world.ts";
+import {
+  DAY,
+  HOUR,
+  MINUTE,
+  WEEK,
+  clock,
+  type Account,
+  type Limit,
+  type Tool,
+} from "../data/world.ts";
 import { SITE_BANNED, bannedFromDocs, wordPattern } from "../../scripts/guard.mjs";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -233,8 +246,9 @@ function reading(limits: Record<string, Limit[]>) {
     ),
   });
 }
+// each notification as macOS titles it, and the account its button switches to
 const posted = () =>
-  model.get().posted.map((p) => [p.title, p.subtitle, p.body, p.switchTo?.label ?? null]);
+  model.get().posted.map((p) => [p.title.macos, p.subtitle, p.body, p.button?.label ?? null]);
 
 test("a_limit_at_the_share_is_notified_once_before_it_runs_out", () => {
   answersTo(advising, "a_limit_at_the_share_is_notified_once_before_it_runs_out");
@@ -246,13 +260,16 @@ test("a_limit_at_the_share_is_notified_once_before_it_runs_out", () => {
   refresh();
   const once = [
     [
-      "personal has used 96% of its 5-hour limit",
+      "5-Hour Limit Almost Reached",
       "Claude Code",
-      "work has 88% of its own left.",
+      "personal has used 96%. work has used 12%.",
       "work",
     ],
   ];
   assert.deepEqual(posted(), once);
+  const [heads] = model.get().posted;
+  assert.equal(heads.title.windows, "5-hour limit almost reached");
+  assert.deepEqual(heads.button?.title, { macos: "Switch", windows: "Switch to work" });
   assert.deepEqual(model.get().advice, [], "the window offers it at 100%");
   reading({ "claude/personal": [session(100), weekly(20)] });
   refresh();
@@ -270,7 +287,12 @@ test("a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets", () => {
   reading({ "claude/personal": [session(97, NOW + HOUR + 5 * MINUTE)] });
   refresh();
   assert.deepEqual(posted(), [
-    ["personal has used 97% of its 5-hour limit", "Claude Code", "Resets in 1h 05m.", null],
+    [
+      "5-Hour Limit Almost Reached",
+      "Claude Code",
+      "personal has used 97%. Resets in 1h 05m.",
+      null,
+    ],
   ]);
 });
 
@@ -283,7 +305,12 @@ test("an_account_past_the_share_is_not_offered_at_the_share", () => {
   });
   refresh();
   assert.deepEqual(posted(), [
-    ["personal has used 96% of its 5-hour limit", "Claude Code", "Resets in 1h 05m.", null],
+    [
+      "5-Hour Limit Almost Reached",
+      "Claude Code",
+      "personal has used 96%. Resets in 1h 05m.",
+      null,
+    ],
   ]);
 });
 
@@ -311,13 +338,13 @@ test("switch_notifies_of_codex_alone, and Codex Plus has no room against Pro's w
     "codex/main": [{ ...weekly(97), resetsAt: NOW + 5 * DAY + 18 * HOUR }],
   });
   refresh();
-  const atLimit = model.get().posted.filter((p) => p.subtitle !== null);
+  const atLimit = model.get().posted.filter((p) => p.subtitle === "Codex");
   assert.deepEqual(
-    atLimit.map((p) => [p.title, p.subtitle, p.body, p.switchTo]),
-    [["main has used 97% of its weekly limit", "Codex", "Resets in 5d 18h.", null]],
+    atLimit.map((p) => [p.title.macos, p.subtitle, p.body, p.button]),
+    [["Weekly Limit Almost Reached", "Codex", "main has used 97%. Resets in 5d 18h.", null]],
   );
   assert.equal(model.get().inUse.claude, "work", "Claude Code was switched instead");
-  assert.ok(model.get().posted.some((p) => p.title === "Switched Claude Code to work"));
+  assert.ok(model.get().posted.some((p) => p.title.macos === "Switched to work"));
 });
 
 test("one limit of each tool is notified a pass, the 5-hour first, the weekly at the next read", () => {
@@ -325,17 +352,17 @@ test("one limit of each tool is notified a pass, the 5-hour first, the weekly at
   setShare(50);
   assert.deepEqual(posted(), [
     [
-      "personal has used 59% of its 5-hour limit",
+      "5-Hour Limit Almost Reached",
       "Claude Code",
-      "work has 88% of its own left.",
+      "personal has used 59%. work has used 12%.",
       "work",
     ],
   ]);
   advance(model.get().readAt + READ_EVERY_SECONDS);
   assert.deepEqual(posted().at(-1), [
-    "personal has used 73% of its weekly limit",
+    "Weekly Limit Almost Reached",
     "Claude Code",
-    "work has 60% of its own left.",
+    "personal has used 73%. work has used 40%.",
     "work",
   ]);
   advance(model.get().readAt + READ_EVERY_SECONDS);
@@ -353,8 +380,8 @@ test("Pitboard switches by itself only once the account has settled, then never 
   const s = model.get();
   assert.equal(s.inUse.claude, "personal");
   assert.deepEqual(posted().at(-1), [
-    "Claude Code wasn’t switched",
-    null,
+    "Automatic Switch Skipped",
+    "Claude Code",
     "personal has used 73% of its weekly limit. The account was put in use less than 5 minutes ago.",
     null,
   ]);
@@ -370,11 +397,15 @@ test("Pitboard switches by itself only once the account has settled, then never 
   const after = model.get();
   assert.equal(after.inUse.claude, "work");
   assert.deepEqual(posted().at(-1), [
-    "Switched Claude Code to work",
-    null,
+    "Switched to work",
+    "Claude Code",
     "personal has used 73% of its weekly limit. Sessions already running follow within 33 seconds.",
-    null,
+    "personal",
   ]);
+  assert.deepEqual(after.posted.at(-1)?.button?.title, {
+    macos: "Switch Back",
+    windows: "Switch back",
+  });
   assert.deepEqual(
     after.log.slice(-1).map((e) => [e.caller, e.verb, e.subject, e.outcome]),
     [["app", "auto-switch", "work", "ok"]],
@@ -384,6 +415,40 @@ test("Pitboard switches by itself only once the account has settled, then never 
     autoStandingSaid(model.get().autoStanding!),
     `Watching work: 40% of its weekly limit, as of ${hm(model.get().readAt)}.`,
   );
+});
+
+test("Switch Back goes back to the account a switch by itself left, and nothing says Claude Code was not switched for that limit until it resets", (t) => {
+  const automatic = ffi("model/automatic.rs");
+  answersTo(automatic, "switch_back_switches_to_the_account_left");
+  answersTo(
+    automatic,
+    "after_switch_back_nothing_says_claude_code_was_not_switched_until_the_limit_resets",
+  );
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  reset();
+  assert.equal(use("claude", "work"), "ok");
+  advance(NOW + 2);
+  assert.equal(use("claude", "personal"), "ok");
+  setChoice("switch");
+  setShare(50);
+  advance(model.get().now + SETTLING_SECONDS + DECIDE_EVERY_SECONDS);
+  assert.equal(model.get().inUse.claude, "work", "switched for personal's weekly limit");
+  const weeklyResets = model.get().accounts.find((a) => a.label === "personal")!.limits[1].resetsAt;
+  assert.deepEqual(model.get().lastSwitch.claude?.back, { resetsAt: weeklyResets });
+  const told = model.get().posted.length;
+  switchBackFromApp("macos");
+  t.mock.timers.tick(TAKES_MS.switch.macos);
+  assert.equal(model.get().inUse.claude, "personal");
+  assert.deepEqual(model.get().switchedBack, { from: "personal", until: weeklyResets });
+  assert.equal(model.get().lastSwitch.claude?.back, undefined, "a switch asked for offers none");
+  // the account just put back in use settles, said under the setting alone
+  advance(model.get().now + DECIDE_EVERY_SECONDS);
+  assert.match(autoStandingSaid(model.get().autoStanding!), /less than 5 minutes ago/);
+  // and the weekly limit it was switched away from
+  setShare(70);
+  assert.match(autoStandingSaid(model.get().autoStanding!), /switched away from once already/);
+  assert.equal(model.get().posted.length, told);
+  assert.equal(model.get().inUse.claude, "personal");
 });
 
 test("a switch is the app's change: the notice counts down, the log and every figure follow", () => {
@@ -456,25 +521,70 @@ test("forgetting is refused for the account in use, and takes the rest out of ev
   );
 });
 
-test("a simulated enrolment reads nothing until the next read, which finds nothing used", () => {
+test("a simulated add signs in first, under a name from the email, and reads nothing until the next read, which finds nothing used", () => {
   reset();
-  assert.equal(enroll("claude", "side", "app"), "ok");
-  let side = model.get().accounts.find((a) => a.label === "side")!;
-  assert.equal(side.email, "side@example.com");
-  assert.equal(side.plan, "Max 20x");
-  assert.equal(menuLine(side, model.get()), "side@example.com");
+  assert.equal(add("claude", "app"), "travel");
+  let travel = model.get().accounts.find((a) => a.label === "travel")!;
+  assert.equal(travel.email, "dana@travel.example");
+  assert.equal(travel.plan, "Max 20x");
+  assert.deepEqual(model.get().naming, {
+    tool: "claude",
+    label: "travel",
+    email: "dana@travel.example",
+  });
+  named();
+  assert.equal(model.get().naming, null, "Done or Cancel keeps the name");
+  assert.equal(menuLine(travel, model.get()), "dana@travel.example");
   advance(model.get().readAt + READ_EVERY_SECONDS);
-  side = model.get().accounts.find((a) => a.label === "side")!;
+  travel = model.get().accounts.find((a) => a.label === "travel")!;
   assert.deepEqual(
-    side.limits.map((l) => limitRow(l, model.get())).map((r) => [r.short, r.figure, r.resets]),
+    travel.limits.map((l) => limitRow(l, model.get())).map((r) => [r.short, r.figure, r.resets]),
     [
-      ["5h", "0%", ""],
-      ["week", "0%", "resets in 7d 0h"],
+      ["5-hour", "0%", ""],
+      ["Weekly", "0%", "Resets Tue 20:55"],
     ],
   );
-  assert.equal(enroll("desktop", "studio"), "ok");
-  assert.equal(model.get().inUse.desktop, "studio", "Claude quits signed in to it");
-  assert.equal(enroll("claude", "side"), "label_taken");
+  assert.equal(add("desktop"), "desktop");
+  assert.equal(model.get().inUse.desktop, "desktop", "Claude quits signed in to it");
+  assert.equal(add("claude"), "dana2", "the next somebody's company name is taken");
+});
+
+test("a name is suggested as label.rs's a_suggested_name_is_one_word_free_in_its_tool_and_never_empty says", () => {
+  const label = core("label.rs");
+  const body = label
+    .slice(label.indexOf("fn a_suggested_name_is_one_word_free_in_its_tool_and_never_empty()"))
+    .split("#[test]")[0]
+    .replace(/\s+/g, " ");
+  reset();
+  const s = model.get();
+  const own = (tool: Tool, labels: string[]) => ({
+    ...s,
+    accounts: labels.map((label, i) => ({ ...s.accounts[0], id: `x${i}`, tool, label })),
+  });
+  const none = own("claude", []);
+  for (const [tool, email, said] of [
+    ["claude", "dana@acme.io", "acme"],
+    ["claude", "dana@eng.acme.io", "eng"],
+    ["codex", "Dana.Lee+pitboard@Gmail.com", "dana.lee"],
+    ["claude", "dana@icloud.com", "dana"],
+    ["claude", "dana@yahoo.co.uk", "dana"],
+    ["claude", "dana@web.de", "dana"],
+    ["desktop", "", "desktop"],
+    ["claude", "not an address", "claude"],
+  ] as const) {
+    assert.ok(body.includes(`"${email}"`) && body.includes(`"${said}"`), email);
+    assert.equal(suggest(none, tool, email), said, email);
+  }
+  for (const [labels, said] of [
+    [["acme"], "dana"],
+    [["acme", "dana"], "acme-2"],
+    [["acme", "dana", "acme-2"], "acme-3"],
+  ] as const) {
+    assert.ok(body.includes(`, "${said}");`), said);
+    assert.equal(suggest(own("claude", [...labels]), "claude", "dana@acme.io"), said);
+  }
+  assert.equal(suggest(own("codex", ["acme"]), "claude", "dana@acme.io"), "acme");
+  assert.equal(suggest(own("desktop", ["desktop"]), "desktop", ""), "desktop-2");
 });
 
 test("an added Codex account says no lifetime for its parked login, as the core gives it none", () => {
@@ -484,22 +594,26 @@ test("an added Codex account says no lifetime for its parked login, as the core 
       'access_token"]\n                .as_str()\n                .and_then(jwt::expires_at),\n            refresh_expires_at: None,',
     ),
   );
-  assert.equal(enroll("codex", "extra"), "ok");
-  const extra = model.get().accounts.find((a) => a.tool === "codex" && a.label === "extra")!;
+  assert.equal(add("codex"), "travel");
+  const extra = model.get().accounts.find((a) => a.tool === "codex" && a.label === "travel")!;
   assert.equal(extra.refreshExpiresAt, undefined);
-  assert.deepEqual(notes(extra, model.get(), null), []);
-  assert.equal(enroll("claude", "side"), "ok");
-  const side = model.get().accounts.find((a) => a.label === "side")!;
+  assert.deepEqual(rowLines(extra, model.get(), null), []);
+  assert.equal(add("claude"), "travel");
+  const side = model.get().accounts.find((a) => a.tool === "claude" && a.label === "travel")!;
   assert.equal(side.refreshExpiresAt, model.get().now + SIGN_IN_LASTS);
 });
 
-test("signing in again gives a parked login another 30 days, said in whole days a second on", () => {
+test("signing in again gives a saved sign-in another 30 days, said only within its last three", () => {
   reset();
   signInAgain("claude", "work");
-  advance(model.get().now + 1);
-  const s = model.get();
-  const work = s.accounts.find((a) => a.label === "work")!;
-  assert.ok(notes(work, s, null).includes("Parked login good for 29 more days"));
+  const signedIn = model.get().now;
+  advance(signedIn + 1);
+  let s = model.get();
+  const work = () => s.accounts.find((a) => a.label === "work")!;
+  assert.equal(work().refreshExpiresAt, signedIn + SIGN_IN_LASTS);
+  assert.deepEqual(rowLines(work(), s, null), []);
+  s = { ...s, now: signedIn + SIGN_IN_LASTS - 2 * DAY - MINUTE };
+  assert.deepEqual(rowLines(work(), s, null), ["Sign-in expires in 2 days"]);
   signInAgain("claude", "personal");
   assert.equal(model.get().newLogin.claude?.label, "personal");
 });
@@ -537,10 +651,11 @@ test("warm-ups start a period as the last one resets, within the hours set", () 
 
 test("a share is clamped to 50 to 99, and every change of it is a choice made", () => {
   assert.deepEqual([0, 49.4, 50, 77.6, 99, 120].map(clamped), [50, 50, 50, 78, 99, 99]);
-  const machine = ffi("present/machine.rs").replace(/\\\n\s*/g, "");
+  const words = ffi("present/words.rs").replace(/\\\n\s*/g, "");
   assert.ok(
-    machine.includes("once a limit of the account in use reaches {at}%, while the app is open."),
+    words.includes("once a limit of the account in use reaches {at}%, while the app is open."),
   );
+  assert.ok(ffi("present/machine.rs").includes("let note = words::at_limit_note("));
   assert.equal(
     atLimitNote({ atLimit: "notify", chosen: true, share: 90 }),
     "Pitboard notifies you once a limit of the account in use reaches 90%, while the app is open.",
@@ -575,7 +690,10 @@ function everything(): { said: string[]; printed: string[] } {
   const said = new Set<string>();
   const printed = new Set<string>();
   const hear = (s: State) => {
-    for (const p of s.posted) [p.title, p.subtitle ?? "", p.body].forEach((t) => said.add(t));
+    for (const p of s.posted)
+      [p.title.macos, p.title.windows, p.subtitle ?? "", p.body, p.button?.title.macos ?? ""]
+        .concat(p.button?.title.windows ?? "")
+        .forEach((t) => said.add(t));
     if (s.autoStanding) said.add(autoStandingSaid(s.autoStanding));
     const note = atLimitNote(s.preferences);
     if (note) said.add(note);
@@ -587,10 +705,11 @@ function everything(): { said: string[]; printed: string[] } {
       .forEach((t) => said.add(t));
     for (const a of s.accounts) {
       said.add(menuLine(a, s));
-      notes(a, s, warmNote(s, a)).forEach((n) => said.add(n));
+      said.add(menuLine(a, s, "windows"));
+      rowLines(a, s, warmNote(s, a)).forEach((n) => said.add(n));
       for (const l of a.limits) {
         const r = limitRow(l, s);
-        [r.short, r.figure, r.resets, r.pace?.said ?? ""].forEach((t) => said.add(t));
+        [r.short, r.figure, r.resets, r.spoken].forEach((t) => said.add(t));
       }
     }
     for (const tool of ["claude", "codex", "desktop"] as const)
@@ -612,8 +731,8 @@ function everything(): { said: string[]; printed: string[] } {
       advance(NOW + 10 * MINUTE);
     },
     () => {
-      enroll("claude", "side");
-      use("claude", "side");
+      add("claude");
+      use("claude", "travel");
       setChoice("switch");
       advance(NOW + 6 * MINUTE);
     },
@@ -634,8 +753,8 @@ function everything(): { said: string[]; printed: string[] } {
     () => {
       rename("claude", "work", "job");
       forget("codex", "spare");
-      enroll("codex", "extra");
-      enroll("desktop", "studio");
+      add("codex");
+      add("desktop");
       signInAgain("desktop", "office");
       signInAgain("claude", "personal");
       warmUp("job");
@@ -663,6 +782,7 @@ function everything(): { said: string[]; printed: string[] } {
     { stands: "held", why: "limit_used_up", limit: { ...limit, resetsAt: null } },
   ];
   standings.forEach((w) => said.add(capitalised(warmSaid(w))));
+  standings.forEach((w) => said.add(capitalised(appWarmSaid(w))));
   const skips: Skip[] = [
     { code: "no_room", unread: [] },
     { code: "no_room", unread: ["side", "codex/extra"] },
@@ -801,37 +921,39 @@ test("the switch the hero's demo makes is where the page rests, and Reset comes 
   assert.deepEqual(model.get(), start());
 });
 
-test("a simulated sign-in waits its 3 seconds, Claude Desktop's parking first, and can be cancelled", (t) => {
+test("a simulated sign-in waits its 3 seconds, Claude Desktop's saving the account in use first, and can be cancelled", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   reset();
-  signInFromApp("claude", "third", false);
+  signInFromApp("claude", null);
   assert.deepEqual(
     { ...model.get().signing!, token: 0 },
-    { tool: "claude", label: "third", again: false, phase: "waiting", token: 0 },
+    { tool: "claude", label: null, again: false, phase: "waiting", token: 0 },
   );
   // one at a time
-  signInFromApp("codex", "other", false);
+  signInFromApp("codex", null);
   t.mock.timers.tick(SIGN_IN_MS);
   assert.equal(model.get().signing, null);
-  assert.ok(model.get().accounts.some((a) => a.label === "third" && a.tool === "claude"));
-  assert.ok(!model.get().accounts.some((a) => a.label === "other"));
+  assert.ok(model.get().accounts.some((a) => a.label === "travel" && a.tool === "claude"));
+  assert.ok(!model.get().accounts.some((a) => a.tool === "codex" && a.label === "travel"));
+  assert.equal(model.get().naming?.label, "travel");
 
-  signInFromApp("desktop", "studio", false);
-  assert.equal(model.get().signing?.phase, "parking");
+  signInFromApp("desktop", null);
+  assert.equal(model.get().signing?.phase, "saving");
   t.mock.timers.tick(TAKES_MS.switch.macos);
   assert.equal(model.get().signing?.phase, "waiting");
   t.mock.timers.tick(SIGN_IN_MS - TAKES_MS.switch.macos);
-  assert.equal(model.get().inUse.desktop, "studio");
+  assert.equal(model.get().inUse.desktop, "desktop");
   assert.deepEqual(model.get().newLogin.desktop, {
-    label: "studio",
+    label: "desktop",
     at: model.get().now,
     added: true,
+    opens: true,
   });
 
-  signInFromApp("claude", "work", true);
+  signInFromApp("claude", "work");
   cancelSignIn();
   t.mock.timers.tick(SIGN_IN_MS);
-  assert.equal(model.get().log.at(-1)?.subject, "desktop/studio", "nothing more was signed in");
+  assert.equal(model.get().log.at(-1)?.subject, "desktop/desktop", "nothing more was signed in");
   reset();
 });
 

@@ -215,7 +215,7 @@ export class AppMenus {
   }
 
   // AccountCommands.swift: every offer of the account selected, dimmed where it does not apply;
-  // with none, the model's offers and Forget, each dimmed.
+  // with none, the model's offers and Remove Account, each dimmed.
   #account(el: HTMLElement, s: State, a: Account | null) {
     const item = (name: string) => el.querySelector<HTMLElement>(`[data-offer="${name}"]`)!;
     const set = (name: string, on: boolean, enabled: boolean, words?: string) => {

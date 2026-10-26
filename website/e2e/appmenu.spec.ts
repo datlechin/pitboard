@@ -95,12 +95,17 @@ test("the keyboard moves along the bar, opens a menu on its first item and goes 
   await expect(title("pitboard")).toBeFocused();
 });
 
-test("the Account menu offers the account selected, dimmed where it does not apply, and Forget on ⌘⌫", async ({
+test("the Account menu offers the account selected, dimmed where it does not apply, and Remove Account on ⌘⌫", async ({
   page,
 }) => {
   const { title, menu, items, row } = await window(page);
   await title("account").click();
-  await said(items("account")).toEqual(["Use", "Sign In Again…", "Rename…", "Forget… ⌘⌫"]);
+  await said(items("account")).toEqual([
+    "Switch",
+    "Sign In Again…",
+    "Rename…",
+    "Remove Account… ⌘⌫",
+  ]);
   for (const item of await items("account").all())
     await expect(item).toHaveAttribute("aria-disabled", "true");
   await page.keyboard.press("Escape");
@@ -108,23 +113,23 @@ test("the Account menu offers the account selected, dimmed where it does not app
   await row("personal").click(at);
   await title("account").click();
   await said(items("account")).toEqual([
-    "Use personal",
+    "Switch to personal",
     "Sign In Again…",
     "Rename…",
     "Warm Up Now",
     "Open claude.ai",
-    "Forget… ⌘⌫",
+    "Remove Account… ⌘⌫",
   ]);
   await expect(menu("account").getByRole("menuitem", { name: "Warm Up Now" })).toHaveAttribute(
     "aria-disabled",
     "true",
   );
-  const forget = menu("account").getByRole("menuitem", { name: "Forget…" });
+  const forget = menu("account").getByRole("menuitem", { name: "Remove Account…" });
   await expect(forget).not.toHaveAttribute("aria-disabled", "true");
   await expect(forget).toHaveAttribute("aria-keyshortcuts", "Meta+Backspace");
   await forget.click();
   const alert = page.locator("#mac-accounts-forget");
-  await expect(alert).toHaveAccessibleName("Forget “personal (Claude Code)”?");
+  await expect(alert).toHaveAccessibleName("Remove “personal (Claude Code)”?");
   await page.keyboard.press("Escape");
 
   // ⌘⌫ wherever focus is in the window, and nothing on the account in use
@@ -136,7 +141,7 @@ test("the Account menu offers the account selected, dimmed where it does not app
   await page.keyboard.press("Meta+Backspace");
   await expect(alert).toBeHidden();
   await title("account").click();
-  await expect(menu("account").getByRole("menuitem", { name: "Use work" })).toHaveAttribute(
+  await expect(menu("account").getByRole("menuitem", { name: "Switch to work" })).toHaveAttribute(
     "aria-disabled",
     "true",
   );

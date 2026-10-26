@@ -3,19 +3,21 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   accountSpoken,
+  appSpan,
+  figure,
   hm,
   level,
   limitColumn,
   limitName,
+  limitNotification,
   limitRow,
   menuBarClock,
   menuBarSpoken,
   menuLine,
-  notes,
+  rowLines,
   warmsAgainNote,
   paceColumn,
   paceOf,
-  parkedLife,
   parkedLifeColumn,
   RENEW_WITHIN,
   MARGIN,
@@ -24,21 +26,18 @@ import {
   runsOut,
   runsOutFirst,
   runsOutNote,
-  sessionLife,
   sessionLifeColumn,
   shortDate,
+  signInExpires,
   span,
   spokenLimit,
-  spokenLimitOf,
-  spokenSpan,
+  staleNote,
   statusLine,
   statusLines,
+  switchSpoken,
   toolsOn,
   headsUp,
-  useSpoken,
   whole,
-  type Pace,
-  type Standing,
 } from "./words.ts";
 import { plainText } from "./changelog.ts";
 import {
@@ -51,6 +50,7 @@ import {
   clock,
   moments,
   share,
+  type Limit,
   type World,
 } from "../data/world.ts";
 
@@ -164,12 +164,7 @@ test("a limit running out is said as words.rs's a_limit_running_out_is_named_wit
   for (const [, limit, seconds, words] of rows) assert.equal(runsOut(limit, value(seconds)), words);
 });
 
-test("a parked login's life reads as words.rs's tests of parked_life and parked_life_column say", () => {
-  const sentence = rustTest(said, "a_parked_logins_life_in_a_sentence_is_counted_in_whole_days");
-  assert.ok(sentence.includes("assert_eq!(parked_life(None, NOW), None);"));
-  assert.equal(parkedLife(undefined, NOW), null);
-  for (const [left, words] of cases(sentence, "life"))
-    assert.equal(parkedLife(NOW + left, NOW), words);
+test("a parked login's life in a column reads as words.rs's a_parked_logins_life_in_a_column_says_when_it_expires says", () => {
   const column = rustTest(said, "a_parked_logins_life_in_a_column_says_when_it_expires");
   for (const [left, words] of cases(column, "life"))
     assert.equal(parkedLifeColumn(NOW + left, NOW), words);
@@ -177,13 +172,13 @@ test("a parked login's life reads as words.rs's tests of parked_life and parked_
   assert.equal(RENEW_WITHIN, 3 * DAY);
 });
 
-test("a Claude Desktop sign-in's life is hedged, as words.rs's a_session_life_is_hedged_and_never_says_expired says", () => {
+test("a Claude Desktop sign-in's life in a column is hedged, as words.rs's a_session_life_is_hedged_and_never_says_expired says", () => {
   const body = rustTest(said, "a_session_life_is_hedged_and_never_says_expired");
   for (const [left, words] of cases(body, "column"))
     assert.equal(sessionLifeColumn(NOW + left, NOW), words);
   for (const left of [-DAY, 0, 30, DAY, 40 * DAY]) {
-    const both = `${sessionLifeColumn(NOW + left, NOW)} ${sessionLife(NOW + left, NOW) ?? ""}`;
-    assert.ok(!both.includes("expire"), both);
+    const column = sessionLifeColumn(NOW + left, NOW);
+    assert.ok(!column.includes("expire"), column);
   }
 });
 
@@ -256,40 +251,61 @@ test("an_untouched_limit_is_under_pace", () => {
 
 test("the world's times give every word the figures were drawn with", () => {
   const before = moments.before;
+  // the app's bars, each reset at a clock time
   const row = (label: string, tool: "claude" | "codex" = "claude") =>
     account(label, tool).limits.map((l) => {
       const r = limitRow(l, before);
-      return [r.short, r.figure, r.resets, r.pace?.said ?? "", r.pace && whole(r.pace.expected)];
+      return [r.short, r.figure, r.resets];
     });
   assert.deepEqual(row("personal"), [
+    ["5-hour", "59%", "Resets 22:00"],
+    ["Weekly", "73%", "Resets Mon 14:50"],
+  ]);
+  assert.deepEqual(row("work"), [
+    ["5-hour", "12%", "Resets 23:50"],
+    ["Weekly", "40%", "Resets Fri 01:00"],
+  ]);
+  assert.deepEqual(row("main", "codex"), [["Weekly", "7%", "Resets Mon 15:00"]]);
+  assert.deepEqual(row("spare", "codex"), [["5-hour", "0%", "Resets Wed 01:50"]]);
+  // the terminal's columns, with their pace
+  const columns = (label: string, tool: "claude" | "codex" = "claude") =>
+    account(label, tool).limits.map((l) => {
+      const p = paceOf(l.percent, l.resetsAt, l.lengthSeconds, before.readAt, before.now);
+      return [
+        limitColumn(l),
+        figure(l.percent),
+        resets(l.resetsAt!, before.now),
+        p ? paceColumn(p) : "",
+        p && whole(p.expected),
+      ];
+    });
+  assert.deepEqual(columns("personal"), [
     ["5h", "59%", "resets in 1h 10m", "18% under pace", 77],
     ["week", "73%", "resets in 5d 18h", "55% over pace", 18],
   ]);
-  assert.deepEqual(row("work"), [
+  assert.deepEqual(columns("work"), [
     ["5h", "12%", "resets in 3h 00m", "28% under pace", 40],
     ["week", "40%", "resets in 2d 4h", "29% under pace", 69],
   ]);
-  assert.deepEqual(row("main", "codex"), [
+  assert.deepEqual(columns("main", "codex"), [
     ["week", "7%", "resets in 5d 18h", "11% under pace", 18],
   ]);
-  assert.deepEqual(row("spare", "codex"), [["5h", "0%", "resets in 5h 00m", "", null]]);
+  assert.deepEqual(columns("spare", "codex"), [["5h", "0%", "resets in 5h 00m", "", null]]);
   assert.equal(
     runsOutNote(account("personal"), before),
     "weekly limit runs out in 11h 05m at this pace",
   );
-  assert.equal(
-    menuLine(account("personal"), before),
-    "5-hour 59%, weekly 73% (runs out in 11h 05m)",
-  );
+  assert.equal(menuLine(account("personal"), before), "5-hour 59% used, Weekly 73%");
+  assert.equal(menuLine(account("personal"), before, "windows"), "5-hour 59% used, weekly 73%");
   assert.equal(runsOutFirst(account("personal"), moments.after), null);
-  const all = (w: World) => accounts.map((a) => notes(a, w, warmsAgainNote(a)));
+  const all = (w: World) => accounts.map((a) => rowLines(a, w, warmsAgainNote(a)));
   assert.deepEqual(all(before), [
-    ["Weekly limit runs out in 11h 05m at this pace", "Warms up again at 22:00"],
-    ["Parked login good for 26 more days"],
+    ["Warms up again at 22:00"],
     [],
     [],
-    ["Read 2h 05m ago, with Claude closed"],
-    ["Its sign-in may lapse in 25 days"],
+    [],
+    ["Read 2 hr 5 min ago, with Claude closed"],
+    [],
   ]);
   const column = (label: string) =>
     plainText(statusLines(before, label === "office" ? "desktop" : "claude").join("\n"));
@@ -314,7 +330,11 @@ test("the notification comes when personal's weekly limit, at its pace, reaches 
   const left = ((share - week.percent) / (100 - week.percent)) * runs.inSeconds;
   const minute = (epoch: number) => Math.floor(epoch / MINUTE);
   assert.equal(minute(clock.menuBar + left), minute(clock.warned));
-  assert.equal(headsUp.title, `personal has used ${share}% of its weekly limit`);
+  assert.deepEqual(headsUp.title, limitNotification(week, false));
+  assert.equal(headsUp.body, `personal has used ${share}%. work has used 40%.`);
+  const ffi = repo("crates/pitboard-ffi/src/present/words.rs");
+  assert.ok(ffi.includes('assert_eq!(has_used_share("work", "95%"), "work has used 95%.");'));
+  assert.ok(ffi.includes('assert_eq!(other_used("spare", Some(80)), "spare has used 20%.");'));
 });
 
 test("a label, email or plan a visitor types stays text in every line words.ts writes as HTML", () => {
@@ -339,68 +359,147 @@ test("a label, email or plan a visitor types stays text in every line words.ts w
 const ffiWords = repo("crates/pitboard-ffi/src/present/words.rs");
 const ffiAccounts = repo("crates/pitboard-ffi/src/present/accounts.rs");
 
-test("a span is spoken as present/words.rs's a_span_is_spoken_as_foundation_spoke_it says", () => {
-  const body = rustTest(ffiWords, "a_span_is_spoken_as_foundation_spoke_it");
-  const said = [...body.matchAll(/\((-?[\d_]+), "([^"]+)"\)/g)].map((m): [number, string] => [
-    value(m[1]),
-    m[2],
-  ]);
-  assert.ok(said.length > 50, `${said.length} spans`);
-  for (const [seconds, words] of said) assert.equal(spokenSpan(seconds), words, `${seconds}`);
-});
+// Each `assert_eq!(call(args), "…")` of a test body, its arguments as written and the words.
+const calls = (body: string, call: string) =>
+  [
+    ...body.matchAll(
+      new RegExp(
+        `assert_eq!\\( ?${call}\\(([^()]*(?:\\([^()]*\\)[^()]*)*)\\), "([^"]*)" ?\\);`,
+        "g",
+      ),
+    ),
+  ].map((m) => [m[1], m[2]] as const);
 
-test("a limit is spoken as present/words.rs's tests of spoken_limit say", () => {
-  const body = [
-    "a_limit_is_spoken_in_words_and_not_in_its_columns_shorthand",
-    "a_limit_with_a_pace_is_spoken_with_it",
-    "a_spoken_span_of_time_reads_the_same_in_every_region",
-  ]
-    .map((name) => rustTest(ffiWords, name))
-    .join(" ");
-  const paced = (delta: number, standing: Standing): Pace => ({ expected: 6, delta, standing });
-  const spoken: [Parameters<typeof spokenLimitOf>, string][] = [
-    [["5-hour", 42, 3 * HOUR, null], "5-hour limit, 42 percent used, resets in 3 hours"],
-    [["30-minute", 12, null, null], "30-minute limit, 12 percent used"],
-    [["weekly Fable", 98, 0, null], "weekly Fable limit, 98 percent used, resetting now"],
-    [
-      ["weekly", 33, 6 * DAY, paced(27, "over")],
-      "weekly limit, 33 percent used, 27 percent over an even pace, resets in 6 days",
-    ],
-    [
-      ["5-hour", 30, null, paced(-50, "under")],
-      "5-hour limit, 30 percent used, 50 percent under an even pace",
-    ],
-    [["5-hour", 52, null, paced(2, "even")], "5-hour limit, 52 percent used, on an even pace"],
-    [
-      ["5-hour", 42, 90 * MINUTE, null],
-      "5-hour limit, 42 percent used, resets in 1 hour, 30 minutes",
-    ],
-  ];
-  for (const [args, words] of spoken) {
-    assert.ok(body.includes(`"${words}"`), `the core says "${words}"`);
-    assert.equal(spokenLimitOf(...args), words);
-  }
+test("a reset counts down and a read says when as present/words.rs's tests of its span say", () => {
+  const body = rustTest(ffiWords, "a_reset_is_counted_down_in_hours_and_minutes");
+  const counted = [...body.matchAll(/\(([\d_ *+]+), "in ([^"]+)"\)/g)];
+  assert.ok(counted.length >= 10, `${counted.length} spans`);
+  for (const [, seconds, words] of counted) assert.equal(appSpan(value(seconds)), words, seconds);
+  const read = rustTest(ffiWords, "an_account_is_said_in_these_words");
+  assert.ok(read.includes('"Read 2 hr 5 min ago, with Claude closed"'));
+  assert.ok(read.includes('"Read under a minute ago, with Claude closed"'));
   assert.equal(
-    spokenLimit(account("personal").limits[1], moments.before),
-    "weekly limit, 73 percent used, 55 percent over an even pace, resets in 5 days, 18 hours",
+    staleNote(account("home", "desktop"), moments.before),
+    "Read 2 hr 5 min ago, with Claude closed",
   );
 });
 
-test("the menu bar item, a row and its button are spoken as present/accounts.rs names them", () => {
-  for (const line of [
-    'let mut spoken = vec!["Pitboard".to_owned()];',
-    "spoken.push(name_and_usage.clone());",
-    "spoken.push(tool.name.clone());",
-    "let mut spoken = vec![spoken_name.clone()];",
-    "spoken.push(plan.clone());",
-    'spoken.push("in use".into());',
-    'spoken: format!("Use {spoken}"),',
+test("a limit is spoken as present/words.rs's a_limit_is_spoken_as_one_sentence says", () => {
+  const body = rustTest(ffiWords, "a_limit_is_spoken_as_one_sentence");
+  const spoken: [Parameters<typeof spokenLimit>, string][] = [
+    [["5-hour limit", 42, "Resets 3:45 PM"], "5-hour limit, 42 percent used, resets 3:45 PM"],
+    [["30-minute limit", 12, ""], "30-minute limit, 12 percent used"],
+    [
+      ["Weekly limit (Fable)", 98, "Resetting now"],
+      "Weekly limit (Fable), 98 percent used, resetting now",
+    ],
+  ];
+  for (const [args, words] of spoken) {
+    assert.ok(body.includes(`"${words}"`), `the app says "${words}"`);
+    assert.equal(spokenLimit(...args), words);
+  }
+  assert.equal(
+    limitRow(account("personal").limits[1], moments.before).spoken,
+    "Weekly limit, 73 percent used, resets Mon 14:50",
+  );
+});
+
+test("a limit's names, reset and menu line are present/words.rs's an_account_is_said_in_these_words", () => {
+  const body = rustTest(ffiWords, "an_account_is_said_in_these_words");
+  for (const words of [
+    "5-hour limit",
+    "Weekly limit (Fable)",
+    "Resets 3:45 PM",
+    "Resets Mon 9:00 AM",
+    "Resetting now",
+    "5-hour limit reached, resets 6:46 PM",
+    "Weekly limit reached",
+    "5-hour 42% used, Weekly 12%, Weekly (Fable) 3%",
+    "5-hour 42% used, weekly 12%, weekly (Fable) 3%",
+    "Weekly 12% used",
   ])
-    assert.ok(ffiAccounts.includes(line), line);
+    assert.ok(body.includes(`"${words}"`), words);
+  const at = (lengthSeconds: number, percent: number, scope?: string): Limit => ({
+    percent,
+    resetsAt: NOW + HOUR,
+    lengthSeconds,
+    scope,
+  });
+  const three = {
+    ...account("personal"),
+    limits: [at(5 * HOUR, 42), at(WEEK, 12), at(WEEK, 3, "Fable")],
+  };
+  const w: World = { ...moments.before, now: NOW, accounts: [three] };
+  assert.equal(menuLine(three, w), "5-hour 42% used, Weekly 12%, Weekly (Fable) 3%");
+  assert.equal(menuLine(three, w, "windows"), "5-hour 42% used, weekly 12%, weekly (Fable) 3%");
+  const weekly = { ...three, limits: [at(WEEK, 12)] };
+  assert.equal(menuLine(weekly, w, "windows"), "Weekly 12% used");
+  const accountsRs = repo("crates/pitboard-ffi/src/present/accounts.rs");
+  assert.ok(accountsRs.includes("return words::limit_reached(&title, clock.as_deref());"));
+  const reached = { ...three, limits: [at(5 * HOUR, 100), at(WEEK, 40)] };
+  assert.equal(menuLine(reached, w), `5-hour limit reached, resets ${hm(NOW + HOUR)}`);
+  assert.equal(
+    menuLine(
+      { ...reached, refreshExpiresAt: NOW - 1 },
+      { ...w, inUse: { ...w.inUse, claude: "work" } },
+    ),
+    "Sign-in expired",
+  );
+});
+
+test("a saved sign-in says when it expires, as present/words.rs's a_saved_sign_in_says_when_it_expires says", () => {
+  const body = rustTest(ffiWords, "a_saved_sign_in_says_when_it_expires");
+  const found = calls(body, "sign_in_expires");
+  assert.ok(found.length >= 6, `${found.length} cases`);
+  for (const [args, words] of found) {
+    const [left, lapses] = args.split(/,\s*/);
+    assert.equal(signInExpires(value(left), lapses === "true"), words, args);
+  }
+});
+
+test("a notification is titled as present/words.rs's a_notification_is_titled_as_each_system_titles_one says", () => {
+  const body = rustTest(ffiWords, "a_notification_is_titled_as_each_system_titles_one")
+    .replace(/\( /g, "(")
+    .replace(/ \)/g, ")");
+  const at = (lengthSeconds: number, scope?: string): Limit => ({
+    percent: 95,
+    resetsAt: null,
+    lengthSeconds,
+    scope,
+  });
+  for (const [limit, reached] of [
+    [at(5 * HOUR), false],
+    [at(WEEK, "Fable"), true],
+  ] as const) {
+    const titled = limitNotification(limit, reached);
+    assert.ok(body.includes(`pair("${titled.macos}", "${titled.windows}")`), titled.macos);
+  }
+  assert.deepEqual(limitNotification(at(WEEK), false), {
+    macos: "Weekly Limit Almost Reached",
+    windows: "Weekly limit almost reached",
+  });
+});
+
+test("the menu bar item, a row and its button are spoken as present/words.rs says them", () => {
+  for (const line of [
+    "let mut said = vec![PITBOARD];",
+    "said.push(shown);",
+    "said.extend(tool);",
+    "let mut said = vec![name.to_owned()];",
+    "said.extend(plan.map(str::to_owned));",
+    'said.push("in use".into());',
+    "said.extend(sign_in.map(uncapitalised));",
+    "Some(name) => switch_to(name),",
+  ])
+    assert.ok(ffiWords.includes(line), line);
+  for (const call of ["words::bar_spoken(", "words::row_spoken(", "words::switch_account(Some("])
+    assert.ok(ffiAccounts.includes(call), call);
   assert.equal(menuBarSpoken(moments.before), "Pitboard, personal 73%, Claude Code");
   assert.equal(menuBarSpoken(moments.after), "Pitboard, work 40%, Claude Code");
   assert.equal(accountSpoken(account("work"), moments.after), "work, Max 20x, in use");
   assert.equal(accountSpoken(account("home", "desktop"), moments.after), "home, in use");
   assert.equal(accountSpoken(account("spare", "codex"), moments.after), "spare, Plus");
-  assert.equal(useSpoken(account("personal")), "Use personal");
+  const lapsed = { ...moments.after, now: account("personal").refreshExpiresAt! };
+  assert.equal(accountSpoken(account("personal"), lapsed), "personal, Max 20x, sign-in expired");
+  assert.equal(switchSpoken(account("personal")), "Switch to personal");
 });

@@ -23,17 +23,24 @@ import {
 import {
   ADOPTION_CEILING_SECONDS,
   SETTLING_SECONDS,
+  SWITCH_BACK,
+  appWarmSaid,
   capitalised,
+  figure,
+  hasUsedShare,
   hm,
-  limitName,
+  limitNotification,
+  otherUsed,
   resets,
   afterSwitch,
   notSwitching,
   notWatching,
   sentence,
   shareOfLimit,
-  warmSaid,
+  switchButton,
   whole,
+  type Said,
+  type System,
 } from "./words.ts";
 
 export { ADOPTION_CEILING_SECONDS, SETTLING_SECONDS };
@@ -68,6 +75,8 @@ export interface LastSwitch {
   at: number;
   // when sessions already open are sure to follow: Claude Code's alone
   followsAt: number | null;
+  // a switch Pitboard made by itself offers Switch Back, with when the limit it left resets
+  back?: { resetsAt: number | null };
 }
 
 // advice.rs `Advice`: an account in use has used a limit up, and another has room.
@@ -79,14 +88,15 @@ export interface Advice {
   left: number | null;
 }
 
-// present/notices.rs `RunOutNotice`, as the system's notification shows it.
+// present/notices.rs `RunOutNotice`, as the system's notification shows it: its button switches to
+// an account, Switch at a limit and Switch Back after a switch Pitboard made by itself.
 export interface Posted {
   id: string;
   at: number;
-  title: string;
+  title: Said;
   subtitle: string | null;
   body: string;
-  switchTo: { tool: Tool; label: string } | null;
+  button: { title: Said; tool: Tool; label: string } | null;
   opens: "accounts" | "limits";
 }
 
@@ -110,8 +120,12 @@ export interface State extends World {
   toldThisLaunch: Record<string, number>;
   advice: Advice[];
   lastSwitch: Partial<Record<Tool, LastSwitch>>;
-  // a sign-in that put a new login in use
-  newLogin: Partial<Record<Tool, { label: string; at: number; added?: boolean }>>;
+  // a sign-in that put a new login in use; one inside Claude to an account not in use before
+  // opens Claude signed in to it, which is said as a switch
+  newLogin: Partial<Record<Tool, { label: string; at: number; added?: boolean; opens?: boolean }>>;
+  // the account Switch Back went back to, about which nothing says Claude Code was not switched
+  // for settling or for having switched once until the limit left resets (state.rs `SwitchedBack`)
+  switchedBack: { from: string; until: number | null } | null;
   // limits switched away from, by account id, kind and scope, at their reset
   ledger: Record<string, number>;
   // reasons not to switch already told, until the next switch
@@ -132,14 +146,17 @@ export interface State extends World {
   // a switch or a read the app has under way: "Switching…" and "Reading…" while it runs
   switching: { id: string; token: number } | null;
   reading: number | null;
-  // a sign-in the app has under way, Claude Desktop's parking the account in use first
+  // a sign-in the app has under way, Claude Desktop's saving the account in use first; a new
+  // account's label is picked once it is added
   signing: {
     tool: Tool;
-    label: string;
+    label: string | null;
     again: boolean;
-    phase: "parking" | "waiting";
+    phase: "saving" | "waiting";
     token: number;
   } | null;
+  // the account just added, which Name This Account offers to rename (present/sheets.rs `Name`)
+  naming: { tool: Tool; label: string; email: string } | null;
   // the tools whose step asking for a second account somebody put off (present/setup.rs)
   declinedSecond: Tool[];
   // Settings' General, which is each app's own and not the core's: opening at sign-in, what the
@@ -176,6 +193,7 @@ export function start(): State {
     advice: [],
     lastSwitch: {},
     newLogin: {},
+    switchedBack: null,
     ledger: {},
     autoTold: [],
     autoStanding: null,
@@ -195,6 +213,7 @@ export function start(): State {
     switching: null,
     reading: null,
     signing: null,
+    naming: null,
     declinedSecond: [],
     general: {
       opensAtLogin: false,
@@ -362,10 +381,6 @@ export function decide(s: State, share: number): Decision {
   };
 }
 
-// The tools whose accounts were read, which a notification names where there is more than one.
-const subtitle = (s: State, tool: Tool) =>
-  new Set(s.accounts.map((a) => a.tool)).size > 1 ? toolName(tool) : null;
-
 function post(s: State, notice: Omit<Posted, "at">) {
   if (!s.running) return;
   s.posted.push({ ...notice, at: s.now });
@@ -441,24 +456,36 @@ function advise(s: State) {
     if (!l || (atLimit === "switch" && a.tool === "claude")) continue;
     s.told[limitKey(a.tool, a.id, l)] = l.resetsAt ?? 0;
     const instead = spare(s, a, l, share);
+    const then = instead
+      ? otherUsed(instead.account.label, instead.left)
+      : l.resetsAt !== null
+        ? sentence(resets(l.resetsAt, now))
+        : "";
     post(s, {
       id: `${limitKey(a.tool, a.label, l)}-${l.resetsAt ?? 0}`,
-      title: usedUp(l, now)
-        ? `${a.label} has no ${limitName(l)} limit left`
-        : `${a.label} has used ${shareOfLimit(l)}`,
-      subtitle: subtitle(s, a.tool),
-      body: instead
-        ? instead.left === null
-          ? `${instead.account.label} has no such limit.`
-          : `${instead.account.label} has ${instead.left}% of its own left.`
-        : l.resetsAt !== null
-          ? sentence(resets(l.resetsAt, now))
-          : "",
-      switchTo: instead && { tool: a.tool, label: instead.account.label },
+      title: limitNotification(l, usedUp(l, now)),
+      subtitle: toolName(a.tool),
+      body: `${hasUsedShare(a.label, figure(l.percent))} ${then}`.trimEnd(),
+      button: instead && {
+        title: switchButton(instead.account.label),
+        tool: a.tool,
+        label: instead.account.label,
+      },
       opens: "accounts",
     });
   }
 }
+
+// present/words.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did not make
+// by itself, and of its not judging one.
+const NOT_SWITCHED: Said = {
+  macos: "Automatic Switch Skipped",
+  windows: "Automatic switch skipped",
+};
+const NOT_SWITCHING: Said = {
+  macos: "Automatic Switching Paused",
+  windows: "Automatic switching paused",
+};
 
 // state.rs `look_to_switch` and its outcomes: what switching by itself came to, said under the
 // setting, and each reason not to said once until the next switch.
@@ -481,10 +508,10 @@ function lookToSwitch(s: State) {
       const why = notWatching(from ? typed(from) : "");
       stands({ came: "not-watching", why }, `not-watching/no_reading/${from?.label}`, {
         id: `auto-not-watching/no_reading/${from?.label}`,
-        title: "Pitboard isn’t switching Claude Code",
-        subtitle: null,
+        title: NOT_SWITCHING,
+        subtitle: toolName("claude"),
         body: sentence(why),
-        switchTo: null,
+        button: null,
         opens: "limits",
       });
       return;
@@ -501,6 +528,9 @@ function lookToSwitch(s: State) {
       const { limit, why } = decision;
       const key = `skipped/${from!.label}/${kind(limit)}/${limit.scope ?? ""}/${limit.resetsAt ?? 0}/${why.code}`;
       const said = notSwitching(why, share);
+      const back = s.switchedBack;
+      if (back?.until != null && back.until <= s.now) s.switchedBack = null;
+      const quiet = why.code !== "no_room" && s.switchedBack?.from === from!.label;
       stands(
         {
           came: "skipped",
@@ -509,13 +539,13 @@ function lookToSwitch(s: State) {
           why: said,
           until: why.code === "settling" ? why.until : null,
         },
-        key,
+        quiet ? undefined : key,
         {
           id: `auto-${key}`,
-          title: "Claude Code wasn’t switched",
-          subtitle: null,
+          title: NOT_SWITCHED,
+          subtitle: toolName("claude"),
           body: `${from!.label} has used ${shareOfLimit(limit)}. ${sentence(said)}`,
-          switchTo: null,
+          button: null,
           opens: "limits",
         },
       );
@@ -528,13 +558,15 @@ function lookToSwitch(s: State) {
       switchTo(s, to, app ? "app" : "cli", "auto-switch");
       s.autoTold = [];
       if (!app) return;
+      s.switchedBack = null;
+      s.lastSwitch.claude!.back = { resetsAt: limit.resetsAt };
       s.autoStanding = { came: "switched", from: was, to: to.label, used: shareOfLimit(limit) };
       post(s, {
         id: `auto/${was}/${to.label}/${s.now}`,
-        title: `Switched Claude Code to ${to.label}`,
-        subtitle: null,
+        title: { macos: `Switched to ${to.label}`, windows: `Switched to ${to.label}` },
+        subtitle: toolName("claude"),
         body: `${was} has used ${shareOfLimit(limit)}. ${sentence(afterSwitch("claude", "Sessions"))}`,
-        switchTo: null,
+        button: { title: SWITCH_BACK, tool: "claude", label: was },
         opens: "accounts",
       });
     }
@@ -593,10 +625,10 @@ export function warmStanding(s: State, a: Account, asked: "now" | "by-itself"): 
 // The note under an account turned on for warm-ups (present/accounts.rs `warm_note`).
 export function warmNote(s: State, a: Account): string | null {
   if (a.tool !== "claude" || !s.warm.on.includes(a.id)) return null;
-  return capitalised(warmSaid(warmStanding(s, a, "by-itself")));
+  return capitalised(appWarmSaid(warmStanding(s, a, "by-itself")));
 }
 
-// The line under Warm up limits (present/machine.rs `warm`, warm/mod.rs `Overview::next`).
+// The line under Warm-Up (present/machine.rs `warm`, warm/mod.rs `Overview::next`).
 export function nextWarmUp(s: State): string | null {
   let soonest: [string, number] | null = null;
   for (const a of s.accounts.filter((a) => a.tool === "claude" && s.warm.on.includes(a.id))) {
@@ -718,7 +750,7 @@ export type Outcome =
   | "cannot_forget_active_account"
   | "parked_login_expired";
 
-// state.rs `switch`: Use, a menu's account, a notification's Switch, `pitboard use`.
+// state.rs `switch`: a row's Switch, a menu's account, a notification's Switch, `pitboard use`.
 export function use(tool: Tool, label: string, caller: Caller = "app"): Outcome {
   return change((s) => {
     const to = find(s, tool, label);
@@ -807,6 +839,8 @@ export function forget(tool: Tool, label: string, caller: Caller = "app"): Outco
 }
 
 let enrolled = 0;
+// the people the page's sign-ins have signed in as, who each have an email
+let people = 0;
 
 // Hex that stands for what a simulated sign-in would bring, which nobody reads: FNV-1a's 64 bits.
 function madeUp(seed: string): string {
@@ -819,45 +853,76 @@ const uuidOf = (seed: string) => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
 
-// A simulated sign-in's end, for Add Account and `pitboard enroll`: the tool's own sign-in is
-// never loaded, so the new account is `<name>@example.com` on the plan of the one in use, and
-// its first read finds nothing used. Claude Desktop's ends with Claude signed in to it.
-export function enroll(tool: Tool, label: string, caller: Caller = "app"): Outcome {
+// label.rs `MAIL_SERVICES`: anyone can have an address at one of these, so the domain says
+// nothing of whose it is.
+const MAIL_SERVICES = new Set(
+  "163 aol fastmail gmail gmx googlemail hey hotmail icloud live mac mail me msn naver outlook pm proton protonmail qq web yahoo yandex zoho".split(
+    " ",
+  ),
+);
+
+// label.rs `suggest`: a name no account of the tool has, from the email's company and then its
+// mailbox, or the tool's code where it gives neither, and the first of them numbered after.
+export function suggest(s: State, tool: Tool, email: string): string {
+  const lower = email.toLowerCase();
+  const at = lower.lastIndexOf("@");
+  const [local, domain] = at < 0 ? ["", ""] : [lower.slice(0, at), lower.slice(at + 1)];
+  const mailbox = local.split("+")[0];
+  const company = domain.split(".")[0];
+  const names = [MAIL_SERVICES.has(company) ? null : company, mailbox].filter(
+    (n): n is string => !!n && nameProblem(n) === null,
+  );
+  if (names.length === 0) names.push(tool);
+  const free = (name: string) => !find(s, tool, name);
+  for (const name of names) if (free(name)) return name;
+  for (let n = 2; ; n++) if (free(`${names[0]}-${n}`)) return `${names[0]}-${n}`;
+}
+
+// A simulated sign-in's end, for Add Account: the tool's own sign-in is never loaded, so it signs
+// in as somebody new, dana@travel.example as the apps' fixture does and a number after dana for
+// each one after, on the plan of the account in use, and its first read finds nothing used. The
+// core adds the account under the name it picks, and Name This Account offers to change it.
+// Claude Desktop's ends with Claude signed in to it, which has no email.
+export function add(tool: Tool, caller: Caller = "app"): string {
   return change((s) => {
-    const subject = tool === "claude" ? label : `${tool}/${label}`;
-    if (nameProblem(label)) {
-      record(s, caller, "enroll", subject, "invalid_label");
-      return "invalid_label";
-    }
-    if (find(s, tool, label)) {
-      record(s, caller, "enroll", subject, "label_taken");
-      return "label_taken";
-    }
+    const n = ++enrolled;
+    const person = tool === "desktop" ? 0 : ++people;
+    const email = person ? `dana${person > 1 ? person : ""}@travel.example` : "";
+    const label = suggest(s, tool, email);
     const like = current(s, tool);
     const a: Account = {
-      id: `new-${++enrolled}`,
+      id: `new-${n}`,
       tool,
       label,
-      email: tool === "desktop" ? "" : `${label}@example.com`,
+      email,
       plan: like?.plan ?? null,
       limits: [],
-      uuid: uuidOf(`${tool}/${label}/${enrolled}`),
-      login: madeUp(`refresh/${tool}/${label}/${enrolled}`),
+      uuid: uuidOf(`${tool}/${label}/${n}`),
+      login: madeUp(`refresh/${tool}/${label}/${n}`),
     };
-    if (tool === "claude") a.org = uuidOf(`org/${label}/${enrolled}`);
+    if (tool === "claude") a.org = uuidOf(`org/${label}/${n}`);
+    s.naming = { tool, label, email };
     if (tool === "desktop") {
       s.accounts.push(a);
       switchTo(s, a, caller, "enroll");
-      s.newLogin.desktop = { label, at: s.now, added: true };
-      return "ok";
+      s.newLogin.desktop = { label, at: s.now, added: true, opens: true };
+      return label;
     }
     a.unread = true;
     // codex/engine.rs `expiry`: Codex states no refresh lifetime, so its parks keep none
     if (tool === "claude") a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
     s.accounts.push(a);
-    record(s, caller, "enroll", subject);
-    return "ok";
+    record(s, caller, "enroll", typed(a));
+    return label;
   });
+}
+
+// Name This Account put away, by Done or Cancel: the account keeps the name it was added under,
+// or Done renames it.
+export function named() {
+  change((s) => {
+    s.naming = null;
+  }, false);
 }
 
 // A simulated sign-in again: a fresh login, parked or in use. Claude Desktop's ends with Claude
@@ -867,12 +932,13 @@ export function signInAgain(tool: Tool, label: string, caller: Caller = "app"): 
     const a = find(s, tool, label);
     if (!a) return "account_unknown";
     if (tool === "desktop") {
-      if (s.inUse.desktop !== label) switchTo(s, a, caller, "enroll");
+      const opens = s.inUse.desktop !== label;
+      if (opens) switchTo(s, a, caller, "enroll");
       else {
         a.readAt = s.now;
         record(s, caller, "enroll", typed(a));
       }
-      s.newLogin.desktop = { label, at: s.now };
+      s.newLogin.desktop = { label, at: s.now, opens };
       return "ok";
     }
     if (tool === "claude") a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
@@ -1035,22 +1101,22 @@ export function settle(at: State | null = model.get()) {
 
 export function reset() {
   enrolled = 0;
+  people = 0;
   model.set(rest ? structuredClone(rest) : start());
   rebase();
 }
 
 // How long each app took over a switch and a read in its UI tests on CI's runners
-// (docs/facts/site.md): In Use 0.12 s after a click on macOS, In use 0.19 to 0.37 s after Use on
-// windows-2025 and 0.25 s on windows-11-arm, and Refresh disabled for 14 to 24 ms on Windows and
-// never seen dimmed on macOS.
-type System = "macos" | "windows";
+// (docs/facts/site.md): In Use 0.12 s after a click on macOS, In use 0.19 to 0.37 s after a row's
+// button on windows-2025 and 0.25 s on windows-11-arm, and Refresh disabled for 14 to 24 ms on
+// Windows and never seen dimmed on macOS.
 export const TAKES_MS: Record<"switch" | "read", Record<System, number>> = {
   switch: { macos: 120, windows: 250 },
   read: { macos: 24, windows: 24 },
 };
 let token = 0;
 
-// The app's switch from a menu, the window's Use or a notification's Switch: the account reads
+// The app's switch from a menu, the window's Switch or a notification's: the account reads
 // "Switching…" and the others are dimmed while it runs, then it is in use.
 export function switchFromApp(tool: Tool, label: string, system: System) {
   const to = find(model.get(), tool, label);
@@ -1085,6 +1151,18 @@ export function refreshFromApp(system: System) {
   }, TAKES_MS.read[system]);
 }
 
+// Switch Back on the window's notice of a switch Pitboard made by itself: a switch to the account
+// it left, while the one it switched to is still in use (state.rs `switch_back`).
+export function switchBackFromApp(system: System) {
+  const s = model.get();
+  const last = s.lastSwitch.claude;
+  if (!last?.back || s.inUse.claude !== last.to || s.switching) return;
+  change((s) => {
+    s.switchedBack = { from: last.from, until: last.back!.resetsAt };
+  }, false);
+  switchFromApp("claude", last.from, system);
+}
+
 // The window's notice of a tool's last switch or new login, put away by its close button.
 export function dismissNotice(tool: Tool) {
   change((s) => {
@@ -1103,18 +1181,18 @@ export function declineSecond(tool: Tool) {
 // A simulated sign-in ends this long after it starts (answer 16 a).
 export const SIGN_IN_MS = 3000;
 
-// The app's sign-in, from Add Account or Sign In Again: the tool's own sign-in is never loaded,
-// so it ends by itself, Claude Desktop's as if Claude quit signed in. Claude Desktop parks the
-// account in use first, for as long as a switch takes.
-export function signInFromApp(tool: Tool, label: string, again: boolean) {
+// The app's sign-in, from Add Account or Sign In Again to `again`: the tool's own sign-in is never
+// loaded, so it ends by itself, Claude Desktop's as if Claude quit signed in. Claude Desktop saves
+// the account in use first, for as long as a switch takes.
+export function signInFromApp(tool: Tool, again: string | null) {
   if (model.get().signing) return;
   const mine = ++token;
   change((s) => {
     s.signing = {
       tool,
-      label,
-      again,
-      phase: tool === "desktop" ? "parking" : "waiting",
+      label: again,
+      again: again !== null,
+      phase: tool === "desktop" ? "saving" : "waiting",
       token: mine,
     };
   });
@@ -1126,13 +1204,14 @@ export function signInFromApp(tool: Tool, label: string, again: boolean) {
           s.signing!.phase = "waiting";
         }, false);
     }, TAKES_MS.switch.macos);
+  // added before the sign-in ends, so what ends it finds the account to name
   setTimeout(() => {
     if (!still()) return;
+    if (again !== null) signInAgain(tool, again);
+    else add(tool);
     change((s) => {
       s.signing = null;
     }, false);
-    if (again) signInAgain(tool, label);
-    else enroll(tool, label);
   }, SIGN_IN_MS);
 }
 

@@ -15,7 +15,8 @@ export const choices: { value: AtLimit; mac: string; win: string }[] = [
 
 // the pop-up's and the ComboBox's name, which says the share
 export const atLabel = (share: number) => `${heading} ${share}%`;
-export const shareLabel = "Share of a limit";
+// present/words.rs `AT`: the share's field, beside When a limit reaches
+export const shareLabel = "At";
 export const shareRange = "From 50% to 99%";
 
 export const terms = {
@@ -35,4 +36,5 @@ export function warmHours(from: number, to: number): string {
   return `${timeOfDay(from)} to ${to === 24 * 60 ? "midnight" : timeOfDay(to)}`;
 }
 
-export const warm = { title: "Warm up limits" };
+// present/words.rs `warm_up`
+export const warm = { title: { macos: "Warm-Up", windows: "Warm-up" } };

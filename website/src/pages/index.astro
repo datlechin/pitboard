@@ -94,11 +94,11 @@ const faq: { q: string; a: string | { on: Platform[]; a: string }[] }[] = [
     a: [
       {
         on: ["macos", "linux"],
-        a: `Yes. On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Forget</b> on <a href="${DOCS}/reference/mac-app#keyboard-shortcuts">Command-Delete</a>.`,
+        a: `Yes. On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Remove Account</b> on <a href="${DOCS}/reference/mac-app#keyboard-shortcuts">Command-Delete</a>.`,
       },
       {
         on: ["windows"],
-        a: `Yes. On Windows, <a href="${DOCS}/reference/windows-app#keyboard-shortcuts">Pitboard's keyboard shortcuts</a> include F2 to rename the account selected, Delete to forget it and Ctrl+C to copy its email address.`,
+        a: `Yes. On Windows, <a href="${DOCS}/reference/windows-app#keyboard-shortcuts">Pitboard's keyboard shortcuts</a> include F2 to rename the account selected, Delete to remove it and Ctrl+C to copy its email address.`,
       },
     ],
   },
@@ -166,7 +166,7 @@ const jsonLd = [
             windows: {
               caption: "Switching accounts from Pitboard's icon on Windows.",
               describe:
-                "Pitboard's menu open from its icon in the notification area. Claude Code has personal, in use, and work; Codex has main, in use, and spare, each with its plan and the most it has used of a limit. The pointer rests on work, whose tooltip reads 5-hour 12%, weekly 40%, then chooses it, and the menu closes. The icon's row grows from a short one to a long one, and its tooltip reads Pitboard, then work (Claude Code): 5-hour 12%, weekly 40%, then main (Codex): Weekly 7%. The menu opens again with work first and in use. Then the status line of the Claude Code session in Windows Terminal puts work first.",
+                "Pitboard's menu open from its icon in the notification area. Claude Code has personal, in use, and work; Codex has main, in use, and spare, each with its plan and the most it has used of a limit. The pointer rests on work, whose tooltip reads 5-hour 12% used, weekly 40%, then chooses it, and the menu closes. The icon's row grows from a short one to a long one, and its tooltip reads Pitboard, then work (Claude Code): 5-hour 12% used, weekly 40%, then main (Codex): Weekly 7% used. The menu opens again with work first and in use. Then the status line of the Claude Code session in Windows Terminal puts work first.",
             },
           }}
           cli={{
@@ -239,7 +239,7 @@ const jsonLd = [
           macos: {
             caption: "Claude Desktop in the Pitboard window on macOS.",
             describe:
-              "The Claude Desktop section of the Accounts pane. home is in use: Read 2h 05m ago, with Claude closed. office has a Use button: Its sign-in may lapse in 25 days.",
+              "The Claude Desktop section of the Accounts pane. home is in use: Read 2 hr 5 min ago, with Claude closed. office has a Switch button.",
           },
         }}
         cli={{
@@ -257,9 +257,10 @@ const jsonLd = [
 
     <Feature id="usage" title="What each account has left">
       <p>
-        Pitboard shows the usage, resets and <a href={`${DOCS}/concepts/usage#pace`}>pace</a> of
-        each Claude Code and Codex account. <code>pitboard statusline</code> lists every Claude Code
-        account in each session's status line.
+        Pitboard shows how much of each limit every Claude Code and Codex account has used, and when
+        it resets; <code>pitboard</code> shows its <a href={`${DOCS}/concepts/usage#pace`}>pace</a>
+        too. <code>pitboard statusline</code> lists every Claude Code account in each session's
+        status line.
       </p>
       <Figure
         slot="fig"
@@ -267,12 +268,12 @@ const jsonLd = [
           macos: {
             caption: "The Pitboard window on macOS.",
             describe:
-              "The Accounts pane of the Pitboard window. personal is in use, with its weekly limit at 73% and 55% over pace, and the line: Weekly limit runs out in 11h 05m at this pace. work's parked login is good for 26 more days. Codex's main and spare follow, then Claude Desktop's home and office.",
+              "The Accounts pane of the Pitboard window. personal is in use, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50. work has a Switch button. Codex's main and spare follow, then Claude Desktop's home and office.",
           },
           windows: {
             caption: "The Pitboard window on Windows.",
             describe:
-              "The Accounts page of the Pitboard window. personal is in use, with its weekly limit at 73% and 55% over pace, and the line: Weekly limit runs out in 11h 05m at this pace. work's parked login is good for 26 more days. Codex's main and spare follow.",
+              "The Accounts page of the Pitboard window. personal is in use, with its 5-hour limit at 59%, resetting at 22:00, and its weekly limit at 73%, resetting on Monday at 14:50. work has a Switch button. Codex's main and spare follow.",
           },
         }}
         cli={{
@@ -321,12 +322,12 @@ const jsonLd = [
               macos: {
                 caption: "The notification on macOS at 95%.",
                 describe:
-                  "A notification from Pitboard: personal has used 95% of its weekly limit. Claude Code. work has 60% of its own left. It has a Switch button. The menu bar shows personal 95%.",
+                  "A notification from Pitboard: Weekly Limit Almost Reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch button. The menu bar shows personal 95%.",
               },
               windows: {
                 caption: "The notification on Windows at 95%.",
                 describe:
-                  "A notification from Pitboard in the corner of the screen: personal has used 95% of its weekly limit. Claude Code. work has 60% of its own left. It has a Switch button.",
+                  "A notification from Pitboard in the corner of the screen: Weekly limit almost reached. Claude Code. personal has used 95%. work has used 40%. It has a Switch to work button.",
               },
             }}
           >
@@ -351,7 +352,7 @@ const jsonLd = [
               windows: {
                 caption: "Settings on Windows, under Limits.",
                 describe:
-                  "Pitboard's Settings under Limits: When a limit reaches, Switch automatically, and the line: Watching work: 40% of its weekly limit, as of 20:50. Under it, Share of a limit, 95.",
+                  "Pitboard's Settings under Limits: When a limit reaches, Switch automatically, and the line: Watching work: 40% of its weekly limit, as of 20:50. Under it, At, 95.",
               },
             }}
             cli={{
@@ -388,12 +389,12 @@ const jsonLd = [
               macos: {
                 caption: "Warm-up in the Limits pane on macOS.",
                 describe:
-                  "Warm up limits, from 07:00 to 23:00. personal is turned on and warms up again at 22:00; work is off. Next warm-up: personal at 22:00.",
+                  "Warm-Up, from 07:00 to 23:00. personal is turned on and warms up again at 22:00; work is off. Next warm-up: personal at 22:00.",
               },
               windows: {
                 caption: "Warm-up in Settings on Windows, under Limits.",
                 describe:
-                  "Pitboard's Settings under Limits, with Warm up limits open: 07:00 to 23:00, and the line: Next warm-up: personal at 22:00. Under it, From 07:00 and To 23:00, personal turned on and warming up again at 22:00, and work off.",
+                  "Pitboard's Settings under Limits, with Warm-up open: 07:00 to 23:00, and the line: Next warm-up: personal at 22:00. Under it, From 07:00 and To 23:00, personal turned on and warming up again at 22:00, and work off.",
               },
             }}
             cli={{
@@ -451,12 +452,12 @@ const jsonLd = [
           macos: {
             caption: "The Activity pane on macOS.",
             describe:
-              "The Activity pane of the Pitboard window lists the switch to work, the switch to desktop/home and a warm-up of personal, all asked by the Pitboard app, and the enrolment of work from the command line, each Done.",
+              "The Activity pane of the Pitboard window lists the switch to work, the switch to desktop/home and a warm-up of personal, all asked by the Pitboard app, and work added from the command line, each Done.",
           },
           windows: {
             caption: "The Activity page on Windows.",
             describe:
-              "The Activity page of the Pitboard window lists the switch to work and a warm-up of personal, both asked by the Pitboard app, and the enrolment of work from the command line, each Done.",
+              "The Activity page of the Pitboard window lists the switch to work and a warm-up of personal, both asked by the Pitboard app, and work added from the command line, each Done.",
           },
         }}
         cli={{

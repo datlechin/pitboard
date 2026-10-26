@@ -72,12 +72,12 @@ test.describe("on macOS", () => {
     await row("personal").click({ button: "right", ...at });
     await expect(menu).toBeVisible();
     await expect(offers).toHaveText([
-      "Use personal",
+      "Switch to personal",
       "Sign In Again…",
       "Rename…",
       "Open claude.ai",
       "Copy Email Address",
-      "Forget…",
+      "Remove Account…",
     ]);
     await expect(row("work")).toHaveAttribute("aria-selected", "true");
     await expect(row("personal")).toHaveAttribute("aria-selected", "false");
@@ -90,7 +90,7 @@ test.describe("on macOS", () => {
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(row("personal")).not.toHaveAttribute("data-state", "menu");
-    // the account in use offers neither Use nor Forget
+    // the account in use offers neither Switch nor Remove Account
     await row("work").click({ button: "right", ...at });
     await expect(offers).toHaveText([
       "Sign In Again…",
@@ -134,12 +134,16 @@ test.describe("on macOS", () => {
     await expect(field).toBeFocused();
     await expect(field).toHaveValue("work");
     await expect(sheet.locator('button[value="rename"]')).toBeDisabled();
+    await field.fill("");
+    await expect(sheet.locator('[data-part="problem"]')).toHaveText(
+      "Type a name for this account.",
+    );
     await field.fill("a/b");
     await expect(sheet.locator('[data-part="problem"]')).toHaveText("A name can’t contain “/”.");
     await field.fill("personal");
     await page.keyboard.press("Enter");
     await expect(sheet.locator('[data-part="failure"]')).toHaveText(
-      "Couldn’t rename work personal already refers to me@example.com. Choose a different label.",
+      "Couldn’t rename work personal is already the name of me@example.com. Type another name.",
     );
     await expect(sheet).toBeVisible();
     await field.fill("<b>x&y");
@@ -153,7 +157,7 @@ test.describe("on macOS", () => {
     await expect(page.locator('[data-output] b:text-is("x&y")')).toHaveCount(0);
   });
 
-  test("Delete asks before forgetting the selection; Escape and ⌘. cancel, Return presses nothing", async ({
+  test("Delete asks before removing the selection; Escape and ⌘. cancel, Return presses nothing", async ({
     page,
   }) => {
     const { row, grid, fig } = await accounts(page, "macos");
@@ -161,8 +165,8 @@ test.describe("on macOS", () => {
     await row("personal").click(at);
     await page.keyboard.press("Delete");
     await expect(alert).toBeVisible();
-    await expect(alert).toHaveAccessibleName("Forget “personal (Claude Code)”?");
-    await expect(alert.getByRole("button")).toHaveText(["Cancel", "Forget"]);
+    await expect(alert).toHaveAccessibleName("Remove “personal (Claude Code)”?");
+    await expect(alert.getByRole("button")).toHaveText(["Cancel", "Remove"]);
     await page.keyboard.press("Escape");
     await expect(alert).toBeHidden();
     await expect(row("personal")).toBeFocused();
@@ -174,7 +178,7 @@ test.describe("on macOS", () => {
     // neither button is the default, so Return presses neither, wherever focus is
     await page.keyboard.press("Enter");
     await expect(alert).toBeVisible();
-    await alert.getByRole("button", { name: "Forget" }).focus();
+    await alert.getByRole("button", { name: "Remove" }).focus();
     await page.keyboard.press("Enter");
     await expect(alert).toBeVisible();
     await expect(row("personal")).toBeVisible();
@@ -193,7 +197,7 @@ test.describe("on macOS", () => {
     );
     await step.locator('[data-does="not-now"]').click();
     await expect(step).toBeHidden();
-    // the account in use is never forgotten
+    // the account in use is never removed
     await row("work").click(at);
     await page.keyboard.press("Delete");
     await expect(alert).toBeHidden();
@@ -206,7 +210,7 @@ test.describe("on macOS", () => {
     await expect(row("personal")).toHaveAttribute("aria-keyshortcuts", "Backspace Delete Meta+C");
   });
 
-  test("Add Account signs in to the tool picked in its sheet, and lists the account", async ({
+  test("Add Account signs in to the tool picked in its sheet, then names the account it added", async ({
     page,
   }) => {
     await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
@@ -214,30 +218,46 @@ test.describe("on macOS", () => {
     await fig.locator('[data-does="add"]').first().click();
     const sheet = page.locator("#mac-accounts-sign-in");
     await expect(sheet).toHaveAccessibleName("Add Account");
-    await expect(sheet.locator('input[name="name"]')).toBeFocused();
+    // the sign-in comes first: the sheet asks for no name
+    await expect(sheet.locator('input[name="name"]')).toHaveCount(0);
     const confirm = sheet.locator('[data-part="confirm"]');
-    await expect(confirm).toBeDisabled();
+    await expect(confirm).toHaveText("Sign In…");
+    await expect(confirm).toBeFocused();
     await sheet.locator('[role="combobox"]').click();
     await sheet.locator('[role="option"][data-value="codex"]').click();
     // NSMenu blinks the item chosen, then fades, before the button takes it
     await expect(sheet.locator('[role="combobox"] [data-value="codex"]')).toBeVisible();
-    await sheet.locator('input[name="name"]').fill("main");
-    await expect(confirm).toBeEnabled();
-    await page.keyboard.press("Enter");
-    await expect(sheet.locator('[data-part="problem"]')).toContainText("main already refers to");
-    // the page's clock ticking on redraws the sheet, and leaves what the name was told
-    await page.clock.runFor(2000);
-    await expect(sheet.locator('[data-part="problem"]')).toContainText("main already refers to");
-    await sheet.locator('input[name="name"]').fill("side");
-    await page.keyboard.press("Enter");
+    await expect(sheet.locator('[data-part="message"]')).toHaveText(
+      "Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.",
+    );
+    await confirm.click();
     await expect(sheet).toHaveAccessibleName("Signing In to Codex");
     await expect(sheet.locator('[data-part="waiting"]')).toBeVisible();
-    await expect(sheet).toBeHidden({ timeout: 6000 });
+    await page.clock.runFor(3500);
+    await expect(sheet).toBeHidden();
+    // added under the name the core picks from the email, which the next sheet offers to change
+    const name = page.locator("#mac-accounts-rename");
+    await expect(name).toHaveAccessibleName("Name This Account");
+    await expect(name.locator('[data-part="message"]')).toHaveText("dana@travel.example is added.");
+    const field = name.locator('input[name="name"]');
+    await expect(field).toHaveValue("travel");
+    await expect(fig.getByRole("row", { name: /^travel\b/ })).toBeVisible();
+    await field.fill("main");
+    await page.keyboard.press("Enter");
+    await expect(name.locator('[data-part="failure"]')).toContainText(
+      "main is already the name of me@example.com.",
+    );
+    // the page's clock ticking on redraws the window, and leaves what the name was told
+    await page.clock.runFor(2000);
+    await expect(name.locator('[data-part="failure"]')).toBeVisible();
+    await field.fill("side");
+    await page.keyboard.press("Enter");
+    await expect(name).toBeHidden();
     await expect(fig.locator('[data-tool="codex"] [data-account]:not([hidden])')).toHaveCount(3);
     await expect(fig.getByRole("row", { name: /^side\b/ })).toBeVisible();
   });
 
-  test("Claude Desktop's sign-in parks the login in use, and only Later or Put Back put it away", async ({
+  test("Claude Desktop's sign-in saves the login in use, and only Later or Switch Back put it away", async ({
     page,
   }) => {
     await page.clock.install({ time: new Date("2026-10-13T13:51:00Z") });
@@ -249,12 +269,11 @@ test.describe("on macOS", () => {
       await sheet.locator('[role="combobox"]').click();
       await sheet.locator('[role="option"][data-value="desktop"]').click();
       await expect(sheet.locator('[role="combobox"] [data-value="desktop"]')).toBeVisible();
-      await sheet.locator('input[name="name"]').fill("side");
       const confirm = sheet.locator('[data-part="confirm"]');
-      await expect(confirm).toHaveText("Park home");
+      await expect(confirm).toHaveText("Continue");
       await confirm.click();
       await expect(sheet.locator('[data-does="cancel"]')).toHaveText("Later");
-      await expect(sheet.locator('[data-does="put-back"]')).toHaveText("Put home Back");
+      await expect(sheet.locator('[data-does="put-back"]')).toHaveText("Switch Back to home");
     };
     await start();
     await expect(window).toHaveAttribute("data-modal", "");
@@ -267,7 +286,7 @@ test.describe("on macOS", () => {
     await expect(sheet).toBeHidden();
     await expect(window).not.toHaveAttribute("data-modal");
     await page.clock.runFor(3500);
-    await expect(fig.getByRole("row", { name: /^side\b/ })).toHaveCount(0);
+    await expect(fig.getByRole("row", { name: /^desktop\b/ })).toHaveCount(0);
     await start();
     await sheet.locator('[data-does="put-back"]').click();
     await expect(sheet).toBeHidden();
@@ -360,12 +379,12 @@ test.describe("on Windows", () => {
     await expect(menu).toBeVisible();
     await expect(offers.first()).toBeFocused();
     await expect(offers).toHaveText([
-      "Use personal",
+      "Switch to personal",
       "Sign in again…",
       "Rename…F2",
       "Open claude.ai",
       "Copy email addressCtrl+C",
-      "Forget…Del",
+      "Remove account…Del",
     ]);
     const above = (await row("personal").boundingBox())!;
     const box = (await menu.boundingBox())!;
@@ -392,7 +411,7 @@ test.describe("on Windows", () => {
     await page.keyboard.press("F2");
     await field.fill("");
     await expect(dialog.locator('[data-part="problem"]')).toHaveText(
-      "Type a name for this account to rename.",
+      "Type a name for this account.",
     );
     await field.fill("side");
     await page.keyboard.press("Enter");
@@ -400,7 +419,7 @@ test.describe("on Windows", () => {
     await expect(row("personal").locator('[data-part="label"]')).toHaveText("side");
   });
 
-  test("Delete asks with focus on Forget, Enter forgets, and focus goes to the title bar", async ({
+  test("Delete asks with focus on Remove, Enter removes, and focus goes to the title bar", async ({
     page,
   }) => {
     const { row, fig } = await accounts(page, "windows");
@@ -408,8 +427,8 @@ test.describe("on Windows", () => {
     await row("personal").click(at);
     await page.keyboard.press("Delete");
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button")).toHaveText(["Forget", "Cancel"]);
-    await expect(dialog.getByRole("button", { name: "Forget" })).toBeFocused();
+    await expect(dialog.getByRole("button")).toHaveText(["Remove", "Cancel"]);
+    await expect(dialog.getByRole("button", { name: "Remove" })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
     await expect(row("personal")).toBeHidden();
@@ -432,18 +451,27 @@ test.describe("on Windows", () => {
     await expect(row("spare")).toHaveAttribute("aria-keyshortcuts", "Delete F2 Control+C");
   });
 
-  test("Add account picks its tool with radio buttons and lists the account", async ({ page }) => {
+  test("Add account picks its tool with radio buttons, signs in, then names the account", async ({
+    page,
+  }) => {
     const { fig } = await accounts(page, "windows");
     await fig.locator('[data-does="add"]').first().click();
     const dialog = page.locator("#win-accounts-sign-in");
     await expect(dialog).toHaveAccessibleName("Add account");
     await expect(dialog.getByRole("radio")).toHaveCount(2);
     await dialog.getByRole("radio", { name: "Codex" }).check();
-    await dialog.locator('input[name="name"]').fill("side");
-    await page.keyboard.press("Enter");
+    const confirm = dialog.locator('[data-part="confirm"]');
+    await expect(confirm).toHaveText("Sign in…");
+    await confirm.click();
     await expect(dialog).toHaveAccessibleName("Signing in to Codex");
     await expect(dialog).toBeHidden({ timeout: 6000 });
-    await expect(fig.getByRole("row", { name: /^side\b/ })).toBeVisible();
+    const name = page.locator("#win-accounts-rename");
+    await expect(name).toHaveAccessibleName("Name this account");
+    await expect(name.locator('input[name="name"]')).toHaveValue("travel");
+    await expect(name.getByRole("button", { name: "Done" })).toBeEnabled();
+    await page.keyboard.press("Enter");
+    await expect(name).toBeHidden();
+    await expect(fig.getByRole("row", { name: /^travel\b/ })).toBeVisible();
   });
 
   test("with its menu open and each dialog up, the window keeps WAI-ARIA's rules", async ({

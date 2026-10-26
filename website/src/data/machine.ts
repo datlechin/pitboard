@@ -29,12 +29,30 @@ function typeset(core: string): string {
     .join("");
 }
 
-// words.rs `check_name`: the app's own names for two checks, and doctor's for the rest
-function checkName(name: string): string {
-  if (name === "storage v5") return "Claude Code’s new login storage";
-  if (name === "machine ID") return "Machine ID";
-  return typeset(capitalised(name));
-}
+// words.rs `check_name`: the app's own names for doctor's checks, by their codes, which the
+// printed checks name as doctor does; doctor's own name for the rest
+export const appNames: [code: string, doctor: string, app: string][] = [
+  ["storage_v5", "storage v5", "Claude Code’s new sign-in storage"],
+  ["machine_id", "machine id", "Machine ID"],
+  ["vault", "parked logins", "Saved sign-ins"],
+  ["pending_parks", "parks being reclaimed", "Saved sign-ins being deleted"],
+  ["discarded", "old parked logins", "Old saved sign-ins"],
+  ["desktop_parks_folder", "parked Claude Desktop logins", "Saved Claude Desktop sign-ins"],
+  ["desktop_set_aside", "folders set aside", "Claude Desktop folders moved out of the way"],
+  ["desktop_move", "interrupted Claude Desktop move", "Switch in Claude that didn’t finish"],
+  ["interrupted_switch", "interrupted switch", "Switch that didn’t finish"],
+  ["credential", "credential", "Sign-in"],
+  ["credential_store", "credential store", "Sign-in store"],
+  ["credential_size", "login size", "Sign-in size"],
+  ["fallback_login", "fallback login", "Leftover sign-in file"],
+  ["codex_login", "Codex login", "Codex sign-in"],
+  ["codex_auth_file", "Codex login file", "Codex sign-in file"],
+  ["codex_backend", "Codex login store", "Codex sign-in store"],
+  ["private_on_disk", "logins on disk", "Sign-ins on disk"],
+  ["desktop_awaiting", "awaited sign-in", "Sign-in in Claude"],
+];
+const checkName = (name: string) =>
+  appNames.find(([, doctor]) => doctor === name)?.[2] ?? typeset(capitalised(name));
 
 // Each check doctor made, in its order, as present/machine.rs `checks` words it: the advice under a
 // check that did not pass, and the sentence over them.
@@ -53,7 +71,7 @@ export function checksOf(rows: Row[]): { lines: CheckLine[]; summary: string } {
 // words.rs `spoken_level`
 export const spokenLevel: Record<Level, string> = {
   ok: "Passed",
-  warn: "Worth looking at",
+  warn: "Warning",
   fail: "Failed",
 };
 

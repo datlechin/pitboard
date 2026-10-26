@@ -7,7 +7,8 @@ import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures
 const notify =
   "Pitboard notifies you once a limit of the account in use reaches 95%, while the app is open.";
 const watching = "Watching work: 40% of its weekly limit, as of 20:50.";
-const heads = "personal has used 95% of its weekly limit";
+const heads = { macos: "Weekly Limit Almost Reached", windows: "Weekly limit almost reached" };
+const room = "personal has used 95%. work has used 40%.";
 
 async function open(page: Page, platform: Platform, id: string) {
   await choose(page.context(), { platform });
@@ -57,7 +58,9 @@ test.describe("macOS", () => {
     await expect(list).toBeHidden();
     await expect(chosen(box)).toHaveText("Switch Automatically");
     await expect(fig.locator("[data-standing]")).toHaveText(watching);
-    await expect(fig.locator('[data-note="switch"]')).toContainText("never back by itself");
+    await expect(fig.locator('[data-note="switch"]')).toContainText(
+      "its running sessions follow within about 33 seconds",
+    );
     const link = fig.getByRole("link", { name: "Is this allowed?" });
     await expect(link).toHaveAttribute(
       "href",
@@ -224,7 +227,7 @@ test.describe("Windows", () => {
     await expect(box).toHaveValue("50");
   });
 
-  test("the expander shows and hides Share of a limit", async ({ page }) => {
+  test("the expander shows and hides the share's field", async ({ page }) => {
     const fig = await open(page, "windows", "auto-win");
     const toggle = page.locator("#auto-win-expand");
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -261,8 +264,9 @@ test.describe("Notification Center", () => {
     await expect(clock).toHaveAttribute("aria-expanded", "true");
     await expect(center).toBeFocused();
     const note = center.locator('[data-part="note"]');
-    await expect(note).toHaveAccessibleName(heads);
-    await expect(note).toContainText("work has 60% of its own left.");
+    await expect(note).toHaveAccessibleName(heads.windows);
+    await expect(note).toContainText(room);
+    await expect(note.getByRole("button", { name: "Switch to work" })).toBeVisible();
     await expect(center).toContainText("Wednesday 14 October");
     await page.keyboard.press("Escape");
     await expect(center).toBeHidden();
@@ -302,9 +306,10 @@ for (const [platform, id] of [
       await expect(banner).toBeHidden();
       await fig.scrollIntoViewIfNeeded();
       await expect(banner).toBeVisible();
-      await expect(banner).toHaveAccessibleName(heads);
-      await expect(page.locator("#status")).toHaveText(
-        `${heads}, Claude Code, work has 60% of its own left.`,
+      await expect(banner).toHaveAccessibleName(heads[platform]);
+      await expect(page.locator("#status")).toHaveText(`${heads[platform]}, Claude Code, ${room}`);
+      await expect(banner.locator("[data-switch]")).toHaveText(
+        platform === "macos" ? "Switch" : "Switch to work",
       );
       // focus inside it holds it, and shows its close button and Switch
       await banner.locator("[data-close]").focus();
@@ -334,7 +339,10 @@ for (const [platform, id] of [
       const fig = page.locator(`#${id}`);
       const banner = fig.locator("[data-banner]");
       await fig.scrollIntoViewIfNeeded();
-      await expect(banner).toHaveAccessibleName("personal has used 90% of its weekly limit");
+      await expect(banner).toHaveAccessibleName(heads[platform]);
+      await expect(banner.locator("[data-body]")).toHaveText(
+        "personal has used 90%. work has used 40%.",
+      );
       await page.mouse.move(0, 0);
       await page.clock.fastForward(5500);
       await expect(banner).toBeHidden();
@@ -351,9 +359,11 @@ for (const [platform, id] of [
         platform === "macos" ? "Switch Automatically" : "Switch automatically",
       );
       await fig.scrollIntoViewIfNeeded();
-      await expect(banner).toHaveAccessibleName("Switched Claude Code to work");
-      await expect(banner.locator("[data-switch]")).toBeHidden();
-      await expect(banner.locator("[data-subtitle]")).toBeHidden();
+      await expect(banner).toHaveAccessibleName("Switched to work");
+      await expect(banner.locator("[data-switch]")).toHaveText(
+        platform === "macos" ? "Switch Back" : "Switch back",
+      );
+      await expect(banner.locator("[data-subtitle]")).toHaveText("Claude Code");
     });
   });
 }

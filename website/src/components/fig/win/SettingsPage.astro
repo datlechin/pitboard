@@ -55,7 +55,7 @@ const notes = isBeta(version) ? [winGeneral.noFeed, winGeneral.betaNote] : [];
     <div class:list={[head, "mt-30"]}>Advanced</div>
     <div class={card}>
       <span class="min-w-0 flex-1" id="tpl-renew">
-        <span class="block">{renew}</span>
+        <span class="block">{renew.windows}</span>
         <span class={caption}>{renewalAbout("windows")}</span>
       </span>
       <Toggle aria-labelledby="tpl-renew" data-setting="renew" />

@@ -2,14 +2,10 @@
 // step, its rows' menus and its sheets and dialogs. window.test.ts finds each in the file that
 // says it.
 import { toolOn, tools, type Account, type Tool, type World } from "./world.ts";
-import type { Platform } from "../lib/platform.ts";
-import { countdown as countdownOf } from "../lib/model.ts";
+import { countdown as countdownOf, type State } from "../lib/model.ts";
+import { titled, type System } from "../lib/words.ts";
 
-export type System = Extract<Platform, "macos" | "windows">;
-
-// present/words.rs `titled`: a control's words in title case on macOS, sentence case on Windows
-export const titled = (system: System, mac: string, win: string) =>
-  system === "windows" ? win : mac;
+export type { System };
 
 const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 
@@ -32,129 +28,127 @@ export const siteOf = (tool: Tool) =>
 
 // AccountsPane.swift's and AccountsPage.xaml's toolbar help
 export const REFRESH_HELP = "Read every account’s usage again";
-export const ADD_HELP = "Sign in to another account and park its login";
+export const ADD_HELP = "Sign in to another account";
 export const inUse = (system: System) => titled(system, "In Use", "In use");
-export const USE = "Use";
+export const SWITCH = "Switch";
 export const SWITCHING_SPOKEN = "Switching";
 
 // The offers on an account, as the row's menus and the Account menu list them
-// (present/accounts.rs `offers`, AccountCommands.swift, AccountMenu.cs).
-export const useOffer = (label: string) => `Use ${label}`;
+// (present/accounts.rs `actions`, AccountCommands.swift, AccountMenu.cs).
+export const switchOffer = (label: string) => `Switch to ${label}`;
 export const signInAgain = (system: System) => titled(system, "Sign In Again…", "Sign in again…");
 export const RENAME_OFFER = "Rename…";
 export const warmUpNow = (system: System) => titled(system, "Warm Up Now", "Warm up now");
 export const openSite = (site: string) => `Open ${site}`;
 export const copyEmail = (system: System) =>
   titled(system, "Copy Email Address", "Copy email address");
-export const FORGET_OFFER = "Forget…";
+export const removeAccount = (system: System) =>
+  titled(system, "Remove Account…", "Remove account…");
 
-// The Forget question (present/accounts.rs `forget`, account_windows/accounts.rs
+// What Remove Account… asks (present/words.rs `remove_title`, account_windows/accounts.rs
 // `forget_message_on`).
-export const forgetTitle = (a: Account, w: World, system: System) =>
-  `Forget “${nameOf(a, w, system)}”?`;
-export function forgetMessage(a: Account, system: System): string {
+export const removeTitle = (a: Account, w: World, system: System) =>
+  `Remove “${nameOf(a, w, system)}”?`;
+export function removeMessage(a: Account, system: System): string {
   if (a.tool === "desktop")
-    return "Pitboard deletes the login it parked for this account and the folders set aside for it. Using it again needs a sign-in in Claude.";
+    return "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using it again needs a sign-in in Claude.";
   const machine = system === "windows" ? "this PC" : "this Mac";
-  return `Pitboard deletes the login it parked for this account, and everything its ${siteOf(a.tool)} window keeps on ${machine}, its sign-in included. Using it again needs a sign-in in your browser.`;
+  return `Pitboard deletes this account’s saved sign-in, and everything its ${siteOf(a.tool)} window keeps on ${machine}, its sign-in included. Using it again needs a sign-in in your browser.`;
 }
-export const FORGET = "Forget";
+export const REMOVE = "Remove";
 export const CANCEL = "Cancel";
 
-// The Rename sheet (present/sheets.rs, present/words.rs).
+// The Rename sheet, and the one that names an account just added (present/sheets.rs,
+// present/words.rs).
 export const renameTitle = (label: string) => `Rename “${label}”`;
-export const RENAMING =
-  "The account keeps its parked login. Only the name you switch to it by changes, here and in the command line.";
+export const RENAMING = "Only its name changes, here and in the command line.";
 export const RENAME = "Rename";
 export const NAME = "Name";
 export const NAME_PROMPT = "work";
 export const couldNotRename = (label: string) => `Couldn’t rename ${label}`;
+export const nameThisAccount = (system: System) =>
+  titled(system, "Name This Account", "Name this account");
+export const naming = (email: string, tool: string) =>
+  email ? `${email} is added.` : `The account ${tool} is signed in to is added.`;
+export const DONE = "Done";
 
-// present/words.rs `unusable_name`, and what a Windows field says while it is empty
-// (SheetPage.cs), its confirm in lower case
-export function unusableName(
-  problem: "empty" | "not_one_word" | "separator",
-  picksTool: boolean,
-): string | null {
+// present/words.rs `unusable_name`: why what is typed is no name.
+export function unusableName(problem: "empty" | "not_one_word" | "separator"): string {
   switch (problem) {
     case "empty":
-      return null;
+      return "Type a name for this account.";
     case "not_one_word":
       return "A name is one word, with no spaces.";
     case "separator":
-      return picksTool
-        ? "A name can’t contain “/”. Choose the tool above."
-        : "A name can’t contain “/”.";
+      return "A name can’t contain “/”.";
   }
 }
-export const typeAName = (confirm: string) =>
-  `Type a name for this account to ${confirm[0].toLowerCase()}${confirm.slice(1)}.`;
 
-// core/error.rs `LabelTaken`, as present/words.rs `typeset` shows it: the label a tool's other
-// account has, and whose it is (core/words.rs `login`).
-export const labelTaken = (typed: string, email: string) =>
-  `${typed} already refers to ${email}. Choose a different label.`;
+// present/words.rs `in_app_refusal` of core/error.rs `LabelTaken`: the name a tool's other account
+// has, and whose it is (core/words.rs `login`).
+export const nameTaken = (label: string, email: string) =>
+  `${label} is already the name of ${email}. Type another name.`;
 
 // The sign-in sheets (present/sheets.rs, present/words.rs).
 export const TOOL = "Tool";
 export const ACCOUNT = "Account";
 export const addAccount = (system: System) => titled(system, "Add Account", "Add account");
-export const signIn = (system: System) => titled(system, "Sign In", "Sign in");
+export const signInAsking = (system: System) => titled(system, "Sign In…", "Sign in…");
 export const signInToAgain = (system: System, label: string) =>
   titled(system, `Sign In to ${label} Again`, `Sign in to ${label} again`);
 export const signInMessage = (tool: string, again: string | null) =>
   again === null
-    ? `Pitboard opens ${tool}’s own sign-in in your browser. Sign in as the account you’re adding, and Pitboard parks its login beside the one in use.`
-    : `Pitboard opens ${tool}’s own sign-in in your browser. Sign in as ${again} to give Pitboard a new login for it.`;
+    ? `Pitboard opens ${tool}’s sign-in in your browser, where you sign in to the account you’re adding.`
+    : `Pitboard opens ${tool}’s sign-in in your browser, where you sign in to ${again} again.`;
 export const signingInTo = (system: System, tool: string) =>
   titled(system, `Signing In to ${tool}`, `Signing in to ${tool}`);
-export const finishInBrowser = (name: string, tool: string) =>
-  `Finish signing in as ${name} in your browser. This closes once ${tool} says you’re in.`;
+export const finishInBrowser = (again: string | null, tool: string) =>
+  `${again === null ? "Finish signing in in your browser." : `Finish signing in as ${again} in your browser.`} This closes once ${tool} says you’re in.`;
 export const signInPage = (system: System) => titled(system, "Sign-In Page", "Sign-in page");
 export const copyLink = (system: System) => titled(system, "Copy Link", "Copy link");
 export const OPEN = "Open";
 export const WAITING_FOR_BROWSER = "Waiting for your browser";
 export const LATER = "Later";
 
-// A sign-in inside Claude, which parks the account in use first (present/sheets.rs
-// `in_app_form`, `in_app_signing_in_text`).
-export const park = (label: string) => `Park ${label}`;
-export const parkToAdd = (app: string, work: string) =>
-  `Pitboard parks ${work}, which leaves ${app} signed out and signs nothing out at claude.ai. Then you sign in to the other account in ${app}, and Pitboard adds it once ${app} quits.`;
-export const parkToSignInAgain = (app: string, label: string, work: string) =>
-  `Pitboard parks ${work === label ? `${label}’s login as it is` : work}, which leaves ${app} signed out and signs nothing out at claude.ai. Then you sign in to ${label} again in ${app}, and Pitboard records it once ${app} quits.`;
-export const parking = (label: string) => [`Parking ${label}.`, `Parking ${label}`] as const;
+// A sign-in inside Claude, which saves the account in use and signs Claude out first
+// (present/sheets.rs `in_app_form`, `in_app_signing_in_text`).
+export const CONTINUE = "Continue";
+export const signOutToAdd = (app: string, work: string) =>
+  `Pitboard saves ${work} and signs ${app} out, without signing out at claude.ai. Then sign in to the other account in ${app} and quit it.`;
+export const signOutToSignInAgain = (app: string, label: string, work: string) =>
+  `Pitboard ${work === label ? `keeps ${label}’s sign-in as it is` : `saves ${work}`} and signs ${app} out, without signing out at claude.ai. Then sign in to ${label} again in ${app} and quit it.`;
+export const signingOut = (label: string) => [`Saving ${label}.`, `Saving ${label}`] as const;
 export function inAppWaiting(app: string, name: string, again: boolean): string {
   const signIn = again ? `sign in to ${name} again` : "sign in to the account you’re adding";
-  const adds = again ? `Pitboard records it as ${name}’s login` : `Pitboard adds it as ${name}`;
-  return `Open ${app} and ${signIn}. When it shows your chats, quit ${app} with Command-Q, and ${adds}.\n\nDon’t choose Log out in ${app}: it ends the login ${app} holds at claude.ai, and Pitboard can’t bring it back.`;
+  const adds = again ? `Pitboard saves it for ${name}` : "Pitboard adds it";
+  return `Open ${app} and ${signIn}. When it shows your chats, quit ${app} with Command-Q, and ${adds}.\n\nDon’t choose Log out in ${app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.`;
 }
 export const waitingToQuit = (app: string) => `Waiting for ${app} to quit`;
-export const putBack = (system: System, label: string) =>
-  titled(system, `Put ${label} Back`, `Put ${label} back`);
+export const switchBackTo = (system: System, label: string) =>
+  titled(system, `Switch Back to ${label}`, `Switch back to ${label}`);
 
 // The notice a tool's last switch leaves (present/notices.rs `of_last_switch`, present/words.rs).
 export const switchedTo = (tool: string | null, label: string) =>
   tool ? `Switched ${tool} to ${label}` : `Switched to ${label}`;
-export const hasANewLogin = (tool: string | null, label: string) =>
-  tool ? `${label} in ${tool} has a new login` : `${label} has a new login`;
+export const signedInTo = (tool: string | null, label: string) =>
+  tool ? `Signed in to ${label} in ${tool}` : `Signed in to ${label}`;
 export const sessionsFollowIn = (tool: string | null) =>
   tool ? `${tool} sessions already open follow in` : "Sessions already open follow in";
 export function signedInNow(name: string, again: boolean, app: string | null): string {
   if (again)
     return app
       ? `Signed in to ${name} again. ${app} is signed in to it now.`
-      : `Signed in to ${name} again. Its new login is the one in use now.`;
+      : `Signed in to ${name} again. It’s the account in use now.`;
   return app
     ? `Added ${name}, the account ${app} is signed in to now.`
-    : `Enrolled ${name}, the account signed in now. Its new login is the one in use.`;
+    : `Added ${name}, the account signed in now.`;
 }
 export const restartNotice = (program: string, from: string) =>
   `Any ${program} session started before this switch keeps using ${from || "the account it started with"} until it is quit and started again.`;
-// core/words.rs: a Claude Desktop switch, with Claude closed
+// present/words.rs `follows`: a Claude Desktop switch, with Claude closed
 export const CLAUDE_OPENS = "Claude opens signed in to it.";
 export const DISMISS = "Dismiss";
-export const CLOSE = "Close";
+export const switchBack = (system: System) => titled(system, "Switch Back", "Switch back");
 // present/mod.rs `spoken_severity`
 export const severitySaid = { info: "Note", warning: "Warning" } as const;
 
@@ -164,50 +158,55 @@ export const addASecond = (tool: string | null) =>
 export function onlyOneDetail(label: string, tool: Tool, shown: string | null): string {
   const adding =
     tool === "desktop"
-      ? `Adding another parks this one while you sign in to the other in ${program(tool)}.`
-      : "Adding another signs in to it and parks its login beside this one.";
-  return `${label} is the only ${shown ? `${shown} ` : ""}account Pitboard knows, so there’s nothing to switch to. ${adding}`;
+      ? `To add another, ${program(tool)} signs out while you sign in to it.`
+      : "Add another to switch between them.";
+  return `${label} is your only ${shown ? `${shown} ` : ""}account. ${adding}`;
 }
 export const addAccountAsks = (system: System) => titled(system, "Add Account…", "Add account…");
 export const notNow = (system: System) => titled(system, "Not Now", "Not now");
 
 // What the window's notice of a tool's last switch or new login says, at `now`, or null where it
 // says nothing: a Claude Code switch's notice is its countdown, and goes with it (present/notices.rs
-// `of_last_switch`; NoticeRow.swift). Codex's warns that running sessions keep the old account.
+// `of_last_switch`; NoticeRow.swift), unless it offers Switch Back, as a switch Pitboard made by
+// itself does. Codex's warns that running sessions keep the old account.
 export interface Notice {
   title: string;
   lines: string[];
   countdown: string | null;
   severity: "info" | "warning";
+  back: string | null;
 }
-interface Switches {
-  now: number;
-  accounts: Account[];
-  inUse: Record<Tool, string>;
-  lastSwitch: Partial<Record<Tool, { from: string; to: string; followsAt: number | null }>>;
-  newLogin: Partial<Record<Tool, { label: string; added?: boolean }>>;
-}
-export function noticeOf(s: Switches, tool: Tool, system: System): Notice | null {
+export function noticeOf(
+  s: Pick<State, "now" | "accounts" | "inUse" | "lastSwitch" | "newLogin">,
+  tool: Tool,
+  system: System,
+): Notice | null {
   const last = s.lastSwitch[tool];
   const login = s.newLogin[tool];
   if (!last && !login) return null;
   const shown = toolIfShown({ ...s, readAt: s.now }, system, tool);
   const app = tool === "desktop" ? program(tool) : null;
-  const lines: string[] = [];
-  if (login) lines.push(signedInNow(login.label, !login.added, app));
-  else if (tool === "desktop") lines.push(CLAUDE_OPENS);
+  const said = login ? signedInNow(login.label, !login.added, app) : null;
+  // a sign-in inside Claude to an account not in use before is said as a switch to it, in place
+  // of what Claude's opening says
+  const asSwitch = !said || !!login?.opens;
+  const opens =
+    tool === "desktop" && last && last.to === (login?.label ?? last.to) ? CLAUDE_OPENS : null;
+  const lines = (asSwitch ? [said ?? opens] : [opens, said]).filter((l): l is string => !!l);
   const restart = tool === "codex" && last && !login;
   if (restart) lines.push(restartNotice("codex", last.from));
   const running = last?.followsAt != null && last.followsAt > s.now;
   const countdown = running
     ? `${sessionsFollowIn(shown)} ${countdownOf(last!.followsAt!, s.now)}`
     : null;
-  if (lines.length === 0 && !countdown) return null;
+  const back = last?.back ? switchBack(system) : null;
+  if (lines.length === 0 && !countdown && !back) return null;
   return {
-    title: login ? hasANewLogin(shown, login.label) : switchedTo(shown, last!.to),
+    title: asSwitch ? switchedTo(shown, last!.to) : signedInTo(shown, login!.label),
     lines,
     countdown,
     severity: restart ? "warning" : "info",
+    back,
   };
 }
 

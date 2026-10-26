@@ -35,13 +35,14 @@ export const winGeneral = {
 export const named = (version: string) => (version ? `Pitboard ${version}` : "Pitboard");
 export const isBeta = (version: string) => version.includes("-beta.");
 
-export const renew = "Renew parked logins daily";
+// AdvancedSettings.swift's and SettingsPage.xaml's switch, in each system's case
+export const renew = { macos: "Keep Saved Sign-Ins Fresh", windows: "Keep saved sign-ins fresh" };
 
 // words.rs `renewal_about`, with Claude Desktop enrolled on macOS
 export const renewalAbout = (system: "macos" | "windows") =>
   system === "macos"
-    ? "Your Mac’s own scheduler renews your parked logins once a day, so one you leave alone doesn’t expire. A parked Claude Desktop login is never renewed."
-    : "Your PC’s own scheduler renews your parked logins once a day, so one you leave alone doesn’t expire.";
+    ? "Your Mac refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t expire."
+    : "Your PC refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire.";
 
 export const inTerminal = "In your terminal";
 // where each system's terminal finds the command line that came with the app
