@@ -11,8 +11,8 @@ enum Words {
     static let fileMenu = "File"
     static let removeWebsiteData = "Remove Website Data…"
     static let claudeCodeMissing = "Claude Code Isn’t Installed"
-    static let couldNotReadUsage = "Couldn’t read usage"
-    static let switchWaiting = "A switch didn’t finish"
+    // The menu's item for a notice, with the notice's heading under it.
+    static let oneIssue = "1 Issue"
 
     static func openSite(_ site: String) -> String { "Open \(site)" }
 

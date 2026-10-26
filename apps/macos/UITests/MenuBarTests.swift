@@ -80,7 +80,7 @@ final class MenuBarTests: FixtureTestCase {
     func testAFailedReadIsSaidInTheMenuAndInTheWindow() {
         let app = launch(.readFailure)
         app.openMenu()
-        let item = app.menuItem(Words.couldNotReadUsage)
+        let item = app.menuItem(Words.oneIssue)
         XCTAssertTrue(item.waitForExistence(timeout: 5))
         item.click()
         XCTAssertTrue(app.control("accounts.readFailed").waitForExistence(timeout: 5))
@@ -99,7 +99,7 @@ final class MenuBarTests: FixtureTestCase {
         XCTAssertTrue(checks.waitForExistence(timeout: 5))
 
         app.openMenu()
-        let item = app.menuItem(Words.switchWaiting)
+        let item = app.menuItem(Words.oneIssue)
         XCTAssertTrue(item.waitForExistence(timeout: 5))
         item.click()
         XCTAssertTrue(
