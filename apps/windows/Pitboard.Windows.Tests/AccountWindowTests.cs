@@ -321,7 +321,7 @@ public sealed partial class AccountWindowTests
 
             var asking = windows.MayQuit();
 
-            await DialogButton(window, "Quit");
+            await DialogButton(window, "Exit");
             Assert.IsTrue(window.AppWindow.IsVisible, "the question was asked out of sight");
             Assert.HasCount(2, model.Sent.OfType<Intent.WindowOpened>());
             Views.Press(await DialogButton(window, "Cancel"));

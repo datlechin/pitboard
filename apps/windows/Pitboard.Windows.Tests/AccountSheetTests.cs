@@ -62,7 +62,7 @@ public sealed class AccountSheetTests
 
         await up.Type("sheet.name", "");
 
-        Assert.AreEqual("Type a name for this account to save.", Views.Description(field));
+        Assert.AreEqual("Type a name for this account.", Views.Description(field));
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled);
     }
 
