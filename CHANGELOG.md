@@ -11,11 +11,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `pitboard status`, its `--json` and the app show a Codex account's limits for one model under
   the model's name, as they show Claude Code's.
-- `pitboard doctor`, **This Mac** and **This PC** name each Codex setting that limits which logins
+- `pitboard doctor` and the app's **Diagnostics** name each Codex setting that limits which logins
   Codex keeps, such as `forced_chatgpt_workspace_id`, and the accounts it rules out.
-- `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginOrgUUID` of Claude
+- `pitboard doctor` and the app's **Diagnostics** name a managed `forceLoginOrgUUID` of Claude
   Code's, and the accounts whose organisation it leaves out.
-- `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginMethod` of Claude
+- `pitboard doctor` and the app's **Diagnostics** name a managed `forceLoginMethod` of Claude
   Code's set to `console`, under which Pitboard refuses a Claude Code sign-in.
 - On macOS, Pitboard's refusals and `pitboard doctor` follow Claude Code's managed settings from
   a configuration profile too, as Claude Code does.
@@ -147,6 +147,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are about, and show a check that passed only where it says something to look for.
 - The Windows icon's tooltip goes on in lower case after an account's name, as **work: weekly
   18% used**.
+- The macOS app's window shows only the accounts, and **Diagnostics**, where **This Mac** was,
+  and **Activity** open as windows of their own from the **Window** menu.
+- The macOS app draws only **Remove Account**'s answer in red, where every question's answer was.
 
 ### Removed
 

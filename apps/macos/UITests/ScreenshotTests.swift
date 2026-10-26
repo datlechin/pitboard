@@ -13,12 +13,26 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(item.waitForExistence(timeout: 10))
         XCTAssertTrue(item.wait(until: "title CONTAINS 'work 42%'", timeout: 10))
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         XCTAssertTrue(app.control("setup.atLimitUnchosen").waitForExistence(timeout: 5))
         keep(window, as: "macos-window-tip-at-limit")
         // The other pictures show the accounts.
         app.putTheTipsAway()
+
+        app.openFromWindowMenu(Words.diagnostics)
+        let diagnostics = app.windows["diagnostics"]
+        XCTAssertTrue(
+            diagnostics.descendants(matching: .any)["checks.summary"].waitForExistence(
+                timeout: 10))
+        keep(diagnostics, as: "macos-diagnostics")
+        diagnostics.buttons[XCUIIdentifierCloseWindow].click()
+        app.openFromWindowMenu(Words.activity)
+        let activity = app.windows["activity"]
+        XCTAssertTrue(
+            activity.staticTexts["activity.change"].firstMatch.waitForExistence(timeout: 5))
+        keep(activity, as: "macos-activity")
+        activity.buttons[XCUIIdentifierCloseWindow].click()
 
         // The menu is see-through, so it is shown over this window, not over the Mac's screen.
         app.openMenu()
@@ -26,16 +40,12 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
         let below = menu.frame
         app.typeKey(.escape, modifierFlags: [])
-        app.descendants(matching: .any)["sidebar.machine"].click()
-        XCTAssertTrue(app.control("checks.summary").waitForExistence(timeout: 5))
-        keep(window, as: "macos-checks")
         move(window, to: CGPoint(x: below.maxX + 20 - window.frame.width, y: below.minY - 4))
         app.openMenu()
         XCTAssertTrue(app.menuItem("main").waitForExistence(timeout: 5))
         keep(menu, as: "macos-menu-accounts")
         app.typeKey(.escape, modifierFlags: [])
 
-        app.descendants(matching: .any)["sidebar.accounts"].click()
         XCTAssertTrue(app.accountRow("codex/spare").waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.accountRow("claude/work").descendants(matching: .any)["account.inUse"]
@@ -43,11 +53,6 @@ final class ScreenshotTests: FixtureTestCase {
         keep(window, as: "macos-window-accounts")
 
         keep(item.screenshot().pngRepresentation, as: "macos-menu-bar-item")
-
-        app.descendants(matching: .any)["sidebar.activity"].click()
-        XCTAssertTrue(
-            app.staticTexts["activity.change"].firstMatch.waitForExistence(timeout: 5))
-        keep(window, as: "macos-activity")
 
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
@@ -64,7 +69,6 @@ final class ScreenshotTests: FixtureTestCase {
         choose(Words.notifyMe, in: atLimit)
         settings.buttons[XCUIIdentifierCloseWindow].click()
         XCTAssertTrue(settings.waitForNonExistence(timeout: 5))
-        app.descendants(matching: .any)["sidebar.accounts"].click()
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         personal.buttons["account.action"].click()
@@ -87,7 +91,7 @@ final class ScreenshotTests: FixtureTestCase {
         app.openWindow()
         let warmed = app.text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30))
-        keep(app.windows["main"], as: "macos-window-warm-up")
+        keep(app.accountsWindow, as: "macos-window-warm-up")
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
         XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
@@ -98,7 +102,7 @@ final class ScreenshotTests: FixtureTestCase {
     func testClaudeDesktopForTheSite() {
         let app = launch(.claudeDesktop)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         app.putTheTipsAway()
         let last = app.accountRow("desktop/work")
@@ -119,7 +123,7 @@ final class ScreenshotTests: FixtureTestCase {
     func testAnAccountsMenusAndItsNameSheet() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let row = app.accountRow("claude/personal")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.rightClick()
@@ -165,7 +169,7 @@ final class ScreenshotTests: FixtureTestCase {
     func testAddingAnAccount() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         app.toolbars.buttons["toolbar.addAccount"].click()
         let signIn = app.buttons["sheet.confirm"]
         XCTAssertTrue(signIn.waitForExistence(timeout: 5))
@@ -190,7 +194,7 @@ final class ScreenshotTests: FixtureTestCase {
     func testSigningInAgainAndSwitchingCodex() {
         let app = launch(.twoTools)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         app.putTheTipsAway()
         let old = app.accountRow("claude/old")
         XCTAssertTrue(old.waitForExistence(timeout: 5))
@@ -212,7 +216,7 @@ final class ScreenshotTests: FixtureTestCase {
     func testAddingAClaudeDesktopAccount() {
         let app = launch(.claudeDesktop)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         app.putTheTipsAway()
         app.toolbars.buttons["toolbar.addAccount"].click()
         let tool = app.popUpButtons["sheet.tool"]
@@ -250,7 +254,7 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(spare.waitForExistence(timeout: 5))
         spare.buttons["account.action"].click()
         XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
-        keep(app.windows["main"], as: "macos-alert-quit-chatgpt")
+        keep(app.accountsWindow, as: "macos-alert-quit-chatgpt")
         app.alertCancel.click()
     }
 
@@ -264,7 +268,7 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 5))
         home.buttons["account.action"].click()
         XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
-        keep(app.windows["main"], as: "macos-alert-quit-claude")
+        keep(app.accountsWindow, as: "macos-alert-quit-claude")
         app.alertCancel.click()
     }
 
@@ -276,7 +280,7 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(issue.waitForExistence(timeout: 5))
         keep(app.statusItems.firstMatch.menus.firstMatch, as: "macos-menu-issue")
         issue.click()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let cancel = app.control("notice.stuck").buttons["notice.action.abandonStuckSwitch"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
         keep(window, as: "macos-notice-switch-unfinished")
@@ -294,7 +298,7 @@ final class ScreenshotTests: FixtureTestCase {
     func testCleaningUpALeftoverSignIn() {
         let app = launch(.leftInFile)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let cleanUp = app.buttons["notice.action.stow"]
         XCTAssertTrue(cleanUp.waitForExistence(timeout: 10))
         keep(window, as: "macos-notice-left-in-file")
@@ -314,7 +318,7 @@ final class ScreenshotTests: FixtureTestCase {
         let app = launch(.loginReplaced)
         app.openWindow()
         XCTAssertTrue(app.buttons["notice.action.signInAgain"].waitForExistence(timeout: 10))
-        keep(app.windows["main"], as: "macos-notice-login-replaced")
+        keep(app.accountsWindow, as: "macos-notice-login-replaced")
     }
 
     @MainActor
@@ -322,14 +326,14 @@ final class ScreenshotTests: FixtureTestCase {
         let app = launch(.switchedByItself)
         app.openWindow()
         XCTAssertTrue(app.buttons["notice.action.switchBack"].waitForExistence(timeout: 30))
-        keep(app.windows["main"], as: "macos-notice-switched-by-itself")
+        keep(app.accountsWindow, as: "macos-notice-switched-by-itself")
     }
 
     @MainActor
     func testTheFirstLaunch() {
         let app = launch(.firstLaunch)
         XCTAssertTrue(app.control("setup.codexUnused").waitForExistence(timeout: 10))
-        keep(app.windows["main"], as: "macos-window-first-launch")
+        keep(app.accountsWindow, as: "macos-window-first-launch")
     }
 
     @MainActor
@@ -340,7 +344,7 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(tip.waitForExistence(timeout: 5))
         tip.buttons["setup.action.declineTip"].click()
         XCTAssertTrue(app.control("accounts.noAccounts").waitForExistence(timeout: 5))
-        keep(app.windows["main"], as: "macos-window-no-accounts")
+        keep(app.accountsWindow, as: "macos-window-no-accounts")
     }
 
     @MainActor
@@ -351,7 +355,7 @@ final class ScreenshotTests: FixtureTestCase {
         keep(app.statusItems.firstMatch.menus.firstMatch, as: "macos-menu-no-tool")
         app.menuItem(Words.openPitboard).click()
         XCTAssertTrue(app.control("accounts.noTool").waitForExistence(timeout: 5))
-        keep(app.windows["main"], as: "macos-window-no-tool")
+        keep(app.accountsWindow, as: "macos-window-no-tool")
     }
 
     @MainActor
@@ -363,14 +367,14 @@ final class ScreenshotTests: FixtureTestCase {
         keep(app.statusItems.firstMatch.menus.firstMatch, as: "macos-menu-read-failure")
         issue.click()
         XCTAssertTrue(app.control("accounts.readFailed").waitForExistence(timeout: 5))
-        keep(app.windows["main"], as: "macos-window-read-failure")
+        keep(app.accountsWindow, as: "macos-window-read-failure")
     }
 
     @MainActor
     func testASignInPitboardHasNoNameFor() {
         let app = launch(.unnamed)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let add = app.buttons["account.action"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         keep(window, as: "macos-window-unnamed")
@@ -384,7 +388,7 @@ final class ScreenshotTests: FixtureTestCase {
         let app = launch(.onlyOne)
         app.openWindow()
         XCTAssertTrue(app.control("setup.onlyOne").waitForExistence(timeout: 5))
-        keep(app.windows["main"], as: "macos-window-tip-second-account")
+        keep(app.accountsWindow, as: "macos-window-tip-second-account")
     }
 
     @MainActor

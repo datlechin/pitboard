@@ -127,7 +127,7 @@ final class SiteFiguresTests: FixtureTestCase {
         for _ in 1...4 { app.typeKey(.upArrow, modifierFlags: []) }
         let before = highlighted(in: menu)
         app.typeKey(.space, modifierFlags: [])
-        let opened = app.windows["main"].waitForExistence(timeout: 3)
+        let opened = app.accountsWindow.waitForExistence(timeout: 3)
         let open = isOpen(menu)
         record(
             "highlighted: \(before ?? "-")\nwindow opened: \(opened)\nmenu still open: \(open)",
@@ -349,7 +349,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let dialogs = app.dialogs.count
         let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Remove" : "Remove, Cancel"
         keep(app.alert, as: "site-forget-alert")
-        keep(app.windows["main"], as: "site-forget-alert-window")
+        keep(app.accountsWindow, as: "site-forget-alert-window")
         let tree = tree(of: app.alert)
         app.typeKey(.return, modifierFlags: [])
         let closed = app.alert.waitForNonExistence(timeout: 3)
@@ -397,7 +397,7 @@ final class SiteFiguresTests: FixtureTestCase {
         app.alertAnswer.click()
         XCTAssertTrue(personal.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let after = selectedAccounts(in: window)
         keep(window, as: "site-focus-after-forget")
         // macOS gives a UI test no focus to read: Down moves a selection only in the list.
@@ -414,7 +414,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testSelectingAndTypingInTheAccountList() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         var seen: [(String, [String])] = [("at first", selectedAccounts(in: window))]
@@ -431,16 +431,13 @@ final class SiteFiguresTests: FixtureTestCase {
         sleep(2)
         type("p", in: app)
         seen.append(("typed p", selectedAccounts(in: window)))
-        app.descendants(matching: .any)["sidebar.accounts"].click()
-        seen.append(("sidebar clicked", selectedAccounts(in: window)))
-        keep(window, as: "site-list-selected-unfocused")
         record(
             seen.map { "\($0.0): \($0.1)" }.joined(separator: "\n"), as: "site-list-selection")
         XCTAssertEqual(
             seen.map { $0.1 },
             [
                 [], ["claude/personal"], ["claude/work"], ["claude/personal"], ["claude/work"],
-                ["claude/personal"], ["claude/personal"],
+                ["claude/personal"],
             ])
     }
 
@@ -448,7 +445,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testAShortcutMenuOnARowNotSelected() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let personal = app.accountRow("claude/personal")
         let work = app.accountRow("claude/work")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
@@ -486,7 +483,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testHowLongASwitchAndAReadTake() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         let use = personal.buttons["account.action"]

@@ -49,3 +49,30 @@ extension View {
         }
     }
 }
+
+// A question the model asks before something that cannot be undone, and what its answer sends.
+struct Asking: Equatable {
+    let question: Question
+    let intent: Intent
+}
+
+extension View {
+    func asking(_ asking: Binding<Asking?>, of model: AppModel) -> some View {
+        alert(
+            asking.wrappedValue?.question.title ?? "",
+            isPresented: Binding(
+                get: { asking.wrappedValue != nil },
+                set: { if !$0 { asking.wrappedValue = nil } }),
+            presenting: asking.wrappedValue
+        ) { asked in
+            Button(
+                asked.question.confirm, role: asked.question.destructive ? .destructive : nil
+            ) {
+                model.send(asked.intent)
+            }
+            Button(words.window.cancel, role: .cancel) {}
+        } message: { asked in
+            Text(asked.question.message)
+        }
+    }
+}

@@ -338,20 +338,24 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(app.accountRow("claude/work").exists)
     }
 
-    /// The window goes to the accounts, where the new one is listed.
+    /// The accounts come forward with the sheet over them, wherever Command-N was pressed.
     @MainActor
-    func testCommandNAddsAnAccountFromAnyPane() {
+    func testCommandNAddsAnAccountFromAnyWindow() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.activity"].click()
-        let activity = app.staticTexts["activity.change"].firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        app.openFromWindowMenu(Words.activity)
+        let activity = app.windows["activity"]
+        XCTAssertTrue(
+            activity.staticTexts["activity.change"].firstMatch
+                .waitForExistence(timeout: 5))
         app.typeKey("n", modifierFlags: .command)
-        XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 5))
-        app.sheets.firstMatch.buttons["sheet.cancel"].click()
-        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
-        XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
+        let sheet = app.accountsWindow.sheets.firstMatch
+        XCTAssertTrue(
+            sheet.descendants(matching: .any)["sheet.add"].waitForExistence(timeout: 5))
+        sheet.buttons["sheet.cancel"].click()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.accountRow("claude/work").exists)
+        XCTAssertTrue(activity.exists, "a window of its own")
     }
 
     @MainActor

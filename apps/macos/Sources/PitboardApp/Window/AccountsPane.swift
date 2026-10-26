@@ -5,8 +5,6 @@ struct AccountsPane: View {
     let model: AppModel
     let windows: AccountWindows
     @State private var selection: String?
-    /// A question the model asks before something that cannot be undone, and what to send
-    /// once it is answered.
     @State private var asking: Asking?
     @Environment(\.openWindow) private var openWindow
 
@@ -46,17 +44,7 @@ struct AccountsPane: View {
                 model.sheet == nil ? selection.flatMap(model.item).map(command(for:)) : nil
             )
             .task { model.send(.paneShown(pane: .accounts)) }
-            .alert(
-                asking?.question.title ?? "",
-                isPresented: Binding(
-                    get: { asking != nil }, set: { if !$0 { asking = nil } }),
-                presenting: asking
-            ) { asked in
-                Button(asked.question.confirm, role: .destructive) { model.send(asked.intent) }
-                Button("Cancel", role: .cancel) {}
-            } message: { asked in
-                Text(asked.question.message)
-            }
+            .asking($asking, of: model)
     }
 
     @ViewBuilder private var content: some View {
@@ -188,11 +176,6 @@ struct AccountsPane: View {
             model.send(intent)
         }
     }
-}
-
-private struct Asking: Equatable {
-    let question: Question
-    let intent: Intent
 }
 
 private struct SetupTip: View {

@@ -36,8 +36,8 @@ public struct PitboardScenes: Scene {
         }
         .menuBarExtraStyle(.menu)
 
-        Window("Pitboard", id: MainWindow.id) {
-            MainWindow(model: model, windows: windows, requests: requests)
+        Window(words.window.accounts, id: PlaceWindow.accounts.id) {
+            AccountsWindow(model: model, windows: windows)
         }
         .defaultSize(width: 760, height: 560)
         .commands {
@@ -48,7 +48,7 @@ public struct PitboardScenes: Scene {
                     Button("Check for Updates…") { updates.check() }
                 }
             }
-            // Nothing here makes a document: what is new here is an account, from any pane.
+            // Nothing here makes a document: what is new here is an account, from any window.
             CommandGroup(replacing: .newItem) {
                 Button("Add Account…") { model.send(.presentSheet(sheet: .add(provider: nil))) }
                     .keyboardShortcut("n")
@@ -61,6 +61,17 @@ public struct PitboardScenes: Scene {
                 Link("Pitboard Help", destination: Links.documentation)
             }
         }
+
+        // Each is listed in the Window menu, as Mail lists its Connection Doctor.
+        Window(words.window.diagnostics, id: PlaceWindow.diagnostics.id) {
+            DiagnosticsWindow(model: model, presence: windows.presence)
+        }
+        .defaultSize(width: 560, height: 620)
+
+        Window(words.window.activity, id: PlaceWindow.activity.id) {
+            ActivityWindow(model: model, presence: windows.presence)
+        }
+        .defaultSize(width: 720, height: 440)
 
         AccountWindowScene(windows: windows)
 

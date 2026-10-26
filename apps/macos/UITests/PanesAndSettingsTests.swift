@@ -1,25 +1,42 @@
+import AppKit
 import XCTest
 
 final class PanesAndSettingsTests: FixtureTestCase {
-    /// The fixture's switches and enrolments, in the order the model gives them.
+    /// The fixture's switches and enrolments, in the order the model gives them, in a window
+    /// of their own beside the accounts.
     @MainActor
     func testActivityListsChanges() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.activity"].click()
-        let changes = app.staticTexts.matching(identifier: "activity.change")
+        app.openFromWindowMenu(Words.activity)
+        let activity = app.windows["activity"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        let changes = activity.staticTexts.matching(identifier: "activity.change")
         XCTAssertTrue(changes.firstMatch.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(changes.count, 1)
+        XCTAssertTrue(app.accountsWindow.exists)
     }
 
-    /// The checks the fixture's doctor makes, under the line that sums them up.
+    /// The checks the fixture's doctor makes, under the line that sums them up, and the report
+    /// Copy Report copies.
     @MainActor
-    func testThisMacShowsTheChecks() {
+    func testDiagnosticsShowsTheChecks() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.machine"].click()
-        XCTAssertTrue(app.control("checks.summary").waitForExistence(timeout: 5))
-        XCTAssertTrue(app.control("check.0").exists)
+        app.openFromWindowMenu(Words.diagnostics)
+        let diagnostics = app.windows["diagnostics"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            diagnostics.descendants(matching: .any)["checks.summary"]
+                .waitForExistence(timeout: 10))
+        XCTAssertTrue(diagnostics.descendants(matching: .any)["check.0"].exists)
+        let copy = diagnostics.toolbars.buttons["toolbar.copyReport"]
+        XCTAssertTrue(copy.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        NSPasteboard.general.clearContents()
+        copy.click()
+        let report = NSPasteboard.general.string(forType: .string) ?? ""
+        XCTAssertTrue(report.hasPrefix("{"), "doctor's JSON report")
+        XCTAssertFalse(report.contains("dana@"), "with email addresses hidden")
     }
 
     @MainActor

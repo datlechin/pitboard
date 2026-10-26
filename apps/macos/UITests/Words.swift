@@ -10,6 +10,9 @@ enum Words {
     static let accountMenu = "Account"
     static let fileMenu = "File"
     static let removeWebsiteData = "Remove Website Data…"
+    static let windowMenu = "Window"
+    static let diagnostics = "Diagnostics"
+    static let activity = "Activity"
     static let claudeCodeMissing = "Claude Code Isn’t Installed"
     // The menu's item for a notice, with the notice's heading under it.
     static let oneIssue = "1 Issue"

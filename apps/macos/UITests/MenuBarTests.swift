@@ -86,23 +86,26 @@ final class MenuBarTests: FixtureTestCase {
         XCTAssertFalse(app.accountRow("claude/work").exists)
     }
 
-    /// The window is left on another pane first: the notice's item opens it on the accounts
-    /// whichever pane it was on.
+    /// With the accounts closed and Diagnostics in front, the notice's item opens the accounts
+    /// on it.
     @MainActor
-    func testShowingANoticeOpensTheWindowOnTheAccounts() {
+    func testShowingANoticeOpensTheAccounts() {
         let app = launch(.stuck)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.machine"].click()
-        let checks = app.control("checks.summary")
-        XCTAssertTrue(checks.waitForExistence(timeout: 5))
+        app.openFromWindowMenu(Words.diagnostics)
+        let diagnostics = app.windows["diagnostics"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
+        app.accountsWindow.buttons[XCUIIdentifierCloseWindow].click()
+        XCTAssertTrue(app.accountsWindow.waitForNonExistence(timeout: 5))
 
         app.openMenu()
         let item = app.menuItem(Words.oneIssue)
         XCTAssertTrue(item.waitForExistence(timeout: 5))
         item.click()
         XCTAssertTrue(
-            app.buttons["notice.action.abandonStuckSwitch"].waitForExistence(timeout: 5))
-        XCTAssertTrue(checks.waitForNonExistence(timeout: 5))
+            app.accountsWindow.buttons["notice.action.abandonStuckSwitch"].waitForExistence(
+                timeout: 5))
+        XCTAssertTrue(diagnostics.exists)
     }
 
     @MainActor

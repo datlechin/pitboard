@@ -51,7 +51,18 @@ extension XCUIApplication {
     func openWindow() {
         openMenu()
         menuItem(Words.openPitboard).click()
-        XCTAssertTrue(windows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(accountsWindow.waitForExistence(timeout: 5))
+    }
+
+    var accountsWindow: XCUIElement {
+        windows["accounts"]
+    }
+
+    // Opens a window the Window menu lists, or brings it forward.
+    func openFromWindowMenu(_ title: String) {
+        let menu = menuBars.menuBarItems[Words.windowMenu]
+        menu.click()
+        menu.menuItems[title].click()
     }
 
     // The tip past a second account: what happens at a limit.

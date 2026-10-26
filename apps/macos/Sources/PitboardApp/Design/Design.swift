@@ -80,7 +80,6 @@ enum Symbol {
     static let account = "person.crop.circle"
     static let accounts = "person.2"
     static let activity = "clock.arrow.circlepath"
-    static let machine = "stethoscope"
     static let add = "plus"
     static let refresh = "arrow.clockwise"
     static let switchAccount = "arrow.left.arrow.right"
