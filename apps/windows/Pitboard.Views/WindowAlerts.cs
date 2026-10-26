@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Pitboard.Core;
 using Pitboard.Windows;
 
 namespace Pitboard.Views;
@@ -10,13 +12,15 @@ public sealed partial class WindowAlerts : IDisposable
 {
     private readonly AppModel _model;
     private readonly DialogHost _dialogs;
+    private readonly Action<Uri> _open;
     private WindowAlert? _shown;
     private CancellationTokenSource? _withdraw;
 
-    public WindowAlerts(AppModel model, DialogHost dialogs)
+    public WindowAlerts(AppModel model, DialogHost dialogs, Action<Uri> open)
     {
         _model = model;
         _dialogs = dialogs;
+        _open = open;
         model.PropertyChanged += OnModelChanged;
         Follow();
     }
@@ -65,27 +69,49 @@ public sealed partial class WindowAlerts : IDisposable
 
         if (answer is { } result && !withdraw.IsCancellationRequested)
         {
-            _model.Send(alert.Answered(result == ContentDialogResult.Primary));
+            foreach (var intent in alert.Answered(result == ContentDialogResult.Primary))
+            {
+                _model.Send(intent);
+            }
         }
     }
 
-    private static ContentDialog Dialog(WindowAlert alert)
-    {
-        switch (alert)
+    private ContentDialog Dialog(WindowAlert alert) =>
+        alert switch
         {
-            case WindowAlert.Failed failed:
-                var dialog = new ContentDialog
-                {
-                    Title = failed.Text.Title,
-                    Content = failed.Text.Message,
-                    CloseButtonText = Words.Window.Ok,
-                };
-                AutomationProperties.SetAutomationId(dialog, "failure");
-                return dialog;
-            case WindowAlert.Asking asked:
-                return DialogHost.Asking(asked.Question);
-            default:
-                throw new ArgumentOutOfRangeException(nameof(alert));
+            WindowAlert.Failed failed => Failure(failed),
+            WindowAlert.Asking asked => DialogHost.Asking(asked.Question),
+            _ => throw new ArgumentOutOfRangeException(nameof(alert)),
+        };
+
+    // Its next step is its button, or a link to the docs under what it says.
+    private ContentDialog Failure(WindowAlert.Failed failed)
+    {
+        var said = new StackPanel { Spacing = 8 };
+        said.Children.Add(new TextBlock { Text = failed.Text.Message, TextWrapping = TextWrapping.Wrap });
+        if (failed.Learn is { } learn)
+        {
+            said.Children.Add(Learning(learn, _open));
         }
+
+        var dialog = new ContentDialog
+        {
+            Title = failed.Text.Title,
+            Content = said,
+            PrimaryButtonText = failed.Act?.Title ?? "",
+            IsPrimaryButtonEnabled = failed.Act?.Enabled ?? false,
+            CloseButtonText = Words.Window.Ok,
+            DefaultButton = failed.Act is null ? ContentDialogButton.None : ContentDialogButton.Primary,
+        };
+        AutomationProperties.SetAutomationId(dialog, "failure");
+        return dialog;
+    }
+
+    private static HyperlinkButton Learning(SetupLink learn, Action<Uri> open)
+    {
+        var link = new HyperlinkButton { Content = learn.Title, Padding = new Thickness(0) };
+        AutomationProperties.SetAutomationId(link, "failure.learn");
+        link.Click += (_, _) => open(new Uri(learn.Link));
+        return link;
     }
 }

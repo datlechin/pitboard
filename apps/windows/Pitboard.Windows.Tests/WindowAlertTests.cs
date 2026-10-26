@@ -27,8 +27,8 @@ public sealed class WindowAlertTests
         var model = Model(Snapshots.Read(1) with { QuitQuestion = QuitChatGPT });
         var alert = WindowAlert.Of(model)!;
 
-        Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), alert.Answered(confirmed: true));
-        Assert.AreEqual(new Intent.KeepAppOpen(), alert.Answered(confirmed: false));
+        CollectionAssert.AreEqual(new Intent[] { new Intent.QuitAndSwitch("codex/spare") }, alert.Answered(confirmed: true).ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.KeepAppOpen() }, alert.Answered(confirmed: false).ToArray());
     }
 
     [TestMethod]
@@ -41,14 +41,38 @@ public sealed class WindowAlertTests
         var alert = WindowAlert.Of(Model(Snapshots.Read(1) with { ReplaceQuestion = replace }))!;
 
         Assert.AreEqual(new WindowAlert.Asking(replace.Question, replace.Confirmed, replace.Declined), alert);
-        Assert.AreEqual(new Intent.ReplaceAndSwitch("claude/work"), alert.Answered(confirmed: true));
-        Assert.AreEqual(new Intent.KeepLogin(), alert.Answered(confirmed: false));
+        CollectionAssert.AreEqual(new Intent[] { new Intent.ReplaceAndSwitch("claude/work") }, alert.Answered(confirmed: true).ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.KeepLogin() }, alert.Answered(confirmed: false).ToArray());
     }
 
     [TestMethod]
     public void ClosingAFailureDismissesIt()
     {
-        Assert.AreEqual(new Intent.DismissFailure(), new WindowAlert.Failed(Failure).Answered(confirmed: false));
+        CollectionAssert.AreEqual(new Intent[] { new Intent.DismissFailure() }, new WindowAlert.Failed(Failure).Answered(confirmed: false).ToArray());
+    }
+
+    // Plan 3: every failure ends with an action in the app or a link to the docs, never a command.
+    [TestMethod]
+    public void AFailureWhoseNextStepIsAnActionTakesItOnceChosen()
+    {
+        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "work")), Enabled: true);
+        var failed = new WindowAlert.Failed(Failure with { Next = new NextStep.Act(signIn) });
+
+        Assert.AreEqual(signIn, failed.Act);
+        Assert.IsNull(failed.Learn);
+        CollectionAssert.AreEqual(
+            new Intent[] { new Intent.DismissFailure(), signIn.Intent }, failed.Answered(confirmed: true).ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.DismissFailure() }, failed.Answered(confirmed: false).ToArray());
+    }
+
+    [TestMethod]
+    public void AFailureNothingInTheAppPutsRightLinksToTheDocs()
+    {
+        var failed = new WindowAlert.Failed(Failure with { Next = Items.LearnMore });
+
+        Assert.IsNull(failed.Act);
+        Assert.AreEqual(((NextStep.Learn)Items.LearnMore).Link, failed.Learn);
+        CollectionAssert.AreEqual(new Intent[] { new Intent.DismissFailure() }, failed.Answered(confirmed: true).ToArray());
     }
 
     [TestMethod]

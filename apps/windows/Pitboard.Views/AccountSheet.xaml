@@ -102,8 +102,14 @@
       </InfoBar>
     </StackPanel>
     <!-- What the window asks or says meanwhile, in place of the step: a window shows one ContentDialog at a time. -->
-    <StackPanel x:Name="Asked" Spacing="12" Visibility="Collapsed">
+    <StackPanel x:Name="Asked" Spacing="8" Visibility="Collapsed">
       <TextBlock x:Name="AskedMessage" TextWrapping="Wrap" />
+      <HyperlinkButton
+          x:Name="AskedLearn"
+          Padding="0"
+          Visibility="Collapsed"
+          AutomationProperties.AutomationId="failure.learn"
+          Click="OnAskedLearn" />
     </StackPanel>
   </Grid>
 </ContentDialog>

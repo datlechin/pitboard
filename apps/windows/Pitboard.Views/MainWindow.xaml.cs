@@ -55,7 +55,7 @@ public sealed partial class MainWindow : Window
         Navigation.Loaded += (_, _) =>
         {
             _sheets ??= new WindowSheets(model, _dialogs);
-            _alerts ??= new WindowAlerts(model, _dialogs);
+            _alerts ??= new WindowAlerts(model, _dialogs, _context.Open);
         };
         Closed += (_, _) =>
         {

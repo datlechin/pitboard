@@ -19,12 +19,13 @@ public sealed class AccountsPageTests
     private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: null)), Enabled: true);
 
     private static async Task<(AccountsPage Page, StandInModel Model, AppModel App)> Over(
-        Snapshot snapshot, double width = double.NaN, Action<string>? copy = null, Action<WindowAccount>? openWindow = null)
+        Snapshot snapshot, double width = double.NaN, Action<string>? copy = null, Action<WindowAccount>? openWindow = null,
+        Action<Uri>? open = null)
     {
         var model = new StandInModel(snapshot);
         var app = new AppModel(model);
         var frame = await Views.Shown(new Frame { IsNavigationStackEnabled = false, Width = width });
-        var context = Views.Context(app, copy: copy) with { OpenWindow = openWindow };
+        var context = Views.Context(app, open: open, copy: copy) with { OpenWindow = openWindow };
         return (await Views.Navigate<AccountsPage>(frame, context), model, app);
     }
 
@@ -182,6 +183,25 @@ public sealed class AccountsPageTests
         Assert.AreEqual("Use spare", AutomationProperties.GetName(use));
         Views.Press(use);
         Assert.Contains(new Intent.SwitchTo("claude/spare"), model.Sent);
+    }
+
+    // Plan 3: a note nothing in the app does anything about ends with the docs that say what to do.
+    [UITestMethod]
+    public async Task ANoteNothingInTheAppPutsRightLinksToItsDocs()
+    {
+        var learn = new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors#stale-codes");
+        var stale = Spare() with { Notes = [new AccountNote(NoteKind.Stale, "Usage from 2 hours ago", Action: null, Learn: learn)] };
+        var opened = new List<Uri>();
+        var (page, _, _) = await Over(Listing(Work(), stale), open: opened.Add);
+        Assert.IsFalse(
+            Views.Visible<HyperlinkButton>(Row(page, "claude/work")).Any(link => AutomationProperties.GetAutomationId(link) == "account.note.learn"),
+            "a link under a row with no note");
+
+        var link = Views.Element<HyperlinkButton>(Row(page, "claude/spare"), "account.note.learn");
+        Assert.AreEqual("Learn more", link.Content);
+        new HyperlinkButtonAutomationPeer(link).Invoke();
+
+        CollectionAssert.AreEqual(new[] { new Uri(learn.Link) }, opened);
     }
 
     // Narrator reads the row as one sentence, and each limit once, not the bar and each figure on their own.

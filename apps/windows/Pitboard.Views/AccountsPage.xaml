@@ -126,6 +126,13 @@
                             <TextBlock
                                 Text="{x:Bind local:AccountsPage.NoteOf(Item), Mode=OneWay}"
                                 Visibility="{x:Bind local:AccountsPage.NoteShown(Item), Mode=OneWay}" />
+                            <!-- Where nothing in the app does something about the note, the docs that say what to do. -->
+                            <HyperlinkButton
+                                Content="{x:Bind local:AccountsPage.NoteLearnTitle(Item), Mode=OneWay}"
+                                Visibility="{x:Bind local:AccountsPage.NoteLearnShown(Item), Mode=OneWay}"
+                                Tag="{x:Bind}"
+                                AutomationProperties.AutomationId="account.note.learn"
+                                Click="OnNoteLearn" />
                           </StackPanel>
                         </toolkit:SettingsExpander.Description>
                         <Grid>

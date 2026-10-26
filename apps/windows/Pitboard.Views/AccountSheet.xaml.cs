@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Pitboard.Core;
 using Pitboard.Windows;
@@ -162,22 +163,25 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
                 Title = asked.Question.Title;
                 AskedMessage.Text = asked.Question.Message;
                 PrimaryButtonText = asked.Question.Confirm;
+                IsPrimaryButtonEnabled = true;
                 CloseButtonText = Words.Window.Cancel;
                 DefaultButton = DialogHost.DefaultOf(asked.Question);
                 break;
             case WindowAlert.Failed failed:
                 Title = failed.Text.Title;
                 AskedMessage.Text = failed.Text.Message;
-                PrimaryButtonText = "";
+                PrimaryButtonText = failed.Act?.Title ?? "";
+                IsPrimaryButtonEnabled = failed.Act?.Enabled ?? false;
                 CloseButtonText = Words.Window.Ok;
-                DefaultButton = ContentDialogButton.None;
+                DefaultButton = failed.Act is null ? ContentDialogButton.None : ContentDialogButton.Primary;
                 break;
         }
 
+        AskedLearn.Content = (alert as WindowAlert.Failed)?.Learn?.Title;
+        AskedLearn.Visibility = Look.Shown(alert is WindowAlert.Failed { Learn: not null });
         if (alert is not null)
         {
             SecondaryButtonText = "";
-            IsPrimaryButtonEnabled = true;
             ClearValue(CloseButtonStyleProperty);
         }
 
@@ -322,11 +326,36 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         FailureBar.Margin = new Thickness(0, 12, 0, 0);
         if (fresh)
         {
+            FailureBar.ActionButton = NextStepOf(failure.Next);
             FailureBar.IsOpen = false;
             DispatcherQueue.TryEnqueue(Ui.Guarded(FocusField));
         }
 
         FailureBar.IsOpen = true;
+    }
+
+    // An action in the app as the bar's button, or the docs about it as its link.
+    private ButtonBase NextStepOf(NextStep next)
+    {
+        ButtonBase button = next switch
+        {
+            NextStep.Act { Choice: var choice } => new Button { Content = choice.Title, IsEnabled = choice.Enabled },
+            NextStep.Learn { Link: var link } => new HyperlinkButton { Content = link.Title },
+            _ => throw new ArgumentOutOfRangeException(nameof(next)),
+        };
+        AutomationProperties.SetAutomationId(button, "sheet.failure.next");
+        button.Click += (_, _) =>
+        {
+            if (next is NextStep.Act { Choice: var choice })
+            {
+                _model.Send(choice.Intent);
+            }
+            else if (next is NextStep.Learn { Link: var link } && Uri.TryCreate(link.Link, UriKind.Absolute, out var page))
+            {
+                _open(page);
+            }
+        };
+        return button;
     }
 
     private void Enable()
@@ -420,13 +449,21 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
     private void OnCodeChanged(object sender, TextChangedEventArgs args) => Enable();
 
+    private void OnAskedLearn(object sender, RoutedEventArgs args)
+    {
+        if (_alert is WindowAlert.Failed { Learn: { } learn } && Uri.TryCreate(learn.Link, UriKind.Absolute, out var page))
+        {
+            _open(page);
+        }
+    }
+
     // The model closes the sheet once it is done, so the dialog stays up meanwhile, saying what went wrong if anything does.
     private void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         args.Cancel = true;
         if (_alert is { } alert)
         {
-            _model.Send(alert.Answered(confirmed: true));
+            Send(alert.Answered(confirmed: true));
             return;
         }
 
@@ -470,7 +507,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         if (_alert is { } alert)
         {
             args.Cancel = true;
-            _model.Send(alert.Answered(confirmed: false));
+            Send(alert.Answered(confirmed: false));
             return;
         }
 
@@ -480,7 +517,12 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
             return;
         }
 
-        foreach (var intent in Dismissed())
+        Send(Dismissed());
+    }
+
+    private void Send(IEnumerable<Intent> intents)
+    {
+        foreach (var intent in intents)
         {
             _model.Send(intent);
         }

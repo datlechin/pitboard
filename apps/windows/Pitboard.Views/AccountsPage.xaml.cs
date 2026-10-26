@@ -76,6 +76,10 @@ public sealed partial class AccountsPage : Page
 
     public static Visibility NoteShown(AccountItem item) => Look.Shown(item.Notes.Length > 0);
 
+    public static string NoteLearnTitle(AccountItem item) => item.Notes.FirstOrDefault()?.Learn?.Title ?? "";
+
+    public static Visibility NoteLearnShown(AccountItem item) => Look.Shown(item.Notes.FirstOrDefault()?.Learn is not null);
+
     public static bool Switching(AccountItem item) => item.End is RowEnd.Switching;
 
     public static Visibility SwitchingShown(AccountItem item) => Look.Shown(Switching(item));
@@ -258,6 +262,14 @@ public sealed partial class AccountsPage : Page
         if ((sender as FrameworkElement)?.Tag is ShownAccount { Item.Detail.Warm.Settings: { } settings })
         {
             ViewModel!.Send(settings.Intent);
+        }
+    }
+
+    private void OnNoteLearn(object sender, RoutedEventArgs args)
+    {
+        if ((sender as FrameworkElement)?.Tag is ShownAccount { Item.Notes: [{ Learn: { } learn }, ..] })
+        {
+            Context.Open(new Uri(learn.Link));
         }
     }
 

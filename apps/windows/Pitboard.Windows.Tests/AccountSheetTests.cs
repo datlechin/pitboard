@@ -152,6 +152,37 @@ public sealed class AccountSheetTests
         Assert.AreEqual("work", up.Element<TextBox>("sheet.name").Text);
     }
 
+    // Plan 3: what went wrong ends with what to do, an action in the app or the docs about it, as the bar's own button.
+    [UITestMethod]
+    public async Task AFailureInTheSheetEndsWithItsNextStep()
+    {
+        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
+        await using var up = await Up.Over(renaming);
+        var bar = up.Element<InfoBar>("sheet.failure");
+        up.App.Apply(renaming with
+        {
+            Revision = 2,
+            SheetFailure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", [], Items.LearnMore),
+        });
+        await Views.Until(() => bar.IsOpen, "the failure was not said");
+
+        var learn = Assert.IsInstanceOfType<HyperlinkButton>(bar.ActionButton);
+        Assert.AreEqual("Learn more", learn.Content);
+        new HyperlinkButtonAutomationPeer(learn).Invoke();
+        CollectionAssert.AreEqual(new[] { new Uri("https://docs.usepitboard.com/reference/errors") }, up.Opened);
+
+        var refresh = new Choice("Refresh", new Intent.Refresh(Asked: true), Enabled: true);
+        up.App.Apply(renaming with
+        {
+            Revision = 3,
+            SheetFailure = new FailureText(8, "Couldn’t rename personal", "Pitboard stopped before it could say.", [], new NextStep.Act(refresh)),
+        });
+        await Views.Until(() => bar.ActionButton is Button { Content: "Refresh" }, "the failure's action was not offered");
+        Views.Press((Button)bar.ActionButton);
+
+        await Views.Until(() => up.Model.Sent.Contains(refresh.Intent), "the failure's action was not taken");
+    }
+
     // Microsoft's InfoBar guidance closes and opens the bar again for a new message, which Narrator hears as the bar opens.
     [UITestMethod]
     public async Task ASecondFailureReopensItsInfoBar()
@@ -604,6 +635,33 @@ public sealed class AccountSheetTests
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the failure");
         up.App.Apply(naming with { Revision = 2, FailureAlert = null });
         await Views.Until(() => up.Sheet.Title as string == "Name this account", "the step did not come back");
+    }
+
+    // Plan 3: a failure said in the sheet ends with its next step there too.
+    [UITestMethod]
+    public async Task AFailureDuringASheetOffersItsNextStepInIt()
+    {
+        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), Enabled: true);
+        var failed = new AlertText("Couldn’t switch to spare", "spare’s saved sign-in no longer works.", new NextStep.Act(signIn));
+        var naming = Naming with { FailureAlert = failed };
+        await using var up = await Up.Over(naming);
+        await Views.Until(() => up.Sheet.Title as string == "Couldn’t switch to spare", "the failure did not take the sheet over");
+        Assert.AreEqual("Sign in again…", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.Primary, up.Sheet.DefaultButton);
+        Assert.AreEqual(Visibility.Collapsed, up.Element<HyperlinkButton>("failure.learn").Visibility);
+
+        Views.Press(up.Part("PrimaryButton"));
+        await Views.Until(() => up.Model.Sent.Count == 2, "the next step was not taken");
+        CollectionAssert.AreEqual(new Intent[] { new Intent.DismissFailure(), signIn.Intent }, up.Model.Sent.ToArray());
+
+        up.App.Apply(naming with { Revision = 2, FailureAlert = failed with { Message = "Claude Code is signing in.", Next = Items.LearnMore } });
+        var learn = up.Element<HyperlinkButton>("failure.learn");
+        await Views.Until(() => learn.Visibility == Visibility.Visible, "the docs were not offered");
+        Assert.AreEqual("", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.None, up.Sheet.DefaultButton);
+        new HyperlinkButtonAutomationPeer(learn).Invoke();
+
+        CollectionAssert.AreEqual(new[] { new Uri("https://docs.usepitboard.com/reference/errors") }, up.Opened);
     }
 
     // The sheet over a window's content, up once it is in front, and taken down after each test, since one dialog shows at a time.
