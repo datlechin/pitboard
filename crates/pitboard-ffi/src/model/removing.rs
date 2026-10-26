@@ -1,6 +1,6 @@
 //! Uninstalling Pitboard from the app, driven through `State::apply` by hand.
 
-use super::state::{After, Job};
+use super::state::{After, Answer, Job};
 use super::testing::machine::{Hand, Stub, any_read, desktop_machine};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CLAUDE, DANA, refusal, status};
@@ -321,4 +321,41 @@ fn a_request_from_outside_while_uninstalling_is_answered() {
     assert_eq!(model.shown().answers, [answered(1), answered(2)]);
     model.run(&mut machine);
     assert!(machine.switched_to.is_empty());
+}
+
+// The core may have removed the accounts and let go of Pitboard's folder before the job was lost.
+#[test]
+fn an_uninstall_that_came_to_nothing_runs_nothing_more_and_offers_try_again() {
+    let mut machine = two_accounts();
+    let mut model = started(&mut machine);
+    model.send(Intent::Uninstall);
+    let job = model.take(uninstalling);
+    model.give(Answer::Lost(job));
+    let again = Choice {
+        title: words::try_again(OS),
+        intent: Intent::Uninstall,
+        enabled: true,
+    };
+    assert_eq!(
+        removal(&model),
+        Some(RemovalShown::Stopped {
+            title: words::COULD_NOT_UNINSTALL.into(),
+            line: words::UNINSTALL_NOT_KNOWN.into(),
+            again: again.clone(),
+        })
+    );
+    assert_eq!(model.shown().failure_alert, None);
+    let asked = model.asked.len();
+    for _ in 0..10 {
+        model.later(Duration::from_secs(600));
+        model.tick();
+        model.run(&mut machine);
+    }
+    model.send(Intent::Woke);
+    assert_eq!(model.asked.len(), asked, "{:?}", &model.asked[asked..]);
+
+    model.send(again.intent);
+    model.run(&mut machine);
+    assert_eq!(machine.removals, 1);
+    assert_eq!(removal(&model), Some(RemovalShown::Done));
 }

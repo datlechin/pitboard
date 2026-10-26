@@ -645,6 +645,8 @@ pub(crate) enum Removing {
     // the account windows' stores go before it is said
     Clearing(Uninstalled),
     Done(Uninstalled),
+    // its job came to nothing, maybe after the core removed the accounts and let go of the folder
+    Lost,
 }
 
 // How a request from outside ended, which `present` words.
@@ -1693,7 +1695,7 @@ impl State {
     // Once more where the folder stayed, never once it is gone.
     pub(crate) fn may_uninstall(&self) -> bool {
         let again = match &self.removing {
-            None => true,
+            None | Some(Removing::Lost) => true,
             Some(Removing::Done(stayed)) => *stayed != Uninstalled::Removed,
             Some(_) => false,
         };
@@ -1781,14 +1783,11 @@ impl State {
                 self.removing = Some(Removing::Clearing(stayed));
                 self.windows.remove_all(jobs);
             }
-            Err(error) => {
+            Err(Some(error)) => {
                 self.resume(now);
-                let title = COULD_NOT_UNINSTALL.into();
-                self.present(match error {
-                    Some(error) => Refused::of(title, error),
-                    None => Refused::lost(title),
-                });
+                self.present(Refused::of(COULD_NOT_UNINSTALL.into(), error));
             }
+            Err(None) => self.removing = Some(Removing::Lost),
         }
     }
 

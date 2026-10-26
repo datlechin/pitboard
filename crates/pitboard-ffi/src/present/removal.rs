@@ -45,12 +45,21 @@ pub(crate) fn removal(seen: &Seen) -> Option<RemovalShown> {
             Some(line) => RemovalShown::Stopped {
                 title: words::KEPT_ITS_FOLDER.into(),
                 line,
-                again: Choice {
-                    title: words::try_again(seen.os),
-                    intent: Intent::Uninstall,
-                    enabled: seen.state.may_uninstall(),
-                },
+                again: again(seen),
             },
         },
+        Removing::Lost => RemovalShown::Stopped {
+            title: words::COULD_NOT_UNINSTALL.into(),
+            line: words::UNINSTALL_NOT_KNOWN.into(),
+            again: again(seen),
+        },
     })
+}
+
+fn again(seen: &Seen) -> Choice {
+    Choice {
+        title: words::try_again(seen.os),
+        intent: Intent::Uninstall,
+        enabled: seen.state.may_uninstall(),
+    }
 }

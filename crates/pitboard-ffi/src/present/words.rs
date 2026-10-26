@@ -1426,6 +1426,9 @@ pub(crate) const UNINSTALLING: &str = "Uninstalling Pitboard…";
 
 pub(crate) const KEPT_ITS_FOLDER: &str = "Pitboard couldn’t remove everything";
 
+pub(crate) const UNINSTALL_NOT_KNOWN: &str =
+    "Pitboard stopped before it could say how uninstalling went. Try again to finish it.";
+
 // Why Pitboard's folder stayed, which the command line says with its paths.
 pub(crate) fn folder_kept(stayed: crate::Uninstalled) -> Option<String> {
     Some(match stayed {
