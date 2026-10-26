@@ -679,7 +679,7 @@ public sealed class ModelTests
         Assert.AreEqual(
             new NameCheck(null, new Intent.Rename("claude", "acme", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
         Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardFfiMethods.CheckName(named, "claude", " acme"));
-        Assert.AreEqual(new NameCheck(null, null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
+        Assert.AreEqual(new NameCheck("Type a name for this account.", null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
         Assert.IsNull(PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
         Assert.AreEqual(
             new Intent.SignIn("codex", "work"),

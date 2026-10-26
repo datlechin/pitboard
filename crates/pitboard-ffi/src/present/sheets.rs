@@ -42,7 +42,7 @@ pub fn check_name(sheet: Sheet, tool: String, typed: String) -> NameCheck {
             // The account is added under the name it shows already.
             Ok(None) => sends(matches!(sheet, Sheet::Name { .. }).then_some(Intent::CloseSheet)),
             Err(unusable) => NameCheck {
-                problem: words::unusable_name(unusable),
+                problem: Some(words::unusable_name(unusable)),
                 intent: None,
             },
         },
@@ -528,9 +528,9 @@ mod tests {
             );
             assert_eq!(saved(sheet.clone(), " \t\u{200b}"), None, "{kind}");
             assert_eq!(
-                problem(sheet.clone(), ""),
-                None,
-                "{kind}: nothing typed is nothing wrong"
+                problem(sheet.clone(), " "),
+                Some(words::unusable_name(label::Unusable::Empty)),
+                "{kind}: the field says why its button waits"
             );
             assert_eq!(saved(sheet.clone(), " acme "), None, "{kind}: unchanged");
             assert_eq!(problem(sheet, " acme "), None, "{kind}");
@@ -591,11 +591,11 @@ mod tests {
             assert_eq!(saved(sheet.clone(), "codex/phu"), None);
             assert_eq!(
                 problem(sheet.clone(), "codex/phu"),
-                words::unusable_name(Unusable::Separator)
+                Some(words::unusable_name(Unusable::Separator))
             );
             assert_eq!(
                 problem(sheet.clone(), "my work"),
-                words::unusable_name(Unusable::NotOneWord)
+                Some(words::unusable_name(Unusable::NotOneWord))
             );
             assert_eq!(problem(sheet, "phu"), None);
         }

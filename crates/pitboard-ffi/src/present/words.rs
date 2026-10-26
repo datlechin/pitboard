@@ -892,13 +892,13 @@ const INSTALL_CODEX_CLI: &str = "https://developers.openai.com/codex/cli";
 const DOWNLOAD_CLAUDE: &str = "https://claude.ai/download";
 
 // Why what was typed cannot be a new name, where something was.
-pub(crate) fn unusable_name(unusable: Unusable) -> Option<String> {
-    let said = match unusable {
-        Unusable::Empty => return None,
+pub(crate) fn unusable_name(unusable: Unusable) -> String {
+    match unusable {
+        Unusable::Empty => "Type a name for this account.",
         Unusable::NotOneWord => "A name is one word, with no spaces.",
         Unusable::Separator => "A name can’t contain “/”.",
-    };
-    Some(said.into())
+    }
+    .into()
 }
 
 /// How the `pitboard` a terminal runs is kept up to date: with the app when it is the one
@@ -4301,14 +4301,17 @@ mod tests {
 
     #[test]
     fn a_name_that_cannot_be_one_says_why_in_these_words() {
-        assert_eq!(unusable_name(Unusable::Empty), None);
         assert_eq!(
-            unusable_name(Unusable::NotOneWord).as_deref(),
-            Some("A name is one word, with no spaces.")
+            unusable_name(Unusable::Empty),
+            "Type a name for this account."
         );
         assert_eq!(
-            unusable_name(Unusable::Separator).as_deref(),
-            Some("A name can’t contain “/”.")
+            unusable_name(Unusable::NotOneWord),
+            "A name is one word, with no spaces."
+        );
+        assert_eq!(
+            unusable_name(Unusable::Separator),
+            "A name can’t contain “/”."
         );
     }
 

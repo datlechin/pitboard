@@ -191,7 +191,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         Message.Text = text.Message;
         NameField.PlaceholderText = text.Prompt;
         NameField.IsEnabled = !text.Saving;
-        Describe(NameField, naming.Note(NameField.Text));
+        Describe(NameField, naming.Problem(NameField.Text));
         PrimaryButtonText = text.Confirm;
         SecondaryButtonText = "";
         DefaultButton = ContentDialogButton.Primary;
@@ -352,7 +352,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
     private void OnNameChanged(object sender, TextChangedEventArgs args)
     {
-        Describe(NameField, (_page as SheetPage.Naming)?.Note(NameField.Text));
+        Describe(NameField, (_page as SheetPage.Naming)?.Problem(NameField.Text));
         Edited();
         Enable();
     }

@@ -51,11 +51,11 @@ public sealed class SheetPageTests
     {
         var rename = new SheetPage.Naming(new Sheet.Rename("claude", "personal"), Items.Rename("personal"));
 
-        Assert.AreEqual("Type a name for this account to rename.", rename.Note(""));
-        Assert.AreEqual("Type a name for this account to rename.", rename.Note(" \t"));
-        Assert.AreEqual("A name is one word, with no spaces.", rename.Note("my work"));
-        Assert.AreEqual("A name can’t contain “/”.", rename.Note("codex/phu"));
-        Assert.IsNull(rename.Note("personal"), "the name it has, which Rename waits to change");
+        Assert.AreEqual("Type a name for this account.", rename.Problem(""));
+        Assert.AreEqual("Type a name for this account.", rename.Problem(" \t"));
+        Assert.AreEqual("A name is one word, with no spaces.", rename.Problem("my work"));
+        Assert.AreEqual("A name can’t contain “/”.", rename.Problem("codex/phu"));
+        Assert.IsNull(rename.Problem("personal"), "the name it has, which Rename waits to change");
     }
 
     [TestMethod]
