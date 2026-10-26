@@ -25,21 +25,28 @@ test("the macOS menu's commands have the keys MenuBarContent.swift gives them, a
   }
 });
 
-test("the questions' macOS shortcuts are AccountCommands.swift's: the Account menu, and Forget on Command-Delete", () => {
+test("the questions' macOS shortcuts are AccountCommands.swift's: the Account menu, and Remove Account on Command-Delete", () => {
   const commands = repo("apps/macos/Sources/PitboardApp/Window/AccountCommands.swift");
   assert.ok(commands.includes('CommandMenu("Account")'));
-  // .delete with SwiftUI's default modifier, Command, on the menu bar's Forget
+  // .delete with SwiftUI's default modifier, Command, on the menu bar's Remove Account
   assert.match(
     commands,
     /if place == \.menuBar \{\s+Button\(forget\.title, role: \.destructive\) \{ command\.choose\(forget\) \}\s+\.keyboardShortcut\(\.delete\)\n/,
   );
   assert.ok(
-    repo("crates/pitboard-ffi/src/present/accounts.rs").includes('const FORGET: &str = "Forget…";'),
+    repo("crates/pitboard-ffi/src/present/accounts.rs").includes(
+      "title: words::remove_account(seen.os),",
+    ),
+  );
+  assert.ok(
+    repo("crates/pitboard-ffi/src/present/words.rs").includes(
+      'titled(os, "Remove Account…", "Remove account…")',
+    ),
   );
   const page = repo("website/src/pages/index.astro");
   assert.ok(
     page.includes(
-      "On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Forget</b> on <a ",
+      "On macOS, the <b>Account</b> menu lists what you can do to the account selected, with <b>Remove Account</b> on <a ",
     ),
   );
   assert.ok(page.includes('/reference/mac-app#keyboard-shortcuts">Command-Delete</a>'));
@@ -47,14 +54,17 @@ test("the questions' macOS shortcuts are AccountCommands.swift's: the Account me
 
 test("the menus say what the app says while a switch or a read runs, and of a site's one account", () => {
   const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
-  assert.ok(present("accounts.rs").includes(`return Some("${SWITCHING}".into());`));
-  assert.ok(present("setup.rs").includes(`return "${READING}".into();`));
+  assert.ok(present("accounts.rs").includes("return Some(words::SWITCHING_NOW.into());"));
+  assert.ok(present("words.rs").includes(`pub(crate) const SWITCHING_NOW: &str = "${SWITCHING}";`));
+  assert.ok(present("setup.rs").includes("return words::READING.into();"));
+  assert.ok(present("words.rs").includes(`pub(crate) const READING: &str = "${READING}";`));
   assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
   assert.equal(updated(clock.read), "Updated 20:50");
   assert.ok(
     repo("crates/pitboard-ffi/src/account_windows/accounts.rs").includes(
-      'title: format!("Open {} as {}", site.name(), window.label),',
+      "title: words::open_site_as(site.name(), &window.label),",
     ),
   );
+  assert.ok(present("words.rs").includes('format!("Open {site} as {label}")'));
   assert.equal(openSiteAs("claude.ai", "work"), "Open claude.ai as work");
 });

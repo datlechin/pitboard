@@ -1,7 +1,7 @@
-// What an account offers (present/accounts.rs `offers`, AccountCommands.swift).
+// What an account offers (present/accounts.rs `actions`, AccountCommands.swift).
 import { warmStanding, type State } from "../../lib/model.ts";
-import { isInUse } from "../../lib/words.ts";
-import { openSite, siteOf, useOffer } from "../../data/window.ts";
+import { isInUse, signInExpired } from "../../lib/words.ts";
+import { openSite, siteOf, switchOffer } from "../../data/window.ts";
 import type { Account } from "../../data/world.ts";
 
 export interface Offers {
@@ -16,15 +16,11 @@ export interface Offers {
   forget: boolean;
 }
 
-// a parked login past its life signs in again in place of a switch
-export const expired = (a: Account, s: State) =>
-  !isInUse(a, s) && a.refreshExpiresAt !== undefined && a.refreshExpiresAt <= s.now;
-
 export function offersOf(a: Account, s: State): Offers {
   const on = isInUse(a, s);
   const site = siteOf(a.tool);
   return {
-    use: { title: useOffer(a.label), enabled: !on && !expired(a, s) && !s.switching },
+    use: { title: switchOffer(a.label), enabled: !on && !signInExpired(a, s) && !s.switching },
     signInAgain: !s.signing,
     rename: true,
     warm: a.tool === "claude" ? { enabled: warmStanding(s, a, "now").stands === "due" } : null,

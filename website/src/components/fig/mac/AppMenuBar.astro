@@ -9,7 +9,7 @@ import MenuItem from "./MenuItem.astro";
 import { appMenus, NO_ACCOUNT, type AppItem } from "../../../data/appmenu.ts";
 import { sites } from "../../../data/windows.ts";
 import { moments, type Tool } from "../../../data/world.ts";
-import { signInAgain, warmUpNow, FORGET_OFFER, RENAME_OFFER } from "../../../data/window.ts";
+import { removeAccount, signInAgain, warmUpNow, RENAME_OFFER } from "../../../data/window.ts";
 import { listed } from "../../../lib/words.ts";
 
 interface Props {
@@ -113,7 +113,7 @@ const id = (menu: string) => `${prefix}-am-${menu}`;
             aria-keyshortcuts="Meta+Backspace"
             data-offer="forget"
           >
-            <span class="flex-1">{FORGET_OFFER}</span>
+            <span class="flex-1">{removeAccount("macos")}</span>
             <span class={keyLook} aria-hidden="true"
               ><i class="not-italic">⌘</i><i class="w-13 text-center not-italic">⌫</i></span
             >

@@ -30,6 +30,7 @@ struct GeneralSettings: View {
                 }
                 if let failed = openAtLogin.failed {
                     Text(failed).explanatory()
+                        .accessibilityIdentifier("settings.openAtLoginFailed")
                 }
                 if notifications.off {
                     LabeledContent {
@@ -76,6 +77,7 @@ struct GeneralSettings: View {
                 } footer: {
                     // Without this, a build with no update key would look broken.
                     Text(noUpdateKey()).footnote()
+                        .accessibilityIdentifier("settings.noUpdateKey")
                 }
             }
         }

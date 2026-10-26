@@ -92,7 +92,7 @@ public sealed class ModelTests
     private static Snapshot Read(ulong revision) =>
         new(
             Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
-            WindowRequest: new WindowRequest(Serial: 0, Pane: null),
+            WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
@@ -101,11 +101,18 @@ public sealed class ModelTests
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
-            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
+            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
-            AccountWindows: NoWindows());
+            AccountWindows: NoWindows(),
+            Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
+            Removal: null,
+            Welcome: new WelcomeShown(
+                Title: "Welcome to Pitboard", Lines: [], IconLink: null, Tools: [],
+                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: ""),
+                Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
+            GlanceRevision: 0, Answers: []);
 
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],
@@ -194,8 +201,8 @@ public sealed class ModelTests
         // calls are registered, before it answers. Saying what a sheet sends reads only what
         // it is given, so it answers at once.
         Assert.AreEqual(
-            new Intent.Enrol("claude", "home"),
-            PitboardFfiMethods.CheckName(new Sheet.Name("claude", "a@example.com"), "claude", " home ").Intent);
+            new Intent.Rename("claude", "acme", "home"),
+            PitboardFfiMethods.CheckName(new Sheet.Name("claude", "acme", "a@example.com"), "claude", " home ").Intent);
     }
 
     // Never started, so nothing on this machine is read.
@@ -225,14 +232,13 @@ public sealed class ModelTests
             Assert.IsFalse(first.Reading);
             Assert.IsEmpty(first.Sections);
             Assert.AreEqual(new Footing.Ready(), first.Footing);
-            Assert.AreEqual(new AccountsShown.Reading("Reading accounts…"), first.AccountsShown);
-            Assert.AreEqual("Pitboard", first.MenuBar.Spoken);
-            Assert.AreEqual("Not read yet", first.UpdatedMenu);
+            Assert.IsInstanceOfType<AccountsShown.Reading>(first.AccountsShown);
+            Assert.AreEqual("", first.MenuBar.NameAndUsage);
+            Assert.AreEqual("", first.UpdatedWindow);
             Assert.IsFalse(first.Machine.Schedule.On);
-            Assert.Contains("renews your parked logins once a day", first.Machine.Schedule.About);
             Assert.IsEmpty(first.Machine.Checks.Lines);
-            Assert.StartsWith("Checking ", first.Machine.Checks.Waiting!);
-            Assert.AreEqual(OperatingSystem.IsWindows() ? "No activity" : "No Activity", first.Machine.Activity.Empty?.Title);
+            Assert.IsNotNull(first.Machine.Checks.Waiting);
+            Assert.IsNotNull(first.Machine.Activity.Empty);
             Assert.IsNull(first.Machine.CommandLine.Found);
             Assert.AreEqual(0UL, model.Snapshot().Revision);
             Assert.IsEmpty(keeping.Told);
@@ -286,14 +292,15 @@ public sealed class ModelTests
                 Confirmed: new Intent.QuitAndSwitch("codex/spare"),
                 Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
-                Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed."),
-            WindowRequest = new WindowRequest(Serial: 3, Pane: Pane.Accounts),
+                Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed.",
+                Next: new NextStep.Learn(new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors"))),
+            WindowRequest = new WindowRequest(Serial: 3, Place: new Place.Accounts()),
         };
 
         Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), snapshot.QuitQuestion?.Confirmed);
         Assert.AreEqual("Couldn’t switch to spare", snapshot.FailureAlert?.Title);
-        Assert.AreEqual(Pane.Accounts, snapshot.WindowRequest.Pane);
-        Assert.AreEqual(new WindowRequest(3, Pane.Accounts), snapshot.WindowRequest);
+        Assert.IsInstanceOfType<Place.Accounts>(snapshot.WindowRequest.Place);
+        Assert.AreEqual(new WindowRequest(3, new Place.Accounts()), snapshot.WindowRequest);
     }
 
     [TestMethod]
@@ -301,14 +308,15 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.SignIn(Provider: "claude", Name: "travel"), new Intent.PasteCode(Code: "the-code#the-state"),
+            new Intent.SignIn(Provider: "claude", Again: "work"), new Intent.PasteCode(Code: "the-code#the-state"),
             new Intent.CancelSignIn(), new Intent.PresentSheet(Sheet: new Sheet.Add(Provider: null)),
-            new Intent.CloseSheet(),
+            new Intent.CloseSheet(), new Intent.SignIn(Provider: "codex", Again: null),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.SignIn("claude", "travel"), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.SignIn("codex", "travel"), intents[0]);
-        Assert.AreEqual("travel", intents.OfType<Intent.SignIn>().Single().Name);
+        Assert.AreEqual<Intent>(new Intent.SignIn("claude", "work"), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.SignIn("claude", null), intents[0]);
+        Assert.AreEqual("work", intents.OfType<Intent.SignIn>().First().Again);
+        Assert.IsNull(intents.OfType<Intent.SignIn>().Last().Again, "a new account, named once it is added");
         Assert.AreEqual("the-code#the-state", intents.OfType<Intent.PasteCode>().Single().Code);
         Assert.AreEqual<Intent>(new Intent.PresentSheet(new Sheet.Add(null)), intents[3]);
         Assert.AreNotEqual<Intent>(new Intent.PresentSheet(new Sheet.Add("codex")), intents[3]);
@@ -377,7 +385,9 @@ public sealed class ModelTests
         Assert.IsFalse(clear.Enabled);
         var failed = Assert.IsInstanceOfType<WaitingShown.ReadFailed>(snapshot.AccountWindows.Waiting.Shown);
         Assert.AreEqual("Try Again", failed.Retry.Title);
-        Assert.AreEqual("A download is in progress. Quit anyway?", PitboardFfiMethods.DownloadsQuitQuestion(1)?.Title);
+        Assert.AreEqual(
+            OperatingSystem.IsWindows() ? "A download is in progress. Exit anyway?" : "A download is in progress. Quit anyway?",
+            PitboardFfiMethods.DownloadsQuitQuestion(1)?.Title);
         Assert.IsNull(PitboardFfiMethods.DownloadsQuitQuestion(0));
 
         Intent[] intents =
@@ -404,13 +414,15 @@ public sealed class ModelTests
         Sheet[] sheets =
         [
             new Sheet.Add(Provider: "codex"), new Sheet.SignInAgain(Provider: "claude", Label: "work"),
-            new Sheet.Name(Provider: "codex", Email: "c@example.com"), new Sheet.Rename(Provider: "claude", Label: "home"),
+            new Sheet.Name(Provider: "codex", Label: "acme", Email: "c@example.com"),
+            new Sheet.Rename(Provider: "claude", Label: "home"),
         ];
 
         Assert.AreEqual<Sheet>(new Sheet.Add("codex"), sheets[0]);
         Assert.AreNotEqual<Sheet>(new Sheet.Add(null), sheets[0]);
         Assert.AreEqual("work", sheets.OfType<Sheet.SignInAgain>().Single().Label);
         Assert.AreEqual("c@example.com", sheets.OfType<Sheet.Name>().Single().Email);
+        Assert.AreEqual("acme", sheets.OfType<Sheet.Name>().Single().Label);
         Assert.AreNotEqual<Sheet>(new Sheet.Rename("claude", "work"), sheets[3]);
     }
 
@@ -424,7 +436,8 @@ public sealed class ModelTests
             Sheet = new Sheet.SignInAgain(Provider: "claude", Label: "work"),
             SheetFailure = new FailureText(
                 Id: 4, Title: "Couldn’t sign in to work", Message: "`claude` is not on this machine",
-                Warnings: ["The account in use is unchanged."]),
+                Warnings: ["The account in use is unchanged."],
+                Next: new NextStep.Learn(new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors#signing-in"))),
         };
 
         Assert.AreEqual(3UL, snapshot.SigningIn?.Id);
@@ -479,16 +492,16 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.ShowWindow(Pane: Pane.Machine), new Intent.ShowWindow(Pane: null), new Intent.DismissFailure(),
-            new Intent.Enrol(Provider: "codex", Name: "job"),
+            new Intent.Show(Place: new Place.Checks()), new Intent.Show(Place: null), new Intent.DismissFailure(),
+            new Intent.Enrol(Provider: "codex"),
             new Intent.Rename(Provider: "claude", Label: "work", To: "office"),
             new Intent.Forget(Qualified: "claude/spare"), new Intent.DeclineSecondAccount(Provider: "codex"),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.ShowWindow(Pane.Machine), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.ShowWindow(null), intents[0]);
-        Assert.IsNull(((Intent.ShowWindow)intents[1]).Pane);
-        Assert.AreEqual("job", intents.OfType<Intent.Enrol>().Single().Name);
+        Assert.AreEqual<Intent>(new Intent.Show(new Place.Checks()), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.Show(null), intents[0]);
+        Assert.IsNull(((Intent.Show)intents[1]).Place);
+        Assert.AreEqual("codex", intents.OfType<Intent.Enrol>().Single().Provider);
         Assert.AreEqual("office", intents.OfType<Intent.Rename>().Single().To);
         Assert.AreEqual("claude/spare", intents.OfType<Intent.Forget>().Single().Qualified);
         Assert.AreEqual(1, intents.OfType<Intent.DismissFailure>().Count());
@@ -499,9 +512,9 @@ public sealed class ModelTests
     public void ASnapshotSaysWhatTheMenuAndTheWindowShow()
     {
         var limit = new LimitRow(
-            Short: "5h", Percent: 72.4, Figure: "72%", Level: UsageLevel.Low,
-            Resets: "resets in 1h 05m", Pace: null,
-            Spoken: "5-hour limit, 72 percent used, resets in 1 hour, 5 minutes");
+            Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5-hour", Percent: 72.4, Figure: "72%",
+            Used: "72% used", Level: UsageLevel.Low, ResetsAt: 1_800_003_900, Resets: "Resets 09:05",
+            ResetsIn: "in 1 hr 5 min", Spoken: "5-hour limit, 72 percent used, resets 09:05");
         var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
         var window = new WindowAccount(
             Sites.ChatGpt, Label: "spare", Email: "spare@example.com", Store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40",
@@ -510,8 +523,19 @@ public sealed class ModelTests
             Id: "codex:spare", Qualified: "codex/spare", Title: "spare",
             Email: "spare@example.com", EmailLine: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
-            NeedsSignIn: false, Unplaced: false, End: new RowEnd.Button(use), Action: use,
-            Summary: "5-hour 72%", Notes: ["Parked login good for 3 more days"], Help: null, Limits: [limit],
+            NeedsSignIn: false, Standing: AccountStanding.Ready, Unplaced: false, End: new RowEnd.Button(use), Action: use,
+            Summary: "5-hour 72% used",
+            Notes:
+            [
+                new AccountNote(
+                    Kind: NoteKind.Expiring, Text: "Parked login good for 3 more days: sign in again to keep it",
+                    Action: null, Learn: null),
+            ],
+            Lines: ["Parked login good for 3 more days: sign in again to keep it"],
+            Detail: new AccountDetail(
+                Email: "spare@example.com", Plan: null, SignedInUntil: 1_800_259_200,
+                SignIn: "Parked login good for 3 more days", Warm: null, ReadAt: 1_800_000_000, Read: "Updated 08:00"),
+            Help: null, Limits: [limit],
             Offers:
             [
                 new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null),
@@ -527,7 +551,13 @@ public sealed class ModelTests
                 Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
                 Confirm: new Question(
                     Title: "Forget “spare (Codex)”?",
-                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")));
+                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")),
+            Actions:
+            [
+                new AccountAction(
+                    Kind: ActionKind.OpenWindow, Title: "Open chatgpt.com", Intent: null, Window: window, Enabled: true,
+                    Confirm: null),
+            ]);
         var giveUp = new NoticeAction(
             Title: "Give Up…", Intent: new Intent.AbandonStuckSwitch(), Dismisses: false, Switches: false,
             Enabled: true,
@@ -537,10 +567,10 @@ public sealed class ModelTests
         var stuck = new PanelNotice(
             Id: "stuck", Severity: Severity.Error, SpokenSeverity: "Problem", Title: "An interrupted switch is waiting",
             Lines: ["An interrupted switch can’t be finished until OpenAI answers."], Until: null, UntilLabel: null,
-            Actions: [giveUp]);
+            Actions: [giveUp], Learn: null);
         var others = new MenuEntry(
             Title: stuck.Title, Subtitle: "Show in Pitboard", Help: stuck.Lines[0], Severity: Severity.Error,
-            Intent: new Intent.ShowWindow(Pane.Accounts), Link: null, Enabled: true);
+            Intent: new Intent.Show(new Place.Accounts()), Link: null, Enabled: true);
         var snapshot = Read(6) with
         {
             Sections = [new AccountSection(Id: "codex", Heading: "Codex", Accounts: [spare])],
@@ -557,6 +587,13 @@ public sealed class ModelTests
         var row = snapshot.Sections[0].Accounts[0];
         Assert.AreEqual<Intent>(new Intent.SwitchTo("codex/spare"), row.Action?.Intent);
         Assert.AreEqual(UsageLevel.Low, row.Limits[0].Level);
+        Assert.IsInstanceOfType<LimitKind.FiveHour>(row.Limits[0].Kind);
+        Assert.AreEqual(1_800_003_900L, row.Limits[0].ResetsAt);
+        Assert.AreEqual(NoteKind.Expiring, row.Notes[0].Kind);
+        Assert.AreEqual(1_800_259_200L, row.Detail.SignedInUntil);
+        Assert.AreEqual(ActionKind.OpenWindow, row.Actions[0].Kind);
+        Assert.AreEqual("chatgpt.com", row.Actions[0].Window?.Site.Host);
+        Assert.AreEqual(1_800_000_000L, snapshot.UpdatedAt);
         Assert.AreEqual<Intent>(row.Action!.Intent, row.Offers[0].Intent);
         Assert.IsFalse(row.Offers[1].Enabled);
         Assert.AreEqual("chatgpt.com", row.Windows[0].Window.Site.Host);
@@ -566,7 +603,7 @@ public sealed class ModelTests
         Assert.IsTrue(snapshot.Notices[0].Severity > Severity.Warning);
         Assert.AreEqual<Intent>(new Intent.AbandonStuckSwitch(), snapshot.Notices[0].Actions[0].Intent);
         Assert.AreEqual("Give Up", snapshot.Notices[0].Actions[0].Confirm?.Confirm);
-        Assert.AreEqual<Intent?>(new Intent.ShowWindow(Pane.Accounts), snapshot.MenuNotices.Others?.Intent);
+        Assert.AreEqual<Intent?>(new Intent.Show(new Place.Accounts()), snapshot.MenuNotices.Others?.Intent);
         Assert.AreEqual(new Footing.OnlyOne("claude", "work"), snapshot.Footing);
         Assert.IsInstanceOfType<Intent.PresentSheet>(snapshot.Setup?.Actions[0].Intent);
         Assert.AreEqual("Try Again", ((AccountsShown.ReadFailed)snapshot.AccountsShown).Retry.Title);
@@ -578,13 +615,13 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.PaneShown(Pane: Pane.Machine), new Intent.PaneShown(Pane: Pane.Activity),
+            new Intent.PaneShown(Pane: Pane.Checks), new Intent.PaneShown(Pane: Pane.Activity),
             new Intent.ReadSchedule(), new Intent.SetSchedule(On: true), new Intent.LookForCommandLine(),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.PaneShown(Pane.Machine), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.PaneShown(Pane.Machine), intents[1]);
-        Assert.AreNotEqual<Intent>(new Intent.ShowWindow(Pane.Machine), intents[0]);
+        Assert.AreEqual<Intent>(new Intent.PaneShown(Pane.Checks), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.PaneShown(Pane.Checks), intents[1]);
+        Assert.AreNotEqual<Intent>(new Intent.Show(new Place.Checks()), intents[0]);
         Assert.IsTrue(intents.OfType<Intent.SetSchedule>().Single().On);
         Assert.AreNotEqual<Intent>(new Intent.SetSchedule(false), intents[3]);
         Assert.AreEqual(1, intents.OfType<Intent.ReadSchedule>().Count());
@@ -638,16 +675,21 @@ public sealed class ModelTests
     [TestMethod]
     public void ANameComesWithWhatItsSheetSends()
     {
-        var named = new Sheet.Name("claude", "a@example.com");
-        Assert.AreEqual(new NameCheck(null, new Intent.Enrol("claude", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
-        Assert.AreEqual(new NameCheck(null, null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
+        var named = new Sheet.Name("claude", "acme", "a@example.com");
+        Assert.AreEqual(
+            new NameCheck(null, new Intent.Rename("claude", "acme", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
+        Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardFfiMethods.CheckName(named, "claude", " acme"));
+        Assert.AreEqual(new NameCheck("Type a name for this account.", null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
         Assert.IsNull(PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
         Assert.AreEqual(
             new Intent.SignIn("codex", "work"),
             PitboardFfiMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "codex", "").Intent);
         Assert.AreEqual(
-            new NameCheck("A name can’t contain “/”. Choose the tool above.", null),
-            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"));
+            new NameCheck(null, new Intent.SignIn("codex", null)),
+            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"),
+            "a new account is named once it is added");
+        Assert.AreEqual(
+            new NameCheck("A name can’t contain “/”.", null), PitboardFfiMethods.CheckName(named, "claude", "codex/phu"));
     }
 
     private sealed class Waiting : ModelListener
@@ -718,7 +760,7 @@ public sealed class ModelTests
         [
             "twoTools", "oneTool", "empty", "firstLaunch", "noClaudeCode", "unnamed", "onlyOne",
             "readFailure", "stuck", "chatGPTOpen", "claudeDesktop", "claudeDesktopOpen",
-            "warmUp", "leftInFile", "loginReplaced",
+            "warmUp", "leftInFile", "loginReplaced", "switchedByItself",
         ];
         CollectionAssert.AreEqual(ordered, names);
         var unknown = Assert.ThrowsExactly<FixtureException.Unknown>(
@@ -877,8 +919,9 @@ public sealed class ModelTests
         [
             new(
                 Id: $"claude/personal/session/-{resetsAt}",
-                Title: "personal has no 5-hour limit left", Subtitle: null, Body: "work has 58% of its own left.",
-                Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work")),
+                Title: LimitReached, Subtitle: "Claude Code", Body: "personal has used 100%. work has used 42%.",
+                Clicked: "accounts",
+                Button: new NotificationButton(OperatingSystem.IsWindows() ? "Switch to work" : "Switch", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
     }
@@ -898,10 +941,10 @@ public sealed class ModelTests
 
         var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
         var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
-        Assert.AreEqual("A login was replaced outside Pitboard", notice.Title);
+        Assert.AreEqual(OperatingSystem.IsWindows() ? "Sign-in replaced" : "Sign-In Replaced", notice.Title);
         Assert.AreEqual(
-            "work’s login was replaced by a sign-in outside Pitboard: Claude Code now has personal’s login stored, " +
-            "and Pitboard holds no login for work.",
+            "work’s sign-in was replaced outside Pitboard: Claude Code is now signed in to personal, " +
+            "and Pitboard has no sign-in saved for work.",
             notice.Body);
         Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
     }
@@ -917,7 +960,7 @@ public sealed class ModelTests
         // The login replaced, then the run-out of the account in use, the last refused.
         Assert.HasCount(2, posting.Posted.Until(2, Patience));
 
-        model.Send(new Intent.PaneShown(Pane.Machine));
+        model.Send(new Intent.PaneShown(Pane.Checks));
         var checkedIn = waiting.Until(
             snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Name == "Notifications", Patience);
         model.Shutdown();
@@ -925,9 +968,12 @@ public sealed class ModelTests
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
         var line = checkedIn.Machine.Checks.Lines[^1];
         Assert.AreEqual(Level.Warn, line.Level);
-        Assert.StartsWith("“personal has no 5-hour limit left” not posted at ", line.Detail);
+        Assert.StartsWith($"“{LimitReached}” not posted at ", line.Detail);
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);
     }
+
+    // A notification's title, in the case each system gives one.
+    private static string LimitReached => OperatingSystem.IsWindows() ? "5-hour limit reached" : "5-Hour Limit Reached";
 
     private static bool LibraryIsOpened =>
         typeof(ModelTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()

@@ -276,7 +276,7 @@ test.describe("on macOS", () => {
     await page.locator(mac.item).click();
     await hold(page);
     const home = page.locator(mac.account("home"));
-    await expect(home).toHaveAccessibleDescription("Read 2h 06m ago, with Claude closed");
+    await expect(home).toHaveAccessibleDescription("Read 2 hr 6 min ago, with Claude closed");
     await home.hover();
     const tip = page.locator("#hero-mac-tip-home");
     await page.clock.runFor(900);
@@ -382,10 +382,10 @@ test.describe("on Windows", () => {
     await page.clock.runFor(200);
     await expect(tip).toBeVisible();
     await expect(tip).toHaveText(
-      "Pitboardwork (Claude Code): 5-hour 12%, weekly 40%main (Codex): Weekly 7%",
+      "Pitboardwork (Claude Code): 5-hour 12% used, weekly 40%main (Codex): Weekly 7% used",
     );
     await expect(page.locator(win.icon)).toHaveAccessibleName(
-      "Pitboard work (Claude Code): 5-hour 12%, weekly 40% main (Codex): Weekly 7%",
+      "Pitboard work (Claude Code): 5-hour 12% used, weekly 40% main (Codex): Weekly 7% used",
     );
   });
 
@@ -425,7 +425,7 @@ test.describe("on Windows", () => {
     await page.locator(win.icon).click({ button: "right" });
     await hold(page);
     const work = page.locator(win.account("work"));
-    await expect(work).toHaveAccessibleDescription("5-hour 12%, weekly 40%");
+    await expect(work).toHaveAccessibleDescription("5-hour 12% used, weekly 40%");
     await work.hover();
     const tip = page.locator("#hero-win-tip-work");
     await page.clock.runFor(700);

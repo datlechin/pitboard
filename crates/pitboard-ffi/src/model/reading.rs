@@ -279,7 +279,7 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
         machine.posted,
         [RunOutNotice {
             id: "warning/login_replaced/claude:work".into(),
-            title: "A login was replaced outside Pitboard".into(),
+            title: words::sign_in_replaced(OS),
             subtitle: None,
             body: replaced.message.clone(),
             clicked: "accounts".into(),
@@ -415,9 +415,9 @@ fn a_parked_login_that_stops_being_usable_is_posted_once() {
         machine.posted,
         [RunOutNotice {
             id: "unusable/claude:work".into(),
-            title: words::needs_signing_in("work"),
-            subtitle: None,
-            body: words::UNUSABLE_LOGIN.into(),
+            title: words::sign_in_title(OS, Standing::LoginExpired),
+            subtitle: Some("Claude Code".into()),
+            body: words::sign_in_to_keep("work"),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
                 title: words::sign_in_again(OS, false),

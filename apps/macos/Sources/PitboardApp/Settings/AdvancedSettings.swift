@@ -11,7 +11,7 @@ struct AdvancedSettings: View {
         Form {
             Section {
                 Toggle(
-                    "Renew parked logins daily",
+                    "Keep Saved Sign-Ins Fresh",
                     isOn: Binding(
                         get: { schedule.on }, set: { model.send(.setSchedule(on: $0)) })
                 )
@@ -41,6 +41,7 @@ struct AdvancedSettings: View {
                             Task { await link.install() }
                         }
                         .disabled(link.linking)
+                        .accessibilityIdentifier("settings.installCommandLine")
                     } label: {
                         Text(
                             "Links \(link.target) to the one inside this app. macOS asks for "

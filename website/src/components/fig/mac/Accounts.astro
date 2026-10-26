@@ -2,8 +2,8 @@
 // AccountRow.swift, UsageBar.swift, NoticeRow.swift for the notices a switch leaves, and the step
 // AccountsPane.swift shows a tool with one account. The list is a grid of one row an account, a
 // row group a tool, each named as VoiceOver hears it. Every node a state shows is drawn: each
-// tool's notice, the step, each row's ends, and templates for a row, a limit and a note; the
-// shortcut menu, the Forget alert and the sheets wait over the desk. live/accounts.ts follows the
+// tool's notice, the step, each row's ends, and templates for a row, a limit and a line; the
+// shortcut menu, the Remove alert and the sheets wait over the desk. live/accounts.ts follows the
 // one state with them. Shown on another pane, the window draws its list's rows once the pane shows.
 import ActivityTable from "./ActivityTable.astro";
 import Alert from "./Alert.astro";
@@ -15,11 +15,11 @@ import {
   ACCOUNT,
   CANCEL,
   DISMISS,
-  FORGET,
-  FORGET_OFFER,
   NAME,
+  REMOVE,
   RENAME,
   RENAME_OFFER,
+  SWITCH,
   TOOL,
   addAccountAsks,
   copyEmail,
@@ -27,10 +27,12 @@ import {
   inUse,
   keysOf,
   notNow,
+  removeAccount,
   severitySaid,
-  signIn,
   signInAgain,
+  signInAsking,
   signInPage,
+  switchBack,
   switchedTo,
   sessionsFollowIn,
   warmUpNow,
@@ -44,12 +46,9 @@ import {
   isInUse,
   limitRow,
   listed,
-  notes,
-  spokenLimit,
-  useSpoken,
+  rowLines,
+  switchSpoken,
   warmsAgainNote,
-  whole,
-  type LimitRow,
 } from "../../../lib/words.ts";
 
 interface Props {
@@ -93,7 +92,6 @@ const ruled =
 const fill = { g: "fill-mac-window-green", y: "fill-mac-window-orange", r: "fill-mac-window-red" };
 const fillBy =
   "data-[state=g]:fill-mac-window-green data-[state=y]:fill-mac-window-orange data-[state=r]:fill-mac-window-red";
-const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-mac-window-red";
 ---
 
 <Window
@@ -146,6 +144,10 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
             hidden={tool !== "claude"}
             >{sessionsFollowIn(name)} 0:21</span
           >
+          {/* a switch Pitboard made by itself offers Switch Back */}
+          <span class="mt-8 flex gap-8" data-part="actions" hidden>
+            <Button data-does="switch-back">{switchBack("macos")}</Button>
+          </span>
         </span>
         <button
           class="-mr-1 shrink-0 text-mac-window-sub live:cursor-default"
@@ -208,7 +210,7 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
       </div>
       {(rows ? listed(world, tool) : []).map((a) => {
         const on = isInUse(a, world);
-        const said = notes(a, world, warmsAgainNote(a));
+        const said = rowLines(a, world, warmsAgainNote(a));
         // each row's rule starts under its name
         return <div
           class={row}
@@ -259,8 +261,8 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
                 </svg>
                 {inUse("macos")}
               </span>
-              <Button aria-label={on ? undefined : useSpoken(a)} data-does="use" hidden={on}
-                >Use</Button
+              <Button aria-label={on ? undefined : switchSpoken(a)} data-does="use" hidden={on}
+                >{SWITCH}</Button
               >
               <span class="text-mac-window-sub" data-part="switching" hidden>
                 <Spinner label="Switching" />
@@ -268,23 +270,17 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
             </div>
             {/* macOS 27 sets a gauge's words 1.5 points above its middle */}
             <div
-              class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums"
+              class="mt-8 grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums"
               data-part="limits"
               hidden={a.limits.length === 0}
             >
               {a.limits.map((limit) => {
-                const l: LimitRow = limitRow(limit, world);
-                const s = l.pace?.standing;
-                // the mark at the whole percent its pace is said in
-                const even = whole(l.pace?.expected ?? 0);
-                const marked = s !== undefined && s !== "even";
+                const l = limitRow(limit, world);
                 return <div class="contents" data-part="limit">
                   {/* the row read as one sentence, and not the bar and each figure on their own */}
                   <span class:list={["-mt-2.5 text-mac-window-sub", picked]}
                     ><span aria-hidden="true" data-part="short">{l.short}</span
-                    ><span class="sr-only" data-part="spoken"
-                      >{spokenLimit(limit, world)}</span
-                    ></span
+                    ><span class="sr-only" data-part="spoken">{l.spoken}</span></span
                   >
                   <svg
                     aria-hidden="true"
@@ -313,27 +309,6 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
                       ry="2.25"
                       vector-effect="non-scaling-stroke"
                     />
-                    <g data-part="mark" {...(marked ? {} : { hidden: true })}>
-                      <rect
-                        class="fill-mac-window-bg"
-                        x={even - 2}
-                        y="-3"
-                        width="4"
-                        height="22"
-                        rx="2"
-                        ry="2"
-                      />
-                      <rect
-                        class={markBy}
-                        x={even - 1}
-                        y="-3"
-                        width="2"
-                        height="22"
-                        rx="1"
-                        ry="1"
-                        data-state={s ?? "even"}
-                      />
-                    </g>
                   </svg>
                   <span
                     class:list={["-mt-2.5 min-w-38 text-right", picked]}
@@ -346,17 +321,6 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
                     aria-hidden="true"
                     data-part="resets"
                     >{l.resets}</span
-                  >
-                  {/* UsageBar.swift tints only over pace */}
-                  <span
-                    aria-hidden="true"
-                    class:list={[
-                      "-mt-2.5 min-w-100 text-mac-window-sub data-[state=over]:text-mac-window-red",
-                      picked,
-                    ]}
-                    data-part="pace"
-                    data-state={s ?? "even"}
-                    >{l.pace?.said}</span
                   >
                 </div>;
               })}
@@ -391,13 +355,15 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
       <div class={sep} role="separator" data-after="open"></div>
       <div class={item} role="menuitem" tabindex="-1" data-offer="copy">{copyEmail("macos")}</div>
       <div class={sep} role="separator" data-after="copy"></div>
-      <div class={item} role="menuitem" tabindex="-1" data-offer="forget">{FORGET_OFFER}</div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="forget">
+        {removeAccount("macos")}
+      </div>
     </div>
     {/* the templates and the dialogs every view of the window shares, drawn once with its top
        view's: each opens anchored over the window it is opened from */}
     {crop && (
       <>
-        {/* an account a visitor adds, a limit its first read finds, and a note */}
+        {/* an account a visitor adds, a limit its first read finds, and a line */}
         <template data-part="row">
           <div class={row} role="row" aria-selected="false">
             <div role="gridcell">
@@ -438,13 +404,13 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
                   </svg>
                   {inUse("macos")}
                 </span>
-                <Button data-does="use">Use</Button>
+                <Button data-does="use">{SWITCH}</Button>
                 <span class="text-mac-window-sub" data-part="switching" hidden>
                   <Spinner label="Switching" />
                 </span>
               </div>
               <div
-                class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums"
+                class="mt-8 grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums"
                 data-part="limits"
                 hidden
               ></div>
@@ -478,10 +444,6 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
                 ry="2.25"
                 vector-effect="non-scaling-stroke"
               />
-              <g data-part="mark" {...hide(true)}>
-                <rect class="fill-mac-window-bg" x="0" y="-3" width="4" height="22" rx="2" ry="2" />
-                <rect class={markBy} x="0" y="-3" width="2" height="22" rx="1" ry="1" />
-              </g>
             </svg>
             <span
               class:list={["-mt-2.5 min-w-38 text-right", picked]}
@@ -492,14 +454,6 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
               class:list={["-mt-2.5 min-w-110 text-right text-mac-window-sub", picked]}
               aria-hidden="true"
               data-part="resets"
-            ></span>
-            <span
-              aria-hidden="true"
-              class:list={[
-                "-mt-2.5 min-w-100 text-mac-window-sub data-[state=over]:text-mac-window-red",
-                picked,
-              ]}
-              data-part="pace"
             ></span>
           </div>
         </template>
@@ -515,13 +469,13 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
           >
             {CANCEL}
           </button>
-          {/* Cancel, then Forget, and neither the default: Return presses neither */}
+          {/* Cancel, then Remove, and neither the default: Return presses neither */}
           <button
             class="h-30 rounded-pill bg-mac-destructive text-mac-window-red outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
             type="button"
             data-does="forget"
           >
-            {FORGET}
+            {REMOVE}
           </button>
         </Alert>
         <Sheet id="mac-accounts-rename">
@@ -541,7 +495,7 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
           </div>
           <Fragment slot="buttons">
             <Button data-does="cancel">{CANCEL}</Button>
-            <Button default type="submit" value="rename">{RENAME}</Button>
+            <Button default type="submit" value="rename" data-part="confirm">{RENAME}</Button>
           </Fragment>
         </Sheet>
         <Sheet id="mac-accounts-sign-in">
@@ -598,16 +552,6 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
                 </span>
               </span>
             </div>
-            <label class:list={[formRow, ruled]} data-part="name">
-              <span class="flex-1">{NAME}</span>
-              <input
-                class={field}
-                name="name"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="work"
-              />
-            </label>
             <div class:list={[formRow, ruled]} data-part="account">
               <span class="flex-1">{ACCOUNT}</span>
               <span data-part="label"></span>
@@ -631,7 +575,7 @@ const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-
             <Button data-does="cancel">{CANCEL}</Button>
             <Button data-does="put-back" hidden />
             <Button default type="submit" value="sign-in" data-part="confirm"
-              >{signIn("macos")}</Button
+              >{signInAsking("macos")}</Button
             >
           </Fragment>
         </Sheet>

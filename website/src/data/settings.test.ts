@@ -11,7 +11,7 @@ import {
   winAbout,
   winGeneral,
 } from "./settings.ts";
-import { checksOf, checking, checkedAt, spokenLevel } from "./machine.ts";
+import { appNames, checksOf, checking, checkedAt, spokenLevel } from "./machine.ts";
 import { rowsOf } from "../lib/doctor.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -54,18 +54,27 @@ test("Windows' General says what SettingsPage.xaml and the updater give it", () 
 });
 
 test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and words.rs give it", () => {
-  assert.ok(mac("Settings/AdvancedSettings.swift").includes(`"${renew}"`));
+  assert.ok(mac("Settings/AdvancedSettings.swift").includes(`"${renew.macos}"`));
   assert.ok(mac("Settings/AdvancedSettings.swift").includes(`LabeledContent("${inTerminal}")`));
-  assert.ok(win("Pitboard.Views/SettingsPage.xaml").includes(`Header="${renew}"`));
+  assert.ok(win("Pitboard.Views/SettingsPage.xaml").includes(`Header="${renew.windows}"`));
   assert.ok(words.includes(`"${updateNote}"`));
-  assert.ok(words.includes('Os::MacOs => "Your Mac’s own scheduler"'));
+  const joined = words.replace(/\\\n\s*/g, "");
   assert.ok(
-    words.includes(
-      '"{scheduler} renews your parked logins once a day, so one you leave alone doesn’t expire."',
+    joined.includes('Os::MacOs => "Your Mac",') && joined.includes('Os::Windows => "Your PC",'),
+  );
+  assert.ok(
+    joined.includes(
+      '"{machine} refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t expire."',
     ),
   );
-  assert.ok(words.includes('"{about} A parked Claude Desktop login is never renewed."'));
-  assert.ok(renewalAbout("macos").endsWith("A parked Claude Desktop login is never renewed."));
+  assert.ok(
+    joined.includes(
+      '"{machine} refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire."',
+    ),
+  );
+  // the page's Mac has Claude Desktop accounts, and its PC none
+  assert.ok(renewalAbout("macos").includes("except Claude Desktop’s"));
+  assert.ok(renewalAbout("windows").startsWith("Your PC refreshes your saved sign-ins"));
 });
 
 test("the About panel numbers a build as build-number.sh does", () => {
@@ -94,9 +103,24 @@ test("This Mac words doctor's checks as present/machine.rs does", () => {
   assert.equal(lines.find((l) => l.name === "In use")?.detail, "personal, as Anthropic said 20:50");
   assert.equal(lines.find((l) => l.name.startsWith("Claude Code’s new"))?.detail, "Inactive");
   // advice under a check that passed is not shown
-  assert.equal(lines.find((l) => l.name === "Codex login store")?.advice, null);
-  assert.ok(words.includes('"storage_v5" => "Claude Code’s new login storage".into(),'));
+  assert.equal(lines.find((l) => l.name === "Codex sign-in store")?.advice, null);
+  // the app's own names, by doctor's codes, and the name doctor prints for each
+  const checkName = words.slice(words.indexOf("fn check_name("), words.indexOf("fn check_text("));
+  assert.deepEqual(
+    appNames.map(([code, , app]) => [code, app]),
+    [...checkName.matchAll(/"(\w+)" => "([^"]+)",/g)].map(([, code, name]) => [code, name]),
+  );
+  const doctor = ["claude.rs", "codex.rs", "desktop.rs", "machine.rs", "parks.rs"]
+    .map((f) => repo(`crates/pitboard-core/src/doctor/${f}`))
+    .join("\n")
+    .replace(/\s+/g, " ");
+  for (const [code, name] of appNames)
+    assert.ok(
+      doctor.includes(`"${code}", "${name}"`) || doctor.includes(`let name = "${name}";`),
+      code,
+    );
   assert.ok(words.includes(`Level::Ok => "${spokenLevel.ok}"`));
+  assert.ok(words.includes(`Level::Warn => "${spokenLevel.warn}"`));
   assert.ok(words.includes('format!("Checked at {clock}")'));
   assert.equal(checkedAt("20:51"), "Checked at 20:51");
   assert.equal(checking("windows"), "Checking this PC…");

@@ -2,6 +2,7 @@
 //! what forgetting an account deletes of its window.
 
 use super::{stores, this_machine};
+use crate::present::words;
 use crate::{Account, Site};
 use pitboard_core::host::Os;
 use pitboard_sites::Conjunction;
@@ -70,7 +71,7 @@ pub(crate) fn window_accounts(accounts: &[Account]) -> Vec<WindowAccount> {
                 store: stores::derive(site.store_name, &account.account_id),
                 in_use: account.signed_in,
                 title: if shared {
-                    format!("{label} ({})", site.name())
+                    words::named_with_tool(label, site.name())
                 } else {
                     label.to_owned()
                 },
@@ -113,12 +114,12 @@ pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
                 1 => {
                     let window = mine.remove(0);
                     Some(SiteMenu::One {
-                        title: format!("Open {} as {}", site.name(), window.label),
+                        title: words::open_site_as(site.name(), &window.label),
                         window,
                     })
                 }
                 _ => Some(SiteMenu::Several {
-                    title: format!("Open {}", site.name()),
+                    title: words::open_site(site.name()),
                     site: (*site).into(),
                     windows: mine,
                 }),
@@ -127,23 +128,20 @@ pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
         .collect()
 }
 
-/// What the alert asking to forget `account` says, among `accounts`, on `os`: the question
-/// an account's Forget… asks first, which the snapshot carries as `AccountItem::forget`.
-/// Forgetting an account that has a window deletes what that window keeps too, and a person
-/// deciding should know.
+// What Remove Account… asks, which names what the account's windows keep too.
 pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account]) -> String {
     if crate::model::state::in_its_app(&account.provider) {
         let app = pitboard_core::provider::ProviderId::parse(&account.provider)
             .map_or(account.provider.as_str(), |tool| tool.program());
         return format!(
-            "Pitboard deletes the login it parked for this account and the folders set aside \
-             for it. Using it again needs a sign-in in {app}."
+            "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using \
+             it again needs a sign-in in {app}."
         );
     }
     let windows = windows_of_account(account, accounts);
     if windows.is_empty() {
-        return "Pitboard deletes the login it parked for this account. Using it again needs a \
-                sign-in in your browser."
+        return "Pitboard deletes this account’s saved sign-in. Using it again needs a sign-in in \
+                your browser."
             .into();
     }
     let sites: Vec<&str> = windows
@@ -151,8 +149,8 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
         .map(|window| window.site.name.as_str())
         .collect();
     format!(
-        "Pitboard deletes the login it parked for this account, and everything its {} window \
-         keeps on {}, its sign-in included. Using it again needs a sign-in in your browser.",
+        "Pitboard deletes this account’s saved sign-in, and everything its {} window keeps on \
+         {}, its sign-in included. Using it again needs a sign-in in your browser.",
         pitboard_sites::listed(&sites, Conjunction::And),
         this_machine(os)
     )
@@ -261,7 +259,14 @@ pub(crate) mod tests {
             account(Some("home"), "claude", "c"),
         ]);
         let titles: Vec<&str> = windows.iter().map(|w| w.title.as_str()).collect();
-        assert_eq!(titles, ["work (claude.ai)", "work (chatgpt.com)", "home"]);
+        assert_eq!(
+            titles,
+            [
+                words::named_with_tool("work", "claude.ai").as_str(),
+                &words::named_with_tool("work", "chatgpt.com"),
+                "home"
+            ]
+        );
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["work", "work", "home"]);
     }
@@ -285,9 +290,9 @@ pub(crate) mod tests {
         else {
             panic!("an item for claude.ai and a submenu for chatgpt.com: {menus:?}");
         };
-        assert_eq!(title, "Open claude.ai as work");
+        assert_eq!(*title, words::open_site_as("claude.ai", "work"));
         assert_eq!(window.label, "work");
-        assert_eq!(several, "Open chatgpt.com");
+        assert_eq!(*several, words::open_site("chatgpt.com"));
         assert_eq!(site.host, "chatgpt.com");
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["main", "spare"]);
@@ -312,44 +317,44 @@ pub(crate) mod tests {
         assert!(windows_of_account(&unplaced("codex"), &all()).is_empty());
     }
 
-    /// Forgetting an account that has a window deletes what that window keeps too, and a
-    /// person deciding should know. The Mac's words are the Swift test's.
+    /// Removing an account that has a window deletes what that window keeps too, and a
+    /// person deciding should know.
     #[test]
-    fn the_forget_alert_names_the_windows_data() {
+    fn the_remove_alert_names_the_windows_data() {
         let work = || account(Some("work"), "claude", "a");
         assert_eq!(
             forget_message_on(Os::MacOs, &work(), &[work()]),
-            "Pitboard deletes the login it parked for this account, and everything its \
-             claude.ai window keeps on this Mac, its sign-in included. Using it again needs a \
-             sign-in in your browser."
+            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
+             keeps on this Mac, its sign-in included. Using it again needs a sign-in in your \
+             browser."
         );
         assert_eq!(
             forget_message_on(Os::Linux, &work(), &[work()]),
-            "Pitboard deletes the login it parked for this account, and everything its \
-             claude.ai window keeps on this computer, its sign-in included. Using it again \
-             needs a sign-in in your browser."
+            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
+             keeps on this computer, its sign-in included. Using it again needs a sign-in in \
+             your browser."
         );
         assert_eq!(
             forget_message_on(Os::Windows, &work(), &[work()]),
-            "Pitboard deletes the login it parked for this account, and everything its \
-             claude.ai window keeps on this PC, its sign-in included. Using it again needs a \
-             sign-in in your browser."
+            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
+             keeps on this PC, its sign-in included. Using it again needs a sign-in in your \
+             browser."
         );
         let api = || unplaced("codex");
-        let said = "Pitboard deletes the login it parked for this account. Using it again needs \
-                    a sign-in in your browser.";
+        let said = "Pitboard deletes this account’s saved sign-in. Using it again needs a \
+                    sign-in in your browser.";
         for os in [Os::MacOs, Os::Linux, Os::Windows] {
             assert_eq!(forget_message_on(os, &api(), &[api()]), said);
         }
     }
 
     #[test]
-    fn forgetting_a_claude_desktop_account_says_it_needs_a_sign_in_in_claude() {
+    fn removing_a_claude_desktop_account_says_it_needs_a_sign_in_in_claude() {
         let home = account(Some("home"), "desktop", "5b1e");
         assert_eq!(
             forget_message_on(Os::MacOs, &home, std::slice::from_ref(&home)),
-            "Pitboard deletes the login it parked for this account and the folders set aside \
-             for it. Using it again needs a sign-in in Claude."
+            "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using \
+             it again needs a sign-in in Claude."
         );
     }
 }

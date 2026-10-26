@@ -21,9 +21,8 @@ import {
   listed,
   menuLine,
   menuTitle,
-  notes,
-  spokenLimit,
-  useSpoken,
+  rowLines,
+  switchSpoken,
   warmsAgainNote,
   toolAccounts,
   toolsOn,
@@ -56,7 +55,7 @@ export const itemTitle = (a: Account) =>
   a.limits.length > 0 ? `${menuTitle(a)} · ${fullest(a)}%` : menuTitle(a);
 
 // IconMenu.cs `Entries`, a group between each two separators. A beta's menu has no Check for updates.
-// An account's tooltip is the line the menu bar app shows under it.
+// An account's tooltip is the line the menu bar app shows under it, in sentence case.
 export function iconMenu(w: World, updates: boolean): MenuEntry[][] {
   return [
     ...toolsOn("windows").map(([tool, name]) => [
@@ -65,7 +64,7 @@ export function iconMenu(w: World, updates: boolean): MenuEntry[][] {
         account: itemTitle(a),
         label: a.label,
         checked: isInUse(a, w),
-        tip: menuLine(a, w),
+        tip: menuLine(a, w, "windows"),
       })),
     ]),
     [{ command: "Add account…" }, { command: "Refresh" }],
@@ -97,7 +96,8 @@ export const switchNotice = {
   countdown: "Claude Code sessions already open follow in 0:21",
 };
 
-// AccountRow.xaml: its notes are the problem, the pace, the parked login's life and the warm-up.
+// AccountRow.xaml: its lines are when a login in use was read, a sign-in that has expired or soon
+// does, and the warm-up.
 export function accountsPage(w: World, notice: typeof switchNotice | null) {
   return {
     title: "Accounts",
@@ -115,9 +115,9 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
           email: a.email,
           inUse,
           spoken: accountSpoken(a, w),
-          action: inUse ? null : { title: "Use", spoken: useSpoken(a) },
-          limits: a.limits.map((l) => ({ ...limitRow(l, w), spoken: spokenLimit(l, w) })),
-          notes: notes(a, w, warmsAgainNote(a)),
+          action: inUse ? null : { title: "Switch", spoken: switchSpoken(a) },
+          limits: a.limits.map((l) => limitRow(l, w)),
+          lines: rowLines(a, w, warmsAgainNote(a)),
         };
       }),
     })),
@@ -125,7 +125,7 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
 }
 
 // SettingsPage.xaml's Limits, with machine.rs's words under When a limit reaches, set to Switch
-// automatically, and Warm up limits open on its hours and machine.rs's rows
+// automatically, and Warm-up open on its hours and machine.rs's rows
 export const settingsPage = {
   title: "Settings",
   section: "Limits",
@@ -135,13 +135,13 @@ export const settingsPage = {
     label: `When a limit reaches ${share}%`,
     choice: "Switch automatically",
     standing: `Watching work: 40% of its weekly limit, as of ${hm(clock.read)}.`,
-    note: `Pitboard switches Claude Code once a limit of the account in use reaches ${share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about 33 seconds.`,
+    note: `Pitboard switches Claude Code at ${share}%, and its running sessions follow within about 33 seconds.`,
     terms: "Anthropic’s terms may cover automatic switching and warm-ups.",
     link: "Is this allowed?",
   },
-  share: { header: "Share of a limit", range: "From 50% to 99%", value: share },
+  share: { header: "At", range: "From 50% to 99%", value: share },
   warm: {
-    header: "Warm up limits",
+    header: "Warm-up",
     range: `${warmUp.from} to ${warmUp.to}`,
     standing: `Next warm-up: ${warmUp.accounts[0]} at ${hm(clock.warmsAgain)}.`,
     hours: [
@@ -168,8 +168,8 @@ export const activityPage = {
 // The notification at the share: title, tool and body, and its one button (WindowsNotifications.cs)
 export const toast = {
   app,
-  title: headsUp.title,
+  title: headsUp.title.windows,
   tool: headsUp.tool,
   body: headsUp.body,
-  button: headsUp.button,
+  button: headsUp.button.windows,
 };

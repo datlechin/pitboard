@@ -40,9 +40,10 @@ pub use sites::{Site, SiteLink};
 mod model;
 pub use model::{
     AppControl, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences, EarlierWindowRecords, Intent,
-    LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications, Pane,
-    PitboardModel, PlatformError, ReadFailure, RunOutNotice, RunningSignIn, Sheet, Snapshot, Tip,
-    WindowRequest, WindowsLaunch,
+    LocalTime, ModelListener, NotificationButton, NotificationButtonKind, Notifications,
+    OutsideAnswer, OutsideAsk, Pane, PitboardModel, Place, PlatformError, ReadFailure,
+    RunOutNotice, RunningSignIn, SettingsSection, Sheet, Snapshot, Tip, WindowRequest,
+    WindowsLaunch,
 };
 
 // The fixtures, which the `fixture` feature compiles; what is exported of them is the same
@@ -52,15 +53,21 @@ pub use fixture::{FixtureError, fixture_names, fixture_page};
 
 mod present;
 pub use present::{
-    AccountItem, AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown,
-    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice,
-    CommandLineShown, DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction,
-    ItemOffer, LimitPace, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices,
-    Missing, NameCheck, NoticeAction, OpenWindow, PaceStanding, PageLoad, PanelNotice,
-    PickerAccount, PickerShown, Question, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
-    SheetText, SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown,
-    WarmAccountShown, WarmShown, WindowOffer, WindowQuestion, WindowWaiting, check_name,
-    downloads_quit_question,
+    AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
+    AccountStanding, AccountWindowsShown, AccountsShown, ActionKind, ActivityLine, ActivityShown,
+    AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
+    DownloadState, EmptyList, FailureText, Footing, ItemAction, ItemOffer, LimitKind, LimitRow,
+    LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing, NameCheck, NextStep,
+    NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount, PickerShown,
+    Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity, SheetText,
+    SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown,
+    WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool, WindowOffer,
+    WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+};
+pub use present::{
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
+    already_there, app_words, install_update, links_to, named_version, path_too_long,
+    ready_to_install, webview_runtime_too_old,
 };
 
 mod account_windows;
@@ -78,7 +85,8 @@ pub use account_windows::{
 mod launch;
 pub(crate) use launch::{
     Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched, WarmRefused,
+    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched, Uninstalled,
+    WarmRefused,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]
@@ -386,7 +394,7 @@ pub(crate) fn doctor_level(checks: &[Check]) -> Level {
 mod tests {
     use super::*;
 
-    /// A check that warns is worth looking at, and one that fails outweighs every warning.
+    /// Each check keeps doctor's level, so the line over the checks says what doctor says.
     #[test]
     fn the_doctor_summary_says_not_to_switch_while_a_check_fails() {
         let check = |level: Level| Check {
@@ -396,17 +404,18 @@ mod tests {
             detail: String::new(),
             advice: String::new(),
         };
+        use doctor::Level as Core;
         assert_eq!(
             doctor_summary(&[check(Level::Ok)]),
-            "Everything Pitboard checks is in order."
+            words::doctor_summary([Core::Ok])
         );
         assert_eq!(
             doctor_summary(&[check(Level::Warn), check(Level::Ok), check(Level::Fail)]),
-            "1 broken: do not switch accounts until fixed."
+            words::doctor_summary([Core::Warn, Core::Ok, Core::Fail])
         );
         assert_eq!(
             doctor_summary(&[check(Level::Warn), check(Level::Warn)]),
-            "2 things are worth looking at."
+            words::doctor_summary([Core::Warn, Core::Warn])
         );
     }
 

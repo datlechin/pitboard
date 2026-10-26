@@ -20,25 +20,31 @@ public sealed class AccountsWindowTests
         launched.Row("codex/main");
     }
 
-    // Open is never pressed: it would open the fixture's address in a real browser.
+    // Open is never pressed: it would open the fixture's address in a real browser. The account is added as the sign-in
+    // finishes, under the name its email suggests, and named next.
     [TestMethod]
     public void AddingAClaudeCodeAccount()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         launched.OpenWindow();
 
-        launched.Invoke("Add account");
-        Launched.Type(launched.Field("sheet.name"), "third");
-        launched.Invoke("Sign in");
+        launched.Invoke("accounts.add");
+        launched.Answer("sheet", "PrimaryButton");
         var code = launched.Field("sheet.code");
-        Assert.IsTrue(launched.Enables("Open"), "Open stayed dimmed");
-        launched.Invoke("Copy link");
+        Assert.IsTrue(Launched.Enables(launched.Element("sheet.openLink")), "Open stayed dimmed");
+        launched.Invoke("sheet.copyLink");
         Assert.AreEqual("https://claude.com/cai/oauth/authorize?code=true&state=pitboard-fixture", ClipboardText.Read());
         Launched.Type(code, "fixture-code#state");
-        launched.Invoke("Submit code");
+        launched.Answer("sheet", "PrimaryButton");
+
+        launched.Row("claude/travel");
+        var name = launched.Field("sheet.name");
+        Assert.AreEqual("travel", name.Text, "the name dana@travel.example suggests");
+        Launched.Type(name, "third");
+        launched.Answer("sheet", "PrimaryButton");
 
         launched.Row("claude/third");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.code")), "the sheet stayed up");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
     }
 
     // A Codex sign-in finishes by itself once the browser is done.
@@ -48,12 +54,14 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
         launched.OpenWindow();
 
-        launched.Invoke("Add account");
-        launched.Find(found => found.ByAutomationId("sheet.tool.codex"), "sheet.tool.codex").Patterns.SelectionItem.Pattern.Select();
-        Launched.Type(launched.Field("sheet.name"), "third");
-        launched.Invoke("Sign in");
+        launched.Invoke("accounts.add");
+        launched.Element("sheet.tool.codex").Patterns.SelectionItem.Pattern.Select();
+        launched.Answer("sheet", "PrimaryButton");
 
-        launched.Row("codex/third");
+        launched.Row("codex/travel");
+        launched.Field("sheet.name");
+        launched.Answer("sheet", "PrimaryButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "kept as it is, the sheet stayed up");
     }
 
     // Sign In stays dimmed while a sign-in runs, so a second one finishing shows the first was stopped.
@@ -63,21 +71,19 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         launched.OpenWindow();
 
-        launched.Invoke("Add account");
-        Launched.Type(launched.Field("sheet.name"), "third");
-        launched.Invoke("Sign in");
+        launched.Invoke("accounts.add");
+        launched.Answer("sheet", "PrimaryButton");
         launched.Field("sheet.code");
-        launched.Invoke("Cancel");
+        launched.Answer("sheet", "CloseButton");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.code")), "the sheet stayed up");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.claude/third")), "third was added");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.claude/travel")), "travel was added");
 
-        launched.Invoke("Add account");
-        Launched.Type(launched.Field("sheet.name"), "third");
-        launched.Invoke("Sign in");
+        launched.Invoke("accounts.add");
+        launched.Answer("sheet", "PrimaryButton");
         Launched.Type(launched.Field("sheet.code"), "fixture-code#state");
-        launched.Invoke("Submit code");
+        launched.Answer("sheet", "PrimaryButton");
 
-        launched.Row("claude/third");
+        launched.Row("claude/travel");
     }
 
     [TestMethod]
@@ -87,13 +93,13 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
 
         Launched.OpenMenu(launched.Row("claude/personal"));
-        launched.Invoke("Rename…");
+        launched.Invoke("account.rename");
         var name = launched.Field("sheet.name");
         Launched.Type(name, "work");
-        launched.Invoke("Rename");
-        launched.Named("Couldn’t rename personal");
+        launched.Answer("sheet", "PrimaryButton");
+        launched.Element("sheet.failure");
         Launched.Type(name, "home");
-        launched.Invoke("Rename");
+        launched.Answer("sheet", "PrimaryButton");
 
         launched.Row("claude/home");
     }
@@ -106,14 +112,13 @@ public sealed class AccountsWindowTests
         var row = launched.Row("claude/personal");
 
         Launched.OpenMenu(row);
-        launched.Invoke("Forget…");
-        launched.Named("Forget");
-        launched.Invoke("Cancel");
+        launched.Invoke("account.forget");
+        launched.Answer("question", "CloseButton");
         Assert.IsTrue(row.IsAvailable, "forgotten after Cancel");
 
         Launched.OpenMenu(row);
-        launched.Invoke("Forget…");
-        launched.Invoke("Forget");
+        launched.Invoke("account.forget");
+        launched.Answer("question", "PrimaryButton");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.claude/personal")), "personal is still listed");
     }
 
@@ -124,9 +129,9 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
 
         Launched.OpenMenu(launched.Row("claude/work"));
-        launched.Named("Rename…");
+        launched.Element("account.rename");
 
-        Assert.IsTrue(launched.Gone(found => found.ByName("Forget…")), "the account in use offers Forget…");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("account.forget")), "the account in use offers Forget…");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 
@@ -151,13 +156,10 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
         launched.OpenWindow();
 
-        // Named with its tool, since Claude Code could have a spare too.
-        Launched.Within(launched.Row("codex/spare"), found => found.ByName("Use spare (Codex)"), "Use spare (Codex)").AsButton().Invoke();
-        var notice = launched.Find(found => found.ByAutomationId("notice.switch/codex"), "notice switch/codex");
+        Launched.Within(launched.Row("codex/spare"), found => found.ByAutomationId("account.action"), "spare's switch").AsButton().Invoke();
+        var notice = launched.Element("notice.switch/codex");
 
-        Assert.IsTrue(
-            Launched.Lines(notice).Any(line => line.StartsWith("Any codex session started before this switch keeps using main", StringComparison.Ordinal)),
-            Launched.Said(notice));
+        Assert.IsGreaterThan(1, Launched.Lines(notice).Count(), $"it says what open sessions keep: {Launched.Said(notice)}");
         Launched.Within(notice, found => found.ByAutomationId("CloseButton").Or(found.ByName("Close")), "close button")
             .AsButton().Invoke();
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("notice.switch/codex")), "the notice stayed");
@@ -170,14 +172,13 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
         var spare = launched.Row("codex/spare");
 
-        Launched.Within(spare, found => found.ByName("Use spare (Codex)"), "Use spare (Codex)").AsButton().Invoke();
-        launched.Named("Quit ChatGPT to switch?");
-        launched.Invoke("Cancel");
-        Assert.IsTrue(launched.Gone(found => found.ByName("Quit ChatGPT to switch?")), "the question stayed");
+        Launched.Within(spare, found => found.ByAutomationId("account.action"), "spare's switch").AsButton().Invoke();
+        launched.Answer("question", "CloseButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("question")), "the question stayed");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("notice.switch/codex")), "something was switched");
 
-        Launched.Within(spare, found => found.ByName("Use spare (Codex)"), "Use spare (Codex)").AsButton().Invoke();
-        launched.Invoke("Quit ChatGPT and switch");
+        Launched.Within(spare, found => found.ByAutomationId("account.action"), "spare's switch").AsButton().Invoke();
+        launched.Answer("question", "PrimaryButton");
 
         launched.Find(found => found.ByAutomationId("notice.switch/codex"), "notice switch/codex");
     }
@@ -188,12 +189,12 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "unnamed");
         launched.OpenWindow();
 
-        launched.Named("Give this account a name");
-        launched.Invoke("Name…");
+        launched.Invoke("account.action");
         Assert.AreEqual("work", launched.Field("sheet.name").Text, "the name dana@work.example suggests");
-        launched.Invoke("Save");
-
         launched.Row("claude/work");
+        launched.Answer("sheet", "PrimaryButton");
+
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
     }
 
     // macOS has no UI test of this: no world of its fixtures left a login in a file until this one.
@@ -203,12 +204,11 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "leftInFile");
         launched.OpenWindow();
 
-        launched.Invoke("Put away…");
-        Assert.IsTrue(launched.Enables("Put away"), "Put away stayed dimmed after the look");
-        launched.Invoke("Put away");
+        launched.Invoke("notice.action.stow");
+        launched.Answer("sheet", "PrimaryButton");
 
-        launched.Find(found => found.ByAutomationId("notice.stowed"), "notice stowed");
-        Assert.IsTrue(launched.Gone(found => found.ByName("Put away…")), "the file is still said to be there");
+        launched.Element("notice.stowed");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("notice.action.stow")), "the file is still said to be there");
     }
 
     // With Codex installed, after the tip to use Pitboard with it.
@@ -217,13 +217,13 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         launched.OpenWindow();
-        launched.Named("Use Pitboard with Codex");
-        launched.Invoke("Not now");
+        launched.Element("setup.codexUnused");
+        launched.Invoke("setup.action.declineTip");
 
-        launched.Named("No accounts");
-        launched.Invoke("Add account…");
+        launched.Element("empty");
+        launched.Invoke("empty.choice");
 
-        launched.Field("sheet.name");
+        launched.Element("sheet.tool");
     }
 
     [TestMethod]
@@ -232,12 +232,14 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "stuck");
         launched.OpenWindow();
 
-        launched.Invoke("Give up…");
-        launched.Invoke("Give up");
-        var notice = launched.Find(found => found.ByAutomationId("notice.abandoned"), "notice abandoned");
+        launched.Invoke("notice.action.abandonStuckSwitch");
+        launched.Answer("question", "PrimaryButton");
+        var notice = launched.Element("notice.abandoned");
 
-        Launched.Shows(notice, "Gave up on the interrupted switch");
-        Assert.Contains("2 logins kept", Launched.Said(notice));
+        // The notice shows before its lines do.
+        var said = Retry.WhileFalse(
+            () => Launched.Lines(notice).Count() > 1, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
+        Assert.IsTrue(said, $"it says what was kept: {Launched.Said(notice)}");
     }
 
     [TestMethod]
@@ -245,35 +247,29 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "onlyOne");
         launched.OpenWindow();
-        launched.Named("Add a second account");
+        launched.Element("setup.onlyOne");
 
-        launched.Invoke("Not now");
+        launched.Invoke("setup.action.declineSecondAccount");
 
-        Assert.IsTrue(launched.Gone(found => found.ByName("Add a second account")), "the tip stayed");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.onlyOne")), "the tip stayed");
         launched.Row("claude/work");
     }
 
-    // The window goes to the accounts, where the sheet comes up with focus in its name field, not the tool picker.
+    // The window goes to the accounts, where the sheet comes up.
     [TestMethod]
     public void CtrlNAddsAnAccountFromAnyPane()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
         launched.Select("pane.activity");
-        launched.Named("Switch");
+        Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
 
         Foreground.Require(window);
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_N);
-        launched.Field("sheet.name");
         launched.Find(found => found.ByAutomationId("sheet.tool.codex"), "sheet.tool.codex");
-        string Focused() => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "";
-        Assert.IsTrue(
-            Retry.WhileFalse(() => Focused() == "sheet.name", TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(100)).Result,
-            $"the sheet opened with the focus on '{Focused()}'");
-        launched.Find(found => found.ByName("Add account").And(found.ByControlType(ControlType.Text)), "the sheet's title");
-        launched.Invoke("Cancel");
+        launched.Answer("sheet", "CloseButton");
 
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.tool")), "the sheet stayed up");
         Assert.IsTrue(launched.Selected("pane.accounts"), "Ctrl+N left the window on Activity");
         launched.Row("claude/work");
     }
@@ -285,6 +281,6 @@ public sealed class AccountsWindowTests
 
         launched.Window("Pitboard");
 
-        launched.Named("Use Pitboard with Codex");
+        launched.Element("setup.codexUnused");
     }
 }

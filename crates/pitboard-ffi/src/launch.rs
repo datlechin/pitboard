@@ -31,14 +31,13 @@ use std::time::{Duration, Instant};
 /// Why something the core was asked to do did not happen.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PitboardError {
-    /// `code` is stable, for the model to branch on; `message` names the cause and what to
-    /// do. `warnings` are what was found on the way, reported even though the operation
-    /// failed.
+    // `account`: the one it is about, by its label with its tool, for its next step
     #[error("{message}")]
     Failed {
         code: String,
         message: String,
         warnings: Vec<Warning>,
+        account: Option<String>,
     },
 }
 
@@ -49,6 +48,7 @@ impl From<pitboard_core::error::Error> for PitboardError {
             message: in_app_refusal(pitboard_core::host::OS, &error)
                 .unwrap_or_else(|| sentence(&error.to_string())),
             warnings: Vec::new(),
+            account: account_of(&error),
         }
     }
 }
@@ -60,21 +60,53 @@ impl From<service::Failed> for PitboardError {
             message: in_app_refusal(pitboard_core::host::OS, &failed.error)
                 .unwrap_or_else(|| sentence(&failed.error.to_string())),
             warnings: warnings(&failed.warnings),
+            account: account_of(&failed.error),
         }
+    }
+}
+
+// The account a refusal is about, for its next step.
+fn account_of(error: &pitboard_core::error::Error) -> Option<String> {
+    use pitboard_core::error::{Error, Unidentified};
+    use pitboard_core::state::Key;
+    let of_tool =
+        |tool: ProviderId, label: &str| Key::new(tool, Key::parse(label).label).qualified();
+    match error {
+        Error::NothingParked { tool, label }
+        | Error::ParkedLoginRefused { tool, label }
+        | Error::SignInNotKept { tool, label, .. } => Some(of_tool(*tool, label)),
+        Error::ParkedLoginExpired { label }
+        | Error::ParkedCredentialMissing { label }
+        | Error::ParkedCredentialCorrupt { label, .. }
+        | Error::ParkedLoginBelongsElsewhere { label, .. }
+        | Error::AccountUnknown { label, .. } => Some(Key::parse(label).qualified()),
+        Error::IdentityUnverifiable {
+            tool,
+            login: Unidentified::Parked { label } | Unidentified::SignIn { label },
+            cause,
+            ..
+        } if !cause.worth_retrying() => Some(of_tool(*tool, label)),
+        Error::RecoveryUndetermined { tool, to, .. }
+        | Error::RecoveryElsewhere { tool, to, .. } => Some(of_tool(*tool, to)),
+        Error::LiveAccountNotEnrolled { tool, .. } | Error::LiveCredentialAbsent { tool, .. } => {
+            Some(Key::new(*tool, "").qualified())
+        }
+        _ => None,
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct WarmRefused {
     pub(crate) told_apart: switch::warm::Apart,
-    pub(crate) error: PitboardError,
+    // boxed, as the Result it is the error of stays small
+    pub(crate) error: Box<PitboardError>,
 }
 
 impl From<service::Failed> for WarmRefused {
     fn from(failed: service::Failed) -> Self {
         WarmRefused {
             told_apart: switch::warm::told_apart(&failed.error),
-            error: failed.into(),
+            error: Box::new(failed.into()),
         }
     }
 }
@@ -251,6 +283,8 @@ pub(crate) enum AutoSwitched {
         adoption: Adoption,
         warnings: Vec<Warning>,
         used: String,
+        // when the limit it left resets
+        resets_at: Option<i64>,
     },
     /// A limit of `from` reached the share, `used` of it, and Pitboard did not switch, for
     /// the reason `why` says, until `until` where the reason ends then. `key` tells it apart
@@ -260,6 +294,8 @@ pub(crate) enum AutoSwitched {
         from: String,
         used: String,
         why: String,
+        // the core's for the reason, `Skip::code`
+        code: &'static str,
         until: Option<i64>,
     },
     /// Pitboard cannot judge whether to switch, for the reason `why` says, and asks again at
@@ -283,6 +319,33 @@ pub(crate) enum AutoLooked {
     Act,
 }
 
+// What uninstalling came to, where the core did not refuse it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Uninstalled {
+    // Pitboard's directory is gone
+    Removed,
+    // the directory stays, for `n` saved sign-ins not deleted yet
+    Pending(usize),
+    WarmingUp,
+    // another program holds a file in the directory open
+    HeldOpen,
+}
+
+impl Uninstalled {
+    // In the order the command line says them.
+    fn of(removed: &switch::Removed) -> Uninstalled {
+        if removed.pending > 0 {
+            Uninstalled::Pending(removed.pending)
+        } else if removed.warming_up {
+            Uninstalled::WarmingUp
+        } else if !removed.home_kept_by.is_empty() || !removed.home_removed {
+            Uninstalled::HeldOpen
+        } else {
+            Uninstalled::Removed
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum EnrolledAs {
     /// The account signed in now.
@@ -300,6 +363,10 @@ pub(crate) enum EnrolledAs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Enrolled {
     pub(crate) email: String,
+    // the label it is filed under, bare
+    pub(crate) label: String,
+    // this enrolment added it, rather than an account enrolled already
+    pub(crate) added: bool,
     pub(crate) outcome: EnrolledAs,
     pub(crate) warnings: Vec<Warning>,
 }
@@ -315,8 +382,8 @@ pub(crate) struct Check {
     pub(crate) advice: String,
 }
 
-fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
-    let (email, outcome) = match enrolled {
+fn enrolled(enrolment: switch::Enrolment, warnings: Vec<Warning>) -> Enrolled {
+    let (email, outcome) = match enrolment.enrolled {
         switch::Enrolled::Current { email } => (email, EnrolledAs::Current),
         switch::Enrolled::SignedIn { email } => (email, EnrolledAs::SignedIn),
         switch::Enrolled::Renewed { email } => (email, EnrolledAs::Renewed),
@@ -324,9 +391,24 @@ fn enrolled(enrolled: switch::Enrolled, warnings: Vec<Warning>) -> Enrolled {
     };
     Enrolled {
         email,
+        label: enrolment.key.label,
+        added: enrolment.added,
         outcome,
         warnings,
     }
+}
+
+// The tool a `Tool`'s code names.
+fn tool_of(provider: &str) -> Result<ProviderId, PitboardError> {
+    ProviderId::parse(provider).ok_or_else(|| {
+        PitboardError::from(pitboard_core::error::Error::ProviderUnknown {
+            typed: provider.to_owned(),
+            known: ProviderId::ALL
+                .iter()
+                .map(|known| known.code().to_owned())
+                .collect(),
+        })
+    })
 }
 
 fn account(row: status::Row, now: i64) -> Account {
@@ -340,7 +422,8 @@ fn account(row: status::Row, now: i64) -> Account {
         standing: row.standing(now),
         stale: row.stale,
         // In the row's own tool's words: a Codex row is not about Anthropic.
-        stale_explanation: row.explanation().map(|said| typeset(&said)),
+        stale_explanation: crate::present::words::stale_explanation(&row)
+            .map(|said| typeset(&words::capitalised(&said))),
         plan: row.plan,
         read_at: row.read_at,
         parked: row.parked.map(|p| Parked {
@@ -457,11 +540,13 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             adoption,
             warnings,
             used: words::share_of_limit(&limit),
+            resets_at: limit.resets_at,
         },
         Auto::Skipped { from, limit, why } => AutoSwitched::Skipped {
             key: why.told_apart(&from, &limit),
             used: words::share_of_limit(&limit),
             why: words::not_switching(&why, threshold),
+            code: why.code(),
             until: match why {
                 Skip::Settling { until } => Some(until),
                 _ => None,
@@ -470,7 +555,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
         },
         Auto::NotWatching { why } => AutoSwitched::NotWatching {
             key: why.told_apart(),
-            why: words::not_watching(&why),
+            why: crate::present::words::not_watching(&why),
             until: match why {
                 Blind::Unidentified { until, .. } => Some(until),
                 _ => None,
@@ -497,7 +582,7 @@ pub(crate) struct SignInSession {
     /// address and the browser coming back, so a read that held `watched` kept a cancel or
     /// a paste waiting until then.
     said: switch::Said,
-    label: String,
+    naming: switch::Naming,
     /// The core the sign-in started with, which enrols what it signed in to: one made again
     /// meanwhile, from a login shell that answered late, may look elsewhere for programs,
     /// but keeps its accounts in the same place.
@@ -522,6 +607,7 @@ impl SignInSession {
             code: "sign_in_gone".into(),
             message: "This sign-in is no longer running.".into(),
             warnings: Vec::new(),
+            account: None,
         })?;
         match held.as_mut() {
             Some(watched) => watched.paste(line).map_err(PitboardError::from),
@@ -540,10 +626,13 @@ impl SignInSession {
                 code: "sign_in_gone".into(),
                 message: "This sign-in is no longer running.".into(),
                 warnings: Vec::new(),
+                account: None,
             })?;
         let login = watched.finish()?;
         changed(
-            self.made.core.enroll_signed_in(&self.label, login),
+            self.made
+                .core
+                .enroll_signed_in_as(login, self.naming.clone()),
             enrolled,
         )
     }
@@ -709,8 +798,8 @@ impl Kept {
 /// as `Kept` keeps it.
 pub(crate) struct AppCore {
     made: Kept,
-    // Held from the first core made for as long as the app runs, so `uninstall` refuses then.
-    open: std::sync::OnceLock<Option<pitboard_core::app::Open>>,
+    // Held until the app quits or uninstalls, so `pitboard uninstall` refuses meanwhile.
+    open: std::sync::OnceLock<Mutex<Option<pitboard_core::app::Open>>>,
 }
 
 impl AppCore {
@@ -761,7 +850,7 @@ impl AppCore {
     }
 
     fn held(&self, made: Arc<Made>) -> Arc<Made> {
-        self.open.get_or_init(|| made.core.hold_open());
+        self.open.get_or_init(|| Mutex::new(made.core.hold_open()));
         made
     }
 
@@ -857,12 +946,6 @@ impl AppCore {
             .filter(|tool| here.contains(tool))
             .map(tool)
             .collect()
-    }
-
-    // Asked only once somebody asks to use Pitboard with a tool nothing is enrolled of.
-    pub(crate) fn signed_in_email(&self, provider: &str) -> Option<String> {
-        let which = ProviderId::parse(provider)?;
-        self.readable().ok()?.core.signed_in_email(which)
     }
 
     /// Every account of every tool and what it has left, each asked of its own service.
@@ -965,26 +1048,59 @@ impl AppCore {
         changed(self.core().core.warm_range(range), |_, _| ())
     }
 
-    /// Enroll the account signed in now under `label`.
-    pub(crate) fn enroll_current(&self, label: &str) -> Result<Enrolled, PitboardError> {
-        changed(self.core().core.enroll_current(label), enrolled)
+    // With the app's own hold on Pitboard's directory, which goes with the directory.
+    pub(crate) fn uninstall(&self) -> Result<Uninstalled, PitboardError> {
+        let made = self.core();
+        let mut own = self
+            .open
+            .get_or_init(|| Mutex::new(made.core.hold_open()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        changed(made.core.uninstall_from_app(&mut own), |removed, _| {
+            Uninstalled::of(&removed)
+        })
     }
 
-    /// Starts the tool's own sign-in for a new account, watched rather than inherited. The
-    /// label may name the tool, as in `codex/work`; a bare one means Claude Code. The model
-    /// hands on what the tool says, can paste a fallback code, and finishes it.
+    /// Enroll the account `provider`'s tool has signed in now, under `naming`.
+    pub(crate) fn enroll_current(
+        &self,
+        provider: &str,
+        naming: switch::Naming,
+    ) -> Result<Enrolled, PitboardError> {
+        let which = tool_of(provider)?;
+        changed(self.core().core.enroll_current_as(which, naming), enrolled)
+    }
+
+    /// Starts `provider`'s own sign-in, watched rather than inherited, again for the account
+    /// `again` names or for a new one. The model hands on what the tool says, can paste a
+    /// fallback code, and finishes it.
     ///
     /// May ask the login shell again first, as `installed` does: a sign-in is when a program
     /// the first, late, ask could not find is needed.
-    pub(crate) fn sign_in(&self, label: String) -> Result<Arc<SignInSession>, PitboardError> {
+    pub(crate) fn sign_in(
+        &self,
+        provider: &str,
+        again: Option<String>,
+    ) -> Result<Arc<SignInSession>, PitboardError> {
+        let which = tool_of(provider)?;
         let made = self.made.value_asking_again();
-        let watched = made.core.sign_in_watched(&label)?;
+        let (watched, naming) = match again {
+            Some(label) => (
+                made.core
+                    .sign_in_watched(&pitboard_core::state::Key::new(which, &label).qualified())?,
+                switch::Naming::As(label),
+            ),
+            None => (
+                made.core.sign_in_watched_for(which)?,
+                switch::Naming::FromEmail,
+            ),
+        };
         Ok(Arc::new(SignInSession {
             said: watched.said(),
             steps: watched.steps(),
             put_back: watched.put_back().map(|key| key.qualified()),
             watched: Mutex::new(Some(watched)),
-            label,
+            naming,
             made,
         }))
     }
@@ -1297,22 +1413,230 @@ mod tests {
         };
         assert_eq!(said(refused()), sentence(&refused().to_string()));
         assert_eq!(
-            said(Error::SignInIncomplete),
-            sentence(&Error::SignInIncomplete.to_string())
+            said(Error::SignedInAccountChanged),
+            sentence(&Error::SignedInAccountChanged.to_string())
         );
+        let overridden = || service::Warning::AuthOverridden {
+            tool: ProviderId::Claude,
+            names: vec!["ANTHROPIC_API_KEY".into()],
+        };
         let PitboardError::Failed {
             message, warnings, ..
         } = service::Failed {
-            error: Error::SignInIncomplete,
-            warnings: vec![service::Warning::ParksPendingRemoval(2)],
+            error: Error::SignedInAccountChanged,
+            warnings: vec![overridden()],
             said_first: 0,
         }
         .into();
-        assert_eq!(message, sentence(&Error::SignInIncomplete.to_string()));
         assert_eq!(
-            warnings[0].message,
-            sentence(&service::Warning::ParksPendingRemoval(2).to_string())
+            message,
+            sentence(&Error::SignedInAccountChanged.to_string())
         );
+        assert_eq!(warnings[0].message, sentence(&overridden().to_string()));
+    }
+
+    // Plan.md section 3: no refusal or warning names a command, or how Pitboard works inside.
+    #[test]
+    fn no_sentence_the_apps_show_names_a_command() {
+        use pitboard_core::error::{Cause, Enrolled, Error, Unidentified};
+        use pitboard_core::service::Stored;
+        use pitboard_core::words::Spelling;
+        let (claude, codex) = (ProviderId::Claude, ProviderId::Codex);
+        let path = || PathBuf::from("/Users/dana/.pitboard/state.json");
+        let label = || "work".to_owned();
+        let detail = || "it went wrong".to_owned();
+        let parked = |cause| Error::IdentityUnverifiable {
+            tool: claude,
+            login: Unidentified::Parked { label: label() },
+            cause,
+            detail: detail(),
+            spelling: Spelling::Bare,
+        };
+        let errors = vec![
+            Error::StateWrongMachine { path: path() },
+            Error::StateVersionUnknown {
+                path: path(),
+                found: 9,
+            },
+            Error::LiveCredentialShapeUnexpected {
+                tool: claude,
+                detail: detail(),
+            },
+            Error::AccountUnknown {
+                label: label(),
+                enrolled: Enrolled(vec!["home".into()]),
+            },
+            Error::NothingParked {
+                tool: codex,
+                label: "codex/work".into(),
+            },
+            Error::ParkedLoginExpired { label: label() },
+            Error::LiveAccountNotEnrolled {
+                tool: claude,
+                who: "dana@example.com".into(),
+            },
+            Error::AlreadyEnrolled {
+                tool: codex,
+                email: "dana@example.com".into(),
+                label: "codex/work".into(),
+                asked: "codex/home".into(),
+                waited: false,
+            },
+            Error::ParkSlotExhausted,
+            Error::ParkedCredentialMissing { label: label() },
+            Error::ParkedCredentialCorrupt {
+                label: label(),
+                detail: detail(),
+            },
+            Error::ConfigWriteFailed {
+                path: path(),
+                detail: detail(),
+            },
+            parked(Cause::Refused),
+            parked(Cause::Unreachable),
+            Error::ParkedLoginRefused {
+                tool: claude,
+                label: label(),
+            },
+            Error::ParkedLoginBelongsElsewhere {
+                label: label(),
+                who: "home@example.com".into(),
+            },
+            Error::SwitchUnverified {
+                tool: claude,
+                from: "home".into(),
+                to: label(),
+                detail: detail(),
+            },
+            Error::SwitchCorrupted {
+                tool: claude,
+                from: "home".into(),
+                to: label(),
+                detail: detail(),
+                spelling: Spelling::Bare,
+            },
+            Error::SignInNotKept {
+                tool: codex,
+                label: "codex/work".into(),
+                detail: detail(),
+            },
+            Error::RenewalFailed {
+                label: label(),
+                cause: None,
+                detail: detail(),
+            },
+            Error::LeftLoginNotEnrolled {
+                path: path(),
+                email: "dana@example.com".into(),
+                organization: String::new(),
+            },
+            Error::LeftLoginUnidentified {
+                path: path(),
+                cause: Cause::Refused,
+                detail: detail(),
+            },
+            Error::SignInInProgress,
+            Error::SignInSettledElsewhere { label: label() },
+            Error::SignInNotInstalled {
+                tool: codex,
+                label: "codex/work".into(),
+                detail: detail(),
+                parked: true,
+                spelling: Spelling::Bare,
+                warnings: Vec::new(),
+            },
+            Error::SwitchDidNotHold {
+                tool: codex,
+                from: "codex/home".into(),
+                to: "codex/work".into(),
+                spelling: Spelling::Bare,
+            },
+            Error::LiveLoginRefused {
+                tool: claude,
+                label: label(),
+                detail: detail(),
+            },
+            Error::UninstallWouldStrand {
+                label: Some("desktop/home".into()),
+                set_aside: Vec::new(),
+            },
+            Error::UninstallWouldStrand {
+                label: None,
+                set_aside: vec![path()],
+            },
+        ];
+        let found = [
+            service::Warning::Recovered(switch::Recovered {
+                from: "home".into(),
+                to: label(),
+                finished: true,
+            }),
+            service::Warning::MoveSettled(switch::MoveSettled {
+                tool: ProviderId::Desktop,
+                label: "desktop/home".into(),
+                half: pitboard_core::state::Half::Leave,
+                ended: switch::Ended::Finished,
+            }),
+            service::Warning::ParkedLoginRefused {
+                tool: codex,
+                label: "codex/work".into(),
+            },
+            service::Warning::LockCompromised { tool: claude },
+            service::Warning::FallbackLogin {
+                tool: claude,
+                path: path(),
+                held: provider::Held::Login,
+            },
+            service::Warning::FallbackLogin {
+                tool: claude,
+                path: path(),
+                held: provider::Held::Unreadable,
+            },
+            service::Warning::LoginReplaced {
+                tool: claude,
+                id: "a".into(),
+                label: label(),
+                now: Stored::Nothing,
+            },
+            service::Warning::InUseUnconfirmed {
+                tool: claude,
+                last: Stored::Account(label()),
+                named: Stored::Nothing,
+                asked: false,
+            },
+            service::Warning::ConfigNamesAnother {
+                tool: claude,
+                config: Stored::Account("home".into()),
+                in_use: Stored::Account(label()),
+            },
+            service::Warning::RenewalFailed(Error::RenewalFailed {
+                label: label(),
+                cause: None,
+                detail: detail(),
+            }),
+            service::Warning::SwitchStuck(Error::RecoveryUndetermined {
+                tool: claude,
+                from: "home".into(),
+                to: label(),
+                detail: detail(),
+                spelling: Spelling::Bare,
+            }),
+        ];
+        let said: Vec<String> = errors
+            .into_iter()
+            .map(|error| {
+                let PitboardError::Failed { message, .. } = error.into();
+                message
+            })
+            .chain(warnings(&found).into_iter().map(|warning| warning.message))
+            .collect();
+        for message in said {
+            assert!(!message.is_empty());
+            assert!(!message.contains("pitboard "), "{message}");
+            assert!(!message.contains('`'), "{message}");
+            let found = crate::present::testing::mechanism_words(&message);
+            assert!(found.is_empty(), "{found:?} in {message}");
+        }
     }
 
     #[test]
@@ -1359,11 +1683,9 @@ mod tests {
         };
         assert_eq!(
             refused(&below, full.clone()).map(|failure| failure.message),
-            Some(
-                "Pitboard changes nothing on Windows build 22631. It changes things on Windows \
-                 11 24H2 and later, and on Windows Server 2025: update Windows to use it here."
-                    .into()
-            )
+            Some(sentence(
+                &pitboard_core::error::Error::SystemTooOld { build: Some(22631) }.to_string()
+            ))
         );
         let floor_unknown = |host: &pitboard_core::testing::MemoryHost| {
             host.runs_on(Floor::Unknown);
@@ -1710,7 +2032,9 @@ mod tests {
             None,
         );
         assert_eq!(core.core().search_path, None, "the shell could not be run");
-        let Err(PitboardError::Failed { code, .. }) = core.enroll_current("work") else {
+        let Err(PitboardError::Failed { code, .. }) =
+            core.enroll_current("claude", switch::Naming::FromEmail)
+        else {
             panic!("a Claude Code account was enrolled under a custom OAuth endpoint");
         };
         assert_eq!(code, "custom_oauth_endpoint");

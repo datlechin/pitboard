@@ -40,9 +40,15 @@
           Icon="Download"
           ToolTipService.ToolTip="Show this window’s downloads"
           Visibility="Collapsed"
+          AutomationProperties.AutomationId="window.downloads"
           Click="OnShowDownloads" />
       <CommandBar.SecondaryCommands>
-        <AppBarButton x:Name="RemoveDataButton" Label="Remove website data…" Icon="Delete" Click="OnRemoveData" />
+        <AppBarButton
+            x:Name="RemoveDataButton"
+            Label="Remove website data…"
+            Icon="Delete"
+            AutomationProperties.AutomationId="window.removeData"
+            Click="OnRemoveData" />
       </CommandBar.SecondaryCommands>
     </CommandBar>
     <InfoBar

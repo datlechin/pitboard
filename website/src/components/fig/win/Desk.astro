@@ -128,7 +128,7 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
   {/* WinUI's tooltip of each account and of Refresh in the menu, its UI Automation help text */}
   {live && <div data-part="tips">
     {accounts.map((a) => <Tooltip class={tipAt} id={`${prefix}-tip-${a.id}`} hidden>
-      {menuLine(a, after)}
+      {menuLine(a, after, "windows")}
     </Tooltip>)}
     <Tooltip class={tipAt} id={`${prefix}-tip-refresh`} hidden>
       {updated(after.readAt)}

@@ -54,11 +54,21 @@ const UNRUNNABLE: OwnCommandLine = OwnCommandLine {
     runs: false,
 };
 
-const NO_COMMAND_LINE: &str =
-    "This copy of Pitboard has no command line inside it to run on a schedule.";
+fn no_command_line() -> String {
+    words::cannot_schedule(Os::MacOs, false)
+}
 
-const MOVE_IT_FIRST: &str = "Move Pitboard to your Applications folder first. Until then macOS \
-                             runs it from a temporary copy, which is gone once Pitboard quits.";
+fn move_it_first() -> String {
+    words::cannot_schedule(Os::MacOs, true)
+}
+
+/// What doctor's summary says of one check worth looking at.
+fn one_worth_looking_at() -> String {
+    words::typeset(&pitboard_core::words::doctor_summary([
+        pitboard_core::doctor::Level::Ok,
+        pitboard_core::doctor::Level::Warn,
+    ]))
+}
 
 /// Daily renewal reads as on only while the scheduler has the job. A scheduler this Mac does
 /// not have is not a schedule that is on. Nothing is read until the settings ask.
@@ -108,10 +118,7 @@ fn the_settings_say_where_no_scheduler_is() {
     model.send(Intent::ReadSchedule);
     model.run(&mut machine);
     let schedule = shown(&model).schedule;
-    assert_eq!(
-        schedule.note.as_deref(),
-        Some("This Mac has no scheduler Pitboard knows how to write to.")
-    );
+    assert_eq!(schedule.note, Some(words::no_scheduler(Os::MacOs)));
 }
 
 /// Turning daily renewal on or off changes the scheduler, and the switch then shows what the
@@ -159,8 +166,8 @@ fn daily_renewal_is_refused_where_nothing_would_be_there_to_run() {
     assert!(schedule.enabled);
 
     for (own, reason, temporary) in [
-        (TEMPORARY, MOVE_IT_FIRST, true),
-        (OwnCommandLine::default(), NO_COMMAND_LINE, false),
+        (TEMPORARY, move_it_first(), true),
+        (OwnCommandLine::default(), no_command_line(), false),
     ] {
         let mut model = Hand::new();
         let mut machine = machine();
@@ -175,7 +182,7 @@ fn daily_renewal_is_refused_where_nothing_would_be_there_to_run() {
         );
         assert_eq!((machine.installs, machine.schedule_reads), (0, 0));
         let schedule = shown(&model).schedule;
-        assert_eq!(schedule.note.as_deref(), Some(reason));
+        assert_eq!(schedule.note, Some(reason));
         assert_eq!(schedule.failed, None, "said once, under the switch");
         assert!(!model.state.machine.scheduling.is_some() && !schedule.enabled);
         assert!(
@@ -209,7 +216,7 @@ fn a_schedule_this_copy_cannot_make_can_still_be_taken_away() {
     model.run(&mut machine);
     let schedule = shown(&model).schedule;
     assert!(!schedule.on && !schedule.enabled);
-    assert_eq!(schedule.note.as_deref(), Some(MOVE_IT_FIRST));
+    assert_eq!(schedule.note, Some(move_it_first()));
 }
 
 /// A build run from Xcode is an app with no command line inside it, and a schedule of one
@@ -227,7 +234,7 @@ fn an_app_without_a_command_line_it_can_run_cannot_link_or_schedule() {
     model.send(Intent::LookForCommandLine);
     model.run(&mut machine);
     let shown_now = shown(&model);
-    assert_eq!(shown_now.schedule.note.as_deref(), Some(NO_COMMAND_LINE));
+    assert_eq!(shown_now.schedule.note, Some(no_command_line()));
     assert!(!shown_now.schedule.enabled);
     assert_eq!(
         shown_now.command_line.found,
@@ -266,16 +273,16 @@ fn whether_this_copy_can_schedule_is_read_with_the_schedule() {
     );
     let schedule = shown(&model).schedule;
     assert_eq!(
-        schedule.note.as_deref(),
-        Some(NO_COMMAND_LINE),
+        schedule.note,
+        Some(no_command_line()),
         "read with the repair at launch"
     );
     assert!(!schedule.enabled);
 
     machine.own.runs = true;
     assert_eq!(
-        shown(&model).schedule.note.as_deref(),
-        Some(NO_COMMAND_LINE),
+        shown(&model).schedule.note,
+        Some(no_command_line()),
         "not read again yet"
     );
     model.send(Intent::ReadSchedule);
@@ -286,8 +293,8 @@ fn whether_this_copy_can_schedule_is_read_with_the_schedule() {
     model.send(Intent::LookForCommandLine);
     model.run(&mut machine);
     assert_eq!(
-        shown(&model).schedule.note.as_deref(),
-        Some(MOVE_IT_FIRST),
+        shown(&model).schedule.note,
+        Some(move_it_first()),
         "read with the command line found"
     );
 }
@@ -437,14 +444,12 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
     ];
     let checks = shown(&model).checks;
     assert!(checks.lines.is_empty());
-    assert_eq!(checks.waiting.as_deref(), Some("Checking this Mac…"));
+    assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
     assert_eq!((checks.summary, checks.checked), (None, None));
     assert_eq!(machine.doctor_asks, 0);
 
     assert_eq!(
-        model.send(Intent::PaneShown {
-            pane: Pane::Machine
-        }),
+        model.send(Intent::PaneShown { pane: Pane::Checks }),
         [Job::Check]
     );
     assert!(shown(&model).checks.checking);
@@ -456,29 +461,26 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         [
             CheckLine {
                 id: 0,
-                name: "Keychain".into(),
+                name: words::check_name("keychain", "Keychain"),
                 level: Level::Ok,
-                spoken_level: "Passed".into(),
-                detail: "Login keychain, unlocked".into(),
+                spoken_level: words::spoken_level(Level::Ok).into(),
+                detail: words::check_text("login keychain, unlocked"),
                 advice: None,
             },
             CheckLine {
                 id: 1,
-                name: "Daily renewal".into(),
+                name: words::check_name("schedule", "Daily renewal"),
                 level: Level::Warn,
-                spoken_level: "Worth looking at".into(),
-                detail: "Not scheduled".into(),
+                spoken_level: words::spoken_level(Level::Warn).into(),
+                detail: words::check_text("not scheduled"),
                 advice: Some(words::check_text(
                     "Turn on daily renewal in Pitboard's settings."
                 )),
             },
         ]
     );
-    assert_eq!(
-        checks.summary.as_deref(),
-        Some("One thing is worth looking at.")
-    );
-    assert_eq!(checks.checked.as_deref(), Some("Checked at 08:00"));
+    assert_eq!(checks.summary, Some(one_worth_looking_at()));
+    assert_eq!(checks.checked, Some(words::checked_at("08:00")));
     assert_eq!(checks.waiting, None);
 
     machine.checks = vec![check(
@@ -489,9 +491,7 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         "Unlock the login keychain.",
     )];
     model.later(Duration::from_secs(5 * 60));
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let checks = shown(&model).checks;
     assert!(checks.checking);
     assert_eq!(checks.lines.len(), 2, "what was found stays up meanwhile");
@@ -503,8 +503,8 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
     let checks = shown(&model).checks;
     assert_eq!(checks.lines.len(), 1);
     assert_eq!(
-        checks.lines[0].advice.as_deref(),
-        Some("Unlock the login keychain.")
+        checks.lines[0].advice,
+        Some(words::check_text("Unlock the login keychain."))
     );
     assert_eq!(
         checks.summary,
@@ -512,7 +512,7 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
             pitboard_core::doctor::Level::Fail
         ])))
     );
-    assert_eq!(checks.checked.as_deref(), Some("Checked at 08:05"));
+    assert_eq!(checks.checked, Some(words::checked_at("08:05")));
     assert_eq!(machine.doctor_asks, 2);
 }
 
@@ -547,21 +547,22 @@ fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
             "",
         ),
     ];
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let lines = shown(&model).checks.lines;
-    let ids: Vec<(u64, &str)> = lines
+    let ids: Vec<(u64, String)> = lines
         .iter()
-        .map(|line| (line.id, line.name.as_str()))
+        .map(|line| (line.id, line.name.clone()))
         .collect();
     assert_eq!(
         ids,
         [
-            (0, "Account work"),
-            (1, "Account personal"),
-            (2, "Account codex/main")
+            (0, words::check_name("parked_login", "account work")),
+            (1, words::check_name("parked_login", "account personal")),
+            (
+                2,
+                words::check_name("codex_parked_login", "account codex/main")
+            )
         ]
     );
     let checks = &model.state.machine.checks;
@@ -598,9 +599,7 @@ fn only_a_check_that_did_not_pass_says_what_to_do() {
             "Run pitboard doctor.",
         ),
     ];
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let advice: Vec<Option<String>> = shown(&model)
         .checks
@@ -608,7 +607,10 @@ fn only_a_check_that_did_not_pass_says_what_to_do() {
         .into_iter()
         .map(|line| line.advice)
         .collect();
-    assert_eq!(advice, [None, None, Some("Run pitboard doctor.".into())]);
+    assert_eq!(
+        advice,
+        [None, None, Some(words::check_text("Run pitboard doctor."))]
+    );
 }
 
 /// Checks asked for while others run are counted, as reads are: the pane says it is checking
@@ -618,9 +620,7 @@ fn the_pane_checks_until_the_last_check_asked_for_is_in() {
     let mut model = Hand::new();
     let mut machine = machine();
     machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
-    let pane = Intent::PaneShown {
-        pane: Pane::Machine,
-    };
+    let pane = Intent::PaneShown { pane: Pane::Checks };
     model.send(pane.clone());
     model.send(pane);
     let first = model.next();
@@ -656,9 +656,7 @@ fn doctor_is_only_read_when_asked_for() {
     assert!(checks.lines.is_empty());
     assert_eq!(checks.checked, None);
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let checks = shown(&model).checks;
     assert_eq!(checks.lines.len(), 1);
@@ -690,29 +688,29 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     assert_eq!(machine.posted.len(), 1);
     let checks = shown(&model).checks;
     assert!(checks.lines.is_empty(), "said beside doctor's checks alone");
-    assert_eq!(checks.waiting.as_deref(), Some("Checking this Mac…"));
+    assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let checks = shown(&model).checks;
     assert_eq!(
         checks.lines[1..],
         [CheckLine {
             id: 1,
-            name: "Notifications".into(),
+            name: words::check_name("notification_not_posted", words::NOTIFICATIONS),
             level: Level::Warn,
-            spoken_level: "Worth looking at".into(),
-            detail: "“A login was replaced outside Pitboard” not posted at 08:00 · \
-                     COMException 0x80070490"
-                .into(),
+            spoken_level: words::spoken_level(Level::Warn).into(),
+            detail: words::check_text(&words::not_posted(
+                &words::sign_in_replaced(pitboard_core::host::OS),
+                "08:00",
+                "COMException 0x80070490"
+            )),
             advice: None,
         }]
     );
     assert_eq!(
-        (checks.summary.as_deref(), checks.level),
-        (Some("One thing is worth looking at."), Level::Warn)
+        (checks.summary, checks.level),
+        (Some(one_worth_looking_at()), Level::Warn)
     );
 
     machine.post_refused = None;
@@ -721,8 +719,12 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     model.run(&mut machine);
     assert_eq!(machine.posted.len(), 2);
     let checks = shown(&model).checks;
-    let names: Vec<&str> = checks.lines.iter().map(|line| line.name.as_str()).collect();
-    assert_eq!(names, ["Keychain"], "gone once one is posted");
+    let names: Vec<String> = checks.lines.iter().map(|line| line.name.clone()).collect();
+    assert_eq!(
+        names,
+        [words::check_name("keychain", "Keychain")],
+        "gone once one is posted"
+    );
     assert_eq!(checks.level, Level::Ok);
 }
 
@@ -736,20 +738,18 @@ fn when_the_checks_were_made_names_its_day_once_that_is_over() {
     let mut machine = machine();
     machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
     model.send(Intent::Start);
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     assert_eq!(
-        shown(&model).checks.checked.as_deref(),
-        Some("Checked at 23:59")
+        shown(&model).checks.checked,
+        Some(words::checked_at("23:59"))
     );
 
     model.later(Duration::from_secs(60));
     model.tick();
     assert_eq!(
-        shown(&model).checks.checked.as_deref(),
-        Some("Checked at Fri 23:59")
+        shown(&model).checks.checked,
+        Some(words::checked_at("Fri 23:59"))
     );
 }
 
@@ -781,10 +781,8 @@ fn changes_are_shown_newest_first() {
     let activity = shown(&model).activity;
     assert!(activity.lines.is_empty());
     let empty = activity.empty.expect("what stands in for the list");
-    assert_eq!(
-        (empty.title.as_str(), empty.detail.as_str()),
-        ("No Activity", "Pitboard lists every change it makes here.")
-    );
+    let (title, detail) = words::no_activity(Os::MacOs);
+    assert_eq!((empty.title, empty.detail.as_str()), (title, detail));
 
     assert_eq!(
         model.send(Intent::PaneShown {
@@ -802,44 +800,42 @@ fn changes_are_shown_newest_first() {
             (
                 line.id,
                 line.date.as_str(),
-                line.change.as_str(),
+                line.change.clone(),
                 line.account.as_str(),
-                line.result.as_str(),
+                line.result.clone(),
                 line.done,
-                line.asked_by.as_str(),
+                line.asked_by.clone(),
             )
         })
         .collect();
+    let said = |verb, outcome, caller| {
+        (
+            words::change_verb(verb),
+            words::change_outcome(outcome),
+            words::change_caller(caller),
+        )
+    };
+    let line = |id, date, (change, result, asked_by), account, done| {
+        (id, date, change, account, result, done, asked_by)
+    };
     assert_eq!(
         lines,
         [
-            (
+            line(
                 0,
                 "Sun 09:00",
-                "Switch",
+                said("switch", "nothing_parked", "app"),
                 "codex/spare",
-                "Nothing parked",
-                false,
-                "Pitboard app"
+                false
             ),
-            (
+            line(
                 1,
                 "Sat 07:00",
-                "Switch",
+                said("switch", "ok", "app"),
                 "personal",
-                "Done",
-                true,
-                "Pitboard app"
+                true
             ),
-            (
-                2,
-                "Thu 09:00",
-                "Enrol",
-                "work",
-                "Done",
-                true,
-                "Command line"
-            ),
+            line(2, "Thu 09:00", said("enroll", "ok", "cli"), "work", true),
         ]
     );
 
@@ -854,10 +850,14 @@ fn changes_are_shown_newest_first() {
     assert_eq!(
         (
             newest.date.as_str(),
-            newest.change.as_str(),
-            newest.asked_by.as_str()
+            newest.change.clone(),
+            newest.asked_by.clone()
         ),
-        ("yesterday", "Sign in", "Schedule"),
+        (
+            "yesterday",
+            words::change_verb("sign_in"),
+            words::change_caller("schedule")
+        ),
         "a time that does not read as one is said as the log keeps it"
     );
     assert_eq!(machine.log_limits, [500, 500]);
@@ -903,7 +903,10 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
     model.run(&mut machine);
     let command_line = shown(&model).command_line;
     assert_eq!(command_line.found, Some(FoundCommandLine::Nowhere));
-    assert_eq!(command_line.in_terminal.as_deref(), Some("Not installed"));
+    assert_eq!(
+        command_line.in_terminal.as_deref(),
+        Some(words::NOT_INSTALLED)
+    );
     assert_eq!(command_line.update_note, None);
     assert!(command_line.offers_link);
     assert_eq!(command_line.cannot_link, None);
@@ -926,13 +929,13 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
             FoundCommandLine::Bundled {
                 path: "/usr/local/bin/pitboard".into(),
             },
-            "The one inside this app, so it updates with the app.",
+            words::update_note(true),
         ),
         (
             FoundCommandLine::Another {
                 path: "/Users/x/.cargo/bin/pitboard".into(),
             },
-            "Installed apart from this app, so update it the way you installed it.",
+            words::update_note(false),
         ),
     ] {
         machine.command_line = found.clone();
@@ -964,11 +967,8 @@ fn a_copy_run_from_a_temporary_place_is_told_why_it_cannot_link() {
     let command_line = shown(&model).command_line;
     assert!(!command_line.offers_link);
     assert_eq!(
-        command_line.cannot_link.as_deref(),
-        Some(
-            "Move Pitboard to your Applications folder first. Until then macOS runs it from a \
-             temporary copy, and a link to that would break."
-        )
+        command_line.cannot_link,
+        Some(words::cannot_link(Os::MacOs))
     );
 
     for found in [
@@ -1008,9 +1008,7 @@ fn what_came_to_nothing_holds_nothing_back() {
     assert!(!model.state.machine.scheduling.is_some());
     assert_eq!(shown(&model).schedule.failed, None);
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let check = model.next();
     model.give(Answer::Lost(check));
     assert!(!shown(&model).checks.checking);

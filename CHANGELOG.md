@@ -32,33 +32,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it installs into your home, the lines that make zsh load Pitboard's completions.
 - The app's notification that a login was replaced outside Pitboard, and its notice in the
   window, offer **Sign In Again**.
-- The app posts a notification once for each account whose parked login can no longer be used,
+- The app posts a notification once for each account whose saved sign-in can no longer be used,
   with **Sign In Again**.
 - The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
   at first, before it runs out, with **Switch** where another account has room.
 - The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
-- The app's **Name This Account** starts with a name from the account's email address.
 - The macOS menu bar mark has a dot while the menu opens on something that needs attention.
 - The Windows app's icon shows how much of its limit the account in use has left, none before it
   has a reading, and Windows' warning symbol while its menu opens on something that needs
   attention.
-- The app's setup tips go on past a second account: opening Pitboard at login, then what
-  happens when a limit reaches 95%, each with **Not Now**.
+- The app's setup tips go on past a second account to what happens when a limit reaches 95%,
+  with **Not Now**.
 - The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
-  enrolled, and names the account Codex is signed in to once you choose it, where a machine with
+  enrolled, and adds the account Codex is signed in to once you choose it, where a machine with
   Claude Code signed in to nothing said **No Accounts**.
-- The Windows app's tip to start when you sign in says where Windows puts its icon, with a link
-  to Taskbar settings.
 - The macOS app's **Settings** take the share a limit is reached at in a field beside its
   stepper.
 - The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
 - The macOS app has an **Account** menu with what an account's shortcut menu offers, for the
-  account selected, dimming what cannot be chosen now, and **Forget** on Command-Delete.
+  account selected, dimming what cannot be chosen now, and **Remove Account** on Command-Delete.
 - The macOS app's **Edit** > **Copy** copies the email address of the account selected.
 - The Windows app copies an account's email address with Ctrl+C on its row, and its shortcut
   menu shows F2, Del and Ctrl+C beside the items they do.
+- After switching Claude Code by itself, the app's notification and its notice in the window
+  offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
+  switched until that limit resets.
 
 ### Changed
 
@@ -79,6 +79,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or `weekly_scoped` for one model's, where it passed on `five_hour` and `seven_day` from Claude
   Code's status line, Anthropic's answer without `limits` and Codex. Match `kind` against
   `session` and `weekly_all` where a script matched `five_hour` and `seven_day`.
+- The app adds an account as soon as you sign in to it, or choose the one a tool is signed in
+  to, under a name from its email address, or `desktop` for Claude Desktop, and asks for a name
+  after, where it asked for the name first.
 - Clicking one of the app's notifications on macOS opens **Accounts**, or **Settings** on
   **Limits** for what switching or warming up by itself came to, and the Windows app opens the
   same.
@@ -95,8 +98,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sessions have followed the switch.
 - The Windows app's icon tooltip lists each account in use with its limits, after **Needs
   attention** while its menu opens on something to look at.
-- The app's **Settings** say what switching, warm-up and daily renewal do in one or two
-  sentences.
+- The app's **Settings** say what switching, warm-up and keeping saved sign-ins fresh do in one
+  sentence each.
 - An account's shortcut menu leaves out **Warm Up Now** and **Sign In Again** while they cannot
   be chosen, where the Windows app dimmed them.
 - **Open Pitboard** in the macOS app's menu no longer takes Command-0, which is **Actual Size**
@@ -116,15 +119,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it shares with the command line included, and without a terminal's backticks.
 - `pitboard doctor` says why Pitboard leaves a Codex keychain store alone, and that Claude Code's
   config names somebody no store holds, in the words a refused switch uses.
-- An account's row in the app says to sign in again where its parked login is due to expire, or
-  its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
+- An account's row in the app says when its saved sign-in expires once three days or fewer are
+  left, or its Claude Desktop sign-in may have lapsed, as `pitboard status` does.
+- The app's notice that Pitboard set a login or its keys aside offers **Show Diagnostics**, which
+  opens the checks that list it, where it said **This Mac lists it**.
+- The app names a limit **5-hour** or **Weekly** beside its bar and says when it resets as a
+  clock time, such as **Resets 3:45 PM** or **Resets Mon 9:00 AM**, where it said **resets in
+  2h 05m**.
+- The app's menu says an account's limits as **5-hour 42% used, Weekly 12%**, and only **5-hour
+  limit reached, resets 6:46 PM** once one is reached.
+- The app says **Switch**, **Remove Account**, **Cancel Switch** and **Clean Up**, where it said
+  **Use**, **Forget**, **Give Up** and **Put Away**, and calls a parked login a saved sign-in.
+- The app's **Settings** say **Keep Saved Sign-Ins Fresh** and **Warm-Up**, where they said
+  **Renew parked logins daily** and **Warm up limits**.
+- The app's notifications are titled in the system's case, such as **5-Hour Limit Almost
+  Reached** on macOS, under the name of the tool they are about.
+- What the app says went wrong names no `pitboard` command.
 
 ### Removed
 
+- The app no longer shows a tip to name the account a tool is signed in to: its row offers
+  **Add**.
+- The app no longer marks a limit's pace or says when a limit runs out at it: `pitboard status`
+  still shows both.
 - The app's account menu no longer offers **Warm Up Automatically**: **Settings** > **Limits**
   turns each account's warm-up on and off.
 - The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app
-  renews parked logins as it reads usage, and `pitboard renew` and `pitboard schedule status`
+  refreshes saved sign-ins as it reads usage, and `pitboard renew` and `pitboard schedule status`
   keep both.
 
 ### Fixed
@@ -166,10 +187,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   says the sign-in opens, instead of after.
 - On Windows, `pitboard doctor` says where Codex keeps its home among Codex's checks, instead
   of under a second Codex heading above Pitboard's own.
-- The app marks an account whose parked login Anthropic or OpenAI refused **Needs signing in
-  again** and offers **Sign In Again**, in place of a switch to a login that no longer works.
-- The app lines up the usage bars of every account, where a row that said no pace had wider
-  bars.
+- The app marks an account whose saved sign-in Anthropic or OpenAI refused **Sign-in no longer
+  works** and offers **Sign In Again**, in place of a switch to a sign-in that no longer works.
+- The macOS app selects an account when you click one of its usage bars, where the click
+  selected nothing.
 - On Windows, an update of the app leaves a file in use to be replaced at your next restart,
   instead of restarting Windows by itself.
 - While the app or `pitboard watch` switches Claude Code by itself, the other waits for that
@@ -180,8 +201,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app notifies you of a warm-up that came to nothing once for each account and reason until
   that account warms up, as `pitboard watch` says it, where a run of Claude Code that failed in
   other words, or another account warming up, had it notified again.
-- The app says why it could not give up an interrupted Claude Desktop move whose parked login it
-  could not look at, as the command line does.
+- The app says why it could not cancel a Claude Desktop switch that did not finish, whose saved
+  sign-in it could not look at, as the command line does.
 - `pitboard doctor` says how long the Claude Code login in use has left as it says a parked
   login's, says when it has expired, and no longer warns that a login whose expiry is not known
   expires soon.

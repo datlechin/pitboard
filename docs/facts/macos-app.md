@@ -5,14 +5,6 @@
 Measured on macOS 27.0 with Swift 6.4 on 5 October 2026, so that `pitboard-ffi`'s
 `present` says what the Swift app said.
 
-- VoiceOver heard a limit's reset as a span Foundation's `Duration.UnitsFormatStyle` said:
-  days, hours and minutes, wide, at most two units, in `en_US_POSIX`, of at least a minute.
-  Asked for 100 spans, it rounds the span to whole minutes, a half to the even one, to see
-  which units it has, and says the two largest that are not nought, so 1 day and 1 minute
-  is "1 day, 1 minute". The last unit it says is the rest of the span in that unit, rounded
-  the same way, and a rest that rounds up to a whole one of the unit before it is carried:
-  1 day 23 hours 30 minutes is "2 days, 0 hours". It writes no thousands separator: 11,574
-  days is "11574 days, 2 hours". `words::spoken_span` is tested against every one.
 - The menu bar cut a label past 12 `Character`s to 11 and an ellipsis, and Swift counts
   extended grapheme clusters. Over 22 labels, accents written as combining marks, flags,
   emoji joined by zero-width joiners, keycaps, tag sequences, Hangul written in jamo, Thai,
@@ -55,3 +47,17 @@ its own date.
   Notification Settings** opens
   `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=` and the app's
   bundle identifier. Nobody has opened the URL to see it land on Pitboard's page.
+
+## What the UI tests find a control by
+
+Measured on macOS 27.0.1 with Swift 6.4 on 25 October 2026, in a program of its own that
+made the views and read AppKit's objects.
+
+- A SwiftUI menu's items carry no accessibility identifier. An `NSHostingMenu` of `Button`s,
+  a `Toggle`, a `Menu` and a `Link`, each given `.accessibilityIdentifier`, made `NSMenuItem`s
+  whose `identifier` was `menuAction:`, or `ID(id: 5)` for the submenu, and whose
+  `accessibilityIdentifier()` was empty. So the macOS UI tests find a menu's items by their
+  words, in `apps/macos/UITests/Words.swift`.
+- A SwiftUI `.alert` is an `_NSAlertPanel` attached to its window as a sheet, whose buttons
+  AppKit names by their order, whatever `.accessibilityIdentifier` they are given: the first
+  declared, the answer, is `action-button-1`, and Cancel after it is `action-button-2`.

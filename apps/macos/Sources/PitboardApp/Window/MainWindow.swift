@@ -7,7 +7,6 @@ struct MainWindow: View {
     let model: AppModel
     let windows: AccountWindows
     let requests: WindowRequests
-    let openAtLogin: OpenAtLogin
     @SceneStorage("pane") private var pane = WindowPane.accounts
 
     var body: some View {
@@ -21,7 +20,7 @@ struct MainWindow: View {
         } detail: {
             switch pane {
             case .accounts:
-                AccountsPane(model: model, windows: windows, openAtLogin: openAtLogin)
+                AccountsPane(model: model, windows: windows)
             case .activity: ActivityPane(model: model)
             case .machine: MachinePane(model: model)
             }
@@ -59,7 +58,7 @@ extension Sheet: Identifiable {
         switch self {
         case .add(let provider): "add/\(provider ?? "")"
         case .signInAgain(let provider, let label): "again/\(provider)/\(label)"
-        case .name(let provider, _): "name/\(provider)"
+        case .name(let provider, let label, _): "name/\(provider)/\(label)"
         case .rename(let provider, let label): "rename/\(provider)/\(label)"
         case .stow: "stow"
         }

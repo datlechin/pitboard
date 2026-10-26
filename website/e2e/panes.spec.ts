@@ -99,12 +99,12 @@ test.describe("macOS", () => {
     await fig.getByRole("tab", { name: "Advanced" }).click();
     await expect(fig.locator('[data-part="title"]')).toHaveText("Advanced");
     await expect(fig).toContainText("/opt/homebrew/bin/pitboard");
-    await fig.getByRole("switch", { name: "Renew parked logins daily" }).click();
+    await fig.getByRole("switch", { name: "Keep Saved Sign-Ins Fresh" }).click();
     // the other Settings figure is the same window
     const other = page.locator("#warm-mac");
     await other.scrollIntoViewIfNeeded();
     await other.getByRole("tab", { name: "Advanced" }).click();
-    await expect(other.getByRole("switch", { name: "Renew parked logins daily" })).toHaveAttribute(
+    await expect(other.getByRole("switch", { name: "Keep Saved Sign-Ins Fresh" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -139,10 +139,10 @@ test.describe("macOS", () => {
     await expect(window.locator('[data-part="title"]')).toHaveText("personal");
     await expect(window.locator('[data-part="site"]')).toHaveText("claude.ai");
     expect(await axe(page, ["#switch-mac"])).toEqual([]);
-    // forgotten, from the window in #usage, its window goes too
+    // removed, from the window in #usage, its window goes too
     await page.locator('#usage-mac [role="row"][data-account="personal"]').click(at);
     await page.keyboard.press("Meta+Backspace");
-    await page.locator("#mac-accounts-forget").getByRole("button", { name: "Forget" }).click();
+    await page.locator("#mac-accounts-forget").getByRole("button", { name: "Remove" }).click();
     await expect(window).toHaveCount(0);
   });
 });
@@ -174,9 +174,9 @@ test.describe("Windows", () => {
     await expect(panel("settings")).toContainText(
       "No full release of Pitboard for Windows is out yet",
     );
-    await panel("settings").getByRole("switch", { name: "Renew parked logins daily" }).click();
+    await panel("settings").getByRole("switch", { name: "Keep saved sign-ins fresh" }).click();
     await expect(
-      panel("settings").getByRole("switch", { name: "Renew parked logins daily" }),
+      panel("settings").getByRole("switch", { name: "Keep saved sign-ins fresh" }),
     ).toHaveAttribute("aria-checked", "true");
     expect(await axe(page, ["#usage-win"])).toEqual([]);
   });

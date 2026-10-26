@@ -11,15 +11,15 @@
 //! minute tick, and a countdown is the app's native one, from [`PanelNotice::until`].
 //!
 //! The words both apps say and the command line does not are in `words.rs`, each a function
-//! of typed values. What the command line says too, a limit's names, a reset, a pace, a
-//! parked login's life, a renewal's note and doctor's summary, is `pitboard_core::words`',
+//! of typed values. What the command line says too, a limit's names, a reset, a parked
+//! login's life, a renewal's note and doctor's summary, is `pitboard_core::words`',
 //! called from here.
 //!
 //! A button the snapshot offers comes with its words and what it sends, and with whether it
 //! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`,
 //! a `NoticeAction` or a `WindowQuestion`'s answers, so a view never words an intent or
 //! decides whether to offer one, and both apps label and hold back one offer alike: a row's
-//! "Use", "Sign In Again…" or "Name…", what an account's own menu offers, the setup step's
+//! "Switch", "Sign In Again…" or "Add…", what an account's own menu offers, the setup step's
 //! "Add Account…" and "Not Now", an empty pane's "Try Again", a window's "Clear", the quit
 //! question's "Quit Claude and Switch" and a sheet's default button, whose intent
 //! `check_name` gives. A control an app always
@@ -30,23 +30,38 @@
 //! Finder. So "Add Account…" is said in both places.
 
 mod accounts;
+mod app_words;
+mod glance;
 mod machine;
+pub(crate) mod next;
 mod notices;
+mod removal;
 mod setup;
 mod sheets;
+mod welcome;
 mod windows;
 pub(crate) mod words;
 
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub use app_words::{
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
+    already_there, app_words, install_update, links_to, named_version, path_too_long,
+    ready_to_install, webview_runtime_too_old,
+};
+#[cfg(test)]
+pub(crate) use glance::glance_on;
+pub(crate) use glance::{glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
     CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
     WarmShown,
 };
+pub use removal::RemovalShown;
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
+pub use welcome::{WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool};
 pub use windows::{
     AccountWindowsShown, DownloadShown, DownloadState, LinkPicker, OpenWindow, PageLoad,
     PickerAccount, PickerShown, StoreDeletion, WaitingShown, WindowWaiting,
@@ -92,10 +107,18 @@ pub struct FailureText {
     pub id: u64,
     /// What was being done: "Couldn’t sign in to work".
     pub title: String,
-    /// What went wrong. Pitboard's errors already say what to do, so it is shown as it is.
+    /// What went wrong.
     pub message: String,
     /// Everything else it warned about, a sentence each.
     pub warnings: Vec<String>,
+    pub next: NextStep,
+}
+
+// What to do about a failure: a button that does it, or a link to the docs about its code.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NextStep {
+    Act { choice: Choice },
+    Learn { link: SetupLink },
 }
 
 /// One tool's accounts, under its name: one section, unheaded, while every account shown is
@@ -134,6 +157,7 @@ pub struct AccountItem {
     pub in_use: bool,
     /// Its parked login can no longer be used, whatever else is running.
     pub needs_sign_in: bool,
+    pub standing: AccountStanding,
     /// A login of its tool that belongs to no account Pitboard can name.
     pub unplaced: bool,
     /// What the far end of its row in the window shows, where anything.
@@ -144,12 +168,11 @@ pub struct AccountItem {
     pub action: Option<ItemAction>,
     /// The one line under its name in the menu: its limits, or what stands in their way.
     pub summary: String,
-    /// The lines under its limits in the window, in this order: why it cannot be used, in
-    /// full; why its numbers are not new, where it can be used all the same; which limit of
-    /// the account in use runs out first at its pace, "Weekly limit runs out in 20h 18m at
-    /// this pace"; how long its parked login stays usable, for an account not in use; and
-    /// where its warm-up stands, "Warms up again at 22:50".
-    pub notes: Vec<String>,
+    // what needs doing about it, the most pressing first
+    pub notes: Vec<AccountNote>,
+    // the window's lines under its limits: its notes, a sign-in due to expire and its warm-up
+    pub lines: Vec<String>,
+    pub detail: AccountDetail,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
@@ -163,6 +186,98 @@ pub struct AccountItem {
     // for an enrolled account, dimmed for the one in use, whose record is the only one of who
     // is signed in; what its own menu offers last, and what deleting its row does
     pub forget: Option<ItemOffer>,
+    // everything its own menu offers, in its order: offers, windows and forget, by kind
+    pub actions: Vec<AccountAction>,
+}
+
+// For a view that marks or orders accounts by where each stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum AccountStanding {
+    InUse,
+    Ready,
+    // ready, with its parked login due to expire or its Claude Desktop sign-in that may lapse
+    Expiring,
+    NeedsSignIn,
+    // signed in, and not added
+    NotAdded,
+    // a login Pitboard cannot read, identify or switch
+    Unusable,
+    Switching,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountNote {
+    pub kind: NoteKind,
+    pub text: String,
+    // what does something about it, where anything does
+    pub action: Option<AccountAction>,
+    // where nothing does, the docs about it
+    pub learn: Option<SetupLink>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NoteKind {
+    // why it cannot be used
+    Problem,
+    // its parked login is due to expire, or its Claude Desktop sign-in may lapse
+    Expiring,
+    // why its numbers are not new
+    Stale,
+    // a login signed in and not added yet
+    Unfinished,
+}
+
+// The inspector's on macOS, an expanded row's on Windows: each value beside its sentence.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountDetail {
+    pub email: Option<String>,
+    pub plan: Option<String>,
+    // when its parked login stops working, for an account not in use
+    pub signed_in_until: Option<i64>,
+    // "In Use", "Saved sign-in valid until Nov 20, 2026 at 3:45 PM", "Sign-in expired"
+    pub sign_in: Option<String>,
+    // for a Claude Code account Pitboard can warm up
+    pub warm: Option<WarmDetail>,
+    pub read_at: Option<i64>,
+    // "Updated 14:05", and for Claude Desktop "Read 2h 05m ago, with Claude closed"
+    pub read: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WarmDetail {
+    pub on: bool,
+    // "Warms up again at 22:50", "Warming up…", "Off"
+    pub said: String,
+    pub next_at: Option<i64>,
+    // when its five-hour period ends, while one runs
+    pub running_until: Option<i64>,
+}
+
+// From an account's menu, its detail or one of its notes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountAction {
+    pub kind: ActionKind,
+    pub title: String,
+    // sent once any question is answered; none for a window, which the app opens itself
+    pub intent: Option<Intent>,
+    // what OpenWindow opens
+    pub window: Option<WindowAccount>,
+    // a shortcut menu leaves out one that cannot be chosen now
+    pub enabled: bool,
+    pub confirm: Option<Question>,
+}
+
+// A view picks an action's symbol and place by this, never by its title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ActionKind {
+    Switch,
+    SignInAgain,
+    // the login signed in now
+    Add,
+    Rename,
+    WarmUpNow,
+    OpenWindow,
+    Remove,
 }
 
 /// What the far end of an account's row in the window shows.
@@ -186,9 +301,9 @@ pub struct AccountMenuShown {
 /// What pressing an account does.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ItemAction {
-    /// What the row's button says: "Use", "Sign In Again…", "Name…".
+    /// What the row's button says: "Switch", "Sign In Again…", "Add…".
     pub title: String,
-    /// What VoiceOver says of that button: "Use work (Codex)".
+    /// What VoiceOver says of that button: "Switch to work (Codex)".
     pub spoken: String,
     /// What to send.
     pub intent: Intent,
@@ -217,46 +332,36 @@ pub struct WindowOffer {
 /// One limit of an account, as a row of its bars.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct LimitRow {
-    /// As the column beside its bar names it: "5h", "week · Fable".
+    pub kind: LimitKind,
+    // as a heading names it: "5-hour limit", "Weekly limit (Fable)"
+    pub name: String,
+    // beside its bar: "5-hour", "Weekly (Fable)"
     pub short: String,
     /// The share used, as the service said it, for the bar. Past 100 once exceeded.
     pub percent: f64,
     /// The share used in words: "42%".
     pub figure: String,
+    // "42% used"
+    pub used: String,
     /// The step it is at, which its tint follows.
     pub level: UsageLevel,
-    /// When it resets: "resets in 2h 05m", "resetting now", or empty where nothing says.
+    pub resets_at: Option<i64>,
+    // "Resets 3:45 PM", "Resets Mon 9:00 AM", "Resetting now", or empty where nothing says
     pub resets: String,
-    /// How it compares with an even use of it, where that means something.
-    pub pace: Option<LimitPace>,
-    /// The whole row as VoiceOver says it: "5-hour limit, 42 percent used, 38 percent under
-    /// an even pace, resets in 3 hours".
+    // "in 2 hr 9 min", or empty: the one part the minute tick moves
+    pub resets_in: String,
+    // the row as VoiceOver says it: "5-hour limit, 42 percent used, resets 3:45 PM"
     pub spoken: String,
 }
 
-/// How a limit compares with using it evenly across its window, as of the moment it is
-/// shown: what its bar marks, and the words beside it.
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct LimitPace {
-    /// Where on its bar an even use would be by now, in percent of the limit: where the mark
-    /// goes.
-    pub expected: f64,
-    /// Which side of an even pace it is on, which the mark's tint follows.
-    pub standing: PaceStanding,
-    /// Beside its bar: "27% over pace", "13% under pace", "on pace".
-    pub said: String,
-    /// What its bar's help says: what an even pace would have used, and for a limit over
-    /// pace, when it runs out.
-    pub help: String,
-}
-
-/// Which side of an even pace a limit is on. Over and under are a mark on its bar, red and
-/// green; at an even pace there is no mark.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum PaceStanding {
-    Under,
-    Even,
-    Over,
+// By its length, for a view that tells limits apart by more than their words.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum LimitKind {
+    FiveHour,
+    Weekly,
+    // a weekly limit of one model's
+    WeeklyModel { model: String },
+    Other { length_seconds: Option<i64> },
 }
 
 /// A question asked before something is done that cannot be undone. Not called
@@ -265,7 +370,7 @@ pub enum PaceStanding {
 pub struct Question {
     pub title: String,
     pub message: String,
-    /// What the button that does it says: "Forget", "Give Up".
+    /// What the button that does it says: "Remove", "Cancel Switch".
     pub confirm: String,
 }
 
@@ -315,12 +420,14 @@ pub struct PanelNotice {
     pub until_label: Option<String>,
     /// What can be done about it: buttons, and the one that puts it away.
     pub actions: Vec<NoticeAction>,
+    // where no button does anything about a warning or a problem, the docs about it
+    pub learn: Option<SetupLink>,
 }
 
 /// Something that can be done about a notice.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NoticeAction {
-    /// What its button says: "Switch to spare", "Give Up…", "Dismiss".
+    /// What its button says: "Switch to spare", "Cancel Switch…", "Dismiss".
     pub title: String,
     /// What to send, once any question has been answered.
     pub intent: Intent,
@@ -377,15 +484,10 @@ pub enum Footing {
     NoClaudeCode,
     /// No tool has anybody signed in, and nothing is enrolled.
     NoOneSignedIn,
-    /// Somebody is signed in to a tool and Pitboard has not been told what to call them,
-    /// so their login cannot be parked yet.
-    Unnamed { provider: String, email: String },
     /// A tool has one account, so there is nothing yet to switch to in it.
     OnlyOne { provider: String, label: String },
     /// Codex is installed and nothing of it is enrolled, so nothing of it is read.
     CodexUnused,
-    /// The app's system says it does not open the app at login, where nothing it does runs.
-    NotOpenedAtLogin,
     /// Claude Code has two accounts, and nobody chose what happens once a limit reaches the
     /// share.
     AtLimitUnchosen,
@@ -401,11 +503,9 @@ pub struct SetupStep {
     pub detail: String,
     /// What can be pressed, the one to press first first.
     pub actions: Vec<Choice>,
-    // a page of the system's own settings, which the app opens
-    #[uniffi(default)]
-    pub link: Option<SetupLink>,
 }
 
+// A page of the system's own settings, or a tool's install page, which the app opens.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SetupLink {
     pub title: String,
@@ -489,9 +589,9 @@ pub struct StowText {
     /// What the look found, a paragraph each. Empty while it looks, and where it could not
     /// look, which the sheet's failure says.
     pub lines: Vec<String>,
-    /// What the sheet says while it looks: "Finding out whose login it is…".
+    /// What the sheet says while it looks: "Finding out whose sign-in it is…".
     pub looking: Option<String>,
-    /// What its default button says: "Put Away".
+    /// What its default button says: "Clean Up".
     pub confirm: String,
     /// Whether that button can be pressed: the look found a login to put away, of an
     /// enrolled account or of none, and it is not being put away already.
@@ -628,6 +728,11 @@ impl<'a> Seen<'a> {
     /// `LocalTime`'s to read, and nothing here reads it.
     pub(crate) fn clock(&self, at: i64) -> String {
         clock_of(self.local, at, self.now)
+    }
+
+    // A moment as the person's calendar and clock say it, or in UTC where they can't.
+    pub(crate) fn date_and_time_of(&self, at: i64) -> String {
+        (self.local.date_and_time(at)).unwrap_or_else(|_| words::utc_clock(at, self.now))
     }
 
     pub(crate) fn time_of_day(&self, minutes: u16) -> Option<String> {
@@ -769,7 +874,8 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         window_request: state.window,
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
-        sheet_failure: state.sheet_failure.as_ref().map(sheets::failure_text),
+        sheet_failure: (state.sheet_failure.as_ref())
+            .map(|failure| sheets::failure_text(os, failure)),
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
         account_menu: accounts::account_menu(seen.os),
@@ -778,25 +884,21 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         setup: setup::step(&seen, &footing),
         accounts_shown: setup::accounts_shown(&seen, &footing),
         menu_accounts_note: setup::menu_accounts_note(&seen, &footing),
+        updated_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
         updated_menu: setup::updated_menu(&seen),
         updated_window: setup::updated_window(&seen),
         footing,
         sheet_text: sheets::sheet_text(&seen),
         signing_in_text: sheets::signing_in_text(&seen),
         stow_text: sheets::stow_text(&seen),
-        failure_alert: state.presented.as_ref().map(sheets::failure_alert),
+        failure_alert: (state.presented.as_ref()).map(|failure| sheets::failure_alert(os, failure)),
         machine: machine::machine(&seen),
         account_windows: windows::account_windows(&seen),
-    }
-}
-
-/// A notice's severity, said in a word where a symbol shows it: if two ever sounded the
-/// same, an error would pass for a note.
-pub(crate) fn spoken_severity(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Info => "Note",
-        Severity::Warning => "Warning",
-        Severity::Error => "Problem",
+        uninstall: removal::uninstall(&seen),
+        removal: removal::removal(&seen),
+        welcome: welcome::welcome(&seen),
+        glance_revision: state.glance_revision(),
+        answers: glance::answers(&seen),
     }
 }
 
@@ -808,6 +910,7 @@ pub(crate) fn alert_of(title: &str, message: &str, warnings: &[crate::Warning]) 
     AlertText {
         title: title.to_owned(),
         message: paragraphs.join("\n\n"),
+        next: None,
     }
 }
 
@@ -826,7 +929,12 @@ mod tests {
     #[test]
     fn windows_says_its_controls_in_sentence_case() {
         use crate::model::Sheet;
-        use crate::present::testing::{claude_code, read, status};
+        use crate::model::testing::records::warning;
+        use crate::present::testing::{
+            account, claude_code, claude_desktop, codex, desktop_account, read, status, strings_of,
+            title_cased,
+        };
+        use pitboard_core::status::Standing;
         let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
         state.sheet = Some(Sheet::Add { provider: None });
         let words = |os| {
@@ -838,26 +946,69 @@ mod tests {
             let empty = shown.machine.activity.empty.expect("no activity");
             [title, add.title, sheet.title, sheet.confirm, empty.title]
         };
-        assert_eq!(
+        for os in [Os::MacOs, Os::Windows] {
+            assert_eq!(
+                words(os),
+                [
+                    words::no_accounts(os).0,
+                    words::add_account(os, true),
+                    words::add_account(os, false),
+                    words::sign_in_asking(os),
+                    words::no_activity(os).0
+                ]
+            );
+        }
+        assert_ne!(
             words(Os::MacOs),
-            [
-                "No Accounts".into(),
-                "Add Account…".into(),
-                words::add_account(Os::MacOs),
-                words::sign_in(Os::MacOs),
-                "No Activity".into()
-            ]
-        );
-        assert_eq!(
             words(Os::Windows),
-            [
-                "No accounts".into(),
-                "Add account…".into(),
-                words::add_account(Os::Windows),
-                words::sign_in(Os::Windows),
-                "No activity".into()
-            ]
+            "each system its own case"
         );
+        let mut accounts = vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("old"))
+                .standing(Standing::LoginExpired)
+                .build(),
+            account(None).of("codex").signed_in().uuid("u").build(),
+        ];
+        accounts.push(desktop_account("home", false));
+        let mut state = read(
+            status(accounts, vec![warning("fallback_login", "")]),
+            vec![claude_code(), codex(), claude_desktop()],
+        );
+        state.sheet = Some(Sheet::Add { provider: None });
+        let names = [
+            "Pitboard",
+            "Claude",
+            "Code",
+            "Codex",
+            "Desktop",
+            "ChatGPT",
+            "Windows",
+            "Credential",
+            "Manager",
+            "PC",
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sun",
+            "Gmail",
+            "Google",
+            "Drive",
+            "Calendar",
+            "Continue",
+            "Taskbar",
+            "Share",
+        ];
+        let mut found = Vec::new();
+        for said in strings_of(&present_on(Os::Windows, &state, MIDDAY, &Utc)) {
+            if !title_cased(&said, &names).is_empty() {
+                found.push(said);
+            }
+        }
+        assert!(found.is_empty(), "{found:#?}");
     }
 
     /// A moment later today is a clock time, and one on another day names its day as well,

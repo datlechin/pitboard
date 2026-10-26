@@ -109,7 +109,8 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
                     actions: [
                         UNNotificationAction(
                             identifier: action, title: button.title,
-                            options: button.opensWindow ? [.foreground] : [])
+                            options: button.opensWindow ? [.foreground] : [],
+                            icon: UNNotificationActionIcon(systemImageName: button.symbol))
                     ],
                     intentIdentifiers: [])
             })

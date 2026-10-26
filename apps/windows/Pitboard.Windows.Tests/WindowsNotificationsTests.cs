@@ -265,7 +265,7 @@ public sealed class WindowsNotificationsTests
 
         Assert.IsTrue(shown, "nothing was shown");
         var toast = XElement.Parse(notification!.Payload);
-        Assert.AreEqual("personal has no 5-hour limit left", toast.Descendants("text").First().Value);
+        Assert.AreEqual("5-hour limit reached", toast.Descendants("text").First().Value);
         Assert.AreEqual("clicked=switch/claude/work", (string?)toast.Descendants("action").Single().Attribute("arguments"));
     }
 

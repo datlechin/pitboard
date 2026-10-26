@@ -15,6 +15,14 @@ struct SettingsView: View {
         case limits
         case advanced
 
+        init(_ section: SettingsSection) {
+            switch section {
+            case .general: self = .general
+            case .limits: self = .limits
+            case .advanced: self = .advanced
+            }
+        }
+
         // The panes an earlier version kept open the one that holds them now.
         init?(rawValue: String) {
             switch rawValue {

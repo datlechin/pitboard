@@ -8,7 +8,7 @@ internal static class Snapshots
     public static Snapshot Read(ulong revision) =>
         new(
             Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
-            WindowRequest: new WindowRequest(Serial: 0, Pane: null),
+            WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
@@ -17,7 +17,7 @@ internal static class Snapshots
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
-            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null,
+            AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
@@ -29,7 +29,14 @@ internal static class Snapshots
                 NoLink: new EmptyList(
                     Title: "No link to open",
                     Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."),
-                Held: []));
+                Held: []),
+            Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
+            Removal: null,
+            Welcome: new WelcomeShown(
+                Title: "Welcome to Pitboard", Lines: [], IconLink: null, Tools: [],
+                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: ""),
+                Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
+            GlanceRevision: 0, Answers: []);
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(

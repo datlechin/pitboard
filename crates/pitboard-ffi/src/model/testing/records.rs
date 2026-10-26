@@ -6,12 +6,6 @@ use crate::{
 };
 use pitboard_core::provider::ProviderId;
 
-/// A control's words as this system writes them, title case on a Mac and sentence case on
-/// Windows, for a test of what `shown` says.
-pub(crate) fn titled(title_case: &str, sentence_case: &str) -> String {
-    crate::present::words::titled(pitboard_core::host::OS, title_case, sentence_case)
-}
-
 /// The ChatGPT app's bundle id, which is how the core's holder detection names it.
 pub(crate) const CHATGPT: &str = "com.openai.codex";
 
@@ -193,13 +187,20 @@ pub(crate) fn already_active(label: &str, warnings: Vec<Warning>) -> Result<Swit
     })
 }
 
-/// What a sign-in enrolled, as the core reports it.
+/// What a sign-in enrolled under `label`, as the core reports it: added unless it was
+/// enrolled already.
 pub(crate) fn enrolled_as(
+    label: &str,
     outcome: EnrolledAs,
     warnings: Vec<Warning>,
 ) -> Result<Enrolled, Refusal> {
     Ok(Enrolled {
         email: "w@example.com".into(),
+        label: label.into(),
+        added: !matches!(
+            outcome,
+            EnrolledAs::Renewed | EnrolledAs::InUse { again: true }
+        ),
         outcome,
         warnings,
     })
@@ -232,6 +233,7 @@ impl Refusal {
             code: self.code.clone(),
             message: self.message.clone(),
             warnings: self.warnings.clone(),
+            account: None,
         }
     }
 }

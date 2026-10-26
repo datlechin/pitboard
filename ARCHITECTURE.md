@@ -75,7 +75,8 @@ built with a `context::Context`:
   written into.
 - `state.rs`: `state.json`, the index of accounts ([The state file](#the-state-file)).
 - `in_use.rs`: whose login each tool has stored, as its service last said.
-- `label.rs`: what somebody typed, as one account.
+- `label.rs`: what somebody typed, as one account, and the name an account gets where nobody
+  typed one.
 - `switch/`: every change to the index: switching, enrolling, adopting, renaming, forgetting,
   renewing, repairing, abandoning, uninstalling and putting away a login left in a file.
   - `journal.rs`, `settle.rs`: an interrupted switch finished, given up or said.
@@ -402,6 +403,9 @@ keeps it is in the header of the module named.
 - One sign-in runs at a time, on a thread of its own, told apart by an id, and enrols only if
   it is still the sign-in under way. It keeps the sheet it started from, and `shutdown` waits
   for each one's tool to stop (`model/signing.rs`).
+- An account the app adds is enrolled as its sign-in ends, under a name the core picks under
+  `state.lock`, and named after, so quitting before the name keeps it
+  (`quitting_before_the_name_is_saved_keeps_the_account`).
 - What the app says by itself is said once: a run-out once per reset across launches, kept in
   `told.json`; a replaced login once per account while the reads say it; a refusal of the
   automatic switch once until it next switches (`model/advising.rs`, `model/threaded.rs`,
@@ -411,11 +415,22 @@ keeps it is in the header of the module named.
   app's UserDefaults are handed over once (`model/keeping.rs`).
 - With its setting on, the app asks the core's look after every read and every
   `DECIDE_EVERY_SECONDS`, as `pitboard watch` decides, paces a refusal by
-  `duty::cadence::retry_after`, and never says what it came to in an alert
+  `duty::cadence::retry_after`, and never says what it came to in an alert. Its Switch Back is
+  a plain switch, taken only while the account it switched to is still in use
   (`model/automatic.rs`).
 - A notice's button is a change of the app's own, never a switch: updating Claude Code's
   config is refused where another account is in use by then, and **Put Away** puts away only
   the file its sheet looked at (`model/changing.rs`, `model/stowing.rs`).
+- Uninstalling from the app stops what runs by itself and closes every account window, and asks
+  the core only once nothing that writes Pitboard's directory is under way, holding the app's
+  `app.lock` until the directory goes. Nothing writes it after, and a refusal before anything
+  went starts the model again (`model/removing.rs`,
+  `after_uninstall_nothing_writes_pitboards_directory_again`).
+- The glance for widgets and intents names each account by an id derived from its own, never
+  by an email, a token, a uuid, a path or a notice's lines, and is written only where the app
+  names a file and only once it changed. A request from outside does no more than a click in
+  the app, and one that needs a question only the app asks is refused in words
+  (`model/glancing.rs`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).

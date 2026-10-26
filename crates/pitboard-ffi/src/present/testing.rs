@@ -221,7 +221,7 @@ impl AccountMade {
         AccountMade { windows, ..self }
     }
 
-    /// With its numbers read at `at`, which is what a limit's pace is as of.
+    /// With its numbers read at `at`.
     pub(crate) fn read_at(self, at: i64) -> AccountMade {
         AccountMade {
             read_at: at,
@@ -371,6 +371,97 @@ impl LocalTime for Unreadable {
             reason: "no formatter".into(),
         })
     }
+}
+
+// Every string in `shown`'s `{:?}`, but ids and codes: what a person may read of it.
+pub(crate) fn strings_of(shown: &impl std::fmt::Debug) -> Vec<String> {
+    strings_in(&format!("{shown:?}"))
+}
+
+// Every string quoted in `debugged`, as `{:?}` writes one, but ids and codes.
+pub(crate) fn strings_in(debugged: &str) -> Vec<String> {
+    let mut strings = Vec::new();
+    let mut chars = debugged.chars();
+    while chars.by_ref().any(|c| c == '"') {
+        let mut string = String::new();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => string.extend(chars.next()),
+                '"' => break,
+                c => string.push(c),
+            }
+        }
+        let code = !string.contains(' ')
+            && string.contains(['_', '/', ':'])
+            && !string.contains(char::is_uppercase);
+        if !code {
+            strings.push(string);
+        }
+    }
+    strings
+}
+
+// Each capital past a sentence's first word that is none of `names`, which sentence case has not.
+pub(crate) fn title_cased(said: &str, names: &[&str]) -> Vec<String> {
+    let words: Vec<&str> = said.split_whitespace().collect();
+    words
+        .windows(2)
+        .filter(|pair| !pair[0].ends_with(['.', '?', '!', ':']))
+        .map(|pair| pair[1].trim_matches(|c: char| !c.is_alphanumeric()))
+        .map(|word| word.strip_suffix("’s").unwrap_or(word))
+        .filter(|word| word.starts_with(char::is_uppercase) && !names.contains(word))
+        .map(str::to_owned)
+        .collect()
+}
+
+// The core's words for how it works, which the apps leave to the command line and its docs.
+pub(crate) fn mechanism_words(text: &str) -> Vec<String> {
+    const WORDS: [&str; 22] = [
+        "park",
+        "parks",
+        "parked",
+        "parking",
+        "enrol",
+        "enrols",
+        "enrolled",
+        "enrolling",
+        "enrolment",
+        "enroll",
+        "record",
+        "records",
+        "recorded",
+        "recording",
+        "settle",
+        "settles",
+        "settled",
+        "settling",
+        "forget",
+        "forgets",
+        "forgotten",
+        "forgetting",
+    ];
+    const PUT: [&str; 3] = ["put", "puts", "putting"];
+    const GIVE: [&str; 5] = ["give", "gives", "gave", "given", "giving"];
+    let lower = text.to_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| !(c.is_alphanumeric() || c == '-'))
+        .filter(|word| !word.is_empty())
+        .collect();
+    let mut found: Vec<String> = (words.iter())
+        .filter(|word| WORDS.contains(word))
+        .map(|word| (*word).to_owned())
+        .collect();
+    for pair in words.windows(2) {
+        let phrase = match pair {
+            [verb, "away"] => PUT.contains(verb),
+            [verb, "up"] => GIVE.contains(verb),
+            _ => false,
+        };
+        if phrase {
+            found.push(pair.join(" "));
+        }
+    }
+    found
 }
 
 #[cfg(test)]

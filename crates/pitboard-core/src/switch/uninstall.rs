@@ -1,6 +1,7 @@
 //! Taking Pitboard off a machine without leaving credentials behind.
 
 use super::{Result, Settled, purge};
+use crate::app::Open;
 use crate::context::Context;
 use crate::error::Error;
 use crate::permit::Permit;
@@ -56,13 +57,18 @@ pub struct Removed {
 /// renewed login settling could not save yet is the only copy of that login, so it is
 /// neither deleted nor left unnamed: it keeps the directory too.
 pub(crate) fn uninstall(settled: Settled) -> Result<Removed> {
+    uninstall_from_app(settled, &mut None)
+}
+
+// `own` is the app's own hold, let go of only as the directory goes: one refused keeps it.
+pub(crate) fn uninstall_from_app(settled: Settled, own: &mut Option<Open>) -> Result<Removed> {
     let Settled {
         _exclusive: exclusive,
         mut state,
         ctx,
         permit,
     } = settled;
-    if crate::app::Open::is_held(&ctx) {
+    if own.is_none() && Open::is_held(&ctx) {
         return Err(Error::PitboardOpen {
             home: home::dir(&ctx),
         });
@@ -84,7 +90,7 @@ pub(crate) fn uninstall(settled: Settled) -> Result<Removed> {
             }
         }
     }
-    match take_away(&ctx, permit, &mut state, exclusive) {
+    match take_away(&ctx, permit, &mut state, exclusive, own) {
         Ok(removed) => Ok(Removed {
             warnings,
             ..removed
@@ -99,6 +105,7 @@ fn take_away(
     permit: Permit,
     state: &mut state::State,
     exclusive: std::fs::File,
+    own: &mut Option<Open>,
 ) -> Result<Removed> {
     let watch_service_removed = remove_job(ctx, permit, Job::Watch)?;
     let schedule_removed = remove_job(ctx, permit, Job::Renew)?;
@@ -133,7 +140,7 @@ fn take_away(
         crate::pending::clear(ctx, permit);
         discard_signins(ctx, permit);
     }
-    let home = (pending == 0).then(|| remove_home(ctx, permit, exclusive));
+    let home = (pending == 0).then(|| remove_home(ctx, permit, exclusive, own));
     Ok(Removed {
         parks: parks.saturating_sub(undeleted - asides_left),
         pending,
@@ -183,14 +190,19 @@ fn remove_job(ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
     }
 }
 
-// A warm-up runs its tool in a home inside this one for as long as it holds `warm.lock`. This
-// run's own `state.lock` is let go of first: on exFAT and FAT32 a file held open keeps its
-// folder (docs/facts/windows-runners.md).
-fn remove_home(ctx: &Context, permit: Permit, exclusive: std::fs::File) -> Home {
+fn remove_home(
+    ctx: &Context,
+    permit: Permit,
+    exclusive: std::fs::File,
+    own: &mut Option<Open>,
+) -> Home {
+    // A warm-up runs its tool in a home inside this one for as long as it holds `warm.lock`.
     if super::warm::RunLock::is_held(ctx) {
         return Home::WarmingUp;
     }
+    // On exFAT and FAT32 a file held open keeps its folder (docs/facts/windows-runners.md).
     drop(exclusive);
+    drop(own.take());
     match home::remove_all(permit, &home::dir(ctx)) {
         Ok(()) => Home::Removed,
         Err(kept) => Home::Kept(kept.left),
@@ -299,7 +311,7 @@ mod tests {
         for make in [machine, codex_machine] {
             let m = make("uninstall-app-open").in_the_default_home();
             schedule::install(&m.ctx, Permit::for_a_test()).expect("scheduled");
-            let open = crate::app::Open::hold(&m.ctx, Permit::for_a_test()).expect("held");
+            let open = Open::hold(&m.ctx, Permit::for_a_test()).expect("held");
             let refused = uninstall(
                 settle(&m.ctx, Permit::for_a_test(), None)
                     .expect("nothing to recover")
@@ -324,6 +336,68 @@ mod tests {
             .expect("uninstalled once the app quit");
             assert!(removed.home_removed);
         }
+    }
+
+    // The app removes Pitboard from inside, holding `app.lock` until the directory goes.
+    #[test]
+    fn the_app_holding_the_lock_uninstalls_from_inside() {
+        for make in [machine, codex_machine] {
+            let m = make("uninstall-from-app").in_the_default_home();
+            schedule::install(&m.ctx, Permit::for_a_test()).expect("scheduled");
+            let mut own = Open::hold(&m.ctx, Permit::for_a_test());
+            assert!(own.is_some(), "the app's hold");
+
+            let removed = uninstall_from_app(
+                settle(&m.ctx, Permit::for_a_test(), None)
+                    .expect("nothing to recover")
+                    .0,
+                &mut own,
+            )
+            .expect("uninstalled");
+
+            assert!(removed.home_removed, "{:?}", removed.home_kept_by);
+            assert!(own.is_none(), "let go of");
+            assert!(!home::dir(&m.ctx).exists());
+            assert_eq!(schedule::status(&m.ctx), schedule::Installed::No);
+        }
+    }
+
+    #[test]
+    fn another_app_holding_the_lock_still_refuses() {
+        let m = machine("uninstall-other-app").in_the_default_home();
+        let _other = Open::hold(&m.ctx, Permit::for_a_test()).expect("held");
+        let refused = uninstall_from_app(
+            settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0,
+            &mut None,
+        );
+        assert_eq!(refused.err().map(|e| e.code()), Some("pitboard_open"));
+        assert_eq!(state::load(&m.ctx).expect("kept").accounts.len(), 2);
+    }
+
+    // Refused before anything is deleted, the app still holds Pitboard's directory open.
+    #[test]
+    fn an_uninstall_from_the_app_refused_keeps_its_hold() {
+        use crate::host::fs::testing;
+        let m = machine("uninstall-app-refused").in_the_default_home();
+        schedule::install(&m.ctx, Permit::for_a_test()).expect("scheduled");
+        let dir = schedule::path(&m.ctx)
+            .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+            .expect("where the scheduler keeps it");
+        let mut own = Open::hold(&m.ctx, Permit::for_a_test());
+        testing::deny_changes(&dir).expect("read-only");
+        let refused = uninstall_from_app(
+            settle(&m.ctx, Permit::for_a_test(), None)
+                .expect("nothing to recover")
+                .0,
+            &mut own,
+        );
+        testing::allow_changes(&dir).expect("changeable again");
+
+        assert_eq!(refused.err().map(|e| e.code()), Some("home_unwritable"));
+        assert!(own.is_some());
+        assert!(Open::is_held(&m.ctx));
     }
 
     #[test]

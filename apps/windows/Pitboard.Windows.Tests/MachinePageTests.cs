@@ -52,7 +52,7 @@ public sealed class MachinePageTests
         }
 
         Assert.IsTrue(Views.Element<AppBarButton>(page, "machine.check").IsEnabled);
-        Assert.Contains(new Intent.PaneShown(Pane.Machine), model.Sent);
+        Assert.Contains(new Intent.PaneShown(Pane.Checks), model.Sent);
     }
 
     [UITestMethod]

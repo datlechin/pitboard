@@ -1,8 +1,8 @@
 ---
 // The notification once a limit reaches the share (MacPlatform.swift); macOS cuts a title longer
 // than the banner's one line at its end. The banner is a group its title names. Working, it is a
-// Temporary banner: it comes in from the screen's edge, shows its close button and Switch while the
-// pointer is over it or focus is inside it, and goes.
+// Temporary banner: it comes in from the screen's edge, shows its close button and its button,
+// Switch or Switch Back, while the pointer is over it or focus is inside it, and goes.
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import { clock, share } from "../../../data/world.ts";
@@ -43,7 +43,7 @@ const { prefix } = Astro.props;
     <img class="size-38 flex-none" src="/icon-192.png" alt="" width="38" height="38" />
     <span class="min-w-0 flex-1 text-u-13/16">
       <b class="flex gap-6 font-bold whitespace-nowrap"
-        ><span class="min-w-0 truncate" id={`${prefix}-title`}>{headsUp.title}</span
+        ><span class="min-w-0 truncate" id={`${prefix}-title`}>{headsUp.title.macos}</span
         ><span class="ml-auto text-u-12 font-normal text-mac-menu-sub">now</span></b
       >
       <span class="block" data-subtitle>{headsUp.tool}</span>
@@ -54,7 +54,7 @@ const { prefix } = Astro.props;
       type="button"
       data-switch
     >
-      {headsUp.button}
+      {headsUp.button.macos}
     </button>
   </div>
 </pb-notice>

@@ -36,10 +36,12 @@ for (const colorScheme of ["light", "dark"] as const) {
         expect(ids.length).toBeGreaterThan(4);
         // every figure is compared, and every missing baseline written, before the test fails;
         // each is taken a whole pixel down the page, so a change above it moves it by whole pixels
-        // the page's header stays at the top of the page, off the figure it would cover
-        await page.evaluate(
-          () => (document.querySelector<HTMLElement>("body > header")!.style.position = "static"),
-        );
+        // the page's header stays at the top of the page, off the figure it would cover, and the room
+        // kept above a figure for it goes, or a figure nearly the window's height loses its foot
+        await page.evaluate(() => {
+          document.querySelector<HTMLElement>("body > header")!.style.position = "static";
+          document.documentElement.style.scrollPaddingTop = "0px";
+        });
         for (const id of ids) {
           await page.evaluate((id) => {
             const root = document.documentElement;

@@ -1,4 +1,4 @@
-// Settings at Warm up limits on both systems: the hours as each system picks a time, each Claude
+// Settings at Warm-Up on both systems: the hours as each system picks a time, each Claude
 // Code account's switch, and the words that follow them (plan question 14, answer c).
 import type { Page } from "@playwright/test";
 import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";

@@ -222,7 +222,7 @@
         </toolkit:SettingsExpander>
 
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Advanced" />
-        <toolkit:SettingsCard Header="Renew parked logins daily">
+        <toolkit:SettingsCard Header="Keep saved sign-ins fresh">
           <toolkit:SettingsCard.Description>
             <StackPanel>
               <TextBlock
@@ -240,7 +240,7 @@
               IsOn="{x:Bind ViewModel.RenewsDaily, Mode=OneWay}"
               IsEnabled="{x:Bind ViewModel.CanRenewDaily, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.renewDaily"
-              AutomationProperties.Name="Renew parked logins daily"
+              AutomationProperties.Name="Keep saved sign-ins fresh"
               Toggled="OnRenewDailyToggled" />
         </toolkit:SettingsCard>
         <!-- No button: the installer puts the command line on the PATH, and takes it off again. -->

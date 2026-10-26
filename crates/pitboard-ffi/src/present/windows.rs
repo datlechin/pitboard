@@ -13,7 +13,7 @@ use crate::account_windows::{
 };
 use crate::model::windows::{Download, Picking};
 use crate::model::{Intent, Sheet};
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 
 /// The account windows, as the model has them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -225,7 +225,7 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
                 // Held back until one of its own downloads has ended: before then it would
                 // clear nothing.
                 clear_downloads: (!matches!(seen.os, Os::Windows)).then(|| Choice {
-                    title: "Clear".into(),
+                    title: words::CLEAR.into(),
                     intent: Intent::ClearDownloads {
                         store: window.store.clone(),
                     },
@@ -258,7 +258,7 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
 /// nothing is known, else that they are being read, as the Open Link window says either.
 fn waiting(seen: &Seen) -> WindowWaiting {
     WindowWaiting {
-        window_title: "Account".into(),
+        window_title: words::ACCOUNT.into(),
         shown: match (&seen.state.status, seen.problem()) {
             (None, Some(problem)) => WaitingShown::ReadFailed {
                 title: words::could_not_read_accounts(seen.os),
@@ -266,14 +266,11 @@ fn waiting(seen: &Seen) -> WindowWaiting {
                 retry: retry(seen.os),
             },
             _ => WaitingShown::Reading {
-                title: READING.into(),
+                title: words::READING_ACCOUNTS.into(),
             },
         },
     }
 }
-
-/// What a window and the Open Link window say while the accounts are read for the first time.
-const READING: &str = "Reading accounts…";
 
 /// Reading the accounts again, as somebody asked. Offered while a read runs too, as
 /// AccountWindowView.swift and AccountPicker.swift offered it, where the accounts pane holds
@@ -298,7 +295,7 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
     let arrival = windows.arrival.as_ref()?.id;
     let shown = match windows.picking(seen.state.status.as_ref(), seen.problem())? {
         Picking::Reading => PickerShown::Reading {
-            title: READING.into(),
+            title: words::READING_ACCOUNTS.into(),
         },
         Picking::ReadFailed(problem) => PickerShown::ReadFailed {
             title: words::could_not_read_accounts(seen.os),
@@ -310,21 +307,14 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             reason: refusal.to_string(),
         },
         Picking::NoAccount(link) => {
-            let name = link.site.name.clone();
+            let (title, detail) = words::no_site_account(seen.os, &link.site.name);
             PickerShown::NoAccount {
-                title: words::titled(
-                    seen.os,
-                    &format!("No {name} Account"),
-                    &format!("No {name} account"),
-                ),
+                title,
                 link_text: link_text(&link.url),
-                detail: format!(
-                    "None of the accounts Pitboard has opens {name}. Add one, and this link \
-                     waits here until you choose it."
-                ),
-                in_browser: words::titled(seen.os, "Open in Browser", "Open in browser"),
+                detail,
+                in_browser: words::open_in_browser(seen.os),
                 add: Choice {
-                    title: words::titled(seen.os, "Add Account…", "Add account…"),
+                    title: words::add_account(seen.os, true),
                     intent: Intent::PresentSheet {
                         sheet: Sheet::Add {
                             provider: Some(link.site.provider.clone()),
@@ -348,7 +338,7 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
                     let open = windows.is_showing(&window.store);
                     PickerAccount {
                         detail: if open {
-                            format!("{}, window open", window.email)
+                            words::window_open(&window.email)
                         } else {
                             window.email.clone()
                         },
@@ -357,7 +347,7 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
                 })
                 .collect(),
             chosen,
-            open: "Open".into(),
+            open: words::OPEN.into(),
             link,
         },
     };
@@ -375,9 +365,9 @@ fn download(download: &Download) -> DownloadShown {
         store: download.store.clone(),
         name: download.name.clone(),
         said: match &download.state {
-            DownloadState::Finished { .. } => Some("Downloaded".into()),
+            DownloadState::Finished { .. } => Some(words::DOWNLOADED.into()),
             DownloadState::Failed { reason } => Some(reason.clone()),
-            DownloadState::Cancelled => Some("Cancelled".into()),
+            DownloadState::Cancelled => Some(words::CANCELLED.into()),
             DownloadState::Starting | DownloadState::Running { .. } => None,
         },
         running: download.running(),
@@ -393,14 +383,13 @@ fn download(download: &Download) -> DownloadShown {
 /// that lists it, and Pitboard would quit without asking.
 #[uniffi::export]
 pub fn downloads_quit_question(running: u32) -> Option<Question> {
-    let title = match running {
-        0 => return None,
-        1 => "A download is in progress. Quit anyway?".to_owned(),
-        _ => format!("{running} downloads are in progress. Quit anyway?"),
-    };
+    if running == 0 {
+        return None;
+    }
+    let (title, message, confirm) = words::quit_with_downloads(OS, running);
     Some(Question {
         title,
-        message: "Quitting Pitboard stops them, and they will not resume.".into(),
-        confirm: "Quit".into(),
+        message: message.into(),
+        confirm: confirm.into(),
     })
 }

@@ -16,6 +16,7 @@ struct NoticeRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(Array(notice.lines.enumerated()), id: \.offset) { _, line in
                     Text(line).explanatory().textSelection(.enabled)
+                        .accessibilityIdentifier("notice.line")
                 }
                 if let until = notice.until, let label = notice.untilLabel {
                     // Counts down by itself, and stops at zero once the moment has passed.
@@ -32,6 +33,8 @@ struct NoticeRow: View {
                         ForEach(buttons, id: \.title) { action in
                             Button(action.title) { perform(action) }
                                 .disabled(!action.enabled)
+                                .accessibilityIdentifier(
+                                    "notice.action.\(caseName(action.intent))")
                         }
                     }
                 }
@@ -43,6 +46,7 @@ struct NoticeRow: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .help(dismiss.title)
+                    .accessibilityIdentifier("notice.dismiss")
             }
         }
         .padding(.vertical, 4)

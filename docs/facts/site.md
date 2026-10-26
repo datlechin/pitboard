@@ -173,8 +173,9 @@ only a picture shows, and the share field's keys are recorded and not asserted, 
   was read on windows-2025 alone.
 
 Runs 40204121073 and 40206476781 read them on 25 October 2026, after run 40196222517 read most
-of them first, and runs 40211517451 and 40247375339 read them again. A line that names runs was
-read in those alone.
+of them first, and runs 40211517451 and 40247375339 read them again. Run 40292624691 read them
+on 26 October 2026, once the apps said Switch, Remove Account and Sign-in expired. A line that
+names runs was read in those alone.
 
 ### macOS: the menu bar item
 
@@ -190,8 +191,9 @@ read in those alone.
   menu does not wrap. With nothing highlighted, the first Up goes to Quit Pitboard. Home and
   Page Up go to work, End and Page Down to Quit Pitboard.
 - Typing goes to the first item whose title or subtitle starts with what is typed, in any case:
-  "spa" goes to spare · Pro, "Open P" to Open Pitboard, "o" to old, and "Needs" to old, whose
-  subtitle is "Needs signing in again". With a pause of 0.5 s between keys they make one name,
+  "spa" goes to spare · Pro, "Open P" to Open Pitboard and "o" to old. "Needs" went to old while
+  its subtitle was "Needs signing in again", and still did in run 40292624691, where the subtitle
+  reads "Sign-in expired". With a pause of 0.5 s between keys they make one name,
   and with 1 s a new one starts: "o" then "p" goes to Open claude.ai after 0.5 s and to personal
   after 1 s, 1.5 s and 3 s. The pauses measured 500 to 505 ms and 1007 to 1014 ms (runs
   40204121073, 40206476781, 40211517451 and 40247375339).
@@ -205,7 +207,7 @@ read in those alone.
 - Resting the pointer on Open claude.ai opens its submenu within 0.34 s of the pointer starting
   to move there (recorded, runs 40204121073 and 40206476781).
 - On the fixture a switch is quicker than the test can see: In Use showed 0.11 to 0.13 s after
-  the click on **Use** returned, and no "Switching…" was seen. Refresh was never seen dimmed
+  the click on the row's button returned, and no "Switching…" was seen. Refresh was never seen dimmed
   (recorded, runs 40204121073, 40206476781, 40211517451 and 40247375339).
 
 ### macOS: the menu bar with the Accounts window in front
@@ -222,10 +224,11 @@ read in those alone.
 - View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Enter Full Screen fn F. Actual
   Size, Zoom In, Zoom Out and Enter Full Screen are dimmed.
 - Go: Back ⌘[, Forward ⌘]. Back and Forward are dimmed.
-- Account, with no account selected: Use, Sign In Again…, Rename…, Forget… ⌘⌫, all dimmed.
-  With personal selected: Use personal, Sign In Again…, Rename…, Warm Up Now, dimmed; Open
-  claude.ai; Forget… ⌘⌫. With work, the account in use, selected: the same with Use work, Warm
-  Up Now and Forget… dimmed, and ⌘⌫ asks nothing. No item is red.
+- Account, with no account selected: Switch, Sign In Again…, Rename…, Remove Account… ⌘⌫, all
+  dimmed. With personal selected: Switch to personal, Sign In Again…, Rename…, Warm Up Now,
+  dimmed; Open claude.ai; Remove Account… ⌘⌫. With work, the account in use, selected: the same
+  with Switch to work, Warm Up Now and Remove Account… dimmed, and ⌘⌫ asks nothing. No item is
+  red.
 - Window is macOS's own: Minimize ⌘M, Zoom, Fill ⌃fn F, Center ⌃fn C; Move & Resize ›; Full
   Screen Tile; Remove Window from Set; Pitboard; Bring All to Front. Full Screen Tile and Remove
   Window from Set are dimmed. Under ⌥, Minimize All, Zoom All and Arrange in Front take their
@@ -235,10 +238,10 @@ read in those alone.
   button alone is enabled: the app's icon, "Pitboard" in bold, and the version and build,
   "0.0.0 (1)" in a debug build, with no "Version" before them.
 
-### macOS: the Forget alert and the sheets
+### macOS: the Remove alert and the sheets
 
-- A sheet on the Accounts window: the title "Forget “personal”?", the message, then Cancel and
-  Forget, in that order and of one width. Forget's title is red on a pale red fill, Cancel's
+- A sheet on the Accounts window: the title "Remove “personal”?", the message, then Cancel and
+  Remove, in that order and of one width. Remove's title is red on a pale red fill, Cancel's
   grey; neither is drawn as the default button.
 - Return presses neither button, where AppKit's own rule gives Return to an alert's first
   button. ⌘. and Escape press Cancel.
@@ -254,12 +257,12 @@ read in those alone.
 - At first no row is selected. A click selects a row, in the accent colour with white text; a
   click on the sidebar leaves it selected in grey. Up and Down move the selection. Typing an
   account's name selects it: "w" selects work.
-- **Use** switches without selecting its row.
+- **Switch** switches without selecting its row.
 - A right click on a row not selected leaves the selection where it was and draws an accent
-  outline round the row clicked. The shortcut menu acts on that row: Use personal, Sign In
-  Again…, Rename…; Open claude.ai; Copy Email Address; Forget…, with no keys and nothing red.
-  Copy Email Address copied personal's address.
-- After Forget, no row is selected and the list keeps focus: Down selects work.
+  outline round the row clicked. The shortcut menu acts on that row: Switch to personal, Sign In
+  Again…, Rename…; Open claude.ai; Copy Email Address; Remove Account…, with no keys and nothing
+  red. Copy Email Address copied personal's address.
+- After Remove Account, no row is selected and the list keeps focus: Down selects work.
 
 ### macOS: Limits
 
@@ -293,8 +296,8 @@ cannot tell apart:
   main · Pro · 7%, spare · Pro · 0%; Add account…, Refresh; Open claude.ai ›, Open chatgpt.com ›;
   Open Pitboard, in semibold; Settings; Pitboard help, Exit. The headings are disabled. Each
   account is a toggle item, on for its tool's account in use. The tooltips are the items' help
-  text: "5-hour 42%, weekly 12%", "Needs signing in again", "Updated 3:10 PM" on Refresh, none
-  on the headings.
+  text: "5-hour 42% used, weekly 12%", "Sign-in expired", "Updated 3:10 PM" on Refresh, none on
+  the headings (run 40292624691).
 - It opens with focus on work · 42%, the first enabled item, whose tooltip then shows (recorded,
   picture `site-tray-menu-mid-screen` of run 40206476781). The first
   Down goes to old. Down and Up pass over the headings and wrap: Down from Exit goes to work, and
@@ -303,17 +306,17 @@ cannot tell apart:
 ### Windows: the account list and its dialog
 
 - A right click on a row not selected leaves the selection where it was and draws no outline.
-  The context menu puts focus on its first item, Use personal, then lists Sign in again…,
-  Rename… F2; Open claude.ai; Copy email address Ctrl+C; Forget… Del. Copy email address copied
-  personal's address.
-- Delete on the selected row opens the Forget dialog with focus, and its focus rectangle, on
-  Forget, the primary button on the left; Cancel is on the right; neither is drawn as the
-  default. Enter presses Forget.
-- After Forget no row is selected and focus is on the window's title bar, `AppTitleBar`, not the
+  The context menu puts focus on its first item, Switch to personal, then lists Sign in again…,
+  Rename… F2; Open claude.ai; Copy email address Ctrl+C; Remove account… Del. Copy email address
+  copied personal's address.
+- Delete on the selected row opens the Remove dialog with focus, and its focus rectangle, on
+  Remove, the primary button on the left; Cancel is on the right; neither is drawn as the
+  default. Enter presses Remove.
+- After Remove no row is selected and focus is on the window's title bar, `AppTitleBar`, not the
   list: Down moves nothing.
-- On the fixture, In use showed 0.19 to 0.37 s after **Use** was invoked on windows-2025 and
-  0.25 s on windows-11-arm, and no "Switching" was seen. Refresh was disabled for 14 to 24 ms
-  (recorded, runs 40204121073 and 40206476781).
+- On the fixture, In use showed 0.19 to 0.37 s after the row's button was invoked on
+  windows-2025 and 0.25 s on windows-11-arm, and no "Switching" was seen. Refresh was disabled
+  for 14 to 24 ms (recorded, runs 40204121073 and 40206476781).
 
 ### Windows: Settings, windows and Notification Center
 
@@ -367,8 +370,8 @@ says so in a comment naming its line here, which `website/src/scripts/departures
   the app brings a window forward.
 - The macOS share field takes a typed share on Return or as focus leaves. The app's binding
   clamps each key as it is typed, which can rewrite the text under the caret.
-- After Forget on Windows the page draws a focus ring on the title bar, where WinUI draws none
-  (WCAG 2.4.7).
+- After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
+  none (WCAG 2.4.7).
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
 - This PC stays on its spinner, and Check again is held back: the page draws no PC's checks yet.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn

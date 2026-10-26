@@ -5,7 +5,7 @@ import { LiveFigure } from "./figure.ts";
 import { Grid } from "./grid.ts";
 import { hold } from "./hold.ts";
 import { INSET, Menu, sectioned } from "./menu.ts";
-import { expired, offersOf } from "./offers.ts";
+import { offersOf } from "./offers.ts";
 import { readLog } from "./activity.ts";
 import type { WindowMenus } from "./appmenu.ts";
 import { MachinePane } from "./machine.ts";
@@ -23,6 +23,7 @@ import {
   refreshFromApp,
   setGeneral,
   setSchedule,
+  switchBackFromApp,
   switchFromApp,
   warmNote,
   warmUp,
@@ -34,13 +35,19 @@ import {
   isInUse,
   limitRow,
   listed,
-  notes,
-  spokenLimit,
+  rowLines,
+  signInExpired,
+  switchSpoken,
   updated,
-  useSpoken,
-  whole,
 } from "../../lib/words.ts";
-import { keysOf, noticeOf, setupStepOf, signInAgain, type System } from "../../data/window.ts";
+import {
+  SWITCH,
+  keysOf,
+  noticeOf,
+  setupStepOf,
+  signInAgain,
+  type System,
+} from "../../data/window.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
 const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
@@ -262,6 +269,8 @@ export class AccountsWindow extends LiveFigure {
           return;
         case "dismiss":
           return dismissNotice(does.closest<HTMLElement>("[data-notice]")!.dataset.notice as Tool);
+        case "switch-back":
+          return switchBackFromApp(this.system);
       }
     });
     // a right click, a Control-click or a two-finger click opens a row's shortcut menu where it
@@ -317,7 +326,7 @@ export class AccountsWindow extends LiveFigure {
       else this.#openMenu(row, null, null);
     });
     hold(grid, '[role="row"]', (row, x, y) => this.#openMenu(row, x, y));
-    // ⌘⌫, the Account menu's Forget…, wherever focus is in the window but a field
+    // ⌘⌫, the Account menu's Remove Account…, wherever focus is in the window but a field
     this.addEventListener("keydown", (e) => {
       const at = e.target as Element;
       if (this.system !== "macos" || e.defaultPrevented || !e.metaKey || e.key !== "Backspace")
@@ -342,12 +351,12 @@ export class AccountsWindow extends LiveFigure {
 
   #setupTool: Tool | null = null;
 
-  // Use, Return, Enter or a double click: the row's button
+  // Switch, Return, Enter or a double click: the row's button
   #act(row: HTMLElement) {
     const s = model.get();
     const a = accountOf(s, row.dataset.account);
     if (!a || isInUse(a, s) || s.switching) return;
-    if (expired(a, s)) return sheets(this.system)?.signIn(this, a.tool, a);
+    if (signInExpired(a, s)) return sheets(this.system)?.signIn(this, a.tool, a);
     this.#saying = a.tool;
     switchFromApp(a.tool, a.label, this.system);
   }
@@ -477,8 +486,8 @@ export class AccountsWindow extends LiveFigure {
     return false;
   }
 
-  // after Forget the row has gone and nothing is selected; macOS's list keeps focus, and Windows
-  // gives it to the window's title bar
+  // after Remove Account the row has gone and nothing is selected; macOS's list keeps focus, and
+  // Windows gives it to the window's title bar
   forgotten() {
     this.#grid.lost();
     if (this.system !== "windows") return;
@@ -532,6 +541,10 @@ export class AccountsWindow extends LiveFigure {
       });
       shown(part(box, "countdown"), !!n.countdown);
       text(part(box, "countdown"), n.countdown ?? "");
+      const back = box.querySelector<HTMLButtonElement>('[data-does="switch-back"]');
+      shown(back?.closest('[data-part="actions"]') ?? null, !!n.back);
+      text(back, n.back ?? "");
+      attr(back, "disabled", s.switching ? "" : null);
       for (const icon of box.querySelectorAll<HTMLElement>("[data-severity]"))
         shown(icon, icon.dataset.severity === n.severity);
       // a switch asked for here says the notice it leaves
@@ -589,13 +602,13 @@ export class AccountsWindow extends LiveFigure {
     shown(part(row, "in-use"), on && !switching);
     shown(part(row, "switching"), switching);
     const button = row.querySelector<HTMLButtonElement>('[data-does="use"]')!;
-    const again = expired(a, s);
+    const again = signInExpired(a, s);
     shown(button, !on && !switching);
-    text(button, again ? signInAgain(this.system) : "Use");
-    attr(button, "aria-label", on || again ? null : useSpoken(a));
+    text(button, again ? signInAgain(this.system) : SWITCH);
+    attr(button, "aria-label", on || again ? null : switchSpoken(a));
     attr(button, "disabled", s.switching && !switching ? "" : null);
     this.#limits(s, row, a);
-    const said = notes(a, s, warmNote(s, a));
+    const said = rowLines(a, s, warmNote(s, a));
     const box = part(row, "notes")!;
     if ([...box.children].map((n) => n.textContent?.trim()).join("\n") !== said.join("\n")) {
       box.replaceChildren(
@@ -619,29 +632,13 @@ export class AccountsWindow extends LiveFigure {
     a.limits.forEach((limit, i) => {
       const g = groups[i];
       const l = limitRow(limit, s);
-      const standing = l.pace?.standing ?? "even";
-      const even = whole(l.pace?.expected ?? 0);
       text(part(g, "short"), l.short);
-      text(part(g, "spoken"), spokenLimit(limit, s));
+      text(part(g, "spoken"), l.spoken);
       const fill = part(g, "fill")!;
       attr(fill, "width", String(l.percent));
       attr(fill, "data-state", l.level);
-      const mark = part(g, "mark")!;
-      shown(mark, standing !== "even");
-      if (mark.localName === "line") {
-        attr(mark, "x1", String(even));
-        attr(mark, "x2", String(even));
-        attr(mark, "data-state", standing);
-      } else {
-        const [ground, line] = mark.querySelectorAll("rect");
-        attr(ground, "x", String(even - 2));
-        attr(line, "x", String(even - 1));
-        attr(line, "data-state", standing);
-      }
       text(part(g, "figure"), l.figure);
       text(part(g, "resets"), l.resets);
-      text(part(g, "pace"), l.pace?.said ?? "");
-      attr(part(g, "pace"), "data-state", standing);
     });
   }
 }

@@ -14,6 +14,7 @@ import {
   menuBarSpoken,
   menuBarShown,
   shortDate,
+  type System,
 } from "../../lib/words.ts";
 
 // how long a banner stays, until measured on macOS 27 and Windows 11: Windows' default, which
@@ -26,6 +27,7 @@ const said = (el: Element | null, text: string) => {
 };
 
 class Notice extends LiveFigure {
+  #system: System = "macos";
   #banner!: HTMLElement;
   #moment: Moment | null = null;
   #inputs = "";
@@ -42,6 +44,8 @@ class Notice extends LiveFigure {
   #clock: HTMLElement | null = null;
 
   connectedCallback() {
+    const drawing = this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? "";
+    this.#system = drawing.endsWith("windows") ? "windows" : "macos";
     this.#banner = this.querySelector("[data-banner]")!;
     const b = this.#banner;
     b.addEventListener("pointerenter", () => this.#hold("pointer", true));
@@ -151,12 +155,13 @@ class Notice extends LiveFigure {
     shown(c.querySelector('[data-part="group"]'), !!p);
     shown(c.querySelector('[data-does="clear"]'), !!p);
     if (!p) return;
-    text(c.querySelector(`[data-part="note-title"]`), p.title);
+    text(c.querySelector(`[data-part="note-title"]`), p.title[this.#system]);
     const subtitle = c.querySelector<HTMLElement>("[data-subtitle]");
     shown(subtitle, p.subtitle !== null);
     if (p.subtitle) text(subtitle, p.subtitle);
     text(c.querySelector("[data-body]"), p.body);
-    shown(c.querySelector("[data-switch-row]"), p.switchTo !== null);
+    shown(c.querySelector("[data-switch-row]"), p.button !== null);
+    if (p.button) text(c.querySelector('[data-does="switch"]'), p.button.title[this.#system]);
   }
 
   // The desk at the moment: its clock, and Pitboard's figure in the menu bar or the tray.
@@ -178,14 +183,15 @@ class Notice extends LiveFigure {
 
   #fill(p: Posted) {
     const b = this.#banner;
-    said(b.querySelector(`#${this.id}-title`), p.title);
+    said(b.querySelector(`#${this.id}-title`), p.title[this.#system]);
     const subtitle = b.querySelector<HTMLElement>("[data-subtitle]")!;
     subtitle.hidden = p.subtitle === null;
     if (p.subtitle) said(subtitle, p.subtitle);
     said(b.querySelector("[data-body]"), p.body);
     const button =
       b.querySelector<HTMLElement>("[data-switch-row]") ?? b.querySelector("[data-switch]")!;
-    button.hidden = p.switchTo === null;
+    button.hidden = p.button === null;
+    if (p.button) said(b.querySelector("[data-switch]"), p.button.title[this.#system]);
   }
 
   #arrive() {
@@ -194,14 +200,14 @@ class Notice extends LiveFigure {
       this.#forget();
       return this.#leave();
     }
-    const key = JSON.stringify([p.title, p.subtitle, p.body, p.switchTo, this.#moment!.at]);
+    const key = JSON.stringify([p.title, p.subtitle, p.body, p.button, this.#moment!.at]);
     if (!this.#inView || key === this.#shown) return;
     this.#shown = key;
     this.#fill(p);
     this.#kept = p;
     this.#drawCenter();
     this.#banner.dataset.state = this.#held() ? "held" : "in";
-    say([p.title, p.subtitle, p.body].filter(Boolean).join(", "));
+    say([p.title[this.#system], p.subtitle, p.body].filter(Boolean).join(", "));
     this.#wait();
   }
 
@@ -234,9 +240,10 @@ class Notice extends LiveFigure {
     this.#pointer = this.#focus = false;
   }
 
-  // Switch acts in the moment: Pitboard switches to the account offered, and the desk shows it.
+  // Switch and Switch Back act in the moment: Pitboard switches to the account offered, and the desk
+  // shows it.
   #switch() {
-    const to = this.#moment?.posted?.switchTo;
+    const to = this.#moment?.posted?.button;
     if (!to) return;
     this.#moment!.state.inUse[to.tool] = to.label;
     this.#draw();

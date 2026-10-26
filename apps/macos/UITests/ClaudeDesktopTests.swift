@@ -16,7 +16,7 @@ final class ClaudeDesktopTests: FixtureTestCase {
         app.openWindow()
         let home = app.accountRow("desktop/home")
         XCTAssertTrue(home.waitForExistence(timeout: 5))
-        XCTAssertTrue(home.buttons["Use home (Claude Desktop)"].exists)
+        XCTAssertTrue(home.buttons["account.action"].exists)
     }
 
     @MainActor
@@ -25,7 +25,7 @@ final class ClaudeDesktopTests: FixtureTestCase {
         app.openWindow()
         let home = app.accountRow("desktop/home")
         XCTAssertTrue(home.waitForExistence(timeout: 5))
-        home.buttons["Use home (Claude Desktop)"].click()
+        home.buttons["account.action"].click()
         let notice = app.descendants(matching: .any)["notice.switch/desktop"]
         XCTAssertTrue(notice.waitForExistence(timeout: 10))
         XCTAssertFalse(app.alert.exists, "Claude was closed, so nothing asked")
@@ -39,17 +39,15 @@ final class ClaudeDesktopTests: FixtureTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 5))
         let notice = app.descendants(matching: .any)["notice.switch/desktop"]
 
-        home.buttons["Use home (Claude Desktop)"].click()
-        XCTAssertTrue(app.alert.buttons["Cancel"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.alert.staticTexts["Quit Claude to switch?"].exists)
-        app.alert.buttons["Cancel"].click()
+        home.buttons["account.action"].click()
+        XCTAssertTrue(app.alertCancel.waitForExistence(timeout: 5))
+        app.alertCancel.click()
         XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
         XCTAssertFalse(notice.exists, "nothing was switched")
 
-        home.buttons["Use home (Claude Desktop)"].click()
-        let quit = app.alert.buttons["Quit Claude and Switch"]
-        XCTAssertTrue(quit.waitForExistence(timeout: 5))
-        quit.click()
+        home.buttons["account.action"].click()
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
+        app.alertAnswer.click()
         XCTAssertTrue(notice.waitForExistence(timeout: 10))
     }
 
@@ -57,30 +55,35 @@ final class ClaudeDesktopTests: FixtureTestCase {
     func testAddingAClaudeDesktopAccountAsksToQuitClaudeOverTheSheet() {
         let app = launch(.claudeDesktopOpen)
         app.openWindow()
-        startAddingTravel(app)
+        startAdding(app)
 
-        app.buttons["Park work"].click()
-        XCTAssertTrue(app.alert.buttons["Cancel"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.alert.staticTexts["Quit Claude to add an account?"].exists)
-        XCTAssertTrue(app.alert.buttons["Quit Claude and Park work"].exists)
-        let name = app.textFields["sheet.name"]
-        XCTAssertTrue(name.exists, "asked over the sheet, which stays")
-        app.alert.buttons["Cancel"].click()
+        let park = app.buttons["sheet.confirm"]
+        park.click()
+        XCTAssertTrue(app.alertCancel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alertAnswer.exists)
+        XCTAssertTrue(app.control("sheet.add").exists, "asked over the sheet, which stays")
+        app.alertCancel.click()
         XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
-        XCTAssertEqual(name.value as? String, "travel")
 
-        let park = app.buttons["Park work"]
         XCTAssertTrue(park.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         park.click()
-        let quit = app.alert.buttons["Quit Claude and Park work"]
-        XCTAssertTrue(quit.waitForExistence(timeout: 5))
-        quit.click()
-        let waiting = app.text("BEGINSWITH", "In Claude, sign in to the account you’re adding.")
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
+        app.alertAnswer.click()
+        let waiting = app.sheets.firstMatch.buttons["sheet.undo"]
         XCTAssertTrue(waiting.waitForExistence(timeout: 10))
-        // The fixture's Claude signs in to travel and quits 7 seconds after it is opened.
-        let travel = app.accountRow("desktop/travel")
-        XCTAssertTrue(travel.waitForExistence(timeout: 30))
-        XCTAssertTrue(travel.staticTexts["In Use"].waitForExistence(timeout: 5))
+        // The fixture's Claude signs in to travel and quits 7 seconds after it is opened. A
+        // Claude Desktop account has no email, so it is added as desktop and named next.
+        let added = app.accountRow("desktop/desktop")
+        XCTAssertTrue(added.waitForExistence(timeout: 30))
+        XCTAssertTrue(
+            added.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 5))
+        let name = app.textFields["sheet.name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.click()
+        name.typeKey("a", modifierFlags: .command)
+        name.typeText("travel")
+        app.buttons["sheet.confirm"].click()
+        XCTAssertTrue(app.accountRow("desktop/travel").waitForExistence(timeout: 10))
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
     }
 
@@ -88,41 +91,37 @@ final class ClaudeDesktopTests: FixtureTestCase {
     func testAnAddLeftHalfwayOffersToPutTheParkedAccountBack() {
         let app = launch(.claudeDesktop)
         app.openWindow()
-        startAddingTravel(app)
+        startAdding(app)
 
-        app.buttons["Park work"].click()
-        let waiting = app.text(
-            "BEGINSWITH", "Open Claude and sign in to the account you’re adding.")
+        app.buttons["sheet.confirm"].click()
+        let waiting = app.sheets.firstMatch.buttons["sheet.undo"]
         XCTAssertTrue(waiting.waitForExistence(timeout: 10))
         XCTAssertFalse(app.alert.exists, "Claude was closed, so nothing asked")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waiting.exists, "the waiting page stays")
-        XCTAssertTrue(app.sheets.firstMatch.buttons["Put work Back"].exists)
 
-        app.sheets.firstMatch.buttons["Later"].click()
+        app.sheets.firstMatch.buttons["sheet.cancel"].click()
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
         let notice = app.descendants(matching: .any)["notice.awaiting/desktop"]
         XCTAssertTrue(notice.waitForExistence(timeout: 5))
-        XCTAssertTrue(notice.buttons["Finish Adding…"].exists)
-        let putBack = notice.buttons["Put work Back"]
+        XCTAssertTrue(notice.buttons["notice.action.add"].exists)
+        let putBack = notice.buttons["notice.action.switchTo"]
         XCTAssertTrue(putBack.exists)
 
         putBack.click()
         let work = app.accountRow("desktop/work")
-        XCTAssertTrue(work.staticTexts["In Use"].waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            work.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 10))
         XCTAssertTrue(notice.waitForNonExistence(timeout: 5))
     }
 
     @MainActor
-    private func startAddingTravel(_ app: XCUIApplication) {
-        app.toolbars.buttons["Add Account"].click()
+    private func startAdding(_ app: XCUIApplication) {
+        app.toolbars.buttons["toolbar.addAccount"].click()
         let tool = app.popUpButtons["sheet.tool"]
         XCTAssertTrue(tool.waitForExistence(timeout: 5))
         tool.click()
         // Its own item, not the menu bar item's Claude Desktop heading.
         tool.menuItems["Claude Desktop"].click()
-        let name = app.textFields["sheet.name"]
-        name.click()
-        name.typeText("travel")
     }
 }

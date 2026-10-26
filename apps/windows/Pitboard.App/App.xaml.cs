@@ -103,7 +103,7 @@ public partial class App : Application, IIconTargets
         else if (Launching.OpensWindow(_start.Arguments))
         {
             // Windows puts a new icon in the overflow, so a launch from Start shows only through its window.
-            model.Send(new Intent.ShowWindow(Pane: null));
+            model.Send(new Intent.Show(Place: null));
         }
 
         // A second launch's handover arrives on a thread of its own.

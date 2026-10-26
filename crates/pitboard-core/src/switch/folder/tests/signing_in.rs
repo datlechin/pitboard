@@ -5,15 +5,16 @@ use super::{
 };
 use super::{data, rested, settled, snapshot, unchanged, whereabouts};
 use crate::desktop_testing::EMPTIED;
+use crate::desktop_testing::Person;
 use crate::error::Error;
 use crate::permit::Permit;
 use crate::provider::ProviderId;
 use crate::state::{self, SetAside};
 use crate::switch::harness::{
     HOME, STRANGER, WORK, audit_lines, desktop_machine, desktop_pair, hold, hold_where_deleted,
-    recover, sign_in_inside,
+    recover, sign_in_inside, signed_in_inside,
 };
-use crate::switch::{Outcome, enroll};
+use crate::switch::{Enrolled, Naming, Outcome, enroll};
 use crate::warning::Warning;
 use std::sync::mpsc::RecvTimeoutError;
 
@@ -22,10 +23,7 @@ fn a_sign_in_parks_the_account_in_use_and_enrols_whoever_signs_in() {
     let m = desktop_machine("sign-in-inside");
     let (enrolled, warnings) = sign_in_inside(&m, "home", &HOME).expect("added");
     assert!(
-        matches!(
-            enrolled,
-            crate::switch::folder::Enrolled::InUse { again: false, .. }
-        ),
+        matches!(enrolled, Enrolled::InUse { again: false, .. }),
         "{enrolled:?}"
     );
     assert!(warnings.is_empty(), "{warnings:?}");
@@ -37,6 +35,61 @@ fn a_sign_in_parks_the_account_in_use_and_enrols_whoever_signs_in() {
     assert!(state.awaiting.is_empty() && state.moving.is_empty());
     hold(&m, "a sign-in inside Claude");
     rested(&m, "a sign-in inside Claude");
+}
+
+// The app's add asks no name: somebody enrolled already keeps theirs.
+#[test]
+fn an_add_in_claude_given_no_name_waits_under_a_name_no_account_has() {
+    let m = desktop_pair("given-no-name");
+    let pitboard = crate::service::Pitboard::new(m.ctx.clone());
+    let add = |who: &Person| {
+        let watched = pitboard
+            .sign_in_watched_for(ProviderId::Desktop)
+            .expect("waiting");
+        let login = signed_in_inside(&m, watched, who).expect("signed in");
+        pitboard
+            .enroll_signed_in_as(login, Naming::FromEmail)
+            .expect("added")
+            .value
+    };
+    let first = add(&STRANGER);
+    assert_eq!((&first.key, first.added), (&m.key("desktop"), true));
+    assert!(
+        matches!(first.enrolled, Enrolled::InUse { again: false, .. }),
+        "{:?}",
+        first.enrolled
+    );
+    let other = Person {
+        uuid: "0b7e2c44-3333-4d1f-8a35-91c0de77aa02",
+        session: "other-session",
+    };
+    let second = add(&other);
+    assert_eq!((&second.key, second.added), (&m.key("desktop-2"), true));
+    let home = add(&Person {
+        uuid: HOME.uuid,
+        session: "home-session-again",
+    });
+    assert_eq!((&home.key, home.added), (&m.key("home"), false));
+    assert!(
+        matches!(home.enrolled, Enrolled::InUse { again: true, .. }),
+        "{:?}",
+        home.enrolled
+    );
+    assert_eq!(in_use(&m).as_deref(), Some("home"));
+    assert_eq!(
+        audit_lines(&m, "enroll")
+            .into_iter()
+            .rev()
+            .take(3)
+            .collect::<Vec<_>>(),
+        [
+            ("desktop/home".to_owned(), "ok".to_owned()),
+            ("desktop/desktop-2".to_owned(), "ok".to_owned()),
+            ("desktop/desktop".to_owned(), "ok".to_owned()),
+        ],
+        "logged under the names they were given"
+    );
+    hold(&m, "three adds given no name");
 }
 
 #[test]
@@ -316,10 +369,7 @@ fn an_add_from_a_logged_out_claude_never_files_a_session_under_the_old_name() {
     claude.quits();
     let login = waiting.finish().expect("signed in");
     let (enrolled, _) = enroll(settled(&m), &m.key("travel"), Some(login)).expect("enrolled");
-    assert!(matches!(
-        enrolled,
-        crate::switch::folder::Enrolled::InUse { again: false, .. }
-    ));
+    assert!(matches!(enrolled, Enrolled::InUse { again: false, .. }));
     let state = state_of(&m);
     assert_eq!(
         state.get(&m.key("travel")).expect("enrolled").account_uuid,
@@ -583,10 +633,7 @@ fn the_wait_goes_on_where_claude_opens_again_or_another_pitboard_holds_the_folde
     let lines = said_to_the_end(&said);
     assert!(lines.is_empty(), "no quit was said: {lines:?}");
     let (enrolled, _) = enroll(settled(&m), &m.key("travel"), Some(login)).expect("enrolled");
-    assert!(matches!(
-        enrolled,
-        crate::switch::folder::Enrolled::InUse { again: false, .. }
-    ));
+    assert!(matches!(enrolled, Enrolled::InUse { again: false, .. }));
     assert_eq!(in_use(&m).as_deref(), Some("travel"));
     rested(&m, "enrolled after the wait");
 }

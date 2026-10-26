@@ -7,8 +7,7 @@ final class AccountPickerTests: FixtureTestCase {
         app.share("https://chatgpt.com/c/shared")
         let picker = app.picker
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            picker.text("==", "Open this chatgpt.com link as:").waitForExistence(timeout: 10))
+        XCTAssertTrue(picker.staticTexts["picker.choose"].waitForExistence(timeout: 10))
         // Each row is one element for VoiceOver, its label and email read together.
         let spare = picker.descendants(matching: .any)["picker.account.spare"]
         XCTAssertTrue(spare.waitForExistence(timeout: 5))
@@ -20,7 +19,7 @@ final class AccountPickerTests: FixtureTestCase {
 
         spare.click()
         // Open waits a moment after the accounts appear, so a stray Return opens nothing.
-        let open = picker.buttons["Open"]
+        let open = picker.buttons["picker.open"]
         XCTAssertTrue(open.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         open.click()
         let window = app.accountWindow("spare")
@@ -37,9 +36,9 @@ final class AccountPickerTests: FixtureTestCase {
         app.share("https://example.com/page")
         let picker = app.picker
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
-        XCTAssertTrue(picker.text("==", "Can’t Open This Link").waitForExistence(timeout: 10))
-        XCTAssertTrue(picker.text("CONTAINS", "This link is on example.com.").exists)
-        picker.buttons["OK"].click()
+        XCTAssertTrue(picker.staticTexts["picker.refused"].waitForExistence(timeout: 10))
+        XCTAssertTrue(picker.text("CONTAINS", "example.com").exists, "where the link is")
+        picker.buttons["picker.ok"].click()
         XCTAssertTrue(picker.waitForNonExistence(timeout: 5))
         XCTAssertEqual(app.accountWindows.count, 0)
     }
@@ -49,9 +48,8 @@ final class AccountPickerTests: FixtureTestCase {
         let app = launch(.onlyOne)
         app.share("https://claude.ai/new")
         let picker = app.picker
-        XCTAssertTrue(
-            picker.text("==", "Open this claude.ai link as:").waitForExistence(timeout: 10))
-        picker.buttons["Cancel"].click()
+        XCTAssertTrue(picker.staticTexts["picker.choose"].waitForExistence(timeout: 10))
+        picker.buttons["picker.cancel"].click()
         XCTAssertTrue(picker.waitForNonExistence(timeout: 5))
         XCTAssertEqual(app.accountWindows.count, 0)
     }
@@ -61,10 +59,10 @@ final class AccountPickerTests: FixtureTestCase {
         let app = launch(.onlyOne)
         app.share("https://chatgpt.com/")
         let picker = app.picker
-        XCTAssertTrue(picker.text("==", "No chatgpt.com Account").waitForExistence(timeout: 10))
-        XCTAssertTrue(picker.buttons["Add Account…"].exists)
-        XCTAssertTrue(picker.buttons["Open in Browser"].exists)
-        picker.buttons["Cancel"].click()
+        XCTAssertTrue(picker.staticTexts["picker.noAccount"].waitForExistence(timeout: 10))
+        XCTAssertTrue(picker.buttons["picker.add"].exists)
+        XCTAssertTrue(picker.buttons["picker.inBrowser"].exists)
+        picker.buttons["picker.cancel"].click()
     }
 
     /// Someone else's sign-in link is refused: it would sign the window in as them.
@@ -73,9 +71,8 @@ final class AccountPickerTests: FixtureTestCase {
         let app = launch(.onlyOne)
         app.share("https://claude.ai/magic-link#someone")
         let picker = app.picker
-        XCTAssertTrue(picker.text("==", "Can’t Open This Link").waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            picker.text("BEGINSWITH", "Pitboard doesn’t open claude.ai sign-in links").exists)
-        picker.buttons["OK"].click()
+        XCTAssertTrue(picker.staticTexts["picker.refused"].waitForExistence(timeout: 10))
+        XCTAssertTrue(picker.staticTexts["picker.detail"].exists)
+        picker.buttons["picker.ok"].click()
     }
 }

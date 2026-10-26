@@ -9,7 +9,7 @@ use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Intent, RunOutNotice};
 use crate::present::testing::{LimitExt, account, window};
-use crate::present::words;
+use crate::present::{ActionKind, WarmDetail, words};
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
@@ -22,6 +22,13 @@ use std::time::Duration;
 
 /// Two hours after the moment the hand's clock starts at, 10:00 in UTC on the same day.
 const UNTIL: i64 = 1_800_007_200;
+
+/// The hours of each day it warms up in, as the settings say them on the hand's clock.
+fn hours(from: u16, to: u16) -> String {
+    use crate::LocalTime;
+    let clock = crate::present::testing::Utc;
+    words::warm_hours(from, to, |minutes| clock.time_of_day(minutes).ok()).expect("a clock")
+}
 
 /// `personal`, parked, its five-hour period not running.
 fn personal() -> Account {
@@ -86,10 +93,19 @@ fn nothing_is_warmed_up_unless_an_account_is_turned_on() {
     assert!(machine.warmed.is_empty(), "the core is not even asked");
     let shown = model.shown().machine.warm;
     assert!(shown.enabled);
-    assert_eq!(shown.range_label, "06:00 to 22:00");
+    assert_eq!(shown.range_label, hours(6 * 60, 22 * 60));
     assert_eq!(shown.accounts.len(), 1);
     assert!(!shown.accounts[0].on);
     assert_eq!(shown.standing, None);
+    assert_eq!(
+        model.shown().sections[0].accounts[0].detail.warm,
+        Some(WarmDetail {
+            on: false,
+            said: words::WARM_UP_OFF.into(),
+            next_at: None,
+            running_until: None,
+        })
+    );
 }
 
 /// An account turned on is asked for after every read, and every 30 seconds though nothing
@@ -115,8 +131,8 @@ fn an_account_turned_on_is_asked_for_after_each_read_and_every_thirty_seconds() 
     model.run(&mut machine);
     assert_eq!(machine.warmed.len(), 2);
     assert_eq!(
-        model.shown().machine.warm.standing.as_deref(),
-        Some("Next warm-up: personal at 10:00."),
+        model.shown().machine.warm.standing,
+        Some(words::next_warm_up("personal", Some("10:00"))),
         "what the core said as it found nothing due"
     );
 }
@@ -161,8 +177,8 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
         machine.posted,
         [RunOutNotice {
             id: "warm-failed/personal/warm_up_not_started".into(),
-            title: words::COULD_NOT_WARM_ITSELF.into(),
-            subtitle: None,
+            title: words::could_not_warm_itself(OS),
+            subtitle: Some("Claude Code".into()),
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
                    still has no period running."
                 .into(),
@@ -176,7 +192,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
             .machine
             .warm
             .standing
-            .is_some_and(|said| said.starts_with("The last warm-up came to nothing: ")),
+            .is_some_and(|said| said.starts_with(&words::warm_up_failed(""))),
     );
     model.later(Duration::from_secs(59));
     model.tick();
@@ -201,7 +217,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
             .machine
             .warm
             .standing
-            .is_some_and(|said| said.starts_with("The last warm-up came to nothing")),
+            .is_some_and(|said| said.starts_with(&words::warm_up_failed(""))),
         "a period started ends what was said"
     );
 }
@@ -240,7 +256,8 @@ fn a_failure_in_other_words_is_notified_once() {
             code,
             message,
             warnings,
-        } = refused.error;
+            ..
+        } = *refused.error;
         (refused.told_apart, refusal(&code, &message, warnings))
     };
     let (first, second) = (refused(), refused());
@@ -297,7 +314,7 @@ fn asked_for_now_what_went_wrong_is_said_in_the_window() {
     assert_eq!(machine.warmed, [Some("claude/personal".to_owned())]);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said");
-    assert_eq!(failure.title, "Couldn’t warm up personal");
+    assert_eq!(failure.title, words::could_not_warm("claude/personal"));
     assert_eq!(failure.code.as_deref(), Some("warm_up_not_started"));
     assert!(machine.posted.is_empty());
     assert_eq!(
@@ -319,7 +336,7 @@ fn a_failure_is_said_until_the_core_says_where_each_account_stands() {
             .machine
             .warm
             .standing
-            .is_some_and(|said| said.starts_with("The last warm-up came to nothing: "))
+            .is_some_and(|said| said.starts_with(&words::warm_up_failed("")))
     );
     let held = overview(
         true,
@@ -371,10 +388,7 @@ fn a_setting_that_cannot_be_read_is_said_and_a_change_to_it_refused() {
     });
     model.run(&mut machine);
     let failure = model.state.presented.clone().expect("refused");
-    assert_eq!(
-        failure.title,
-        "Couldn’t change which accounts are warmed up"
-    );
+    assert_eq!(failure.title, words::COULD_NOT_CHANGE_WARM);
     assert_eq!(failure.code.as_deref(), Some("warm_setting_corrupt"));
 }
 
@@ -399,7 +413,7 @@ fn turning_an_account_on_warms_it_up_where_it_is_due() {
     assert_eq!(machine.warm_ranges, [(420, 1380)]);
     let shown = model.shown().machine.warm;
     assert_eq!((shown.from, shown.to), (420, 1380));
-    assert_eq!(shown.range_label, "07:00 to 23:00");
+    assert_eq!(shown.range_label, hours(7 * 60, 23 * 60));
 }
 
 // Turning it on and off is Settings' alone, where the hours and every account's state are.
@@ -427,19 +441,37 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         .flat_map(|section| &section.accounts)
         .find(|item| item.title == "personal")
         .expect("personal");
-    assert_eq!(
-        item.notes.last().map(String::as_str),
-        Some("Warms up again at 10:00")
+    let standing = pitboard_core::words::warm_standing(
+        &Standing::Running {
+            until: UNTIL,
+            next: Some(UNTIL),
+        },
+        &|_| "10:00".to_owned(),
     );
-    let warm: Vec<(String, bool)> = item
-        .offers
+    let said = words::typeset(&pitboard_core::words::capitalised(&standing));
+    assert_eq!(item.lines.last(), Some(&said));
+    assert_eq!(
+        item.detail.warm,
+        Some(WarmDetail {
+            on: true,
+            said,
+            next_at: Some(UNTIL),
+            running_until: Some(UNTIL),
+        })
+    );
+    let warm: Vec<(ActionKind, &str, bool)> = item
+        .actions
         .iter()
-        .filter(|offer| offer.title.starts_with("Warm"))
-        .map(|offer| (offer.title.clone(), offer.enabled))
+        .filter(|action| matches!(action.intent, Some(Intent::WarmNow { .. })))
+        .map(|action| (action.kind, action.title.as_str(), action.enabled))
         .collect();
     assert_eq!(
         warm,
-        [(words::warm_up_now(OS), false)],
+        [(
+            ActionKind::WarmUpNow,
+            words::warm_up_now(OS).as_str(),
+            false
+        )],
         "its period runs, so nothing to start now"
     );
 }
@@ -454,8 +486,6 @@ fn a_halt_is_said_under_the_setting() {
     let model = started(&mut machine);
     assert_eq!(
         model.shown().machine.warm.standing,
-        Some(words::typeset(&pitboard_core::words::warming_halted(
-            &Halt::ProgramMissing
-        )))
+        Some(words::warming_halted(&Halt::ProgramMissing))
     );
 }

@@ -6,7 +6,7 @@
 
 use super::state::Cadence;
 use super::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
-use super::testing::records::{CHATGPT, CHATGPT_CODEX, percent, read_in};
+use super::testing::records::{CHATGPT, CHATGPT_CODEX, percent, read_in, warning};
 use super::testing::world::StandIn;
 use super::testing::world::World;
 use super::{
@@ -15,7 +15,8 @@ use super::{
 };
 use crate::AppCore;
 use crate::present::testing::Utc;
-use crate::present::{AccountItem, PanelNotice};
+use crate::present::{AccountItem, PanelNotice, words};
+use pitboard_core::host::OS;
 use pitboard_core::state::Key;
 use pitboard_core::testing::{Asked, live_service};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -91,6 +92,7 @@ fn platform(apps: Arc<dyn AppControl>) -> Platform {
         local_time: Arc::new(Utc),
         earlier: None,
         windows: None,
+        glance: None,
     }
 }
 
@@ -164,6 +166,70 @@ fn uninstall_refuses_while_the_app_runs() {
     model.shutdown();
     drop(model);
     eventually("the app let go", || terminal.uninstall().is_ok());
+}
+
+// The app removes Pitboard holding app.lock, and nothing asked after writes the directory again.
+#[test]
+fn after_uninstall_nothing_writes_pitboards_directory_again() {
+    let world = World::new("uninstall-from-app");
+    world.enrolled("work", "here", 42.0);
+    world.parked("spare", "there", 10.0);
+    let told = Arc::new(Told::default());
+    let model = model(&world.core(), &told);
+    model.send(Intent::Start);
+    told.until("the accounts read", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| !last.reading && labels(last) == ["work", "spare"])
+    });
+
+    model.send(Intent::Uninstall);
+    told.until("Pitboard removed", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| last.removal == Some(crate::RemovalShown::Done))
+    });
+    assert!(!world.pitboard_dir().exists());
+    for intent in [
+        Intent::Refresh { asked: true },
+        Intent::Woke,
+        Intent::Glanced,
+        Intent::SwitchTo {
+            qualified: "claude/spare".into(),
+        },
+    ] {
+        model.send(intent);
+    }
+    model.shutdown();
+    assert!(!world.pitboard_dir().exists());
+}
+
+// Through the lane of what the model keeps, into a folder it makes private where it is not there.
+#[test]
+fn the_glance_is_written_to_the_file_the_app_names() {
+    let world = World::new("glance");
+    world.enrolled("work", "here", 42.0);
+    let glance = world
+        .pitboard_dir()
+        .with_file_name("group")
+        .join("glance.json");
+    let told = Arc::new(Told::default());
+    let model = PitboardModel::over(
+        world.core(),
+        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Platform {
+            glance: Some(glance.clone()),
+            ..platform(StandInApps::new(&[], true))
+        },
+        QUICK,
+    );
+    model.send(Intent::Start);
+    told.until("the account read", shows("work"));
+    eventually("the glance written", || {
+        std::fs::read_to_string(&glance).is_ok_and(|text| text.contains(r#""name":"work""#))
+    });
+    assert!(model.snapshot().glance_revision > 0);
+    model.shutdown();
 }
 
 /// A change another front end makes, here a rename typed in a terminal, reaches the
@@ -443,7 +509,7 @@ fn a_codex_switchs_warning_reaches_the_snapshot() {
         .iter()
         .find(|line| line.contains("2 codex sessions"))
         .expect("the sessions still running are warned about");
-    assert!(warned.contains("codex/personal"), "{warned:?}");
+    assert!(warned.contains("personal’s sign-in"), "{warned:?}");
     assert!(
         !warns(last, "sessions_still_running"),
         "the read after it does not say it again: {:#?}",
@@ -476,12 +542,9 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     });
     let asked = asked.last().expect("a snapshot");
     let question = asked.quit_question.as_ref().expect("a question");
-    assert_eq!(
-        question.question.title,
-        crate::present::words::quit_to_switch("ChatGPT")
-    );
+    assert_eq!(question.question.title, words::quit_to_switch("ChatGPT"));
     assert_eq!(switching(asked), Some("codex/work"));
-    assert_eq!(asked.window_request.pane, Some(super::Pane::Accounts));
+    assert_eq!(asked.window_request.place, Some(super::Place::Accounts));
     assert!(
         apps.asked().is_empty(),
         "nothing is quit before the person says so"
@@ -506,7 +569,7 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
         .unwrap_or_else(|| panic!("the switch's notice: {:#?}", last.notices));
     assert_eq!(
         said.lines,
-        [crate::present::words::restart_notice("codex", "personal")],
+        [words::restart_notice("codex", "personal")],
         "switched once ChatGPT had quit, with nothing left running to warn about"
     );
     model.shutdown();
@@ -546,11 +609,8 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     let [restart, unknown] = &said.lines[..] else {
         panic!("the restart line and what is unknown: {:#?}", said.lines);
     };
-    assert_eq!(
-        restart,
-        &crate::present::words::restart_notice("codex", "personal")
-    );
-    assert!(unknown.contains("codex/personal"), "{unknown:?}");
+    assert_eq!(restart, &words::restart_notice("codex", "personal"));
+    assert!(unknown.contains("personal’s sign-in"), "{unknown:?}");
     assert!(
         !warns(last, "sessions_unknown"),
         "said in the switch's notice"
@@ -558,7 +618,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     assert!(
         last.notices
             .iter()
-            .all(|n| n.title != "Couldn’t tell which sessions are open"),
+            .all(|n| n.title != words::warning_heading(&warning("sessions_unknown", ""))),
         "said once: {:#?}",
         last.notices
     );
@@ -731,10 +791,20 @@ fn signed_in_as<'a>(
     }
 }
 
-fn sign_in(name: &str) -> Intent {
+// An add of a Claude Code account, which the core names from its email.
+fn sign_in() -> Intent {
     Intent::SignIn {
         provider: "claude".into(),
-        name: name.into(),
+        again: None,
+    }
+}
+
+// The last snapshot told has the account just added up to be named, under `label`.
+fn naming(label: &str) -> impl Fn(&[Snapshot]) -> bool + '_ {
+    move |told| {
+        told.last().is_some_and(
+            |last| matches!(&last.sheet, Some(Sheet::Name { label: named, .. }) if named == label),
+        )
     }
 }
 
@@ -750,7 +820,7 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     at.model.send(Intent::PresentSheet {
         sheet: Sheet::Add { provider: None },
     });
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
     at.world.signed_in_privately("away", "access-away", 20.0);
 
@@ -769,14 +839,18 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     at.model.send(paste("the-code#the-state"));
     let told = at
         .told
-        .until("travel enrolled", signed_in_as("travel", |_| true));
+        .until("away enrolled", signed_in_as("example", |_| true));
     let last = told.last().expect("a snapshot");
     assert_eq!(at.claude.typed(), ["half-a-code", "the-code#the-state"]);
-    assert_eq!(last.sheet, None, "the sheet it was started from closed");
+    assert!(
+        naming("example")(std::slice::from_ref(last)),
+        "the sheet it was started from gives way to the name: {:?}",
+        last.sheet
+    );
     assert_eq!((&last.failure_alert, &last.sheet_failure), (&None, &None));
     let travel = rows(last)
-        .find(|row| row.qualified.as_deref() == Some("claude/travel"))
-        .expect("travel");
+        .find(|row| row.qualified.as_deref() == Some("claude/example"))
+        .expect("away, under the name its email suggests");
     assert!(
         !travel.in_use
             && matches!(&travel.action, Some(action) if matches!(action.intent, Intent::SwitchTo { .. })),
@@ -802,7 +876,10 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
             label: "work".into(),
         },
     });
-    at.model.send(sign_in("work"));
+    at.model.send(Intent::SignIn {
+        provider: "claude".into(),
+        again: Some("work".into()),
+    });
     at.told.until("a code asked for", signing(|s| s.wants_code));
     at.world
         .signed_in_privately("here", "access-here-again", 10.0);
@@ -814,10 +891,7 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
     );
     let last = told.last().expect("a snapshot");
     let said = notice(last, "switch/claude").expect("the sign-in's notice");
-    assert_eq!(
-        said.lines,
-        [crate::present::words::signed_in_now("work", true, None)]
-    );
+    assert_eq!(said.lines, [words::signed_in_now("work", true, None)]);
     assert_eq!(signed_in(last, "claude").as_deref(), Some("work"));
     assert_eq!(last.sheet, None);
     assert!(
@@ -832,7 +906,7 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
 #[test]
 fn cancelling_a_sign_in_stops_its_tool() {
     let at = signing_in_world("cancel");
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
     assert!(at.claude.is_running());
 
@@ -860,7 +934,7 @@ fn cancelling_a_sign_in_stops_its_tool() {
 #[test]
 fn a_sign_in_asked_for_at_once_after_a_cancel_starts_once_that_one_has_stopped() {
     let at = signing_in_world("cancel-then-sign-in");
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at.told.until("a code asked for", signing(|s| s.wants_code));
     let first = told
         .last()
@@ -868,7 +942,7 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_starts_once_that_one_has_stopped()
         .expect("the first sign-in")
         .id;
     at.model.send(Intent::CancelSignIn);
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at
         .told
         .until("a code asked for again, or a refusal", |told| {
@@ -902,7 +976,7 @@ fn a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open() {
         "cancel-output-held",
         World::claude_stand_in_holding_its_output,
     );
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at.told.until("a code asked for", signing(|s| s.wants_code));
     let first = told
         .last()
@@ -912,7 +986,7 @@ fn a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open() {
     assert!(at.claude.holds_output(), "its output held open");
 
     at.model.send(Intent::CancelSignIn);
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     let told = at
         .told
         .until("a code asked for again, or a refusal", |told| {
@@ -950,7 +1024,7 @@ fn a_sign_in_after_a_cancel_waits_for_no_output_the_tool_stopped_left_open() {
 #[test]
 fn shutting_down_stops_a_sign_in_under_way() {
     let at = signing_in_world("shutdown-signing-in");
-    at.model.send(sign_in("travel"));
+    at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
     let private = at.world.pitboard_dir().join("signin");
     assert!(at.claude.is_running() && private.exists());
@@ -986,7 +1060,7 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
             .is_some_and(|tool| tool.missing.is_some())
     };
     told.until("Claude Code said missing", missing);
-    model.send(sign_in("travel"));
+    model.send(sign_in());
     let told = told.until("the sign-in over", |told| {
         told.last()
             .is_some_and(|last| last.signing_in.is_none() && read_in(last))
@@ -1000,8 +1074,7 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
 }
 
 // The report this rebuild began with: Codex enrolled from a terminal, then only the ChatGPT
-// app, so no Codex CLI. The tip's Add Account says the CLI is missing before Sign In, and a
-// name typed with its tool says why it cannot be one.
+// app, so no Codex CLI. The tip's Add Account says the CLI is missing before Sign In.
 #[test]
 fn adding_codex_without_its_cli_says_so_before_sign_in() {
     let world = World::new("chatgpt-app-only");
@@ -1034,23 +1107,10 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
         .iter()
         .find(|tool| tool.code == "codex")
         .expect("codex offered");
-    let missing = codex.missing.as_ref().expect("its CLI is not here");
-    assert!(
-        missing
-            .title
-            .starts_with("Pitboard can’t find the Codex CLI")
-    );
     assert_eq!(
-        crate::present::check_name(
-            Sheet::Add {
-                provider: Some("codex".into())
-            },
-            "codex".into(),
-            "codex/phu".into()
-        )
-        .problem
-        .as_deref(),
-        Some("A name can’t contain “/”. Choose the tool above.")
+        codex.missing,
+        words::missing(OS, "codex"),
+        "its CLI is not here"
     );
     model.shutdown();
 }
@@ -1107,6 +1167,7 @@ fn model_telling_time(
             local_time: Arc::clone(clock) as Arc<dyn LocalTime>,
             earlier: None,
             windows: None,
+            glance: None,
         },
         cadence,
     );
@@ -1240,40 +1301,70 @@ fn putting_away_a_login_left_in_a_file_reaches_the_core() {
     model.shutdown();
 }
 
-/// Naming the login signed in now from its sheet enrols it with the core, and the sheet
-/// closes once it has.
+/// Adding the login signed in now enrols it with the core under the name its email suggests,
+/// which the sheet that follows starts on, and a new name renames it.
 #[test]
-fn naming_the_login_signed_in_now_enrols_it() {
+fn adding_the_login_signed_in_now_enrols_it_and_names_it_after() {
     let world = World::new("name");
     world.signed_in("here", 10.0);
     let told = Arc::new(Told::default());
     let model = model(&world.core(), &told);
     model.send(Intent::Start);
     told.until("the login read", |told| {
-        told.last().is_some_and(|last| {
-            !last.reading && matches!(last.footing, crate::Footing::Unnamed { .. })
-        })
-    });
-    model.send(Intent::PresentSheet {
-        sheet: Sheet::Name {
-            provider: "claude".into(),
-            email: "here@example.com".into(),
-        },
+        told.last()
+            .is_some_and(|last| !last.reading && !last.sections.is_empty())
     });
     model.send(Intent::Enrol {
         provider: "claude".into(),
-        name: " work ".into(),
     });
-    // The sheet closes as the enrolment answers, and the read after it lists the account:
-    // the poll leaves the account index alone meanwhile, the enrolment being the app's own.
-    let told = told.until("the login enrolled", |told| {
+    // The read after it lists the account: the poll leaves the account index alone
+    // meanwhile, the enrolment being the app's own.
+    let enrolled = told.until("the login enrolled", |told| {
+        naming("example")(told) && told.last().is_some_and(|last| labels(last) == ["example"])
+    });
+    let last = enrolled.last().expect("a snapshot");
+    assert_eq!(last.sheet_failure, None);
+    assert_eq!(last.failure_alert, None);
+    let sheet = last.sheet.clone().expect("the name");
+    let to = crate::present::check_name(sheet, "claude".into(), "work".into())
+        .intent
+        .expect("a rename");
+    model.send(to);
+    told.until("renamed", |told| {
         told.last()
             .is_some_and(|last| labels(last) == ["work"] && last.sheet.is_none())
     });
-    let last = told.last().expect("a snapshot");
-    assert_eq!(last.sheet_failure, None);
-    assert_eq!(last.failure_alert, None);
     model.shutdown();
+}
+
+// A crash is the index as it stands, read by another core; a quit is the next launch's read.
+#[test]
+fn quitting_before_the_name_is_saved_keeps_the_account() {
+    let at = signing_in_world("quit-before-naming");
+    at.model.send(Intent::PresentSheet {
+        sheet: Sheet::Add { provider: None },
+    });
+    at.model.send(sign_in());
+    at.told.until("a code asked for", signing(|s| s.wants_code));
+    at.world.signed_in_privately("away", "access-away", 20.0);
+    at.model.send(paste("the-code#the-state"));
+    at.told.until("the name asked for", naming("example"));
+
+    let on_disk = at.world.core().status_offline().expect("the index read");
+    assert!(
+        on_disk
+            .accounts
+            .iter()
+            .any(|account| account.label.as_deref() == Some("example")),
+        "{:?}",
+        on_disk.accounts
+    );
+    at.model.shutdown();
+    let told = Arc::new(Told::default());
+    let next = model(&at.core, &told);
+    next.send(Intent::Start);
+    told.until("the account kept", signed_in_as("example", |_| true));
+    next.shutdown();
 }
 
 /// The last snapshot told is of a read that has landed after everything asked of the model,
@@ -1285,18 +1376,26 @@ fn read_after<'a>(want: &'a [&'a str]) -> impl Fn(&[Snapshot]) -> bool + 'a {
     }
 }
 
-// The look reads the index as `change` wrote it, and lands before the read after the change.
-fn with_a_look_held(model: &PitboardModel, told: &Told, change: impl FnOnce()) {
+// The look reads the index as `change` wrote it, and lands before the read after the change,
+// once what is told says it has `answered`.
+fn with_a_look_held(
+    model: &PitboardModel,
+    told: &Told,
+    change: impl FnOnce(),
+    answered: impl Fn(&[Snapshot]) -> bool,
+) {
     let (held, release) = model.next_look.hold();
     held.recv_timeout(PATIENCE)
         .expect("a look held on the lane of reads");
     change();
-    // Its sheet closes, or its sign-in ends, as it answers.
-    told.until("the change answered", |told| {
-        told.last()
-            .is_some_and(|last| last.sheet.is_none() && last.signing_in.is_none())
-    });
+    told.until("the change answered", answered);
     drop(release);
+}
+
+// Its sheet closes, or its sign-in ends, as it answers.
+fn closed_or_over(told: &[Snapshot]) -> bool {
+    told.last()
+        .is_some_and(|last| last.sheet.is_none() && last.signing_in.is_none())
 }
 
 #[test]
@@ -1317,47 +1416,38 @@ fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
     told.until("the sheet up", |told| {
         told.last().is_some_and(|last| last.sheet.is_some())
     });
-    with_a_look_held(&renaming, &told, || {
+    let rename = || {
         renaming.send(Intent::Rename {
             provider: "claude".into(),
             label: "work".into(),
             to: "office".into(),
         });
-    });
+    };
+    with_a_look_held(&renaming, &told, rename, closed_or_over);
     told.until("the read after the rename", read_after(&["office"]));
     renaming.shutdown();
 }
 
 #[test]
-fn naming_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
+fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
     let world = World::new("name-looked-at");
-    // Nothing enrolled, so there is no account index until the name writes one.
+    // Nothing enrolled, so there is no account index until the enrolment writes one.
     world.signed_in("here", 10.0);
     let told = Arc::new(Told::default());
-    let naming = model(&world.core(), &told);
-    naming.send(Intent::Start);
+    let adding = model(&world.core(), &told);
+    adding.send(Intent::Start);
     told.until("the login read", |told| {
-        told.last().is_some_and(|last| {
-            read_in(last) && matches!(last.footing, crate::Footing::Unnamed { .. })
-        })
+        told.last()
+            .is_some_and(|last| read_in(last) && !last.sections.is_empty())
     });
-    naming.send(Intent::PresentSheet {
-        sheet: Sheet::Name {
+    let enrol = || {
+        adding.send(Intent::Enrol {
             provider: "claude".into(),
-            email: "here@example.com".into(),
-        },
-    });
-    told.until("the sheet up", |told| {
-        told.last().is_some_and(|last| last.sheet.is_some())
-    });
-    with_a_look_held(&naming, &told, || {
-        naming.send(Intent::Enrol {
-            provider: "claude".into(),
-            name: "work".into(),
         });
-    });
-    told.until("the read after naming it", read_after(&["work"]));
-    naming.shutdown();
+    };
+    with_a_look_held(&adding, &told, enrol, naming("example"));
+    told.until("the read after adding it", read_after(&["example"]));
+    adding.shutdown();
 }
 
 #[test]
@@ -1370,15 +1460,14 @@ fn a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile() {
     let model = model(&world.core(), &told);
     model.send(Intent::Start);
     told.until("the account read", read_after(&["work"]));
-    model.send(sign_in("travel"));
+    model.send(sign_in());
     told.until("a code asked for", signing(|s| s.wants_code));
     world.signed_in_privately("away", "access-away", 20.0);
-    with_a_look_held(&model, &told, || {
-        model.send(paste("the-code#the-state"));
-    });
+    let paste_it = || model.send(paste("the-code#the-state"));
+    with_a_look_held(&model, &told, paste_it, closed_or_over);
     told.until(
         "the read after the sign-in",
-        read_after(&["work", "travel"]),
+        read_after(&["work", "example"]),
     );
     model.shutdown();
 }
@@ -1398,6 +1487,7 @@ fn model_posting(
             local_time: Arc::new(Utc),
             earlier: None,
             windows: None,
+            glance: None,
         },
         QUICK,
     );
@@ -1433,13 +1523,23 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
     told.until("the advice", advised);
     eventually("the notification posted", || posted.posted().len() == 1);
     let notice = posted.posted().remove(0);
-    assert_eq!(notice.title, "work has no 5-hour limit left");
-    assert_eq!(notice.body, "spare has 90% of its own left.");
+    assert_eq!(
+        notice.title,
+        words::limit_notification(OS, "5-hour", None, true)
+    );
+    assert_eq!(
+        notice.body,
+        format!(
+            "{} {}",
+            words::has_used_share("work", "100%"),
+            words::other_used("spare", Some(90))
+        )
+    );
     assert_eq!(
         notice.button.map(|button| button.clicked).as_deref(),
         Some("switch/claude/spare")
     );
-    assert_eq!(notice.subtitle, None);
+    assert_eq!(notice.subtitle.as_deref(), Some("Claude Code"));
     let kept = world.pitboard_dir().join("told.json");
     eventually("the record of it kept", || {
         std::fs::read_to_string(&kept).is_ok_and(|text| text.contains("claude/work/session/"))
@@ -1473,8 +1573,8 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
 
 /// On the real core, with switching by itself turned on in the app's preferences, an account
 /// in use at its share is switched from to another with room through the model's lanes: the
-/// switch is said in a notification with nothing to switch back to, the activity log records
-/// it as automatic and made by the app, and the account switched to stays in use.
+/// switch is said in a notification that offers Switch Back, the activity log records it as
+/// automatic and made by the app, and the account switched to stays in use.
 #[test]
 fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     let world = World::new("auto-switch");
@@ -1495,13 +1595,19 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     told.until("spare in use", in_use("claude", "spare"));
     eventually("the switch said", || !posted.posted().is_empty());
     let notice = posted.posted().remove(0);
-    assert_eq!(notice.title, "Switched Claude Code to spare");
+    assert_eq!(notice.title, words::switched_to(None, "spare"));
     assert_eq!(
         notice.body,
-        "work has used 97% of its 5-hour limit. Sessions already running follow within 33 \
-         seconds."
+        words::used_then(
+            "work",
+            "97% of its 5-hour limit",
+            &words::follows(&crate::Adoption::PollingWithin(33))
+        )
     );
-    assert_eq!(notice.button, None);
+    assert_eq!(
+        notice.button.map(|button| button.clicked),
+        Some(r#"switch-back/["claude/work","claude/spare"]"#.into())
+    );
     let changes = pitboard_core::audit::read(world.ctx(), 20);
     let automatic: Vec<_> = changes
         .iter()
@@ -1613,7 +1719,7 @@ fn the_apps_preferences_follow_its_pitboard_directory() {
 fn the_machine_is_kept_over_the_real_core() {
     use super::Pane;
     use crate::{FoundCommandLine, Schedule};
-    use pitboard_core::host::{OS, Os};
+    use pitboard_core::host::Os;
     let mut world = World::new("machine");
     world.in_the_default_home();
     world.enrolled("work", "here", 42.0);
@@ -1652,33 +1758,39 @@ fn the_machine_is_kept_over_the_real_core() {
         pane: Pane::Activity,
     });
     let logged = told.last_where("the log", |last| !last.machine.activity.lines.is_empty());
-    let lines: Vec<(&str, &str, &str, &str)> = logged
+    let lines: Vec<(String, &str, String, String)> = logged
         .machine
         .activity
         .lines
         .iter()
         .map(|line| {
             (
-                line.change.as_str(),
+                line.change.clone(),
                 line.account.as_str(),
-                line.result.as_str(),
-                line.asked_by.as_str(),
+                line.result.clone(),
+                line.asked_by.clone(),
             )
         })
         .collect();
+    let said = |verb, account, outcome, caller| {
+        (
+            words::change_verb(verb),
+            account,
+            words::change_outcome(outcome),
+            words::change_caller(caller),
+        )
+    };
     assert_eq!(
         lines.first(),
-        Some(&("Schedule", "install", "Done", "Pitboard app")),
+        Some(&said("schedule", "install", "ok", "app")),
         "{lines:?}"
     );
     assert!(
-        lines.contains(&("Enrol", "work", "Done", "Command line")),
+        lines.contains(&said("enroll", "work", "ok", "cli")),
         "{lines:?}"
     );
 
-    model.send(Intent::PaneShown {
-        pane: Pane::Machine,
-    });
+    model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks", |last| {
         !last.machine.checks.lines.is_empty() && !last.machine.checks.checking
     });
@@ -1698,7 +1810,10 @@ fn the_machine_is_kept_over_the_real_core() {
     });
     let command_line = &found.machine.command_line;
     assert_eq!(command_line.found, Some(FoundCommandLine::Nowhere));
-    assert_eq!(command_line.in_terminal.as_deref(), Some("Not installed"));
+    assert_eq!(
+        command_line.in_terminal.as_deref(),
+        Some(words::NOT_INSTALLED)
+    );
     assert!(command_line.offers_link);
     model.shutdown();
 }

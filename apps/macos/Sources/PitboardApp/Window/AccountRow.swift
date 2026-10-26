@@ -41,8 +41,8 @@ struct AccountRow: View {
                 if !item.limits.isEmpty {
                     UsageBars(limits: item.limits)
                 }
-                ForEach(item.notes, id: \.self) { note in
-                    Text(note).explanatory()
+                ForEach(item.lines, id: \.self) { line in
+                    Text(line).explanatory()
                 }
             }
             .padding(.leading, textInset)
@@ -70,13 +70,16 @@ struct AccountRow: View {
         case .switching(let spoken)?:
             ProgressView().controlSize(.small)
                 .accessibilityLabel(spoken)
+                .accessibilityIdentifier("account.switching")
         case .inUse(let title)?:
             Label(title, systemImage: "checkmark")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("account.inUse")
         case .button(let action)?:
             Button(action.title) { perform(action.intent) }
                 .accessibilityLabel(action.spoken)
+                .accessibilityIdentifier("account.action")
         case nil:
             EmptyView()
         }

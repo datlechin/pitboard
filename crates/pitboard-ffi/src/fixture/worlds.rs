@@ -14,8 +14,8 @@ use super::tools::{Browser, Warmer};
 use crate::model::preferences::Preferences;
 use crate::model::state::Cadence;
 use crate::model::{
-    AppControl, LocalTime, ModelListener, Notifications, PitboardModel, Platform, WindowsLaunch,
-    WindowsPlace,
+    AppControl, AtLimit, LocalTime, ModelListener, Notifications, PitboardModel, Platform,
+    WindowsLaunch, WindowsPlace,
 };
 use crate::{AppCore, Made};
 use pitboard_core::app::AppFile;
@@ -69,7 +69,7 @@ pub(crate) enum World {
     /// `OneTool` with a switch to personal interrupted, which nothing can finish: Claude
     /// Code's keychain locked as it was written, and Claude Code has since renewed its login
     /// and its session has expired, so neither the record nor Anthropic says whose it is. The
-    /// read that asks Anthropic says so, `recovery_undetermined`, so the app offers Give Up…
+    /// read that asks Anthropic says so, `recovery_undetermined`, so the app offers Cancel Switch…
     /// as it starts.
     Stuck,
     /// `TwoTools`, with ChatGPT open and running Codex's login.
@@ -87,11 +87,14 @@ pub(crate) enum World {
     LeftInFile,
     // `OneTool`, then personal signs in with Claude Code over work's only login, read by a CLI.
     LoginReplaced,
+    /// `WarmUp`'s accounts with switching by itself on and work's five-hour limit 97% used, so
+    /// the app switches Claude Code to personal as it starts.
+    SwitchedByItself,
 }
 
 impl World {
     /// Every world, in the order the macOS app's `Fixture` listed them.
-    pub(crate) const ALL: [World; 15] = [
+    pub(crate) const ALL: [World; 16] = [
         World::TwoTools,
         World::OneTool,
         World::Empty,
@@ -107,6 +110,7 @@ impl World {
         World::WarmUp,
         World::LeftInFile,
         World::LoginReplaced,
+        World::SwitchedByItself,
     ];
 
     /// Its name, as `PITBOARD_FIXTURE` gives it and the UI tests launch it.
@@ -127,6 +131,7 @@ impl World {
             World::WarmUp => "warmUp",
             World::LeftInFile => "leftInFile",
             World::LoginReplaced => "loginReplaced",
+            World::SwitchedByItself => "switchedByItself",
         }
     }
 
@@ -158,7 +163,8 @@ impl World {
             | World::ChatGptOpen
             | World::WarmUp
             | World::LeftInFile
-            | World::LoginReplaced => &[ProviderId::Claude, ProviderId::Codex],
+            | World::LoginReplaced
+            | World::SwitchedByItself => &[ProviderId::Claude, ProviderId::Codex],
             World::ClaudeDesktop | World::ClaudeDesktopOpen => {
                 &[ProviderId::Claude, ProviderId::Desktop]
             }
@@ -768,6 +774,7 @@ impl Launched {
                     launch: self.windows.clone(),
                     web_scheme: super::pages::SCHEME.into(),
                 }),
+                glance: None,
             },
             Cadence::APP,
         )
@@ -782,10 +789,13 @@ pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
     install(&machine, world.installed())?;
     seed(world, &machine)?;
     if world != World::FirstLaunch {
-        let seen = Preferences {
+        let mut seen = Preferences {
             has_been_seen: true,
             ..Preferences::default()
         };
+        if world == World::SwitchedByItself {
+            seen.choose(AtLimit::Switch);
+        }
         if let Some(text) = seen.text() {
             service::Pitboard::new(machine.base.clone())
                 .keep_app_file(AppFile::Preferences, &text)
@@ -945,11 +955,7 @@ fn seed(world: World, machine: &Stage) -> Result<(), Unmade> {
             let (work, personal) = (work(), personal());
             uses(machine, &work);
             machine.rests(&personal, 61.0, 190_000);
-            let now = machine.now;
-            let login = machine.login(&work, now + DAY, now + 30 * DAY);
-            machine.enrolled(&work, "work", &login, "cli", 3 * DAY)?;
-            let login = machine.login(&personal, now + DAY, now + 30 * DAY);
-            machine.parked(&personal, "personal", &login, "app", 2 * DAY)?;
+            rested_accounts(machine)?;
             let app = machine.front_end("app", DAY).1;
             app.warm_turn("personal", true)
                 .map_err(refused("turning on personal's warm-up"))?;
@@ -959,8 +965,33 @@ fn seed(world: World, machine: &Stage) -> Result<(), Unmade> {
                 .map(drop)
                 .map_err(refused("warming up all day"))
         }
+        World::SwitchedByItself => {
+            let (work, personal) = (work(), personal());
+            machine.has_used(
+                &work,
+                &[
+                    ("session", 97.0, 5 * HOUR, 7_800),
+                    ("weekly_all", 12.0, 7 * DAY, 356_000),
+                ],
+            );
+            machine.rests(&personal, 61.0, 190_000);
+            rested_accounts(machine)?;
+            claude_switches(machine)
+        }
         World::Empty | World::FirstLaunch | World::NoClaudeCode => Ok(()),
     }
+}
+
+/// Work signed in and enrolled from a terminal three days ago, and personal signed in
+/// privately and parked from the app two days ago, each login good for a month, with what
+/// each has used put there first.
+fn rested_accounts(machine: &Stage) -> Result<(), Unmade> {
+    let (work, personal) = (work(), personal());
+    let now = machine.now;
+    let login = machine.login(&work, now + DAY, now + 30 * DAY);
+    machine.enrolled(&work, "work", &login, "cli", 3 * DAY)?;
+    let login = machine.login(&personal, now + DAY, now + 30 * DAY);
+    machine.parked(&personal, "personal", &login, "app", 2 * DAY)
 }
 
 /// What `person` has used of their limits.

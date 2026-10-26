@@ -49,6 +49,8 @@ mod cadence;
 #[cfg(test)]
 mod changing;
 #[cfg(test)]
+mod glancing;
+#[cfg(test)]
 mod keeping;
 #[cfg(test)]
 mod maintaining;
@@ -56,6 +58,8 @@ mod maintaining;
 mod presenting;
 #[cfg(test)]
 mod reading;
+#[cfg(test)]
+mod removing;
 #[cfg(test)]
 mod signing;
 #[cfg(test)]
@@ -69,18 +73,21 @@ mod threaded;
 #[cfg(test)]
 mod warming;
 #[cfg(test)]
+mod welcoming;
+#[cfg(test)]
 mod windowing;
 
 use crate::account_windows::AlertText;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
-    MachineShown, MenuBarText, MenuNotices, PanelNotice, SetupStep, SheetText, SigningInText,
-    StowText, WindowQuestion, present,
+    ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, RemovalShown, SetupStep,
+    SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
 };
 use crate::{AppCore, Warning};
 use lanes::Lanes;
 use state::{Cadence, Msg, Now, State};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -109,6 +116,9 @@ pub struct AppLaunch {
     /// runs, and no store is deleted.
     #[uniffi(default)]
     pub windows: Option<WindowsLaunch>,
+    // Where the glance is kept for widgets and intents: written only where the app names a path.
+    #[uniffi(default)]
+    pub glance: Option<String>,
 }
 
 /// Where the account windows' records are kept, and what this launch is to them.
@@ -219,6 +229,8 @@ pub enum Intent {
     /// `KeepAppOpen` closed that question, and does nothing once taken, or once another
     /// switch has been asked for in that question's place.
     QuitAndSwitch { qualified: String },
+    /// From the notification or notice of a switch by itself, which left `from` for `to`.
+    SwitchBack { from: String, to: String },
     /// The person kept the app open, or the question was closed some other way: the quit
     /// question goes, and nothing is switched.
     KeepAppOpen,
@@ -240,19 +252,11 @@ pub enum Intent {
     AbandonStuckSwitch,
     /// Somebody has read what giving up on an interrupted switch kept, and put it away.
     DismissAbandoned,
-    /// Sign in to `provider`'s tool, a `Tool`'s code, through the tool's own sign-in in a
-    /// browser, as the account to be called `name`: a new account, or one enrolled already
-    /// whose parked login can no longer be used, signed in to again, as the Swift model signs
-    /// in to both. For a tool that signs in inside its app, as `State::in_app_add` decides,
-    /// the account the app is signed in to is recorded under `name`, or the account in use is
-    /// parked and the app watched until it quits signed in, each asked through the quit
-    /// question first. The name is read as `check_name` reads it, and one that is not a name
-    /// starts nothing. One sign-in at a time: asked for while one is under way, it does
-    /// nothing. What goes wrong is said in the sheet it was started from, or in
-    /// the window where that sheet has gone, and the sheet closes once the sign-in has
-    /// finished. Signing in again to the account in use is kept as what its tool's last
-    /// switch said.
-    SignIn { provider: String, name: String },
+    /// A new account is added under a name from its email, which `Sheet::Name` offers to change.
+    SignIn {
+        provider: String,
+        again: Option<String>,
+    },
     /// Type back the code the browser showed, to the sign-in under way, once its tool asks
     /// for one: `RunningSignIn::wants_code`. Taken without the white space around it, and one
     /// with nothing else in it is not typed. A code is asked for once, and again once Claude
@@ -273,9 +277,8 @@ pub enum Intent {
     /// The sheet over the main window has gone, however it went, and what went wrong in it
     /// goes with it. A sign-in it started goes on until it ends or is cancelled.
     CloseSheet,
-    /// Open the main window, on `pane` where it matters which, from the menu, a notification
-    /// or anywhere else: `Snapshot::window_request` moves. The sheet up, if any, stays.
-    ShowWindow { pane: Option<Pane> },
+    /// Show `place`, or the main window as it was left: `Snapshot::window_request` moves.
+    Show { place: Option<Place> },
     /// Anything that starts the app can hand it any text, so only what a notice asks for is read.
     NotificationClicked { argument: String },
     /// Somebody has read the failure the window said, and put it away.
@@ -284,14 +287,9 @@ pub enum Intent {
     DismissSheetFailure,
     /// Look again which tools are installed, while a sheet that signs in is up.
     LookForTools,
-    /// Enrol the login signed in now to `provider`'s tool under `name`, with no browser: the
-    /// Name sheet's Save. The name is read as `check_name` reads it, and one that is not a
-    /// name saves nothing; nor does a
-    /// second Save from a sheet already saving. Once enrolled, the sheet naming a login of
-    /// that tool closes, and only that one, and the accounts are read; what goes wrong is
-    /// said in the sheet it was asked from, or in the window where that sheet has gone. For a
-    /// tool that signs in inside its app it is asked through the quit question first.
-    Enrol { provider: String, name: String },
+    /// Add the login `provider`'s tool has signed in now, with no browser, as `SignIn` adds a
+    /// new one; where the tool stores none, its sign-in is offered instead.
+    Enrol { provider: String },
     /// Give the account `label` of `provider`'s tool the name `to`, inside its own tool: the
     /// Rename sheet's Save, by the same rules, and a name it has already saves nothing. What
     /// was said about the account is said about it under its new name.
@@ -322,7 +320,7 @@ pub enum Intent {
     /// `pane` of the main window is shown, or its own button asks for what it shows to be
     /// read again, as Check Again and the activity's Refresh do: what it shows is read every
     /// time, as the Swift panes read it on every visit, since an app runs for days and a check
-    /// fixed in a terminal since would otherwise still read as failing. For `Pane::Machine`,
+    /// fixed in a terminal since would otherwise still read as failing. For `Pane::Checks`,
     /// every check `pitboard doctor` makes; for `Pane::Activity`, what Pitboard has changed;
     /// for `Pane::Accounts`, the accounts where the numbers shown are a minute old, as for
     /// `Glanced`. What was shown stays meanwhile.
@@ -346,9 +344,6 @@ pub enum Intent {
     OpensAtLogin { on: bool },
     /// The settings, on what happens at a limit, from the tip that asks, which it ends.
     ShowLimits,
-    /// Reads whose login the tool stores, which nothing reads before: Name This Account for it,
-    /// or Add Account set to the tool where it stores none.
-    NameSignedIn { provider: String },
     /// Turned on, an account due is warmed up at once.
     SetWarm { qualified: String, on: bool },
     /// Warm up accounts only from `from` to `to`, in minutes of the day, `to` up to 24 hours;
@@ -406,12 +401,33 @@ pub enum Intent {
     DownloadEnded { id: String, end: DownloadEnd },
     /// Somebody cleared the downloads of the window whose store is `store` that have ended.
     ClearDownloads { store: String },
+    /// Once `Snapshot::uninstall` was confirmed: nothing more is read or written until it ends.
+    Uninstall,
+    /// From a widget, a control or an intent, answered by `request` in `Snapshot::answers`.
+    Outside { request: u64, ask: OutsideAsk },
+}
+
+/// Never more than a click in the app does.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum OutsideAsk {
+    /// `account`: its id in the glance
+    Switch {
+        account: String,
+    },
+    Refresh,
+}
+
+// How a request from outside ended, in words, kept for the ten newest.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OutsideAnswer {
+    pub request: u64,
+    pub done: bool,
+    pub said: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Tip {
     UseCodex,
-    OpenAtLogin,
     AtLimit,
 }
 
@@ -434,8 +450,12 @@ pub enum Sheet {
     /// An enrolled account whose parked login can no longer be used, signed in to again
     /// through the same sign-in as a new one.
     SignInAgain { provider: String, label: String },
-    /// The login signed in now to this tool, to be recorded under a name: no browser.
-    Name { provider: String, email: String },
+    /// The account just added under `label`, which the core picked, to be given a name.
+    Name {
+        provider: String,
+        label: String,
+        email: String,
+    },
     /// A new name for an enrolled account.
     Rename { provider: String, label: String },
     /// Putting away the login Claude Code left in a file behind the keychain: put up, it
@@ -494,6 +514,16 @@ pub(crate) struct LastSwitch {
     pub warnings: Vec<Warning>,
     // For a tool whose app holds the login from when it is next opened: that, as a sentence.
     pub opens: Option<String>,
+    // where switching by itself made it
+    pub back: Option<Back>,
+}
+
+// The account a switch by itself left, which Switch Back puts back in use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Back {
+    pub from: String,
+    // when the limit it left resets
+    pub resets_at: Option<i64>,
 }
 
 // Something a person asked for that did not happen, numbered one higher for each said.
@@ -505,28 +535,42 @@ pub(crate) struct Failure {
     pub message: String,
     pub code: Option<String>,
     pub warnings: Vec<Warning>,
+    // the account its next step is for, by its label with its tool
+    pub account: Option<String>,
 }
 
-/// A pane of the main window.
+// What the model reads afresh each time an app shows it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum Pane {
     Accounts,
     Activity,
-    Machine,
+    Checks,
 }
 
-/// What the model wants of the main window: it is opened each time `serial` moves, on
-/// `pane` when that says which. A menu has nowhere to put a sentence or a question, so a
-/// failure or a quit question asked for from one is said in the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Place {
+    Accounts,
+    Activity,
+    // doctor's checks, which the apps call Diagnostics
+    Checks,
+    Settings { section: SettingsSection },
+    // what the first launch shows
+    Welcome,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SettingsSection {
+    General,
+    Limits,
+    Advanced,
+}
+
+// Shown each time `serial` moves; a failure or a question asked from a menu is said in a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
 pub struct WindowRequest {
-    /// How many times the window has been asked for.
     pub serial: u64,
-    /// The pane the last request wants shown, when it wants one.
-    pub pane: Option<Pane>,
-    // the settings, on their limits, in place of the main window
-    #[uniffi(default)]
-    pub settings: bool,
+    // none: the main window as it was left
+    pub place: Option<Place>,
 }
 
 /// Why the last read of the accounts did not answer.
@@ -552,7 +596,6 @@ pub struct Snapshot {
     pub quit_question: Option<WindowQuestion>,
     /// The question a switch asks before it replaces a login its service refuses for good.
     pub replace_question: Option<WindowQuestion>,
-    /// What the model wants of the main window.
     pub window_request: WindowRequest,
     /// The sign-in under way, from the moment it is asked for until it has finished, failed
     /// or been cancelled. Nothing else is signed in to meanwhile, so the rows hold back.
@@ -581,6 +624,8 @@ pub struct Snapshot {
     pub accounts_shown: AccountsShown,
     /// What the menu says where it has no accounts to list.
     pub menu_accounts_note: Option<String>,
+    // when the accounts were last read
+    pub updated_at: Option<i64>,
     /// When the accounts were read, as the menu's Refresh item says it: "Updated 14:05".
     pub updated_menu: String,
     /// The same, as the window's subtitle says it.
@@ -601,6 +646,13 @@ pub struct Snapshot {
     /// the windows to close and the stores to delete, the link waiting for an account, and
     /// the downloads.
     pub account_windows: AccountWindowsShown,
+    // Uninstall Pitboard…, with its question
+    pub uninstall: ItemOffer,
+    pub removal: Option<RemovalShown>,
+    pub welcome: WelcomeShown,
+    // one higher each time the glance changed, for an app to reload its widgets
+    pub glance_revision: u64,
+    pub answers: Vec<OutsideAnswer>,
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements
@@ -648,6 +700,8 @@ pub struct NotificationButtonKind {
     pub title: String,
     // what it asks for always opens a window, so the system brings the app forward with it
     pub opens_window: bool,
+    // the SF Symbol macOS shows beside it
+    pub symbol: String,
 }
 
 // The app's system's notifications, called on a thread of the model's own. Asking for
@@ -742,6 +796,7 @@ impl PitboardModel {
                     launch,
                     web_scheme: windows::WEB_SCHEME.into(),
                 }),
+                glance: launch.glance.map(PathBuf::from),
             },
             Cadence::APP,
         )
@@ -803,6 +858,7 @@ pub(crate) struct Platform {
     pub(crate) earlier: Option<EarlierPreferences>,
     /// Where the account windows' records are kept, for an app that keeps them.
     pub(crate) windows: Option<WindowsPlace>,
+    pub(crate) glance: Option<PathBuf>,
 }
 
 /// Where the account windows' records are kept, and the scheme their pages are on.
@@ -822,6 +878,9 @@ impl PitboardModel {
     ) -> Arc<PitboardModel> {
         let clock = Clock::starting();
         let mut state = State::new(cadence);
+        if platform.glance.is_some() {
+            state.glance_to_a_file();
+        }
         if let Some(place) = &platform.windows {
             state.windows.on(
                 pitboard_core::host::OS,
@@ -843,6 +902,7 @@ impl PitboardModel {
                 windows: platform
                     .windows
                     .map(|place| lanes::RecordsFile::of(place.launch)),
+                glance: platform.glance,
             },
             cadence,
             &mailbox,
@@ -951,6 +1011,12 @@ impl Actor {
             }
             let now = self.clock.now();
             for job in self.state.apply(msg, now) {
+                self.lanes.run(job);
+            }
+            let glance = self.state.glances().then(|| {
+                crate::present::glance(&self.state, now.epoch(), self.local_time.as_ref())
+            });
+            if let Some(job) = glance.and_then(|text| self.state.glanced(text)) {
                 self.lanes.run(job);
             }
             self.publish(now);

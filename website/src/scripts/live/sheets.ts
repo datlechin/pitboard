@@ -1,5 +1,5 @@
-// The Forget alert, the Rename sheet and the sign-in sheet of each system, drawn once and opened
-// over whichever window asks.
+// The Remove alert, the Rename sheet, which names an account just added too, and the sign-in sheet
+// of each system, drawn once and opened over whichever window asks.
 import { combobox, type Combobox } from "./combobox.ts";
 import { closeDialog, isOpen, openDialog, type Cancelled } from "./dialog.ts";
 import { attr, shown, text } from "./draw.ts";
@@ -9,32 +9,35 @@ import {
   forget,
   model,
   nameProblem,
+  named,
   rename,
   signInFromApp,
-  typed,
   type State,
 } from "../../lib/model.ts";
 import {
+  CONTINUE,
+  DONE,
+  NAME_PROMPT,
   addAccount,
   couldNotRename,
   finishInBrowser,
-  forgetMessage,
-  forgetTitle,
   inAppWaiting,
-  labelTaken,
-  park,
-  parkToAdd,
-  parkToSignInAgain,
-  parking,
+  nameTaken,
+  nameThisAccount,
+  naming,
   program,
-  putBack,
+  removeMessage,
+  removeTitle,
   renameTitle,
   RENAMING,
-  signIn,
+  signInAsking,
   signInMessage,
   signInToAgain,
+  signOutToAdd,
+  signOutToSignInAgain,
   signingInTo,
-  typeAName,
+  signingOut,
+  switchBackTo,
   unusableName,
   waitingToQuit,
   RENAME,
@@ -45,7 +48,7 @@ import {
 } from "../../data/window.ts";
 import { tools, type Account, type Tool } from "../../data/world.ts";
 
-// the window a sheet opens over: its element is the desk, and Forget hands it back the list
+// the window a sheet opens over: its element is the desk, and Remove hands it back the list
 export interface SheetOwner extends HTMLElement {
   window: HTMLElement;
   forgotten(): void;
@@ -56,8 +59,9 @@ const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
   in_.querySelector<T>(`[data-part="${name}"]`);
 
 class Sheets {
-  #renaming: Account | null = null;
-  #signing: { tool: Tool; again: Account | null; started: boolean } | null = null;
+  // the account the Rename sheet names, and whether it was just added rather than renamed
+  #renaming: { a: Account; added: boolean } | null = null;
+  #signing: { tool: Tool; again: Account | null; started: boolean; from: SheetOwner } | null = null;
   #tools: Combobox | null = null;
   #said = "";
 
@@ -68,9 +72,7 @@ class Sheets {
     readonly signInDialog: HTMLDialogElement,
   ) {
     const field = renameDialog.querySelector<HTMLInputElement>('input[name="name"]')!;
-    field.addEventListener("input", () => this.#checkRename());
-    const name = signInDialog.querySelector<HTMLInputElement>('input[name="name"]')!;
-    name.addEventListener("input", () => this.#checkSignIn());
+    field.addEventListener("input", () => this.#checkName());
     for (const radio of signInDialog.querySelectorAll<HTMLInputElement>('input[name="tool"]'))
       radio.addEventListener("change", () => this.#pick(radio.value as Tool));
     const box = part(signInDialog, "tool-box");
@@ -98,6 +100,7 @@ class Sheets {
 
   close() {
     this.#dismiss();
+    if (this.#renaming?.added) named();
     this.#renaming = null;
     this.#signing = null;
   }
@@ -105,8 +108,8 @@ class Sheets {
   forget(from: SheetOwner, a: Account) {
     const s = model.get();
     const d = this.forgetDialog;
-    text(part(d, "title"), forgetTitle(a, s, this.system));
-    text(part(d, "message"), forgetMessage(a, this.system));
+    text(part(d, "title"), removeTitle(a, s, this.system));
+    text(part(d, "message"), removeMessage(a, this.system));
     this.#over(from, d, {
       answer: (value) => {
         if (value !== "forget") return;
@@ -118,60 +121,59 @@ class Sheets {
     });
   }
 
-  rename(from: SheetOwner, a: Account) {
+  // Rename, or Name This Account for one just added under the name the core picked, which Done
+  // keeps where it is not changed (present/sheets.rs `check_name`)
+  rename(from: SheetOwner, a: Account, added = false) {
     const d = this.renameDialog;
-    this.#renaming = a;
-    text(part(d, "title"), renameTitle(a.label));
-    text(part(d, "message"), RENAMING);
+    this.#renaming = { a, added };
+    text(part(d, "title"), added ? nameThisAccount(this.system) : renameTitle(a.label));
+    text(part(d, "message"), added ? naming(a.email, toolName(a.tool)) : RENAMING);
+    text(part(d, "confirm"), added ? DONE : RENAME);
     const field = d.querySelector<HTMLInputElement>('input[name="name"]')!;
     field.value = a.label;
-    field.placeholder = a.label;
+    field.placeholder = added ? NAME_PROMPT : a.label;
     shown(part(d, "failure"), false);
-    this.#checkRename();
+    this.#checkName();
     this.#over(from, d, {
       answer: (value) => {
-        if (value !== "rename" || !this.#renaming) return;
         const was = this.#renaming;
+        if (value !== "rename" || !was) return;
         const to = field.value.trim();
-        const out = rename(was.tool, was.label, to);
+        if (to === was.a.label) return this.close();
+        const out = rename(was.a.tool, was.a.label, to);
         if (out === "label_taken") {
-          const taken = model.get().accounts.find((x) => x.tool === was.tool && x.label === to);
+          const taken = model.get().accounts.find((x) => x.tool === was.a.tool && x.label === to);
           const failure = part(d, "failure")!;
-          text(part(failure, "failure-title"), couldNotRename(was.label));
-          text(
-            part(failure, "failure-message"),
-            labelTaken(typed({ tool: was.tool, label: to }), taken?.email ?? ""),
-          );
+          text(part(failure, "failure-title"), couldNotRename(was.a.label));
+          text(part(failure, "failure-message"), nameTaken(to, taken?.email ?? ""));
           shown(failure, true);
-          say(couldNotRename(was.label));
+          say(couldNotRename(was.a.label));
           field.focus();
           return;
         }
-        if (out === "ok") closeDialog(d);
+        if (out === "ok") this.close();
       },
-      cancel: () => true,
+      cancel: () => {
+        if (this.#renaming?.added) named();
+        this.#renaming = null;
+        return true;
+      },
       focus: field,
     });
     field.select();
   }
 
-  #checkRename() {
-    const a = this.#renaming;
+  #checkName() {
+    const was = this.#renaming;
     const d = this.renameDialog;
-    if (!a) return;
+    if (!was) return;
     const field = d.querySelector<HTMLInputElement>('input[name="name"]')!;
-    const typedName = field.value.trim();
-    const problem = nameProblem(typedName);
-    const said =
-      problem === "empty" && this.system === "windows"
-        ? typeAName(RENAME)
-        : problem
-          ? unusableName(problem, false)
-          : null;
-    this.#problem(d, said);
+    const typed = field.value.trim();
+    const problem = nameProblem(typed);
+    this.#problem(d, problem && unusableName(problem));
     shown(part(d, "failure"), false);
     const confirm = d.querySelector<HTMLButtonElement>('button[value="rename"]')!;
-    confirm.disabled = !!problem || typedName === a.label;
+    confirm.disabled = !!problem || (!was.added && typed === was.a.label);
   }
 
   #problem(d: HTMLDialogElement, said: string | null) {
@@ -182,7 +184,8 @@ class Sheets {
     this.#said = said ?? "";
   }
 
-  // Add Account with `tool` picked, or Sign In Again for `again`
+  // Add Account with `tool` picked, or Sign In Again for `again`: the sign-in comes first, and a
+  // new account is named once it is added
   signIn(from: SheetOwner, tool: Tool | null, again: Account | null) {
     const s = model.get();
     if (s.signing) return;
@@ -191,18 +194,15 @@ class Sheets {
       .filter(([t]) => this.system === "macos" || t !== "desktop")
       .map(([t]) => t);
     const picked = again?.tool ?? tool ?? offered[0];
-    this.#signing = { tool: picked, again, started: false };
+    this.#signing = { tool: picked, again, started: false, from };
     shown(part(d, "tool"), !again);
-    shown(part(d, "name"), !again);
     shown(part(d, "account"), !!again);
     text(part(d, "label"), again?.label ?? "");
-    const name = d.querySelector<HTMLInputElement>('input[name="name"]')!;
-    name.value = "";
     this.#pick(picked);
     this.#over(from, d, {
       answer: (value) => this.#signInAnswer(value),
       cancel: (by) => this.#signInCancel(by),
-      focus: again ? d.querySelector<HTMLElement>('[data-part="confirm"]') : name,
+      focus: d.querySelector<HTMLElement>('[data-part="confirm"]'),
     });
   }
 
@@ -213,11 +213,9 @@ class Sheets {
     for (const radio of this.signInDialog.querySelectorAll<HTMLInputElement>('input[name="tool"]'))
       radio.checked = radio.value === tool;
     this.#form(model.get());
-    this.#checkSignIn();
   }
 
-  // the form before it starts: its words and its button for the tool picked, which a render
-  // redraws without taking away what the name was last told
+  // the form before it starts: its words and its button for the tool picked
   #form(s: State) {
     const d = this.signInDialog;
     const sign = this.#signing;
@@ -226,10 +224,13 @@ class Sheets {
     const work = s.inUse.desktop;
     const [message, confirm] =
       tool === "desktop"
-        ? again
-          ? [parkToSignInAgain(program(tool), again.label, work), park(work)]
-          : [parkToAdd(program(tool), work), park(work)]
-        : [signInMessage(toolName(tool), again?.label ?? null), signIn(this.system)];
+        ? [
+            again
+              ? signOutToSignInAgain(program(tool), again.label, work)
+              : signOutToAdd(program(tool), work),
+            CONTINUE,
+          ]
+        : [signInMessage(toolName(tool), again?.label ?? null), signInAsking(this.system)];
     text(
       part(d, "title"),
       again ? signInToAgain(this.system, again.label) : addAccount(this.system),
@@ -238,6 +239,7 @@ class Sheets {
     const button = part<HTMLButtonElement>(d, "confirm")!;
     text(button, confirm);
     shown(button, true);
+    button.disabled = false;
     shown(part(d, "form"), true);
     shown(part(d, "page"), false);
     shown(part(d, "waiting"), false);
@@ -245,46 +247,16 @@ class Sheets {
     shown(d.querySelector('[data-does="put-back"]'), false);
   }
 
-  #checkSignIn() {
-    const sign = this.#signing;
-    if (!sign || sign.started) return;
-    const d = this.signInDialog;
-    const button = part<HTMLButtonElement>(d, "confirm")!;
-    if (sign.again) {
-      this.#problem(d, null);
-      button.disabled = false;
-      return;
-    }
-    const name = d.querySelector<HTMLInputElement>('input[name="name"]')!.value.trim();
-    const problem = nameProblem(name);
-    this.#problem(
-      d,
-      problem === "empty" && this.system === "windows"
-        ? typeAName(button.textContent!.trim())
-        : problem
-          ? unusableName(problem, true)
-          : null,
-    );
-    button.disabled = !!problem;
-  }
-
   #signInAnswer(value: string) {
     const sign = this.#signing;
-    const d = this.signInDialog;
     if (!sign) return;
     if (value === "put-back") {
       cancelSignIn();
       return this.close();
     }
     if (value !== "sign-in" || sign.started) return;
-    const name =
-      sign.again?.label ?? d.querySelector<HTMLInputElement>('input[name="name"]')!.value.trim();
-    const taken =
-      !sign.again && model.get().accounts.find((a) => a.tool === sign.tool && a.label === name);
-    if (taken)
-      return this.#problem(d, labelTaken(typed({ tool: sign.tool, label: name }), taken.email));
     sign.started = true;
-    signInFromApp(sign.tool, name, !!sign.again);
+    signInFromApp(sign.tool, sign.again?.label ?? null);
   }
 
   // sheets.rs `escape_cancels`: no key puts away a sign-in Claude Desktop runs, where its Cancel or
@@ -293,15 +265,26 @@ class Sheets {
     const sign = this.#signing;
     if (by === "key" && sign?.started && model.get().signing?.tool === "desktop") return false;
     if (sign?.started) cancelSignIn();
+    this.#signing = null;
     return true;
   }
 
   render(s: State) {
     const sign = this.#signing;
-    if (!sign || !isOpen(this.signInDialog)) return;
+    if (!sign) return;
+    if (!isOpen(this.signInDialog)) return;
     if (!sign.started) return this.#form(s);
     const run = s.signing;
-    if (!run) return this.close();
+    if (!run) {
+      // a new account is added under the name the core picked, which the name sheet offers
+      const added =
+        s.naming &&
+        s.accounts.find((a) => a.tool === s.naming!.tool && a.label === s.naming!.label);
+      const from = sign.from;
+      this.close();
+      if (added && !sign.again) this.rename(from, added, true);
+      return;
+    }
     const d = this.signInDialog;
     const tool = run.tool;
     shown(part(d, "form"), false);
@@ -318,17 +301,17 @@ class Sheets {
       const waiting = run.phase === "waiting";
       text(
         part(d, "title"),
-        run.again ? signInToAgain(this.system, run.label) : addAccount(this.system),
+        run.label !== null ? signInToAgain(this.system, run.label) : addAccount(this.system),
       );
       text(
         part(d, "message"),
-        waiting ? inAppWaiting(app, run.label, run.again) : parking(work)[0],
+        waiting ? inAppWaiting(app, run.label ?? "", run.again) : signingOut(work)[0],
       );
-      attr(spinner, "aria-label", waiting ? waitingToQuit(app) : parking(work)[1]);
+      attr(spinner, "aria-label", waiting ? waitingToQuit(app) : signingOut(work)[1]);
       shown(part(d, "page"), false);
       text(cancel, waiting ? LATER : CANCEL);
       shown(back, waiting);
-      text(back, putBack(this.system, work));
+      text(back, switchBackTo(this.system, work));
       return;
     }
     text(part(d, "title"), signingInTo(this.system, toolName(tool)));

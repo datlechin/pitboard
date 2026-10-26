@@ -93,14 +93,6 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
 
     public void Add() => model.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)));
 
-    public void OpenSetupLink()
-    {
-        if (model.Setup?.Link is { } link && Uri.TryCreate(link.Link, UriKind.Absolute, out var uri))
-        {
-            open(uri);
-        }
-    }
-
     public void ChooseEmpty()
     {
         switch (model.AccountsShown)

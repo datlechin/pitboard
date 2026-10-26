@@ -39,6 +39,23 @@ public sealed class SettingsTests
     private static bool Enables(AutomationElement control, bool enabled) =>
         Retry.WhileFalse(() => control.IsEnabled == enabled, Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
 
+    // The model's choices, in its order: Do nothing, Notify me, Switch automatically.
+    private const int DoNothing = 0;
+    private const int Notify = 1;
+    private const int SwitchAutomatically = 2;
+
+    private static int Chosen(ComboBox choice)
+    {
+        choice.Expand();
+        var chosen = Array.FindIndex(choice.Items, item => item.IsSelected);
+        choice.Collapse();
+        return chosen;
+    }
+
+    // The choice's name says the share it is made at.
+    private static bool Names(ComboBox choice, int share) =>
+        Retry.WhileFalse(() => choice.Name.EndsWith($" {share}%", StringComparison.Ordinal), Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
+
     private static bool Says(Launched launched, string start, TimeSpan within) =>
         Retry.WhileFalse(
             () => Launched.Lines(launched.Window("Pitboard")).Any(line => line.StartsWith(start, StringComparison.Ordinal)),
@@ -72,7 +89,7 @@ public sealed class SettingsTests
         Assert.IsTrue(Enables(toggle, false), "the switch can be turned on past Settings");
         Assert.AreEqual(ToggleState.Off, State(toggle));
         Assert.IsTrue(Says(launched, "Turned off in Settings > Apps > Startup", Shortly));
-        Assert.IsNotNull(Launched.Pressable(launched.Window("Pitboard"), "Open Startup settings"), "no link to Settings > Apps > Startup");
+        Control(launched, "settings.startupSettings");
     }
 
     [TestMethod]
@@ -86,18 +103,18 @@ public sealed class SettingsTests
 
         // Both are held back until the app's preferences have been read.
         Assert.IsTrue(Enables(choice, true));
-        Assert.AreEqual("Notify me", choice.SelectedItem?.Name, "a fresh install notifies");
+        Assert.AreEqual(Notify, Chosen(choice), "a fresh install notifies");
         Assert.IsTrue(Enables(share, true));
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")), "nothing said while it does not switch");
-        launched.Named("When a limit reaches 95%");
+        Assert.IsTrue(Names(choice, 95));
 
-        choice.Select("Switch automatically");
+        choice.Select(SwitchAutomatically);
         Control(launched, "settings.autoSwitchStanding");
 
         share.Patterns.RangeValue.Pattern.SetValue(96);
-        launched.Named("When a limit reaches 96%");
+        Assert.IsTrue(Names(choice, 96), "the model did not take the share");
 
-        choice.Select("Do nothing");
+        choice.Select(DoNothing);
         Assert.IsTrue(Enables(share, false));
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")));
     }
@@ -108,7 +125,7 @@ public sealed class SettingsTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "warmUp");
         launched.OpenWindow();
-        Assert.IsTrue(Says(launched, "Warms up again at ", TimeSpan.FromSeconds(30)), "personal is not warmed up");
+        Assert.IsTrue(Says(launched, Words.WarmsUpAgain, TimeSpan.FromSeconds(30)), "personal is not warmed up");
 
         launched.Select("SettingsItem");
         Expand(launched, "settings.warm");
@@ -134,7 +151,6 @@ public sealed class SettingsTests
         var renew = Control(launched, "settings.renewDaily");
         renew.Patterns.Toggle.Pattern.Toggle();
         Assert.IsTrue(Becomes(renew, ToggleState.On));
-        Assert.IsTrue(launched.Gone(found => found.ByName("Renew now")), "the app renews as it reads");
     }
 
     // The fixture puts no pitboard where a terminal looks, and the installer, not the app, puts one on the PATH.
@@ -144,9 +160,8 @@ public sealed class SettingsTests
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         OpenSettings(launched);
 
-        launched.Named("Not installed");
-        Assert.IsTrue(Says(launched, "Pitboard’s installer puts pitboard on your PATH", Shortly));
-        Assert.IsTrue(launched.Gone(found => found.ByName("Install Command Line Tool…")), "the section offers a button");
+        Assert.AreEqual(Words.NotInstalled, Control(launched, "settings.inTerminal").Name);
+        Assert.IsTrue(Says(launched, Words.NewTerminals, Shortly));
     }
 
     // A Debug build carries no update key, and General says so.
@@ -156,6 +171,6 @@ public sealed class SettingsTests
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         OpenSettings(launched);
 
-        Assert.IsTrue(Says(launched, "This copy of Pitboard can", Shortly));
+        Assert.IsTrue(Says(launched, Words.NoUpdateKey, Shortly));
     }
 }

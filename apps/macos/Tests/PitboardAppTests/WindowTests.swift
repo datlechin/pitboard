@@ -10,12 +10,15 @@ import Testing
 @Test func aRequestNamesThePaneTheWindowShows() {
     for left in WindowPane.allCases {
         for wanted in WindowPane.allCases {
-            #expect(left.after(WindowRequest(serial: 1, pane: wanted.pane)) == wanted)
+            #expect(left.after(WindowRequest(serial: 1, place: wanted.place)) == wanted)
         }
-        #expect(left.after(WindowRequest(serial: 2, pane: nil)) == left)
+        #expect(left.after(WindowRequest(serial: 2, place: nil)) == left)
+        #expect(left.after(WindowRequest(serial: 3, place: .welcome)) == .accounts)
+        let limits = WindowRequest(serial: 4, place: .settings(section: .limits))
+        #expect(left.after(limits) == left, "the settings are a window of their own")
     }
-    #expect(WindowPane.allCases.map(\.pane) == [.accounts, .activity, .machine])
-    #expect(WindowPane.allCases.allSatisfy { WindowPane($0.pane) == $0 })
+    #expect(WindowPane.allCases.map(\.place) == [.accounts, .activity, .checks])
+    #expect(WindowPane.allCases.allSatisfy { WindowPane($0.place) == $0 })
 }
 
 /// The window opens once for each request, whether the menu bar item first sees it as it
@@ -25,11 +28,11 @@ import Testing
 @MainActor
 @Test func theWindowOpensOnceForEachRequest() {
     let requests = WindowRequests()
-    #expect(!requests.opens(WindowRequest(serial: 0, pane: nil)), "nothing asked yet")
-    #expect(requests.opens(WindowRequest(serial: 1, pane: nil)), "as the label appears")
-    #expect(!requests.opens(WindowRequest(serial: 1, pane: nil)), "and not as it moves")
-    #expect(requests.opens(WindowRequest(serial: 3, pane: .machine)))
-    #expect(!requests.opens(WindowRequest(serial: 2, pane: nil)), "an older one")
+    #expect(!requests.opens(WindowRequest(serial: 0, place: nil)), "nothing asked yet")
+    #expect(requests.opens(WindowRequest(serial: 1, place: nil)), "as the label appears")
+    #expect(!requests.opens(WindowRequest(serial: 1, place: nil)), "and not as it moves")
+    #expect(requests.opens(WindowRequest(serial: 3, place: .checks)))
+    #expect(!requests.opens(WindowRequest(serial: 2, place: nil)), "an older one")
 }
 
 /// Opened again some other way, the window stays on the pane it was left on rather than
@@ -38,13 +41,13 @@ import Testing
 @MainActor
 @Test func theWindowShowsThePaneItIsAskedForOnce() {
     let requests = WindowRequests()
-    let notice = WindowRequest(serial: 1, pane: .accounts)
+    let notice = WindowRequest(serial: 1, place: .accounts)
     #expect(requests.pane(for: notice, from: .machine) == .accounts)
     #expect(requests.pane(for: notice, from: .activity) == .activity, "answered already")
     #expect(
-        requests.pane(for: WindowRequest(serial: 2, pane: nil), from: .activity) == .activity)
+        requests.pane(for: WindowRequest(serial: 2, place: nil), from: .activity) == .activity)
     #expect(
-        requests.pane(for: WindowRequest(serial: 3, pane: .machine), from: .activity)
+        requests.pane(for: WindowRequest(serial: 3, place: .checks), from: .activity)
             == .machine)
 }
 
@@ -83,17 +86,16 @@ import Testing
     #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])
 }
 
-// Each row has a grid of its own, so an empty pace column widened its bars past another row's.
-@MainActor
-@Test func theBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid() {
-    func width(_ pace: LimitPace?) -> CGFloat {
-        let limit = LimitRow(
-            short: "5h", percent: 42, figure: "42%", level: .plenty,
-            resets: "resets in 2h 10m", pace: pace, spoken: "5-hour limit 42% used")
-        return NSHostingView(rootView: UsageBars(limits: [limit])).fittingSize.width
-    }
-    let over = LimitPace(expected: 30, standing: .over, said: "27% over pace", help: "")
-    #expect(width(nil) == width(over))
+/// The UI tests find a control by the model's case it shows or sends, whatever it carries.
+@Test func aCaseIsNamedWithoutWhatItCarries() {
+    #expect(caseName(Intent.switchTo(qualified: "codex/spare")) == "switchTo")
+    #expect(caseName(Intent.abandonStuckSwitch) == "abandonStuckSwitch")
+    #expect(
+        caseName(Intent.presentSheet(sheet: .rename(provider: "claude", label: "work")))
+            == "rename")
+    #expect(caseName(Footing.onlyOne(provider: "claude", label: "work")) == "onlyOne")
+    #expect(caseName(Sheet.signInAgain(provider: "claude", label: "old")) == "signInAgain")
+    #expect(caseName(WindowNoteKind.otherApp(scheme: "vscode")) == "otherApp")
 }
 
 /// A sheet put up in place of another is told apart from it, so the window puts it up
@@ -102,7 +104,7 @@ import Testing
     let sheets: [Sheet] = [
         .add(provider: nil), .add(provider: "codex"),
         .signInAgain(provider: "claude", label: "old"),
-        .name(provider: "claude", email: "dana@work.example"),
+        .name(provider: "claude", label: "work", email: "dana@work.example"),
         .rename(provider: "claude", label: "personal"),
         .rename(provider: "codex", label: "personal"),
         .stow,
@@ -129,4 +131,28 @@ import Testing
     #expect(board.pasteboardItems?.count == 1)
     #expect(board.string(forType: .URL) == link.absoluteString)
     #expect(board.string(forType: .string) == link.absoluteString)
+}
+
+// A limit's bar is AppKit's level indicator, which took a click on it from the list.
+@MainActor
+@Test func aClickOnALimitsBarReachesItsRow() {
+    let limit = LimitRow(
+        kind: .fiveHour, name: "5-hour limit", short: "5-hour", percent: 60, figure: "60%",
+        used: "60% used", level: .plenty, resetsAt: nil, resets: "Resets 3:22 AM",
+        resetsIn: "in 2 hr", spoken: "5-hour limit, 60 percent used")
+    let bars = NSHostingView(rootView: UsageBars(limits: [limit]).frame(width: 480))
+    let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: bars.fittingSize), styleMask: .borderless,
+        backing: .buffered, defer: true)
+    window.contentView = bars
+    bars.layoutSubtreeIfNeeded()
+
+    let hits = stride(from: 0.0, to: bars.bounds.height, by: 2).flatMap { y in
+        stride(from: 0.0, to: bars.bounds.width, by: 2).compactMap { x in
+            bars.hitTest(NSPoint(x: x, y: y))
+        }
+    }
+
+    #expect(!hits.isEmpty)
+    #expect(hits.allSatisfy { $0 === bars })
 }

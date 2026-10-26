@@ -1,5 +1,5 @@
-// <pb-settings> and <pb-warm>: macOS's Settings window, cut at When a limit reaches or at Warm up
-// limits, its tabs as SettingsView.swift's TabView shows them (answer 4 a).
+// <pb-settings> and <pb-warm>: macOS's Settings window, cut at When a limit reaches or at Warm-Up,
+// its tabs as SettingsView.swift's TabView shows them (answer 4 a).
 import { combobox, type Combobox } from "./combobox.ts";
 import { attr, cloned, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";

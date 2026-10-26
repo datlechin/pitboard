@@ -98,7 +98,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         var asked = signingIn is { SignIn.WantsCode: true } && CodePart.Visibility == Visibility.Collapsed;
         ToolPicker.Visibility = Look.Shown(form is { Text.Tools.Length: > 1 });
         AccountPart.Visibility = Look.Shown(form is { Text.Account: not null });
-        NameField.Visibility = Look.Shown(page is SheetPage.Naming || form is { Text.Account: null });
+        NameField.Visibility = Look.Shown(page is SheetPage.Naming);
         Working.Visibility = Look.Shown((form?.Text.Progress ?? stowing?.Text.Looking) is not null);
         Lines.Visibility = Look.Shown(stowing is { Text.Lines.Length: > 0 });
         Link.Visibility = Look.Shown(signingIn is { Text.OffersLink: true });
@@ -147,12 +147,11 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     private void ShowForm(SheetPage.Form form)
     {
         var text = form.Text;
-        // The form's fields start from the model once, and keep what was typed when a sign-in that failed comes back to it.
+        // The tool starts from the model once, and keeps what was picked when a sign-in that failed comes back to it.
         if (!_filled)
         {
             _filled = true;
             _tool = text.Tool;
-            NameField.Text = text.Name;
         }
 
         Title = text.Title;
@@ -172,10 +171,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
         ToolPicker.IsEnabled = !text.Saving;
         AccountText.Text = text.Account ?? "";
-        NameField.PlaceholderText = text.Prompt;
-        NameField.IsEnabled = !text.Saving;
         WorkingText.Text = text.Progress ?? "";
-        Describe(NameField, form.Note(_tool, NameField.Text));
         ShowMissing(form.NotFound(_tool));
         Message.Text = form.Message(_tool);
         PrimaryButtonText = form.Confirm(_tool);
@@ -195,7 +191,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         Message.Text = text.Message;
         NameField.PlaceholderText = text.Prompt;
         NameField.IsEnabled = !text.Saving;
-        Describe(NameField, naming.Note(NameField.Text));
+        Describe(NameField, naming.Problem(NameField.Text));
         PrimaryButtonText = text.Confirm;
         SecondaryButtonText = "";
         DefaultButton = ContentDialogButton.Primary;
@@ -294,7 +290,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     {
         IsPrimaryButtonEnabled = _page switch
         {
-            SheetPage.Form form => form.Start(_tool, NameField.Text) is not null,
+            SheetPage.Form form => form.Start(_tool) is not null,
             SheetPage.Naming naming => naming.Save(NameField.Text) is not null,
             SheetPage.SigningIn signingIn => signingIn.Submit(CodeField.Text) is not null,
             SheetPage.Stowing stowing => stowing.PutAway() is not null,
@@ -332,7 +328,6 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
             _tool = tool;
             Message.Text = form.Message(tool);
             PrimaryButtonText = form.Confirm(tool);
-            Describe(NameField, form.Note(tool, NameField.Text));
             ShowMissing(form.NotFound(tool));
             Enable();
         }
@@ -357,17 +352,12 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
     private void OnNameChanged(object sender, TextChangedEventArgs args)
     {
-        Describe(NameField, _page switch
-        {
-            SheetPage.Form form => form.Note(_tool, NameField.Text),
-            SheetPage.Naming naming => naming.Note(NameField.Text),
-            _ => null,
-        });
+        Describe(NameField, (_page as SheetPage.Naming)?.Problem(NameField.Text));
         Edited();
         Enable();
     }
 
-    // What went wrong was about the name and tool it was asked with.
+    // What went wrong was about the name or the tool it was asked with.
     private void Edited()
     {
         if (_model.SheetFailure is not null)
@@ -393,7 +383,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         args.Cancel = true;
         var intent = _page switch
         {
-            SheetPage.Form form => form.Start(_tool, NameField.Text),
+            SheetPage.Form form => form.Start(_tool),
             SheetPage.Naming naming => naming.Save(NameField.Text),
             SheetPage.SigningIn signingIn => signingIn.Submit(CodeField.Text),
             SheetPage.Stowing stowing => stowing.PutAway(),

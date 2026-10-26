@@ -16,7 +16,7 @@ public sealed class AccountPickerTests
 
         var picker = launched.Share("https://chatgpt.com/c/shared");
 
-        Launched.Shows(picker, "Open this chatgpt.com link as:");
+        launched.Element("picker.choose");
         // Each row is one element for Narrator, its label and email read together.
         var spare = launched.Find(found => found.ByAutomationId("picker.account.spare"), "spare's row");
         launched.Find(found => found.ByAutomationId("picker.account.main"), "main's row");
@@ -25,8 +25,9 @@ public sealed class AccountPickerTests
 
         spare.Patterns.SelectionItem.Pattern.Select();
         // Open waits a moment after the accounts appear, so a stray Enter opens nothing.
-        Assert.IsTrue(launched.Enables("Open"), "Open was held back");
-        Launched.Press(picker, "Open");
+        var open = Command(picker, "PrimaryButton");
+        Assert.IsTrue(Launched.Enables(open), "Open was held back");
+        open.Invoke();
 
         Launched.Loads(launched.AccountWindow("spare"), "A Pitboard fixture page at /c/shared", exact: false);
         Assert.IsTrue(Closed(picker), "the Open link window stayed");
@@ -39,11 +40,11 @@ public sealed class AccountPickerTests
 
         var picker = launched.Share("https://example.com/page");
 
-        Launched.Shows(picker, "Can’t open this link");
+        launched.Element("picker.refused");
         Assert.IsTrue(
-            Launched.Lines(picker).Any(line => line.Contains("This link is on example.com.", StringComparison.Ordinal)),
+            Launched.Lines(picker).Any(line => line.Contains("example.com", StringComparison.Ordinal)),
             string.Join(" | ", Launched.Lines(picker)));
-        Launched.Press(picker, "OK");
+        Command(picker, "PrimaryButton").Invoke();
         Assert.IsTrue(Closed(picker), "the Open link window stayed");
         Assert.AreEqual(0, AccountWindows(launched));
     }
@@ -55,8 +56,8 @@ public sealed class AccountPickerTests
 
         var picker = launched.Share("https://claude.ai/new");
 
-        Launched.Shows(picker, "Open this claude.ai link as:");
-        Launched.Press(picker, "Cancel");
+        launched.Element("picker.choose");
+        Command(picker, "CancelButton").Invoke();
         Assert.IsTrue(Closed(picker), "the Open link window stayed");
         Assert.AreEqual(0, AccountWindows(launched));
     }
@@ -68,10 +69,10 @@ public sealed class AccountPickerTests
 
         var picker = launched.Share("https://chatgpt.com/");
 
-        Launched.Shows(picker, "No chatgpt.com account");
-        Assert.IsNotNull(Launched.Pressable(picker, "Add account…"));
-        Assert.IsNotNull(Launched.Pressable(picker, "Open in browser"));
-        Launched.Press(picker, "Cancel");
+        launched.Element("picker.noAccount");
+        Command(picker, "PrimaryButton");
+        Command(picker, "SecondaryButton");
+        Command(picker, "CancelButton").Invoke();
         Assert.IsTrue(Closed(picker), "the Open link window stayed");
     }
 
@@ -83,9 +84,9 @@ public sealed class AccountPickerTests
 
         var picker = launched.Share("https://claude.ai/magic-link#someone");
 
-        Launched.Shows(picker, "Can’t open this link");
-        Launched.Shows(picker, "Pitboard doesn’t open claude.ai sign-in links", exact: false);
-        Launched.Press(picker, "OK");
+        launched.Element("picker.refused");
+        launched.Element("picker.detail");
+        Command(picker, "PrimaryButton").Invoke();
         Assert.IsTrue(Closed(picker), "the Open link window stayed");
     }
 
@@ -103,6 +104,10 @@ public sealed class AccountPickerTests
         Assert.AreEqual(1, launched.Process.ExitCode);
         Assert.AreEqual("", string.Join(", ", launched.Written()));
     }
+
+    // Its buttons, which say what they do as the link waiting asks.
+    private static Button Command(AutomationElement picker, string automationId) =>
+        Launched.Within(picker, found => found.ByAutomationId(automationId), automationId).AsButton();
 
     private static bool Closed(AutomationElement picker) =>
         Retry.WhileTrue(() => picker.IsAvailable, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(250), ignoreException: true).Result;

@@ -178,6 +178,8 @@ pub(crate) struct Windows {
     arming: Option<Duration>,
     /// Every download, oldest first.
     pub(crate) downloads: Vec<Download>,
+    // while Pitboard is being removed: every window closes, and none opens
+    closing_all: bool,
 }
 
 impl Windows {
@@ -204,6 +206,7 @@ impl Windows {
             armed_for: None,
             arming: None,
             downloads: Vec::new(),
+            closing_all: false,
         }
     }
 
@@ -406,6 +409,25 @@ impl Windows {
             .unwrap_or_default()
     }
 
+    pub(crate) fn close_all(&mut self, on: bool) {
+        self.closing_all = on;
+    }
+
+    // Pitboard's accounts are gone: every store this directory recorded alone goes.
+    pub(crate) fn remove_all(&mut self, jobs: &mut Vec<super::state::Job>) {
+        self.waiting.clear();
+        if matches!(self.kept, Kept::Unread) {
+            self.enrolled = Some(BTreeSet::new());
+            return;
+        }
+        self.put_away(&BTreeSet::new(), jobs);
+    }
+
+    // Once the records are read: an app that keeps none has none to delete.
+    pub(crate) fn stores_gone(&self) -> bool {
+        !matches!(self.kept, Kept::Unread) && self.claimed.is_empty() && self.deleting.is_empty()
+    }
+
     /// `store` is no longer asked of the app, and no longer claimed. Whether it was asked.
     fn unclaim(&mut self, store: &str) -> bool {
         let Some(at) = self.deleting.iter().position(|asked| asked.store == store) else {
@@ -450,7 +472,7 @@ impl Windows {
         let Some(status) = status else {
             return;
         };
-        if self.open.iter().all(|window| window.shown.is_some()) {
+        if self.closing_all || self.open.iter().all(|window| window.shown.is_some()) {
             return;
         }
         let accounts = window_accounts(&status.accounts);
@@ -552,12 +574,12 @@ impl Windows {
     /// The stores of the windows the app has open whose account the accounts shown no longer
     /// list, which close.
     pub(crate) fn closing(&self, status: Option<&Status>) -> Vec<String> {
-        let Some(status) = status else {
-            return Vec::new();
-        };
         self.open
             .iter()
-            .filter(|window| window_of(status, &window.store).is_none())
+            .filter(|window| {
+                self.closing_all
+                    || status.is_some_and(|status| window_of(status, &window.store).is_none())
+            })
             .map(|window| window.store.clone())
             .collect()
     }

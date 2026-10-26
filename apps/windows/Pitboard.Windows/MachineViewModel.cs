@@ -40,7 +40,7 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
     public void Stop() => model.PropertyChanged -= OnModelChanged;
 
     // Every visit, and Check again: a check fixed in a terminal since would otherwise still read as failing.
-    public void Check() => model.Send(new Intent.PaneShown(Pane.Machine));
+    public void Check() => model.Send(new Intent.PaneShown(Pane.Checks));
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs args)
     {

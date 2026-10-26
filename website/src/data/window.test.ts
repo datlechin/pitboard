@@ -10,6 +10,8 @@ const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
 const words = joined(present("words.rs"));
+// the words a test of present/words.rs pins, as a string literal of it
+const pinned = (said: string) => words.includes(`"${said}"`);
 const after = moments.after;
 
 test("a name says its tool once two tools have accounts, on each system's list", () => {
@@ -27,12 +29,13 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
     assert.ok(pane.includes(`.help("${help}")`), help);
     assert.ok(page.includes(`ToolTipService.ToolTip="${help}"`), help);
   }
-  assert.ok(words.includes('titled(os, "In Use", "In use")'));
+  assert.ok(words.includes('titled(os, "In Use", IN_USE)'));
   assert.equal(w.inUse("windows"), "In use");
-  const accounts = present("accounts.rs");
-  assert.ok(accounts.includes('format!("Use {label}")'));
-  assert.ok(accounts.includes('"Rename…".into()'));
-  assert.ok(accounts.includes(`const FORGET: &str = "${w.FORGET_OFFER}";`));
+  assert.ok(words.includes(`pub(crate) const SWITCH: &str = "${w.SWITCH}";`));
+  assert.ok(words.includes('format!("Switch to {label}")'));
+  assert.equal(w.switchOffer("personal"), "Switch to personal");
+  assert.ok(words.includes(`if asks { "${w.RENAME_OFFER}" } else { "Rename" }`));
+  assert.ok(words.includes('titled(os, "Remove Account…", "Remove account…")'));
   assert.ok(words.includes('titled(os, "Sign In Again…", "Sign in again…")'));
   assert.ok(words.includes('titled(os, "Warm Up Now", "Warm up now")'));
   assert.ok(
@@ -47,19 +50,21 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
   );
 });
 
-test("Forget asks with the account's name and says what goes, on this Mac or this PC", () => {
-  assert.ok(present("accounts.rs").includes('title: format!("Forget “{spoken_name}”?"),'));
-  assert.ok(present("accounts.rs").includes('confirm: "Forget".into(),'));
-  assert.equal(w.forgetTitle(account("work"), after, "macos"), "Forget “work (Claude Code)”?");
+test("Remove Account asks with the account's name and says what goes, on this Mac or this PC", () => {
+  assert.ok(present("accounts.rs").includes("title: words::remove_title(spoken_name),"));
+  assert.ok(present("accounts.rs").includes("confirm: words::REMOVE.into(),"));
+  assert.ok(words.includes('format!("Remove “{name}”?")'));
+  assert.ok(words.includes(`pub(crate) const REMOVE: &str = "${w.REMOVE}";`));
+  assert.equal(w.removeTitle(account("work"), after, "macos"), "Remove “work (Claude Code)”?");
   const windows = joined(repo("crates/pitboard-ffi/src/account_windows/accounts.rs"));
   assert.ok(
     windows.includes(
-      "Pitboard deletes the login it parked for this account, and everything its {} window keeps on {}, its sign-in included. Using it again needs a sign-in in your browser.",
+      "Pitboard deletes this account’s saved sign-in, and everything its {} window keeps on {}, its sign-in included. Using it again needs a sign-in in your browser.",
     ),
   );
   assert.ok(
     windows.includes(
-      "Pitboard deletes the login it parked for this account and the folders set aside for it. Using it again needs a sign-in in {app}.",
+      "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using it again needs a sign-in in {app}.",
     ),
   );
   const machines = repo("crates/pitboard-ffi/src/account_windows/mod.rs");
@@ -67,93 +72,124 @@ test("Forget asks with the account's name and says what goes, on this Mac or thi
     machines.includes('Os::MacOs => "this Mac"') && machines.includes('Os::Windows => "this PC"'),
   );
   assert.match(
-    w.forgetMessage(account("main", "codex"), "windows"),
+    w.removeMessage(account("main", "codex"), "windows"),
     /its chatgpt\.com window keeps on this PC,/,
   );
-  assert.match(w.forgetMessage(account("office", "desktop"), "macos"), /sign-in in Claude\.$/);
+  assert.match(w.removeMessage(account("office", "desktop"), "macos"), /sign-in in Claude\.$/);
 });
 
-test("the Rename sheet says what present/sheets.rs gives it, and its problems as typed", () => {
-  assert.ok(words.includes('format!("Rename “{label}”")'));
-  assert.ok(words.includes(`pub(crate) const RENAMING: &str = "${w.RENAMING}";`));
-  assert.ok(words.includes(`pub(crate) const RENAME: &str = "${w.RENAME}";`));
+test("the Rename sheet and the one naming an account added say what present/sheets.rs gives them", () => {
+  const sheets = present("sheets.rs");
+  assert.ok(sheets.includes("title: words::rename_title(label),"));
+  assert.ok(sheets.includes("title: words::name_this_account(seen.os),"));
+  assert.ok(sheets.includes("message: words::naming(email, &seen.tool_name(&tool)),"));
+  assert.ok(sheets.includes("confirm: words::DONE.into(),"));
+  assert.ok(pinned(w.renameTitle("work")));
+  assert.ok(pinned(w.RENAMING));
+  assert.ok(pinned(w.naming("a@example.com", "Codex")));
+  assert.ok(pinned(w.naming("", "Claude Desktop")));
+  assert.ok(words.includes(`pub(crate) const DONE: &str = "${w.DONE}";`));
   assert.ok(words.includes(`pub(crate) const NAME_PROMPT: &str = "${w.NAME_PROMPT}";`));
+  assert.ok(words.includes('titled(os, "Name This Account", "Name this account")'));
+  assert.equal(w.nameThisAccount("windows"), "Name this account");
   assert.ok(words.includes('format!("Couldn’t rename {label}")'));
-  for (const problem of ["not_one_word", "separator"] as const)
-    for (const picks of [false, true])
-      assert.ok(words.includes(`"${w.unusableName(problem, picks)}"`), problem);
-  assert.ok(
-    repo("apps/windows/Pitboard.Windows/SheetPage.cs").includes(
-      '$"Type a name for this account to {char.ToLowerInvariant(confirm[0])}{confirm[1..]}."',
-    ),
-  );
-  assert.equal(w.typeAName(w.signIn("windows")), "Type a name for this account to sign in.");
-  assert.ok(
-    repo("crates/pitboard-core/src/error.rs").includes(
-      '#[error("`{label}` already refers to {who}. Choose a different label.")]',
-    ),
-  );
+  for (const problem of ["empty", "not_one_word", "separator"] as const)
+    assert.ok(pinned(w.unusableName(problem)), problem);
+  assert.ok(words.includes('"{} is already the name of {who}. Type another name.",'));
+  assert.ok(pinned(w.nameTaken("work", "dana@work.example")));
 });
 
 test("the sign-in sheets and the wait say what the app says, for a browser and for Claude", () => {
   for (const said of [
+    w.signInMessage("Codex", null),
+    w.signInMessage("Codex", "work"),
+    w.finishInBrowser("work", "Codex"),
+    w.finishInBrowser(null, "Codex"),
+    w.signOutToAdd("Claude", "work"),
+    w.signOutToSignInAgain("Claude", "home", "work"),
+    w.signOutToSignInAgain("Claude", "work", "work"),
+    w.waitingToQuit("Claude"),
+    w.WAITING_FOR_BROWSER,
+    w.LATER,
+    w.CONTINUE,
+  ])
+    assert.ok(pinned(said), said);
+  assert.deepEqual(w.signingOut("work"), ["Saving work.", "Saving work"]);
+  assert.ok(words.includes('(format!("Saving {label}."), format!("Saving {label}"))'));
+  for (const said of [
     'titled(os, "Add Account", "Add account")',
-    'titled(os, "Sign In", "Sign in")',
-    '&format!("Sign In to {label} Again"),',
+    'titled(os, "Sign In…", "Sign in…")',
+    '&format!("Sign In to {label} Again{more}"),',
     '&format!("Signing In to {tool}"),',
-    "Pitboard opens {tool}’s own sign-in in your browser. Sign in as the account you’re adding, and Pitboard parks its login beside the one in use.",
-    "Pitboard opens {tool}’s own sign-in in your browser. Sign in as {label} to give Pitboard a new login for it.",
-    'format!("Finish signing in as {name} in your browser. This closes once {tool} says you’re in.")',
-    `pub(crate) const WAITING_FOR_BROWSER: &str = "${w.WAITING_FOR_BROWSER}";`,
-    `pub(crate) const LATER: &str = "${w.LATER}";`,
-    'format!("Park {label}")',
-    "Pitboard parks {work}, which leaves {app} signed out and signs nothing out at claude.ai. Then you sign in to the other account in {app}, and Pitboard adds it once {app} quits.",
-    "Pitboard parks {parks}, which leaves {app} signed out and signs nothing out at claude.ai. Then you sign in to {label} again in {app}, and Pitboard records it once {app} quits.",
-    'format!("{label}’s login as it is")',
-    '(format!("Parking {label}."), format!("Parking {label}"))',
+    '&format!("Switch Back to {label}"),',
     '"Open {app} and {sign_in}. When it shows your chats, quit {app} with Command-Q, and {adds}."',
-    "{first}\\n\\nDon’t choose Log out in {app}: it ends the login {app} holds at claude.ai, and Pitboard can’t bring it back.",
-    'format!("Waiting for {app} to quit")',
-    '&format!("Put {label} Back"),',
+    "{first}\\n\\nDon’t choose Log out in {app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.",
+    '"sign in to the account you’re adding".to_owned(),',
+    '"Pitboard adds it".to_owned(),',
+    'format!("Pitboard saves it for {label}"),',
   ])
     assert.ok(words.includes(said), said);
+  assert.equal(
+    w.inAppWaiting("Claude", "", false),
+    "Open Claude and sign in to the account you’re adding. When it shows your chats, quit Claude with Command-Q, and Pitboard adds it.\n\nDon’t choose Log out in Claude: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.",
+  );
   const sheet = repo("apps/macos/Sources/PitboardApp/Sheets/SignInSheet.swift");
   assert.ok(sheet.includes('LabeledContent("Sign-In Page")'));
   assert.ok(sheet.includes('Button("Copy Link")') && sheet.includes('Button("Open")'));
   assert.ok(sheet.includes('Picker("Tool", selection: $provider)'));
   assert.ok(sheet.includes('LabeledContent("Account", value: account)'));
+  // the sheet that adds an account asks for no name: one is picked once the sign-in adds it
+  assert.ok(!sheet.includes('TextField("Name"'));
+  assert.ok(present("sheets.rs").includes("Sheet::Add { .. } => sends(Some(Intent::SignIn {"));
 });
 
 test("a switch's notice and the setup step say what present/notices.rs and setup.rs give them", () => {
   for (const said of [
-    'Some(tool) => format!("Switched {tool} to {label}"),',
-    'Some(tool) => format!("{label} in {tool} has a new login"),',
-    'Some(tool) => format!("{tool} sessions already open follow in"),',
-    '(true, None) => format!("Signed in to {name} again. Its new login is the one in use now."),',
+    w.switchedTo(null, "work"),
+    w.switchedTo("Claude Code", "work"),
+    w.sessionsFollowIn(null),
+    w.sessionsFollowIn("Claude Code"),
+    w.restartNotice("codex", "personal"),
+    w.signedInTo(null, "work"),
+    w.signedInTo("Codex", "work"),
+    w.signedInNow("work", true, null),
+    w.signedInNow("work", false, null),
+    w.onlyOneDetail("work", "claude", null),
+    w.onlyOneDetail("work", "desktop", "Claude Desktop"),
+  ])
+    assert.ok(pinned(said), said);
+  for (const said of [
     '(true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),',
     '(false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),',
-    "Any {program} session started before this switch keeps using {old} until it is quit and started again.",
     'Some(tool) => format!("Add a second {tool} account"),',
+    'Adoption::NextOpen { app } => format!("{app} opens signed in to it."),',
+    'titled(os, "Switch Back", "Switch back")',
   ])
     assert.ok(words.includes(said), said);
-  assert.ok(present("notices.rs").includes(`opens: Some("${w.CLAUDE_OPENS}".into())`));
-  const setup = joined(present("setup.rs"));
-  assert.ok(
-    setup.includes(
-      '"{label} is the only {tool}account Pitboard knows, so there’s nothing to switch to. {adding}"',
-    ),
-  );
-  assert.ok(setup.includes('"Adding another signs in to it and parks its login beside this one."'));
-  assert.ok(
-    setup.includes('"Adding another parks this one while you sign in to the other in {}."'),
-  );
-  assert.ok(setup.includes('words::titled(seen.os, "Add Account…", "Add account…")'));
-  assert.ok(setup.includes('words::titled(seen.os, "Not Now", "Not now")'));
-  assert.equal(
-    w.onlyOneDetail("work", "claude", "Claude Code"),
-    "work is the only Claude Code account Pitboard knows, so there’s nothing to switch to. Adding another signs in to it and parks its login beside this one.",
-  );
-  assert.ok(present("mod.rs").includes('Severity::Info => "Note",'));
+  assert.equal(w.CLAUDE_OPENS, "Claude opens signed in to it.");
+  const notices = present("notices.rs");
+  assert.ok(notices.includes("title: words::switch_back(seen.os),"));
+  assert.ok(notices.includes("words::signed_in_to(tool.as_deref(), &label)"));
+  const setup = present("setup.rs");
+  assert.ok(setup.includes("detail: words::only_one(label, named.as_deref(), app),"));
+  assert.ok(setup.includes("title: words::add_account(seen.os, true),"));
+  assert.ok(setup.includes("title: words::not_now(seen.os),"));
+  assert.ok(words.includes('titled(os, "Not Now", "Not now")'));
+  assert.ok(notices.includes("spoken_severity: words::spoken_severity(severity).into(),"));
+  assert.ok(words.includes('Severity::Info => "Note",'));
+});
+
+test("a switch Pitboard made by itself offers Switch Back on its notice, while the account it left is the one to go back to", () => {
+  const last = { from: "personal", to: "work", at: 0, followsAt: null };
+  const s = { ...after, now: 0, lastSwitch: { claude: last }, newLogin: {} };
+  assert.equal(w.noticeOf(s, "claude", "macos")?.back ?? null, null);
+  const back = { ...s, lastSwitch: { claude: { ...last, back: { resetsAt: null } } } };
+  assert.equal(w.noticeOf(back, "claude", "macos")?.back, "Switch Back");
+  assert.equal(w.noticeOf(back, "claude", "windows")?.back, "Switch back");
+  const notices = present("notices.rs");
+  assert.ok(notices.includes("let back = last.back.as_ref().map(|back| NoticeAction {"));
+  // a bare one stays while it offers Switch Back
+  assert.ok(notices.includes("|| notice.actions.iter().any(|action| action.switches)"));
 });
 
 test("Activity names each change and its end as present/words.rs does", () => {
@@ -168,4 +204,17 @@ test("Activity names each change and its end as present/words.rs does", () => {
   assert.ok(verbs.length > 15 && outcomes.length > 5);
   for (const [code, said] of verbs) assert.equal(changeVerb(code), said, code);
   for (const [code, said] of outcomes) assert.equal(changeOutcome(code), said, code);
+  // an end the app says as it says the account's standing
+  const standing = words.slice(words.indexOf("fn sign_in_standing("));
+  for (const [code, of] of [
+    ["parked_login_expired", "LoginExpired"],
+    ["nothing_parked", "NothingParked"],
+  ] as const) {
+    assert.ok(words.includes(`"${code}" => sign_in_standing(Standing::${of}).into(),`), code);
+    assert.ok(standing.includes(`Standing::${of} => "${changeOutcome(code)}",`), code);
+  }
+  assert.ok(
+    words.includes('"parked_login_refused" => sign_in_standing(Standing::LoginRefused).into(),'),
+  );
+  assert.ok(standing.includes(`_ => "${changeOutcome("parked_login_refused")}",`));
 });

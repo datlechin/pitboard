@@ -15,7 +15,7 @@ public sealed class IconMenuFlyoutTests
 {
     private static readonly MenuEntry Stuck = new(
         "An interrupted switch is waiting", null, "Pitboard can finish it or give it up.", null,
-        new Intent.ShowWindow(Pane.Accounts), null, true);
+        new Intent.Show(new Place.Accounts()), null, true);
 
     private static AppModel TwoTools(bool reading = false) => new(TwoToolsRead(reading));
 
@@ -36,21 +36,25 @@ public sealed class IconMenuFlyoutTests
     private static MenuFlyout Menu(AppModel model, List<IconCommand>? chosen = null) =>
         IconMenuFlyout.For(IconMenu.Entries(model, new NoUpdates()), command => chosen?.Add(command));
 
+    // Each item by what UI Automation finds it by, and a heading, which has nothing to find it by, by its words.
     private static string Said(MenuFlyout menu) => string.Join(" | ", menu.Items.Select(item => item switch
     {
         MenuFlyoutSeparator => "-",
-        RadioMenuFlyoutItem radio => (radio.IsChecked ? "(x) " : "( ) ") + radio.Text,
-        MenuFlyoutItem entry => entry.Text,
+        RadioMenuFlyoutItem radio => (radio.IsChecked ? "(x) " : "( ) ") + Id(radio),
+        MenuFlyoutItem entry when Id(entry).Length == 0 => entry.Text,
+        MenuFlyoutItem entry => Id(entry),
         _ => item.GetType().Name,
     }));
+
+    private static string Id(DependencyObject item) => AutomationProperties.GetAutomationId(item);
 
     // A RadioMenuFlyoutItem is a ToggleMenuFlyoutItem inside, and toggles as UI Automation sees it.
     private static void Toggle(MenuFlyoutItem radio) =>
         ((IToggleProvider)FrameworkElementAutomationPeer.CreatePeerForElement(radio).GetPattern(PatternInterface.Toggle)).Toggle();
 
-    private static MenuFlyoutItem Item(MenuFlyout menu, string text) =>
-        menu.Items.OfType<MenuFlyoutItem>().FirstOrDefault(item => item.Text == text)
-        ?? throw new AssertFailedException($"no '{text}' in: {Said(menu)}");
+    private static MenuFlyoutItem Item(MenuFlyout menu, string id) =>
+        menu.Items.OfType<MenuFlyoutItem>().FirstOrDefault(item => Id(item) == id)
+        ?? throw new AssertFailedException($"no '{id}' in: {Said(menu)}");
 
     [UITestMethod]
     public void TheMenuShowsTheEntriesInOrder()
@@ -58,8 +62,9 @@ public sealed class IconMenuFlyoutTests
         var menu = Menu(TwoTools());
 
         Assert.AreEqual(
-            "An interrupted switch is waiting | - | Claude Code | (x) work | ( ) personal | - | Codex | (x) main | - "
-            + "| Add account… | Refresh | - | Open Pitboard | Settings | - | Pitboard help | Exit",
+            "menu.others | - | Claude Code | (x) menu.account.claude/work | ( ) menu.account.claude/personal | - | Codex "
+            + "| (x) menu.account.codex/main | - | menu.addAccount | menu.refresh | - | menu.openPitboard | menu.settings | - "
+            + "| menu.help | menu.exit",
             Said(menu));
     }
 
@@ -80,9 +85,9 @@ public sealed class IconMenuFlyoutTests
         var window = (MenuFlyoutItem)site.Items[1];
         new MenuFlyoutItemAutomationPeer(window).Invoke();
 
-        Assert.AreEqual("Open chatgpt.com", site.Text);
+        Assert.AreEqual("menu.site.chatgpt.com", Id(site));
         Assert.AreEqual("main, spare", string.Join(", ", site.Items.OfType<MenuFlyoutItem>().Select(item => item.Text)));
-        Assert.AreEqual("window.chatgpt.com/spare", AutomationProperties.GetAutomationId(window));
+        Assert.AreEqual("window.chatgpt.com/spare", Id(window));
         Assert.AreEqual(new IconCommand.OpenWindow(spare), chosen.Single());
     }
 
@@ -104,7 +109,7 @@ public sealed class IconMenuFlyoutTests
     [UITestMethod]
     public void AToolsNameIsAHeadingNobodyChooses()
     {
-        var heading = Item(Menu(TwoTools()), "Claude Code");
+        var heading = Menu(TwoTools()).Items.OfType<MenuFlyoutItem>().Single(item => item.Text == "Claude Code");
 
         Assert.IsFalse(heading.IsEnabled);
         Assert.AreEqual(AutomationHeadingLevel.Level1, AutomationProperties.GetHeadingLevel(heading));
@@ -115,19 +120,19 @@ public sealed class IconMenuFlyoutTests
     {
         var menu = Menu(TwoTools());
 
-        foreach (var (text, detail) in new[]
+        foreach (var (id, detail) in new[]
         {
-            ("work", "5h 42% · resets in 2h"),
-            ("Refresh", "Updated 08:00"),
-            ("An interrupted switch is waiting", "Pitboard can finish it or give it up."),
+            ("menu.account.claude/work", "5h 42% · resets in 2h"),
+            ("menu.refresh", "Updated 08:00"),
+            ("menu.others", "Pitboard can finish it or give it up."),
         })
         {
-            var item = Item(menu, text);
-            Assert.AreEqual(detail, ToolTipService.GetToolTip(item), text);
-            Assert.AreEqual(detail, AutomationProperties.GetHelpText(item), text);
+            var item = Item(menu, id);
+            Assert.AreEqual(detail, ToolTipService.GetToolTip(item), id);
+            Assert.AreEqual(detail, AutomationProperties.GetHelpText(item), id);
         }
 
-        Assert.IsNull(ToolTipService.GetToolTip(Item(menu, "Exit")));
+        Assert.IsNull(ToolTipService.GetToolTip(Item(menu, "menu.exit")));
     }
 
     // The window's keys do nothing in this menu, and the menu guidance shows a context menu no shortcuts.
@@ -136,7 +141,7 @@ public sealed class IconMenuFlyoutTests
     {
         var shown = Menu(TwoTools()).Items.OfType<MenuFlyoutItem>().Where(item => !string.IsNullOrEmpty(item.KeyboardAcceleratorTextOverride));
 
-        Assert.AreEqual("", string.Join(", ", shown.Select(item => item.Text)));
+        Assert.AreEqual("", string.Join(", ", shown.Select(item => Id(item))));
     }
 
     [UITestMethod]
@@ -144,14 +149,14 @@ public sealed class IconMenuFlyoutTests
     {
         var menu = Menu(TwoTools());
 
-        Assert.AreEqual(FontWeights.SemiBold.Weight, Item(menu, "Open Pitboard").FontWeight.Weight);
-        Assert.AreEqual(FontWeights.Normal.Weight, Item(menu, "Settings").FontWeight.Weight);
+        Assert.AreEqual(FontWeights.SemiBold.Weight, Item(menu, "menu.openPitboard").FontWeight.Weight);
+        Assert.AreEqual(FontWeights.Normal.Weight, Item(menu, "menu.settings").FontWeight.Weight);
     }
 
     [UITestMethod]
     public void ANoticeShowsItsMark()
     {
-        var mark = Item(Menu(TwoTools()), "An interrupted switch is waiting").Icon as FontIcon;
+        var mark = Item(Menu(TwoTools()), "menu.others").Icon as FontIcon;
 
         Assert.AreEqual("\uE7BA", mark?.Glyph);
     }
@@ -159,7 +164,7 @@ public sealed class IconMenuFlyoutTests
     [UITestMethod]
     public void RefreshWaitsForTheReadUnderWay()
     {
-        Assert.IsFalse(Item(Menu(TwoTools(reading: true)), "Refresh").IsEnabled);
+        Assert.IsFalse(Item(Menu(TwoTools(reading: true)), "menu.refresh").IsEnabled);
     }
 
     [UITestMethod]
@@ -168,9 +173,9 @@ public sealed class IconMenuFlyoutTests
         var chosen = new List<IconCommand>();
         var menu = Menu(TwoTools(), chosen);
 
-        new MenuFlyoutItemAutomationPeer(Item(menu, "Add account…")).Invoke();
-        Toggle(Item(menu, "personal"));
-        new MenuFlyoutItemAutomationPeer(Item(menu, "Exit")).Invoke();
+        new MenuFlyoutItemAutomationPeer(Item(menu, "menu.addAccount")).Invoke();
+        Toggle(Item(menu, "menu.account.claude/personal"));
+        new MenuFlyoutItemAutomationPeer(Item(menu, "menu.exit")).Invoke();
 
         CollectionAssert.AreEqual(
             new IconCommand[]
@@ -215,9 +220,9 @@ public sealed class IconMenuFlyoutTests
         var chosen = new List<IconCommand>();
         var menu = Menu(TwoTools(), chosen);
 
-        Toggle(Item(menu, "work"));
+        Toggle(Item(menu, "menu.account.claude/work"));
 
         Assert.IsEmpty(chosen);
-        Assert.IsTrue(((RadioMenuFlyoutItem)Item(menu, "work")).IsChecked);
+        Assert.IsTrue(((RadioMenuFlyoutItem)Item(menu, "menu.account.claude/work")).IsChecked);
     }
 }

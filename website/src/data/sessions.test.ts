@@ -39,10 +39,12 @@ test("the status line before the switch is the Status line guide's", () => {
   );
 });
 
-test("the menu says an account's limits as the usage guide does", () => {
-  assert.ok(
-    docs("guides/usage.mdx").includes(`**${menuLine(account("personal"), moments.after)}**`),
-  );
+test("the menu says an account's limits as the usage guide does, on each system", () => {
+  const guide = docs("guides/usage.mdx");
+  const personal = account("personal");
+  assert.ok(guide.includes(`**${menuLine(personal, moments.after)}**`));
+  assert.ok(guide.includes(`**${menuLine(personal, moments.after, "windows")}**`));
+  assert.ok(guide.includes(`**personal: ${menuLine(personal, moments.after, "windows")}**`));
 });
 
 test("pitboard use work prints what the Quickstart prints", () => {

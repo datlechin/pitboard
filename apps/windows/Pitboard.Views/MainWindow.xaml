@@ -52,7 +52,7 @@
             <FontIcon Glyph="&#xE81C;" />
           </NavigationViewItem.Icon>
         </NavigationViewItem>
-        <NavigationViewItem Content="This PC" Tag="Machine" AutomationProperties.AutomationId="pane.machine">
+        <NavigationViewItem Content="This PC" Tag="Checks" AutomationProperties.AutomationId="pane.machine">
           <NavigationViewItem.Icon>
             <FontIcon Glyph="&#xE977;" />
           </NavigationViewItem.Icon>

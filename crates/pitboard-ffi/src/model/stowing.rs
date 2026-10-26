@@ -12,7 +12,6 @@ use crate::present::words;
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
-use pitboard_core::words as said;
 use std::path::PathBuf;
 
 const FILE: &str = "/Users/dana/.claude/.credentials.json";
@@ -101,7 +100,7 @@ fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
             continue;
         }
         assert_eq!(notice.actions.len(), 1, "{held:?}: {:?}", notice.actions);
-        assert_eq!(notice.actions[0].title, words::put_away(OS, true));
+        assert_eq!(notice.actions[0].title, words::clean_up(OS, true));
         assert_eq!(notice.actions[0].intent, stow_sheet());
         assert!(notice.actions[0].enabled);
         assert_eq!(notice.actions[0].confirm, None, "the sheet asks");
@@ -127,21 +126,21 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
     model.run(&mut machine);
 
     let text = model.on_a_mac().stow_text.expect("the sheet's words");
-    assert_eq!(text.title, words::stow_title(Os::MacOs));
-    assert_eq!(text.confirm, words::put_away(Os::MacOs, false));
+    assert_eq!(text.title, words::clean_up_title(Os::MacOs));
+    assert_eq!(text.confirm, words::clean_up(Os::MacOs, false));
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
     assert!(!text.saving);
     let lines = |os| {
-        typeset(said::left_lines(
+        typeset(words::clean_up_lines(
             os,
             &left(Foreseen::Kept(parked_now("work"))),
         ))
     };
     assert_eq!(text.lines, lines(Os::MacOs));
-    assert_eq!(text.message, words::stow_message(Os::MacOs));
+    assert_eq!(text.message, words::clean_up_message(Os::MacOs));
     let text = model.on_windows().stow_text.expect("the sheet's words");
-    assert_eq!(text.message, words::stow_message(Os::Windows));
+    assert_eq!(text.message, words::clean_up_message(Os::Windows));
     assert_eq!(text.lines, lines(Os::Windows));
 }
 
@@ -178,8 +177,8 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
         .find(|notice| notice.id == "stowed")
         .expect("what it did");
     assert_eq!(notice.severity, Severity::Info);
-    assert_eq!(notice.title, words::STOWED);
-    assert_eq!(notice.lines, typeset(said::stowed_lines(OS, &stowed)));
+    assert_eq!(notice.title, words::CLEANED_UP);
+    assert_eq!(notice.lines, typeset(words::cleaned_up_lines(OS, &stowed)));
     assert!(
         shown
             .notices
@@ -238,7 +237,7 @@ fn what_stops_it_is_said_in_the_sheet() {
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t tell whose login it is");
+    assert_eq!(failure.title, words::COULD_NOT_TELL_WHOSE);
     assert!(!shown.stow_text.expect("still up").can_confirm);
 
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
@@ -257,7 +256,7 @@ fn what_stops_it_is_said_in_the_sheet() {
     let shown = model.shown();
     assert_eq!(shown.sheet, Some(Sheet::Stow));
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t put the login away");
+    assert_eq!(failure.title, words::COULD_NOT_CLEAN_UP);
     assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     assert!(!shown.stow_text.expect("still up").saving);
 }
@@ -324,6 +323,6 @@ fn putting_away_that_came_to_nothing_is_said_in_its_sheet() {
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, "Couldn’t put the login away");
+    assert_eq!(failure.title, words::COULD_NOT_CLEAN_UP);
     assert!(!shown.stow_text.expect("still up").saving);
 }

@@ -16,7 +16,7 @@ use super::testing::records::{
     CHATGPT, CLAUDE, already_active, chatgpt_holding, claude, codex_account, desktop_account,
     desktop_warning, percent, refusal, status, still_running, switched, warned, warning,
 };
-use super::{Intent, LastSwitch, Pane, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
+use super::{Intent, LastSwitch, Place, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
 use crate::present::words;
 use crate::{Abandoned, GaveUp};
 use pitboard_core::host::{OS, Os};
@@ -70,8 +70,7 @@ fn a_failed_switch_says_so_and_changes_nothing() {
         shown.window_request,
         WindowRequest {
             serial: 1,
-            pane: None,
-            settings: false,
+            place: None,
         }
     );
     assert_eq!(model.state.switch_under_way(), None);
@@ -392,6 +391,7 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
             said: None,
             warnings: vec![overridden],
             opens: None,
+            back: None,
         }
     );
 }
@@ -839,8 +839,8 @@ fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
         "nothing is quit before the person says so"
     );
     assert_eq!(
-        shown.window_request.pane,
-        Some(Pane::Accounts),
+        shown.window_request.place,
+        Some(Place::Accounts),
         "asked in the window"
     );
     assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
@@ -929,6 +929,20 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
         failure.message,
         words::still_open("ChatGPT", "switch again"),
         "{failure:?}"
+    );
+    // Claude's own page about an app left open is not ChatGPT's.
+    let next = model.shown().failure_alert.and_then(|alert| alert.next);
+    assert_eq!(
+        next,
+        Some(crate::NextStep::Act {
+            choice: crate::Choice {
+                title: words::try_again(OS),
+                intent: Intent::SwitchTo {
+                    qualified: "codex/spare".into(),
+                },
+                enabled: true,
+            },
+        })
     );
 }
 
@@ -1083,8 +1097,7 @@ fn one_switch_at_a_time_while_the_app_question_waits() {
         model.shown().window_request,
         WindowRequest {
             serial: asked + 1,
-            pane: Some(Pane::Accounts),
-            settings: false,
+            place: Some(Place::Accounts),
         },
         "the question came back to the front"
     );
@@ -1297,7 +1310,7 @@ fn giving_up_that_is_refused_is_said_in_the_window() {
     model.run(&mut machine);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("the failure is said");
-    assert_eq!(failure.title, words::COULD_NOT_GIVE_UP);
+    assert_eq!(failure.title, words::COULD_NOT_CANCEL);
     assert_eq!(failure.message, "another Pitboard is changing accounts");
     assert_eq!(failure.code.as_deref(), Some("lock_busy"));
     assert_eq!(shown.window_request.serial, 1);
@@ -1335,7 +1348,7 @@ fn waiting_in_claude() -> (Hand, Stub, u64) {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
     let id = model.shown().signing_in.expect("waiting").id;
@@ -1437,7 +1450,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::park("work"),
+        words::CONTINUE,
         "a change of it that lands clears it"
     );
 }
@@ -1511,10 +1524,10 @@ fn a_switch_asked_while_claude_quits_for_a_sign_in_parks_nothing() {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
-    model.send(quit_and_switch("desktop/travel"));
+    model.send(quit_and_switch("desktop/"));
     model.send(Intent::SwitchTo {
         qualified: "desktop/home".into(),
     });
@@ -1562,10 +1575,10 @@ fn claude_left_partly_running_for_an_add_opens_only_after_a_switch_asked_meanwhi
         model.run(&mut machine);
         model.send(Intent::SignIn {
             provider: "desktop".into(),
-            name: "travel".into(),
+            again: None,
         });
         model.run(&mut machine);
-        model.send(quit_and_switch("desktop/travel"));
+        model.send(quit_and_switch("desktop/"));
         model.send(Intent::SwitchTo {
             qualified: "desktop/home".into(),
         });
@@ -1612,10 +1625,10 @@ fn a_switch_asked_while_claude_parks_for_a_sign_in_waits_for_the_park() {
         model.run(&mut machine);
         model.send(Intent::SignIn {
             provider: "desktop".into(),
-            name: "travel".into(),
+            again: None,
         });
         model.run(&mut machine);
-        model.send(quit_and_switch("desktop/travel"));
+        model.send(quit_and_switch("desktop/"));
         let quit = model.next();
         let answer = machine.answer(quit);
         model.give(answer);
@@ -1675,10 +1688,10 @@ fn claude_kept_for_a_switch_is_never_opened_by_another_tools_switch() {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
-    model.send(quit_and_switch("desktop/travel"));
+    model.send(quit_and_switch("desktop/"));
     model.send(Intent::SwitchTo {
         qualified: "desktop/home".into(),
     });
@@ -1714,7 +1727,7 @@ fn a_question_for_a_sign_in_holds_back_no_switch() {
     model.run(&mut machine);
     model.send(Intent::SignIn {
         provider: "desktop".into(),
-        name: "travel".into(),
+        again: None,
     });
     model.run(&mut machine);
     let shown = model.shown();
@@ -1810,7 +1823,7 @@ fn a_stopped_claude_desktop_move_offers_give_up_and_the_account_claude_shows() {
             .confirm
             .as_ref()
             .map(|asked| asked.title.as_str()),
-        Some(words::GIVE_UP_ON_MOVE)
+        Some(words::CANCEL_MOVE_QUESTION)
     );
 }
 
@@ -1857,7 +1870,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     model.run(&mut machine);
     assert_eq!(
         model.state.presented.clone().expect("said").title,
-        words::could_not_forget("desktop/home")
+        words::could_not_remove("desktop/home")
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
@@ -1904,7 +1917,7 @@ fn giving_up_gives_up_a_waiting_move_too() {
         .iter()
         .find(|notice| notice.id == "moves_given_up")
         .expect("what was given up");
-    assert_eq!(notice.title, words::GAVE_UP_ON_MOVE);
+    assert_eq!(notice.title, words::MOVE_CANCELLED);
     assert_eq!(notice.lines, [given]);
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),

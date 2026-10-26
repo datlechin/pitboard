@@ -186,6 +186,12 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
         SettingsView.Tab.allCases.allSatisfy { SettingsView.Tab(rawValue: $0.rawValue) == $0 })
 }
 
+// The model asks for a section of the settings by the name of its pane.
+@Test func eachSectionTheModelAsksForOpensItsPane() {
+    let sections: [SettingsSection] = [.general, .limits, .advanced]
+    #expect(sections.map(SettingsView.Tab.init) == SettingsView.Tab.allCases)
+}
+
 // MARK: - The share a limit is reached at
 
 // Typed past either end, the share is taken at that end, where the stepper stops.

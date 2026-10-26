@@ -880,10 +880,10 @@ jobs:
           target/windows-app/share-tests/Pitboard.Share.Core.Tests.exe, target/windows-app/installer-tests/Pitboard.Installer.Tests.exe,
           target/windows-app/installer-tests-unsigned/Pitboard.Installer.Tests.exe
           -Results "$env:RUNNER_TEMP/app-tests" -Probe target/debug/pitboard-probe.exe
-      # ScreenshotTests' pictures of the window and the icon's menu in the twoTools fixture, for the docs. On
+      # ScreenshotTests' picture of each surface, for the docs and pull requests, also of a run with a test failed. On
       # windows-11-arm a window of the job user's keeps the foreground (CF1), so the test takes none there.
-      - name: The docs' pictures of the app
-        if: matrix.os == 'windows-2025'
+      - name: The app's pictures
+        if: matrix.os == 'windows-2025' && (success() || failure())
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-app-pictures

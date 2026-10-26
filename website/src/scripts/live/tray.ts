@@ -209,7 +209,7 @@ class TrayDesk extends LiveFigure {
     const switching = s.switching?.id === a.id;
     return {
       title: switching ? menuTitle(a) : itemTitle(a),
-      tip: switching ? SWITCHING : menuLine(a, s),
+      tip: switching ? SWITCHING : menuLine(a, s, "windows"),
     };
   }
 

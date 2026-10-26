@@ -50,7 +50,7 @@ package func snapshot(
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
-        windowRequest: WindowRequest(serial: 0, pane: nil), signingIn: nil, sheet: nil,
+        windowRequest: WindowRequest(serial: 0, place: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
         menuBar: MenuBarText(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
@@ -61,7 +61,8 @@ package func snapshot(
         notices: [],
         menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
-        menuAccountsNote: nil, updatedMenu: updated, updatedWindow: updated, sheetText: nil,
+        menuAccountsNote: nil, updatedAt: nil, updatedMenu: updated, updatedWindow: updated,
+        sheetText: nil,
         signingInText: nil, stowText: nil, failureAlert: nil,
         machine: MachineShown(
             schedule: ScheduleShown(
@@ -92,5 +93,14 @@ package func snapshot(
                     sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
                     linkTitle: "Is this allowed?",
                     link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"))),
-        accountWindows: windows)
+        accountWindows: windows,
+        uninstall: ItemOffer(
+            title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
+        removal: nil,
+        welcome: WelcomeShown(
+            title: "Welcome to Pitboard", lines: [], iconLink: nil, tools: [],
+            openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
+            done: Choice(
+                title: "Continue", intent: .show(place: .accounts), enabled: true)),
+        glanceRevision: 0, answers: [])
 }

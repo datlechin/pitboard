@@ -151,7 +151,8 @@ impl Window {
         reached(self.used(now), share)
     }
 
-    pub(crate) fn length(&self) -> Option<i64> {
+    /// How long it runs, in seconds: as its service times it, or as its kind runs.
+    pub fn length(&self) -> Option<i64> {
         self.length_seconds
             .filter(|s| *s > 0)
             .or_else(|| self.kind.length())

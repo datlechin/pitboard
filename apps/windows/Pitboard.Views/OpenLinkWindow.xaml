@@ -39,7 +39,7 @@
           FontFamily="Cascadia Mono, Consolas"
           TextTrimming="CharacterEllipsis"
           IsTextSelectionEnabled="True" />
-      <TextBlock x:Name="Explanation" Style="{StaticResource SecondaryTextBlockStyle}" />
+      <TextBlock x:Name="Explanation" Style="{StaticResource SecondaryTextBlockStyle}" AutomationProperties.AutomationId="picker.detail" />
       <ListView
           x:Name="AccountList"
           MinHeight="96"

@@ -109,7 +109,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openMainWindow() {
-        model.send(.showWindow(pane: nil))
+        model.send(.show(place: nil))
     }
 
     /// A Dock click with every window minimised brings one back, as AppKit does by itself.
@@ -117,7 +117,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         _ sender: NSApplication, hasVisibleWindows flag: Bool
     ) -> Bool {
         if !flag, !sender.windows.contains(where: \.isMiniaturized) {
-            model.send(.showWindow(pane: nil))
+            model.send(.show(place: nil))
         }
         return true
     }

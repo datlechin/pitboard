@@ -6,7 +6,7 @@ use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::status;
-use super::{AtLimit, EarlierPreferences, Intent, Tip, WindowRequest};
+use super::{AtLimit, EarlierPreferences, Intent, Place, SettingsSection, Tip, WindowRequest};
 use crate::Footing;
 use crate::present::testing::account;
 use std::collections::BTreeSet;
@@ -74,51 +74,35 @@ fn a_second_account_is_declined_per_tool() {
     assert_eq!(later.shown().footing, Footing::Ready);
 }
 
-/// Past a second account the tips go on, one at a time: opening at login, where the app's
-/// system says it does not, then what happens at a limit, once Claude Code has two accounts
-/// and nobody chose. Not Now puts each away for good, and doing what it asks ends it too.
+// Not Now is kept beside a tip an earlier version kept.
 #[test]
-fn setup_goes_on_to_opening_at_login_then_to_what_happens_at_a_limit() {
+fn setup_goes_on_to_what_happens_at_a_limit() {
     let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ])));
+    machine.preferences_file =
+        Some(r#"{"has_been_seen":true,"tips_declined":["open_at_login"]}"#.into());
     let mut model = started(&mut machine);
-    assert_eq!(
-        model.shown().footing,
-        Footing::AtLimitUnchosen,
-        "nothing asked of an app that never said whether it opens at login"
-    );
-    model.send(Intent::OpensAtLogin { on: false });
-    assert_eq!(model.shown().footing, Footing::NotOpenedAtLogin);
-    model.send(Intent::OpensAtLogin { on: true });
     assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
-
-    model.send(Intent::OpensAtLogin { on: false });
-    model.send(Intent::DeclineTip {
-        tip: Tip::OpenAtLogin,
-    });
+    model.send(Intent::DeclineTip { tip: Tip::AtLimit });
     model.run(&mut machine);
-    assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
+    assert_eq!(model.shown().footing, Footing::Ready);
     let kept = machine.kept_preferences.last().expect("kept");
     assert_eq!(
         kept.tips_declined
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>(),
-        ["open_at_login"]
+        ["at_limit", "open_at_login"]
     );
 
-    let mut later = started(&mut machine);
-    later.send(Intent::OpensAtLogin { on: false });
+    let later = started(&mut machine);
     assert_eq!(
         later.shown().footing,
-        Footing::AtLimitUnchosen,
+        Footing::Ready,
         "and it is remembered"
     );
-    later.send(Intent::DeclineTip { tip: Tip::AtLimit });
-    later.run(&mut machine);
-    assert_eq!(later.shown().footing, Footing::Ready);
 
     let mut chose = started(&mut Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
@@ -143,7 +127,12 @@ fn opening_the_settings_from_the_tip_ends_it() {
     assert_eq!(model.shown().footing, Footing::AtLimitUnchosen);
     model.send(Intent::ShowLimits);
     model.run(&mut machine);
-    assert!(model.shown().window_request.settings);
+    assert_eq!(
+        model.shown().window_request.place,
+        Some(Place::Settings {
+            section: SettingsSection::Limits
+        })
+    );
     assert_eq!(model.shown().footing, Footing::Ready);
     assert_eq!(
         started(&mut machine).shown().footing,
@@ -180,20 +169,19 @@ fn a_nudge_declined_before_codex_was_about_claude_code() {
 }
 
 /// An app with no Dock icon that launches straight into a menu bar item shows somebody who
-/// has just installed it nothing at all, so the very first launch opens the window, once,
+/// has just installed it nothing at all, so the very first launch asks for the welcome, once,
 /// and never again.
 ///
 /// MenuBarLabel.swift's `hasBeenSeen`, which the Swift tested nowhere.
 #[test]
-fn the_first_launch_opens_the_window_once() {
+fn the_first_launch_asks_for_the_welcome_once() {
     let mut machine = one_of_each();
     let first = started(&mut machine);
     assert_eq!(
         first.shown().window_request,
         WindowRequest {
             serial: 1,
-            pane: None,
-            settings: false,
+            place: Some(Place::Welcome),
         }
     );
     assert!(machine.kept_preferences.last().expect("kept").has_been_seen);

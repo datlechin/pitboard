@@ -5,65 +5,72 @@
 
 use super::words;
 use super::{
-    Choice, FailureText, Missing, NameCheck, Question, Seen, SheetText, SheetTool, SigningInText,
-    StowText, WindowQuestion, alert_of,
+    Choice, FailureText, Missing, NameCheck, NextStep, Question, Seen, SheetText, SheetTool,
+    SigningInText, StowText, WindowQuestion, alert_of,
 };
 use crate::Tool;
 use crate::account_windows::AlertText;
 use crate::model::state::{After, InAppAdd, Leftover, in_its_app, trimmed};
 use crate::model::{Failure, Intent, QuitQuestion, Sheet};
+use pitboard_core::host::Os;
 use pitboard_core::label;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::{Foreseen, WaitStep};
-use pitboard_core::words as said;
 
 /// What a sheet's default button sends with `typed` as the name, `tool` picked where the sheet
 /// picks one, or why what is typed cannot be a name. The model saves by the same rule, and it
-/// answers at once, so a view asks it as it is typed in.
+/// answers at once, so a view asks it as it is typed in. A sheet that signs in takes no name.
 #[uniffi::export]
 pub fn check_name(sheet: Sheet, tool: String, typed: String) -> NameCheck {
-    match saved_name(&sheet, &typed) {
-        Ok(name) => NameCheck {
-            problem: None,
-            intent: name.and_then(|name| saves(sheet, tool, name)),
-        },
-        Err(unusable) => NameCheck {
-            problem: words::unusable_name(unusable, matches!(sheet, Sheet::Add { .. })),
-            intent: None,
+    let sends = |intent| NameCheck {
+        problem: None,
+        intent,
+    };
+    match sheet {
+        Sheet::Add { .. } => sends(Some(Intent::SignIn {
+            provider: tool,
+            again: None,
+        })),
+        Sheet::SignInAgain { provider, label } => sends(Some(Intent::SignIn {
+            provider,
+            again: Some(label),
+        })),
+        Sheet::Stow => sends(None),
+        Sheet::Name { .. } | Sheet::Rename { .. } => match saved_name(&sheet, &typed) {
+            Ok(Some(to)) => sends(renames(sheet, to)),
+            // The account is added under the name it shows already.
+            Ok(None) => sends(matches!(sheet, Sheet::Name { .. }).then_some(Intent::CloseSheet)),
+            Err(unusable) => NameCheck {
+                problem: Some(words::unusable_name(unusable)),
+                intent: None,
+            },
         },
     }
 }
 
-/// The name `typed` saves as from `sheet`, trimmed: none where there is nothing to save, as in
-/// a rename to the name the account has.
+/// The name `typed` gives the account `sheet` names, trimmed: none where it is the name the
+/// account has.
 pub(crate) fn saved_name(sheet: &Sheet, typed: &str) -> Result<Option<String>, label::Unusable> {
-    if let Sheet::SignInAgain { label, .. } = sheet {
-        return Ok(Some(label.clone()));
-    }
     let name = trimmed(typed);
     match sheet {
-        Sheet::Stow => Ok(None),
-        Sheet::Rename { label, .. } if label == name => Ok(None),
+        Sheet::Rename { label, .. } | Sheet::Name { label, .. } if label == name => Ok(None),
         _ => label::check(name).map(|()| Some(name.to_owned())),
     }
 }
 
-fn saves(sheet: Sheet, tool: String, name: String) -> Option<Intent> {
-    Some(match sheet {
-        Sheet::Add { .. } => Intent::SignIn {
-            provider: tool,
-            name,
-        },
-        Sheet::SignInAgain { provider, .. } => Intent::SignIn { provider, name },
-        Sheet::Name { provider, .. } => Intent::Enrol { provider, name },
-        Sheet::Rename { provider, label } => Intent::Rename {
+fn renames(sheet: Sheet, to: String) -> Option<Intent> {
+    match sheet {
+        Sheet::Rename { provider, label }
+        | Sheet::Name {
+            provider, label, ..
+        } => Some(Intent::Rename {
             provider,
             label,
-            to: name,
-        },
-        Sheet::Stow => return None,
-    })
+            to,
+        }),
+        _ => None,
+    }
 }
 
 /// The tool the sheet for `sheet` starts on: the one it is about, and for a new account
@@ -122,30 +129,31 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
         .any(|account| account.provider == provider);
     match sheet {
         Sheet::SignInAgain { label, .. } if current => {
-            (words::record_shown(app, label), words::record_as(label))
+            (words::add_shown(app, label), words::add_as(label))
         }
         Sheet::SignInAgain { label, .. } => match park {
             Some(work) => (
-                words::park_to_sign_in_again(app, label, work),
-                words::park(work),
+                words::sign_out_to_sign_in_again(app, label, work),
+                words::CONTINUE.into(),
             ),
             None => (
                 words::wait_to_sign_in_again(app, label),
                 words::start_sign_in(seen.os),
             ),
         },
-        _ if current && first => (words::record_first(app), words::add_account(seen.os)),
+        _ if current && first => (
+            words::add_shown_first(app),
+            words::add_account(seen.os, false),
+        ),
         _ if current => (
             match awaiting {
-                Some(awaiting) => {
-                    words::add_once_signed_in(app, &Key::parse(&awaiting.put_back).label)
-                }
-                None => words::record_unidentified(app),
+                Some(_) => words::add_once_signed_in(app),
+                None => words::add_unidentified(app),
             },
             words::add_account_shown(seen.os, app, false),
         ),
         _ => match park {
-            Some(work) => (words::park_to_add(app, work), words::park(work)),
+            Some(work) => (words::sign_out_to_add(app, work), words::CONTINUE.into()),
             None => (words::wait_to_add(app), words::start_sign_in(seen.os)),
         },
     }
@@ -162,7 +170,7 @@ fn form_words(seen: &Seen, sheet: &Sheet, tool: &str) -> (String, String) {
     };
     (
         words::sign_in_message(&seen.tool_name(tool), again),
-        words::sign_in(seen.os),
+        words::sign_in_asking(seen.os),
     )
 }
 
@@ -194,27 +202,15 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
     let text = match sheet {
         Sheet::Add { .. } => {
             let (message, confirm) = form_words(seen, sheet, &tool);
-            // An add left halfway is finished under the name it was started with.
-            let name = state
-                .status
-                .as_ref()
-                .and_then(|status| {
-                    status
-                        .awaiting
-                        .iter()
-                        .find(|awaiting| awaiting.provider == tool && !awaiting.again)
-                })
-                .map(|awaiting| awaiting.label.clone())
-                .unwrap_or_default();
             SheetText {
-                title: words::add_account(seen.os),
+                title: words::add_account(seen.os, false),
                 message,
                 tools: (seen.tools.iter())
                     .map(|offered| sheet_tool(seen, sheet, offered))
                     .collect(),
                 tool,
                 account: None,
-                name,
+                name: String::new(),
                 prompt: words::NAME_PROMPT.into(),
                 confirm,
                 saving,
@@ -224,7 +220,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         Sheet::SignInAgain { label, .. } => {
             let (message, confirm) = form_words(seen, sheet, &tool);
             SheetText {
-                title: words::sign_in_to_again(seen.os, label),
+                title: words::sign_in_to_again(seen.os, label, false),
                 message,
                 tools: (seen.tools.iter())
                     .filter(|own| own.code == tool)
@@ -239,15 +235,15 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
                 progress,
             }
         }
-        Sheet::Name { email, .. } => SheetText {
+        Sheet::Name { label, email, .. } => SheetText {
             title: words::name_this_account(seen.os),
             message: words::naming(email, &seen.tool_name(&tool)),
             tools: Vec::new(),
             account: None,
-            name: suggested_name(seen, &tool, email),
+            name: label.clone(),
             tool,
             prompt: words::NAME_PROMPT.into(),
-            confirm: words::SAVE.into(),
+            confirm: words::DONE.into(),
             saving,
             progress: None,
         },
@@ -259,66 +255,13 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
             account: None,
             name: label.clone(),
             prompt: label.clone(),
-            confirm: words::RENAME.into(),
+            confirm: words::rename(false).into(),
             saving,
             progress: None,
         },
         Sheet::Stow => return None,
     };
     Some(text)
-}
-
-// Anyone can have an address at one of these, in any country, so the domain says nothing of
-// whose account it is.
-const MAIL_SERVICES: &[&str] = &[
-    "163",
-    "aol",
-    "fastmail",
-    "gmail",
-    "gmx",
-    "googlemail",
-    "hey",
-    "hotmail",
-    "icloud",
-    "live",
-    "mac",
-    "mail",
-    "me",
-    "msn",
-    "naver",
-    "outlook",
-    "pm",
-    "proton",
-    "protonmail",
-    "qq",
-    "web",
-    "yahoo",
-    "yandex",
-    "zoho",
-];
-
-fn suggested_name(seen: &Seen, provider: &str, email: &str) -> String {
-    let email = email.to_lowercase();
-    let Some((local, domain)) = email.rsplit_once('@') else {
-        return String::new();
-    };
-    let mailbox = local.split('+').next().unwrap_or_default();
-    let company = domain.split('.').next().unwrap_or_default();
-    let candidates = if MAIL_SERVICES.contains(&company) {
-        vec![mailbox]
-    } else {
-        vec![company, mailbox]
-    };
-    let taken = |name: &str| {
-        seen.accounts()
-            .iter()
-            .any(|account| account.provider == provider && account.label.as_deref() == Some(name))
-    };
-    candidates
-        .into_iter()
-        .find(|name| label::check(name).is_ok() && !taken(name))
-        .unwrap_or_default()
-        .to_owned()
 }
 
 pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
@@ -332,9 +275,9 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
             (Vec::new(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
         }
         Some(Leftover::Unknown) => (Vec::new(), None, false),
-        Some(Leftover::Found(None)) => (vec![words::typeset(said::nothing_left())], None, false),
+        Some(Leftover::Found(None)) => (vec![words::nothing_to_clean_up(seen.os)], None, false),
         Some(Leftover::Found(Some(left))) => (
-            said::left_lines(seen.os, left)
+            words::clean_up_lines(seen.os, left)
                 .iter()
                 .map(|line| words::typeset(line))
                 .collect(),
@@ -343,11 +286,11 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
         ),
     };
     Some(StowText {
-        title: words::stow_title(seen.os),
-        message: words::stow_message(seen.os),
+        title: words::clean_up_title(seen.os),
+        message: words::clean_up_message(seen.os),
         lines,
         looking,
-        confirm: words::put_away(seen.os, false),
+        confirm: words::clean_up(seen.os, false),
         can_confirm,
         saving,
     })
@@ -372,7 +315,7 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         undo: None,
         announce: None,
         title: words::signing_in_to(seen.os, &tool),
-        message: words::finish_in_browser(&signing.name, &tool),
+        message: words::finish_in_browser(signing.again.as_deref(), &tool),
         code_note: words::code_note(&tool),
         refused: signing.code_refused().then(|| words::code_refused(&tool)),
     })
@@ -389,15 +332,14 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
             .in_use_of(provider)
             .filter(|_| !nothing_to_park(seen, provider))
         {
-            Some(work) => words::parking(work),
+            Some(work) => words::signing_out(work),
             None => (words::GETTING_READY.0.into(), words::GETTING_READY.1.into()),
         }
     } else {
         (
             words::in_app_waiting(
                 app,
-                &signing.name,
-                signing.again,
+                signing.again.as_deref(),
                 signing.step,
                 signing.opened_for_it,
             ),
@@ -411,10 +353,9 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
     );
     let announce = (signing.started && asks_again).then(|| message.clone());
     SigningInText {
-        title: if signing.again {
-            words::sign_in_to_again(seen.os, &signing.name)
-        } else {
-            words::add_account(seen.os)
+        title: match &signing.again {
+            Some(label) => words::sign_in_to_again(seen.os, label, false),
+            None => words::add_account(seen.os, false),
         },
         message,
         code_note: String::new(),
@@ -433,7 +374,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         },
         escape_cancels: signing.started && put_back.is_none(),
         undo: put_back.map(|qualified| Choice {
-            title: words::put_back(seen.os, &Key::parse(qualified).label),
+            title: words::switch_back_to(seen.os, &Key::parse(qualified).label),
             intent: Intent::SwitchTo {
                 qualified: qualified.to_owned(),
             },
@@ -449,7 +390,7 @@ pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> Windo
     let tool = seen.tool_name(Key::parse(qualified).provider.code());
     WindowQuestion {
         question: Question {
-            title: words::replace_title(seen.os, &tool),
+            title: words::replace_title(&tool),
             message: why.to_owned(),
             confirm: words::REPLACE.into(),
         },
@@ -488,17 +429,16 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
             message: words::quit_to_move(name, &label),
             confirm: words::quit_and_switch(seen.os, name),
         },
-        After::SignIn { from, .. } => {
-            let again = matches!(from, Some(Sheet::SignInAgain { .. }));
-            let title = words::quit_to_sign_in(name, again.then_some(label.as_str()));
+        After::SignIn { again, .. } => {
+            let title = words::quit_to_sign_in(name, again.as_deref());
             match seen
                 .in_use_of(tool)
                 .filter(|_| !nothing_to_park(seen, tool))
             {
                 Some(work) => Question {
                     title,
-                    message: words::quit_to_park(name, work),
-                    confirm: words::quit_and_park(seen.os, name, work),
+                    message: words::quit_to_sign_out(name, work),
+                    confirm: words::quit_and_continue(seen.os, name),
                 },
                 None => Question {
                     title,
@@ -507,24 +447,32 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
                 },
             }
         }
-        After::Enrol { from, .. } => {
-            let again = matches!(from, Some(Sheet::SignInAgain { .. }));
-            Question {
-                title: words::quit_to_record(name, &label, again),
-                message: words::quit_to_read(name, &label, again),
-                confirm: words::quit_and_record(seen.os, name, again),
-            }
-        }
+        After::Enrol { again, .. } => Question {
+            title: match again {
+                Some(label) => words::quit_to_add(name, label),
+                None => words::quit_to_sign_in(name, None),
+            },
+            message: words::quit_to_read(name, again.as_deref()),
+            confirm: words::quit_and_add(seen.os, name),
+        },
+        After::Uninstall => Question {
+            title: words::quit_to_uninstall(name),
+            message: words::quit_to_delete(name),
+            confirm: words::quit_and_uninstall(seen.os, name),
+        },
     }
 }
 
-/// A failure's alert, gone once it is read: its title, and its message with everything else
-/// it warned about.
-pub(crate) fn failure_alert(failure: &Failure) -> AlertText {
-    alert_of(&failure.title, &failure.message, &failure.warnings)
+/// A failure's alert, gone once it is read: its title, its message with everything else it
+/// warned about, and what to do.
+pub(crate) fn failure_alert(os: Os, failure: &Failure) -> AlertText {
+    AlertText {
+        next: Some(next_of(os, failure)),
+        ..alert_of(&failure.title, &failure.message, &failure.warnings)
+    }
 }
 
-pub(crate) fn failure_text(failure: &Failure) -> FailureText {
+pub(crate) fn failure_text(os: Os, failure: &Failure) -> FailureText {
     FailureText {
         id: failure.id,
         title: failure.title.clone(),
@@ -534,7 +482,12 @@ pub(crate) fn failure_text(failure: &Failure) -> FailureText {
             .iter()
             .map(|warning| warning.message.clone())
             .collect(),
+        next: next_of(os, failure),
     }
+}
+
+fn next_of(os: Os, failure: &Failure) -> NextStep {
+    super::next::of_failure(os, failure.code.as_deref(), failure.account.as_deref())
 }
 
 #[cfg(test)]
@@ -556,36 +509,35 @@ mod tests {
         check_name(sheet, "claude".into(), typed.into()).problem
     }
 
-    // Save waits for a name, trimmed: in a rename, one the account does not already have.
-    #[test]
-    fn a_name_is_saved_trimmed_and_only_once_there_is_one() {
-        let name = Sheet::Name {
+    fn named(label: &str) -> Sheet {
+        Sheet::Name {
             provider: "claude".into(),
+            label: label.into(),
             email: "a@example.com".into(),
-        };
-        assert_eq!(saved(name.clone(), "  work\n").as_deref(), Some("work"));
-        assert_eq!(saved(name.clone(), " \t\u{200b}"), None);
-        assert_eq!(saved(name.clone(), ""), None);
-        assert_eq!(problem(name, ""), None, "nothing typed is nothing wrong");
-        assert_eq!(saved(rename("work"), " work "), None, "unchanged");
-        assert_eq!(problem(rename("work"), " work "), None);
-        assert_eq!(saved(rename("work"), "home ").as_deref(), Some("home"));
-        assert_eq!(
-            saved(Sheet::Add { provider: None }, " travel").as_deref(),
-            Some("travel")
-        );
-        let again = Sheet::SignInAgain {
-            provider: "codex".into(),
-            label: "my work".into(),
-        };
-        assert_eq!(
-            saved(again, "").as_deref(),
-            Some("my work"),
-            "the account's own name, whatever a new one may be"
-        );
+        }
     }
 
-    // What each sheet's default button sends, so neither app maps a sheet to an intent.
+    // Save waits for a name, trimmed, the account does not already have.
+    #[test]
+    fn a_name_is_saved_trimmed_and_only_once_there_is_one() {
+        for (sheet, kind) in [(named("acme"), "named"), (rename("acme"), "renamed")] {
+            assert_eq!(
+                saved(sheet.clone(), "  work\n").as_deref(),
+                Some("work"),
+                "{kind}"
+            );
+            assert_eq!(saved(sheet.clone(), " \t\u{200b}"), None, "{kind}");
+            assert_eq!(
+                problem(sheet.clone(), " "),
+                Some(words::unusable_name(label::Unusable::Empty)),
+                "{kind}: the field says why its button waits"
+            );
+            assert_eq!(saved(sheet.clone(), " acme "), None, "{kind}: unchanged");
+            assert_eq!(problem(sheet, " acme "), None, "{kind}");
+        }
+    }
+
+    // Neither app maps a sheet to an intent; naming an account just added renames it on a change.
     #[test]
     fn a_name_comes_with_what_its_sheet_sends() {
         let sends = |sheet: Sheet, tool: &str, typed: &str| {
@@ -595,7 +547,7 @@ mod tests {
             sends(Sheet::Add { provider: None }, "codex", " travel"),
             Some(Intent::SignIn {
                 provider: "codex".into(),
-                name: "travel".into()
+                again: None,
             }),
             "the tool picked"
         );
@@ -603,65 +555,48 @@ mod tests {
             sends(
                 Sheet::SignInAgain {
                     provider: "codex".into(),
-                    label: "work".into()
+                    label: "my work".into()
                 },
                 "codex",
                 ""
             ),
             Some(Intent::SignIn {
                 provider: "codex".into(),
-                name: "work".into()
-            })
+                again: Some("my work".into()),
+            }),
+            "the account's own name, whatever a new one may be"
         );
+        let to_home = Some(Intent::Rename {
+            provider: "claude".into(),
+            label: "acme".into(),
+            to: "home".into(),
+        });
+        assert_eq!(sends(named("acme"), "claude", "home"), to_home);
         assert_eq!(
-            sends(
-                Sheet::Name {
-                    provider: "codex".into(),
-                    email: "a@example.com".into()
-                },
-                "codex",
-                "home"
-            ),
-            Some(Intent::Enrol {
-                provider: "codex".into(),
-                name: "home".into()
-            })
+            sends(named("acme"), "claude", " acme"),
+            Some(Intent::CloseSheet)
         );
-        assert_eq!(
-            sends(rename("work"), "claude", "home"),
-            Some(Intent::Rename {
-                provider: "claude".into(),
-                label: "work".into(),
-                to: "home".into()
-            })
-        );
-        assert_eq!(sends(rename("work"), "claude", "work"), None, "unchanged");
-        assert_eq!(sends(Sheet::Add { provider: None }, "codex", "a/b"), None);
+        assert_eq!(sends(rename("acme"), "claude", "home"), to_home);
+        assert_eq!(sends(rename("acme"), "claude", "acme"), None, "unchanged");
+        assert_eq!(sends(named("acme"), "claude", "a/b"), None);
         assert_eq!(sends(Sheet::Stow, "claude", "work"), None);
     }
 
-    // The tool is picked apart from the name, so a name naming one again is refused as typed,
-    // and not where the core would read it as `codex/codex/phu`.
     #[test]
     fn a_name_that_cannot_be_one_says_why_as_it_is_typed() {
-        let add = || Sheet::Add {
-            provider: Some("codex".into()),
-        };
-        assert_eq!(saved(add(), "codex/phu"), None);
-        assert_eq!(
-            problem(add(), "codex/phu").as_deref(),
-            Some("A name can’t contain “/”. Choose the tool above.")
-        );
-        assert_eq!(
-            problem(rename("work"), "a/b").as_deref(),
-            Some("A name can’t contain “/”.")
-        );
-        assert_eq!(saved(add(), "my work"), None);
-        assert_eq!(
-            problem(add(), "my work").as_deref(),
-            Some("A name is one word, with no spaces.")
-        );
-        assert_eq!(problem(add(), "phu"), None);
+        use pitboard_core::label::Unusable;
+        for sheet in [named("acme"), rename("acme")] {
+            assert_eq!(saved(sheet.clone(), "codex/phu"), None);
+            assert_eq!(
+                problem(sheet.clone(), "codex/phu"),
+                Some(words::unusable_name(Unusable::Separator))
+            );
+            assert_eq!(
+                problem(sheet.clone(), "my work"),
+                Some(words::unusable_name(Unusable::NotOneWord))
+            );
+            assert_eq!(problem(sheet, "phu"), None);
+        }
     }
 
     use crate::Account;
@@ -738,7 +673,7 @@ mod tests {
                 .build(),
         );
         let text = form(Sheet::Add { provider: None }, accounts, Vec::new());
-        let sign_in = words::sign_in(Os::MacOs);
+        let sign_in = words::sign_in_asking(Os::MacOs);
         assert_eq!(
             text.tools
                 .iter()
@@ -747,7 +682,7 @@ mod tests {
             [
                 ("claude", sign_in.clone()),
                 ("codex", sign_in.clone()),
-                ("desktop", words::park("work"))
+                ("desktop", words::CONTINUE.into())
             ]
         );
         assert_eq!(text.confirm, sign_in, "it starts on Claude Code");
@@ -761,11 +696,17 @@ mod tests {
         };
         assert_eq!(
             case(Vec::new(), Vec::new()),
-            (words::record_first("Claude"), words::add_account(Os::MacOs))
+            (
+                words::add_shown_first("Claude"),
+                words::add_account(Os::MacOs, false)
+            )
         );
         assert_eq!(
             case(work_and_home(), Vec::new()),
-            (words::park_to_add("Claude", "work"), words::park("work"))
+            (
+                words::sign_out_to_add("Claude", "work"),
+                words::CONTINUE.into()
+            )
         );
         let signed_out = (
             words::wait_to_add("Claude"),
@@ -792,7 +733,7 @@ mod tests {
             signed_out
         );
         let doubt = (
-            words::record_unidentified("Claude"),
+            words::add_unidentified("Claude"),
             words::add_account_shown(Os::MacOs, "Claude", false),
         );
         for code in ["in_use_unconfirmed", "move_waiting"] {
@@ -813,11 +754,10 @@ mod tests {
         let mut state = read(waiting, vec![claude_code(), claude_desktop()]);
         let text = form_of(&mut state, add_desktop());
         assert_eq!(
-            (text.message, text.confirm, text.name.as_str()),
+            (text.message, text.confirm),
             (
-                words::add_once_signed_in("Claude", "work"),
+                words::add_once_signed_in("Claude"),
                 words::add_account_shown(Os::MacOs, "Claude", false),
-                "travel"
             )
         );
     }
@@ -839,10 +779,10 @@ mod tests {
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
             &seen,
-            &asked("desktop/travel", CLAUDE, "Claude"),
+            &asked("desktop/", CLAUDE, "Claude"),
             &After::SignIn {
                 provider: "desktop".into(),
-                name: "travel".into(),
+                again: None,
                 from: Some(add_desktop()),
             },
         );
@@ -864,7 +804,7 @@ mod tests {
             work_and_home(),
             vec![desktop_warning("in_use_unconfirmed", "in doubt")],
         );
-        assert_eq!(text.confirm, words::record_as("home"));
+        assert_eq!(text.confirm, words::add_as("home"));
         let state = State::new(Cadence::APP);
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
@@ -872,16 +812,16 @@ mod tests {
             &asked("desktop/home", CLAUDE, "Claude"),
             &After::Enrol {
                 provider: "desktop".into(),
-                name: "home".into(),
+                again: Some("home".into()),
                 from: Some(again),
             },
         );
         assert_eq!(
             question,
             Question {
-                title: words::quit_to_record("Claude", "home", true),
-                message: words::quit_to_read("Claude", "home", true),
-                confirm: words::quit_and_record(Os::MacOs, "Claude", true),
+                title: words::quit_to_add("Claude", "home"),
+                message: words::quit_to_read("Claude", Some("home")),
+                confirm: words::quit_and_add(Os::MacOs, "Claude"),
             }
         );
     }
@@ -906,15 +846,15 @@ mod tests {
         );
         let parks = |again| Question {
             title: words::quit_to_sign_in("Claude", again),
-            message: words::quit_to_park("Claude", "work"),
-            confirm: words::quit_and_park(Os::MacOs, "Claude", "work"),
+            message: words::quit_to_sign_out("Claude", "work"),
+            confirm: words::quit_and_continue(Os::MacOs, "Claude"),
         };
         assert_eq!(
             said(
-                "desktop/travel",
+                "desktop/",
                 After::SignIn {
                     provider: "desktop".into(),
-                    name: "travel".into(),
+                    again: None,
                     from: Some(add_desktop()),
                 }
             ),
@@ -925,7 +865,7 @@ mod tests {
                 "desktop/home",
                 After::SignIn {
                     provider: "desktop".into(),
-                    name: "home".into(),
+                    again: Some("home".into()),
                     from: Some(Sheet::SignInAgain {
                         provider: "desktop".into(),
                         label: "home".into(),
@@ -936,17 +876,17 @@ mod tests {
         );
         assert_eq!(
             said(
-                "desktop/travel",
+                "desktop/",
                 After::Enrol {
                     provider: "desktop".into(),
-                    name: "travel".into(),
+                    again: None,
                     from: Some(add_desktop()),
                 }
             ),
             Question {
-                title: words::quit_to_record("Claude", "travel", false),
-                message: words::quit_to_read("Claude", "travel", false),
-                confirm: words::quit_and_record(Os::MacOs, "Claude", false),
+                title: words::quit_to_sign_in("Claude", None),
+                message: words::quit_to_read("Claude", None),
+                confirm: words::quit_and_add(Os::MacOs, "Claude"),
             }
         );
     }
@@ -955,19 +895,23 @@ mod tests {
     /// paragraph each.
     #[test]
     fn a_failures_alert_says_its_warnings_too() {
-        let alert = failure_alert(&Failure {
-            id: 1,
-            title: "Couldn’t switch to personal".into(),
-            message: "Nothing is parked.".into(),
-            code: Some("nothing_parked".into()),
-            warnings: vec![crate::Warning {
-                code: "auth_overridden".into(),
-                message: "ANTHROPIC_API_KEY is set".into(),
+        let alert = failure_alert(
+            Os::MacOs,
+            &Failure {
+                id: 1,
+                title: "Couldn’t switch to personal".into(),
+                message: "Nothing is parked.".into(),
+                code: Some("nothing_parked".into()),
                 account: None,
-                held: None,
-                provider: None,
-            }],
-        });
+                warnings: vec![crate::Warning {
+                    code: "auth_overridden".into(),
+                    message: "ANTHROPIC_API_KEY is set".into(),
+                    account: None,
+                    held: None,
+                    provider: None,
+                }],
+            },
+        );
         assert_eq!(alert.title, "Couldn’t switch to personal");
         assert_eq!(
             alert.message,
@@ -1016,7 +960,7 @@ mod tests {
                 .title
         };
         for os in [Os::MacOs, Os::Windows] {
-            assert_eq!(titled(os), words::replace_title(os, "Claude Code"));
+            assert_eq!(titled(os), words::replace_title("Claude Code"));
         }
     }
 }

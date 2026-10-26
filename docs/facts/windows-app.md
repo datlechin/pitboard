@@ -213,7 +213,10 @@ Microsoft's documentation.
 - WinUI 2.3.9's `Themes/generic.xaml`, in the Windows App SDK 2.5.1 package: the InfoBar's
   close button is the template part `CloseButton`, which `NoticeBarTests` presses, and a
   `ListViewItem` is padded `16,0,12,0`, which only the Activity page's column headers repeat,
-  so they line up with the rows under them.
+  so they line up with the rows under them. A `ContentDialog`'s buttons are the template
+  parts `PrimaryButton`, `SecondaryButton` and `CloseButton`, with no AutomationId of their
+  own, so UI Automation finds each by its part's name, as the UI tests find the InfoBar's
+  `CloseButton` and the command bar's `MoreButton`.
 - `Shell_NotifyIconW` and `NOTIFYICONDATAW` (Microsoft Learn, updated 1 July 2025 and 20
   November 2024): `NIM_SETVERSION` follows every `NIM_ADD`; under `NOTIFYICON_VERSION_4` the
   event is `lParam`'s low word and the point `wParam`'s two words, the icon's upper-left

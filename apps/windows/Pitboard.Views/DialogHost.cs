@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Pitboard.Core;
 
@@ -57,14 +58,18 @@ public sealed class DialogHost(Func<XamlRoot?> root)
         }
     }
 
-    public async Task<bool> Confirm(Question question) =>
-        await Show(new ContentDialog
+    public async Task<bool> Confirm(Question question)
+    {
+        var dialog = new ContentDialog
         {
             Title = question.Title,
             Content = question.Message,
             PrimaryButtonText = question.Confirm,
             CloseButtonText = "Cancel",
-        }) == ContentDialogResult.Primary;
+        };
+        AutomationProperties.SetAutomationId(dialog, "question");
+        return await Show(dialog) == ContentDialogResult.Primary;
+    }
 
     // A dialog draws in a popup, which takes no theme from its window's content, so it is given the content's, as the WinUI
     // Gallery gives one its page's, and follows it while it is up.

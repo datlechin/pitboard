@@ -37,6 +37,7 @@ use crate::account_windows::records::{self, Records};
 use crate::{AppCore, Holding, Remedy, SignInSession};
 use pitboard_core::app::AppFile;
 use pitboard_core::state::Key;
+use pitboard_core::switch::Naming;
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -93,18 +94,20 @@ impl Job {
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
             | Job::SetWarm { .. }
-            | Job::SetWarmRange { .. } => Lane::Changes,
+            | Job::SetWarmRange { .. }
+            | Job::Uninstall => Lane::Changes,
             Job::WarmUp | Job::WarmNow { .. } => Lane::Warm,
             Job::Holding { .. } | Job::Quit { .. } | Job::Open { .. } => Lane::Processes,
             // Where the login shell's `PATH` is asked, as the Swift service asked it for
             // `searchPath`, apart from every queue of its own.
-            Job::AskInstalled | Job::FindCommandLine | Job::ReadSignedIn { .. } => Lane::Discovery,
+            Job::AskInstalled | Job::FindCommandLine => Lane::Discovery,
             Job::SignIn { .. } | Job::SignInOver { .. } => Lane::SignIn,
             Job::PasteCode { .. } | Job::StopSignIn { .. } => Lane::SignInCalls,
             Job::LoadKept
             | Job::KeepTold { .. }
             | Job::KeepPreferences { .. }
             | Job::KeepWindows { .. }
+            | Job::KeepGlance { .. }
             | Job::CheckShared { .. } => Lane::Kept,
             Job::Post { .. } => Lane::Notify,
         }
@@ -144,6 +147,7 @@ impl Lanes {
 pub(crate) struct Keeping {
     pub(crate) earlier: Option<EarlierPreferences>,
     pub(crate) windows: Option<RecordsFile>,
+    pub(crate) glance: Option<PathBuf>,
 }
 
 /// The account windows' records: `windows.json` in the directory the app named, the key this
@@ -191,6 +195,7 @@ impl Lanes {
             local_time,
             earlier: keeping.earlier,
             windows: keeping.windows,
+            glance: keeping.glance,
             quit_within: cadence.quit_within,
             quit_checked_every: cadence.quit_checked_every,
             sign_ins: Arc::default(),
@@ -235,7 +240,11 @@ impl Lanes {
     /// Starts a sign-in on a thread of its own, or tells one whether to enrol.
     fn sign_in(&self, job: Job) {
         match job {
-            Job::SignIn { id, qualified } => self.start_sign_in(id, qualified, |run| {
+            Job::SignIn {
+                id,
+                provider,
+                again,
+            } => self.start_sign_in(id, provider, again, |run| {
                 std::thread::Builder::new()
                     .name("pitboard-sign-in".into())
                     .spawn(run)
@@ -247,13 +256,14 @@ impl Lanes {
         }
     }
 
-    /// Starts the sign-in `id` to `qualified` on the thread `spawn` starts. One the system
-    /// cannot start comes to nothing, as one that stops with a panic does: this runs on the
-    /// actor's own thread, which a panic would stop, and the model with it.
+    /// Starts the sign-in `id` on the thread `spawn` starts. One the system cannot start comes
+    /// to nothing, as one that stops with a panic does: this runs on the actor's own thread,
+    /// which a panic would stop, and the model with it.
     fn start_sign_in(
         &self,
         id: u64,
-        qualified: String,
+        provider: String,
+        again: Option<String>,
         spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
     ) {
         let (tell, told) = channel();
@@ -262,10 +272,11 @@ impl Lanes {
         let answers = self.answers.clone();
         let lost = Job::SignIn {
             id,
-            qualified: qualified.clone(),
+            provider: provider.clone(),
+            again: again.clone(),
         };
         let started = spawn(Box::new(move || {
-            signing_in(&worker, &answers, id, qualified, &told);
+            signing_in(&worker, &answers, id, provider, again, &told);
         }));
         if started.is_err() {
             self.worker.sign_ins.end(id);
@@ -320,11 +331,15 @@ fn signing_in(
     worker: &Worker,
     answers: &Sender<Msg>,
     id: u64,
-    qualified: String,
+    provider: String,
+    again: Option<String>,
     told: &Receiver<bool>,
 ) {
     let tell = |answer| answers.send(Msg::Done(answer)).is_ok();
-    let session = match catch_unwind(AssertUnwindSafe(|| worker.core.sign_in(qualified.clone()))) {
+    let started = catch_unwind(AssertUnwindSafe(|| {
+        worker.core.sign_in(&provider, again.clone())
+    }));
+    let session = match started {
         Ok(Ok(session)) => session,
         Ok(Err(error)) => {
             tell(Answer::SignInStarted {
@@ -335,7 +350,11 @@ fn signing_in(
             return worker.sign_ins.end(id);
         }
         Err(_) => {
-            tell(Answer::Lost(Job::SignIn { id, qualified }));
+            tell(Answer::Lost(Job::SignIn {
+                id,
+                provider,
+                again,
+            }));
             return worker.sign_ins.end(id);
         }
     };
@@ -524,6 +543,7 @@ pub(crate) struct Worker {
     pub(crate) local_time: Arc<dyn LocalTime>,
     pub(crate) earlier: Option<EarlierPreferences>,
     pub(crate) windows: Option<RecordsFile>,
+    pub(crate) glance: Option<PathBuf>,
     pub(crate) quit_within: Duration,
     pub(crate) quit_checked_every: Duration,
     pub(crate) sign_ins: Arc<SignIns>,
@@ -593,10 +613,6 @@ impl Worker {
             }
             Job::AskInstalled => Answer::Installed {
                 tools: core.installed(),
-            },
-            Job::ReadSignedIn { provider } => Answer::SignedIn {
-                email: core.signed_in_email(&provider),
-                provider,
             },
             Job::Holding { qualified, then } => {
                 let holdings = core.holding(Key::parse(&qualified).provider.code());
@@ -676,17 +692,18 @@ impl Worker {
                 }
             }
             Job::Abandon => Answer::Abandoned(core.abandon_recovery()),
-            // Named with their tool, as AppModel.swift's `qualified(_:for:)` named them, so a
-            // Codex login is enrolled as Codex's and not as a Claude Code account.
             Job::Enrol {
                 provider,
-                name,
+                again,
                 from,
                 reopen,
             } => Answer::Enrolled {
-                done: core.enroll_current(&format!("{provider}/{name}")),
+                done: core.enroll_current(
+                    &provider,
+                    again.clone().map_or(Naming::FromEmail, Naming::As),
+                ),
                 provider,
-                name,
+                again,
                 from,
                 reopen,
             },
@@ -749,6 +766,14 @@ impl Worker {
                     let _ = pitboard_core::app::write_file(permit, &file.path, &text);
                 }
                 Answer::WindowsKept { write }
+            }
+            Job::KeepGlance { text } => {
+                if let Some(path) = &self.glance
+                    && let Ok(permit) = core.permit()
+                {
+                    let _ = pitboard_core::app::write_file(permit, path, &text);
+                }
+                Answer::Saved
             }
             Job::CheckShared { stores } => Answer::SharedChecked {
                 shared: self.windows.as_ref().and_then(|file| {
@@ -814,6 +839,7 @@ impl Worker {
                 found: core.command_line(),
                 own: core.own_command_line(),
             },
+            Job::Uninstall => Answer::Uninstalled(core.uninstall()),
             // Typed back as the Swift model typed it, whatever comes of it: the tool says
             // itself whether it took the code.
             Job::PasteCode { id, code } => {
@@ -983,6 +1009,7 @@ mod tests {
             local_time: Arc::new(crate::present::testing::Utc),
             earlier: None,
             windows: None,
+            glance: None,
             quit_within: Duration::from_millis(50),
             quit_checked_every: Duration::from_millis(5),
             sign_ins: Arc::default(),
@@ -1007,11 +1034,12 @@ mod tests {
     fn a_notification_the_system_refused_answers_with_why() {
         let world = World::new("refused-post");
         let mut worker = worker(world.core(), StandInApps::new(&[], true));
+        let ran_out = crate::present::words::ran_out("work", "5-hour");
         let notice = crate::model::RunOutNotice {
             id: "claude/work/session/-1800018000".into(),
-            title: "work has no 5-hour limit left".into(),
+            title: ran_out.clone(),
             subtitle: None,
-            body: "spare has 80% of its own left.".into(),
+            body: crate::present::words::other_used("spare", Some(80)),
             clicked: "accounts".into(),
             button: None,
         };
@@ -1021,18 +1049,12 @@ mod tests {
             Answer::Posted { title, refused } => (title, refused),
             _ => panic!("a post answers as one"),
         };
-        assert_eq!(
-            answered(&worker),
-            ("work has no 5-hour limit left".into(), None)
-        );
+        assert_eq!(answered(&worker), (ran_out.clone(), None));
 
         worker.notifications = Arc::new(Posted::refusing("COMException 0x80070490"));
         assert_eq!(
             answered(&worker),
-            (
-                "work has no 5-hour limit left".into(),
-                Some("COMException 0x80070490".into())
-            )
+            (ran_out, Some("COMException 0x80070490".into()))
         );
     }
 
@@ -1084,7 +1106,7 @@ mod tests {
         for change in [
             Job::Enrol {
                 provider: "codex".into(),
-                name: "job".into(),
+                again: None,
                 from: None,
                 reopen: None,
             },
@@ -1329,7 +1351,8 @@ mod tests {
         for job in [
             Job::SignIn {
                 id: 1,
-                qualified: "claude/work".into(),
+                provider: "claude".into(),
+                again: None,
             },
             Job::SignInOver { id: 1, enrol: true },
         ] {
@@ -1364,9 +1387,7 @@ mod tests {
         let core = world.core();
         let (tell, told) = channel();
         sign_ins.begin(2, tell);
-        let session = core
-            .sign_in("claude/travel".into())
-            .expect("the stand-in starts");
+        let session = core.sign_in("claude", None).expect("the stand-in starts");
         // Once it has written its process id, so that it stopping below is not taken from
         // one stopped before it wrote it.
         assert!(claude.is_running(), "the stand-in started");
@@ -1408,9 +1429,7 @@ mod tests {
         let core = world.core();
         let (tell, _told) = channel();
         sign_ins.begin(1, tell);
-        let session = core
-            .sign_in("claude/travel".into())
-            .expect("the stand-in starts");
+        let session = core.sign_in("claude", None).expect("the stand-in starts");
         assert!(sign_ins.started(1, &session));
         let (tell, _told_starting) = channel();
         sign_ins.begin(2, tell);
@@ -1461,12 +1480,13 @@ mod tests {
             Keeping {
                 earlier: None,
                 windows: None,
+                glance: None,
             },
             Cadence::APP,
             &answers,
         );
         let refused = catch_unwind(AssertUnwindSafe(|| {
-            lanes.start_sign_in(1, "claude/travel".into(), |_| {
+            lanes.start_sign_in(1, "claude".into(), None, |_| {
                 Err(std::io::Error::other("no thread left"))
             });
         }));
@@ -1477,8 +1497,8 @@ mod tests {
         assert!(
             matches!(
                 &answer,
-                Msg::Done(Answer::Lost(Job::SignIn { id: 1, qualified }))
-                    if qualified == "claude/travel"
+                Msg::Done(Answer::Lost(Job::SignIn { id: 1, provider, again: None }))
+                    if provider == "claude"
             ),
             "{answer:?}"
         );
@@ -1507,9 +1527,7 @@ mod tests {
         };
         assert!(matches!(worker.work(paste.clone()), Answer::Pasted));
 
-        let session = core
-            .sign_in("claude/travel".into())
-            .expect("the stand-in starts");
+        let session = core.sign_in("claude", None).expect("the stand-in starts");
         assert!(worker.sign_ins.started(1, &session));
         let mut said = String::new();
         while !said.contains("Paste code") {
@@ -1535,7 +1553,7 @@ mod tests {
         // In the same home, at once: the cancel has let go of the core's one sign-in at a
         // time by the time it returns, whatever processes other tests start meanwhile.
         let session = core
-            .sign_in("claude/again".into())
+            .sign_in("claude", None)
             .expect("the stand-in starts again");
         assert!(worker.sign_ins.started(1, &session));
         // It writes its process id before it says anything.
@@ -1547,7 +1565,7 @@ mod tests {
         );
         assert!(!claude.is_running(), "stopped and waited for as it answers");
         assert!(
-            core.sign_in("claude/after".into())
+            core.sign_in("claude", None)
                 .expect("the one sign-in at a time let go of")
                 .cancel(),
             "the next stopped too"

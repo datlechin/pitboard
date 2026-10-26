@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Shapes;
 using Pitboard.Core;
 using Pitboard.Windows;
 
@@ -14,8 +13,6 @@ public sealed partial class AccountRow : UserControl
     public static readonly DependencyProperty AccountProperty = DependencyProperty.Register(
         nameof(Account), typeof(ShownAccount), typeof(AccountRow),
         new PropertyMetadata(null, (row, change) => ((AccountRow)row).Follow(change.OldValue as ShownAccount, change.NewValue as ShownAccount)));
-
-    private const double PaceMarkHeight = 12;
 
     public AccountRow() => InitializeComponent();
 
@@ -96,10 +93,10 @@ public sealed partial class AccountRow : UserControl
     {
         ShowLimits(item.Limits);
         Notes.Children.Clear();
-        foreach (var note in item.Notes)
+        foreach (var line in item.Lines)
         {
             Notes.Children.Add(
-                new TextBlock { Text = note, Style = Shared("SecondaryCaptionTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
+                new TextBlock { Text = line, Style = Shared("SecondaryCaptionTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
         }
     }
 
@@ -111,8 +108,7 @@ public sealed partial class AccountRow : UserControl
         Limits.RowDefinitions.Clear();
         Limits.ColumnDefinitions.Clear();
         Limits.Visibility = limits.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        GridLength[] widths =
-            [GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto, GridLength.Auto];
+        GridLength[] widths = [GridLength.Auto, new GridLength(1, GridUnitType.Star), GridLength.Auto, GridLength.Auto];
         foreach (var width in widths)
         {
             Limits.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
@@ -134,18 +130,11 @@ public sealed partial class AccountRow : UserControl
             var resets = Column(limit.Resets, "SecondaryCaptionTextBlockStyle");
             resets.TextAlignment = TextAlignment.Right;
             Place(Unspoken(resets), row, 3);
-            var over = limit.Pace?.Standing == PaceStanding.Over;
-            var pace = Column(limit.Pace?.Said ?? "", over ? "CriticalCaptionTextBlockStyle" : "SecondaryCaptionTextBlockStyle");
-            // As wide as "27% over pace", so a row with no pace has bars as wide as one with.
-            pace.MinWidth = 96;
-            Place(Unspoken(pace), row, 4);
         }
     }
 
-    // The mark is where an even use of the limit would be by now, and none at an even pace.
-    private Grid Bar(LimitRow limit)
-    {
-        var bar = new ProgressBar
+    private ProgressBar Bar(LimitRow limit) =>
+        Unspoken(new ProgressBar
         {
             Minimum = 0,
             Maximum = 100,
@@ -158,28 +147,7 @@ public sealed partial class AccountRow : UserControl
                 UsageLevel.Out => "Out",
                 _ => "Plenty",
             }),
-        };
-        var cell = new Grid { Children = { Unspoken(bar) } };
-        if (limit.Pace is { Standing: not PaceStanding.Even } pace)
-        {
-            var mark = new Rectangle
-            {
-                Width = 2,
-                Height = PaceMarkHeight,
-                Style = Own(pace.Standing == PaceStanding.Over ? "OverPace" : "UnderPace"),
-            };
-            var marks = new Canvas { Children = { mark } };
-            cell.Children.Add(Unspoken(marks));
-            cell.SizeChanged += (_, size) =>
-            {
-                Canvas.SetLeft(mark, (size.NewSize.Width * Math.Clamp(pace.Expected, 0, 100) / 100) - 1);
-                Canvas.SetTop(mark, (size.NewSize.Height - PaceMarkHeight) / 2);
-            };
-            ToolTipService.SetToolTip(cell, pace.Help);
-        }
-
-        return cell;
-    }
+        });
 
     private static TextBlock Column(string text, string style) =>
         new() { Text = text, Style = Shared(style), TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center };

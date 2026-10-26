@@ -14,6 +14,7 @@ struct MachinePane: View {
                 // By its place: doctor gives every account's parked login one code.
                 ForEach(checks.lines, id: \.id) { line in
                     CheckRow(line: line)
+                        .accessibilityIdentifier("check.\(line.id)")
                 }
             } header: {
                 summary(checks)
@@ -28,22 +29,23 @@ struct MachinePane: View {
         .navigationTitle("This Mac")
         .toolbar {
             Button {
-                model.send(.paneShown(pane: .machine))
+                model.send(.paneShown(pane: .checks))
             } label: {
                 Label("Check Again", systemImage: Symbol.refresh)
             }
             .help("Make every check again")
+            .accessibilityIdentifier("toolbar.checkAgain")
             .disabled(checks.checking)
         }
         .focusedSceneValue(
             \.refresh,
             RefreshCommand(title: "Check Again", disabled: checks.checking) {
-                model.send(.paneShown(pane: .machine))
+                model.send(.paneShown(pane: .checks))
             }
         )
         // Every visit: a menu bar app runs for days, and a check fixed in a terminal since
         // would otherwise still read as failing. What was found stays up meanwhile.
-        .task { model.send(.paneShown(pane: .machine)) }
+        .task { model.send(.paneShown(pane: .checks)) }
     }
 
     @ViewBuilder private func summary(_ checks: ChecksShown) -> some View {
@@ -51,6 +53,7 @@ struct MachinePane: View {
             HStack(alignment: .firstTextBaseline) {
                 // The last line of `pitboard doctor`, so the two never disagree.
                 Text(summary)
+                    .accessibilityIdentifier("checks.summary")
                 Spacer()
                 if checks.checking {
                     ProgressView().controlSize(.small)

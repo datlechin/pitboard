@@ -4,14 +4,11 @@ import SwiftUI
 struct AccountsPane: View {
     let model: AppModel
     let windows: AccountWindows
-    let openAtLogin: OpenAtLogin
     @State private var selection: String?
     /// A question the model asks before something that cannot be undone, and what to send
     /// once it is answered.
     @State private var asking: Asking?
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
-    @AppStorage(DefaultsKey.settingsTab) private var settingsTab = SettingsView.Tab.general
 
     var body: some View {
         content
@@ -26,13 +23,15 @@ struct AccountsPane: View {
                     }
                     .help("Read every account’s usage again")
                     .disabled(model.reading)
+                    .accessibilityIdentifier("toolbar.refresh")
                     // Command-N is the window's own command, so it works from every pane.
                     Button {
                         model.send(.presentSheet(sheet: .add(provider: nil)))
                     } label: {
                         Label("Add Account", systemImage: Symbol.add)
                     }
-                    .help("Sign in to another account and park its login")
+                    .help("Sign in to another account")
+                    .accessibilityIdentifier("toolbar.addAccount")
                 }
             }
             .focusedSceneValue(
@@ -65,12 +64,14 @@ struct AccountsPane: View {
         case .noTool(let title, let detail, let linkTitle, let link):
             ContentUnavailableView {
                 Label(title, systemImage: Symbol.terminal)
+                    .accessibilityIdentifier("accounts.noTool")
             } description: {
                 Text(detail)
             } actions: {
                 if let link = URL(string: link) {
                     Link(linkTitle, destination: link)
                         .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("accounts.install")
                 }
             }
         case .readFailed(let title, let detail, let retry):
@@ -78,25 +79,30 @@ struct AccountsPane: View {
             // with a way to try again, and not a spinner that never stops.
             ContentUnavailableView {
                 Label(title, systemImage: Severity.error.symbol)
+                    .accessibilityIdentifier("accounts.readFailed")
             } description: {
                 Text(detail)
             } actions: {
                 Button(retry.title) { model.send(retry.intent) }
                     .disabled(!retry.enabled)
+                    .accessibilityIdentifier("accounts.retry")
             }
         case .noAccounts(let title, let detail, let add):
             ContentUnavailableView {
                 Label(title, systemImage: Symbol.accounts)
+                    .accessibilityIdentifier("accounts.noAccounts")
             } description: {
                 Text(detail)
             } actions: {
                 Button(add.title) { model.send(add.intent) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!add.enabled)
+                    .accessibilityIdentifier("accounts.add")
             }
         case .reading(let title):
             ProgressView(title)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("accounts.reading")
         case .list:
             list
         }
@@ -109,19 +115,7 @@ struct AccountsPane: View {
                     .selectionDisabled()
             }
             if let step = model.setup {
-                SetupTip(step: step, footing: model.footing) { intent in
-                    // The login item is macOS's: the app turns it on, and says what macOS has,
-                    // and why it refused, in General.
-                    if case .opensAtLogin(let on) = intent {
-                        openAtLogin.set(on)
-                        if openAtLogin.failed != nil {
-                            settingsTab = .general
-                            openSettings()
-                        }
-                    } else {
-                        model.send(intent)
-                    }
-                }
+                SetupTip(step: step, footing: model.footing) { model.send($0) }
             }
             ForEach(model.sections, id: \.id) { section in
                 // A heading per tool once there is more than one, and no section at all
@@ -216,17 +210,17 @@ private struct SetupTip: View {
                 Text(step.detail).explanatory()
                 HStack {
                     ForEach(Array(step.actions.enumerated()), id: \.offset) { index, choice in
+                        let identifier = "setup.action.\(caseName(choice.intent))"
                         if index == 0 {
                             Button(choice.title) { perform(choice.intent) }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(!choice.enabled)
+                                .accessibilityIdentifier(identifier)
                         } else {
                             Button(choice.title) { perform(choice.intent) }
                                 .disabled(!choice.enabled)
+                                .accessibilityIdentifier(identifier)
                         }
-                    }
-                    if let link = step.link, let url = URL(string: link.link) {
-                        Link(link.title, destination: url)
                     }
                 }
             }
@@ -234,12 +228,12 @@ private struct SetupTip: View {
         }
         .padding(.vertical, 4)
         .selectionDisabled()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("setup.\(caseName(footing))")
     }
 
     private var symbol: String {
         switch footing {
-        case .unnamed: "tag"
-        case .notOpenedAtLogin: "power"
         case .atLimitUnchosen: Symbol.limits
         default: Symbol.switchAccount
         }

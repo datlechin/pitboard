@@ -29,14 +29,14 @@ public sealed class AccountRowTests
             Items.Account("codex", "spare") with
             {
                 Plan = "Plus",
-                Limits = [Items.Limit(42, PaceStanding.Over)],
-                Notes = ["Its parked login lasts 6 more days"],
+                Limits = [Items.Limit(42)],
+                Lines = ["Its parked login lasts 6 more days"],
             },
             new ItemAction("Use", "Use spare (Codex)", new Intent.SwitchTo("codex/spare")));
         var row = await Shown(item, sent.Add);
 
         var texts = Views.Texts(row);
-        foreach (var said in new[] { "spare", "Plus", "spare@example.com", "5h", "42%", "resets in 2h 10m", "over pace", "Its parked login lasts 6 more days" })
+        foreach (var said in new[] { "spare", "Plus", "spare@example.com", "5-hour", "42%", "Resets 10:10 AM", "Its parked login lasts 6 more days" })
         {
             Assert.Contains(said, texts);
         }
@@ -57,21 +57,6 @@ public sealed class AccountRowTests
         Assert.IsFalse(Views.Visible<Button>(row).Any(), "a button on the account in use");
     }
 
-    // Each row has a grid of its own, so an empty pace column widened its bars past another row's.
-    [UITestMethod]
-    public async Task TheBarsOfTwoRowsLineUpWhetherOrNotAPaceIsSaid()
-    {
-        var over = Items.Limit(42, PaceStanding.Over);
-        over = over with { Pace = over.Pace! with { Said = "27% over pace" } };
-        var paced = Row(Items.Account("claude", "work") with { Limits = [over] });
-        var even = Row(Items.Account("claude", "spare") with { Limits = [Items.Limit(42)] });
-        // Together, as the list shows them: shown apart, the first row's bar read 80, its MinWidth, once out of the window.
-        await Views.Shown(new StackPanel { Width = 600, Children = { paced, even } });
-
-        Assert.AreEqual(
-            Views.Visible<ProgressBar>(paced).Single().ActualWidth, Views.Visible<ProgressBar>(even).Single().ActualWidth, 0.5);
-    }
-
     // Narrator reads a limit once, as a sentence, and not the bar and each figure on their own.
     [UITestMethod]
     public async Task ALimitIsSpokenOnce()
@@ -79,9 +64,9 @@ public sealed class AccountRowTests
         var limit = Items.Limit(42);
         var row = await Shown(Items.Account("claude", "work") with { Limits = [limit] });
 
-        var spoken = Views.Visible<TextBlock>(row).Single(text => text.Text == "5h");
+        var spoken = Views.Visible<TextBlock>(row).Single(text => text.Text == "5-hour");
         Assert.AreEqual(limit.Spoken, AutomationProperties.GetName(spoken));
-        foreach (var unspoken in Views.Visible<TextBlock>(row).Where(text => text.Text is "42%" or "resets in 2h 10m"))
+        foreach (var unspoken in Views.Visible<TextBlock>(row).Where(text => text.Text is "42%" or "Resets 10:10 AM"))
         {
             Assert.AreEqual(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(unspoken));
         }

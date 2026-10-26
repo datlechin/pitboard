@@ -14,6 +14,7 @@ struct ActivityPane: View {
             .width(min: 120, ideal: 150)
             TableColumn("Change") { line in
                 Text(line.change)
+                    .accessibilityIdentifier("activity.change")
             }
             .width(min: 70, ideal: 90)
             TableColumn("Account") { line in
@@ -33,7 +34,9 @@ struct ActivityPane: View {
             if let empty = activity.empty {
                 ContentUnavailableView(
                     empty.title, systemImage: Symbol.activity,
-                    description: Text(empty.detail))
+                    description: Text(empty.detail)
+                )
+                .accessibilityIdentifier("activity.empty")
             }
         }
         .navigationTitle("Activity")

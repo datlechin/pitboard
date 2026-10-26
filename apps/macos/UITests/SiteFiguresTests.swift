@@ -151,11 +151,11 @@ final class SiteFiguresTests: FixtureTestCase {
         app.openMenu()
         XCTAssertTrue(app.menuItem("Quit Pitboard").waitForExistence(timeout: 5))
         app.typeKey("n", modifierFlags: .command)
-        let sheet = app.textFields["sheet.name"].waitForExistence(timeout: 3)
+        let sheet = app.control("sheet.add").waitForExistence(timeout: 3)
         let openAfterN = isOpen(menu)
         keep(XCUIScreen.main.screenshot(), as: "site-status-menu-key-equivalents")
         app.typeKey(.escape, modifierFlags: [])
-        let cancelled = app.textFields["sheet.name"].waitForNonExistence(timeout: 3)
+        let cancelled = app.control("sheet.add").waitForNonExistence(timeout: 3)
 
         app.openMenu()
         XCTAssertTrue(app.menuItem("Quit Pitboard").waitForExistence(timeout: 5))
@@ -284,23 +284,25 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(titles("Go none"), ["Back", "Forward"])
         XCTAssertEqual(dimmed("Go none"), ["Back", "Forward"])
         XCTAssertEqual(titles("Help none"), ["Pitboard Help"])
-        XCTAssertEqual(titles("Account none"), ["Use", "Sign In Again…", "Rename…", "Forget…"])
+        XCTAssertEqual(
+            titles("Account none"), ["Switch", "Sign In Again…", "Rename…", "Remove Account…"])
         XCTAssertEqual(dimmed("Account none"), titles("Account none"))
         XCTAssertEqual(
             titles("Account personal"),
             [
-                "Use personal", "Sign In Again…", "Rename…", "Warm Up Now", "Open claude.ai",
-                "Forget…",
+                "Switch to personal", "Sign In Again…", "Rename…", "Warm Up Now",
+                "Open claude.ai", "Remove Account…",
             ])
         XCTAssertEqual(dimmed("Account personal"), ["Warm Up Now"])
         XCTAssertEqual(
             titles("Account work"),
             [
-                "Use work", "Sign In Again…", "Rename…", "Warm Up Now", "Open claude.ai",
-                "Forget…",
+                "Switch to work", "Sign In Again…", "Rename…", "Warm Up Now", "Open claude.ai",
+                "Remove Account…",
             ]
         )
-        XCTAssertEqual(dimmed("Account work"), ["Use work", "Warm Up Now", "Forget…"])
+        XCTAssertEqual(
+            dimmed("Account work"), ["Switch to work", "Warm Up Now", "Remove Account…"])
         XCTAssertEqual(
             dimmed("Edit none"),
             ["Undo", "Redo", "Cut", "Copy", "Paste", "Delete", "Select All"])
@@ -341,11 +343,11 @@ final class SiteFiguresTests: FixtureTestCase {
     func testReturnInTheForgetAlert() {
         let app = launch(.oneTool)
         let personal = askToForgetPersonal(app)
-        let forget = app.alert.buttons["Forget"]
-        let cancel = app.alert.buttons["Cancel"]
+        let forget = app.alertAnswer
+        let cancel = app.alertCancel
         let sheet = app.sheets["alert"].exists
         let dialogs = app.dialogs.count
-        let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Forget" : "Forget, Cancel"
+        let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Remove" : "Remove, Cancel"
         keep(app.alert, as: "site-forget-alert")
         keep(app.windows["main"], as: "site-forget-alert-window")
         let tree = tree(of: app.alert)
@@ -359,7 +361,7 @@ final class SiteFiguresTests: FixtureTestCase {
             as: "site-forget-alert-return")
         XCTAssertTrue(sheet)
         XCTAssertEqual(dialogs, 0)
-        XCTAssertEqual(order, "Cancel, Forget")
+        XCTAssertEqual(order, "Cancel, Remove")
         XCTAssertFalse(closed, "Return pressed a button")
         XCTAssertTrue(kept)
     }
@@ -373,7 +375,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let keptAfterPeriod = personal.exists
         if period {
             app.typeKey(.delete, modifierFlags: .command)
-            XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
         }
         app.typeKey(.escape, modifierFlags: [])
         let escape = app.alert.waitForNonExistence(timeout: 3)
@@ -392,7 +394,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testWhereFocusGoesAfterForget() {
         let app = launch(.oneTool)
         let personal = askToForgetPersonal(app)
-        app.alert.buttons["Forget"].click()
+        app.alertAnswer.click()
         XCTAssertTrue(personal.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
         let window = app.windows["main"]
@@ -473,8 +475,8 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(
             shown.map(\.title),
             [
-                "Use personal", "Sign In Again…", "Rename…", "Open claude.ai",
-                "Copy Email Address", "Forget…",
+                "Switch to personal", "Sign In Again…", "Rename…", "Open claude.ai",
+                "Copy Email Address", "Remove Account…",
             ])
         XCTAssertEqual(copied, "dana@home.example")
         XCTAssertEqual(after, ["claude/work"])
@@ -487,21 +489,23 @@ final class SiteFiguresTests: FixtureTestCase {
         let window = app.windows["main"]
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
-        let use = personal.buttons["Use personal"]
+        let use = personal.buttons["account.action"]
         XCTAssertTrue(use.waitForExistence(timeout: 5))
+        let inUseLabel = personal.descendants(matching: .any)["account.inUse"]
         var switching = false
         let start = Date()
         use.click()
         let clicked = Date()
-        while !personal.staticTexts["In Use"].exists, Date().timeIntervalSince(start) < 10 {
-            switching = switching || app.text("Switching…").exists
+        while !inUseLabel.exists, Date().timeIntervalSince(start) < 10 {
+            switching =
+                switching || personal.descendants(matching: .any)["account.switching"].exists
         }
         let switched = Date()
-        let inUse = personal.staticTexts["In Use"].exists
+        let inUse = inUseLabel.exists
         let selected = selectedAccounts(in: window)
         keep(window, as: "site-after-use")
 
-        let refresh = app.toolbars.buttons["Refresh"]
+        let refresh = app.toolbars.buttons["toolbar.refresh"]
         var dimmed = false
         let asked = Date()
         refresh.click()
@@ -736,8 +740,10 @@ final class SiteFiguresTests: FixtureTestCase {
         var found: [String] = []
         func walk(_ node: any XCUIElementSnapshot, inSelected: Bool) {
             let inSelected = inSelected || (node.elementType == .outlineRow && node.isSelected)
+            // A row's controls, account.action and the rest, are inside its own identifier.
             if inSelected, node.identifier.hasPrefix("account.") {
                 found.append(String(node.identifier.dropFirst("account.".count)))
+                return
             }
             for child in node.children { walk(child, inSelected: inSelected) }
         }
@@ -765,7 +771,7 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         personal.click()
         app.typeKey(.delete, modifierFlags: .command)
-        XCTAssertTrue(app.alert.buttons["Forget"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
         return personal
     }
 

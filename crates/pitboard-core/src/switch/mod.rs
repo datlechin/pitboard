@@ -43,10 +43,10 @@ pub use crate::pending::Reclaimed;
 pub use adopt::Adopted;
 pub(crate) use adopt::adopt;
 pub(crate) use auto::automatically;
-pub(crate) use enroll::enroll;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use enroll::planted;
-pub use enroll::{Enrolled, Said, SignIn, Steps, WatchedSignIn};
+pub use enroll::{Enrolled, Enrolment, Naming, Said, SignIn, Steps, WatchedSignIn};
+pub(crate) use enroll::{Filing, enroll, enroll_filed};
 #[cfg(any(test, feature = "test-support"))]
 pub use enroll::{ScriptedSignIn, SignInScript};
 pub(crate) use enroll::{
@@ -67,7 +67,7 @@ pub(crate) use stow::find as left_login;
 pub(crate) use stow::stow;
 pub use stow::{Foreseen, Kept, Left, Stowed};
 pub use uninstall::Removed;
-pub(crate) use uninstall::uninstall;
+pub(crate) use uninstall::{uninstall, uninstall_from_app};
 
 use crate::context::Context;
 use crate::error::{Error, Result};

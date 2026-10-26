@@ -21,6 +21,8 @@ public sealed partial class SiteFiguresTests
 
     private static readonly TimeSpan Shortly = TimeSpan.FromSeconds(10);
 
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
+
     private static readonly string[] IconMenu =
     [
         "Claude Code", "work · 42%", "old", "personal · 100%", "Codex", "main · Pro · 7%", "spare · Pro · 0%", "Add account…",
@@ -48,8 +50,7 @@ public sealed partial class SiteFiguresTests
         var focused = new Dictionary<string, string>();
         foreach (var (at, name) in new[] { (nearClock, "by-the-clock"), (middle, "mid-screen") })
         {
-            HiddenWindows.OpenMenu(launched.Process, at.X, at.Y);
-            var menu = Menu(launched, at);
+            var menu = MenuOfAccounts(launched, at);
             placed[name] = menu.BoundingRectangle;
             focused[name] = OwnsForeground(launched) ? FocusedName(launched) : "foreground held";
             seen.Add($"{name}: opened at {at.X},{at.Y}, menu {menu.BoundingRectangle}, focused {Focused(launched)}");
@@ -85,8 +86,7 @@ public sealed partial class SiteFiguresTests
         launched.Running();
         var screen = launched.Automation.GetDesktop().BoundingRectangle;
         var at = new Point(screen.Width / 2, screen.Height / 2);
-        HiddenWindows.OpenMenu(launched.Process, at.X, at.Y);
-        var menu = Menu(launched, at);
+        var menu = MenuOfAccounts(launched, at);
         RequireForeground(launched);
 
         var opened = FocusedName(launched);
@@ -140,7 +140,7 @@ public sealed partial class SiteFiguresTests
         Until(() => SelectedAccounts(window).Length > 0);
         var clicked = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
         Press(VirtualKeyShort.DELETE);
-        launched.Find(found => found.ByName("Forget").And(found.ByControlType(ControlType.Button)), "the dialog's Forget");
+        Launched.Within(launched.Element("question"), found => found.ByAutomationId("PrimaryButton"), "the dialog's Remove");
         Until(() => InDialog(FocusedId(launched)));
         var asked = Focused(launched);
         var askedId = FocusedId(launched);
@@ -164,7 +164,7 @@ public sealed partial class SiteFiguresTests
 
         Assert.AreEqual("account.claude/personal", clicked.Focused);
         Assert.AreEqual("claude/personal", Joined(clicked.Selected));
-        Assert.AreEqual("PrimaryButton", askedId, "Forget is not focused as the dialog opens");
+        Assert.AreEqual("PrimaryButton", askedId, "Remove is not focused as the dialog opens");
         Assert.IsTrue(forgotten);
         Assert.AreEqual("AppTitleBar", after.Focused);
         Assert.AreEqual("", Joined(after.Selected));
@@ -186,7 +186,7 @@ public sealed partial class SiteFiguresTests
         Until(() => SelectedAccounts(window).Length > 0);
         var clicked = SelectedAccounts(window);
         launched.RightClick(personal);
-        var copy = launched.Find(found => found.ByName("Copy email address").And(found.ByControlType(ControlType.MenuItem)), "Copy email address");
+        var copy = launched.Element("account.copyEmail");
         var rightClicked = SelectedAccounts(window);
         var focused = FocusedName(launched);
         var menu = Around(copy, ControlType.Menu);
@@ -209,8 +209,8 @@ public sealed partial class SiteFiguresTests
 
         Assert.AreEqual("claude/work", Joined(clicked));
         Assert.AreEqual("claude/work", Joined(rightClicked));
-        Assert.AreEqual("Use personal", focused);
-        Assert.AreEqual("Use personal | Sign in again… | Rename… F2 | Open claude.ai | Copy email address Ctrl+C | Forget… Del", Joined(keys));
+        Assert.AreEqual("Switch to personal", focused);
+        Assert.AreEqual("Switch to personal | Sign in again… | Rename… F2 | Open claude.ai | Copy email address Ctrl+C | Remove account… Del", Joined(keys));
         Assert.AreEqual("dana@home.example", copied);
         Assert.AreEqual("claude/work", Joined(after));
     }
@@ -220,7 +220,7 @@ public sealed partial class SiteFiguresTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
-        var use = Launched.Within(launched.Row("claude/personal"), found => found.ByName("Use personal"), "Use personal").AsButton();
+        var use = Launched.Within(launched.Row("claude/personal"), found => found.ByAutomationId("account.action"), "Switch to personal").AsButton();
 
         var switching = false;
         var watch = Stopwatch.StartNew();
@@ -228,12 +228,12 @@ public sealed partial class SiteFiguresTests
         var invoked = watch.ElapsedMilliseconds;
         while (watch.Elapsed < Shortly && !InUse(launched))
         {
-            switching |= launched.Row("claude/personal").FindFirstDescendant(found => found.ByName("Switching")) is not null;
+            switching |= launched.Row("claude/personal").FindFirstDescendant(found => found.ByAutomationId("account.switching")) is not null;
         }
 
         var switched = watch.ElapsedMilliseconds;
         var inUse = InUse(launched);
-        var refresh = launched.Find(found => found.ByName("Refresh").And(found.ByControlType(ControlType.Button)), "Refresh");
+        var refresh = launched.Element("accounts.refresh");
         var dimmed = false;
         watch.Restart();
         refresh.Patterns.Invoke.Pattern.Invoke();
@@ -397,11 +397,32 @@ public sealed partial class SiteFiguresTests
     {
         try
         {
-            return Launched.Lines(launched.Row("claude/personal")).Contains("In use");
+            return launched.Row("claude/personal").FindFirstDescendant(found => found.ByAutomationId("account.inUse")) is not null;
         }
         catch (Exception gone) when (gone is InvalidOperationException or COMException)
         {
             return false;
+        }
+    }
+
+    // The menu lists the accounts once the model has read them, a moment after Pitboard starts, and one opened sooner
+    // lists none: it is opened again over itself until it has them.
+    private static AutomationElement MenuOfAccounts(Launched launched, Point at)
+    {
+        var watch = Stopwatch.StartNew();
+        while (true)
+        {
+            HiddenWindows.OpenMenu(launched.Process, at.X, at.Y);
+            var menu = Menu(launched, at);
+            if (menu.FindFirstChild(found => found.ByAutomationId("menu.account.claude/work")) is not null)
+            {
+                return menu;
+            }
+
+            if (watch.Elapsed > Patience)
+            {
+                throw new AssertFailedException($"the icon's menu listed no account within {Patience}: {launched.Shown()}");
+            }
         }
     }
 
@@ -410,7 +431,7 @@ public sealed partial class SiteFiguresTests
     private static AutomationElement Menu(Launched launched, Point at)
     {
         Thread.Sleep(1000);
-        var item = launched.Find(found => found.ByName("Open Pitboard").And(found.ByControlType(ControlType.MenuItem)), $"the menu opened at {at}");
+        var item = launched.Find(found => found.ByAutomationId("menu.openPitboard"), $"the menu opened at {at}");
         var menu = Around(item, ControlType.Menu);
         Assert.IsTrue(Until(() => menu.BoundingRectangle.Contains(item.BoundingRectangle) && !item.IsOffscreen), $"no menu opened at {at}");
         Thread.Sleep(500);
@@ -421,7 +442,7 @@ public sealed partial class SiteFiguresTests
     private static bool Until(Func<bool> condition) =>
         Retry.WhileFalse(condition, Shortly, TimeSpan.FromMilliseconds(100), ignoreException: true).Result;
 
-    // The Forget dialog's buttons.
+    // The Remove dialog's buttons.
     private static bool InDialog(string focused) => focused is "PrimaryButton" or "SecondaryButton" or "CloseButton";
 
     private static string Describe(AutomationElement element)

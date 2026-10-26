@@ -35,24 +35,6 @@ extension UsageLevel {
     }
 }
 
-/// Which side of an even pace a limit is on, as the mark on its bar is tinted: red over,
-/// green under. The words beside the bar say it too, in the core's own words, so the colour
-/// only repeats them. Over is the one worth reading at a glance, so it is the one whose
-/// words are tinted; under and even are said in the secondary style every other figure is.
-extension PaceStanding {
-    var tint: Color {
-        switch self {
-        case .over: .red
-        case .under: .green
-        case .even: .secondary
-        }
-    }
-
-    var wordsStyle: AnyShapeStyle {
-        self == .over ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary)
-    }
-}
-
 /// VoiceOver is told a notice's severity in the model's word, `PanelNotice.spokenSeverity`.
 extension Severity {
     var symbol: String {
@@ -131,4 +113,13 @@ extension View {
     func footnote() -> some View {
         explanatory().frame(maxWidth: .infinity, alignment: .leading)
     }
+}
+
+// What the UI tests find a control by: the model's case it shows or sends, "switchTo", and for an
+// intent that puts up a sheet, the sheet's, "rename".
+func caseName(_ value: some Any) -> String {
+    if let intent = value as? Intent, case .presentSheet(let sheet) = intent {
+        return caseName(sheet)
+    }
+    return String(String(describing: value).prefix { $0 != "(" })
 }

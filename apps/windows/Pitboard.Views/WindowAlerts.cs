@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Pitboard.Windows;
 
@@ -68,21 +69,26 @@ public sealed partial class WindowAlerts : IDisposable
         }
     }
 
-    private static ContentDialog Dialog(WindowAlert alert) => alert switch
+    private static ContentDialog Dialog(WindowAlert alert)
     {
-        WindowAlert.Failed failed => new ContentDialog
+        var (dialog, id) = alert switch
         {
-            Title = failed.Text.Title,
-            Content = failed.Text.Message,
-            CloseButtonText = "OK",
-        },
-        WindowAlert.Asking asked => new ContentDialog
-        {
-            Title = asked.Question.Title,
-            Content = asked.Question.Message,
-            PrimaryButtonText = asked.Question.Confirm,
-            CloseButtonText = "Cancel",
-        },
-        _ => throw new ArgumentOutOfRangeException(nameof(alert)),
-    };
+            WindowAlert.Failed failed => (new ContentDialog
+            {
+                Title = failed.Text.Title,
+                Content = failed.Text.Message,
+                CloseButtonText = "OK",
+            }, "failure"),
+            WindowAlert.Asking asked => (new ContentDialog
+            {
+                Title = asked.Question.Title,
+                Content = asked.Question.Message,
+                PrimaryButtonText = asked.Question.Confirm,
+                CloseButtonText = "Cancel",
+            }, "question"),
+            _ => throw new ArgumentOutOfRangeException(nameof(alert)),
+        };
+        AutomationProperties.SetAutomationId(dialog, id);
+        return dialog;
+    }
 }

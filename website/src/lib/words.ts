@@ -128,7 +128,7 @@ export function paceColumn(p: Pace): string {
   return `${whole(Math.abs(p.delta))}% ${p.standing} pace`;
 }
 
-// words.rs `time_to_run_out` and `runs_out`; present/words.rs `runs_out_in` for the menu.
+// words.rs `time_to_run_out` and `runs_out`
 export const timeToRunOut = (inSeconds: number) => (inSeconds >= MINUTE ? span(inSeconds) : null);
 
 export function runsOut(limit: string, inSeconds: number): string {
@@ -138,11 +138,6 @@ export function runsOut(limit: string, inSeconds: number): string {
     : `${limit} limit is about to run out`;
 }
 
-export function runsOutIn(inSeconds: number): string {
-  const left = timeToRunOut(inSeconds);
-  return left ? `runs out in ${left}` : "about to run out";
-}
-
 // state.rs `RENEW_WITHIN` and `renewal_due`
 export const RENEW_WITHIN = 3 * DAY;
 export const renewalDue = (refreshExpiresAt: number, now: number) => {
@@ -150,32 +145,12 @@ export const renewalDue = (refreshExpiresAt: number, now: number) => {
   return left >= 1 && left < RENEW_WITHIN;
 };
 
-// words.rs `parked_life`, `parked_life_column`, `session_life` and `session_life_column`
-export function parkedLife(refreshExpiresAt: number | undefined, now: number): string | null {
-  if (refreshExpiresAt === undefined) return null;
-  const left = refreshExpiresAt - now;
-  if (left <= 0) return "Its parked login has expired";
-  const days = Math.floor(left / DAY);
-  if (days === 0) return "Parked login good for under a day";
-  return days === 1
-    ? "Parked login good for 1 more day"
-    : `Parked login good for ${days} more days`;
-}
-
+// words.rs `parked_life_column` and `session_life_column`
 export function parkedLifeColumn(refreshExpiresAt: number, now: number): string {
   const left = refreshExpiresAt - now;
   if (left <= 0) return "expired";
   if (renewalDue(refreshExpiresAt, now)) return `expires in ${span(left)}`;
   return `good for ${span(left)}`;
-}
-
-export function sessionLife(sessionExpiresAt: number | undefined, now: number): string | null {
-  if (sessionExpiresAt === undefined) return null;
-  const left = sessionExpiresAt - now;
-  if (left <= 0) return "Its sign-in may have lapsed";
-  const days = Math.floor(left / DAY);
-  if (days === 0) return "Its sign-in may lapse in under a day";
-  return days === 1 ? "Its sign-in may lapse in 1 day" : `Its sign-in may lapse in ${days} days`;
 }
 
 export function sessionLifeColumn(sessionExpiresAt: number, now: number): string {
@@ -258,8 +233,8 @@ export const openSiteAs = (site: string, label: string) => `Open ${site} as ${la
 
 export const menuTitle = (a: Account) => (a.plan ? `${a.label} · ${a.plan}` : a.label);
 
-// present/accounts.rs `runs_out_first`: which limit of the account in use runs out first at its
-// pace, and in how many seconds.
+// status.rs `Row::lasts`: which limit of the account in use runs out first at its pace, and in
+// how many seconds, which `pitboard` says under its bars.
 export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: number } | null {
   if (!isInUse(a, w)) return null;
   let first: { limit: Limit; inSeconds: number } | null = null;
@@ -271,50 +246,128 @@ export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: n
   return first;
 }
 
-// present/accounts.rs `limits_said`: the line under an account in the menu, or its email where
-// nothing is read of it yet.
-export function menuLine(a: Account, w: World): string {
-  if (a.limits.length === 0) return a.tool === "desktop" ? "No usage read" : a.email;
-  const first = runsOutFirst(a, w);
-  const said = a.limits.map((l) => {
-    const runs = first?.limit === l ? ` (${runsOutIn(first.inSeconds)})` : "";
-    return `${scopedLimitName(l)} ${figure(l.percent)}${runs}`;
-  });
-  return capitalised(said.join(", "));
+// The system an app runs on, whose words differ in case alone (present/words.rs `titled`): title
+// case on macOS, sentence case on Windows.
+export type System = Extract<Platform, "macos" | "windows">;
+export const titled = (system: System, mac: string, win: string) =>
+  system === "windows" ? win : mac;
+
+const uncapitalised = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+// present/words.rs `span`: "2 hr 9 min", "1 day 3 hr", "under a minute".
+export function appSpan(seconds: number): string {
+  const minutes = Math.floor(Math.max(seconds, 0) / MINUTE);
+  const [days, hours, rest] = [
+    Math.floor(minutes / 1440),
+    Math.floor(minutes / 60) % 24,
+    minutes % 60,
+  ];
+  if (days === 0 && hours === 0) return rest === 0 ? "under a minute" : `${rest} min`;
+  if (days === 0) return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+  const day = days === 1 ? "1 day" : `${days} days`;
+  return hours === 0 ? day : `${day} ${hours} hr`;
 }
 
-// present/accounts.rs `limit_row`: one limit as a row of its account's bars.
+// present/mod.rs `clock_of`: a moment as the app's clock says it, with its weekday on another day
+// than `now`, in the world's en-GB regional format.
+export function clockAt(at: number, now: number): string {
+  const day = (t: number) => Math.floor((t + ZONE) / DAY);
+  return day(at) === day(now) ? hm(at) : `${weekdays[local(at).getUTCDay()]} ${hm(at)}`;
+}
+
+// present/words.rs `limit_short` and `limit_title`: "5-hour" and "Weekly (Sonnet 4.5)" beside a
+// bar, "5-hour limit" and "Weekly limit (Sonnet 4.5)" where a limit is named alone.
+export const limitShort = (limit: Limit) =>
+  limit.scope ? `${capitalised(limitName(limit))} (${limit.scope})` : capitalised(limitName(limit));
+export const limitTitle = (limit: Limit) =>
+  limit.scope
+    ? `${capitalised(limitName(limit))} limit (${limit.scope})`
+    : `${capitalised(limitName(limit))} limit`;
+
+// present/accounts.rs `limit_row`'s reset: "Resets 22:00", "Resets Mon 14:50", "Resetting now".
+export const resetsSaid = (at: number | null, now: number) =>
+  at === null ? "" : at <= now ? "Resetting now" : `Resets ${clockAt(at, now)}`;
+
+// present/words.rs `sign_in_expires`: a saved sign-in due to expire, or a Claude Desktop one that
+// may have lapsed.
+export function signInExpires(left: number, lapses: boolean): string {
+  if (left <= 0) return lapses ? "Sign-in may have expired" : "Sign-in expired";
+  const days = Math.floor(left / DAY);
+  const may = lapses ? "may expire" : "expires";
+  if (days === 0) return `Sign-in ${may} today`;
+  return days === 1 ? `Sign-in ${may} in 1 day` : `Sign-in ${may} in ${days} days`;
+}
+
+// status.rs `Standing::LoginExpired`: a saved sign-in past its life, which only a sign-in brings
+// back (present/words.rs `sign_in_standing`).
+export const SIGN_IN_EXPIRED = "Sign-in expired";
+export const signInExpired = (a: Account, w: World) =>
+  !isInUse(a, w) && a.refreshExpiresAt !== undefined && a.refreshExpiresAt <= w.now;
+
+// present/accounts.rs `limits_said`, with `in_place_of_limits` before it: the line under an account
+// in the menu, "5-hour 59% used, Weekly 73%", the last limit it reached until that resets, or what
+// stands in their way.
+export function menuLine(a: Account, w: World, system: System = "macos"): string {
+  if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
+  if (a.limits.length === 0) return a.tool === "desktop" ? "No usage read" : a.email;
+  // Rust's `max_by_key` keeps the last of the latest
+  const reached = a.limits
+    .filter((l) => (l.resetsAt === null || l.resetsAt > w.now) && l.percent >= 100)
+    .reduce<Limit | null>(
+      (last, l) => (!last || (l.resetsAt ?? Infinity) >= (last.resetsAt ?? Infinity) ? l : last),
+      null,
+    );
+  if (reached)
+    return reached.resetsAt === null
+      ? `${limitTitle(reached)} reached`
+      : `${limitTitle(reached)} reached, resets ${clockAt(reached.resetsAt, w.now)}`;
+  return a.limits
+    .map((l, i) =>
+      i === 0
+        ? `${limitShort(l)} ${figure(l.percent)} used`
+        : `${system === "windows" ? uncapitalised(limitShort(l)) : limitShort(l)} ${figure(l.percent)}`,
+    )
+    .join(", ");
+}
+
+// present/accounts.rs `limit_row`: one limit as a row of its account's bars, and as one sentence
+// (present/words.rs `spoken_limit`).
 export interface LimitRow {
   short: string;
   percent: number;
   figure: string;
   level: Level;
   resets: string;
-  pace: { expected: number; standing: Standing; said: string } | null;
+  spoken: string;
 }
 
 export function limitRow(limit: Limit, w: World): LimitRow {
-  const p = pace(limit, w);
+  const said = resetsSaid(limit.resetsAt, w.now);
   return {
-    short: limitColumn(limit),
+    short: limitShort(limit),
     percent: limit.percent,
     figure: figure(limit.percent),
     level: level(limit.percent),
-    resets: limit.resetsAt === null ? "" : resets(limit.resetsAt, w.now),
-    pace: p && { expected: p.expected, standing: p.standing, said: paceColumn(p) },
+    resets: said,
+    spoken: spokenLimit(limitTitle(limit), limit.percent, said),
   };
 }
+
+export const spokenLimit = (title: string, percent: number, resets: string) => {
+  const used = `${title}, ${whole(percent)} percent used`;
+  return resets ? `${used}, ${uncapitalised(resets)}` : used;
+};
 
 // The in-use account closest to running out, a tie going to Claude Code (reference/mac-app#menu-bar-item).
 export const fullest = (a: Account) => Math.max(...a.limits.map((l) => whole(l.percent)));
 const inUseOf = (w: World, tool: Tool) => w.accounts.find((a) => a.tool === tool && isInUse(a, w))!;
-const titled = (w: World) =>
+const barAccount = (w: World) =>
   (["claude", "codex"] as Tool[])
     .map((tool) => inUseOf(w, tool))
     .reduce((best, a) => (fullest(a) > fullest(best) ? a : best));
 
 export function menuBarTitle(w: World): string {
-  const shown = titled(w);
+  const shown = barAccount(w);
   return `${shown.label} ${fullest(shown)}%`;
 }
 
@@ -322,89 +375,38 @@ export function menuBarTitle(w: World): string {
 // only, while its spoken name stays whole.
 export function menuBarShown(w: World, shows: "nameAndUsage" | "usage" | "icon"): string {
   if (shows === "icon") return "";
-  return shows === "usage" ? `${fullest(titled(w))}%` : menuBarTitle(w);
+  return shows === "usage" ? `${fullest(barAccount(w))}%` : menuBarTitle(w);
 }
 
 // The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
-export const menuBarLevel = (w: World) => level(fullest(titled(w)));
+export const menuBarLevel = (w: World) => level(fullest(barAccount(w)));
 
 // The menu bar item's spoken name: Pitboard, its title, and the tool where more than one is read
-// (present/accounts.rs `menu_bar`).
+// (present/words.rs `bar_spoken`).
 export const menuBarSpoken = (w: World) =>
-  ["Pitboard", menuBarTitle(w), toolName(titled(w).tool)].join(", ");
+  ["Pitboard", menuBarTitle(w), toolName(barAccount(w).tool)].join(", ");
 
-// An account's row and its button, as VoiceOver and Narrator say them (present/accounts.rs `item`
-// and `action`).
+// An account's row and its button, as VoiceOver and Narrator say them (present/words.rs
+// `row_spoken` and `switch_account`).
 export const accountSpoken = (a: Account, w: World) =>
-  [a.label, a.plan, isInUse(a, w) ? "in use" : null].filter((s) => s !== null).join(", ");
-export const useSpoken = (a: Account) => `Use ${a.label}`;
-
-// present/words.rs `rounded_half_even`, `units` and `spoken_span`: "1 hour, 30 minutes".
-const halfEven = (n: number, d: number) => {
-  const whole = Math.floor(n / d);
-  const twice = 2 * (n - whole * d);
-  return twice < d ? whole : twice > d ? whole + 1 : whole + (whole & 1);
-};
-const units = (count: number, unit: string) => (count === 1 ? `1 ${unit}` : `${count} ${unit}s`);
-
-export function spokenSpan(seconds: number): string {
-  const s = Math.max(seconds, MINUTE);
-  const minutes = halfEven(s, MINUTE);
-  const counts: [number, number, string][] = [
-    [Math.floor(minutes / (24 * 60)), DAY, "day"],
-    [Math.floor((minutes % (24 * 60)) / 60), HOUR, "hour"],
-    [minutes % 60, MINUTE, "minute"],
-  ];
-  const named = counts.filter(([count]) => count > 0).slice(0, 2);
-  if (named.length === 1) return units(halfEven(s, named[0][1]), named[0][2]);
-  const [[, first, firstUnit], [, second, secondUnit]] = named;
-  let whole = Math.floor(s / first);
-  let part = halfEven(s - whole * first, second);
-  if (part * second === first) {
-    whole += 1;
-    part = 0;
-  }
-  return `${units(whole, firstUnit)}, ${units(part, secondUnit)}`;
-}
-
-// present/words.rs `spoken_limit`: a limit's row read as one sentence, from its name, its share,
-// its pace and the seconds until it resets.
-export function spokenLimitOf(
-  name: string,
-  percent: number,
-  resettingIn: number | null,
-  p: Pace | null,
-): string {
-  let said = `${name} limit, ${whole(percent)} percent used`;
-  if (p) {
-    const points = whole(Math.abs(p.delta));
-    said +=
-      p.standing === "even"
-        ? ", on an even pace"
-        : `, ${points} percent ${p.standing} an even pace`;
-  }
-  if (resettingIn === null) return said;
-  return resettingIn <= 0
-    ? `${said}, resetting now`
-    : `${said}, resets in ${spokenSpan(resettingIn)}`;
-}
-
-export const spokenLimit = (limit: Limit, w: World) =>
-  spokenLimitOf(
-    scopedLimitName(limit),
-    limit.percent,
-    limit.resetsAt === null ? null : limit.resetsAt - w.now,
-    pace(limit, w),
-  );
+  [
+    a.label,
+    a.plan,
+    isInUse(a, w) ? "in use" : null,
+    signInExpired(a, w) ? uncapitalised(SIGN_IN_EXPIRED) : null,
+  ]
+    .filter((s) => s !== null)
+    .join(", ");
+export const switchSpoken = (a: Account) => `Switch to ${a.label}`;
 
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
-// the line the menu shows under it (present/accounts.rs `menu_bar`).
+// the line the menu shows under it (present/words.rs `bar_tip`).
 export const trayTip = (w: World) =>
   [
     "Pitboard",
     ...(["claude", "codex"] as Tool[]).map((tool) => {
       const a = inUseOf(w, tool);
-      return `${a.label} (${toolName(tool)}): ${menuLine(a, w)}`;
+      return `${a.label} (${toolName(tool)}): ${menuLine(a, w, "windows")}`;
     }),
   ].join("\n");
 
@@ -416,43 +418,68 @@ export const shellTip = (tip: string) =>
     ? tip
     : tip.slice(0, /[\uD800-\uDBFF]/.test(tip[TIP_LENGTH - 1]) ? TIP_LENGTH - 1 : TIP_LENGTH);
 
+// A notification's words where each system says them in its own case.
+export type Said = Record<System, string>;
+const bothSaid = (mac: string, win: string): Said => ({ macos: mac, windows: win });
+
+// present/words.rs `limit_notification`: "5-Hour Limit Almost Reached", "Weekly limit reached".
+export function limitNotification(limit: Limit, reached: boolean): Said {
+  const headed = limitName(limit).split("-").map(capitalised).join("-");
+  const title = `${headed} Limit${limit.scope ? ` (${limit.scope})` : ""}`;
+  return reached
+    ? bothSaid(`${title} Reached`, `${limitTitle(limit)} reached`)
+    : bothSaid(`${title} Almost Reached`, `${limitTitle(limit)} almost reached`);
+}
+
+// present/words.rs `switch_button`: macOS draws the button its notification's category registered,
+// and a toast takes any.
+export const switchButton = (label: string): Said => bothSaid("Switch", `Switch to ${label}`);
+export const SWITCH_BACK = bothSaid("Switch Back", "Switch back");
+
+// present/words.rs `has_used_share` and `other_used`: the at-limit notification's body.
+export const hasUsedShare = (label: string, used: string) => `${label} has used ${used}.`;
+export const otherUsed = (label: string, left: number | null) =>
+  left === null ? `${label} has no such limit.` : `${label} has used ${Math.max(100 - left, 0)}%.`;
+
 // The notification once a limit of the account in use reaches the share (present/notices.rs
-// `at_limit_notice`): personal's weekly limit, with work's room in it.
-export const headsUpTitle = (label: string, limit: Limit, used: number) =>
-  `${label} has used ${used}% of its ${scopedLimitName(limit)} limit`;
+// `at_limit_notice`): personal's weekly limit, with what work has used of its own.
 const weekly = (label: string) => account(label).limits.find((l) => l.lengthSeconds === WEEK)!;
+const workLeft = 100 - whole(weekly("work").percent);
 export const headsUp = {
   account: "personal",
-  title: headsUpTitle("personal", weekly("personal"), share),
+  title: limitNotification(weekly("personal"), false),
   tool: "Claude Code",
-  body: `work has ${100 - whole(weekly("work").percent)}% of its own left.`,
-  button: "Switch",
+  body: `${hasUsedShare("personal", `${share}%`)} ${otherUsed("work", workLeft)}`,
+  button: switchButton("work"),
 };
 
-// The limit that runs out first, in the sentence the window's note and `pitboard` say it in.
+// The limit that runs out first, in the sentence `pitboard` says it in.
 export function runsOutNote(a: Account, w: World): string | null {
   const first = runsOutFirst(a, w);
   return first ? runsOut(scopedLimitName(first.limit), first.inSeconds) : null;
 }
 
-// present/accounts.rs `stale_note`: when Pitboard last read a Claude Desktop login in use, which
-// is also its item's tooltip in the menu.
+// present/words.rs `read_ago`: when Pitboard last read a Claude Desktop login in use, which is also
+// its item's tooltip in the menu.
 export const staleNote = (a: Account, w: World) =>
   isInUse(a, w) && a.readAt !== undefined
-    ? `Read ${span(w.now - a.readAt)} ago, with Claude closed`
+    ? `Read ${appSpan(w.now - a.readAt)} ago, with Claude closed`
     : null;
 
-// present/accounts.rs `item`'s notes under an account in the window, then where it stands for
-// warm-ups, where it is turned on for them.
-export function notes(a: Account, w: World, warm: string | null): string[] {
-  const on = isInUse(a, w);
-  const runs = runsOutNote(a, w);
-  return [
-    staleNote(a, w),
-    runs && capitalised(runs),
-    on ? null : (parkedLife(a.refreshExpiresAt, w.now) ?? sessionLife(a.sessionExpiresAt, w.now)),
-    warm,
-  ].filter((n): n is string => n !== null);
+// present/accounts.rs `item`'s lines under an account in the window: when a Claude Desktop login in
+// use was read, a saved sign-in that has expired or soon does, and where it stands for warm-ups,
+// where it is turned on for them.
+export function rowLines(a: Account, w: World, warm: string | null): string[] {
+  const parked = !isInUse(a, w);
+  const ended =
+    parked && a.refreshExpiresAt !== undefined
+      ? a.refreshExpiresAt <= w.now || renewalDue(a.refreshExpiresAt, w.now)
+        ? signInExpires(a.refreshExpiresAt - w.now, false)
+        : null
+      : parked && a.sessionExpiresAt !== undefined && a.sessionExpiresAt <= w.now
+        ? signInExpires(a.sessionExpiresAt - w.now, true)
+        : null;
+  return [staleNote(a, w), ended, warm].filter((n): n is string => n !== null);
 }
 
 // The world's warm-up note: personal's period runs until its five hours reset.
@@ -571,7 +598,7 @@ export function statusLine(w: World): string {
 // `change_outcome` and `change_caller`).
 const verbs: Record<string, string> = {
   use: "Switch",
-  enroll: "Enrol",
+  enroll: "Add",
   "warm-up": "Warm-up",
   "warm-on": "Warm-up turned on",
   "warm-off": "Warm-up turned off",
@@ -607,22 +634,32 @@ const moreVerbs: Record<string, string> = {
   switch: "Switch",
   "auto-switch": "Automatic switch",
   "auto-stay": "Automatic switch not made",
-  forget: "Forget",
+  forget: "Remove",
   rename: "Rename",
-  renew: "Renew",
-  abandon: "Give up on a switch",
+  renew: "Sign-in kept fresh",
+  abandon: "Cancel a switch",
   repair: "Repair",
   adopt: "Adopt",
   uninstall: "Uninstall",
-  "in-use": "Login in use changed",
-  stow: "Put away a login left in a file",
-  park: "Park for a sign-in",
+  "in-use": "Sign-in in use changed",
+  stow: "Clean up a leftover sign-in file",
+  park: "Sign out for a sign-in",
 };
 const moreOutcomes: Record<string, string> = {
   second_sign_in: "Second sign-in",
-  warm_up_not_started: "No period started",
-  warm_up_limit_reached: "A limit is used up",
-  warm_up_login_refused: "Login refused",
+  warm_up_not_started: "Warm-up didn’t start",
+  warm_up_limit_reached: "Limit reached",
+  warm_up_login_refused: "Sign-in refused",
+  parked_login_expired: "Sign-in expired",
+  parked_login_refused: "Sign-in no longer works",
+  nothing_parked: "Not signed in",
+  already_enrolled: "Already added",
+  live_account_not_enrolled: "Account in use not added",
+  login_replaced: "Sign-in replaced",
+  no_login: "No sign-in",
+  already_parked: "Already saved",
+  parked_now: "Saved",
+  park_kept: "Saved sign-in kept",
   warm_up_unreachable: "Anthropic out of reach",
   warm_up_timed_out: "Took too long",
   warm_up_failed: "Claude Code failed",
@@ -691,7 +728,7 @@ export function atLimitNote(p: Preferences): string | null {
     case "notify":
       return `Pitboard notifies you once a limit of the account in use reaches ${p.share}%, while the app is open.`;
     case "switch":
-      return `Pitboard switches Claude Code once a limit of the account in use reaches ${p.share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
+      return `Pitboard switches Claude Code at ${p.share}%, and its running sessions follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
   }
 }
 
@@ -737,6 +774,12 @@ export function warmSaid(standing: WarmStanding, moment: (at: number) => string 
       }
   }
 }
+
+// present/words.rs `warm_standing`: the core's words, but for a saved sign-in past its life.
+export const appWarmSaid = (standing: WarmStanding) =>
+  standing.stands === "held" && standing.why === "parked_login_expired"
+    ? "can’t warm up: its sign-in expired"
+    : warmSaid(standing);
 
 // time.rs `moment`: "20:51" today, "Oct 14 05:53" on another day.
 export function moment(at: number, now: number): string {

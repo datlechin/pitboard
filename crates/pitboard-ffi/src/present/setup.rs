@@ -4,10 +4,9 @@
 use super::accounts::in_order;
 use super::notices::INSTALL_CLAUDE_CODE;
 use super::words;
-use super::{AccountsShown, Choice, Footing, Seen, SetupLink, SetupStep};
+use super::{AccountsShown, Choice, Footing, Seen, SetupStep};
 use crate::model::state::in_its_app;
 use crate::model::{Intent, Sheet, Tip};
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 
 /// How far along setting Pitboard up this machine is, worked out across every tool.
@@ -34,12 +33,6 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
             Footing::CodexUnused
         } else {
             Footing::NoOneSignedIn
-        };
-    }
-    if let Some(login) = seen.unnamed().next() {
-        return Footing::Unnamed {
-            provider: login.provider.clone(),
-            email: login.email.clone(),
         };
     }
     // Not before the preferences are in, which say which tools somebody declined it for: a
@@ -72,9 +65,6 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
         return Footing::CodexUnused;
     }
     let preferences = &seen.state.preferences;
-    if seen.state.opens_at_login == Some(false) && !preferences.declined(Tip::OpenAtLogin) {
-        return Footing::NotOpenedAtLogin;
-    }
     let switching = accounts
         .iter()
         .filter(|account| account.provider == ProviderId::Claude.code() && account.label.is_some())
@@ -104,30 +94,6 @@ fn codex_unused(seen: &Seen) -> bool {
 /// has usually never run a command and may never want to.
 pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
     match footing {
-        Footing::Unnamed { provider, email } => {
-            let to = seen
-                .tool_if_shown(provider)
-                .map(|tool| format!(" to {tool}"))
-                .unwrap_or_default();
-            Some(SetupStep {
-                title: words::GIVE_IT_A_NAME.into(),
-                detail: format!(
-                    "{email} is signed in{to}. Pitboard parks logins under a name you choose, \
-                     and can’t park this one until it has one."
-                ),
-                actions: vec![Choice {
-                    title: "Name…".into(),
-                    intent: Intent::PresentSheet {
-                        sheet: Sheet::Name {
-                            provider: provider.clone(),
-                            email: email.clone(),
-                        },
-                    },
-                    enabled: true,
-                }],
-                link: None,
-            })
-        }
         Footing::OnlyOne { provider, label } => {
             let in_its_app = in_its_app(provider);
             let named = if in_its_app {
@@ -135,25 +101,13 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             } else {
                 seen.tool_if_shown(provider)
             };
-            let title = words::add_a_second(named.as_deref());
-            let tool = named.map(|tool| format!("{tool} ")).unwrap_or_default();
-            let adding = if in_its_app {
-                format!(
-                    "Adding another parks this one while you sign in to the other in {}.",
-                    seen.program_of(provider)
-                )
-            } else {
-                "Adding another signs in to it and parks its login beside this one.".into()
-            };
+            let app = in_its_app.then(|| seen.program_of(provider));
             Some(SetupStep {
-                title,
-                detail: format!(
-                    "{label} is the only {tool}account Pitboard knows, so there’s nothing to \
-                     switch to. {adding}"
-                ),
+                title: words::add_a_second(named.as_deref()),
+                detail: words::only_one(label, named.as_deref(), app),
                 actions: vec![
                     Choice {
-                        title: words::titled(seen.os, "Add Account…", "Add account…"),
+                        title: words::add_account(seen.os, true),
                         intent: Intent::PresentSheet {
                             sheet: Sheet::Add {
                                 provider: Some(provider.clone()),
@@ -164,79 +118,41 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                     // Somebody may keep one account on purpose and watch its limits, so the
                     // nudge can be declined, for its tool alone.
                     Choice {
-                        title: words::titled(seen.os, "Not Now", "Not now"),
+                        title: words::not_now(seen.os),
                         intent: Intent::DeclineSecondAccount {
                             provider: provider.clone(),
                         },
                         enabled: true,
                     },
                 ],
-                link: None,
             })
         }
         Footing::CodexUnused => Some(SetupStep {
-            title: "Use Pitboard with Codex".into(),
-            detail: "Codex is installed. Pitboard reads nothing of it until you add the account \
-                     it’s signed in to."
-                .into(),
+            title: words::USE_WITH_CODEX.into(),
+            detail: words::CODEX_UNUSED.into(),
             actions: vec![
                 Choice {
-                    title: words::titled(seen.os, "Add Codex Account…", "Add Codex account…"),
-                    intent: Intent::NameSignedIn {
+                    title: words::add_codex_account(seen.os),
+                    intent: Intent::Enrol {
                         provider: ProviderId::Codex.code().into(),
                     },
                     enabled: true,
                 },
                 not_now(seen, Tip::UseCodex),
             ],
-            link: None,
-        }),
-        Footing::NotOpenedAtLogin => Some(SetupStep {
-            title: match seen.os {
-                Os::Windows => "Start when you sign in to Windows",
-                Os::MacOs | Os::Linux => "Open Pitboard at login",
-            }
-            .into(),
-            detail: match seen.os {
-                Os::Windows => "Pitboard watches your limits only while it’s running. Its icon \
-                                starts behind the arrow at the end of the taskbar, and Taskbar \
-                                settings can keep it in view."
-                    .into(),
-                Os::MacOs | Os::Linux => {
-                    "Pitboard watches your limits only while it’s open.".into()
-                }
-            },
-            actions: vec![
-                Choice {
-                    title: words::titled(seen.os, "Open at Login", "Turn on"),
-                    intent: Intent::OpensAtLogin { on: true },
-                    enabled: true,
-                },
-                not_now(seen, Tip::OpenAtLogin),
-            ],
-            // The app cannot bring its own icon out of the overflow.
-            link: (seen.os == Os::Windows).then(|| SetupLink {
-                title: "Taskbar settings".into(),
-                link: "ms-settings:taskbar".into(),
-            }),
         }),
         Footing::AtLimitUnchosen => Some(SetupStep {
-            title: "Switch before a limit runs out".into(),
-            detail: format!(
-                "Pitboard notifies you once a limit of the account in use reaches {}%. It can \
-                 switch Claude Code to another of your accounts instead.",
-                seen.state.preferences.threshold().percent()
-            ),
+            title: words::SWITCH_BEFORE_RUNNING_OUT.into(),
+            detail: words::at_limit_tip(seen.state.preferences.threshold().percent()),
             // The settings say what the plans' terms may say of switching by itself.
             actions: vec![
                 Choice {
-                    title: words::titled(seen.os, "Open Settings…", "Open settings"),
+                    title: words::open_settings(seen.os),
                     intent: Intent::ShowLimits,
                     enabled: true,
                 },
                 not_now(seen, Tip::AtLimit),
             ],
-            link: None,
         }),
         Footing::NoClaudeCode | Footing::NoOneSignedIn | Footing::Ready => None,
     }
@@ -244,7 +160,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
 
 fn not_now(seen: &Seen, tip: Tip) -> Choice {
     Choice {
-        title: words::titled(seen.os, "Not Now", "Not now"),
+        title: words::not_now(seen.os),
         intent: Intent::DeclineTip { tip },
         enabled: true,
     }
@@ -260,20 +176,9 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
     let names = pitboard_core::words::listed(&names);
     match footing {
         Footing::NoClaudeCode => AccountsShown::NoTool {
-            title: words::titled(
-                seen.os,
-                "Claude Code Isn’t Installed",
-                "Claude Code isn’t installed",
-            ),
-            detail: format!(
-                "Pitboard switches the logins of {names}, so there is nothing for it to do \
-                 until one of them is installed and signed in once."
-            ),
-            link_title: words::titled(
-                seen.os,
-                "How to Install Claude Code",
-                "How to install Claude Code",
-            ),
+            title: words::claude_code_not_installed(seen.os),
+            detail: words::no_tool(&names),
+            link_title: words::how_to_install_claude_code(seen.os),
             link: INSTALL_CLAUDE_CODE.into(),
         },
         _ if seen.problem().is_some() && seen.accounts().is_empty() => AccountsShown::ReadFailed {
@@ -288,12 +193,10 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
             },
         },
         Footing::NoOneSignedIn => AccountsShown::NoAccounts {
-            title: words::titled(seen.os, "No Accounts", "No accounts"),
-            detail: "Sign in once here and Pitboard parks that login, so signing in to another \
-                     account doesn’t cost you the first."
-                .into(),
+            title: words::no_accounts(seen.os).0,
+            detail: words::no_accounts(seen.os).1.into(),
             add: Choice {
-                title: words::titled(seen.os, "Add Account…", "Add account…"),
+                title: words::add_account(seen.os, true),
                 intent: Intent::PresentSheet {
                     sheet: Sheet::Add { provider: None },
                 },
@@ -301,7 +204,7 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
             },
         },
         _ if seen.state.status.is_none() => AccountsShown::Reading {
-            title: "Reading accounts…".into(),
+            title: words::READING_ACCOUNTS.into(),
         },
         _ => AccountsShown::List,
     }
@@ -310,10 +213,10 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
 /// What the menu says where it has no accounts to list.
 pub(crate) fn menu_accounts_note(seen: &Seen, footing: &Footing) -> Option<String> {
     match &seen.state.status {
-        None if seen.problem().is_none() => Some("Reading accounts…".into()),
-        None => Some(words::NO_ACCOUNTS_TO_SHOW.into()),
+        None if seen.problem().is_none() => Some(words::READING_ACCOUNTS.into()),
+        None => Some(words::no_accounts_to_show(seen.os)),
         Some(status) if status.accounts.is_empty() && *footing != Footing::NoClaudeCode => {
-            Some("No accounts yet".into())
+            Some(words::no_accounts_yet(seen.os))
         }
         Some(_) => None,
     }
@@ -324,19 +227,19 @@ pub(crate) fn menu_accounts_note(seen: &Seen, footing: &Footing) -> Option<Strin
 /// later.
 pub(crate) fn updated_menu(seen: &Seen) -> String {
     if seen.state.reads > 0 {
-        return "Reading…".into();
+        return words::READING.into();
     }
     match seen.state.updated_ms {
         Some(ms) => words::updated(&seen.clock(ms.div_euclid(1000))),
-        None if seen.problem().is_none() => "Not read yet".into(),
-        None => "Showing the last numbers measured".into(),
+        None if seen.problem().is_none() => words::NOT_READ_YET.into(),
+        None => words::SHOWING_LAST_MEASURED.into(),
     }
 }
 
 /// The same, as the window's subtitle says it: nothing before the first read.
 pub(crate) fn updated_window(seen: &Seen) -> String {
     if seen.state.reads > 0 {
-        return "Reading…".into();
+        return words::READING.into();
     }
     seen.state
         .updated_ms
@@ -362,8 +265,7 @@ mod tests {
         assert_eq!(step.title, words::add_a_second(Some("Claude Desktop")));
         assert_eq!(
             step.detail,
-            "work is the only Claude Desktop account Pitboard knows, so there’s nothing to \
-             switch to. Adding another parks this one while you sign in to the other in Claude."
+            words::only_one("work", Some("Claude Desktop"), Some("Claude"))
         );
     }
 
@@ -377,8 +279,7 @@ mod tests {
         };
         assert_eq!(
             detail,
-            "Pitboard switches the logins of Claude Code, Codex and Claude Desktop, so there is \
-             nothing for it to do until one of them is installed and signed in once."
+            words::no_tool("Claude Code, Codex and Claude Desktop")
         );
     }
 }
