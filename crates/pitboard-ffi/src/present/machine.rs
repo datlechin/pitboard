@@ -319,15 +319,16 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     let state = seen.state;
     let at = state.preferences.threshold().percent();
     let choice = state.preferences.at_limit();
-    let follows = words::sessions_follow(
+    let note = words::at_limit_note(
         seen.os,
+        choice,
+        at,
         state
             .warnings
             .iter()
             .any(|warning| warning.code == "fallback_login"),
         pitboard_core::switch::ADOPTION_CEILING_SECONDS,
     );
-    let note = words::at_limit_note(choice, at, &follows);
     let switching = choice == AtLimit::Switch;
     AtLimitShown {
         title: words::BEFORE_RUNNING_OUT.into(),

@@ -293,7 +293,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::SWITCH.into(),
+                title: words::switch_button(OS, "personal"),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -667,7 +667,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::SWITCH.into(),
+                title: words::switch_button(OS, "personal"),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -829,7 +829,7 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
     assert_eq!(shown.at_limit.at_label, words::at_limit_label(95));
     assert_eq!(
         shown.at_limit.note,
-        words::at_limit_note(AtLimit::Notify, 95, "")
+        words::at_limit_note(Os::MacOs, AtLimit::Notify, 95, false, 33)
     );
     assert!(shown.at_limit.share_enabled);
     assert_eq!(

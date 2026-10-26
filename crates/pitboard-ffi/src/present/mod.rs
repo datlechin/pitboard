@@ -952,7 +952,7 @@ mod tests {
                     words::no_accounts(os).0,
                     words::add_account(os, true),
                     words::add_account(os, false),
-                    words::sign_in(os),
+                    words::sign_in_asking(os),
                     words::no_activity(os).0
                 ]
             );

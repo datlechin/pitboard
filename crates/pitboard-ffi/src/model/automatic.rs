@@ -656,13 +656,7 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
-    let note = |os, file_left| {
-        words::at_limit_note(
-            AtLimit::Switch,
-            95,
-            &words::sessions_follow(os, file_left, 33),
-        )
-    };
+    let note = |os, file_left| words::at_limit_note(os, AtLimit::Switch, 95, file_left, 33);
     assert_eq!(model.shown().machine.at_limit.note, note(OS, false));
 
     machine.answer = Ok(super::testing::records::warned(

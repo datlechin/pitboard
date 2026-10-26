@@ -218,12 +218,10 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     };
     // No usage is read for an app's login: the menu's line says so once.
     let in_its_app = crate::model::state::in_its_app(&account.provider);
-    let read_ago = account.read_at.filter(|_| in_its_app).map(|read_at| {
-        words::read_ago(
-            &said::span(seen.now - read_at),
-            seen.program_of(&account.provider),
-        )
-    });
+    let read_ago = account
+        .read_at
+        .filter(|_| in_its_app)
+        .map(|read_at| words::read_ago(seen.now - read_at, seen.program_of(&account.provider)));
     let stale = if problem.is_some() || account.stale == Some(Stale::NoUsage) {
         None
     } else {
@@ -323,7 +321,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         sign_in: if unnamed {
             Some(words::NOT_ADDED_YET.into())
         } else if in_use && account.label.is_some() {
-            Some(words::in_use(seen.os))
+            Some(words::IN_USE.into())
         } else if let Some(standing) = sign_in_standing {
             Some(standing.into())
         } else {
@@ -1378,7 +1376,7 @@ mod tests {
             ..desktop_account("work", true)
         };
         let rows = desktop_rows(vec![work]);
-        let read = words::read_ago(&said::span(2 * 3_600), "Claude");
+        let read = words::read_ago(2 * 3_600, "Claude");
         assert_eq!(rows[0].lines, [read.as_str()]);
         assert!(rows[0].notes.is_empty(), "nothing to do");
         assert_eq!(

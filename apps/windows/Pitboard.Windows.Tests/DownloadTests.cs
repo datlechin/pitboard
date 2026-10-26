@@ -186,7 +186,7 @@ public sealed class DownloadTests
         paused.Pause();
         await Views.Until(() => paused.State == CoreWebView2DownloadState.Interrupted, "the download did not pause", Webs.Patience);
         Console.WriteLine($"CF7: a paused download is {paused.State}, {paused.InterruptReason}, can resume: {paused.CanResume}");
-        Assert.AreEqual("A download is in progress. Quit anyway?", webs.Downloads.QuitQuestion?.Title);
+        Assert.AreEqual("A download is in progress. Exit anyway?", webs.Downloads.QuitQuestion?.Title);
         CollectionAssert.AreEqual(new[] { webs.Own(Main).Store }, webs.Downloads.Stores.ToArray());
 
         paused.Cancel();

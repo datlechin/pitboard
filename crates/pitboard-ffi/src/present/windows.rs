@@ -13,7 +13,7 @@ use crate::account_windows::{
 };
 use crate::model::windows::{Download, Picking};
 use crate::model::{Intent, Sheet};
-use pitboard_core::host::Os;
+use pitboard_core::host::{OS, Os};
 
 /// The account windows, as the model has them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -386,7 +386,7 @@ pub fn downloads_quit_question(running: u32) -> Option<Question> {
     if running == 0 {
         return None;
     }
-    let (title, message, confirm) = words::quit_with_downloads(running);
+    let (title, message, confirm) = words::quit_with_downloads(OS, running);
     Some(Question {
         title,
         message: message.into(),

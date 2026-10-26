@@ -157,18 +157,13 @@ pub fn app_words() -> AppWords {
 pub(crate) fn app_words_on(os: Os) -> AppWords {
     let mac = |words: &str| (os != Os::Windows).then(|| words.to_owned());
     let windows = |words: &str| (os == Os::Windows).then(|| words.to_owned());
-    // Windows writes no ellipsis on a command that opens settings, help or a link.
-    let opens = |title: &str, sentence: &str| match os {
-        Os::Windows => sentence.to_owned(),
-        Os::MacOs | Os::Linux => title.to_owned(),
-    };
     AppWords {
         menu: MenuWords {
             add_account: words::add_account(os, true),
             refresh: words::REFRESH.into(),
             open_pitboard: titled(os, "Open Pitboard", "Open Pitboard"),
-            settings: opens("Settings…", "Settings"),
-            check_for_updates: opens("Check for Updates…", "Check for updates"),
+            settings: titled(os, "Settings…", "Settings"),
+            check_for_updates: titled(os, "Check for Updates…", "Check for updates"),
             about: titled(os, "About Pitboard", "About Pitboard"),
             help: titled(os, "Pitboard Help", "Pitboard help"),
             quit: match os {
@@ -228,7 +223,8 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
                 }
             }
             .into(),
-            open_notification_settings: opens(
+            open_notification_settings: titled(
+                os,
                 "Open Notification Settings…",
                 "Open notification settings",
             ),

@@ -364,6 +364,14 @@ pub(crate) fn update_config(os: Os) -> String {
 
 pub(crate) const SWITCH: &str = "Switch";
 
+// A notification's button: macOS draws the one its category registered, and a toast takes any.
+pub(crate) fn switch_button(os: Os, label: &str) -> String {
+    match os {
+        Os::Windows => switch_to(label),
+        Os::MacOs | Os::Linux => SWITCH.into(),
+    }
+}
+
 pub(crate) fn switch_back(os: Os) -> String {
     titled(os, "Switch Back", "Switch back")
 }
@@ -457,14 +465,15 @@ pub(crate) fn sign_in_to_keep(label: &str) -> String {
     format!("Sign in to {label} again to keep switching to it.")
 }
 
-pub(crate) const SHOW_IN_PITBOARD: &str = "Show in Pitboard";
-
 // What VoiceOver and Narrator call a switching row's spinner.
 pub(crate) const SWITCHING: &str = "Switching";
 
 pub(crate) fn in_use(os: Os) -> String {
-    titled(os, "In Use", "In use")
+    titled(os, "In Use", IN_USE)
 }
+
+// The detail's sign-in line, a value among sentences.
+pub(crate) const IN_USE: &str = "In use";
 
 pub(crate) const CLAUDE_CODE_MISSING: &str = "Claude Code isn’t installed";
 
@@ -524,7 +533,11 @@ pub(crate) fn switch_to(label: &str) -> String {
 
 /// The menu's one item for everything else to know about, more than one of them.
 pub(crate) fn issues(os: Os, count: usize) -> String {
-    titled(os, &format!("{count} Issues"), &format!("{count} issues"))
+    if count == 1 {
+        titled(os, "1 Issue", "1 issue")
+    } else {
+        titled(os, &format!("{count} Issues"), &format!("{count} issues"))
+    }
 }
 
 // "work (Codex)", "work (claude.ai)", where nothing around it says which tool or site.
@@ -662,8 +675,8 @@ pub(crate) fn row_spoken(
 }
 
 // A Claude Desktop login in use, read last while its app was closed.
-pub(crate) fn read_ago(span: &str, program: &str) -> String {
-    format!("Read {span} ago, with {program} closed")
+pub(crate) fn read_ago(seconds: i64, program: &str) -> String {
+    format!("Read {} ago, with {program} closed", span(seconds))
 }
 
 pub(crate) fn open_site(site: &str) -> String {
@@ -758,10 +771,15 @@ pub(crate) const RESETTING_NOW: &str = "Resetting now";
 
 // How long until a reset, to the minute it has not yet reached.
 pub(crate) fn resets_in(seconds: i64) -> String {
+    format!("in {}", span(seconds))
+}
+
+// "2 hr 9 min", "1 day 3 hr", "under a minute".
+fn span(seconds: i64) -> String {
     let minutes = seconds.max(0) / MINUTE;
     let (days, hours, rest) = (minutes / (24 * 60), minutes % (24 * 60) / 60, minutes % 60);
-    let left = match (days, hours, rest) {
-        (0, 0, 0) => return "in under a minute".into(),
+    match (days, hours, rest) {
+        (0, 0, 0) => "under a minute".into(),
         (0, 0, minutes) => format!("{minutes} min"),
         (0, hours, 0) => format!("{hours} hr"),
         (0, hours, minutes) => format!("{hours} hr {minutes} min"),
@@ -769,8 +787,7 @@ pub(crate) fn resets_in(seconds: i64) -> String {
         (1, hours, _) => format!("1 day {hours} hr"),
         (days, 0, _) => format!("{days} days"),
         (days, hours, _) => format!("{days} days {hours} hr"),
-    };
-    format!("in {left}")
+    }
 }
 
 // "5-hour limit reached, resets 6:46 PM": `title` as a heading names the limit.
@@ -1409,9 +1426,8 @@ pub(crate) fn show_diagnostics(os: Os) -> String {
     titled(os, "Show Diagnostics", "Show diagnostics")
 }
 
-// Windows' ellipsis is for a command that asks for more than a yes.
 pub(crate) fn uninstall_pitboard(os: Os) -> String {
-    titled(os, "Uninstall Pitboard…", "Uninstall Pitboard")
+    titled(os, "Uninstall Pitboard…", "Uninstall Pitboard…")
 }
 
 pub(crate) const UNINSTALL_QUESTION: &str = "Uninstall Pitboard?";
@@ -1499,17 +1515,23 @@ pub(crate) const DOWNLOADED: &str = "Downloaded";
 pub(crate) const CANCELLED: &str = "Cancelled";
 
 // Asked before quitting while downloads run: its title, what quitting does, and its button.
-pub(crate) fn quit_with_downloads(running: u32) -> (String, &'static str, &'static str) {
-    let title = if running == 1 {
-        "A download is in progress. Quit anyway?".to_owned()
-    } else {
-        format!("{running} downloads are in progress. Quit anyway?")
+pub(crate) fn quit_with_downloads(os: Os, running: u32) -> (String, &'static str, &'static str) {
+    let (quit, stops) = match os {
+        Os::Windows => (
+            "Exit",
+            "Exiting Pitboard stops them, and they won’t resume.",
+        ),
+        Os::MacOs | Os::Linux => (
+            "Quit",
+            "Quitting Pitboard stops them, and they won’t resume.",
+        ),
     };
-    (
-        title,
-        "Quitting Pitboard stops them, and they will not resume.",
-        "Quit",
-    )
+    let title = if running == 1 {
+        format!("A download is in progress. {quit} anyway?")
+    } else {
+        format!("{running} downloads are in progress. {quit} anyway?")
+    };
+    (title, stops, quit)
 }
 
 pub(crate) fn cannot_open_link(os: Os) -> String {
@@ -1643,31 +1665,30 @@ pub(crate) fn at_limit_choice(os: Os, choice: AtLimit) -> String {
     }
 }
 
-// Under the choice; `follows` says when running sessions follow a switch.
-pub(crate) fn at_limit_note(choice: AtLimit, at: u8, follows: &str) -> Option<String> {
+// Under the choice. Running sessions follow within `seconds` only while the last read found no
+// login file behind the store.
+pub(crate) fn at_limit_note(
+    os: Os,
+    choice: AtLimit,
+    at: u8,
+    file_left: bool,
+    seconds: u32,
+) -> Option<String> {
     match choice {
         AtLimit::Nothing => None,
         AtLimit::Notify => Some(format!(
             "Pitboard notifies you once a limit of the account in use reaches {at}%, while the app \
              is open."
         )),
-        AtLimit::Switch => Some(format!(
-            "Pitboard switches Claude Code to another account at {at}%, and notifies you about \
-             Codex. {follows}"
-        )),
-    }
-}
-
-// Within `seconds` only while the last read found no login file behind the store.
-pub(crate) fn sessions_follow(os: Os, file_left: bool, seconds: u32) -> String {
-    if file_left {
-        format!(
-            "While a sign-in file is left behind {}, Claude Code sessions already running don’t \
-             follow a switch.",
+        AtLimit::Switch if file_left => Some(format!(
+            "Pitboard switches Claude Code at {at}%, but its running sessions don’t follow while a \
+             sign-in file is left behind {}.",
             pitboard_core::words::store_in_front(os)
-        )
-    } else {
-        format!("Sessions already running follow within about {seconds} seconds.")
+        )),
+        AtLimit::Switch => Some(format!(
+            "Pitboard switches Claude Code at {at}%, and its running sessions follow within about \
+             {seconds} seconds."
+        )),
     }
 }
 
@@ -1707,13 +1728,16 @@ pub(crate) fn renewal_about(os: Os, in_its_app: bool) -> String {
         Os::Linux => "This computer",
         Os::Windows => "Your PC",
     };
-    let about = format!(
-        "{machine} refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire."
-    );
     if in_its_app {
-        format!("{about} A saved Claude Desktop sign-in can’t be refreshed.")
+        format!(
+            "{machine} refreshes saved sign-ins, except Claude Desktop’s, once a day so they \
+             don’t expire."
+        )
     } else {
-        about
+        format!(
+            "{machine} refreshes your saved sign-ins once a day, so one you leave alone doesn’t \
+             expire."
+        )
     }
 }
 
@@ -1785,10 +1809,6 @@ pub(crate) fn sign_in_message(tool: &str, again: Option<&str>) -> String {
             "Pitboard opens {tool}’s sign-in in your browser, where you sign in to {label} again."
         ),
     }
-}
-
-pub(crate) fn sign_in(os: Os) -> String {
-    titled(os, "Sign In", "Sign in")
 }
 
 pub(crate) fn add_account(os: Os, asks: bool) -> String {
@@ -2164,7 +2184,7 @@ pub(crate) fn stale_explanation(row: &pitboard_core::status::Row) -> Option<Stri
     let name = tool.name();
     Some(match row.stale? {
         Stale::LoginRefused if row.signed_in && tool == ProviderId::Claude => {
-            "Claude Code’s sign-in no longer works; sign in again".into()
+            "Claude Code’s sign-in no longer works".into()
         }
         Stale::NothingSignedIn => "nothing is signed in".into(),
         Stale::LoginUnreadable if service.is_some() => format!("{name}’s sign-in couldn’t be read"),
@@ -2175,11 +2195,9 @@ pub(crate) fn stale_explanation(row: &pitboard_core::status::Row) -> Option<Stri
             format!("{name}’s session has expired; using {name} renews it")
         }
         Stale::LoginReplaced if tool == ProviderId::Desktop => {
-            "its sign-in was signed out or replaced in Claude; sign in again".into()
+            "its sign-in was signed out or replaced in Claude".into()
         }
-        Stale::LoginReplaced => {
-            "its sign-in was replaced by a sign-in outside Pitboard; sign in again".into()
-        }
+        Stale::LoginReplaced => "its sign-in was replaced by a sign-in outside Pitboard".into(),
         Stale::ParkUnreadable => "its saved sign-in can’t be read".into(),
         Stale::RateLimited => format!("{} is rate limiting usage checks", service?),
         Stale::Unreachable => format!("{} couldn’t be reached", service?),
@@ -2187,7 +2205,7 @@ pub(crate) fn stale_explanation(row: &pitboard_core::status::Row) -> Option<Stri
         Stale::Refused => format!("{} refused to answer for this sign-in", service?),
         Stale::OnHold => format!("{} has put this account on hold", service?),
         Stale::AnswerNotUnderstood => format!("{}’s answer wasn’t understood", service?),
-        Stale::LoginRefused => "its saved sign-in no longer works; sign in again".into(),
+        Stale::LoginRefused => "its saved sign-in no longer works".into(),
         Stale::Interrupted => "the check didn’t finish".into(),
         Stale::NotAsked => format!("read without asking {}", service?),
         Stale::NoUsage => "Pitboard reads no usage for Claude Desktop".into(),
@@ -4079,7 +4097,6 @@ mod tests {
         assert_eq!(MOVE_CANCELLED, "Switch in Claude cancelled");
         assert_eq!(CLEANED_UP, "Cleaned up the leftover sign-in file");
         assert_eq!(SWITCH, "Switch");
-        assert_eq!(SHOW_IN_PITBOARD, "Show in Pitboard");
         assert_eq!(
             awaiting_lines("Claude", "travel", "work", false),
             [
@@ -4300,7 +4317,7 @@ mod tests {
     fn a_sheet_is_titled_as_each_system_titles_one() {
         let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
-        assert_eq!(both(&sign_in), pair("Sign In", "Sign in"));
+        assert_eq!(both(&sign_in_asking), pair("Sign In…", "Sign in…"));
         assert_eq!(
             both(&|os| add_account(os, false)),
             pair("Add Account", "Add account")
@@ -4397,16 +4414,29 @@ mod tests {
             ("Clear", "Downloaded", "Cancelled")
         );
         assert_eq!(
-            quit_with_downloads(1),
+            quit_with_downloads(Os::MacOs, 1),
             (
                 "A download is in progress. Quit anyway?".into(),
-                "Quitting Pitboard stops them, and they will not resume.",
+                "Quitting Pitboard stops them, and they won’t resume.",
                 "Quit"
             )
         );
         assert_eq!(
-            quit_with_downloads(2).0,
-            "2 downloads are in progress. Quit anyway?"
+            quit_with_downloads(Os::Windows, 2),
+            (
+                "2 downloads are in progress. Exit anyway?".into(),
+                "Exiting Pitboard stops them, and they won’t resume.",
+                "Exit"
+            ),
+            "as the icon's menu says Exit"
+        );
+        assert_eq!(
+            (
+                switch_button(Os::MacOs, "personal"),
+                switch_button(Os::Windows, "personal")
+            ),
+            ("Switch".into(), "Switch to personal".into()),
+            "the Mac's category registered Switch"
         );
         assert_eq!(BEFORE_RUNNING_OUT, "Before an account runs out");
         assert_eq!(AT_LIMIT, "When a limit reaches");
@@ -4430,29 +4460,30 @@ mod tests {
             both(AtLimit::Switch),
             ("Switch Automatically".into(), "Switch automatically".into())
         );
-        assert_eq!(at_limit_note(AtLimit::Nothing, 95, "Then."), None);
         assert_eq!(
-            at_limit_note(AtLimit::Notify, 95, "Then.").as_deref(),
+            at_limit_note(Os::MacOs, AtLimit::Nothing, 95, false, 33),
+            None
+        );
+        assert_eq!(
+            at_limit_note(Os::MacOs, AtLimit::Notify, 95, true, 33).as_deref(),
             Some(
                 "Pitboard notifies you once a limit of the account in use reaches 95%, while the \
                  app is open."
             )
         );
         assert_eq!(
-            at_limit_note(AtLimit::Switch, 95, "Then.").as_deref(),
+            at_limit_note(Os::MacOs, AtLimit::Switch, 95, false, 33).as_deref(),
             Some(
-                "Pitboard switches Claude Code to another account at 95%, and notifies you about \
-                 Codex. Then."
+                "Pitboard switches Claude Code at 95%, and its running sessions follow within \
+                 about 33 seconds."
             )
         );
         assert_eq!(
-            sessions_follow(Os::MacOs, false, 33),
-            "Sessions already running follow within about 33 seconds."
-        );
-        assert_eq!(
-            sessions_follow(Os::MacOs, true, 33),
-            "While a sign-in file is left behind the keychain, Claude Code sessions already \
-             running don’t follow a switch."
+            at_limit_note(Os::MacOs, AtLimit::Switch, 95, true, 33).as_deref(),
+            Some(
+                "Pitboard switches Claude Code at 95%, but its running sessions don’t follow while \
+                 a sign-in file is left behind the keychain."
+            )
         );
         assert_eq!(
             (warm_up(Os::MacOs), warm_up(Os::Windows)),
@@ -4515,8 +4546,12 @@ mod tests {
             "stale, sign-in expired"
         );
         assert_eq!(
-            read_ago("2h 00m", "Claude"),
-            "Read 2h 00m ago, with Claude closed"
+            read_ago(2 * 3_600 + 5 * 60, "Claude"),
+            "Read 2 hr 5 min ago, with Claude closed"
+        );
+        assert_eq!(
+            read_ago(30, "Claude"),
+            "Read under a minute ago, with Claude closed"
         );
         assert_eq!(open_site("claude.ai"), "Open claude.ai");
         assert_eq!(open_site_as("claude.ai", "work"), "Open claude.ai as work");
@@ -4831,7 +4866,8 @@ mod tests {
                 uninstall_pitboard(Os::MacOs),
                 uninstall_pitboard(Os::Windows)
             ),
-            ("Uninstall Pitboard…".into(), "Uninstall Pitboard".into())
+            ("Uninstall Pitboard…".into(), "Uninstall Pitboard…".into()),
+            "it asks before it acts"
         );
         assert_eq!(UNINSTALL_QUESTION, "Uninstall Pitboard?");
         assert_eq!(
@@ -5150,8 +5186,8 @@ mod tests {
         );
         assert_eq!(
             renewal_about(Os::MacOs, true),
-            "Your Mac refreshes your saved sign-ins once a day, so one you leave alone doesn’t \
-             expire. A saved Claude Desktop sign-in can’t be refreshed."
+            "Your Mac refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t \
+             expire."
         );
         assert_eq!(
             renewal_about(Os::Windows, false),

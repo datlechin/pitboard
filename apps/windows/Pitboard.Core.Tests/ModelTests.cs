@@ -385,7 +385,9 @@ public sealed class ModelTests
         Assert.IsFalse(clear.Enabled);
         var failed = Assert.IsInstanceOfType<WaitingShown.ReadFailed>(snapshot.AccountWindows.Waiting.Shown);
         Assert.AreEqual("Try Again", failed.Retry.Title);
-        Assert.AreEqual("A download is in progress. Quit anyway?", PitboardFfiMethods.DownloadsQuitQuestion(1)?.Title);
+        Assert.AreEqual(
+            OperatingSystem.IsWindows() ? "A download is in progress. Exit anyway?" : "A download is in progress. Quit anyway?",
+            PitboardFfiMethods.DownloadsQuitQuestion(1)?.Title);
         Assert.IsNull(PitboardFfiMethods.DownloadsQuitQuestion(0));
 
         Intent[] intents =
@@ -918,7 +920,8 @@ public sealed class ModelTests
             new(
                 Id: $"claude/personal/session/-{resetsAt}",
                 Title: LimitReached, Subtitle: "Claude Code", Body: "personal has used 100%. work has used 42%.",
-                Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/work")),
+                Clicked: "accounts",
+                Button: new NotificationButton(OperatingSystem.IsWindows() ? "Switch to work" : "Switch", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
     }

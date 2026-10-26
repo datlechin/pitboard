@@ -170,7 +170,7 @@ fn form_words(seen: &Seen, sheet: &Sheet, tool: &str) -> (String, String) {
     };
     (
         words::sign_in_message(&seen.tool_name(tool), again),
-        words::sign_in(seen.os),
+        words::sign_in_asking(seen.os),
     )
 }
 
@@ -675,7 +675,7 @@ mod tests {
                 .build(),
         );
         let text = form(Sheet::Add { provider: None }, accounts, Vec::new());
-        let sign_in = words::sign_in(Os::MacOs);
+        let sign_in = words::sign_in_asking(Os::MacOs);
         assert_eq!(
             text.tools
                 .iter()

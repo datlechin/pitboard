@@ -1618,7 +1618,13 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     assert_eq!((code.as_str(), &failure), ("state_unreadable", &message));
 
     let item = shown.menu_notices.others.expect("an item");
-    assert_eq!(item.title, words::COULD_NOT_READ_USAGE);
+    assert_eq!(
+        (item.title.as_str(), item.subtitle.as_deref()),
+        (
+            words::issues(OS, 1).as_str(),
+            Some(words::COULD_NOT_READ_USAGE)
+        )
+    );
     assert_eq!(
         item.intent,
         Some(Intent::Show {
@@ -1731,7 +1737,10 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         Some(words::cancel_switch(OS, false))
     );
     let item = shown.menu_notices.others.expect("an item");
-    assert_eq!(item.title, words::SWITCH_WAITING);
+    assert_eq!(
+        (item.title.as_str(), item.subtitle.as_deref()),
+        (words::issues(OS, 1).as_str(), Some(words::SWITCH_WAITING))
+    );
     assert_eq!(
         item.intent,
         Some(Intent::Show {
@@ -2429,7 +2438,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::SWITCH.into(),
+                title: words::switch_button(OS, "work"),
                 clicked: "switch/claude/work".into(),
             }),
         }]

@@ -469,8 +469,8 @@ fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
     .detail;
     assert_eq!(
         (work.signed_in_until, work.sign_in),
-        (None, Some(words::in_use(OS))),
-        "nothing parked in use"
+        (None, Some(words::IN_USE.into())),
+        "nothing parked in use, said as a value on either system"
     );
     let old = described(
         account(Some("old"))
@@ -2714,8 +2714,8 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     assert_eq!(
         menu.others,
         Some(MenuEntry {
-            title: words::warning_heading(&overridden()).into(),
-            subtitle: Some(words::SHOW_IN_PITBOARD.into()),
+            title: words::issues(OS, 1),
+            subtitle: Some(words::warning_heading(&overridden()).into()),
             help: Some("ANTHROPIC_API_KEY is set".into()),
             severity: Some(Severity::Warning),
             intent: Some(Intent::Show {
@@ -3488,7 +3488,7 @@ fn each_sheets_default_button_says_what_it_does() {
         model.send(present_sheet(sheet));
         model.shown().sheet_text.expect("the sheet").confirm
     };
-    let sign_in = words::sign_in(OS);
+    let sign_in = words::sign_in_asking(OS);
     assert_eq!(confirm(Sheet::Add { provider: None }), sign_in);
     assert_eq!(
         confirm(Sheet::SignInAgain {

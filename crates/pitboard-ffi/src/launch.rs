@@ -423,7 +423,7 @@ fn account(row: status::Row, now: i64) -> Account {
         stale: row.stale,
         // In the row's own tool's words: a Codex row is not about Anthropic.
         stale_explanation: crate::present::words::stale_explanation(&row)
-            .map(|said| typeset(&said)),
+            .map(|said| typeset(&words::capitalised(&said))),
         plan: row.plan,
         read_at: row.read_at,
         parked: row.parked.map(|p| Parked {
@@ -1566,16 +1566,16 @@ mod tests {
             },
         ];
         let found = [
-            service::Warning::Recovered(pitboard_core::switch::Recovered {
+            service::Warning::Recovered(switch::Recovered {
                 from: "home".into(),
                 to: label(),
                 finished: true,
             }),
-            service::Warning::MoveSettled(pitboard_core::switch::MoveSettled {
+            service::Warning::MoveSettled(switch::MoveSettled {
                 tool: ProviderId::Desktop,
                 label: "desktop/home".into(),
                 half: pitboard_core::state::Half::Leave,
-                ended: pitboard_core::switch::Ended::Finished,
+                ended: switch::Ended::Finished,
             }),
             service::Warning::ParkedLoginRefused {
                 tool: codex,

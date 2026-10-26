@@ -634,9 +634,15 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     };
     let used = words::has_used_share(&heads_up.ran, &said::figure(heads_up.window.percent));
     RunOutNotice {
-        button: heads_up.instead.as_ref().and_then(|(_, _, switch_to)| {
-            button(words::SWITCH.into(), &Clicked::Switch(switch_to.clone()))
-        }),
+        button: heads_up
+            .instead
+            .as_ref()
+            .and_then(|(instead, _, switch_to)| {
+                button(
+                    words::switch_button(OS, instead),
+                    &Clicked::Switch(switch_to.clone()),
+                )
+            }),
         ..posted(
             format!("{}-{}", heads_up.key_of(), limit.resets_at.unwrap_or(0)),
             title,
@@ -790,19 +796,12 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
         .iter()
         .filter(|notice| !notice.actions.iter().any(|action| action.switches))
         .collect();
+    // Counted, with the first heading under it: title case would change a name a heading holds.
     let others = others.first().map(|first| {
         let one = others.len() == 1;
         MenuEntry {
-            title: if one {
-                first.title.clone()
-            } else {
-                words::issues(seen.os, others.len())
-            },
-            subtitle: Some(if one {
-                words::SHOW_IN_PITBOARD.into()
-            } else {
-                first.title.clone()
-            }),
+            title: words::issues(seen.os, others.len()),
+            subtitle: Some(first.title.clone()),
             help: one.then(|| first.lines.join(" ")),
             severity: Some(first.severity),
             intent: Some(Intent::Show {

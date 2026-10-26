@@ -1529,7 +1529,7 @@ fn a_window_on_windows_offers_no_clear_of_its_downloads() {
 #[test]
 fn quitting_while_downloads_run_asks_first() {
     let question = |running| {
-        let (title, message, confirm) = words::quit_with_downloads(running);
+        let (title, message, confirm) = words::quit_with_downloads(OS, running);
         Question {
             title,
             message: message.into(),
