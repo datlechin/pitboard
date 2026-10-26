@@ -292,11 +292,11 @@ internal sealed class Launched : IDisposable
         Named(title);
     }
 
-    // Not now, which turns the step down for good, and the tip with it.
-    public void DeclineTip()
+    // Not now, which turns the step down for good, and the tip with it. The next step's tip can follow.
+    public void DeclineTip(string title)
     {
         PressOnceEnabled(Find(found => found.ByAutomationId("CloseButton").And(found.ByName(Words.NotNow)), "the tip's Not now"));
-        if (!Gone(found => found.ByAutomationId("ActionButton")))
+        if (!Gone(found => found.ByName(title)))
         {
             throw new AssertFailedException($"the tip stayed: {Shown()}");
         }
@@ -309,6 +309,14 @@ internal sealed class Launched : IDisposable
             ?? throw new AssertFailedException($"{group.AutomationId} holds nothing that expands");
 
     public static void Expand(AutomationElement group) => Expander(group).Patterns.ExpandCollapse.Pattern.Expand();
+
+    // An account row's toggle, as the keyboard reaches it: Shift+Tab from the row's button. WinUI's ExpanderAutomationPeer
+    // keeps the toggle out of UI Automation's tree.
+    public static void FocusToggle(AutomationElement row)
+    {
+        Within(row, found => found.ByAutomationId("account.action"), "the row's button").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.TAB);
+    }
 
     // One of Settings' own pages, from its card as a person opens it: a SettingsCard takes Enter, and gives UI Automation
     // no Invoke.

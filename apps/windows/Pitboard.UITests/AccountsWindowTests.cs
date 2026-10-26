@@ -143,18 +143,17 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
         var personal = launched.Row("claude/personal");
-        var toggle = Launched.Within(personal, found => found.ByAutomationId("ExpanderToggleButton"), "personal's toggle");
         Foreground.Require(window);
         string Focused() => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "";
         bool Becomes(Func<bool> condition) => Retry.WhileFalse(condition, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(100)).Result;
 
-        toggle.Focus();
+        Launched.FocusToggle(personal);
         Keyboard.Type(VirtualKeyShort.F2);
         Assert.AreEqual("personal", launched.Field("sheet.name").Text);
         launched.Answer("sheet", "CloseButton");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
 
-        toggle.Focus();
+        Launched.FocusToggle(personal);
         Keyboard.Type(VirtualKeyShort.SPACE);
         Launched.Within(personal, found => found.ByAutomationId("detail.copyEmail"), "personal's email");
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
@@ -163,7 +162,7 @@ public sealed class AccountsWindowTests
         Keyboard.Type(VirtualKeyShort.TAB);
         Assert.IsTrue(Becomes(() => Focused() == "account.action"), $"Tab left the focus on '{Focused()}'");
 
-        toggle.Focus();
+        Launched.FocusToggle(personal);
         Keyboard.Type(VirtualKeyShort.ENTER);
         Launched.Within(personal, found => found.ByAutomationId("account.inUse"), "personal in use");
     }
@@ -251,7 +250,7 @@ public sealed class AccountsWindowTests
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         launched.OpenWindow();
         launched.Tip(Words.UseWithCodex);
-        launched.DeclineTip();
+        launched.DeclineTip(Words.UseWithCodex);
 
         launched.Element("empty");
         launched.Invoke("empty.choice");
@@ -282,7 +281,7 @@ public sealed class AccountsWindowTests
         launched.OpenWindow();
         launched.Tip(Words.AddASecondAccount);
 
-        launched.DeclineTip();
+        launched.DeclineTip(Words.AddASecondAccount);
 
         launched.Row("claude/work");
     }

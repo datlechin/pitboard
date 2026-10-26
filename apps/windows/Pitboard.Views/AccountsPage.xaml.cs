@@ -33,6 +33,14 @@ public sealed partial class AccountsPage : Page
             ViewModel?.Stop();
             Tip.IsOpen = false;
         };
+        // WinUI's TeachingTip undoes an IsOpen change made while it animates, so a tip whose step is gone is closed again.
+        Tip.RegisterPropertyChangedCallback(TeachingTip.IsOpenProperty, (_, _) =>
+        {
+            if (Tip.IsOpen && _setup is null)
+            {
+                Tip.IsOpen = false;
+            }
+        });
     }
 
     public AccountsViewModel? ViewModel { get; private set; }

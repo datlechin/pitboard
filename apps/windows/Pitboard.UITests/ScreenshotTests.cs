@@ -36,7 +36,7 @@ public sealed partial class ScreenshotTests
         KeepWindow(window, "windows-window-tip-at-limit");
 
         // The other pictures show the accounts, past the tip on what happens at a limit.
-        launched.DeclineTip();
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
         launched.Row("codex/spare");
         var work = launched.Row("claude/work");
         Launched.Within(work, found => found.ByAutomationId("account.inUse"), "work in use");
@@ -121,7 +121,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
         var window = InFront(launched.OpenWindow());
-        launched.DeclineTip();
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
 
         Switch(launched, "claude/old");
         launched.Element("sheet");
@@ -143,7 +143,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "chatGPTOpen");
         var window = InFront(launched.OpenWindow());
-        launched.DeclineTip();
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
         Switch(launched, "codex/spare");
         launched.Element("question");
         KeepWindow(window, "windows-question-quit-chatgpt");
@@ -223,7 +223,7 @@ public sealed partial class ScreenshotTests
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = InFront(launched.OpenWindow());
         launched.Tip(Words.UseWithCodex);
-        launched.DeclineTip();
+        launched.DeclineTip(Words.UseWithCodex);
         launched.Element("empty.choice");
         KeepWindow(window, "windows-window-no-accounts");
     }
