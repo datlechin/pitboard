@@ -75,3 +75,4 @@ ReleaseDC
 SystemParametersInfo
 HIGHCONTRASTW
 GetSysColor
+MsiEnumRelatedProducts

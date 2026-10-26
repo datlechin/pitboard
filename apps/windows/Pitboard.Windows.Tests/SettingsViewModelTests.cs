@@ -42,6 +42,48 @@ public sealed class SettingsViewModelTests
         return (shown, model, app);
     }
 
+    // Plan 4.11: Uninstall… asks the model's question first, then says what it is doing, and where it stopped short why,
+    // with Try again.
+    [TestMethod]
+    public void UninstallAsksFirstThenSaysHowItGoes()
+    {
+        var question = new Question(
+            "Uninstall Pitboard?", "Pitboard deletes its saved sign-ins, settings and account windows.", "Uninstall",
+            Destructive: false, ConfirmIsDefault: false);
+        var offered = Snapshots.Read(1) with { Uninstall = new ItemOffer("Uninstall…", new Intent.Uninstall(), Enabled: true, question) };
+        var (shown, model, app) = Over(offered);
+
+        Assert.AreEqual(new Choice("Uninstall…", new Intent.Uninstall(), Enabled: true), shown.UninstallChoice);
+        Assert.AreEqual(question, shown.UninstallQuestion);
+        Assert.AreEqual(Words.Settings.UninstallNote, shown.UninstallSays);
+        Assert.IsNull(shown.UninstallStopped);
+        shown.Uninstall();
+        CollectionAssert.AreEqual(new Intent[] { new Intent.Uninstall() }, model.Sent.ToArray());
+
+        app.Apply(offered with
+        {
+            Revision = 2,
+            Uninstall = offered.Uninstall with { Enabled = false },
+            Removal = new RemovalShown.Removing("Uninstalling Pitboard…"),
+        });
+        Assert.IsTrue(shown.Uninstalling);
+        Assert.IsFalse(shown.OffersUninstall);
+        Assert.AreEqual("Uninstalling Pitboard…", shown.UninstallSays);
+
+        var again = new Choice("Try again", new Intent.Uninstall(), Enabled: true);
+        app.Apply(offered with
+        {
+            Revision = 3,
+            Removal = new RemovalShown.Stopped(
+                "Pitboard couldn’t remove everything", "A saved sign-in couldn’t be deleted yet, so Pitboard kept its folder.", again),
+        });
+        Assert.IsFalse(shown.Uninstalling);
+        Assert.AreEqual(again, shown.UninstallChoice);
+        Assert.IsNull(shown.UninstallQuestion, "asked again after it was answered");
+        Assert.AreEqual("Pitboard couldn’t remove everything", shown.UninstallStopped);
+        Assert.AreEqual("A saved sign-in couldn’t be deleted yet, so Pitboard kept its folder.", shown.UninstallSays);
+    }
+
     [TestMethod]
     public void TheVersionLeavesOutTheCommitTheSdkAdds()
     {

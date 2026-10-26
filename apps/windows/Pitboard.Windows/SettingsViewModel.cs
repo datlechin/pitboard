@@ -167,6 +167,28 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasTerminalNote => CommandLine.TerminalNote is not null;
 
+    // Uninstall…, or once it stopped short, Try again, which asks nothing more.
+    public Choice UninstallChoice =>
+        _model.Removal is RemovalShown.Stopped stopped
+            ? stopped.Again
+            : new Choice(_model.Uninstall.Title, _model.Uninstall.Intent, _model.Uninstall.Enabled && _model.Removal is null);
+
+    public Question? UninstallQuestion => _model.Removal is RemovalShown.Stopped ? null : _model.Uninstall.Confirm;
+
+    public bool Uninstalling => _model.Removal is RemovalShown.Removing or RemovalShown.Done;
+
+    public bool OffersUninstall => !Uninstalling;
+
+    // What it does, then what it is doing, and where it stopped short, why.
+    public string UninstallSays => _model.Removal switch
+    {
+        RemovalShown.Removing removing => removing.Title,
+        RemovalShown.Stopped stopped => stopped.Line,
+        _ => Words.Settings.UninstallNote,
+    };
+
+    public string? UninstallStopped => (_model.Removal as RemovalShown.Stopped)?.Title;
+
     public bool UpdatesAvailable => _updates.Available;
 
     public bool ChecksAutomatically => _updates.ChecksAutomatically;
@@ -297,9 +319,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public void CheckNow() => _updates.Check();
 
+    public void Uninstall() => _model.Send(UninstallChoice.Intent);
+
     private void OnModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(AppModel.Machine))
+        if (args.PropertyName is nameof(AppModel.Machine) or nameof(AppModel.Uninstall) or nameof(AppModel.Removal))
         {
             Tell();
         }

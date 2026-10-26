@@ -86,6 +86,32 @@ public sealed class SettingsPageTests
         }
     }
 
+    // Plan 4.11: Uninstall Pitboard in Advanced asks the model's question, whose Uninstall Enter does not press, and only
+    // then asks the model to uninstall.
+    [UITestMethod]
+    public async Task UninstallAsksTheModelsQuestionFirst()
+    {
+        var question = new Question(
+            "Uninstall Pitboard?", "Pitboard deletes its saved sign-ins, settings and account windows.", "Uninstall",
+            Destructive: false, ConfirmIsDefault: false);
+        var model = new StandInModel(Snapshots.Read(1) with { Uninstall = new ItemOffer("Uninstall…", new Intent.Uninstall(), Enabled: true, question) });
+        var context = Views.Context(new AppModel(model));
+        var page = await Views.Navigated<SettingsPage>(context);
+        var uninstall = Views.Element<Button>(page, "settings.uninstall");
+        Assert.AreEqual("Uninstall…", uninstall.Content);
+        Assert.AreEqual("Uninstall Pitboard", Card(uninstall).Header);
+
+        Views.Press(uninstall);
+        await Views.Until(() => context.Dialogs.Open is { IsLoaded: true }, "no question");
+        var asked = context.Dialogs.Open!;
+        Assert.AreEqual("Uninstall Pitboard?", asked.Title);
+        Assert.AreEqual(ContentDialogButton.None, asked.DefaultButton);
+        Assert.IsEmpty(model.Sent.OfType<Intent.Uninstall>(), "uninstalled before the answer");
+        Views.Press(Views.Descendants(asked).OfType<Button>().Single(button => button.Name == "PrimaryButton"));
+
+        await Views.Until(() => model.Sent.Contains(new Intent.Uninstall()), "the answer did not uninstall");
+    }
+
     // As Windows Settings keeps Troubleshoot: a card for each of the pages that look into Pitboard, which open them.
     [UITestMethod]
     public async Task TroubleshootHasACardForDiagnosticsAndActivity()

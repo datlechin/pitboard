@@ -256,6 +256,37 @@
           </Grid>
         </toolkit:SettingsCard>
 
+        <!-- Windows Settings' own uninstall says how it goes in its row, so this card does too. -->
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.Uninstall}">
+          <toolkit:SettingsCard.HeaderIcon>
+            <FontIcon Glyph="&#xE74D;" />
+          </toolkit:SettingsCard.HeaderIcon>
+          <toolkit:SettingsCard.Description>
+            <StackPanel>
+              <TextBlock
+                  x:Name="UninstallStopped"
+                  Style="{StaticResource CriticalCaptionTextBlockStyle}"
+                  Visibility="Collapsed"
+                  AutomationProperties.LiveSetting="Assertive" />
+              <TextBlock Text="{x:Bind ViewModel.UninstallSays, Mode=OneWay}" AutomationProperties.AutomationId="settings.uninstallSays" />
+            </StackPanel>
+          </toolkit:SettingsCard.Description>
+          <Grid>
+            <ProgressRing
+                Width="16"
+                Height="16"
+                IsActive="{x:Bind ViewModel.Uninstalling, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.Uninstalling, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind ViewModel.UninstallSays, Mode=OneWay}" />
+            <Button
+                Content="{x:Bind ViewModel.UninstallChoice.Title, Mode=OneWay}"
+                IsEnabled="{x:Bind ViewModel.UninstallChoice.Enabled, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.OffersUninstall, Mode=OneWay}"
+                AutomationProperties.AutomationId="settings.uninstall"
+                Click="OnUninstall" />
+          </Grid>
+        </toolkit:SettingsCard>
+
         <!-- As Windows Settings keeps Troubleshoot: a clickable card for each page of its own. -->
         <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.Troubleshoot}" />
         <toolkit:SettingsCard

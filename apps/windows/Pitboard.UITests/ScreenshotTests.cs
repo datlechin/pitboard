@@ -291,6 +291,12 @@ public sealed partial class ScreenshotTests
         var scroller = Scroller(launched.Element("settings.renewDaily"));
         scroller.Patterns.Scroll.Pattern.SetScrollPercent(NoScroll, 100);
         KeepWindow(window, "windows-settings-advanced");
+
+        // Asked, and never answered: Uninstall would end the app.
+        launched.Invoke("settings.uninstall");
+        launched.Element("question");
+        KeepWindow(window, "windows-question-uninstall");
+        launched.Answer("question", "CloseButton");
     }
 
     // The fixture's personal is on for warm-ups with no five-hour period running, so it warms up as the app starts.

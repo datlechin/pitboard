@@ -90,6 +90,7 @@ public sealed partial class SettingsPage : Page
     {
         Announce(StartupFailed, ViewModel!.StartupFailed);
         Announce(ScheduleFailed, ViewModel.ScheduleFailed);
+        Announce(UninstallStopped, ViewModel.UninstallStopped);
     }
 
     // WinUI's live region: Narrator reads the text again only when its peer says it changed.
@@ -165,4 +166,14 @@ public sealed partial class SettingsPage : Page
         ViewModel?.SetChecksAutomatically(((ToggleSwitch)sender).IsOn);
 
     private void OnCheckNow(object sender, RoutedEventArgs args) => ViewModel?.CheckNow();
+
+    private async void OnUninstall(object sender, RoutedEventArgs args)
+    {
+        if (ViewModel is not { } shown || (shown.UninstallQuestion is { } question && !await Context.Dialogs.Confirm(question)))
+        {
+            return;
+        }
+
+        shown.Uninstall();
+    }
 }

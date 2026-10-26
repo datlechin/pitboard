@@ -15,6 +15,7 @@ public partial class App : Application, IIconTargets
     private readonly AppStart _start;
     private readonly Handovers _handovers;
     private readonly WindowRequests _requests = new();
+    private readonly Uninstaller _uninstaller;
     private readonly string _version = Versions.Of(typeof(App).Assembly);
     private IUpdates _updates = new NoUpdates();
     private AppModel? _model;
@@ -33,6 +34,7 @@ public partial class App : Application, IIconTargets
     {
         _start = start;
         _handovers = handovers;
+        _uninstaller = Uninstaller.For(start.Identity.Build);
 #if DEBUG
         // Unhandled, it fails fast with 0xC000027B and says nothing: the UI tests read why from here.
         UnhandledException += (_, args) => Console.Error.WriteLine($"{args.Message}{Environment.NewLine}{args.Exception}");
@@ -185,6 +187,11 @@ public partial class App : Application, IIconTargets
                 break;
             case nameof(AppModel.AccountWindows):
                 _accountWindows?.Follow(_model.AccountWindows);
+                break;
+            // What was Pitboard's is gone, and the MSI takes the program once Pitboard.exe has exited.
+            case nameof(AppModel.Removal) when _model.Removal is RemovalShown.Done:
+                _uninstaller.Run();
+                _lifetime?.End();
                 break;
         }
     }
