@@ -4,6 +4,7 @@
 // above the prompt line, which grows with it to the terminal's rows, then scrolls.
 import { LiveFigure } from "./figure.ts";
 import { Prompt } from "./prompt.ts";
+import { toolbar } from "./toolbar.ts";
 import type { Machine, Running, Step } from "../../lib/cli.ts";
 import type { State } from "../../lib/model.ts";
 import type { Platform } from "../../lib/platform.ts";
@@ -50,6 +51,7 @@ class Term extends LiveFigure {
   // what is left of a line's commands while one asks or runs
   private queue: (() => Promise<void>)[] = [];
   private machine?: Promise<Machine>;
+  private row: HTMLElement | null = null;
   // the keys that act on the line, each in turn as the shell takes them
   private keys: Promise<void> = Promise.resolve();
 
@@ -71,6 +73,15 @@ class Term extends LiveFigure {
     });
     this.prompt.history = [this.dataset.command ?? ""];
     this.prompt.reset();
+    // a tap on a command puts it in at the caret and runs the line, as a paste and Return would
+    this.row = this.querySelector<HTMLElement>("[data-commands]");
+    if (this.row)
+      toolbar(this.row, (button) => {
+        const { value, caret } = this.prompt.value;
+        const text = value.slice(0, caret) + (button.textContent ?? "").trim() + value.slice(caret);
+        this.prompt.reset();
+        this.inTurn(() => this.enter(text));
+      });
     // a click in the window gives the prompt focus, as a terminal's does, and a drag selects
     this.log.addEventListener("click", (e) => {
       if ((e as PointerEvent).pointerType === "touch" || e.target === this.prompt.field) return;
@@ -81,6 +92,18 @@ class Term extends LiveFigure {
 
   protected render(state: State) {
     if (this.running) this.print(this.running.next(state));
+    // the row's switch is to the Claude Code account not in use
+    const swap = [...(this.row?.querySelectorAll("button") ?? [])].find((b) =>
+      b.textContent?.trim().startsWith("pitboard use "),
+    );
+    if (swap) {
+      const other = state.accounts.find(
+        (a) => a.tool === "claude" && a.label !== state.inUse.claude,
+      );
+      swap.hidden = !other;
+      if (other && swap.textContent?.trim() !== `pitboard use ${other.label}`)
+        swap.textContent = `pitboard use ${other.label}`;
+    }
   }
 
   private inTurn(act: () => Promise<void>) {

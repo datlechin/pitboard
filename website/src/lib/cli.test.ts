@@ -17,6 +17,7 @@ import {
 } from "./clap.ts";
 import { ascii, checks, choose, location, run, type Machine, type Step } from "./cli.ts";
 import { moment } from "./words.ts";
+import { taps } from "./shell.ts";
 import { plainText } from "./changelog.ts";
 import { rowsOf } from "./doctor.ts";
 import { DAY, HOUR, MINUTE, clock } from "../data/world.ts";
@@ -715,4 +716,16 @@ test("everything the command line prints keeps the site's rules: no dash, a comm
   }
   void DAY;
   void MINUTE;
+});
+
+test("each command a phone taps runs on its system without a usage error", async () => {
+  for (const platform of ["macos", "windows", "linux"] as const) {
+    reset();
+    for (const tapped of taps("work")) {
+      if (tapped === "clear") continue;
+      const lines = await said(platform, tapped.replace(/^pitboard ?/, ""));
+      assert.ok(lines.length > 0, tapped);
+      assert.ok(!lines[0].startsWith("error:"), `${platform}: ${tapped}`);
+    }
+  }
 });

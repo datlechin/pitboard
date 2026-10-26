@@ -229,3 +229,53 @@ test("Reset puts every terminal back to the session it draws", async ({ page }) 
   await field.press("ArrowUp");
   await expect(field).toHaveValue("pitboard use work");
 });
+
+test("on a phone, a tap on a command runs it, and focus stays on the button", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "the row shows where the pointer is coarse");
+  await choose(page.context(), { platform: "macos", surface: "cli" });
+  await page.goto("/");
+  const term = page.locator("#switch-cli-macos");
+  await expect(term).not.toHaveAttribute("inert");
+  const row = term.getByRole("toolbar", { name: "Commands" });
+  await expect(row.getByRole("button")).toHaveText([
+    "pitboard",
+    "pitboard use personal",
+    "pitboard log -n 4",
+    "pitboard warm",
+    "pitboard watch install",
+    "pitboard doctor",
+    "pitboard --help",
+    "clear",
+  ]);
+  // the switch it makes turns its words round, so it is found by its place
+  const use = row.getByRole("button").nth(1);
+  await use.tap();
+  await expect(use).toBeFocused();
+  await expect(term.locator("[role=log]")).toContainText("Switched to personal; work is parked.");
+  await expect(use).toHaveText("pitboard use work");
+  // the window keeps text a field is not zoomed for, and scrolls sideways inside its desk
+  await expect(term.locator("[data-line]")).toHaveCSS("font-size", "16px");
+  const sizes = await term.evaluate((desk) => ({
+    desk: desk.scrollWidth > desk.clientWidth,
+    page: document.documentElement.scrollWidth <= innerWidth,
+  }));
+  expect(sizes).toEqual({ desk: true, page: true });
+  // the toolbar keeps one Tab stop, and its arrows move along it
+  await use.press("ArrowRight");
+  await expect(row.getByRole("button", { name: "pitboard log -n 4" })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(row.getByRole("button", { name: "clear" })).toBeFocused();
+});
+
+test("where the pointer is fine, the terminal draws no row of commands", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "a phone shows it");
+  await choose(page.context(), { platform: "linux", surface: "cli" });
+  await page.goto("/");
+  await expect(page.locator("#usage-cli-linux [role=toolbar]")).toBeHidden();
+});

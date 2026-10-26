@@ -882,3 +882,16 @@ export function edit(shell: Shell, what: Edit, line: Line, kill: string): Edited
       return null;
   }
 }
+
+// Question 12: what a phone taps in each system's terminal, `forget` left out for its question;
+// `other` is the Claude Code account not in use.
+export const taps = (other: string | null) => [
+  "pitboard",
+  ...(other ? [`pitboard use ${other}`] : []),
+  "pitboard log -n 4",
+  "pitboard warm",
+  "pitboard watch install",
+  "pitboard doctor",
+  "pitboard --help",
+  "clear",
+];
