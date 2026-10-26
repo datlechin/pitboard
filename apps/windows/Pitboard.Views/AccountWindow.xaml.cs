@@ -130,7 +130,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
 
     // As the macOS app asks, over the window.
     public Task<bool> AllowDownload(AlertText question) =>
-        Confirm(new Question(question.Title, question.Message, "Download"));
+        Confirm(new Question(question.Title, question.Message, "Download", Destructive: false, ConfirmIsDefault: true));
 
     public void Shown(string address) => _send(new Intent.PageShown(Store, address));
 
@@ -440,7 +440,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
         }
 
         var alert = PitboardFfiMethods.RemoveDataAlert(session.Account);
-        if (!await Confirm(new Question(alert.Title, alert.Message, "Remove")))
+        if (!await Confirm(new Question(alert.Title, alert.Message, "Remove", Destructive: false, ConfirmIsDefault: true)))
         {
             return;
         }

@@ -35,7 +35,7 @@ public sealed class NoticeBarTests
         var performed = new List<NoticeAction>();
         var giveUp = new NoticeAction(
             "Give up…", new Intent.AbandonStuckSwitch(), Dismisses: false, Switches: false, Enabled: true,
-            Confirm: new Question("Give up on the interrupted switch?", "Both logins are kept.", "Give up"));
+            Confirm: new Question("Give up on the interrupted switch?", "Both logins are kept.", "Give up", Destructive: false, ConfirmIsDefault: true));
         var dismiss = Items.Dismiss("codex");
         var bar = await Views.Shown(new NoticeBar(Items.Notice("stuck", giveUp, dismiss), performed.Add, TimeProvider.System));
 

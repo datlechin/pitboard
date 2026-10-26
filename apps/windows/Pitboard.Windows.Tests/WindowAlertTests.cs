@@ -7,7 +7,7 @@ public sealed class WindowAlertTests
 {
     private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.", null);
     private static readonly WindowQuestion QuitChatGPT = new(
-        new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
+        new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
         Confirmed: new Intent.QuitAndSwitch("codex/spare"),
         Declined: new Intent.KeepAppOpen());
 
@@ -35,7 +35,7 @@ public sealed class WindowAlertTests
     public void TheReplaceQuestionNamesTheAccountItPutsInPlace()
     {
         var replace = new WindowQuestion(
-            new Question("Replace Claude Code’s login?", "Anthropic no longer accepts it.", "Replace"),
+            new Question("Replace Claude Code’s login?", "Anthropic no longer accepts it.", "Replace", Destructive: false, ConfirmIsDefault: true),
             Confirmed: new Intent.ReplaceAndSwitch("claude/work"),
             Declined: new Intent.KeepLogin());
         var alert = WindowAlert.Of(Model(Snapshots.Read(1) with { ReplaceQuestion = replace }))!;

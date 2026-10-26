@@ -64,9 +64,12 @@ fn uninstall_asks_first() {
         intent: Intent::Uninstall,
         enabled: true,
         confirm: Some(Question {
-            title: words::UNINSTALL_QUESTION.into(),
-            message: words::UNINSTALL_SAYS.into(),
-            confirm: words::UNINSTALL.into(),
+            confirm_is_default: false,
+            ..Question::asking(
+                words::UNINSTALL_QUESTION.into(),
+                words::UNINSTALL_SAYS.into(),
+                words::UNINSTALL.into(),
+            )
         }),
     };
     assert_eq!(model.on_a_mac().uninstall, offer(Os::MacOs));

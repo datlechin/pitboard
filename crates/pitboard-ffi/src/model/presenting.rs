@@ -145,11 +145,11 @@ fn cancel_switch() -> NoticeAction {
         dismisses: false,
         switches: false,
         enabled: true,
-        confirm: Some(Question {
-            title: words::CANCEL_SWITCH_QUESTION.into(),
-            message: words::cancel_stuck(&[]),
-            confirm: words::cancel_switch(OS, false),
-        }),
+        confirm: Some(Question::asking(
+            words::CANCEL_SWITCH_QUESTION.into(),
+            words::cancel_stuck(&[]),
+            words::cancel_switch(OS, false),
+        )),
     }
 }
 
@@ -861,9 +861,12 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
             },
             enabled: true,
             confirm: Some(Question {
-                title: words::remove_title("spare"),
-                message: forget_message_on(OS, &spare, &accounts),
-                confirm: words::REMOVE.into(),
+                destructive: true,
+                ..Question::asking(
+                    words::remove_title("spare"),
+                    forget_message_on(OS, &spare, &accounts),
+                    words::REMOVE.into(),
+                )
             }),
         })
     );
@@ -1449,6 +1452,8 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
             title: words::remove_title("spare"),
             message: forget_message_on(OS, &spare, &accounts),
             confirm: words::REMOVE.into(),
+            destructive: true,
+            confirm_is_default: true,
         })
     );
     assert_eq!(

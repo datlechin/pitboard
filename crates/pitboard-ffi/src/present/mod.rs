@@ -372,6 +372,22 @@ pub struct Question {
     pub message: String,
     /// What the button that does it says: "Remove", "Cancel Switch".
     pub confirm: String,
+    // only Remove's, as plan 4.4 has it
+    pub destructive: bool,
+    // Return answers it; Uninstall's is read first, as Apple's alerts guide asks
+    pub confirm_is_default: bool,
+}
+
+impl Question {
+    pub(crate) fn asking(title: String, message: String, confirm: String) -> Question {
+        Question {
+            title,
+            message,
+            confirm,
+            destructive: false,
+            confirm_is_default: true,
+        }
+    }
 }
 
 /// A question the window asks by itself, with what each answer sends. The model takes either
@@ -1074,6 +1090,37 @@ mod tests {
             unreadable.date_and_time("2026-09-27T14:05:09+07:00"),
             "2026-09-27T14:05:09+07:00"
         );
+    }
+
+    // Plan 4.4: the verb answers Return, red only on Remove; Uninstall asks to be read first.
+    #[test]
+    fn only_removes_answer_is_destructive_and_only_uninstall_has_no_default() {
+        use crate::present::testing::{account, claude_code, read, status};
+        let accounts = vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("spare")).build(),
+        ];
+        let mut state = read(status(accounts, Vec::new()), vec![claude_code()]);
+        state.stuck = true;
+        let shown = present_on(Os::MacOs, &state, MIDDAY, &Utc);
+        let seen = Seen::new(&state, MIDDAY, &Utc, Os::MacOs);
+        let asked = |question: &Question| (question.destructive, question.confirm_is_default);
+        let remove = (shown.sections[0].accounts[1].actions.iter())
+            .find(|action| action.kind == ActionKind::Remove)
+            .and_then(|action| action.confirm.clone())
+            .expect("spare may be removed");
+        assert_eq!(asked(&remove), (true, true));
+        let cancel = (shown.notices.iter())
+            .flat_map(|notice| &notice.actions)
+            .find_map(|action| action.confirm.clone())
+            .expect("Cancel Switch asks");
+        assert_eq!(asked(&cancel), (false, true));
+        let replace = sheets::replace_question(&seen, "claude/spare", "Anthropic refuses it.");
+        assert_eq!(asked(&replace.question), (false, true));
+        let quit = super::windows::downloads_quit_question(1).expect("a download runs");
+        assert_eq!(asked(&quit), (false, true));
+        let uninstall = shown.uninstall.confirm.expect("Uninstall asks");
+        assert_eq!(asked(&uninstall), (false, false));
     }
 
     #[test]

@@ -213,11 +213,11 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
                 dismisses: false,
                 switches: false,
                 enabled: true,
-                confirm: Some(Question {
-                    title: words::CANCEL_SWITCH_QUESTION.into(),
-                    message: words::cancel_stuck(&moving),
-                    confirm: words::cancel_switch(seen.os, false),
-                }),
+                confirm: Some(Question::asking(
+                    words::CANCEL_SWITCH_QUESTION.into(),
+                    words::cancel_stuck(&moving),
+                    words::cancel_switch(seen.os, false),
+                )),
             }],
         ));
     } else if let Some(problem) = seen.problem()
@@ -428,11 +428,11 @@ fn in_app_actions(seen: &Seen, provider: &str, code: &str) -> Vec<NoticeAction> 
             dismisses: false,
             switches: false,
             enabled: true,
-            confirm: Some(Question {
-                title: words::CANCEL_MOVE_QUESTION.into(),
-                message: words::cancel_move(app),
-                confirm: words::cancel_switch(seen.os, false),
-            }),
+            confirm: Some(Question::asking(
+                words::CANCEL_MOVE_QUESTION.into(),
+                words::cancel_move(app),
+                words::cancel_switch(seen.os, false),
+            )),
         });
     }
     actions

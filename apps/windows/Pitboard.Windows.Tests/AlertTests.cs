@@ -10,7 +10,7 @@ public sealed class AlertTests
 {
     private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.", null);
     private static readonly WindowQuestion QuitChatGPT = new(
-        new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
+        new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
         Confirmed: new Intent.QuitAndSwitch("codex/spare"),
         Declined: new Intent.KeepAppOpen());
 

@@ -290,7 +290,7 @@ public sealed class ModelTests
         var snapshot = Read(4) with
         {
             QuitQuestion = new WindowQuestion(
-                new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
+                new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
                 Confirmed: new Intent.QuitAndSwitch("codex/spare"),
                 Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
@@ -553,7 +553,8 @@ public sealed class ModelTests
                 Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
                 Confirm: new Question(
                     Title: "Forget “spare (Codex)”?",
-                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")),
+                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget",
+                    Destructive: true, ConfirmIsDefault: true)),
             Actions:
             [
                 new AccountAction(
@@ -565,7 +566,7 @@ public sealed class ModelTests
             Enabled: true,
             Confirm: new Question(
                 Title: "Give up on the interrupted switch?", Message: "Every login is kept, and nothing is deleted.",
-                Confirm: "Give Up"));
+                Confirm: "Give Up", Destructive: false, ConfirmIsDefault: true));
         var stuck = new PanelNotice(
             Id: "stuck", Severity: Severity.Error, SpokenSeverity: "Problem", Title: "An interrupted switch is waiting",
             Lines: ["An interrupted switch can’t be finished until OpenAI answers."], Until: null, UntilLabel: null,
