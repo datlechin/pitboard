@@ -59,7 +59,8 @@ package func snapshot(
         accountMenu: AccountMenuShown(
             offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
         notices: [],
-        menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
+        menuNotices: MenuNotices(install: nil, switches: [], signIns: [], others: nil),
+        footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
         menuAccountsNote: nil, updatedAt: nil, updatedMenu: updated, updatedWindow: updated,
         sheetText: nil,

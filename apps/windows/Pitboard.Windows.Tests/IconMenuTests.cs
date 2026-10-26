@@ -50,7 +50,7 @@ public sealed class IconMenuTests
     {
         var model = Model(snapshot => snapshot with
         {
-            MenuNotices = new MenuNotices(Install, [Advice], Stuck),
+            MenuNotices = new MenuNotices(Install, [Advice], [], Stuck),
             Sections =
             [
                 Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true), Items.Account("claude", "personal")),
@@ -110,7 +110,7 @@ public sealed class IconMenuTests
     {
         var model = Model(snapshot => snapshot with
         {
-            MenuNotices = new MenuNotices(null, [Advice], Stuck),
+            MenuNotices = new MenuNotices(null, [Advice], [], Stuck),
             Sections =
             [
                 Items.Section(
@@ -155,7 +155,7 @@ public sealed class IconMenuTests
     public void ANoticeSendsItsIntentOrOpensItsLink()
     {
         var held = Advice with { Enabled = false };
-        var entries = IconMenu.Entries(Model(snapshot => snapshot with { MenuNotices = new MenuNotices(Install, [held], Stuck) }), new NoUpdates());
+        var entries = IconMenu.Entries(Model(snapshot => snapshot with { MenuNotices = new MenuNotices(Install, [held], [], Stuck) }), new NoUpdates());
 
         Assert.AreEqual(new IconCommand.OpenLink("https://example.com/install"), Command(entries, "menu.install").Does);
         Assert.AreEqual(IconMark.Help, Command(entries, "menu.install").Mark);
@@ -169,7 +169,7 @@ public sealed class IconMenuTests
     [TestMethod]
     public void AnAdviceWithoutASeverityShowsTheSwitchMark()
     {
-        var entries = IconMenu.Entries(Model(snapshot => snapshot with { MenuNotices = new MenuNotices(null, [Advice with { Severity = null }], null) }), new NoUpdates());
+        var entries = IconMenu.Entries(Model(snapshot => snapshot with { MenuNotices = new MenuNotices(null, [Advice with { Severity = null }], [], null) }), new NoUpdates());
 
         Assert.AreEqual(IconMark.Switch, Command(entries, "menu.switch.0").Mark);
     }

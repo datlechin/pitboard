@@ -202,17 +202,14 @@ fn an_account_is_called_by_its_name_or_its_address_or_what_is_wrong_with_it() {
     );
 }
 
-/// The menu and VoiceOver say the plan after the name, and an account with none is its name.
+// VoiceOver says the plan after the name; the menu names the account alone.
 #[test]
 fn an_account_carries_the_plan_its_login_says() {
     let mut team = account(Some("work")).signed_in().build();
     team.plan = Some("Team 5x".into());
     let team = described(team);
     assert_eq!(team.plan.as_deref(), Some("Team 5x"));
-    assert_eq!(
-        team.menu_title,
-        words::named_in_menu(OS, "work", Some("Team 5x"), None)
-    );
+    assert_eq!(team.menu_title, "work");
     assert_eq!(
         team.spoken,
         words::row_spoken("work", Some("Team 5x"), true, None)
@@ -629,8 +626,12 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         }))
     );
     assert_eq!(
-        stale.action.map(|action| action.spoken),
-        Some(words::sign_in_to_again(OS, "stale", true))
+        stale.action.map(|action| (action.title, action.spoken)),
+        Some((
+            words::sign_in_asking(OS),
+            words::sign_in_to_again(OS, "stale", true)
+        )),
+        "plan 4.3's row button"
     );
     let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
     assert_eq!(
@@ -2781,6 +2782,44 @@ fn the_menu_says_what_needs_attention_in_one_item() {
         install.link.as_deref(),
         Some("https://docs.claude.com/en/docs/claude-code/setup")
     );
+}
+
+// Plan 4.2: each account to sign in to again is an item at the menu's top, and flags the bar.
+#[test]
+fn the_menu_offers_each_sign_in_again_at_its_top() {
+    let (model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("gone"))
+            .standing(Standing::NothingParked)
+            .build(),
+    ]);
+    let shown = model.shown();
+    let entry = |label: &str, standing| MenuEntry {
+        title: words::sign_in_to_again(OS, label, true),
+        subtitle: Some(words::sign_in_standing(standing).into()),
+        help: None,
+        severity: None,
+        intent: Some(present_sheet(Sheet::SignInAgain {
+            provider: "claude".into(),
+            label: label.into(),
+        })),
+        link: None,
+        enabled: true,
+    };
+    assert_eq!(
+        shown.menu_notices.sign_ins,
+        [
+            entry("old", Standing::LoginExpired),
+            entry("gone", Standing::NothingParked)
+        ]
+    );
+    assert!(shown.menu_bar.attention);
+    let (calm, _) = reading(vec![account(Some("work")).signed_in().build()]);
+    assert!(calm.shown().menu_notices.sign_ins.is_empty());
+    assert!(!calm.shown().menu_bar.attention);
 }
 
 /// When the numbers were read is said as a time rather than an age, since a menu can stay

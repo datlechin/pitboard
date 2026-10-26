@@ -25,7 +25,7 @@ public sealed partial class SiteFiguresTests
 
     private static readonly string[] IconMenu =
     [
-        "Claude Code", "work · 42%", "old", "personal · 100%", "Codex", "main · Pro · 7%", "spare · Pro · 0%", "Add account…",
+        "Claude Code", "work (42%)", "old (sign-in expired)", "personal (100%)", "Codex", "main (7%)", "spare (0%)", "Add account…",
         "Refresh", "Open claude.ai", "Open chatgpt.com", "Open Pitboard", "Settings", "Pitboard help", "Exit",
     ];
 
@@ -68,14 +68,14 @@ public sealed partial class SiteFiguresTests
         Assert.AreEqual(Joined(IconMenu), Joined(entries.Select(entry => entry.Name)));
         Assert.AreEqual(Joined(Headings), Joined(entries.Where(entry => !entry.IsEnabled).Select(entry => entry.Name)));
         Assert.AreEqual(
-            "work · 42% | main · Pro · 7%",
+            "work (42%) | main (7%)",
             Joined(entries.Where(entry => entry.Patterns.Toggle.PatternOrDefault?.ToggleState.ValueOrDefault == ToggleState.On).Select(entry => entry.Name)));
         Assert.AreEqual(
             "Open claude.ai | Open chatgpt.com",
             Joined(entries.Where(entry => entry.ClassName == "MenuFlyoutSubItem").Select(entry => entry.Name)));
         foreach (var name in focused.Values.Where(name => name != "foreground held"))
         {
-            Assert.AreEqual("work · 42%", name, "focused as the menu opened");
+            Assert.AreEqual("work (42%)", name, "focused as the menu opened");
         }
     }
 
@@ -120,10 +120,10 @@ public sealed partial class SiteFiguresTests
             "site-tray-menu-arrows");
 
         var enabled = IconMenu.Except(Headings).ToArray();
-        Assert.AreEqual("work · 42%", opened);
+        Assert.AreEqual("work (42%)", opened);
         Assert.AreEqual(Joined(enabled.Skip(1).Concat(enabled).Concat(enabled).Take(20)), Joined(down));
         Assert.AreEqual(Joined(Enumerable.Repeat(down[^1], 4)), Joined(others));
-        Assert.AreEqual("work · 42%", reopened);
+        Assert.AreEqual("work (42%)", reopened);
         Assert.AreEqual("Exit", up);
     }
 

@@ -811,7 +811,28 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             enabled: true,
         }
     });
+    let sign_ins = (seen.accounts().iter())
+        .filter(|account| super::needs_sign_in(account))
+        .filter_map(|account| {
+            let label = account.label.clone()?;
+            Some(MenuEntry {
+                title: words::sign_in_to_again(seen.os, &seen.name_of(account), true),
+                subtitle: Some(words::sign_in_standing(account.standing).into()),
+                help: None,
+                severity: None,
+                intent: Some(Intent::PresentSheet {
+                    sheet: Sheet::SignInAgain {
+                        provider: account.provider.clone(),
+                        label,
+                    },
+                }),
+                link: None,
+                enabled: !seen.state.sign_in_under_way(),
+            })
+        })
+        .collect();
     MenuNotices {
+        sign_ins,
         install: (*footing == Footing::NoClaudeCode).then(|| MenuEntry {
             title: words::claude_code_not_installed(seen.os),
             subtitle: Some(words::LEARN_TO_INSTALL.into()),

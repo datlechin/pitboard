@@ -545,20 +545,12 @@ pub(crate) fn named_with_tool(label: &str, tool: &str) -> String {
     format!("{label} ({tool})")
 }
 
-/// An account as the menu names it: "work · Team 5x", and on Windows "work · Team 5x · 64%".
-pub(crate) fn named_in_menu(
-    os: Os,
-    title: &str,
-    plan: Option<&str>,
-    figure: Option<&str>,
-) -> String {
-    let mut said = vec![title];
-    said.extend(plan);
-    // A Windows menu item has one line, where macOS puts the account's limits on a second.
-    if matches!(os, Os::Windows) {
-        said.extend(figure);
+// "work" on macOS, whose subtitle says the rest; "work (42%)", "old (sign-in expired)" on Windows.
+pub(crate) fn named_in_menu(os: Os, title: &str, aside: Option<&str>) -> String {
+    match (os, aside) {
+        (Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),
+        _ => title.to_owned(),
     }
-    said.join(" · ")
 }
 
 /// The line in a menu when the numbers were read, as a time rather than an age: a menu can
@@ -4659,15 +4651,16 @@ mod tests {
         assert_eq!(SWITCHING, "Switching");
         assert_eq!(named_with_tool("work", "Codex"), "work (Codex)");
         assert_eq!(named_with_tool("work", "claude.ai"), "work (claude.ai)");
+        assert_eq!(named_in_menu(Os::MacOs, "work", Some("64%")), "work");
         assert_eq!(
-            named_in_menu(Os::MacOs, "work", Some("Team 5x"), Some("64%")),
-            "work · Team 5x"
+            named_in_menu(Os::Windows, "work", Some("64%")),
+            "work (64%)"
         );
         assert_eq!(
-            named_in_menu(Os::Windows, "work", Some("Team 5x"), Some("64%")),
-            "work · Team 5x · 64%"
+            named_in_menu(Os::Windows, "old", Some("sign-in expired")),
+            "old (sign-in expired)"
         );
-        assert_eq!(named_in_menu(Os::Windows, "spare", None, None), "spare");
+        assert_eq!(named_in_menu(Os::Windows, "spare", None), "spare");
         assert_eq!(updated("12:00"), "Updated 12:00");
         assert_eq!(READING, "Reading…");
         assert_eq!(NOT_READ_YET, "Not read yet");

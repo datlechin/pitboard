@@ -149,8 +149,7 @@ pub struct AccountItem {
     pub email_line: Option<String>,
     /// The plan its login says it is on, as the window's tag beside its name: "Team 5x".
     pub plan: Option<String>,
-    /// Its title as the menu says it, with its plan: "work · Team 5x", and on Windows the
-    /// figure the menu bar would show of it: "work · Team 5x · 64%".
+    // "work" on macOS; on Windows its figure or why it can't be switched to: "work (42%)"
     pub menu_title: String,
     /// The row as VoiceOver reads it as one thing: "work (Codex), in use".
     pub spoken: String,
@@ -465,6 +464,8 @@ pub struct MenuNotices {
     pub install: Option<MenuEntry>,
     /// Advice, as items that switch, and an add left halfway, as its way on and its way back.
     pub switches: Vec<MenuEntry>,
+    // "Sign In to old Again…", for each account that needs it
+    pub sign_ins: Vec<MenuEntry>,
     /// Everything else to know about that is more than a note, as one item.
     pub others: Option<MenuEntry>,
 }
@@ -1117,7 +1118,7 @@ mod tests {
         assert_eq!(asked(&cancel), (false, true));
         let replace = sheets::replace_question(&seen, "claude/spare", "Anthropic refuses it.");
         assert_eq!(asked(&replace.question), (false, true));
-        let quit = super::windows::downloads_quit_question(1).expect("a download runs");
+        let quit = downloads_quit_question(1).expect("a download runs");
         assert_eq!(asked(&quit), (false, true));
         let uninstall = shown.uninstall.confirm.expect("Uninstall asks");
         assert_eq!(asked(&uninstall), (false, false));

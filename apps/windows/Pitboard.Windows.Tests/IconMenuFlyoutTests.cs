@@ -22,7 +22,7 @@ public sealed class IconMenuFlyoutTests
     private static Snapshot TwoToolsRead(bool reading = false) => Snapshots.Read(1) with
     {
         Reading = reading,
-        MenuNotices = new MenuNotices(null, [], Stuck),
+        MenuNotices = new MenuNotices(null, [], [], Stuck),
         Sections =
         [
             Items.Section(

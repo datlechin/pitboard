@@ -135,6 +135,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's notifications are titled in the system's case, such as **5-Hour Limit Almost
   Reached** on macOS, under the name of the tool they are about.
 - What the app says went wrong names no `pitboard` command.
+- The Windows app's icon menu names an account with how much it has used, or why it can't be
+  switched to, as **work (42%)** or **old (sign-in expired)**, and the macOS menu names it
+  alone, where both added its plan.
+- The menu bar mark and the Windows icon flag that something needs attention while an account
+  needs a sign-in.
+- An account's row offers **Sign In…** where it said **Sign In Again…**.
 
 ### Removed
 

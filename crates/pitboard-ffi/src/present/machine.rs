@@ -62,7 +62,6 @@ pub struct WarmShown {
 pub struct WarmAccountShown {
     /// Its label with its tool, which `Intent::SetWarm` takes back.
     pub qualified: String,
-    /// Its name, with the plan its login says it is on: "work · Team 5x".
     pub title: String,
     /// Whether it is warmed up.
     pub on: bool,
@@ -251,15 +250,7 @@ fn warm(seen: &Seen) -> WarmShown {
                 .iter()
                 .map(|choice| WarmAccountShown {
                     qualified: choice.qualified.clone(),
-                    title: words::named_in_menu(
-                        seen.os,
-                        &choice.account,
-                        seen.accounts()
-                            .iter()
-                            .find(|account| account.qualified.as_deref() == Some(&choice.qualified))
-                            .and_then(|account| account.plan.as_deref()),
-                        None,
-                    ),
+                    title: choice.account.clone(),
                     on: choice.on,
                     standing: choice.standing.as_ref().map(|standing| {
                         words::typeset(&pitboard_core::words::capitalised(&words::warm_standing(
@@ -797,11 +788,7 @@ mod tests {
             );
             assert!(windows.enabled, "{on}");
             assert_eq!(windows.none_enrolled, None);
-            assert_eq!(
-                windows.accounts[0].title,
-                words::named_in_menu(Os::Windows, "work", Some("Team 5x"), None),
-                "with its plan, as the menu names it"
-            );
+            assert_eq!(windows.accounts[0].title, "work", "its name alone");
             assert_eq!(windows.standing, said, "{on}");
             assert_eq!(windows.note, words::WARM_UP_NOTE);
         }

@@ -20,8 +20,6 @@ enum Words {
         "Open \(site) as \(label)"
     }
 
-    static func inMenu(_ label: String, plan: String) -> String { "\(label) · \(plan)" }
-
     // An account's own menu and the Account menu.
     static func use(_ label: String) -> String { "Switch to \(label)" }
     static let rename = "Rename…"

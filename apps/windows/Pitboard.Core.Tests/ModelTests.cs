@@ -101,7 +101,7 @@ public sealed class ModelTests
                 Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
             Notices: [],
-            MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
+            MenuNotices: new MenuNotices(Install: null, Switches: [], SignIns: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
@@ -578,7 +578,7 @@ public sealed class ModelTests
         {
             Sections = [new AccountSection(Id: "codex", Heading: "Codex", Accounts: [spare])],
             Notices = [stuck],
-            MenuNotices = new MenuNotices(Install: null, Switches: [], Others: others),
+            MenuNotices = new MenuNotices(Install: null, Switches: [], SignIns: [], Others: others),
             Setup = new SetupStep(
                 Title: "Add a second Codex account", Detail: "job is the only Codex account Pitboard knows.",
                 Actions: [new Choice("Add Account…", new Intent.PresentSheet(new Sheet.Add("codex")), Enabled: true)]),

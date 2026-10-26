@@ -1147,24 +1147,21 @@ fn the_menu_lists_every_account_under_its_tool() {
             )
         })
         .collect();
-    let named = |title, plan, figure| words::named_in_menu(OS, title, plan, figure);
+    let named = |title, aside| words::named_in_menu(OS, title, aside);
     assert_eq!(
         sections,
         [
             (
                 Some("Claude Code".into()),
                 vec![
-                    named("work", None, Some("42%")),
-                    named("old", None, None),
-                    named("personal", None, Some("100%"))
+                    named("work", Some("42%")),
+                    named("old", Some("sign-in expired")),
+                    named("personal", Some("100%"))
                 ]
             ),
             (
                 Some("Codex".into()),
-                vec![
-                    named("main", Some("Pro"), Some("7%")),
-                    named("spare", Some("Pro"), Some("0%"))
-                ]
+                vec![named("main", Some("7%")), named("spare", Some("0%"))]
             ),
         ]
     );
