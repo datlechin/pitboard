@@ -6,6 +6,7 @@ import {
   accountsPage,
   activityPage,
   app,
+  detail,
   diagnostics,
   iconMenu,
   joinsTheGroupBefore,
@@ -241,34 +242,86 @@ test("the window and its places are named as MainWindow.xaml and SettingsPage.xa
   );
 });
 
-test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the core say", () => {
+test("the Accounts page says what AccountsPage.xaml binds and the core says", () => {
   const page = accountsPage(moments.after, switchNotice);
   const xaml = views("AccountsPage.xaml");
-  assert.ok(xaml.includes(`Text="${page.title}"`));
-  for (const c of page.commands) assert.ok(xaml.includes(`Label="${c}"`), c);
+  assert.ok(xaml.includes('Text="{x:Bind shown:Words.Window.Accounts}"'));
+  for (const field of ["Refresh", "AddAccount"])
+    assert.ok(xaml.includes(`Label="{x:Bind shown:Words.Window.${field}}"`), field);
+  for (const said of [page.title, ...page.commands]) assert.ok(owned(said), said);
   assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
   assert.match(page.updated, /^Updated \d\d:\d\d$/);
   assert.ok(present("words.rs").includes('titled(os, "In Use", IN_USE)'));
-  assert.ok(present("accounts.rs").includes("title: words::switch_account(None),"));
   assert.deepEqual(
     page.sections.map((s) => s.name),
     ["Claude Code", "Codex"],
   );
   const rows = page.sections.flatMap((s) => s.rows);
   assert.ok(rows.every((r) => r.inUse !== (r.action?.title === "Switch")));
-  // Narrator hears a row, its button and each limit as present/accounts.rs says them
+  // Narrator hears a row's toggle, its button and each limit as present/accounts.rs says them
+  assert.ok(xaml.includes('AutomationProperties.Name="{x:Bind Item.Spoken, Mode=OneWay}"'));
   assert.ok(
-    views("AccountRow.xaml").includes(
-      'AutomationProperties.Name="{x:Bind local:AccountRow.ActionSpoken(Account.Item)',
+    xaml.includes(
+      'AutomationProperties.Name="{x:Bind local:AccountsPage.ActionSpoken(Item), Mode=OneWay}"',
     ),
   );
-  assert.ok(
-    views("AccountRow.xaml.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"),
-  );
+  assert.ok(views("LimitLines.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"));
   const personal = rows.find((r) => r.label === "personal")!;
   assert.equal(personal.spoken, "personal, Max 20x");
   assert.equal(personal.action?.spoken, "Switch to personal");
   assert.equal(personal.limits[0].spoken, "5-hour limit, 59 percent used, resets 22:00");
+  assert.equal(personal.keys, "Delete F2 Control+C");
+});
+
+test("an opened row's cards say what AccountsPage.xaml binds from app_words() and the core, and its commands follow", () => {
+  const xaml = views("AccountsPage.xaml");
+  for (const [field, words] of [
+    ["Email", detail.email],
+    ["SignIn", detail.signIn],
+    ["WarmUp", detail.warmUp],
+  ]) {
+    assert.ok(xaml.includes(`Header="{x:Bind shown:Words.Window.${field}}"`), field);
+    assert.ok(
+      xaml.includes(`AutomationProperties.Name="{x:Bind shown:Words.Window.${field}}"`),
+      field,
+    );
+    assert.ok(owned(words), words);
+  }
+  assert.ok(xaml.includes('Content="{x:Bind shown:Words.Window.Copy}"'));
+  assert.ok(xaml.includes('AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"'));
+  assert.ok(owned(detail.copy) && owned("Copy email address"));
+  assert.ok(
+    present("words.rs").includes(`titled(os, "Warm-Up Settings…", "${detail.warmUpSettings}")`),
+  );
+  assert.ok(present("words.rs").includes('format!("Saved sign-in valid until {until}")'));
+  assert.ok(present("words.rs").includes(`pub(crate) const WARM_UP_OFF: &str = "${detail.off}";`));
+  // the day and month in the regional format's order, its month abbreviated
+  assert.ok(
+    shell("WindowsLocalTime.cs").includes(
+      'MonthDayPattern.Replace("MMMM", "MMM", StringComparison.Ordinal)',
+    ),
+  );
+  const rows = accountsPage(moments.after, null).sections.flatMap((s) => s.rows);
+  const row = (id: string) => rows.find((r) => r.id === id)!;
+  assert.equal(row("work").signIn, "In use");
+  assert.equal(row("personal").signIn, "Saved sign-in valid until 9 Nov");
+  assert.equal(row("spare").signIn, null, "no saved sign-in's date to say");
+  assert.deepEqual(
+    [row("personal").warm, row("work").warm, row("main").warm],
+    ["Warms up again at 22:00", "Off", null],
+  );
+  // its windows, then Rename and Remove, which the account in use holds back
+  assert.ok(
+    shell("ShownAccount.cs").includes(
+      ".. item.Actions.Where(action => action.Kind is ActionKind.Rename or ActionKind.Remove)",
+    ),
+  );
+  assert.equal(row("work").commands.open, "Open claude.ai");
+  assert.equal(row("main").commands.open, "Open chatgpt.com");
+  assert.deepEqual(
+    [row("work").commands.remove.enabled, row("personal").commands.remove.enabled],
+    [false, true],
+  );
 });
 
 test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put together", () => {
@@ -284,25 +337,29 @@ test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put t
   assert.equal(switchNotice.countdown, "Claude Code sessions already open follow in 0:21");
 });
 
-test("an account's lines are the app's, a saved sign-in's only once it expires within days, then when it warms up", () => {
-  const said = core("words.rs");
-  assert.ok(said.includes('format!("warms up again at {}", moment(*next))'));
+test("an account's note is its most pressing, a saved sign-in's only once it expires within days", () => {
   const accounts = present("accounts.rs");
-  assert.ok(accounts.includes("let lines = [&problem, &stale_note, &ended, &warm_note]"));
+  assert.ok(accounts.includes("let notes = ["));
   assert.ok(accounts.includes(".filter(|_| account.standing == status::Standing::Expiring)"));
-  assert.ok(views("AccountRow.xaml.cs").includes("foreach (var line in item.Lines)"));
-  const lines = (moment: "before" | "after") =>
-    accountsPage(moments[moment], null).sections.flatMap((s) => s.rows.flatMap((r) => r.lines));
-  assert.deepEqual(lines("before"), ["Warms up again at 22:00"]);
-  assert.deepEqual(lines("after"), ["Warms up again at 22:00"]);
+  assert.ok(
+    views("AccountsPage.xaml.cs").includes(
+      'public static string NoteOf(AccountItem item) => item.Notes.FirstOrDefault()?.Text ?? "";',
+    ),
+  );
+  const notes = (moment: "before" | "after") =>
+    accountsPage(moments[moment], null).sections.flatMap((s) => s.rows.map((r) => r.note));
+  assert.deepEqual(notes("before"), [null, null, null, null]);
+  assert.deepEqual(notes("after"), [null, null, null, null]);
   // two days before work's saved sign-in expires, and once it has
   const work = moments.after.accounts.find((a) => a.id === "work")!;
   const at = (now: number) =>
     accountsPage({ ...moments.before, now }, null).sections[0].rows.find((r) => r.id === "work")!;
-  assert.deepEqual(at(work.refreshExpiresAt! - 2 * 86_400 - 60).lines, [
-    "Sign-in expires in 2 days",
-  ]);
-  assert.deepEqual(at(work.refreshExpiresAt!).lines, ["Sign-in expired"]);
+  assert.equal(at(work.refreshExpiresAt! - 2 * 86_400 - 60).note, "Sign-in expires in 2 days");
+  const expired = at(work.refreshExpiresAt!);
+  assert.equal(expired.note, "Sign-in expired");
+  // and its button signs in, as a row's does (present/accounts.rs `action`)
+  assert.equal(expired.action?.title, "Sign in…");
+  assert.ok(owned("Sign in…"));
 });
 
 test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs say", () => {
@@ -440,9 +497,16 @@ test("the notification at the share says what WindowsNotifications.cs builds fro
 
 test("the questions' Windows shortcuts are AccountKeys.cs's: F2, Delete and Ctrl+C", () => {
   const keys = shell("AccountKeys.cs");
-  assert.ok(keys.includes("VirtualKey.F2 when item.Offers.FirstOrDefault(Renames)"));
-  assert.ok(keys.includes("Intent: Intent.PresentSheet { Sheet: Sheet.Rename }"));
-  assert.ok(keys.includes("VirtualKey.Delete when item.Forget is { Enabled: true }"));
+  assert.ok(
+    keys.includes(
+      "VirtualKey.F2 when Offered(item, ActionKind.Rename) is { Intent: { } intent } rename",
+    ),
+  );
+  assert.ok(
+    keys.includes(
+      "VirtualKey.Delete when Offered(item, ActionKind.Remove) is { Intent: { } intent } remove",
+    ),
+  );
   assert.ok(keys.includes("key == VirtualKey.C && control && item.Email.Length > 0 ? item.Email"));
   const page = views("AccountsPage.xaml.cs");
   assert.ok(page.includes("AccountKeys.Copied(args.Key, control, shown.Item)"));

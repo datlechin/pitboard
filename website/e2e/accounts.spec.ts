@@ -14,9 +14,13 @@ async function accounts(page: Page, platform: Platform) {
   const id = platform === "macos" ? "usage-mac" : "usage-win";
   const fig = page.locator(`#${id}`);
   await fig.scrollIntoViewIfNeeded();
+  const rows = platform === "windows" ? "[data-row]" : '[role="row"]';
   return {
     fig,
-    row: (account: string) => fig.locator(`[role="row"][data-account="${account}"]`),
+    row: (account: string) => fig.locator(`${rows}[data-account="${account}"]`),
+    // a Windows row's toggle, which keyboard focus takes
+    toggle: (account: string) =>
+      fig.locator(`${rows}[data-account="${account}"] [data-does="expand"]`),
     menu: page.locator(`#${id}-menu`),
     offers: page.locator(`#${id}-menu [role="menuitem"]:not([hidden])`),
     grid: fig.locator('[role="grid"]'),
@@ -344,37 +348,37 @@ test.describe("on Windows", () => {
   test.use({ reducedMotion: "reduce" });
   test.skip(({ isMobile }) => isMobile, "a pointer and a keyboard");
 
-  test("the selection follows focus, Ctrl with an arrow moves focus alone, and Enter switches", async ({
+  test("Tab goes from a row's toggle to its button, Space opens it on its cards, and Enter switches", async ({
     page,
   }) => {
-    const { row } = await accounts(page, "windows");
-    await row("work").click(at);
-    await page.keyboard.press("ArrowDown");
-    await expect(row("personal")).toBeFocused();
-    await expect(row("personal")).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("Control+ArrowDown");
-    await expect(row("main")).toBeFocused();
-    await expect(row("personal")).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("Control+Space");
-    await expect(row("main")).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("End");
-    await expect(row("spare")).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("Home");
-    await expect(row("work")).toHaveAttribute("aria-selected", "true");
-    // Tab goes from the row to its button and out of the list
-    await page.keyboard.press("ArrowDown");
+    const { row, toggle } = await accounts(page, "windows");
+    await toggle("personal").focus();
     await page.keyboard.press("Tab");
     await expect(row("personal").locator('[data-does="use"]')).toBeFocused();
     await page.keyboard.press("Shift+Tab");
+    await expect(toggle("personal")).toBeFocused();
+    await expect(toggle("personal")).toHaveAttribute("aria-expanded", "false");
+    await page.keyboard.press("Space");
+    await expect(toggle("personal")).toHaveAttribute("aria-expanded", "true");
+    const cards = row("personal").locator('[data-part="details"]');
+    await expect(cards).toBeVisible();
+    await expect(cards).toContainText("me@example.com");
+    await expect(cards).toContainText("Saved sign-in valid until 9 Nov");
+    await expect(cards).toContainText("Warm-up settings");
+    await expect(cards.getByRole("button", { name: "Remove account…" })).toBeEnabled();
     await page.keyboard.press("Enter");
-    await expect(row("personal")).toHaveAttribute("aria-label", "personal, Max 20x, in use");
+    await expect(toggle("personal")).toHaveAccessibleName("personal, Max 20x, in use");
+    await expect(cards.getByRole("button", { name: "Remove account…" })).toBeDisabled();
+    // a press on its header closes it again
+    await row("personal").locator('[data-part="label"]').click();
+    await expect(cards).toBeHidden();
   });
 
   test("Shift+F10 opens the context menu above the row on its first item, its keys as labels", async ({
     page,
   }) => {
-    const { row, menu, offers } = await accounts(page, "windows");
-    await row("personal").click(at);
+    const { row, toggle, menu, offers } = await accounts(page, "windows");
+    await toggle("personal").focus();
     await page.keyboard.press("Shift+F10");
     await expect(menu).toBeVisible();
     await expect(offers.first()).toBeFocused();
@@ -391,23 +395,23 @@ test.describe("on Windows", () => {
     expect(box.y + box.height).toBeLessThanOrEqual(above.y + 1);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
-    await expect(row("personal")).toBeFocused();
+    await expect(toggle("personal")).toBeFocused();
     await row("spare").click({ button: "right", ...at });
     await expect(menu).toBeVisible();
-    await expect(row("personal")).toHaveAttribute("aria-selected", "true");
+    await expect(offers.first()).toHaveText("Switch to spare");
   });
 
   test("F2 renames in a ContentDialog that Escape cancels", async ({ page }) => {
-    const { row } = await accounts(page, "windows");
+    const { row, toggle } = await accounts(page, "windows");
     const dialog = page.locator("#win-accounts-rename");
-    await row("personal").click(at);
+    await toggle("personal").focus();
     await page.keyboard.press("F2");
     await expect(dialog).toBeVisible();
     const field = dialog.locator('input[name="name"]');
     await expect(field).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(row("personal")).toBeFocused();
+    await expect(toggle("personal")).toBeFocused();
     await page.keyboard.press("F2");
     await field.fill("");
     await expect(dialog.locator('[data-part="problem"]')).toHaveText(
@@ -422,9 +426,9 @@ test.describe("on Windows", () => {
   test("Delete asks with focus on Remove, Enter removes, and focus goes to the title bar", async ({
     page,
   }) => {
-    const { row, fig } = await accounts(page, "windows");
+    const { row, toggle, fig } = await accounts(page, "windows");
     const dialog = page.locator("#win-accounts-forget");
-    await row("personal").click(at);
+    await toggle("personal").focus();
     await page.keyboard.press("Delete");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button")).toHaveText(["Remove", "Cancel"]);
@@ -432,23 +436,18 @@ test.describe("on Windows", () => {
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
     await expect(row("personal")).toBeHidden();
-    // nothing is selected, and Down moves nothing
     const bar = fig.locator('[data-part="title-bar"]');
     await expect(bar).toBeFocused();
     await expect(bar).toHaveAccessibleName("Pitboard");
     // where WinUI draws no focus visual, the page draws one (WCAG 2.4.7)
     await expect(bar).not.toHaveCSS("outline-style", "none");
-    await expect(fig.locator('[role="row"][aria-selected="true"]')).toHaveCount(0);
-    await page.keyboard.press("ArrowDown");
-    await expect(bar).toBeFocused();
-    await expect(fig.locator('[role="row"][aria-selected="true"]')).toHaveCount(0);
   });
 
   test("Ctrl+C copies the focused account's email", async ({ page }) => {
-    const { row } = await accounts(page, "windows");
-    await row("spare").click(at);
-    expect(await copied(row("spare"))).toBe("me@company.com");
-    await expect(row("spare")).toHaveAttribute("aria-keyshortcuts", "Delete F2 Control+C");
+    const { toggle } = await accounts(page, "windows");
+    await toggle("spare").focus();
+    expect(await copied(toggle("spare"))).toBe("me@company.com");
+    await expect(toggle("spare")).toHaveAttribute("aria-keyshortcuts", "Delete F2 Control+C");
   });
 
   test("Add account picks its tool with radio buttons, signs in, then names the account", async ({
@@ -471,14 +470,15 @@ test.describe("on Windows", () => {
     await expect(name.getByRole("button", { name: "Done" })).toBeEnabled();
     await page.keyboard.press("Enter");
     await expect(name).toBeHidden();
-    await expect(fig.getByRole("row", { name: /^travel\b/ })).toBeVisible();
+    await expect(fig.getByRole("button", { name: /^travel\b/ })).toBeVisible();
   });
 
-  test("with its menu open and each dialog up, the window keeps WAI-ARIA's rules", async ({
+  test("with its menu open, a row open and each dialog up, the window keeps WAI-ARIA's rules", async ({
     page,
   }) => {
-    const { row, menu } = await accounts(page, "windows");
-    await row("personal").click(at);
+    const { toggle, menu } = await accounts(page, "windows");
+    await toggle("work").click();
+    await toggle("personal").focus();
     await page.keyboard.press("Shift+F10");
     await expect(menu).toBeVisible();
     expect(await axe(page, ["#usage-win"])).toEqual([]);

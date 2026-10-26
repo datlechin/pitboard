@@ -1,10 +1,11 @@
 ---
-// AccountsPage.xaml with AccountRow.xaml's rows, the notices NoticeBar.xaml shows after a switch,
-// and the setup step's InfoBar. The ListView is a grid of one row an account, a row group a tool,
-// each named as Narrator hears it. Every node a state shows is drawn: each tool's notice, the
-// step, each row's ends, and templates for a row, a limit and a line; the context menu and the
-// dialogs wait over the desk. live/accounts.ts follows the one state with them. Shown on another
-// page, the window draws its list's rows once the list shows, and the page shown comes in its slot.
+// AccountsPage.xaml: the notices NoticeBar.xaml shows after a switch, the setup step's InfoBar, and
+// each tool's accounts under its name, each a SettingsExpander (AccountRow.astro). Every node a
+// state shows is drawn: each tool's notice, the step, each row's ends and cards, and templates for
+// a row and a limit; the context menu and the dialogs wait over the desk. live/accounts.ts follows
+// the one state with them. Shown on another page, the window draws its rows once the list shows,
+// and the page shown comes in its slot.
+import AccountRow from "./AccountRow.astro";
 import ActivityList from "./ActivityList.astro";
 import Button from "./Button.astro";
 import ContentDialog from "./ContentDialog.astro";
@@ -19,14 +20,11 @@ import {
   REMOVE,
   RENAME,
   RENAME_OFFER,
-  SWITCH,
   TOOL,
   ACCOUNT,
   addAccountAsks,
   copyEmail,
   copyLink,
-  inUse,
-  keysOf,
   notNow,
   removeAccount,
   signInAgain,
@@ -38,7 +36,7 @@ import {
   warmUpNow,
   OPEN,
 } from "../../../data/window.ts";
-import { account, moments, type Moment } from "../../../data/world.ts";
+import { moments, type Moment } from "../../../data/world.ts";
 import { toolsOn } from "../../../lib/words.ts";
 
 interface Props {
@@ -52,17 +50,11 @@ interface Props {
 }
 const { prefix, moment, pane = "accounts", crop = false, version } = Astro.props;
 const rows = pane === "accounts";
-// SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
-const hide = (yes: boolean) => (yes ? { hidden: true } : {});
 const page = accountsPage(moments[moment], moment === "after" ? switchNotice : null);
 const shownTools = toolsOn("windows");
 const fillBy =
-  "data-[state=g]:fill-win-success data-[state=y]:fill-win-caution data-[state=r]:fill-win-critical";
+  "data-[state=g]:fill-win-accent data-[state=y]:fill-win-caution data-[state=r]:fill-win-critical";
 const caption = "text-u-12/16 text-win-text-2";
-// ListViewItem: hover and selection on SubtleFillColorSecondary, the accent pill on a selected
-// row, and the focus visual on the row with keyboard focus
-const row =
-  "relative rounded-u-4 outline-none before:absolute before:top-1/2 before:left-0 before:hidden before:h-16 before:w-3 before:-translate-y-1/2 before:rounded-u-2 before:bg-win-accent focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text aria-selected:bg-win-subtle aria-selected:before:block live:cursor-default live:hover:bg-win-subtle";
 const item =
   "mx-4 my-2 flex h-28 items-center gap-24 rounded-u-4 pr-11 pl-11 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text live:hover:bg-win-subtle live:active:bg-win-subtle-2";
 const key = "ml-auto text-u-12/16 text-win-text-2";
@@ -124,120 +116,19 @@ const radio =
         </span>
       </div>
     </div>
-    <div
-      class="group/grid rounded-u-4 outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-win-text"
-      role="grid"
-      aria-labelledby={`${prefix}-title`}
-    >
+    {/* a tool's name heads its accounts, as the settings page heads its sections */}
+    <div class="flex flex-col gap-30" data-part="list">
       {page.sections.map((section, t) => <div
-        role="rowgroup"
+        role="group"
         aria-labelledby={`${prefix}-${t}`}
         data-tool={shownTools[t][0]}
       >
-        <div class="mx-12 pt-8 pb-10 font-semibold" id={`${prefix}-${t}`} aria-hidden="true">
-          {section.name}
+        <div class="ml-1 pb-6 font-semibold" id={`${prefix}-${t}`}>{section.name}</div>
+        <div class="flex flex-col gap-4" data-part="rows">
+          {(rows ? section.rows : []).map((r) => (
+            <AccountRow prefix={prefix} row={r} />
+          ))}
         </div>
-        <div class="mx-12 h-1 bg-win-group-rule" />
-        {(rows ? section.rows : []).map((r) => <div
-          class={row}
-          role="row"
-          aria-selected="false"
-          aria-label={r.spoken}
-          aria-keyshortcuts={keysOf(account(r.label, shownTools[t][0]), moments[moment], "windows")}
-          data-account={r.id}
-        >
-          <div
-            class="grid grid-cols-[calc(var(--spacing)*28)_1fr_auto] gap-x-12 gap-y-8 py-10 pr-12 pl-16"
-            role="gridcell"
-          >
-            <svg
-              aria-hidden="true"
-              class="size-20 self-center justify-self-center text-win-accent-text"
-              data-part="in-use-symbol"
-              {...hide(!r.inUse)}
-            >
-              <use href="#fl-person-filled" />
-            </svg>
-            <svg
-              aria-hidden="true"
-              class="size-20 self-center justify-self-center text-win-text-2"
-              data-part="parked-symbol"
-              {...hide(r.inUse)}
-            >
-              <use href="#fl-person" />
-            </svg>
-            <span class="flex min-w-0 flex-col gap-2 self-center">
-              <span class="flex items-center gap-8">
-                <b class="truncate font-semibold" data-part="label">{r.label}</b>
-                <span
-                  class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
-                  data-part="plan"
-                  hidden={!r.plan}
-                  >{r.plan}</span
-                >
-              </span>
-              <span class:list={["truncate", caption]} data-part="email">{r.email}</span>
-            </span>
-            <span class="self-center">
-              <Button aria-label={r.action?.spoken} data-does="use" hidden={!r.action}
-                >{r.action?.title ?? SWITCH}</Button
-              >
-              <span
-                class="flex items-center gap-6 text-win-text-2"
-                data-part="in-use"
-                hidden={!!r.action}
-                ><svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg
-                >{inUse("windows")}</span
-              >
-              <span data-part="switching" hidden
-                ><ProgressRing class="size-16" label="Switching"
-              /></span>
-            </span>
-            <div class="col-span-2 col-start-2 flex flex-col gap-6">
-              <div
-                class:list={[
-                  "grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
-                  caption,
-                ]}
-                data-part="limits"
-                hidden={r.limits.length === 0}
-              >
-                {r.limits.map((l) => <div class="contents" data-part="limit">
-                  {/* the limit read once, as a sentence, and not the bar and each figure */}
-                  <span
-                    ><span aria-hidden="true" data-part="short">{l.short}</span
-                    ><span class="sr-only" data-part="spoken">{l.spoken}</span></span
-                  >
-                  <svg
-                    aria-hidden="true"
-                    class="h-12 w-full min-w-80 overflow-visible"
-                    viewBox="0 0 100 12"
-                    preserveAspectRatio="none"
-                  >
-                    <rect class="fill-win-strong" y="5.5" width="100" height="1" />
-                    <rect
-                      class={fillBy}
-                      y="4.5"
-                      width={l.percent}
-                      height="3"
-                      rx="0.4"
-                      ry="1.5"
-                      data-part="fill"
-                      data-state={l.level}
-                    />
-                  </svg>
-                  <span class="min-w-36 text-right" aria-hidden="true" data-part="figure"
-                    >{l.figure}</span
-                  >
-                  <span class="text-right" aria-hidden="true" data-part="resets">{l.resets}</span>
-                </div>)}
-              </div>
-              <div class="contents" data-part="notes">
-                {r.lines.map((n) => <span class={caption}>{n}</span>)}
-              </div>
-            </div>
-          </div>
-        </div>)}
       </div>)}
     </div>
   </div>
@@ -280,64 +171,9 @@ const radio =
     {crop && (
       <>
         {/* an account a visitor adds, a limit its first read finds, and a line */}
-        <template data-part="row">
-          <div class={row} role="row" aria-selected="false">
-            <div
-              class="grid grid-cols-[calc(var(--spacing)*28)_1fr_auto] gap-x-12 gap-y-8 py-10 pr-12 pl-16"
-              role="gridcell"
-            >
-              <svg
-                aria-hidden="true"
-                class="size-20 self-center justify-self-center text-win-accent-text"
-                data-part="in-use-symbol"
-                {...hide(true)}
-              >
-                <use href="#fl-person-filled" />
-              </svg>
-              <svg
-                aria-hidden="true"
-                class="size-20 self-center justify-self-center text-win-text-2"
-                data-part="parked-symbol"
-              >
-                <use href="#fl-person" />
-              </svg>
-              <span class="flex min-w-0 flex-col gap-2 self-center">
-                <span class="flex items-center gap-8">
-                  <b class="truncate font-semibold" data-part="label"></b>
-                  <span
-                    class:list={["rounded-u-4 bg-win-control-2 px-6", caption]}
-                    data-part="plan"
-                    hidden
-                  ></span>
-                </span>
-                <span class:list={["truncate", caption]} data-part="email"></span>
-              </span>
-              <span class="self-center">
-                <Button data-does="use">{SWITCH}</Button>
-                <span class="flex items-center gap-6 text-win-text-2" data-part="in-use" hidden
-                  ><svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg
-                  >{inUse("windows")}</span
-                >
-                <span data-part="switching" hidden
-                  ><ProgressRing class="size-16" label="Switching"
-                /></span>
-              </span>
-              <div class="col-span-2 col-start-2 flex flex-col gap-6">
-                <div
-                  class:list={[
-                    "grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
-                    caption,
-                  ]}
-                  data-part="limits"
-                  hidden
-                ></div>
-                <div class="contents" data-part="notes"></div>
-              </div>
-            </div>
-          </div>
-        </template>
+        <template data-part="row"><AccountRow prefix={prefix} /></template>
         <template data-part="limit">
-          <div class="contents" data-part="limit">
+          <span class="contents" data-part="limit">
             <span
               ><span aria-hidden="true" data-part="short"></span><span
                 class="sr-only"
@@ -346,7 +182,7 @@ const radio =
             >
             <svg
               aria-hidden="true"
-              class="h-12 w-full min-w-80 overflow-visible"
+              class="h-12 w-full overflow-visible"
               viewBox="0 0 100 12"
               preserveAspectRatio="none"
             >
@@ -362,11 +198,8 @@ const radio =
               />
             </svg>
             <span class="min-w-36 text-right" aria-hidden="true" data-part="figure"></span>
-            <span class="text-right" aria-hidden="true" data-part="resets"></span>
-          </div>
-        </template>
-        <template data-part="note">
-          <span class={caption}></span>
+            <span aria-hidden="true" data-part="resets"></span>
+          </span>
         </template>
         <ContentDialog id="win-accounts-forget" alert>
           <Fragment slot="buttons">

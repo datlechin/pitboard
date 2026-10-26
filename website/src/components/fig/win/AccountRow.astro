@@ -1,0 +1,154 @@
+---
+// An account in AccountsPage.xaml, a SettingsExpander: its mark, name and plan, a line a limit with
+// its bar, figure and reset, at most one note, and In use or its button; opened, its email with
+// Copy, its sign-in, its warm-up with Warm-up settings, and its commands. The header's toggle is
+// named as Narrator hears the row and comes before its button, as the expander's own toggle does,
+// and a press on the header opens it too. Every node a state shows is drawn; without `row` it is the
+// template an account a visitor adds is made from, whose ids live/accounts.ts gives it.
+import Button from "./Button.astro";
+import ProgressRing from "./ProgressRing.astro";
+import { accountsPage, detail } from "../../../data/windows.ts";
+import { RENAME_OFFER, SWITCH, inUse, removeAccount } from "../../../data/window.ts";
+
+type Row = ReturnType<typeof accountsPage>["sections"][number]["rows"][number];
+
+interface Props {
+  prefix: string;
+  row?: Row;
+}
+const { prefix, row } = Astro.props;
+const details = row ? `${prefix}-${row.id}-details` : undefined;
+// SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
+const hide = (yes: boolean) => (yes ? { hidden: true } : {});
+const caption = "text-u-12/16 text-win-text-2";
+const fillBy =
+  "data-[state=g]:fill-win-accent data-[state=y]:fill-win-caution data-[state=r]:fill-win-critical";
+// DefaultSettingsExpanderItemStyle's card, the last one rounded at the foot
+const item =
+  "flex min-h-52 items-center gap-16 bg-win-card-2 py-8 pr-44 pl-58 inset-shadow-win-layer-edge last:rounded-b-u-4";
+const link =
+  "rounded-u-4 px-12 py-6 whitespace-nowrap text-win-accent-text focus-win live:cursor-default live:hover:bg-win-subtle";
+---
+
+<div class="rounded-u-4" data-row data-account={row?.id}>
+  <div
+    class="group/header relative flex min-h-68 items-center gap-16 rounded-u-4 bg-win-card py-12 pr-8 pl-16 inset-shadow-win-layer-edge has-[[data-does=expand]:focus-visible]:outline-2 has-[[data-does=expand]:focus-visible]:outline-solid has-[[data-does=expand]:focus-visible]:outline-win-text has-[[data-does=expand][aria-expanded=true]]:rounded-b-none live:hover:bg-win-control-2"
+    data-part="header"
+  >
+    <svg
+      aria-hidden="true"
+      class="size-20 shrink-0 text-win-accent-text"
+      data-part="in-use-symbol"
+      {...hide(!row?.inUse)}
+    >
+      <use href="#fl-person-filled" />
+    </svg>
+    <svg
+      aria-hidden="true"
+      class="size-20 shrink-0 text-win-text-2"
+      data-part="parked-symbol"
+      {...hide(!!row?.inUse)}
+    >
+      <use href="#fl-person" />
+    </svg>
+    <span class="flex min-w-0 flex-1 flex-col gap-4">
+      <span class="flex min-w-0 items-center gap-8">
+        <span class="truncate" data-part="label">{row?.label}</span>
+        <span class={caption} data-part="plan" hidden={!row?.plan}>{row?.plan}</span>
+      </span>
+      <span
+        class:list={[
+          "grid grid-cols-[auto_minmax(calc(var(--spacing)*80),calc(var(--spacing)*260))_auto_auto] items-center gap-x-8 gap-y-4 whitespace-nowrap tabular-nums",
+          caption,
+        ]}
+        data-part="limits"
+        hidden={!row?.limits.length}
+      >
+        {row?.limits.map((l) => <span class="contents" data-part="limit">
+          {/* the limit read once, as a sentence, and not the bar and each figure */}
+          <span
+            ><span aria-hidden="true" data-part="short">{l.short}</span
+            ><span class="sr-only" data-part="spoken">{l.spoken}</span></span
+          >
+          <svg
+            aria-hidden="true"
+            class="h-12 w-full overflow-visible"
+            viewBox="0 0 100 12"
+            preserveAspectRatio="none"
+          >
+            <rect class="fill-win-strong" y="5.5" width="100" height="1" />
+            <rect
+              class={fillBy}
+              y="4.5"
+              width={l.percent}
+              height="3"
+              rx="0.4"
+              ry="1.5"
+              data-part="fill"
+              data-state={l.level}
+            />
+          </svg>
+          <span class="min-w-36 text-right" aria-hidden="true" data-part="figure">{l.figure}</span>
+          <span aria-hidden="true" data-part="resets">{l.resets}</span>
+        </span>)}
+      </span>
+      <span class={caption} data-part="note" hidden={!row?.note}>{row?.note}</span>
+    </span>
+    <button
+      class="group/toggle order-last flex size-32 shrink-0 items-center justify-center rounded-u-4 outline-none live:cursor-default live:hover:bg-win-subtle"
+      type="button"
+      aria-label={row?.spoken}
+      aria-expanded="false"
+      aria-controls={details}
+      aria-keyshortcuts={row?.keys}
+      data-does="expand"
+    >
+      <svg class="size-12 transition-transform group-aria-expanded/toggle:rotate-180">
+        <use href="#fl-chevron-down"></use>
+      </svg>
+    </button>
+    <span class="flex shrink-0 items-center">
+      <span class="[&>button]:min-w-96" data-part="action" hidden={!row?.action}>
+        <Button aria-label={row?.action?.spoken ?? undefined} data-does="use"
+          >{row?.action?.title ?? SWITCH}</Button
+        >
+      </span>
+      <span class="flex items-center gap-6 text-win-text-2" data-part="in-use" hidden={!row?.inUse}
+        ><svg class="size-12" aria-hidden="true"><use href="#fl-checkmark" /></svg
+        >{inUse("windows")}</span
+      >
+      <span data-part="switching" hidden><ProgressRing class="size-16" label="Switching" /></span>
+    </span>
+  </div>
+  <div class="flex flex-col" id={details} data-part="details" hidden>
+    <div class={item} data-part="email-card" hidden={!row?.email}>
+      <span class="min-w-0 flex-1">
+        <span class="block">{detail.email}</span>
+        <span class:list={["block truncate", caption]} data-part="email">{row?.email}</span>
+      </span>
+      <Button aria-label="Copy email address" data-does="copy-email">{detail.copy}</Button>
+    </div>
+    <div class={item} data-part="sign-in-card" hidden={!row?.signIn}>
+      <span class="min-w-0 flex-1">
+        <span class="block">{detail.signIn}</span>
+        <span class:list={["block", caption]} data-part="sign-in">{row?.signIn}</span>
+      </span>
+    </div>
+    <div class={item} data-part="warm-card" hidden={!row?.warm}>
+      <span class="min-w-0 flex-1">
+        <span class="block">{detail.warmUp}</span>
+        <span class:list={["block", caption]} data-part="warm">{row?.warm}</span>
+      </span>
+      <button class={link} type="button" data-does="warm-settings">{detail.warmUpSettings}</button>
+    </div>
+    <div class:list={[item, "gap-8"]} data-part="commands">
+      <span data-part="open-command" hidden={!row?.commands.open}>
+        <Button data-does="open">{row?.commands.open}</Button>
+      </span>
+      <Button data-does="rename">{RENAME_OFFER}</Button>
+      <Button data-does="forget" disabled={row ? !row.commands.remove.enabled : undefined}
+        >{removeAccount("windows")}</Button
+      >
+    </div>
+  </div>
+</div>

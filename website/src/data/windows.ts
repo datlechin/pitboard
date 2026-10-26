@@ -15,6 +15,7 @@ import {
   SWITCHING,
   accountSpoken,
   activity,
+  dayAndMonth,
   fullest,
   headsUp,
   hm,
@@ -23,13 +24,22 @@ import {
   listed,
   menuLine,
   menuTitle,
-  rowLines,
+  rowNote,
   signInExpired,
   switchSpoken,
   warmsAgainNote,
   toolAccounts,
   toolsOn,
 } from "../lib/words.ts";
+import {
+  SWITCH,
+  inUse as inUseSaid,
+  keysOf,
+  openSite,
+  removeAccount,
+  signInAsking,
+  siteOf,
+} from "./window.ts";
 
 export const app = "Pitboard";
 
@@ -126,8 +136,38 @@ export const switchNotice = {
   countdown: "Claude Code sessions already open follow in 0:21",
 };
 
-// AccountRow.xaml: its lines are when a login in use was read, a sign-in that has expired or soon
-// does, and the warm-up.
+// An opened row's cards (AccountsPage.xaml, present/accounts.rs `detail`), in Windows' words
+export const detail = {
+  email: "Email",
+  copy: "Copy",
+  signIn: "Sign-in",
+  warmUp: "Warm-up",
+  warmUpSettings: "Warm-up settings",
+  off: "Off",
+  savedUntil: (date: string) => `Saved sign-in valid until ${date}`,
+};
+
+// What an opened row's Sign-in says: in use, expired, or until when its saved sign-in is valid
+// (present/accounts.rs `detail`).
+export function signInSaid(a: Account, w: World): string | null {
+  if (isInUse(a, w)) return inUseSaid("windows");
+  if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
+  return a.refreshExpiresAt === undefined
+    ? null
+    : detail.savedUntil(dayAndMonth(a.refreshExpiresAt));
+}
+
+// A row's button: Switch, or Sign in… where its saved sign-in has expired (present/accounts.rs
+// `action`).
+export const rowAction = (a: Account, w: World) =>
+  isInUse(a, w)
+    ? null
+    : signInExpired(a, w)
+      ? { title: signInAsking("windows"), spoken: null }
+      : { title: SWITCH, spoken: switchSpoken(a) };
+
+// AccountsPage.xaml's rows, each a SettingsExpander: the account, its plan, a line a limit and at
+// most one note, In use or its button, and opened, its email, sign-in, warm-up and commands.
 export function accountsPage(w: World, notice: typeof switchNotice | null) {
   return {
     title: "Accounts",
@@ -138,16 +178,24 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
       name,
       rows: listed(w, tool).map((a) => {
         const inUse = isInUse(a, w);
+        const site = siteOf(a.tool);
         return {
           id: a.id,
           label: a.label,
           plan: a.plan,
-          email: a.email,
           inUse,
           spoken: accountSpoken(a, w),
-          action: inUse ? null : { title: "Switch", spoken: switchSpoken(a) },
+          keys: keysOf(a, w, "windows"),
+          action: rowAction(a, w),
           limits: a.limits.map((l) => limitRow(l, w)),
-          lines: rowLines(a, w, warmsAgainNote(a)),
+          note: rowNote(a, w),
+          email: a.email || null,
+          signIn: signInSaid(a, w),
+          warm: a.tool === "claude" ? (warmsAgainNote(a) ?? detail.off) : null,
+          commands: {
+            open: site ? openSite(site) : null,
+            remove: { title: removeAccount("windows"), enabled: !inUse },
+          },
         };
       }),
     })),
