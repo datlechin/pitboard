@@ -62,8 +62,7 @@ class Notice extends LiveFigure {
       },
       { threshold: [0, IN_VIEW] },
     );
-    // the drawing, which on a phone is narrower than the desk it scrolls
-    this.#seen.observe(this.closest("[data-drawing]") ?? this);
+    this.#seen.observe(this);
     super.connectedCallback();
   }
 

@@ -256,13 +256,8 @@ test("on a phone, a tap on a command runs it, and focus stays on the button", as
   await expect(use).toBeFocused();
   await expect(term.locator("[role=log]")).toContainText("Switched to personal; work is parked.");
   await expect(use).toHaveText("pitboard use work");
-  // the window keeps text a field is not zoomed for, and scrolls sideways inside its desk
-  await expect(term.locator("[data-line]")).toHaveCSS("font-size", "16px");
-  const sizes = await term.evaluate((desk) => ({
-    desk: desk.scrollWidth > desk.clientWidth,
-    page: document.documentElement.scrollWidth <= innerWidth,
-  }));
-  expect(sizes).toEqual({ desk: true, page: true });
+  // the field takes no tap, which iOS would zoom the page for
+  await expect(term.locator("[data-line]")).toHaveCSS("pointer-events", "none");
   // the toolbar keeps one Tab stop, and its arrows move along it
   await use.press("ArrowRight");
   await expect(row.getByRole("button", { name: "pitboard log -n 4" })).toBeFocused();

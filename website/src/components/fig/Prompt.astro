@@ -1,7 +1,9 @@
 ---
 // A shell's last line: its prompt, then a native field over the cursor the terminal draws at the
 // field's caret, a line high where the prompt ends; both inert until the terminal works. The tags
-// meet with no white space between them, which a terminal would draw.
+// meet with no white space between them, which a terminal would draw. Where the pointer is coarse
+// the field takes no tap, since iOS zooms into a field under 16 px: a phone runs the commands
+// CommandRow offers.
 interface Props {
   id: string;
   // the prompt as the session draws it, and the classes of the terminal's cursor
@@ -12,4 +14,4 @@ const { id, ps, cursor } = Astro.props;
 ---
 
 <!-- prettier-ignore -->
-<div class="group relative" data-prompt><span data-ps><Fragment set:html={ps} /> </span><span data-end></span><span class="live:pointer-events-none live:absolute live:top-[calc(var(--row,0)*1lh)] live:left-[calc(var(--x,0)*1px+var(--at,0)*1ch-var(--scroll,0)*1px)]" aria-hidden="true"><span class={cursor} data-cursor> </span></span><input class="absolute top-[calc(var(--row,0)*1lh)] left-[calc(var(--x,0)*1px)] h-lh w-[calc(100%-var(--x,0)*1px)] appearance-none border-0 bg-transparent p-0 [font:inherit] tracking-[inherit] text-inherit caret-transparent outline-none selection:bg-current/30" type="text" id={`${id}-line`} aria-labelledby={`${id}-title`} aria-describedby={`${id}-keys`} autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="enter" data-line /></div>
+<div class="group relative" data-prompt><span data-ps><Fragment set:html={ps} /> </span><span data-end></span><span class="live:pointer-events-none live:absolute live:top-[calc(var(--row,0)*1lh)] live:left-[calc(var(--x,0)*1px+var(--at,0)*1ch-var(--scroll,0)*1px)]" aria-hidden="true"><span class={cursor} data-cursor> </span></span><input class="absolute pointer-coarse:pointer-events-none top-[calc(var(--row,0)*1lh)] left-[calc(var(--x,0)*1px)] h-lh w-[calc(100%-var(--x,0)*1px)] appearance-none border-0 bg-transparent p-0 [font:inherit] tracking-[inherit] text-inherit caret-transparent outline-none selection:bg-current/30" type="text" id={`${id}-line`} aria-labelledby={`${id}-title`} aria-describedby={`${id}-keys`} autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="enter" data-line /></div>
