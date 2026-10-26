@@ -251,6 +251,8 @@ pub struct WarmDetail {
     pub next_at: Option<i64>,
     // when its five-hour period ends, while one runs
     pub running_until: Option<i64>,
+    // "Warm-Up Settings…", to its hours and its toggle
+    pub settings: Choice,
 }
 
 // From an account's menu, its detail or one of its notes.

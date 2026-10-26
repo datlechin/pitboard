@@ -5,12 +5,12 @@
 use super::words;
 use super::{
     AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
-    AccountStanding, ActionKind, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
+    AccountStanding, ActionKind, Choice, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
     MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::advice::window;
-use crate::model::{Intent, Sheet};
+use crate::model::{Intent, Place, SettingsSection, Sheet};
 use crate::{Account, Limit, Tool};
 use pitboard_core::duty::warm;
 use pitboard_core::host::Os;
@@ -345,7 +345,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         } else {
             life
         },
-        warm: warm_choice(seen, account).map(|choice| warm_detail(choice, warm_note)),
+        warm: warm_choice(seen, account).map(|choice| warm_detail(seen.os, choice, warm_note)),
         read_at,
         read: read_ago.or_else(|| read_at.map(|at| words::updated(&seen.clock(at)))),
     };
@@ -561,7 +561,7 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
 }
 
 // `note` is what its line says, where it says anything.
-fn warm_detail(choice: &warm::Choice, note: Option<String>) -> WarmDetail {
+fn warm_detail(os: Os, choice: &warm::Choice, note: Option<String>) -> WarmDetail {
     let (next_at, running_until) = match &choice.standing {
         Some(warm::Standing::Running { until, next }) => (*next, Some(*until)),
         Some(warm::Standing::Resting { at }) => (Some(*at), None),
@@ -574,6 +574,15 @@ fn warm_detail(choice: &warm::Choice, note: Option<String>) -> WarmDetail {
         said: note.unwrap_or_else(|| words::WARM_UP_OFF.into()),
         next_at,
         running_until,
+        settings: Choice {
+            title: words::warm_up_settings(os),
+            intent: Intent::Show {
+                place: Some(Place::Settings {
+                    section: SettingsSection::Limits,
+                }),
+            },
+            enabled: true,
+        },
     }
 }
 

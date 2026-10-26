@@ -49,7 +49,15 @@ pub struct WindowWords {
     pub close: String,
     pub ok: String,
     pub dismiss: String,
-    // a check's detail's own menu, on Windows
+    // beside an account's values in the macOS inspector and an expanded Windows row
+    pub email: String,
+    pub plan: String,
+    pub sign_in: String,
+    pub warm_up: String,
+    // the macOS toolbar's button that shows and hides the inspector
+    pub inspector: Option<String>,
+    pub inspector_help: Option<String>,
+    // a check's detail's own menu, and an expanded row's email, on Windows
     pub copy: Option<String>,
     pub select_all: Option<String>,
     // what Narrator calls the checks, and the ring while they run
@@ -267,6 +275,12 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             close: "Close".into(),
             ok: "OK".into(),
             dismiss: words::DISMISS.into(),
+            email: "Email".into(),
+            plan: "Plan".into(),
+            sign_in: titled(os, "Sign-In", "Sign-in"),
+            warm_up: words::warm_up(os),
+            inspector: mac("Inspector"),
+            inspector_help: mac("Show or hide the selected account’s details"),
             copy: windows("Copy"),
             select_all: windows("Select all"),
             checks: windows("Checks"),
@@ -546,5 +560,26 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+    }
+
+    // Plan 4.3 and 4.9: what the inspector and an expanded row label an account's values.
+    #[test]
+    fn an_accounts_values_are_labelled_in_each_systems_case() {
+        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        let labels = |words: &AppWords| {
+            [
+                words.window.email.clone(),
+                words.window.plan.clone(),
+                words.window.sign_in.clone(),
+                words.window.warm_up.clone(),
+            ]
+        };
+        assert_eq!(labels(&mac), ["Email", "Plan", "Sign-In", "Warm-Up"]);
+        assert_eq!(labels(&windows), ["Email", "Plan", "Sign-in", "Warm-up"]);
+        assert_eq!(mac.window.inspector.as_deref(), Some("Inspector"));
+        assert_eq!(
+            (windows.window.inspector, windows.window.copy.as_deref()),
+            (None, Some("Copy"))
+        );
     }
 }

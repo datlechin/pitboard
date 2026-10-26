@@ -23,6 +23,19 @@ use std::time::Duration;
 /// Two hours after the moment the hand's clock starts at, 10:00 in UTC on the same day.
 const UNTIL: i64 = 1_800_007_200;
 
+// Plan 4.3: the inspector's warm-up standing comes with Warm-Up Settings….
+fn to_its_settings() -> crate::present::Choice {
+    crate::present::Choice {
+        title: words::warm_up_settings(OS),
+        intent: Intent::Show {
+            place: Some(super::Place::Settings {
+                section: super::SettingsSection::Limits,
+            }),
+        },
+        enabled: true,
+    }
+}
+
 /// The hours of each day it warms up in, as the settings say them on the hand's clock.
 fn hours(from: u16, to: u16) -> String {
     use crate::LocalTime;
@@ -104,6 +117,7 @@ fn nothing_is_warmed_up_unless_an_account_is_turned_on() {
             said: words::WARM_UP_OFF.into(),
             next_at: None,
             running_until: None,
+            settings: to_its_settings(),
         })
     );
 }
@@ -457,6 +471,7 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
             said,
             next_at: Some(UNTIL),
             running_until: Some(UNTIL),
+            settings: to_its_settings(),
         })
     );
     let warm: Vec<(ActionKind, &str, bool)> = item

@@ -1895,6 +1895,10 @@ pub(crate) fn warm_up(os: Os) -> String {
     titled(os, "Warm-Up", "Warm-up")
 }
 
+pub(crate) fn warm_up_settings(os: Os) -> String {
+    titled(os, "Warm-Up Settings…", "Warm-up settings")
+}
+
 pub(crate) const NONE_TO_WARM: &str = "Add a Claude Code account to warm it up.";
 
 pub(crate) const WARM_UP_NOTE: &str = "Pitboard starts each account’s 5-hour limit again as soon \
