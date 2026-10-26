@@ -243,8 +243,8 @@ public sealed partial class ScreenshotTests
 
         var frame = Frame(window);
         HiddenWindows.OpenMenu(launched.Process, frame.Left + 40, frame.Top + 60);
-        var menu = Around(launched.Element("menu.others"), ControlType.Menu);
-        Keep(menu.BoundingRectangle, menu, "windows-tray-menu-issue");
+        var menu = Around(launched.Element("menu.openPitboard"), ControlType.Menu);
+        Keep(menu.BoundingRectangle, menu, "windows-tray-menu-read-failure");
     }
 
     [TestMethod]

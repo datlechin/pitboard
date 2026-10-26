@@ -39,14 +39,10 @@ public static class IconMenuFlyout
     {
         switch (entry)
         {
-            case IconMenuEntry.Label label:
+            case IconMenuEntry.Heading heading:
                 // A menu has no heading of its own, so a tool's name is an item nobody can choose.
-                var line = new MenuFlyoutItem { Text = label.Text, IsEnabled = false };
-                if (label.Heading)
-                {
-                    AutomationProperties.SetHeadingLevel(line, AutomationHeadingLevel.Level1);
-                }
-
+                var line = new MenuFlyoutItem { Text = heading.Text, IsEnabled = false };
+                AutomationProperties.SetHeadingLevel(line, AutomationHeadingLevel.Level1);
                 return line;
             case IconMenuEntry.Account account:
                 var radio = new RadioMenuFlyoutItem
@@ -61,14 +57,15 @@ public static class IconMenuFlyout
                     AutomationProperties.SetAutomationId(radio, accountId);
                 }
 
-                return Described(radio, account.Detail, account.Does, chosen);
-            case IconMenuEntry.Command command:
-                var item = new MenuFlyoutItem { Text = command.Text, IsEnabled = command.Enabled };
-                if (command.Mark is { } mark)
+                if (account.Detail is { } detail)
                 {
-                    item.Icon = new FontIcon { Glyph = Glyph(mark) };
+                    ToolTipService.SetToolTip(radio, detail);
+                    AutomationProperties.SetHelpText(radio, detail);
                 }
 
+                return Chosen(radio, account.Does, chosen);
+            case IconMenuEntry.Command command:
+                var item = new MenuFlyoutItem { Text = command.Text };
                 if (command.Default)
                 {
                     item.FontWeight = FontWeights.SemiBold;
@@ -79,7 +76,7 @@ public static class IconMenuFlyout
                     AutomationProperties.SetAutomationId(item, id);
                 }
 
-                return Described(item, command.Detail, command.Does, chosen);
+                return Chosen(item, command.Does, chosen);
             case IconMenuEntry.Submenu submenu:
                 var sub = new MenuFlyoutSubItem { Text = submenu.Text };
                 if (submenu.Id is { } submenuId)
@@ -100,14 +97,8 @@ public static class IconMenuFlyout
         }
     }
 
-    private static MenuFlyoutItem Described(MenuFlyoutItem item, string? detail, IconCommand? does, Action<IconCommand> chosen)
+    private static MenuFlyoutItem Chosen(MenuFlyoutItem item, IconCommand? does, Action<IconCommand> chosen)
     {
-        if (detail is not null)
-        {
-            ToolTipService.SetToolTip(item, detail);
-            AutomationProperties.SetHelpText(item, detail);
-        }
-
         if (does is not null)
         {
             item.Click += (_, _) => chosen(does);
@@ -115,14 +106,4 @@ public static class IconMenuFlyout
 
         return item;
     }
-
-    private static string Glyph(IconMark mark) => mark switch
-    {
-        IconMark.Help => Glyphs.Help,
-        IconMark.Switch => Glyphs.Switch,
-        IconMark.Update => Glyphs.Update,
-        IconMark.Info => Glyphs.Info,
-        IconMark.Warning => Glyphs.Warning,
-        _ => Glyphs.Problem,
-    };
 }

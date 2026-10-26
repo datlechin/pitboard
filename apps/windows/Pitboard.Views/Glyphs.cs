@@ -11,9 +11,5 @@ internal static class Glyphs
     public const string Problem = "\uEA39";
     public const string Switch = "\uE8AB";
     public const string Passed = "\uE930";
-    public const string Help = "\uE897";
-    public const string Info = "\uE946";
-    public const string Update = "\uE895";
-    public const string Site = "\uE774";
     public const string Limits = "\uEC4A";
 }

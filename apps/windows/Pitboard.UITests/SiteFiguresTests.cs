@@ -25,8 +25,8 @@ public sealed partial class SiteFiguresTests
 
     private static readonly string[] IconMenu =
     [
-        "Claude Code", "work (42%)", "old (sign-in expired)", "personal (100%)", "Codex", "main (7%)", "spare (0%)", "Add account…",
-        "Refresh", "Open claude.ai", "Open chatgpt.com", "Open Pitboard", "Settings", "Pitboard help", "Exit",
+        "Open Pitboard", "Claude Code", "work (42%)", "old (sign-in expired)", "personal (100%)", "Codex", "main (7%)", "spare (0%)",
+        "Add account…", "Open claude.ai", "Open chatgpt.com", "Settings", "Pitboard help", "Exit",
     ];
 
     private static readonly string[] Headings = ["Claude Code", "Codex"];
@@ -75,7 +75,7 @@ public sealed partial class SiteFiguresTests
             Joined(entries.Where(entry => entry.ClassName == "MenuFlyoutSubItem").Select(entry => entry.Name)));
         foreach (var name in focused.Values.Where(name => name != "foreground held"))
         {
-            Assert.AreEqual("work (42%)", name, "focused as the menu opened");
+            Assert.AreEqual("Open Pitboard", name, "focused as the menu opened");
         }
     }
 
@@ -120,10 +120,10 @@ public sealed partial class SiteFiguresTests
             "site-tray-menu-arrows");
 
         var enabled = IconMenu.Except(Headings).ToArray();
-        Assert.AreEqual("work (42%)", opened);
+        Assert.AreEqual("Open Pitboard", opened);
         Assert.AreEqual(Joined(enabled.Skip(1).Concat(enabled).Concat(enabled).Take(20)), Joined(down));
         Assert.AreEqual(Joined(Enumerable.Repeat(down[^1], 4)), Joined(others));
-        Assert.AreEqual("work (42%)", reopened);
+        Assert.AreEqual("Open Pitboard", reopened);
         Assert.AreEqual("Exit", up);
     }
 

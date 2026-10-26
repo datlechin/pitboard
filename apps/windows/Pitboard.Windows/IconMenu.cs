@@ -2,16 +2,6 @@ using Pitboard.Core;
 
 namespace Pitboard.Windows;
 
-public enum IconMark
-{
-    Help,
-    Switch,
-    Update,
-    Info,
-    Warning,
-    Error,
-}
-
 public abstract record IconCommand
 {
     private IconCommand()
@@ -37,15 +27,8 @@ public abstract record IconMenuEntry
     {
     }
 
-    // Detail is the line macOS shows under an item, here its tooltip and its help text.
-    public sealed record Command(string Text, IconCommand? Does) : IconMenuEntry
+    public sealed record Command(string Text, IconCommand Does) : IconMenuEntry
     {
-        public string? Detail { get; init; }
-
-        public bool Enabled { get; init; } = true;
-
-        public IconMark? Mark { get; init; }
-
         // What a click on the icon does, which a Windows context menu shows in bold.
         public bool Default { get; init; }
 
@@ -53,7 +36,8 @@ public abstract record IconMenuEntry
         public string? Id { get; init; }
     }
 
-    // Choosing it does what its row's button does; the one in use stays in use until another is chosen.
+    // Choosing it does what its row's button does; the one in use stays in use until another is chosen. Detail is its
+    // tooltip and its help text.
     public sealed record Account(string Text, string Group, bool InUse, IconCommand? Does, string? Detail) : IconMenuEntry
     {
         public bool Enabled => InUse || Does is not null;
@@ -61,7 +45,8 @@ public abstract record IconMenuEntry
         public string? Id { get; init; }
     }
 
-    public sealed record Label(string Text, bool Heading) : IconMenuEntry;
+    // A tool's name over its accounts.
+    public sealed record Heading(string Text) : IconMenuEntry;
 
     public sealed record Submenu(string Text, IReadOnlyList<IconMenuEntry> Entries) : IconMenuEntry
     {
@@ -71,45 +56,38 @@ public abstract record IconMenuEntry
     public sealed record Separator : IconMenuEntry;
 }
 
-// The notification-area icon's menu, in the macOS menu's order.
+// The notification-area icon's menu, in the order Microsoft gives one: Open first, Exit last, and what does not apply
+// left out rather than dimmed. What needs attention is in the window, which the icon's warning points to.
 public static class IconMenu
 {
     public const string HelpLink = "https://docs.usepitboard.com";
 
     public static IReadOnlyList<IconMenuEntry> Entries(AppModel model, IUpdates updates)
     {
+        var words = Words.Menu;
         List<IconMenuEntry>[] groups =
         [
-            Attention(model.MenuNotices, updates),
-            .. Accounts(model),
             [
-                new IconMenuEntry.Command("Add account…", new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))))
-                {
-                    Id = "menu.addAccount",
-                },
-                new IconMenuEntry.Command("Refresh", new IconCommand.Send(new Intent.Refresh(Asked: true)))
-                {
-                    Detail = model.UpdatedMenu,
-                    Enabled = !model.Reading,
-                    Id = "menu.refresh",
-                },
-            ],
-            Sites(model.AccountWindows),
-            [
-                new IconMenuEntry.Command("Open Pitboard", new IconCommand.Send(new Intent.Show(Place: null)))
+                new IconMenuEntry.Command(words.OpenPitboard, new IconCommand.Send(new Intent.Show(Place: null)))
                 {
                     Default = true,
                     Id = "menu.openPitboard",
                 },
-                new IconMenuEntry.Command("Settings", new IconCommand.ShowSettings()) { Id = "menu.settings" },
-                .. updates.Available && !updates.Beta
-                    ? [new IconMenuEntry.Command("Check for updates", new IconCommand.CheckForUpdates()) { Id = "menu.checkForUpdates" }]
-                    : Array.Empty<IconMenuEntry>(),
             ],
+            Accounts(model.Sections),
             [
-                new IconMenuEntry.Command("Pitboard help", new IconCommand.OpenLink(HelpLink)) { Id = "menu.help" },
-                new IconMenuEntry.Command("Exit", new IconCommand.Quit()) { Id = "menu.exit" },
+                new IconMenuEntry.Command(words.AddAccount, new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))))
+                {
+                    Id = "menu.addAccount",
+                },
             ],
+            Sites(model.AccountWindows),
+            [
+                new IconMenuEntry.Command(words.Settings, new IconCommand.ShowSettings()) { Id = "menu.settings" },
+                .. Updates(updates),
+                new IconMenuEntry.Command(words.Help, new IconCommand.OpenLink(HelpLink)) { Id = "menu.help" },
+            ],
+            [new IconMenuEntry.Command(words.Quit, new IconCommand.Quit()) { Id = "menu.exit" }],
         ];
 
         var entries = new List<IconMenuEntry>();
@@ -126,45 +104,15 @@ public static class IconMenu
         return entries;
     }
 
-    private static List<IconMenuEntry> Attention(MenuNotices notices, IUpdates updates)
+    // Each tool's accounts under its name, and one tool's unheaded, as the window shows them.
+    private static List<IconMenuEntry> Accounts(AccountSection[] sections)
     {
         var entries = new List<IconMenuEntry>();
-        if (notices.Install is { } install)
+        foreach (var section in sections)
         {
-            entries.Add(Notice(install, IconMark.Help, "menu.install"));
-        }
-
-        entries.AddRange(notices.Switches.Select((advice, at) => Notice(advice, Mark(advice.Severity) ?? IconMark.Switch, $"menu.switch.{at}")));
-        if (notices.Others is { } others)
-        {
-            entries.Add(Notice(others, Mark(others.Severity) ?? IconMark.Warning, "menu.others"));
-        }
-
-        if (updates.Available && updates.Waiting is { } waiting)
-        {
-            entries.Add(new IconMenuEntry.Command($"Install Pitboard {waiting}…", new IconCommand.CheckForUpdates())
-            {
-                Mark = IconMark.Update,
-                Id = "menu.update",
-            });
-        }
-
-        return entries;
-    }
-
-    private static IEnumerable<List<IconMenuEntry>> Accounts(AppModel model)
-    {
-        if (model.MenuAccountsNote is { } note)
-        {
-            return [[new IconMenuEntry.Label(note, Heading: false)]];
-        }
-
-        return model.Sections.Select(section =>
-        {
-            var entries = new List<IconMenuEntry>();
             if (section.Heading is { } heading)
             {
-                entries.Add(new IconMenuEntry.Label(heading, Heading: true));
+                entries.Add(new IconMenuEntry.Heading(heading));
             }
 
             entries.AddRange(section.Accounts.Select(item => new IconMenuEntry.Account(
@@ -176,59 +124,60 @@ public static class IconMenu
             {
                 Id = $"menu.account.{item.Qualified ?? item.Id}",
             }));
-            return entries;
-        });
+        }
+
+        return entries;
+    }
+
+    // An update found is offered by its version, on a beta too, which finds no later beta and so offers no check.
+    private static List<IconMenuEntry> Updates(IUpdates updates)
+    {
+        if (!updates.Available)
+        {
+            return [];
+        }
+
+        if (updates.Waiting is { } waiting)
+        {
+            return [new IconMenuEntry.Command(PitboardFfiMethods.InstallUpdate(waiting), new IconCommand.CheckForUpdates()) { Id = "menu.update" }];
+        }
+
+        return updates.Beta
+            ? []
+            : [new IconMenuEntry.Command(Words.Menu.CheckForUpdates, new IconCommand.CheckForUpdates()) { Id = "menu.checkForUpdates" }];
     }
 
     // An account's window entry: its title is the account's label, as the account's own entry is.
     public static string WindowId(WindowAccount window) => $"window.{window.Site.Host}/{window.Label}";
 
-    // A site with one account's window is an item, and one with several a submenu of their titles.
-    private static List<IconMenuEntry> Sites(AccountWindowsShown windows) =>
-        [
-            .. windows.Menus.Select<SiteMenu, IconMenuEntry>(menu => menu switch
-            {
-                SiteMenu.One one => Window(one.Title, one.Window, windows.Held),
-                SiteMenu.Several several => new IconMenuEntry.Submenu(
-                    several.Title, [.. several.Windows.Select(window => Window(window.Title, window, windows.Held))])
-                {
-                    Id = $"menu.site.{several.Site.Host}",
-                },
-                _ => throw new ArgumentOutOfRangeException(nameof(windows), menu, "a site menu of no kind"),
-            }),
-        ];
-
-    private static IconMenuEntry.Command Window(string text, WindowAccount window, string[] held)
+    // A site with one account's window is an item, and one with several a submenu of their titles. A window whose store
+    // is still held opens nothing until it is let go, so it is left out until then.
+    private static List<IconMenuEntry> Sites(AccountWindowsShown windows)
     {
-        var note = HeldStores.Note(window, held);
-        return new IconMenuEntry.Command(text, new IconCommand.OpenWindow(window))
+        var entries = new List<IconMenuEntry>();
+        foreach (var menu in windows.Menus)
         {
-            Detail = note,
-            Enabled = note is null,
-            Id = WindowId(window),
-        };
+            switch (menu)
+            {
+                case SiteMenu.One one when Opens(one.Window):
+                    entries.Add(Window(one.Title, one.Window));
+                    break;
+                case SiteMenu.Several several when several.Windows.Where(Opens).ToArray() is { Length: > 0 } opening:
+                    entries.Add(new IconMenuEntry.Submenu(several.Title, [.. opening.Select(window => Window(window.Title, window))])
+                    {
+                        Id = $"menu.site.{several.Site.Host}",
+                    });
+                    break;
+            }
+        }
+
+        return entries;
+
+        bool Opens(WindowAccount window) => HeldStores.Note(window, windows.Held) is null;
     }
 
-    private static IconMenuEntry.Command Notice(MenuEntry entry, IconMark mark, string id) =>
-        new(
-            entry.Title,
-            entry.Intent is { } intent ? new IconCommand.Send(intent)
-            : entry.Link is { } link ? new IconCommand.OpenLink(link)
-            : null)
-        {
-            Detail = Lines(entry.Subtitle, entry.Help),
-            Enabled = entry.Enabled,
-            Mark = mark,
-            Id = id,
-        };
-
-    private static IconMark? Mark(Severity? severity) => severity switch
-    {
-        Severity.Info => IconMark.Info,
-        Severity.Warning => IconMark.Warning,
-        Severity.Error => IconMark.Error,
-        _ => null,
-    };
+    private static IconMenuEntry.Command Window(string text, WindowAccount window) =>
+        new(text, new IconCommand.OpenWindow(window)) { Id = WindowId(window) };
 
     private static string? Lines(params string?[] lines)
     {

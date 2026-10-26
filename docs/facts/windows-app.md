@@ -249,15 +249,20 @@ Microsoft's documentation.
   return on `TaskbarCreated`.
 - The notification area guidance (updated 15 April 2025) has a right click bring up a normal
   shortcut menu and a left click show what the person expects, the program window among
-  them, and prefers the standard tooltip. Its Windows 7 page (updated 11 March 2025) gives
-  the icon's menu no About command where the program has a window. The Windows 7 menu
-  guidance (updated 26 July 2026) names Exit, puts no ellipsis on Help or Settings, shows a
-  context menu's default command in bold and no shortcut keys, and writes labels in
-  sentence-style capitalization, keeping title style for a legacy program that would
-  otherwise mix styles. So the icon's menu says Exit, bolds Open Pitboard, shows no shortcuts
-  and leaves About to the settings page, and the Windows app writes all its text in sentence
-  case: its own, and the model's buttons, menu items and headings, which `words::titled`
-  words for each system, title case on macOS as Apple's guidelines have it.
+  them, and prefers the standard tooltip. Its Windows 7 page (updated 11 March 2025) puts
+  Open first and in bold and Exit last, removes rather than disables a menu item that does
+  not apply, and gives the icon's menu no About command where the program has a window. The
+  Windows 7 menu guidance (updated 26 July 2026) names Exit, puts no ellipsis on Help or
+  Settings, shows a context menu's default command in bold and no shortcut keys, and writes
+  labels in sentence-style capitalization, keeping title style for a legacy program that
+  would otherwise mix styles. So the icon's menu opens on Open Pitboard in bold and ends
+  with Exit, leaves out Refresh, which the window has, the notices, which the window shows,
+  and a window whose store is still held, shows no shortcuts and leaves About to the
+  settings page (`IconMenuTests`). Its only dimmed rows are the tools' names, since
+  `MenuFlyout` has no heading, and an account while nothing can be done with it, such as
+  during a switch, so the accounts it lists keep their places. The Windows app writes all its
+  text in sentence case: its own, and the model's buttons, menu items and headings, which
+  `words::titled` words for each system, title case on macOS as Apple's guidelines have it.
 - WinUI 2.3.9's `Themes/generic.xaml` draws a `RadioMenuFlyoutItem`'s text in one
   TextBlock that trims, where the macOS menu puts an account's limits on a line under its
   name. So on Windows `AccountItem.menu_title` ends with the figure the menu bar would show
