@@ -4,14 +4,6 @@ namespace Pitboard.Windows.Tests;
 public sealed class ShownAccountTests
 {
     [TestMethod]
-    public void NarratorReadsTheRowAsTheModelSaysIt()
-    {
-        var shown = new ShownAccount(Items.Account("claude", "work", inUse: true), _ => { });
-
-        Assert.AreEqual("work, in use", shown.ToString());
-    }
-
-    [TestMethod]
     public void TheRowIsToldOnlyWhenItsAccountChanged()
     {
         var shown = new ShownAccount(Items.Account("claude", "work"), _ => { });

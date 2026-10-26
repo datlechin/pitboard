@@ -45,7 +45,7 @@ public sealed partial class ShownAccount(AccountItem item, Action<Intent> send) 
 
         Item = item;
         var commands = CommandsOf(item);
-        if (!Structural.Equal(Commands, commands))
+        if (!Structural.Equal(Commands.ToArray(), commands))
         {
             Commands.Clear();
             foreach (var command in commands)
