@@ -128,11 +128,24 @@ mod tests {
         );
     }
 
+    /// The site's world on each system, as the site's terminals print it and its This Mac and
+    /// This PC panes list it.
     #[test]
-    fn a_healthy_mac_with_claude_code_and_codex_reads_as_it_did() {
-        let checks = pitboard_core::testing::doctor_on_a_healthy_mac();
-        let printed = anstream::adapter::strip_str(&human(&checks)).to_string();
-        insta::assert_snapshot!("doctor_on_a_healthy_mac", printed);
+    fn a_healthy_machine_on_each_system_reads_as_it_did() {
+        let printed = |checks: &[Check]| anstream::adapter::strip_str(&human(checks)).to_string();
+        use pitboard_core::testing as world;
+        insta::assert_snapshot!(
+            "doctor_on_a_healthy_mac",
+            printed(&world::doctor_on_a_healthy_mac())
+        );
+        insta::assert_snapshot!(
+            "doctor_on_a_healthy_pc",
+            printed(&world::doctor_on_a_healthy_pc())
+        );
+        insta::assert_snapshot!(
+            "doctor_on_a_healthy_linux",
+            printed(&world::doctor_on_a_healthy_linux())
+        );
     }
 
     /// Codex's checks sit under a heading of their own, after everything about Claude

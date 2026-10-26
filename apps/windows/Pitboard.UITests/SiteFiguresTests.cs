@@ -11,7 +11,7 @@ using FlaUI.Core.WindowsAPI;
 namespace Pitboard.UITests;
 
 // How WinUI's controls behave in the app, for usepitboard.com's figures. Each test keeps what it reads and a picture
-// under a name starting "site-", which docs/facts/site.md records, before it asserts what it read.
+// under a name starting "site-", which docs/facts/site.md records, before it asserts what the site rests on.
 [TestClass]
 [Elevated(ConditionMode.Exclude)]
 public sealed partial class SiteFiguresTests
@@ -137,17 +137,17 @@ public sealed partial class SiteFiguresTests
 
         var place = row.BoundingRectangle;
         Mouse.Click(new Point(place.Left + 24, place.Top + (place.Height / 2)));
-        Thread.Sleep(500);
+        Until(() => SelectedAccounts(window).Length > 0);
         var clicked = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
         Press(VirtualKeyShort.DELETE);
         Launched.Within(launched.Element("question"), found => found.ByAutomationId("PrimaryButton"), "the dialog's Remove");
-        Thread.Sleep(500);
+        Until(() => InDialog(FocusedId(launched)));
         var asked = Focused(launched);
         var askedId = FocusedId(launched);
         Keep(Capture.Element(window), "site-forget-dialog");
         Press(VirtualKeyShort.ENTER);
         var forgotten = launched.Gone(found => found.ByAutomationId("account.claude/personal"));
-        Thread.Sleep(500);
+        Until(() => !InDialog(FocusedId(launched)));
         var after = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
         var afterSaid = Focused(launched);
         Keep(Capture.Element(window), "site-focus-after-forget");
@@ -183,7 +183,7 @@ public sealed partial class SiteFiguresTests
 
         var place = work.BoundingRectangle;
         Mouse.Click(new Point(place.Left + 24, place.Top + (place.Height / 2)));
-        Thread.Sleep(500);
+        Until(() => SelectedAccounts(window).Length > 0);
         var clicked = SelectedAccounts(window);
         launched.RightClick(personal);
         var copy = launched.Element("account.copyEmail");
@@ -195,7 +195,7 @@ public sealed partial class SiteFiguresTests
         Keep(Capture.Rectangle(Rectangle.Union(menu.BoundingRectangle, window.BoundingRectangle)), "site-context-menu-row-not-selected");
         var keys = entries.Select(entry => $"{entry.Name} {entry.Properties.AcceleratorKey.ValueOrDefault}".Trim()).ToArray();
         copy.Patterns.Invoke.Pattern.Invoke();
-        Thread.Sleep(500);
+        Until(() => ClipboardText.Read() == "dana@home.example");
         var copied = ClipboardText.Read();
         var after = SelectedAccounts(window);
         Record(
@@ -275,7 +275,7 @@ public sealed partial class SiteFiguresTests
         Assert.IsTrue(Retry.WhileFalse(() => share.IsEnabled, Shortly, TimeSpan.FromMilliseconds(250)).Result);
 
         choice.Expand();
-        Thread.Sleep(500);
+        Until(() => choice.Items.Length > 0);
         var choices = choice.Items.Select(item => item.Name).ToArray();
         var chosen = choice.SelectedItem?.Name;
         Keep(Capture.Element(window), "site-limits-combo-box-open");
@@ -293,8 +293,9 @@ public sealed partial class SiteFiguresTests
         {
             try
             {
+                var before = range.Value.Value;
                 range.SetValue(value);
-                Thread.Sleep(500);
+                Until(() => range.Value.Value != before);
                 set[value] = (range.Value.Value, Buttons(share));
                 seen.Add($"set {value}: {set[value].Value}; {set[value].Buttons}");
             }
@@ -365,7 +366,9 @@ public sealed partial class SiteFiguresTests
         var center = Retry.WhileNull(
             () => desktop.FindFirstChild(found => found.ByName("Windows Shell Experience Host").And(found.ByClassName("Windows.UI.Core.CoreWindow"))),
             Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
-        Thread.Sleep(1000);
+        var calendar = center is null ? null : Retry.WhileNull(
+            () => center.FindFirstDescendant(found => found.ByAutomationId("CalendarCenterGrid")),
+            Shortly, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
         var seen = new List<string> { $"work area {work}", "after Windows+N:" };
         seen.AddRange(desktop.FindAllChildren().Select(Describe));
         if (center is not null)
@@ -377,14 +380,17 @@ public sealed partial class SiteFiguresTests
         Keep(Capture.Screen(), "site-notification-center");
         var place = center?.BoundingRectangle ?? Rectangle.Empty;
         var focused = center?.Properties.HasKeyboardFocus.ValueOrDefault ?? false;
+        var notifications = center?.FindFirstDescendant(found => found.ByAutomationId("NotificationCenterGrid"))?.BoundingRectangle ?? Rectangle.Empty;
+        var dated = calendar?.BoundingRectangle ?? Rectangle.Empty;
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         Record(seen, "site-notification-center");
 
         Assert.IsNotNull(center, "Windows+N opened no Notification Center");
         Assert.IsTrue(focused, "Notification Center has no keyboard focus");
-        Assert.AreEqual(work.Right, place.Right);
-        Assert.AreEqual(work.Top, place.Top);
-        Assert.AreEqual(work.Bottom, place.Bottom);
+        Assert.AreEqual(Rectangle.FromLTRB(work.Right - 360, work.Top, work.Right, work.Bottom), place);
+        Assert.AreEqual(work.Right - 12, notifications.Right, "the notifications' card from the right");
+        Assert.AreEqual(336, notifications.Width);
+        Assert.AreEqual((work.Right - 12, work.Bottom - 12, 336, 100), (dated.Right, dated.Bottom, dated.Width, dated.Height), "the date's card");
     }
 
     private static bool InUse(Launched launched)
@@ -420,16 +426,24 @@ public sealed partial class SiteFiguresTests
         }
     }
 
-    // The icon's menu, once it has opened at the point given and any it replaced has gone.
+    // The icon's menu, once it has opened at the point given and any it replaced has gone. WinUI places the menu
+    // and moves focus in it for a while after it opens, with nothing to wait on: the reading is where they settle.
     private static AutomationElement Menu(Launched launched, Point at)
     {
         Thread.Sleep(1000);
         var item = launched.Find(found => found.ByAutomationId("menu.openPitboard"), $"the menu opened at {at}");
         var menu = Around(item, ControlType.Menu);
-        Retry.WhileFalse(() => menu.BoundingRectangle.Contains(item.BoundingRectangle) && !item.IsOffscreen, Shortly, TimeSpan.FromMilliseconds(100), ignoreException: true);
+        Assert.IsTrue(Until(() => menu.BoundingRectangle.Contains(item.BoundingRectangle) && !item.IsOffscreen), $"no menu opened at {at}");
         Thread.Sleep(500);
         return menu;
     }
+
+    // Waits for what a step changes, and says whether it came.
+    private static bool Until(Func<bool> condition) =>
+        Retry.WhileFalse(condition, Shortly, TimeSpan.FromMilliseconds(100), ignoreException: true).Result;
+
+    // The Remove dialog's buttons.
+    private static bool InDialog(string focused) => focused is "PrimaryButton" or "SecondaryButton" or "CloseButton";
 
     private static string Describe(AutomationElement element)
     {

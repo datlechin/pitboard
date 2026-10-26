@@ -1,6 +1,8 @@
 ---
 // The notification once a limit reaches the share (MacPlatform.swift); macOS cuts a title longer
-// than the banner's one line at its end. The banner is a group its title names.
+// than the banner's one line at its end. The banner is a group its title names. Working, it is a
+// Temporary banner: it comes in from the screen's edge, shows its close button and Switch while the
+// pointer is over it or focus is inside it, and goes.
 import MenuBar from "./MenuBar.astro";
 import MenuItem from "./MenuItem.astro";
 import { clock, share } from "../../../data/world.ts";
@@ -21,27 +23,42 @@ const { prefix } = Astro.props;
       aria-expanded="false"
     >
       <svg class="size-16 shrink-0"><use href="#pb-template"></use></svg>
-      {`${headsUp.account} ${share}%`}
+      <span data-title>{`${headsUp.account} ${share}%`}</span>
     </MenuItem>
   </MenuBar>
   <div
-    class="absolute top-36 right-14 flex w-370 items-center gap-10 rounded-u-18 bg-mac-menu-bg p-12 text-mac-menu-text shadow-mac-banner backdrop-blur-xl backdrop-saturate-180"
+    class="group/banner absolute top-36 right-14 flex w-370 items-center gap-10 rounded-u-18 bg-mac-menu-bg p-12 text-mac-menu-text shadow-mac-banner backdrop-blur-xl backdrop-saturate-180 live:transition-[translate,opacity,visibility] live:duration-400 live:ease-out live:not-data-[state]:invisible live:not-data-[state]:translate-x-[calc(100%+var(--u)*14)] live:not-data-[state]:opacity-0"
     role="group"
     aria-labelledby={`${prefix}-title`}
+    data-banner
   >
+    <button
+      class="absolute -top-6 -left-6 hidden size-20 items-center justify-center rounded-circle bg-mac-menu-bg text-mac-menu-sub shadow-mac-banner backdrop-blur-xl focus-mac live:flex live:opacity-0 live:group-data-[state=held]/banner:opacity-100"
+      type="button"
+      aria-label="Close"
+      data-close
+    >
+      <svg class="size-10 [--stroke:2.4]"><use href="#sf-xmark"></use></svg>
+    </button>
     <img class="size-38 flex-none" src="/icon-192.png" alt="" width="38" height="38" />
     <span class="min-w-0 flex-1 text-u-13/16">
       <b class="flex gap-6 font-bold whitespace-nowrap"
         ><span class="min-w-0 truncate" id={`${prefix}-title`}>{headsUp.title}</span
         ><span class="ml-auto text-u-12 font-normal text-mac-menu-sub">now</span></b
       >
-      {headsUp.tool}<br />{headsUp.body}
+      <span class="block" data-subtitle>{headsUp.tool}</span>
+      <span class="block" data-body>{headsUp.body}</span>
     </span>
     <button
-      class="flex flex-none items-center self-stretch pl-10 font-medium inset-shadow-mac-menu-l"
+      class="flex flex-none items-center self-stretch pl-10 font-medium inset-shadow-mac-menu-l focus-mac live:group-data-[state=in]/banner:sr-only"
       type="button"
+      data-switch
     >
       {headsUp.button}
     </button>
   </div>
 </pb-notice>
+
+<script>
+  import "../../../scripts/live/notice.ts";
+</script>

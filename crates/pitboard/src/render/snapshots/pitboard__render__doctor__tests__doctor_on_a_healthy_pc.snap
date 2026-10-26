@@ -1,0 +1,38 @@
+---
+source: crates/pitboard/src/render/doctor.rs
+expression: "printed(&world::doctor_on_a_healthy_pc())"
+---
+✓ config file                        C:\Users\me\.claude.json  (1 keys)
+✓ identity                           me@example.com  ·  org 8b2d4e61-3c5a-4f7e-a1d9-6c0e2b7f5a34
+✓ in use                             `personal`, as Anthropic said 20:50
+✓ slot                               default  ·  Claude Code-credentials  ·  account me
+✓ login size                         900 bytes, in one item
+✓ credential store                   Credential Manager  ·  Claude Code-credentials/me  ·  every logon of yours on this PC reads it
+✓ credential                         refresh fcda3e5dfe80953d  ·  good for 26d 4h  ·  keys ["claudeAiOauth"]
+✓ Pitboard home                      C:\Users\me\AppData\Local\Pitboard
+✓ logins on disk                     nothing holding a login is readable by anyone else
+✓ parked logins                      sealed to this Windows account, not plain text
+✓ accounts                           4 enrolled
+✓ account personal                   signed in; parked when you switch away
+✓ account work                       parked, good for 26d 4h
+✓ machine id                         Windows' MachineGuid
+                                     Pitboard tells this PC apart by it, and a copy of the PC keeps it, such as a virtual machine copied whole. Such a copy takes this PC's accounts for its own, and both renew the same parked logins: on a copy, forget each account and enrol it again with `--sign-in`.
+✓ storage v5                         inactive
+✓ Claude Code daemon                 none has run here
+✓ parks being reclaimed              none outstanding
+✓ Claude Code build                  2.1.303, which is what Pitboard's facts were read from
+✓ what a session authenticates with  the stored login, which is what Pitboard moves
+✓ asking Anthropic and OpenAI        nothing is being held back
+✓ network                            direct: no variable names a proxy
+
+Codex
+✓ Codex login store    file (Codex's default)  ·  C:\Users\me\.codex\auth.json
+                       Pitboard does not read a project's own `.codex/config.toml`, which applies only inside that project: in a trusted project that sets `cli_auth_credentials_store`, Codex keeps its login somewhere else.
+✓ Codex login file     C:\Users\me\.codex\auth.json  ·  open to you, SYSTEM and Administrators
+✓ Codex login          me@example.com  ·  account a1e5c9d3-6f2b-4c8a-8e7d-3b0f5a9c1e26  ·  refresh a551afc0bc23fb53
+✓ account codex/main   signed in; parked when you switch away
+✓ account codex/spare  parked
+✓ Codex build          0.164.0, which is what Pitboard's facts were read from
+✓ running Codex        none
+
+Everything Pitboard checks is in order.

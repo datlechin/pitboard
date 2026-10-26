@@ -34,9 +34,21 @@ for (const colorScheme of ["light", "dark"] as const) {
           own(id, platform, surface),
         );
         expect(ids.length).toBeGreaterThan(4);
-        // every figure is compared, and every missing baseline written, before the test fails
-        for (const id of ids)
+        // every figure is compared, and every missing baseline written, before the test fails;
+        // each is taken a whole pixel down the page, so a change above it moves it by whole pixels
+        // the page's header stays at the top of the page, off the figure it would cover
+        await page.evaluate(
+          () => (document.querySelector<HTMLElement>("body > header")!.style.position = "static"),
+        );
+        for (const id of ids) {
+          await page.evaluate((id) => {
+            const root = document.documentElement;
+            root.style.paddingTop = "0px";
+            const top = document.getElementById(id)!.getBoundingClientRect().top + scrollY;
+            root.style.paddingTop = `${Math.ceil(top) - top}px`;
+          }, id);
           await expect.soft(page.locator(`#${id}`)).toHaveScreenshot(`${id}-${colorScheme}.png`);
+        }
       });
     }
   }

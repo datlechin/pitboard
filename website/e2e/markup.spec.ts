@@ -1,7 +1,17 @@
 // One markup, static and live (plan 2.4): without JavaScript every figure is its drawing and nothing
 // in it can be used; with it, each figure is the markup Astro rendered, apart from the attributes
 // its live code changes.
-import { astroDrew, choose, defined, drawn, expect, platforms, roots, test } from "./fixtures.ts";
+import {
+  astroDrew,
+  choose,
+  defined,
+  drawn,
+  expect,
+  handedOver,
+  platforms,
+  roots,
+  test,
+} from "./fixtures.ts";
 
 test.use({ reducedMotion: "reduce" });
 
@@ -45,6 +55,9 @@ test.describe("without JavaScript", () => {
   });
 });
 
+// the figures index.astro draws at the moment before the demo's switch
+const before = ["usage-mac", "usage-win"];
+
 test.describe("with JavaScript", () => {
   for (const platform of platforms) {
     test(`on ${platform}, every figure is the markup Astro drew`, async ({
@@ -58,9 +71,21 @@ test.describe("with JavaScript", () => {
       await page.clock.install();
       await page.goto("/");
       const live = new Set(await defined(page));
+      await handedOver(page);
       const now = await drawn(page);
       expect(Object.keys(now)).toEqual(Object.keys(astro));
-      for (const [id, html] of Object.entries(now)) expect(html, id).toBe(astro[id]);
+      for (const [id, html] of Object.entries(now))
+        if (!before.includes(id)) expect(html, id).toBe(astro[id]);
+      // the window #usage draws before the switch: back on personal, it is that markup again
+      await page
+        .locator('#switch-mac [data-account="personal"] [data-does="use"]')
+        .dispatchEvent("click");
+      await expect(page.locator('#usage-mac [data-account="personal"]')).toHaveAttribute(
+        "aria-keyshortcuts",
+        "Meta+C",
+      );
+      const back = await drawn(page);
+      for (const id of before) expect(back[id], id).toBe(astro[id]);
       // a figure whose element is not defined stays the drawing, inert
       const inert = await page
         .locator(roots)

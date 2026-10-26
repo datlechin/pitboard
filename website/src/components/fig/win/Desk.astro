@@ -1,6 +1,10 @@
 ---
-// IconMenu.cs's menu over Windows Terminal; where it opens is approx until read on Windows. The
-// icon is a button the Shell names by its tooltip, and its menu's ids each start `prefix`.
+// IconMenu.cs's menu over Windows Terminal, opened where the pointer right-clicked the icon: its
+// right edge at the point and its bottom on the taskbar's top, as the app's UI tests read it on
+// windows-2025 (docs/facts/site.md). The icon is a button the Shell names by its tooltip, and its
+// menu's ids each start `prefix`. The
+// hero's desk is live/tray.ts's, and the moment after its switch follows the one state; with
+// `submenu`, the desk shows a site's submenu open, a drawing of its own.
 import IconMenu from "./IconMenu.astro";
 import Taskbar from "./Taskbar.astro";
 import Terminal from "./Terminal.astro";
@@ -9,7 +13,17 @@ import TrayItem from "./TrayItem.astro";
 import { session } from "../../../data/desk.ts";
 import { accountTip } from "../../../data/windows.ts";
 import { clock, moments } from "../../../data/world.ts";
-import { hm, menuBarLevel, shortDate, statusLine, trayTip } from "../../../lib/words.ts";
+import {
+  hm,
+  menuBarLevel,
+  menuLine,
+  shellTip,
+  shortDate,
+  statusLine,
+  toolsOn,
+  trayTip,
+  updated,
+} from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -18,30 +32,46 @@ interface Props {
   updates?: boolean;
 }
 const { prefix, demo = false, submenu, updates = false } = Astro.props;
+const live = submenu === undefined;
+const Root = live ? "pb-tray" : "pb-open-link";
 const icon = `${prefix}-icon`;
+const after = moments.after;
 // The session's status line follows the switch after the menu does.
-const [before, after] = [statusLine(moments.before), statusLine(moments.after)];
+const [before, now] = [statusLine(moments.before), statusLine(after)];
 const status =
-  demo && before !== after
-    ? `<span class="hidden demo:inline">${before}</span><span class="demo:hidden">${after}</span>`
-    : after;
+  demo && before !== now
+    ? `<span class="hidden demo:inline">${before}</span><span class="demo:hidden" data-part="status">${now}</span>`
+    : `<span data-part="status">${now}</span>`;
 const rule =
   "bg-linear-to-b from-win-term-dim to-win-term-dim bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
-// WinUI centres a tooltip above the pointer, and Check for updates' row puts each row 32 higher.
+// The pointer right-clicks the icon at 500, where the menu's right edge stands. WinUI centres a
+// tooltip above the pointer, and Check for updates' row puts each row 32 higher.
 const pointer = submenu
   ? updates
-    ? "translate-x-160 -translate-y-225"
-    : "translate-x-160 -translate-y-193"
+    ? "-translate-x-54 -translate-y-225"
+    : "-translate-x-54 -translate-y-193"
   : updates
-    ? "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:translate-x-60 demo-row:-translate-y-413"
-    : "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:translate-x-60 demo-row:-translate-y-381";
+    ? "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:-translate-x-154 demo-row:-translate-y-413"
+    : "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:-translate-x-154 demo-row:-translate-y-381";
 const rowTip = updates ? "bottom-450" : "bottom-418";
+// a live tooltip sits where live/tooltip.ts puts it: centred over the pointer or its owner
+const tipAt = "absolute top-(--y) left-(--x) z-4 -mt-8 -translate-x-1/2 -translate-y-full";
+const shell = shellTip(trayTip(after)).split("\n");
+const accounts = toolsOn("windows").flatMap(([tool]) =>
+  after.accounts.filter((a) => a.tool === tool),
+);
 ---
 
-<pb-tray
+<Root
   id={prefix}
-  class:list={["desk block desk-px-720", updates ? "h-572" : "h-540"]}
+  class:list={[
+    "desk block desk-px-720",
+    updates ? "h-572" : "h-540",
+    // a drawing that never works has no target to keep large on a phone
+    !live && "[--u-coarse:0px]",
+  ]}
   data-demo-desk={demo ? "" : undefined}
+  data-scroll="end"
   inert
   data-output
 >
@@ -66,41 +96,62 @@ const rowTip = updates ? "bottom-450" : "bottom-418";
     <TrayItem
       on
       id={icon}
-      name={trayTip(moments.after)}
-      level={menuBarLevel(moments.after)}
+      name={shellTip(trayTip(after))}
+      level={menuBarLevel(after)}
       was={demo ? menuBarLevel(moments.before) : undefined}
-      class={demo ? "demo-shut:bg-transparent demo-reach:bg-win-subtle" : undefined}
+      levels={live}
+      class={[
+        demo ? "demo-shut:bg-transparent demo-reach:bg-win-subtle" : "",
+        live
+          ? "data-[state=closed]:bg-transparent data-[state=closed]:hover:bg-win-subtle live:cursor-default"
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     />
   </Taskbar>
   <IconMenu
-    class="absolute right-6 bottom-48 z-3"
+    class="absolute right-(--right) bottom-48 z-3 [--right:calc(var(--spacing)*220)]"
     prefix={prefix}
     owner={icon}
     demo={demo}
+    live={live}
     updates={updates}
     submenu={submenu}
   />
   {demo && <Tooltip
     id={`${prefix}-tip`}
-    class:list={["absolute left-560 z-3 hidden -translate-x-1/2 demo-hl:block", rowTip]}
+    class:list={["absolute left-346 z-3 hidden -translate-x-1/2 demo-hl:block", rowTip]}
     >{accountTip("work", moments.before)}</Tooltip
   >}
   {/* the Shell's tooltip, which names the icon */}
   {demo && <Tooltip
-    class="absolute bottom-56 left-500 z-3 hidden -translate-x-1/2 demo-reach:block"
+    class="absolute bottom-56 left-500 z-3 hidden -translate-x-1/2 demo-reach:block data-[state=shown]:block"
     aria-hidden="true"
-    >{trayTip(moments.after)
-      .split("\n")
-      .map((line) => <span class="block">{line}</span>)}</Tooltip
+    data-part="shell-tip"
+    >{shell.map((line) => <span class="block" data-part="line">{line}</span>)}</Tooltip
   >}
+  {/* WinUI's tooltip of each account and of Refresh in the menu, its UI Automation help text */}
+  {live && <div data-part="tips">
+    {accounts.map((a) => <Tooltip class={tipAt} id={`${prefix}-tip-${a.id}`} hidden>
+      {menuLine(a, after)}
+    </Tooltip>)}
+    <Tooltip class={tipAt} id={`${prefix}-tip-refresh`} hidden>
+      {updated(after.readAt)}
+    </Tooltip>
+    <template data-part="tip">
+      <Tooltip class={tipAt} hidden />
+    </template>
+  </div>}
   <svg
     aria-hidden="true"
     class:list={[
-      "pointer-events-none absolute bottom-8 left-500 z-4 h-21 w-13 origin-[1px_1px] transition-transform duration-800 ease-out",
+      "pointer-events-none absolute bottom-8 left-500 z-4 h-21 w-13 data-[state=gone]:opacity-0 origin-[1px_1px] transition-transform duration-800 ease-out",
       { "demo-pick:scale-86 demo-pick:duration-100": demo },
       pointer,
     ]}
     viewBox="0 0 13 21"
+    data-part={live ? "pointer" : undefined}
   >
     <path
       class="fill-white stroke-black"
@@ -109,4 +160,8 @@ const rowTip = updates ? "bottom-450" : "bottom-418";
       stroke-linejoin="round"
     ></path>
   </svg>
-</pb-tray>
+</Root>
+
+<script>
+  import "../../../scripts/live/tray.ts";
+</script>

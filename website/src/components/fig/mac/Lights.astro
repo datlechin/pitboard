@@ -1,6 +1,7 @@
 ---
 // A key window's buttons on macOS 27, 14 points across and 23 apart, as docs/images/window.png
-// draws them; `class` places them, and a Settings window can only close.
+// draws them; `class` places them, and a Settings window can only close. Under a sheet or an
+// alert the window cannot close either, and its close button greys.
 interface Props {
   window?: boolean;
   closeOnly?: boolean;
@@ -12,13 +13,15 @@ const off =
 const fills = window
   ? closeOnly
     ? ["bg-mac-window-close inset-shadow-mac-light", off, off]
-    : ["bg-mac-window-close", "bg-mac-window-minimize", "bg-mac-window-zoom"].map(
-        (fill) => `${fill} inset-shadow-mac-light`,
-      )
+    : [
+        "bg-mac-window-close group-data-modal/window:bg-mac-window-close-off",
+        "bg-mac-window-minimize",
+        "bg-mac-window-zoom",
+      ].map((fill) => `${fill} inset-shadow-mac-light`)
   : Array(3).fill("bg-mac-term-tl inset-shadow-mac-light");
 ---
 
-<span class:list={["flex", window ? ["absolute z-1 gap-9", place] : "gap-8"]}
+<span class:list={["flex", window ? ["absolute z-2 gap-9", place] : "gap-8"]}
   >{fills.map((fill) => (
     <i class:list={["rounded-circle", window ? "size-14" : "size-12", fill]}></i>
   ))}</span

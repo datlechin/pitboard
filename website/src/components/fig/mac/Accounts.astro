@@ -1,8 +1,42 @@
 ---
-// AccountRow.swift, UsageBar.swift, and NoticeRow.swift for the notice a switch leaves. The list
-// is a grid of one row an account, a row group a tool, each named as VoiceOver hears it.
+// AccountRow.swift, UsageBar.swift, NoticeRow.swift for the notices a switch leaves, and the step
+// AccountsPane.swift shows a tool with one account. The list is a grid of one row an account, a
+// row group a tool, each named as VoiceOver hears it. Every node a state shows is drawn: each
+// tool's notice, the step, each row's ends, and templates for a row, a limit and a note; the
+// shortcut menu, the Forget alert and the sheets wait over the desk. live/accounts.ts follows the
+// one state with them. Shown on another pane, the window draws its list's rows once the pane shows.
+import ActivityTable from "./ActivityTable.astro";
+import Alert from "./Alert.astro";
 import Button from "./Button.astro";
+import Sheet from "./Sheet.astro";
+import Spinner from "./Spinner.astro";
 import Window from "./Window.astro";
+import {
+  ACCOUNT,
+  CANCEL,
+  DISMISS,
+  FORGET,
+  FORGET_OFFER,
+  NAME,
+  RENAME,
+  RENAME_OFFER,
+  TOOL,
+  addAccountAsks,
+  copyEmail,
+  copyLink,
+  inUse,
+  keysOf,
+  notNow,
+  severitySaid,
+  signIn,
+  signInAgain,
+  signInPage,
+  switchedTo,
+  sessionsFollowIn,
+  warmUpNow,
+  OPEN,
+  WAITING_FOR_BROWSER,
+} from "../../../data/window.ts";
 import { moments, tools, type Moment, type Tool } from "../../../data/world.ts";
 import {
   accountSpoken,
@@ -15,205 +49,597 @@ import {
   useSpoken,
   warmsAgainNote,
   whole,
+  type LimitRow,
 } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
   moment: Moment;
+  // the pane the window shows
+  pane?: "accounts" | "activity";
   crop?: boolean;
   // one tool's section alone, as the pane scrolled to it shows it
   only?: Tool;
+  // the release the About panel names, drawn with the cut window's templates
+  version?: string;
 }
-const { prefix, moment, crop = false, only } = Astro.props;
+const { prefix, moment, pane = "accounts", crop = false, only, version } = Astro.props;
+const rows = pane === "accounts";
+// SVGAttributes has no `hidden`, though HTML's attribute hides an svg as any element
+const hide = (yes: boolean) => (yes ? { hidden: true } : {});
 const world = moments[moment];
 const shown = only ? tools.filter(([tool]) => tool === only) : tools;
-const fill = { g: "fill-mac-window-green", y: "fill-mac-window-orange", r: "fill-mac-window-red" };
-const mark = { under: "fill-mac-window-green", over: "fill-mac-window-red" };
+// the notice the switch to work leaves, which the window at the top of the list draws
+const switched = crop && moment === "after";
 const sub = "text-u-12/15 text-mac-window-sub";
+// a row the list has selected: the accent behind it while the list has focus, grey otherwise,
+// and its words white on the accent
+const picked =
+  "group-aria-selected/row:text-white group-not-focus-within/grid:group-aria-selected/row:text-inherit";
+const pickedSub = `${sub} group-aria-selected/row:text-white/85 group-not-focus-within/grid:group-aria-selected/row:text-mac-window-sub`;
+// and the row a shortcut menu is open on outlined in the accent, selected or not
+const row =
+  "group/row relative ml-34 pt-8 pb-7.5 outline-none inset-shadow-mac-window-b before:absolute before:inset-y-0 before:-right-8 before:-left-42 before:-z-1 before:rounded-u-8 aria-selected:inset-shadow-none aria-selected:before:bg-mac-window-blue has-[+[aria-selected=true]]:inset-shadow-none group-not-focus-within/grid:aria-selected:before:bg-mac-window-pick data-[state=menu]:before:shadow-[inset_0_0_0_calc(var(--spacing)*1.5)_var(--color-mac-window-blue)] live:cursor-default";
+const item =
+  "mx-5 flex h-24 items-center rounded-u-5 px-9 outline-none focus:bg-mac-menu-hl focus:text-white";
+const sep = "mx-14 my-5 h-px bg-mac-menu-sep";
+const field =
+  "h-22 w-220 rounded-u-6 bg-mac-window-bg px-6 text-right outline-none shadow-[inset_0_0_0_calc(var(--spacing)*1)_var(--color-mac-window-control)] focus:outline-solid focus:outline-[calc(var(--spacing)*3.5)] focus:outline-mac-window-blue/50";
+const formRow = "flex min-h-38 items-center gap-10 px-10";
+const group = "rounded-u-12 bg-mac-window-group";
+const ruled =
+  "relative before:absolute before:inset-x-10 before:top-0 before:h-1 before:bg-mac-window-rule";
+
+const fill = { g: "fill-mac-window-green", y: "fill-mac-window-orange", r: "fill-mac-window-red" };
+const fillBy =
+  "data-[state=g]:fill-mac-window-green data-[state=y]:fill-mac-window-orange data-[state=r]:fill-mac-window-red";
+const markBy = "data-[state=under]:fill-mac-window-green data-[state=over]:fill-mac-window-red";
 ---
 
 <Window
   prefix={prefix}
-  pane="accounts"
-  title="Accounts"
-  subtitle={`Updated ${hm(world.readAt)}`}
-  tools={[
-    ["sf-refresh", "Refresh"],
-    ["sf-plus", "Add Account"],
-  ]}
+  pane={pane}
+  updated={`Updated ${hm(world.readAt)}`}
   crop={crop}
   fit={only !== undefined}
+  templates={crop}
+  version={version}
 >
-  {/* NoticeRow.swift, first in the list, its rule from under its words */}
-  {crop && <div class="ml-23.5 pt-17.5 pb-7.5 inset-shadow-mac-window-b">
+  <ActivityTable slot="activity" />
+  {/* NoticeRow.swift, first in the list, one a tool, its rule from under its words */}
+  {!only && <div slot="accounts" data-part="notices">
+    {tools.map(([tool, name]) => <div
+      class="ml-23.5 pt-17.5 pb-7.5 inset-shadow-mac-window-b"
+      data-notice={tool}
+      hidden={!(switched && tool === "claude")}
+    >
+      <div class="-ml-23.5 flex items-start gap-8">
+        <svg
+          class="-ml-1 size-16.5 shrink-0 text-mac-window-sub"
+          role="img"
+          aria-label={severitySaid.info}
+          data-severity="info"
+        >
+          <use href="#sf-info-fill" />
+        </svg>
+        <svg
+          class="-ml-1 size-16.5 shrink-0 text-mac-window-orange"
+          role="img"
+          aria-label={severitySaid.warning}
+          data-severity="warning"
+          {...hide(true)}
+        >
+          <use href="#sf-warning-fill" />
+        </svg>
+        <span class="flex-1">
+          <b class="block font-medium" data-part="title">{switchedTo(name, "work")}</b>
+          {[0, 1].map(() => (
+            <span
+              class="mt-6 block pb-1.5 text-u-12/15 text-mac-window-sub"
+              data-part="line"
+              hidden
+            />
+          ))}
+          <span
+            class="mt-6 block pb-1.5 text-u-12/15 text-mac-window-sub tabular-nums"
+            data-part="countdown"
+            hidden={tool !== "claude"}
+            >{sessionsFollowIn(name)} 0:21</span
+          >
+        </span>
+        <button
+          class="-mr-1 shrink-0 text-mac-window-sub live:cursor-default"
+          type="button"
+          aria-label={DISMISS}
+          data-does="dismiss"
+        >
+          <svg class="block size-16.5"><use href="#sf-xmark" /></svg>
+        </button>
+      </div>
+    </div>)}
+  </div>}
+  {/* the step a tool with one account shows (present/setup.rs) */}
+  {!only && <div
+    slot="accounts"
+    class="ml-23.5 pt-13.5 pb-11.5 inset-shadow-mac-window-b"
+    data-part="setup"
+    hidden
+  >
     <div class="-ml-23.5 flex items-start gap-8">
-      <svg class="-ml-1 size-16.5 shrink-0 text-mac-window-sub" role="img" aria-label="Note">
-        <use href="#sf-info-fill" />
+      <svg class="-ml-1 size-16.5 shrink-0 text-mac-window-blue" aria-hidden="true">
+        <use href="#sf-switch" />
       </svg>
       <span class="flex-1">
-        <b class="block font-medium">Switched Claude Code to work</b>
-        <span class="mt-6 block pb-1.5 text-u-12/15 text-mac-window-sub tabular-nums"
-          >Claude Code sessions already open follow in 0:21</span
-        >
+        <b class="block font-medium" data-part="title"></b>
+        <span class="mt-6 block text-u-12/15 text-mac-window-sub" data-part="detail"></span>
+        <span class="mt-8 flex gap-8">
+          <Button default data-does="add">{addAccountAsks("macos")}</Button>
+          <Button data-does="not-now">{notNow("macos")}</Button>
+        </span>
       </span>
-      <button class="-mr-1 shrink-0 text-mac-window-sub" type="button" aria-label="Dismiss">
-        <svg class="block size-16.5"><use href="#sf-xmark" /></svg>
-      </button>
     </div>
   </div>}
-  <div role="grid" aria-labelledby={`${prefix}-title`}>
-    {shown.map(([tool, name], t) => <div role="rowgroup" aria-labelledby={`${prefix}-${tool}`}>
+  <div
+    slot="accounts"
+    class="group/grid rounded-u-8 outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
+    role="grid"
+    aria-labelledby={`${prefix}-title`}
+  >
+    {shown.map(([tool, name], t) => <div
+      role="rowgroup"
+      aria-labelledby={`${prefix}-${tool}`}
+      data-tool={tool}
+    >
       <div
         id={`${prefix}-${tool}`}
         aria-hidden="true"
         class:list={[
-          "pb-8.5 text-u-11/13 font-bold text-mac-window-sub inset-shadow-mac-window-b",
-          t === 0 && !crop ? "pt-6.5" : "pt-26.5",
-          // a list at its top draws a line across the pane under its first heading, and room under it
+          "pb-8.5 pt-26.5 text-u-11/13 font-bold text-mac-window-sub inset-shadow-mac-window-b",
+          // a list at its top draws a line across the pane under its first heading, and room under
+          // it; under a notice or the step the heading is drawn as the others are
           t === 0 &&
             !crop &&
-            "relative -mx-16 mb-10.5 px-16 after:absolute after:inset-x-16 after:bottom-0 after:h-1 after:bg-mac-window-sep",
+            "data-[state=top]:relative data-[state=top]:-mx-16 data-[state=top]:mb-10.5 data-[state=top]:px-16 data-[state=top]:pt-6.5 data-[state=top]:after:absolute data-[state=top]:after:inset-x-16 data-[state=top]:after:bottom-0 data-[state=top]:after:h-1 data-[state=top]:after:bg-mac-window-sep",
         ]}
+        data-part={t === 0 && !crop ? "first" : undefined}
+        data-state={t === 0 && !crop ? "top" : undefined}
       >
         {name}
       </div>
-      {listed(world, tool).map((a) => {
+      {(rows ? listed(world, tool) : []).map((a) => {
         const on = isInUse(a, world);
         const said = notes(a, world, warmsAgainNote(a));
         // each row's rule starts under its name
         return <div
-          class="ml-34 pt-8 pb-7.5 inset-shadow-mac-window-b"
+          class={row}
           role="row"
           aria-selected="false"
           aria-label={accountSpoken(a, world)}
+          aria-keyshortcuts={keysOf(a, world, "macos")}
+          data-account={a.id}
         >
           <div role="gridcell">
             <div class="-ml-34 flex items-center gap-8">
+              {/* a 17 point symbol whose frame is 20 tall */}
               <svg
                 aria-hidden="true"
-                class:list={[
-                  // a 17 point symbol whose frame is 20 tall
-                  "-my-1 h-22 w-26 shrink-0",
-                  on ? "text-mac-window-blue" : "text-mac-window-sub",
-                ]}
+                class:list={["-my-1 h-22 w-26 shrink-0 text-mac-window-blue", picked]}
+                data-part="in-use-symbol"
+                {...hide(!on)}
               >
-                <use href={on ? "#sf-person-fill" : "#sf-person"} />
+                <use href="#sf-person-fill" />
+              </svg>
+              <svg
+                aria-hidden="true"
+                class:list={["-my-1 h-22 w-26 shrink-0 text-mac-window-sub", picked]}
+                data-part="parked-symbol"
+                {...hide(on)}
+              >
+                <use href="#sf-person" />
               </svg>
               <span class="flex min-w-0 flex-1 flex-col gap-2">
-                <span class="flex items-center gap-8 font-medium">
-                  {a.label}
-                  {a.plan && <span
+                <span class:list={["flex items-center gap-8 font-medium", picked]}>
+                  <span data-part="label">{a.label}</span>
+                  <span
                     class="rounded-pill bg-mac-window-fill px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
+                    data-part="plan"
+                    hidden={!a.plan}
                     >{a.plan}</span
-                  >}
+                  >
                 </span>
-                {a.email && <span class={sub}>{a.email}</span>}
+                <span class={pickedSub} data-part="email" hidden={!a.email}>{a.email}</span>
               </span>
-              {on ? (
-                <span class="flex items-center gap-8.5 text-u-12 text-mac-window-sub">
-                  <svg class="size-13.5 shrink-0" aria-hidden="true">
-                    <use href="#sf-check" />
-                  </svg>
-                  In Use
-                </span>
-              ) : (
-                <Button aria-label={useSpoken(a)}>Use</Button>
-              )}
+              <span
+                class:list={["flex items-center gap-8.5 text-u-12 text-mac-window-sub", picked]}
+                data-part="in-use"
+                hidden={!on}
+              >
+                <svg class="size-13.5 shrink-0" aria-hidden="true">
+                  <use href="#sf-check" />
+                </svg>
+                {inUse("macos")}
+              </span>
+              <Button aria-label={on ? undefined : useSpoken(a)} data-does="use" hidden={on}
+                >Use</Button
+              >
+              <span class="text-mac-window-sub" data-part="switching" hidden>
+                <Spinner label="Switching" />
+              </span>
             </div>
             {/* macOS 27 sets a gauge's words 1.5 points above its middle */}
-            {a.limits.length > 0 && <div
-              class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums *:[span]:-mt-2.5"
+            <div
+              class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums"
+              data-part="limits"
+              hidden={a.limits.length === 0}
             >
               {a.limits.map((limit) => {
-                const l = limitRow(limit, world);
+                const l: LimitRow = limitRow(limit, world);
                 const s = l.pace?.standing;
                 // the mark at the whole percent its pace is said in
                 const even = whole(l.pace?.expected ?? 0);
-                return (
-                  <>
-                    {/* the row read as one sentence, and not the bar and each figure on their own */}
-                    <span class="text-mac-window-sub"
-                      ><span aria-hidden="true">{l.short}</span
-                      ><span class="sr-only">{spokenLimit(limit, world)}</span></span
-                    >
-                    <svg
-                      aria-hidden="true"
-                      class="h-16 w-full overflow-visible"
-                      viewBox="0 0 100 16"
-                      preserveAspectRatio="none"
-                    >
+                const marked = s !== undefined && s !== "even";
+                return <div class="contents" data-part="limit">
+                  {/* the row read as one sentence, and not the bar and each figure on their own */}
+                  <span class:list={["-mt-2.5 text-mac-window-sub", picked]}
+                    ><span aria-hidden="true" data-part="short">{l.short}</span
+                    ><span class="sr-only" data-part="spoken"
+                      >{spokenLimit(limit, world)}</span
+                    ></span
+                  >
+                  <svg
+                    aria-hidden="true"
+                    class="h-16 w-full overflow-visible"
+                    viewBox="0 0 100 16"
+                    preserveAspectRatio="none"
+                  >
+                    <rect class="fill-mac-window-track" width="100" height="16" rx="2.4" ry="2.5" />
+                    <rect
+                      class:list={[fill[l.level], fillBy]}
+                      width={l.percent}
+                      height="16"
+                      rx="2.4"
+                      ry="2.5"
+                      data-part="fill"
+                      data-state={l.level}
+                    />
+                    {/* the gauge's edge inside its bounds, a quarter point in from each side */}
+                    <rect
+                      class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
+                      x=".25"
+                      y=".25"
+                      width="99.5"
+                      height="15.5"
+                      rx="2.2"
+                      ry="2.25"
+                      vector-effect="non-scaling-stroke"
+                    />
+                    <g data-part="mark" {...(marked ? {} : { hidden: true })}>
                       <rect
-                        class="fill-mac-window-track"
-                        width="100"
-                        height="16"
-                        rx="2.4"
-                        ry="2.5"
+                        class="fill-mac-window-bg"
+                        x={even - 2}
+                        y="-3"
+                        width="4"
+                        height="22"
+                        rx="2"
+                        ry="2"
                       />
-                      {l.percent > 0 && (
-                        <rect
-                          class={fill[l.level]}
-                          width={l.percent}
-                          height="16"
-                          rx="2.4"
-                          ry="2.5"
-                        />
-                      )}
-                      {/* the gauge's edge inside its bounds, a quarter point in from each side */}
                       <rect
-                        class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
-                        x=".25"
-                        y=".25"
-                        width="99.5"
-                        height="15.5"
-                        rx="2.2"
-                        ry="2.25"
-                        vector-effect="non-scaling-stroke"
+                        class={markBy}
+                        x={even - 1}
+                        y="-3"
+                        width="2"
+                        height="22"
+                        rx="1"
+                        ry="1"
+                        data-state={s ?? "even"}
                       />
-                      {s !== undefined && s !== "even" && (
-                        <>
-                          <rect
-                            class="fill-mac-window-bg"
-                            x={even - 2}
-                            y="-3"
-                            width="4"
-                            height="22"
-                            rx="2"
-                            ry="2"
-                          />
-                          <rect
-                            class={mark[s]}
-                            x={even - 1}
-                            y="-3"
-                            width="2"
-                            height="22"
-                            rx="1"
-                            ry="1"
-                          />
-                        </>
-                      )}
-                    </svg>
-                    <span class="min-w-38 text-right" aria-hidden="true">{l.figure}</span>
-                    <span class="min-w-110 text-right text-mac-window-sub" aria-hidden="true"
-                      >{l.resets}</span
-                    >
-                    <span
-                      aria-hidden="true"
-                      class:list={[
-                        "min-w-100",
-                        // UsageBar.swift tints only over pace
-                        s === "over" ? "text-mac-window-red" : "text-mac-window-sub",
-                      ]}
-                      >{l.pace?.said}</span
-                    >
-                  </>
-                );
+                    </g>
+                  </svg>
+                  <span
+                    class:list={["-mt-2.5 min-w-38 text-right", picked]}
+                    aria-hidden="true"
+                    data-part="figure"
+                    >{l.figure}</span
+                  >
+                  <span
+                    class:list={["-mt-2.5 min-w-110 text-right text-mac-window-sub", picked]}
+                    aria-hidden="true"
+                    data-part="resets"
+                    >{l.resets}</span
+                  >
+                  {/* UsageBar.swift tints only over pace */}
+                  <span
+                    aria-hidden="true"
+                    class:list={[
+                      "-mt-2.5 min-w-100 text-mac-window-sub data-[state=over]:text-mac-window-red",
+                      picked,
+                    ]}
+                    data-part="pace"
+                    data-state={s ?? "even"}
+                    >{l.pace?.said}</span
+                  >
+                </div>;
               })}
-            </div>}
+            </div>
             {/* a note's line runs past its descent, so a row that ends in one has more under it */}
-            {said.map((n) => <p class:list={["mt-6 last:pb-1.5", sub]}>{n}</p>)}
+            <div data-part="notes">
+              {said.map((n) => <p class:list={["mt-6 last:pb-1.5", pickedSub]}>{n}</p>)}
+            </div>
           </div>
         </div>;
       })}
     </div>)}
   </div>
+  <Fragment slot="desk">
+    {/* AccountCommands.swift's items in the shortcut menu: only what applies, and no keys */}
+    <div
+      class="absolute top-(--y) left-(--x) z-5 w-max min-w-150 rounded-u-11 bg-mac-menu-bg py-5 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 outline-none live:cursor-default"
+      id={`${prefix}-menu`}
+      role="menu"
+      aria-label="Account"
+      tabindex="-1"
+      hidden
+    >
+      <div class={item} role="menuitem" tabindex="-1" data-offer="use" data-part="title"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="sign-in-again">
+        {signInAgain("macos")}
+      </div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="rename">{RENAME_OFFER}</div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="warm">{warmUpNow("macos")}</div>
+      <div class={sep} role="separator" data-after="offers"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="open" data-part="title"></div>
+      <div class={sep} role="separator" data-after="open"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="copy">{copyEmail("macos")}</div>
+      <div class={sep} role="separator" data-after="copy"></div>
+      <div class={item} role="menuitem" tabindex="-1" data-offer="forget">{FORGET_OFFER}</div>
+    </div>
+    {/* the templates and the dialogs every view of the window shares, drawn once with its top
+       view's: each opens anchored over the window it is opened from */}
+    {crop && (
+      <>
+        {/* an account a visitor adds, a limit its first read finds, and a note */}
+        <template data-part="row">
+          <div class={row} role="row" aria-selected="false">
+            <div role="gridcell">
+              <div class="-ml-34 flex items-center gap-8">
+                <svg
+                  aria-hidden="true"
+                  class:list={["-my-1 h-22 w-26 shrink-0 text-mac-window-blue", picked]}
+                  data-part="in-use-symbol"
+                  {...hide(true)}
+                >
+                  <use href="#sf-person-fill" />
+                </svg>
+                <svg
+                  aria-hidden="true"
+                  class:list={["-my-1 h-22 w-26 shrink-0 text-mac-window-sub", picked]}
+                  data-part="parked-symbol"
+                >
+                  <use href="#sf-person" />
+                </svg>
+                <span class="flex min-w-0 flex-1 flex-col gap-2">
+                  <span class:list={["flex items-center gap-8 font-medium", picked]}>
+                    <span data-part="label"></span>
+                    <span
+                      class="rounded-pill bg-mac-window-fill px-6 py-1 text-u-10/14 font-normal text-mac-window-sub"
+                      data-part="plan"
+                      hidden
+                    ></span>
+                  </span>
+                  <span class={pickedSub} data-part="email" hidden></span>
+                </span>
+                <span
+                  class:list={["flex items-center gap-8.5 text-u-12 text-mac-window-sub", picked]}
+                  data-part="in-use"
+                  hidden
+                >
+                  <svg class="size-13.5 shrink-0" aria-hidden="true">
+                    <use href="#sf-check" />
+                  </svg>
+                  {inUse("macos")}
+                </span>
+                <Button data-does="use">Use</Button>
+                <span class="text-mac-window-sub" data-part="switching" hidden>
+                  <Spinner label="Switching" />
+                </span>
+              </div>
+              <div
+                class="mt-8 grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-x-8 gap-y-6.5 text-u-12/15 tabular-nums"
+                data-part="limits"
+                hidden
+              ></div>
+              <div data-part="notes"></div>
+            </div>
+          </div>
+        </template>
+        <template data-part="limit">
+          <div class="contents" data-part="limit">
+            <span class:list={["-mt-2.5 text-mac-window-sub", picked]}
+              ><span aria-hidden="true" data-part="short"></span><span
+                class="sr-only"
+                data-part="spoken"
+              ></span></span
+            >
+            <svg
+              aria-hidden="true"
+              class="h-16 w-full overflow-visible"
+              viewBox="0 0 100 16"
+              preserveAspectRatio="none"
+            >
+              <rect class="fill-mac-window-track" width="100" height="16" rx="2.4" ry="2.5" />
+              <rect class={fillBy} width="0" height="16" rx="2.4" ry="2.5" data-part="fill" />
+              <rect
+                class="fill-none stroke-mac-window-gauge-edge stroke-[calc(var(--spacing)*0.5)]"
+                x=".25"
+                y=".25"
+                width="99.5"
+                height="15.5"
+                rx="2.2"
+                ry="2.25"
+                vector-effect="non-scaling-stroke"
+              />
+              <g data-part="mark" {...hide(true)}>
+                <rect class="fill-mac-window-bg" x="0" y="-3" width="4" height="22" rx="2" ry="2" />
+                <rect class={markBy} x="0" y="-3" width="2" height="22" rx="1" ry="1" />
+              </g>
+            </svg>
+            <span
+              class:list={["-mt-2.5 min-w-38 text-right", picked]}
+              aria-hidden="true"
+              data-part="figure"
+            ></span>
+            <span
+              class:list={["-mt-2.5 min-w-110 text-right text-mac-window-sub", picked]}
+              aria-hidden="true"
+              data-part="resets"
+            ></span>
+            <span
+              aria-hidden="true"
+              class:list={[
+                "-mt-2.5 min-w-100 text-mac-window-sub data-[state=over]:text-mac-window-red",
+                picked,
+              ]}
+              data-part="pace"
+            ></span>
+          </div>
+        </template>
+        <template data-part="note">
+          <p class:list={["mt-6 last:pb-1.5", pickedSub]}></p>
+        </template>
+        <Alert id="mac-accounts-forget">
+          <button
+            class="h-30 rounded-pill bg-mac-window-btn outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
+            type="button"
+            value="cancel"
+            data-does="cancel"
+          >
+            {CANCEL}
+          </button>
+          {/* Cancel, then Forget, and neither the default: Return presses neither */}
+          <button
+            class="h-30 rounded-pill bg-mac-destructive text-mac-window-red outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
+            type="button"
+            data-does="forget"
+          >
+            {FORGET}
+          </button>
+        </Alert>
+        <Sheet id="mac-accounts-rename">
+          <div class={group}>
+            <label class={formRow}>
+              <span class="flex-1">{NAME}</span>
+              <input class={field} name="name" autocomplete="off" spellcheck="false" />
+            </label>
+          </div>
+          <p class="-mt-4 px-10 text-u-11/14 text-mac-window-sub" data-part="problem" hidden></p>
+          <div class:list={[group, "px-10 py-8"]} data-part="failure" hidden>
+            <b class="block font-medium" data-part="failure-title"></b>
+            <span
+              class="mt-2 block text-u-12/15 text-mac-window-sub"
+              data-part="failure-message"
+            ></span>
+          </div>
+          <Fragment slot="buttons">
+            <Button data-does="cancel">{CANCEL}</Button>
+            <Button default type="submit" value="rename">{RENAME}</Button>
+          </Fragment>
+        </Sheet>
+        <Sheet id="mac-accounts-sign-in">
+          <div class={group} data-part="form">
+            <div class={formRow} data-part="tool">
+              <span class="flex-1" id="mac-accounts-tool-label">{TOOL}</span>
+              {/* a pop-up button, which says its choice as a select-only combobox does */}
+              <span class="relative flex">
+                <span
+                  class="flex items-center rounded-u-6 outline-none focus-visible:outline-solid focus-visible:outline-[calc(var(--spacing)*3.5)] focus-visible:outline-mac-window-blue/50"
+                  role="combobox"
+                  tabindex="0"
+                  aria-labelledby="mac-accounts-tool-label"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-controls="mac-accounts-tools"
+                  data-part="tool-box"
+                >
+                  {tools.map(([tool, name], i) => <span
+                    class="whitespace-nowrap"
+                    data-value={tool}
+                    hidden={i > 0}
+                    >{name}</span
+                  >)}
+                  <span
+                    class="ml-8 flex size-19.5 flex-none items-center justify-center rounded-circle bg-mac-window-control"
+                    aria-hidden="true"
+                  >
+                    <svg class="size-19 shrink-0"><use href="#sf-updown"></use></svg>
+                  </span>
+                </span>
+                {/* the menu opens with the choice over the button's title */}
+                <span
+                  class="absolute top-[calc(var(--spacing)*(-6.25_-_24*var(--at,0)))] -left-30 z-1 w-max rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-150 data-[state=closing]:pointer-events-none data-[state=closing]:opacity-0"
+                  id="mac-accounts-tools"
+                  role="listbox"
+                  aria-labelledby="mac-accounts-tool-label"
+                  hidden
+                >
+                  {tools.map(([tool, name]) => <span
+                    class="group/option relative mx-5 flex items-center rounded-u-6 py-4 pr-16 pl-25 aria-selected:bg-mac-menu-hl aria-selected:text-white data-[state=blink]:bg-transparent data-[state=blink]:text-inherit"
+                    role="option"
+                    id={`mac-accounts-tool-${tool}`}
+                    aria-selected="false"
+                    aria-checked="false"
+                    data-value={tool}
+                    >{name}<svg
+                      class="absolute top-1/2 left-7 -mt-6 hidden size-14 shrink-0 group-aria-checked/option:block"
+                      aria-hidden="true"
+                    >
+                      <use href="#sf-check-heavy" />
+                    </svg></span
+                  >)}
+                </span>
+              </span>
+            </div>
+            <label class:list={[formRow, ruled]} data-part="name">
+              <span class="flex-1">{NAME}</span>
+              <input
+                class={field}
+                name="name"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="work"
+              />
+            </label>
+            <div class:list={[formRow, ruled]} data-part="account">
+              <span class="flex-1">{ACCOUNT}</span>
+              <span data-part="label"></span>
+            </div>
+          </div>
+          <p class="-mt-4 px-10 text-u-11/14 text-mac-window-sub" data-part="problem" hidden></p>
+          {/* departs from the apps: A simulated sign-in keeps Copy Link and Open dimmed */}
+          <div class={group} data-part="page" hidden>
+            <div class={formRow}>
+              <span class="flex-1">{signInPage("macos")}</span>
+              <Button disabled>{copyLink("macos")}</Button>
+              <Button disabled>{OPEN}</Button>
+            </div>
+          </div>
+          <Fragment slot="status">
+            <span class="text-mac-window-sub" data-part="waiting" hidden>
+              <Spinner label={WAITING_FOR_BROWSER} />
+            </span>
+          </Fragment>
+          <Fragment slot="buttons">
+            <Button data-does="cancel">{CANCEL}</Button>
+            <Button data-does="put-back" hidden />
+            <Button default type="submit" value="sign-in" data-part="confirm"
+              >{signIn("macos")}</Button
+            >
+          </Fragment>
+        </Sheet>
+      </>
+    )}
+  </Fragment>
 </Window>
+
+<script>
+  import "../../../scripts/live/accounts.ts";
+</script>

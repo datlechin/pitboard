@@ -1,0 +1,228 @@
+---
+// The menu bar a Pitboard window in front puts up, along its desk's top edge: the app's menus as
+// data/appmenu.ts lists them, in WAI-ARIA's menubar pattern, then the system's items that room is
+// left for; Pitboard's own status item is not among them, as macOS hides a status item an app's
+// menus need the room of on a screen this narrow. Its titles' ids start `prefix`. With
+// `templates`, the menus themselves are drawn once, as templates every window's menu bar clones
+// its menus from (live/appmenu.ts).
+import MenuItem from "./MenuItem.astro";
+import { appMenus, NO_ACCOUNT, type AppItem } from "../../../data/appmenu.ts";
+import { sites } from "../../../data/windows.ts";
+import { moments, type Tool } from "../../../data/world.ts";
+import { signInAgain, warmUpNow, FORGET_OFFER, RENAME_OFFER } from "../../../data/window.ts";
+import { listed } from "../../../lib/words.ts";
+
+interface Props {
+  prefix: string;
+  clock: string;
+  // the system's items there is room for, from the clock leftward
+  room?: "clock" | "wifi";
+  templates?: boolean;
+  updates?: boolean;
+}
+const { prefix, clock, room = "wifi", templates = false, updates = true } = Astro.props;
+const menus = appMenus(updates);
+const title =
+  "flex h-22 items-center rounded-u-6 px-8 outline-none aria-expanded:bg-mac-bar-hl focus-visible:bg-mac-bar-hl live:cursor-default";
+const menu =
+  "absolute top-27 left-(--x) z-5 w-max translate-x-(--dx) rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 outline-none data-[state=shut]:opacity-0 live:cursor-default";
+const row = "group/item relative mx-5 flex h-24 items-center rounded-u-6 pr-13";
+const live =
+  "outline-none focus:bg-mac-menu-hl focus:text-white data-[state=blink]:bg-transparent data-[state=blink]:text-inherit aria-disabled:text-mac-menu-dim";
+const sep = "mx-16 mt-5.5 mb-4.5 h-px bg-mac-menu-sep";
+const keyLook =
+  "ml-24 flex items-baseline justify-end text-mac-menu-dim group-focus/item:text-white group-data-[state=blink]/item:text-mac-menu-dim";
+const symbol = "absolute top-1/2 left-7.5 -mt-7.5 size-15 shrink-0 [--stroke:1.4]";
+// a site's accounts, as the File menu lists them (account_windows/accounts.rs)
+const siteAccounts = (tool: Tool) => listed(moments.after, tool);
+const id = (menu: string) => `${prefix}-am-${menu}`;
+---
+
+<div
+  class="absolute inset-x-0 top-0 z-2 flex h-24 items-center bg-mac-bar-bg pr-6 pl-7 whitespace-nowrap text-mac-bar-text tabular-nums inset-shadow-mac-bar-b"
+  data-part="app-menu-bar"
+>
+  <div class="flex items-center gap-1.5" role="menubar" aria-label="Pitboard">
+    {menus.map((m, i) => <div
+      class:list={[title, { "font-bold": i === 0 }]}
+      id={id(m.id)}
+      role="menuitem"
+      aria-haspopup="menu"
+      aria-expanded="false"
+      tabindex="-1"
+      data-menu={m.id}
+    >
+      {m.title}
+    </div>)}
+  </div>
+  <span class="flex-1"></span>
+  {room === "wifi" && <MenuItem>
+    <svg class="h-12 w-16 shrink-0"><use href="#ic-wifi"></use></svg>
+  </MenuItem>}
+  <MenuItem>
+    <svg class="h-14 w-16 shrink-0"><use href="#ic-cc"></use></svg>
+  </MenuItem>
+  <MenuItem class="pl-9" data-clock>{clock}</MenuItem>
+</div>
+
+{templates &&
+  menus.map((m) => <template data-app-menu={m.id}>
+    <div class={menu} role="menu" tabindex="-1" hidden>
+      {m.id === "account" ? (
+        /* AccountCommands.swift's items for the account selected, dimmed where they do not apply,
+         and with none selected the model's offers, each dimmed */
+        <>
+          <div class:list={[row, "pl-11", live]} role="menuitem" tabindex="-1" data-offer="use">
+            <span class="flex-1" data-part="title">{NO_ACCOUNT[0]}</span>
+          </div>
+          <div
+            class:list={[row, "pl-11", live]}
+            role="menuitem"
+            tabindex="-1"
+            data-offer="sign-in-again"
+          >
+            <span class="flex-1">{signInAgain("macos")}</span>
+          </div>
+          <div class:list={[row, "pl-11", live]} role="menuitem" tabindex="-1" data-offer="rename">
+            <span class="flex-1">{RENAME_OFFER}</span>
+          </div>
+          <div
+            class:list={[row, "pl-11", live]}
+            role="menuitem"
+            tabindex="-1"
+            data-offer="warm"
+            hidden
+          >
+            <span class="flex-1">{warmUpNow("macos")}</span>
+          </div>
+          <div class={sep} role="separator" data-after="offers"></div>
+          <div
+            class:list={[row, "pl-11", live]}
+            role="menuitem"
+            tabindex="-1"
+            data-offer="open"
+            hidden
+          >
+            <span class="flex-1" data-part="title"></span>
+          </div>
+          <div class={sep} role="separator" data-after="open" hidden></div>
+          <div
+            class:list={[row, "pl-11", live]}
+            role="menuitem"
+            tabindex="-1"
+            aria-keyshortcuts="Meta+Backspace"
+            data-offer="forget"
+          >
+            <span class="flex-1">{FORGET_OFFER}</span>
+            <span class={keyLook} aria-hidden="true"
+              ><i class="not-italic">⌘</i><i class="w-13 text-center not-italic">⌫</i></span
+            >
+          </div>
+        </>
+      ) : m.id === "help" ? (
+        <>
+          {/* the system's search field, which the page draws and does not search with */}
+          <div
+            class="mx-8 mt-2 mb-4 flex h-26 w-344 items-center gap-6 rounded-pill bg-mac-window-bg px-8 text-mac-menu-dim shadow-[inset_0_0_0_calc(var(--spacing)*0.5)_var(--color-mac-menu-sep)]"
+            aria-hidden="true"
+          >
+            <svg class="size-15 shrink-0"><use href="#mi-search"></use></svg>
+            Search
+          </div>
+          {m.items.map(
+            (item) =>
+              item && <div
+                class:list={[row, "pl-11", live]}
+                role="menuitem"
+                tabindex="-1"
+                data-does={item.does}
+              >
+                <span class="flex-1" data-part="title">{item.title}</span>
+              </div>,
+          )}
+        </>
+      ) : (
+        m.items.map((item: AppItem | null) =>
+          item === null ? (
+            <div class={sep} role="separator" />
+          ) : item.does === "claude.ai" || item.does === "chatgpt.com" ? (
+            /* a submenu of the site's accounts, or with one account an item that opens its window */
+            <>
+              <div
+                class:list={[
+                  row,
+                  "pl-11 aria-expanded:bg-mac-menu-hl aria-expanded:text-white",
+                  live,
+                ]}
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                tabindex="-1"
+                data-does={item.does}
+              >
+                <span class="flex-1" data-part="title">{item.title}</span>
+                <svg
+                  class="ml-24 size-10 shrink-0 group-focus/item:text-white group-aria-expanded/item:text-white"
+                >
+                  <use href="#sf-chev-heavy" />
+                </svg>
+              </div>
+              <div
+                class:list={[row, "pl-11", live]}
+                role="menuitem"
+                tabindex="-1"
+                data-does={item.does}
+                data-one
+                hidden
+              >
+                <span class="flex-1" data-part="title"></span>
+              </div>
+            </>
+          ) : (
+            <div
+              class:list={[row, item.icon ? "pl-33" : "pl-11", live]}
+              role="menuitem"
+              tabindex="-1"
+              aria-disabled={item.dimmed ? "true" : undefined}
+              data-does={item.does}
+              data-more={item.more ? "" : undefined}
+            >
+              {item.icon && <svg class={symbol} aria-hidden="true">
+                <use href={`#${item.icon}`} />
+              </svg>}
+              <span class="flex-1" data-part="title">{item.title}</span>
+              {item.keys && <span class={keyLook} aria-hidden="true"
+                ><i class="not-italic">{item.keys[0]}</i
+                ><i class="w-13 text-center not-italic">{item.keys[1]}</i></span
+              >}
+              {item.more && <svg class="ml-24 size-10 shrink-0" aria-hidden="true">
+                <use href="#sf-chev-heavy" />
+              </svg>}
+            </div>
+          ),
+        )
+      )}
+    </div>
+    {m.id === "file" &&
+      sites.map(([site, tool]) => <div
+        class="absolute top-(--y) left-(--x) z-5 w-max min-w-120 rounded-u-11 bg-mac-menu-bg pt-4 pb-6 whitespace-nowrap text-mac-menu-text shadow-mac-menu backdrop-blur-xl backdrop-saturate-180 transition-opacity duration-200 outline-none data-[state=shut]:opacity-0 live:cursor-default"
+        role="menu"
+        tabindex="-1"
+        data-site={site}
+        hidden
+      >
+        {siteAccounts(tool).map((a) => <div
+          class:list={[row, "pl-11", live]}
+          role="menuitem"
+          tabindex="-1"
+          data-account={a.id}
+        >
+          <span class="flex-1" data-part="title">{a.label}</span>
+        </div>)}
+        <template data-part="account">
+          <div class:list={[row, "pl-11", live]} role="menuitem" tabindex="-1">
+            <span class="flex-1" data-part="title"></span>
+          </div>
+        </template>
+      </div>)}
+  </template>)}

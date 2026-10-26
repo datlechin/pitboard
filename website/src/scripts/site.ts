@@ -243,68 +243,9 @@ function afterDownload() {
   }
 }
 
-// The menu demo on the desk of the platform shown, once most of it is in view. A desk the Command
-// line tab hides waits for the App tab, and another platform's desk plays it again.
+// The hero's demo is its live module's (live/demo.ts); a page without the hero has none to play.
 function demo() {
-  const desks = all("[data-demo-desk]");
-  if (!desks.length) {
-    d.removeAttribute("data-demo");
-    return;
-  }
-  if (d.getAttribute("data-demo") !== "start") return;
-  const steps: [number, string | null][] = [
-    [500, "move"],
-    [1400, "hl"],
-    [1900, "pick"],
-    [2100, "shut"],
-    [2900, "reach"],
-    [3800, null],
-  ];
-  let timers: number[] = [];
-  let io: IntersectionObserver | null = null;
-  let started = false;
-  const run = () => {
-    for (const [at, state] of steps) {
-      timers.push(
-        window.setTimeout(() => {
-          if (state) d.setAttribute("data-demo", state);
-          else d.removeAttribute("data-demo");
-        }, at),
-      );
-    }
-  };
-  const watch = () => {
-    io?.disconnect();
-    const fig = desks.find((desk) => desk.offsetParent !== null);
-    if (!fig) return;
-    started = true;
-    if (!("IntersectionObserver" in window)) {
-      run();
-      return;
-    }
-    const seen = new IntersectionObserver(
-      (es) => {
-        if (es.some((e) => e.isIntersecting)) {
-          seen.disconnect();
-          run();
-        }
-      },
-      { threshold: 0.6 },
-    );
-    io = seen;
-    seen.observe(fig);
-  };
-  document.addEventListener("choice", (e) => {
-    const { name, value } = (e as CustomEvent<Chosen>).detail;
-    if (name === "platform") {
-      for (const t of timers) clearTimeout(t);
-      timers = [];
-      started = false;
-      d.setAttribute("data-demo", "start");
-      watch();
-    } else if (name === "surface" && value === "app" && !started) watch();
-  });
-  watch();
+  if (!document.querySelector("[data-demo-desk]")) d.removeAttribute("data-demo");
 }
 
 head();

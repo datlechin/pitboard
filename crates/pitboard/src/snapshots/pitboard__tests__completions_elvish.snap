@@ -1,0 +1,355 @@
+---
+source: crates/pitboard/src/main.rs
+expression: "completions(clap_complete::Shell::Elvish)"
+---
+
+use builtin;
+use str;
+
+set edit:completion:arg-completer[pitboard] = {|@words|
+    fn spaces {|n|
+        builtin:repeat $n ' ' | str:join ''
+    }
+    fn cand {|text desc|
+        edit:complex-candidate $text &display=$text' '(spaces (- 14 (wcswidth $text)))$desc
+    }
+    var command = 'pitboard'
+    for word $words[1..-1] {
+        if (str:has-prefix $word '-') {
+            break
+        }
+        set command = $command';'$word
+    }
+    var completions = [
+        &'pitboard'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand -V 'Print version'
+            cand --version 'Print version'
+            cand status 'What is signed in, and how much each Claude Code and Codex account has left (the default)'
+            cand use 'Switch a tool to an enrolled account'
+            cand enroll 'Add an account: the one signed in now, or with --sign-in, another one'
+            cand rename 'Change the label an account is enrolled under'
+            cand forget 'Drop an account and its parked login'
+            cand watch 'Switch Claude Code before the account in use runs out, and warm up accounts'
+            cand warm 'Start an account''s five-hour period early, so it resets sooner'
+            cand statusline 'One line for Claude Code''s status bar; reads its session JSON on stdin'
+            cand renew 'Renew every parked login that is due, and nothing else'
+            cand schedule 'Keep parked logins alive without running anything yourself'
+            cand log 'What Pitboard has changed, and when'
+            cand doctor 'Check that what Pitboard relies on still holds on this machine'
+            cand uninstall 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files'
+            cand stow 'Put away the login Claude Code left in a file behind the keychain, then delete the file'
+            cand repair 'Ask the credential store what parked logins are here, and account for every one'
+            cand abandon 'Give up on an interrupted switch that cannot be finished, keeping every login'
+            cand adopt 'Take over a Pitboard directory another computer wrote, keeping the accounts'
+            cand completions 'Print a shell completion script'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;status'= {
+            cand --offline 'Answer from what was last measured, without asking anyone'
+            cand --fresh 'Ask about every account, even one asked about moments ago'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;use'= {
+            cand -y 'Where the service refuses the login in use for good, put this account''s login in its place without asking; needed without a terminal or with `--json`'
+            cand --yes 'Where the service refuses the login in use for good, put this account''s login in its place without asking; needed without a terminal or with `--json`'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;enroll'= {
+            cand --sign-in 'Sign in to another account first, through the tool''s own sign-in'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;rename'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;forget'= {
+            cand -y 'Do not ask first; needed without a terminal or with `--json`'
+            cand --yes 'Do not ask first; needed without a terminal or with `--json`'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;watch'= {
+            cand --at 'Switch once a limit of the account in use reaches this share, from 50 to 99'
+            cand --once 'Decide once whether to switch, from the usage Pitboard last measured, asking no service for usage, and stop. Warms nothing up'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand install 'Have this computer''s own service manager run `pitboard watch` from now on and at each sign-in'
+            cand status 'Say whether it is installed'
+            cand uninstall 'Stop it and take it away'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;watch;install'= {
+            cand --at 'Switch once a limit of the account in use reaches this share, from 50 to 99'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;watch;status'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;watch;uninstall'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;watch;help'= {
+            cand install 'Have this computer''s own service manager run `pitboard watch` from now on and at each sign-in'
+            cand status 'Say whether it is installed'
+            cand uninstall 'Stop it and take it away'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;watch;help;install'= {
+        }
+        &'pitboard;watch;help;status'= {
+        }
+        &'pitboard;watch;help;uninstall'= {
+        }
+        &'pitboard;watch;help;help'= {
+        }
+        &'pitboard;warm'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand now 'Start an account''s five-hour period now, whatever the span, through one short request Claude Code makes with that account''s login'
+            cand on 'Warm up an account from now on, within the span `range` sets'
+            cand off 'Stop warming up an account'
+            cand range 'Warm up accounts only between these times of each day, in this computer''s time zone'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;warm;now'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;warm;on'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;warm;off'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;warm;range'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;warm;help'= {
+            cand now 'Start an account''s five-hour period now, whatever the span, through one short request Claude Code makes with that account''s login'
+            cand on 'Warm up an account from now on, within the span `range` sets'
+            cand off 'Stop warming up an account'
+            cand range 'Warm up accounts only between these times of each day, in this computer''s time zone'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;warm;help;now'= {
+        }
+        &'pitboard;warm;help;on'= {
+        }
+        &'pitboard;warm;help;off'= {
+        }
+        &'pitboard;warm;help;range'= {
+        }
+        &'pitboard;warm;help;help'= {
+        }
+        &'pitboard;statusline'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;renew'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;schedule'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand install 'Ask this computer''s own scheduler to renew parked logins daily'
+            cand status 'Say whether it is installed'
+            cand uninstall 'Take it away'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;schedule;install'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;schedule;status'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;schedule;uninstall'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;schedule;help'= {
+            cand install 'Ask this computer''s own scheduler to renew parked logins daily'
+            cand status 'Say whether it is installed'
+            cand uninstall 'Take it away'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;schedule;help;install'= {
+        }
+        &'pitboard;schedule;help;status'= {
+        }
+        &'pitboard;schedule;help;uninstall'= {
+        }
+        &'pitboard;schedule;help;help'= {
+        }
+        &'pitboard;log'= {
+            cand -n 'How many changes to show'
+            cand --lines 'How many changes to show'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;doctor'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;uninstall'= {
+            cand -y 'Do not ask first; needed without a terminal or with `--json`'
+            cand --yes 'Do not ask first; needed without a terminal or with `--json`'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;stow'= {
+            cand -y 'Do not ask first; needed without a terminal or with `--json`'
+            cand --yes 'Do not ask first; needed without a terminal or with `--json`'
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;repair'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;abandon'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;adopt'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;completions'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;help'= {
+            cand status 'What is signed in, and how much each Claude Code and Codex account has left (the default)'
+            cand use 'Switch a tool to an enrolled account'
+            cand enroll 'Add an account: the one signed in now, or with --sign-in, another one'
+            cand rename 'Change the label an account is enrolled under'
+            cand forget 'Drop an account and its parked login'
+            cand watch 'Switch Claude Code before the account in use runs out, and warm up accounts'
+            cand warm 'Start an account''s five-hour period early, so it resets sooner'
+            cand statusline 'One line for Claude Code''s status bar; reads its session JSON on stdin'
+            cand renew 'Renew every parked login that is due, and nothing else'
+            cand schedule 'Keep parked logins alive without running anything yourself'
+            cand log 'What Pitboard has changed, and when'
+            cand doctor 'Check that what Pitboard relies on still holds on this machine'
+            cand uninstall 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files'
+            cand stow 'Put away the login Claude Code left in a file behind the keychain, then delete the file'
+            cand repair 'Ask the credential store what parked logins are here, and account for every one'
+            cand abandon 'Give up on an interrupted switch that cannot be finished, keeping every login'
+            cand adopt 'Take over a Pitboard directory another computer wrote, keeping the accounts'
+            cand completions 'Print a shell completion script'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;help;status'= {
+        }
+        &'pitboard;help;use'= {
+        }
+        &'pitboard;help;enroll'= {
+        }
+        &'pitboard;help;rename'= {
+        }
+        &'pitboard;help;forget'= {
+        }
+        &'pitboard;help;watch'= {
+            cand install 'Have this computer''s own service manager run `pitboard watch` from now on and at each sign-in'
+            cand status 'Say whether it is installed'
+            cand uninstall 'Stop it and take it away'
+        }
+        &'pitboard;help;watch;install'= {
+        }
+        &'pitboard;help;watch;status'= {
+        }
+        &'pitboard;help;watch;uninstall'= {
+        }
+        &'pitboard;help;warm'= {
+            cand now 'Start an account''s five-hour period now, whatever the span, through one short request Claude Code makes with that account''s login'
+            cand on 'Warm up an account from now on, within the span `range` sets'
+            cand off 'Stop warming up an account'
+            cand range 'Warm up accounts only between these times of each day, in this computer''s time zone'
+        }
+        &'pitboard;help;warm;now'= {
+        }
+        &'pitboard;help;warm;on'= {
+        }
+        &'pitboard;help;warm;off'= {
+        }
+        &'pitboard;help;warm;range'= {
+        }
+        &'pitboard;help;statusline'= {
+        }
+        &'pitboard;help;renew'= {
+        }
+        &'pitboard;help;schedule'= {
+            cand install 'Ask this computer''s own scheduler to renew parked logins daily'
+            cand status 'Say whether it is installed'
+            cand uninstall 'Take it away'
+        }
+        &'pitboard;help;schedule;install'= {
+        }
+        &'pitboard;help;schedule;status'= {
+        }
+        &'pitboard;help;schedule;uninstall'= {
+        }
+        &'pitboard;help;log'= {
+        }
+        &'pitboard;help;doctor'= {
+        }
+        &'pitboard;help;uninstall'= {
+        }
+        &'pitboard;help;stow'= {
+        }
+        &'pitboard;help;repair'= {
+        }
+        &'pitboard;help;abandon'= {
+        }
+        &'pitboard;help;adopt'= {
+        }
+        &'pitboard;help;completions'= {
+        }
+        &'pitboard;help;help'= {
+        }
+    ]
+    $completions[$command]
+}

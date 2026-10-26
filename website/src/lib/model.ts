@@ -20,14 +20,28 @@ import {
   type Tool,
   type World,
 } from "../data/world.ts";
-import { capitalised, figure, hm, limitName, resets, scopedLimitName, whole } from "./words.ts";
+import {
+  ADOPTION_CEILING_SECONDS,
+  SETTLING_SECONDS,
+  capitalised,
+  hm,
+  limitName,
+  resets,
+  afterSwitch,
+  notSwitching,
+  notWatching,
+  sentence,
+  shareOfLimit,
+  warmSaid,
+  whole,
+} from "./words.ts";
 
-// autoswitch.rs `Threshold`, `SETTLING_SECONDS`; switch/mod.rs `ADOPTION_CEILING_SECONDS`;
-// advice.rs `FULL`; usage/mod.rs `SAME_RESET`; duty/cadence.rs's reads and looks.
+export { ADOPTION_CEILING_SECONDS, SETTLING_SECONDS };
+
+// autoswitch.rs `Threshold`; advice.rs `FULL`; usage/mod.rs `SAME_RESET`; duty/cadence.rs's reads
+// and looks.
 export const LOWEST = 50;
 export const HIGHEST = 99;
-export const SETTLING_SECONDS = 300;
-export const ADOPTION_CEILING_SECONDS = 33;
 export const FULL = 100;
 export const SAME_RESET = 60;
 export const READ_EVERY_SECONDS = 300;
@@ -97,7 +111,7 @@ export interface State extends World {
   advice: Advice[];
   lastSwitch: Partial<Record<Tool, LastSwitch>>;
   // a sign-in that put a new login in use
-  newLogin: Partial<Record<Tool, { label: string; at: number }>>;
+  newLogin: Partial<Record<Tool, { label: string; at: number; added?: boolean }>>;
   // limits switched away from, by account id, kind and scope, at their reset
   ledger: Record<string, number>;
   // reasons not to switch already told, until the next switch
@@ -106,11 +120,36 @@ export interface State extends World {
   // warm/mod.rs `Range` in minutes of the day, the accounts on by id, and when each last warmed
   warm: { from: number; to: number; on: string[]; started: Record<string, number> };
   watchService: { at: number } | null;
+  // a `pitboard watch` left running in a terminal, at the share it switches at
+  watching: number | null;
+  // the daily renewal schedule `pitboard schedule install` puts in place
+  schedule: boolean;
   log: Logged[];
   posted: Posted[];
   // accounts with a window of their site open, by id
   windowsOpen: string[];
   decidedAt: number;
+  // a switch or a read the app has under way: "Switching…" and "Reading…" while it runs
+  switching: { id: string; token: number } | null;
+  reading: number | null;
+  // a sign-in the app has under way, Claude Desktop's parking the account in use first
+  signing: {
+    tool: Tool;
+    label: string;
+    again: boolean;
+    phase: "parking" | "waiting";
+    token: number;
+  } | null;
+  // the tools whose step asking for a second account somebody put off (present/setup.rs)
+  declinedSecond: Tool[];
+  // Settings' General, which is each app's own and not the core's: opening at sign-in, what the
+  // macOS menu bar item shows, and macOS's updater, each at its default (reference/settings.mdx)
+  general: {
+    opensAtLogin: boolean;
+    menuBarShows: "nameAndUsage" | "usage" | "icon";
+    checksForUpdates: boolean;
+    installsUpdates: boolean;
+  };
 }
 
 const minutes = (hm: string) => {
@@ -147,10 +186,22 @@ export function start(): State {
       started: { [id("personal")]: clock.warmed },
     },
     watchService: null,
+    watching: null,
+    schedule: false,
     log: logged.filter((e) => e.at !== clock.switched).map((e) => ({ ...e })),
     posted: [],
     windowsOpen: [id("work")],
     decidedAt: clock.menuBar,
+    switching: null,
+    reading: null,
+    signing: null,
+    declinedSecond: [],
+    general: {
+      opensAtLogin: false,
+      menuBarShows: "nameAndUsage",
+      checksForUpdates: true,
+      installsUpdates: false,
+    },
   };
 }
 
@@ -311,80 +362,6 @@ export function decide(s: State, share: number): Decision {
   };
 }
 
-// The core's words for what switching by itself came to (words.rs `not_switching`,
-// `not_watching`, `share_of_limit`).
-export const shareOfLimit = (l: Limit) => `${figure(l.percent)} of its ${scopedLimitName(l)} limit`;
-// words.rs `listed`: "a", "a and b", "a, b and c".
-const listed = (names: string[]) =>
-  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-
-export function notSwitching(why: Skip, share: number): string {
-  switch (why.code) {
-    case "no_room": {
-      const room = `no other Claude Code account has room below ${share}% in every limit`;
-      return why.unread.length
-        ? `${room}, and there is no reading of ${listed(why.unread)} from Anthropic yet`
-        : room;
-    }
-    case "already_switched":
-      return "this limit was switched away from once already, and is not again before it resets";
-    case "settling":
-      return `the account was put in use less than ${SETTLING_SECONDS / 60} minutes ago`;
-  }
-}
-
-const notWatching = (account: string) => `there is no reading of ${account} from Anthropic yet`;
-
-// present/words.rs `sentence`: a clause as a sentence.
-const sentence = (text: string) => {
-  const said = capitalised(text);
-  return /[.!?…]$/.test(said) ? said : `${said}.`;
-};
-
-// What the line under the setting says (words.rs `watching`, `auto_switched`, `auto_skipped`).
-export function autoStandingSaid(standing: AutoStanding): string {
-  switch (standing.came) {
-    case "watching": {
-      let said = `Watching ${standing.account}`;
-      if (standing.used) said += `: ${standing.used}`;
-      if (standing.asOf !== null) said += `, as of ${hm(standing.asOf)}`;
-      return `${said}.`;
-    }
-    case "switched":
-      return `Switched Claude Code from ${standing.from} to ${standing.to}: ${standing.from} has used ${standing.used}.`;
-    case "skipped": {
-      const said = `${standing.from} has used ${standing.used}. Pitboard is not switching: ${standing.why}.`;
-      return standing.until === null ? said : `${said} It decides again at ${hm(standing.until)}.`;
-    }
-    case "not-watching":
-      return `Pitboard is not switching Claude Code: ${standing.why}.`;
-  }
-}
-
-// present/machine.rs `at_limit`'s note under the choice.
-export function atLimitNote(p: Preferences): string | null {
-  switch (p.atLimit) {
-    case "nothing":
-      return null;
-    case "notify":
-      return `Pitboard notifies you once a limit of the account in use reaches ${p.share}%, while the app is open.`;
-    case "switch":
-      return `Pitboard switches Claude Code once a limit of the account in use reaches ${p.share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
-  }
-}
-
-// words.rs `after_a_switch`, for what a switch means to what already runs.
-export function afterSwitch(tool: Tool, sessions: string): string {
-  switch (tool) {
-    case "claude":
-      return `${sessions} already running follow within ${ADOPTION_CEILING_SECONDS} seconds`;
-    case "codex":
-      return "Restart any running `codex` for this to take effect";
-    case "desktop":
-      return "Claude opens signed in to it";
-  }
-}
-
 // The tools whose accounts were read, which a notification names where there is more than one.
 const subtitle = (s: State, tool: Tool) =>
   new Set(s.accounts.map((a) => a.tool)).size > 1 ? toolName(tool) : null;
@@ -487,7 +464,7 @@ function advise(s: State) {
 // setting, and each reason not to said once until the next switch.
 function lookToSwitch(s: State) {
   const app = s.running && s.preferences.atLimit === "switch";
-  const share = app ? s.preferences.share : s.watchService?.at;
+  const share = app ? s.preferences.share : (s.watchService?.at ?? s.watching ?? undefined);
   if (share === undefined) return;
   const decision = decide(s, share);
   const from = current(s, "claude");
@@ -613,37 +590,6 @@ export function warmStanding(s: State, a: Account, asked: "now" | "by-itself"): 
   return { stands: "due" };
 }
 
-// words.rs `warm_standing`, with the app's clock.
-export function warmSaid(standing: WarmStanding): string {
-  switch (standing.stands) {
-    case "due":
-      return "warms up now";
-    case "running":
-      if (standing.next === standing.until) return `warms up again at ${hm(standing.next)}`;
-      return standing.next === null
-        ? `has its 5-hour period running until ${hm(standing.until)}`
-        : `has its 5-hour period running until ${hm(standing.until)}, and warms up again at ${hm(standing.next)}`;
-    case "resting":
-      return `warms up at ${hm(standing.at)}`;
-    case "held":
-      switch (standing.why) {
-        case "no_reading":
-          return "waits for a reading from Anthropic";
-        case "nothing_to_start":
-          return "has no 5-hour limit to start";
-        case "parked_login_expired":
-          return "needs signing in again: its parked login has expired";
-        case "limit_used_up": {
-          const l = standing.limit!;
-          const name = scopedLimitName(l);
-          return l.resetsAt !== null
-            ? `has its ${name} limit used up until ${hm(l.resetsAt)}`
-            : `has its ${name} limit used up`;
-        }
-      }
-  }
-}
-
 // The note under an account turned on for warm-ups (present/accounts.rs `warm_note`).
 export function warmNote(s: State, a: Account): string | null {
   if (a.tool !== "claude" || !s.warm.on.includes(a.id)) return null;
@@ -677,7 +623,7 @@ function warmUpNow(s: State, a: Account, caller: Caller) {
 
 // state.rs `warm_tick`: whichever account turned on is due, while the app or the watch runs.
 function warmTick(s: State) {
-  if (!s.running && !s.watchService) return;
+  if (!s.running && !s.watchService && s.watching === null) return;
   for (const a of s.accounts.filter((a) => a.tool === "claude" && s.warm.on.includes(a.id))) {
     if (warmStanding(s, a, "by-itself").stands === "due")
       warmUpNow(s, a, s.running ? "app" : "cli");
@@ -723,6 +669,15 @@ function readUsage(s: State) {
   advise(s);
   lookToSwitch(s);
   warmTick(s);
+}
+
+// A state of its own as a read leaves it, advised on and looked at as the app does after a read:
+// the notification row's own moment, which the store never holds.
+export function advised(state: State): State {
+  const s = structuredClone(state);
+  advise(s);
+  lookToSwitch(s);
+  return s;
 }
 
 function decidePass(s: State) {
@@ -805,11 +760,16 @@ export function rename(tool: Tool, from: string, to: string, caller: Caller = "a
       record(s, caller, "rename", subject, "invalid_label");
       return "invalid_label";
     }
+    // service.rs logs a rename under both names
+    const both = `${typed(a)} -> ${to}`;
     if (to !== from && find(s, tool, to)) {
-      record(s, caller, "rename", subject, "label_taken");
+      record(s, caller, "rename", both, "label_taken");
       return "label_taken";
     }
-    if (to === from) return "ok";
+    if (to === from) {
+      record(s, caller, "rename", both);
+      return "ok";
+    }
     a.label = to;
     if (s.inUse[tool] === from) s.inUse[tool] = to;
     const last = s.lastSwitch[tool];
@@ -820,7 +780,7 @@ export function rename(tool: Tool, from: string, to: string, caller: Caller = "a
       if (advice.ran === from) advice.ran = to;
       if (advice.instead === from) advice.instead = to;
     }
-    record(s, caller, "rename", subject);
+    record(s, caller, "rename", both);
     return "ok";
   });
 }
@@ -848,6 +808,17 @@ export function forget(tool: Tool, label: string, caller: Caller = "app"): Outco
 
 let enrolled = 0;
 
+// Hex that stands for what a simulated sign-in would bring, which nobody reads: FNV-1a's 64 bits.
+function madeUp(seed: string): string {
+  let h = 0xcbf29ce484222325n;
+  for (const c of seed) h = BigInt.asUintN(64, (h ^ BigInt(c.codePointAt(0)!)) * 0x100000001b3n);
+  return h.toString(16).padStart(16, "0");
+}
+const uuidOf = (seed: string) => {
+  const hex = madeUp(`${seed}/a`) + madeUp(`${seed}/b`);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+
 // A simulated sign-in's end, for Add Account and `pitboard enroll`: the tool's own sign-in is
 // never loaded, so the new account is `<name>@example.com` on the plan of the one in use, and
 // its first read finds nothing used. Claude Desktop's ends with Claude signed in to it.
@@ -870,14 +841,19 @@ export function enroll(tool: Tool, label: string, caller: Caller = "app"): Outco
       email: tool === "desktop" ? "" : `${label}@example.com`,
       plan: like?.plan ?? null,
       limits: [],
+      uuid: uuidOf(`${tool}/${label}/${enrolled}`),
+      login: madeUp(`refresh/${tool}/${label}/${enrolled}`),
     };
+    if (tool === "claude") a.org = uuidOf(`org/${label}/${enrolled}`);
     if (tool === "desktop") {
       s.accounts.push(a);
       switchTo(s, a, caller, "enroll");
+      s.newLogin.desktop = { label, at: s.now, added: true };
       return "ok";
     }
     a.unread = true;
-    a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
+    // codex/engine.rs `expiry`: Codex states no refresh lifetime, so its parks keep none
+    if (tool === "claude") a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
     s.accounts.push(a);
     record(s, caller, "enroll", subject);
     return "ok";
@@ -900,6 +876,7 @@ export function signInAgain(tool: Tool, label: string, caller: Caller = "app"): 
       return "ok";
     }
     if (tool === "claude") a.refreshExpiresAt = s.now + SIGN_IN_LASTS;
+    a.login = madeUp(`refresh/${tool}/${label}/${s.now}`);
     if (s.inUse[tool] === label) s.newLogin[tool] = { label, at: s.now };
     record(s, caller, "enroll", typed(a));
     afterChange(s);
@@ -926,13 +903,30 @@ export function setShare(share: number) {
   });
 }
 
-export function turnWarmUp(label: string, on: boolean) {
+// service.rs `warm_turn`, logged as the core logs it.
+export function turnWarmUp(label: string, on: boolean, caller: Caller = "app") {
   change((s) => {
     const a = find(s, "claude", label);
     if (!a) return;
     s.warm.on = s.warm.on.filter((id) => id !== a.id);
     if (on) s.warm.on.push(a.id);
+    record(s, caller, on ? "warm-on" : "warm-off", typed(a));
     warmTick(s);
+  });
+}
+
+// warm/mod.rs `Range::new`: a span of the day in minutes, 00:00 at its end meaning 24:00, and
+// never empty; service.rs `warm_range` logs it as `clock` says each end.
+export function setWarmRange(from: number, to: number, caller: Caller = "app"): boolean {
+  const end = to === 0 ? DAY / MINUTE : to;
+  if (from >= DAY / MINUTE || end > DAY / MINUTE || from === end) return false;
+  const clock = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return change((s) => {
+    s.warm = { ...s.warm, from, to: end };
+    record(s, caller, "warm-range", `${clock(from)}-${clock(end)}`);
+    warmTick(s);
+    return true;
   });
 }
 
@@ -975,6 +969,21 @@ export function openWindow(tool: Tool, label: string) {
   });
 }
 
+// A change to Settings' General.
+export function setGeneral(to: Partial<State["general"]>) {
+  change((s) => {
+    s.general = { ...s.general, ...to };
+  });
+}
+
+// An account's window closed, by its close button: it opens again from a menu.
+export function closeWindow(id: string) {
+  if (!model.get().windowsOpen.includes(id)) return;
+  change((s) => {
+    s.windowsOpen = s.windowsOpen.filter((open) => open !== id);
+  });
+}
+
 export function quit() {
   change((s) => {
     s.running = false;
@@ -987,7 +996,10 @@ export function advance(to: number) {
   change((s) => {
     for (;;) {
       const read = s.running ? s.readAt + READ_EVERY_SECONDS : Infinity;
-      const look = s.running || s.watchService ? s.decidedAt + DECIDE_EVERY_SECONDS : Infinity;
+      const look =
+        s.running || s.watchService || s.watching !== null
+          ? s.decidedAt + DECIDE_EVERY_SECONDS
+          : Infinity;
       const next = Math.min(read, look);
       if (next > to) break;
       s.now = next;
@@ -1013,10 +1025,122 @@ export function run() {
   );
 }
 
+// Where Reset returns to: the start, or the state the hero's opening demo left, once its switch
+// is made (plan section 4).
+let rest: State | null = null;
+export function settle(at: State | null = model.get()) {
+  rest = at && structuredClone({ ...at, changed: false });
+  if (at) model.setKey("changed", false);
+}
+
 export function reset() {
   enrolled = 0;
-  model.set(start());
+  model.set(rest ? structuredClone(rest) : start());
   rebase();
+}
+
+// How long each app took over a switch and a read in its UI tests on CI's runners
+// (docs/facts/site.md): In Use 0.12 s after a click on macOS, In use 0.19 to 0.37 s after Use on
+// windows-2025 and 0.25 s on windows-11-arm, and Refresh disabled for 14 to 24 ms on Windows and
+// never seen dimmed on macOS.
+type System = "macos" | "windows";
+export const TAKES_MS: Record<"switch" | "read", Record<System, number>> = {
+  switch: { macos: 120, windows: 250 },
+  read: { macos: 24, windows: 24 },
+};
+let token = 0;
+
+// The app's switch from a menu, the window's Use or a notification's Switch: the account reads
+// "Switching…" and the others are dimmed while it runs, then it is in use.
+export function switchFromApp(tool: Tool, label: string, system: System) {
+  const to = find(model.get(), tool, label);
+  if (!to || model.get().switching) return;
+  const mine = ++token;
+  change((s) => {
+    s.switching = { id: to.id, token: mine };
+  });
+  setTimeout(() => {
+    if (model.get().switching?.token !== mine) return;
+    change((s) => {
+      s.switching = null;
+    }, false);
+    const now = model.get().accounts.find((a) => a.id === to.id);
+    if (now) use(now.tool, now.label);
+  }, TAKES_MS.switch[system]);
+}
+
+// The app's Refresh: "Reading…" while the read runs.
+export function refreshFromApp(system: System) {
+  if (model.get().reading !== null || !model.get().running) return;
+  const mine = ++token;
+  change((s) => {
+    s.reading = mine;
+  });
+  setTimeout(() => {
+    if (model.get().reading !== mine) return;
+    change((s) => {
+      s.reading = null;
+      if (s.running) readUsage(s);
+    });
+  }, TAKES_MS.read[system]);
+}
+
+// The window's notice of a tool's last switch or new login, put away by its close button.
+export function dismissNotice(tool: Tool) {
+  change((s) => {
+    delete s.lastSwitch[tool];
+    delete s.newLogin[tool];
+  });
+}
+
+// Not Now on the step asking for a second account of `tool`.
+export function declineSecond(tool: Tool) {
+  change((s) => {
+    if (!s.declinedSecond.includes(tool)) s.declinedSecond.push(tool);
+  });
+}
+
+// A simulated sign-in ends this long after it starts (answer 16 a).
+export const SIGN_IN_MS = 3000;
+
+// The app's sign-in, from Add Account or Sign In Again: the tool's own sign-in is never loaded,
+// so it ends by itself, Claude Desktop's as if Claude quit signed in. Claude Desktop parks the
+// account in use first, for as long as a switch takes.
+export function signInFromApp(tool: Tool, label: string, again: boolean) {
+  if (model.get().signing) return;
+  const mine = ++token;
+  change((s) => {
+    s.signing = {
+      tool,
+      label,
+      again,
+      phase: tool === "desktop" ? "parking" : "waiting",
+      token: mine,
+    };
+  });
+  const still = () => model.get().signing?.token === mine;
+  if (tool === "desktop")
+    setTimeout(() => {
+      if (still())
+        change((s) => {
+          s.signing!.phase = "waiting";
+        }, false);
+    }, TAKES_MS.switch.macos);
+  setTimeout(() => {
+    if (!still()) return;
+    change((s) => {
+      s.signing = null;
+    }, false);
+    if (again) signInAgain(tool, label);
+    else enroll(tool, label);
+  }, SIGN_IN_MS);
+}
+
+export function cancelSignIn() {
+  if (!model.get().signing) return;
+  change((s) => {
+    s.signing = null;
+  }, false);
 }
 
 // A switch notice's countdown, as NoticeRow.swift's timer and Countdown.Left draw it.
@@ -1026,4 +1150,42 @@ export function countdown(until: number, now: number): string {
   const m = Math.floor((left % HOUR) / MINUTE);
   const sec = String(left % MINUTE).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+// What the command line changes that no figure of the app does: an entry of the log a refused
+// or repeated command leaves, the renewal schedule, and a `pitboard watch` running in a terminal.
+export function logEntry(caller: Caller, verb: string, subject: string, outcome = "ok") {
+  change((s) => record(s, caller, verb, subject, outcome));
+}
+
+export function setSchedule(on: boolean, caller: Caller = "cli"): boolean {
+  const was = model.get().schedule;
+  if (!on && !was) return false;
+  change((s) => {
+    s.schedule = on;
+    record(s, caller, "schedule", on ? "install" : "uninstall");
+  });
+  return was;
+}
+
+// Not a change of its own: the watch's switches and warm-ups are.
+export function watchInTerminal(share: number | null) {
+  change((s) => {
+    s.watching = share;
+  }, false);
+}
+
+// `pitboard watch --once`: one decision at `share`, switching as a watch does.
+export function decideOnce(share: number): Decision {
+  const decision = decide(model.get(), share);
+  if (decision.decided !== "switch") return decision;
+  return change((s) => {
+    const d = decide(s, share) as Extract<Decision, { decided: "switch" }>;
+    const from = current(s, "claude")!;
+    s.ledger[limitKey("claude", from.id, d.limit)] = d.limit.resetsAt ?? 0;
+    switchTo(s, d.to, "cli", "auto-switch");
+    s.autoTold = [];
+    afterChange(s);
+    return d;
+  });
 }

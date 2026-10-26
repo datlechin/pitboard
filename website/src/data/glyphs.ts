@@ -18,6 +18,13 @@ export const line: Record<string, string> = {
   "sf-plus": "M10 4v12M4 10h12",
   "sf-check": "M4 10.75 8.5 16 16 3.6",
   "sf-xmark": "M5 5l10 10M15 5 5 15",
+  "sf-chev-left": "M12.5 4 6.5 10l6 6",
+  "sf-chev-right": "M7.5 4l6 6-6 6",
+  // Segoe's Back and Forward, as a WinUI AppBarButton draws them
+  "ln-back": "M16.5 10h-13M8.5 5l-5 5 5 5",
+  "ln-forward": "M3.5 10h13M11.5 5l5 5-5 5",
+  // arrow.left.arrow.right, a switch of accounts
+  "sf-switch": "M3.5 7h12.5M13 4l3 3-3 3M16.5 13H4M7 10l-3 3 3 3",
   "sf-person":
     "M10 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14ZM10 6.3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM5.3 15.2c1-1.6 2.7-2.5 4.7-2.5s3.7.9 4.7 2.5",
 };
@@ -41,6 +48,38 @@ export const bar: Record<"ic-batt" | "ic-wifi" | "ic-cc", { viewBox: string; bod
     viewBox: "0 0 16 14",
     body: '<rect x=".75" y="1" width="14.5" height="5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="3.6" cy="3.5" r="1.5" fill="currentColor"/><rect x=".75" y="8" width="14.5" height="5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="12.4" cy="10.5" r="1.5" fill="currentColor"/>',
   },
+};
+
+// What macOS 26 draws before the system's own items in the menus of an app's menu bar, as the app's
+// UI tests' pictures show them, drawn 20 points square. Each body strokes or fills currentColor.
+const stroke =
+  'fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"';
+const rect = 'x="2.75" y="4.25" width="14.5" height="11.5" rx="2.4"';
+export const menuSymbol: Record<string, string> = {
+  "mi-hide": `<rect ${rect} ${stroke} stroke-dasharray="2.4 2.1"/>`,
+  "mi-windows": `<path d="M6 6.75V5.9a1.9 1.9 0 0 1 1.9-1.9h7.2A1.9 1.9 0 0 1 17 5.9v5.7a1.9 1.9 0 0 1-1.9 1.9h-.85" ${stroke}/><rect x="3" y="7.25" width="11" height="8.75" rx="1.9" ${stroke}/>`,
+  "mi-quit": `<rect ${rect} ${stroke}/><path d="m7.6 7.6 4.8 4.8m0-4.8-4.8 4.8" ${stroke}/>`,
+  "mi-close": `<path d="m5.5 5.5 9 9m0-9-9 9" ${stroke}/>`,
+  "mi-undo": `<path d="M7 5.25 3.5 8.75 7 12.25M3.75 8.75h8.5a4 4 0 0 1 0 8H10" ${stroke}/>`,
+  "mi-redo": `<path d="M13 5.25l3.5 3.5-3.5 3.5M16.25 8.75h-8.5a4 4 0 0 0 0 8H10" ${stroke}/>`,
+  "mi-cut": `<circle cx="6" cy="14.5" r="2.4" ${stroke}/><circle cx="14" cy="14.5" r="2.4" ${stroke}/><path d="M7.5 12.6 14 3.25M12.5 12.6 6 3.25" ${stroke}/>`,
+  "mi-copy": `<rect x="6.75" y="6.25" width="9.5" height="11.5" rx="1.9" ${stroke}/><path d="M4.25 13.25V4.2a1.9 1.9 0 0 1 1.9-1.95h6.1" ${stroke}/>`,
+  "mi-paste": `<rect x="4.25" y="3.75" width="11.5" height="14" rx="1.9" ${stroke}/><path d="M7.5 3.75V2.6h5v1.15M7.5 3.75v1.5h5v-1.5" ${stroke}/>`,
+  "mi-trash": `<path d="M3.75 5.5h12.5M8 5.5V3.75h4V5.5M5.25 5.5l.75 10.7a1.6 1.6 0 0 0 1.6 1.5h4.8a1.6 1.6 0 0 0 1.6-1.5l.75-10.7M8.25 8.5v6M11.75 8.5v6" ${stroke}/>`,
+  "mi-select-all": `<rect ${rect} ${stroke} stroke-dasharray="2.4 2.1"/><path d="m7.4 13 2.6-5.9 2.6 5.9M8.3 11h3.4" ${stroke}/>`,
+  "mi-autofill": `<rect x="2.25" y="6.25" width="15.5" height="8.5" rx="1.9" ${stroke}/><path d="M5.25 10.5h.01M7.75 10.5h.01M10.25 10.5h.01" ${stroke} stroke-width="1.8"/><path d="m13.6 12.8 4.4-4.4 1.3 1.3-4.4 4.4-1.7.4Z" ${stroke}/>`,
+  "mi-mic": `<rect x="7.25" y="2.5" width="5.5" height="9.25" rx="2.75" ${stroke}/><path d="M4.5 9.25a5.5 5.5 0 0 0 11 0M10 14.75v2.75" ${stroke}/>`,
+  "mi-emoji": `<circle cx="10" cy="10" r="7.5" ${stroke}/><path d="M7.5 8.25v.5M12.5 8.25v.5" ${stroke} stroke-width="1.8"/><path d="M6.6 11.75a3.9 3.9 0 0 0 6.8 0" ${stroke}/>`,
+  "mi-full-screen": `<rect ${rect} ${stroke}/><path d="M6 10.5V7.75h2.75M14 9.5v2.75h-2.75" ${stroke}/>`,
+  "mi-minimize": `<rect ${rect} ${stroke}/><path d="M7 12.75h6" ${stroke}/>`,
+  "mi-zoom": `<path d="M2.75 7.5V6.5a2.25 2.25 0 0 1 2.25-2.25h1.5M13.5 4.25H15a2.25 2.25 0 0 1 2.25 2.25v1M17.25 12.5v1a2.25 2.25 0 0 1-2.25 2.25h-1.5M6.5 15.75H5a2.25 2.25 0 0 1-2.25-2.25v-1" ${stroke}/><rect x="6.5" y="7.5" width="7" height="5" rx="1" ${stroke}/>`,
+  "mi-fill": `<rect ${rect} ${stroke}/><rect x="5" y="6.5" width="10" height="7" rx="1" fill="currentColor"/>`,
+  "mi-center": `<rect ${rect} ${stroke}/><rect x="7" y="7.75" width="6" height="4.5" rx="1" fill="currentColor"/>`,
+  "mi-move": `<rect ${rect} ${stroke}/><rect x="5" y="6.5" width="4.75" height="7" rx="1" fill="currentColor"/><rect x="11.25" y="6.5" width="3.75" height="3" rx=".8" fill="currentColor"/>`,
+  "mi-tile": `<rect ${rect} ${stroke}/><path d="M10 4.5v11" ${stroke}/>`,
+  "mi-remove": `<rect ${rect} ${stroke}/><path d="M7.25 10h5.5" ${stroke}/>`,
+  "mi-front": `<path d="M10 2.75 17 6.6 10 10.45 3 6.6Z" ${stroke}/><path d="m3 10.05 7 3.85 7-3.85M3 13.5l7 3.85 7-3.85" ${stroke}/>`,
+  "mi-search": `<circle cx="8.75" cy="8.75" r="5.25" ${stroke}/><path d="m12.6 12.6 4.4 4.4" ${stroke}/>`,
 };
 
 // GNOME's symbolic icons in a header bar, 16 pixels square, drawn after Adwaita's.
@@ -80,6 +119,9 @@ export const fluent: Record<string, string> = {
     "M10 2C7.8 2 6 3.8 6 6C6 8.2 7.8 10 10 10C12.2 10 14 8.2 14 6C14 3.8 12.2 2 10 2ZM7 6C7 4.3 8.3 3 10 3C11.7 3 13 4.3 13 6C13 7.7 11.7 9 10 9C8.3 9 7 7.7 7 6ZM5 11C3.9 11 3 11.9 3 13C3 14.7 3.8 16 5.1 16.8C6.4 17.6 8.1 18 10 18C11.9 18 13.6 17.6 14.9 16.8C16.2 16 17 14.7 17 13C17 11.9 16.1 11 15 11L5 11ZM4 13C4 12.4 4.4 12 5 12L15 12C15.6 12 16 12.4 16 13C16 14.3 15.4 15.3 14.3 16C13.3 16.6 11.7 17 10 17C8.3 17 6.7 16.6 5.7 16C4.6 15.3 4 14.3 4 13Z",
   "fl-person-filled":
     "M10 2C7.8 2 6 3.8 6 6C6 8.2 7.8 10 10 10C12.2 10 14 8.2 14 6C14 3.8 12.2 2 10 2ZM5 11C3.9 11 3 11.9 3 13C3 14.7 3.8 16 5.1 16.8C6.4 17.6 8.1 18 10 18C11.9 18 13.6 17.6 14.9 16.8C16.2 16 17 14.7 17 13C17 11.9 16.1 11 15 11L5 11Z",
+  // ArrowSwap, the setup step's switch
+  "fl-arrow-swap":
+    "M13.1 3.1a.5.5 0 0 1 .7 0l3 3a.5.5 0 0 1 0 .7l-3 3a.5.5 0 0 1-.7-.7L15.3 7H3.5a.5.5 0 0 1 0-1h11.8l-2.2-2.2a.5.5 0 0 1 0-.7ZM6.9 10.1a.5.5 0 0 1 0 .7L4.7 13h11.8a.5.5 0 0 1 0 1H4.7l2.2 2.2a.5.5 0 0 1-.7.7l-3-3a.5.5 0 0 1 0-.7l3-3a.5.5 0 0 1 .7 0Z",
   "fl-checkmark":
     "M3.4 10.2C3.2 10 2.9 9.9 2.7 10.1C2.5 10.3 2.4 10.6 2.6 10.8L6.6 15.3C6.8 15.5 7.2 15.6 7.4 15.4L17.9 4.9C18 4.7 18 4.3 17.9 4.1C17.7 4 17.3 4 17.1 4.1L7 14.3L3.4 10.2Z",
   "fl-chevron-right":

@@ -1,0 +1,20 @@
+---
+// MachinePage.xaml before it has any checks: its header with Check again, and the EmptyState that
+// says it is checking. No `pitboard doctor` run on Windows has been read for the site to draw the
+// checks from, so the page stays as it waits.
+import PageHeader from "./PageHeader.astro";
+import ProgressRing from "./ProgressRing.astro";
+import { checking } from "../../../data/machine.ts";
+---
+
+<div class="flex h-full flex-col">
+  <PageHeader
+    prefix="tpl-machine"
+    title="This PC"
+    commands={[["fl-refresh", "Check again", "check"]]}
+  />
+  <div class="flex flex-1 flex-col items-center justify-center gap-12 py-48 text-center">
+    <ProgressRing class="size-32" />
+    <span class="text-u-14/20 font-semibold">{checking("windows")}</span>
+  </div>
+</div>

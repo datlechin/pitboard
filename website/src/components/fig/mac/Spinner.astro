@@ -1,0 +1,31 @@
+---
+// A small ProgressView as macOS draws it: eight spokes, the brightest stepping round. VoiceOver
+// names it by `label`; it does not turn under reduced motion.
+interface Props {
+  label?: string;
+  class?: string;
+}
+const { label, class: extra } = Astro.props;
+const spokes = Array.from({ length: 8 }, (_, i) => i);
+---
+
+<svg
+  class:list={["size-16 shrink-0 animate-spin [animation-timing-function:steps(8)]", extra]}
+  viewBox="0 0 16 16"
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+>
+  {spokes.map((i) => (
+    <rect
+      x="7.1"
+      y="1"
+      width="1.8"
+      height="4.4"
+      rx=".9"
+      fill="currentColor"
+      opacity={1 - i * 0.11}
+      transform={`rotate(${-i * 45} 8 8)`}
+    />
+  ))}
+</svg>

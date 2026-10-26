@@ -1,6 +1,7 @@
 ---
 // Terminal's Basic profile, 11 point and alone 80 columns wide; output colours spans g, y, r, dim.
-// A shell's window, given its `id`, keeps its output as a log its title names.
+// A shell's window, given its `id`, keeps its output as a log its title names; once live it grows
+// with its output to Terminal's 24 rows, then scrolls.
 import Lights from "./Lights.astro";
 
 interface Props {
@@ -32,7 +33,7 @@ const { title, id, solo = false, class: extra } = Astro.props;
     class:list={[
       "flex min-h-0 flex-1 flex-col overflow-hidden font-mono whitespace-pre text-mac-term-text ligatures-none [&_.dim]:text-mac-term-dim [&_.g]:text-mac-term-green [&_.r]:text-mac-term-red [&_.y]:text-mac-term-yellow [&_b]:text-mac-term-bold",
       solo
-        ? "justify-start px-12 pt-8 pb-10 text-u-11/16 *:min-h-16 *:whitespace-pre-wrap"
+        ? "justify-start px-12 pt-8 pb-10 text-u-11/16 *:min-h-16 *:whitespace-pre-wrap live:max-h-[calc(24lh+var(--spacing)*10)] live:min-h-(--min) live:overflow-y-auto live:select-text"
         : "justify-end px-10 pb-7 text-u-11/14 *:min-h-14",
     ]}
     role={id ? "log" : undefined}

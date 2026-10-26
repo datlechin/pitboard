@@ -1,15 +1,100 @@
 ---
-// WinUI's TimePicker on a 24-hour clock: 242 pixels wide, the hour and the minute either side of a divider.
+// WinUI's TimePicker on a 24-hour clock: 242 pixels wide, the hour and the minute either side of a
+// divider. Its flyout, which the window's `over` slot holds, is TimePickerFlyoutPresenter: a
+// looping column each for the hour and the minute under a 40 pixel accent band, then Accept and
+// Dismiss, 398 pixels in all. Its ids start `prefix`.
+import { timeOfDay } from "../../../data/limits.ts";
+
 interface Props {
-  at: string;
+  prefix: string;
+  minutes: number;
+  label: string;
+  flyout?: boolean;
 }
-const [hour, minute] = Astro.props.at.split(":");
+const { prefix, minutes, label, flyout = false } = Astro.props;
+const [hour, minute] = timeOfDay(minutes).split(":");
+// a column shows the value and four either side, the band in its middle
+const rows = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+const two = (n: number) => String(n).padStart(2, "0");
+const column =
+  "relative flex-1 overflow-hidden outline-none focus-visible:outline-[calc(2*var(--u))] focus-visible:-outline-offset-[calc(2*var(--u))] focus-visible:outline-win-focus focus-visible:outline-solid";
+const row =
+  "absolute inset-x-4 flex h-36 items-center justify-center rounded-u-4 hover:bg-win-subtle data-[at=0]:text-win-on-accent data-[at=0]:hover:bg-transparent";
+// rows 40 apart, the middle one's centre at the column's, 177.5 pixels down
+const at = [
+  "top-[calc(var(--u)*-0.5)]",
+  "top-[calc(var(--u)*39.5)]",
+  "top-[calc(var(--u)*79.5)]",
+  "top-[calc(var(--u)*119.5)]",
+  "top-[calc(var(--u)*159.5)]",
+  "top-[calc(var(--u)*199.5)]",
+  "top-[calc(var(--u)*239.5)]",
+  "top-[calc(var(--u)*279.5)]",
+  "top-[calc(var(--u)*319.5)]",
+];
+const button =
+  "m-4 flex flex-1 items-center justify-center rounded-u-4 focus-win live:hover:bg-win-subtle live:active:bg-win-subtle-2";
 ---
 
-<span
-  class="flex h-32 w-242 items-center rounded-u-4 bg-win-control text-u-14/20 tabular-nums shadow-win-control"
->
-  <span class="flex-1 text-center">{hour}</span>
-  <span class="h-full w-1 bg-win-control-edge"></span>
-  <span class="flex-1 text-center">{minute}</span>
-</span>
+{flyout ? (
+  <dialog
+    class="absolute top-(--top) right-auto left-(--left) z-10 m-0 max-h-none w-242 max-w-none overflow-hidden rounded-u-4 border-0 bg-win-flyout p-0 font-win text-u-14/20 text-win-text shadow-win-flyout"
+    id={`${prefix}-flyout`}
+    aria-label={label}
+  >
+    <div class="relative flex h-355">
+      <span
+        class="absolute inset-x-4 top-[calc(var(--u)*157.5)] h-40 rounded-u-4 bg-win-accent"
+        aria-hidden="true"
+      ></span>
+      {(
+        [
+          ["hour", "Hour", Number(hour), 23],
+          ["minute", "Minute", Number(minute), 59],
+        ] as const
+      ).map(([part, name, value, max], i) => (
+        <>
+          {i > 0 && <span class="w-1 shrink-0 bg-win-divider" aria-hidden="true"></span>}
+          <span
+            class={column}
+            role="spinbutton"
+            tabindex="0"
+            aria-label={name}
+            aria-valuenow={value}
+            aria-valuetext={two(value)}
+            aria-valuemin="0"
+            aria-valuemax={max}
+            data-part={part}
+          >
+            {rows.map((d, j) => <span class:list={[row, at[j]]} aria-hidden="true" data-at={d}>
+              {two((value + d + max + 1) % (max + 1))}
+            </span>)}
+          </span>
+        </>
+      ))}
+    </div>
+    <div class="flex h-41 inset-shadow-[0_calc(var(--u)*1)_var(--color-win-divider)]">
+      <button class={button} type="button" aria-label="Accept" data-accept>
+        <svg class="size-16"><use href="#fl-checkmark"></use></svg>
+      </button>
+      <button class={button} type="button" aria-label="Dismiss" data-dismiss>
+        <svg class="size-16"><use href="#fl-dismiss"></use></svg>
+      </button>
+    </div>
+  </dialog>
+) : (
+  <button
+    class="flex h-32 w-242 items-center rounded-u-4 bg-win-control text-u-14/20 tabular-nums shadow-win-control focus-win live:hover:bg-win-control-2 live:active:bg-win-control-3 live:active:text-win-text-2"
+    id={prefix}
+    type="button"
+    aria-label={`${label} ${timeOfDay(minutes)}`}
+    data-label={label}
+    aria-haspopup="dialog"
+    aria-expanded="false"
+    aria-controls={`${prefix}-flyout`}
+  >
+    <span class="flex-1 text-center" data-part="hour">{hour}</span>
+    <span class="h-full w-1 bg-win-control-edge"></span>
+    <span class="flex-1 text-center" data-part="minute">{minute}</span>
+  </button>
+)}

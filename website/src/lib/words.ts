@@ -18,7 +18,13 @@ import {
   type Tool,
   type World,
 } from "../data/world.ts";
+import type { AutoStanding, Preferences, Skip, WarmStanding } from "./model.ts";
 import type { Platform } from "./platform.ts";
+
+// autoswitch.rs `SETTLING_SECONDS` and switch/mod.rs `ADOPTION_CEILING_SECONDS`, which the model's
+// rules count and these words say.
+export const SETTLING_SECONDS = 300;
+export const ADOPTION_CEILING_SECONDS = 33;
 
 // Every value of the world a line puts into HTML: a label someone types is text.
 const entities: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
@@ -206,6 +212,17 @@ export const menuBarClock = (epoch: number) => {
 };
 
 // the en-GB regional format's "d", under the taskbar's time
+// Windows' calendar flyout's date, in the en-GB format the taskbar's date is in
+const weekdaysLong = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split(" ");
+const monthsLong =
+  "January February March April May June July August September October November December".split(
+    " ",
+  );
+export const calendarDate = (epoch: number) => {
+  const d = local(epoch);
+  return `${weekdaysLong[d.getUTCDay()]} ${d.getUTCDate()} ${monthsLong[d.getUTCMonth()]}`;
+};
+
 export const shortDate = (epoch: number) => {
   const d = local(epoch);
   return `${two(d.getUTCDate())}/${two(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
@@ -229,6 +246,15 @@ const toolName = (tool: Tool) => tools.find(([t]) => t === tool)![1];
 // As every listing gives a tool's accounts: the one in use first (status.rs `assemble`).
 export const listed = (w: World, tool: Tool) =>
   [...toolAccounts(w, tool)].sort((a, b) => Number(isInUse(b, w)) - Number(isInUse(a, w)));
+
+// present/accounts.rs `in_place_of_limits` while a switch runs, and present/setup.rs
+// `updated_menu` while a read does and after it (present/words.rs `updated`)
+export const SWITCHING = "Switching…";
+export const READING = "Reading…";
+export const updated = (readAt: number) => `Updated ${hm(readAt)}`;
+
+// account_windows/accounts.rs: one item opens a site's one account in place of a submenu
+export const openSiteAs = (site: string, label: string) => `Open ${site} as ${label}`;
 
 export const menuTitle = (a: Account) => (a.plan ? `${a.label} · ${a.plan}` : a.label);
 
@@ -290,6 +316,13 @@ const titled = (w: World) =>
 export function menuBarTitle(w: World): string {
   const shown = titled(w);
   return `${shown.label} ${fullest(shown)}%`;
+}
+
+// MenuBarShows.swift: what Settings' Menu bar shows leaves of the title, the mark alone for Icon
+// only, while its spoken name stays whole.
+export function menuBarShown(w: World, shows: "nameAndUsage" | "usage" | "icon"): string {
+  if (shows === "icon") return "";
+  return shows === "usage" ? `${fullest(titled(w))}%` : menuBarTitle(w);
 }
 
 // The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
@@ -375,6 +408,14 @@ export const trayTip = (w: World) =>
     }),
   ].join("\n");
 
+// NotifyIcon.cs `Tip`: the Shell holds 127 UTF-16 units of the icon's tooltip, cut never inside a
+// surrogate pair.
+export const TIP_LENGTH = 127;
+export const shellTip = (tip: string) =>
+  tip.length <= TIP_LENGTH
+    ? tip
+    : tip.slice(0, /[\uD800-\uDBFF]/.test(tip[TIP_LENGTH - 1]) ? TIP_LENGTH - 1 : TIP_LENGTH);
+
 // The notification once a limit of the account in use reaches the share (present/notices.rs
 // `at_limit_notice`): personal's weekly limit, with work's room in it.
 export const headsUpTitle = (label: string, limit: Limit, used: number) =>
@@ -394,13 +435,20 @@ export function runsOutNote(a: Account, w: World): string | null {
   return first ? runsOut(scopedLimitName(first.limit), first.inSeconds) : null;
 }
 
+// present/accounts.rs `stale_note`: when Pitboard last read a Claude Desktop login in use, which
+// is also its item's tooltip in the menu.
+export const staleNote = (a: Account, w: World) =>
+  isInUse(a, w) && a.readAt !== undefined
+    ? `Read ${span(w.now - a.readAt)} ago, with Claude closed`
+    : null;
+
 // present/accounts.rs `item`'s notes under an account in the window, then where it stands for
 // warm-ups, where it is turned on for them.
 export function notes(a: Account, w: World, warm: string | null): string[] {
   const on = isInUse(a, w);
   const runs = runsOutNote(a, w);
   return [
-    on && a.readAt !== undefined ? `Read ${span(w.now - a.readAt)} ago, with Claude closed` : null,
+    staleNote(a, w),
     runs && capitalised(runs),
     on ? null : (parkedLife(a.refreshExpiresAt, w.now) ?? sessionLife(a.sessionExpiresAt, w.now)),
     warm,
@@ -521,7 +569,14 @@ export function statusLine(w: World): string {
 
 // The activity list's changes, newest first, in the app's words (present/words.rs `change_verb`,
 // `change_outcome` and `change_caller`).
-const verbs: Record<string, string> = { use: "Switch", enroll: "Enrol", "warm-up": "Warm-up" };
+const verbs: Record<string, string> = {
+  use: "Switch",
+  enroll: "Enrol",
+  "warm-up": "Warm-up",
+  "warm-on": "Warm-up turned on",
+  "warm-off": "Warm-up turned off",
+  "warm-range": "Warm-up hours changed",
+};
 const outcomes: Record<string, string> = { ok: "Done" };
 const callers = { app: "Pitboard app", cli: "Command line" };
 
@@ -540,8 +595,154 @@ export const activity = (log: Logged[], platform: Platform) =>
     .reverse()
     .map((e) => ({
       date: dated(e.at, platform),
-      change: verbs[e.verb],
+      change: changeVerb(e.verb),
       account: e.subject,
-      result: outcomes[e.outcome],
+      result: changeOutcome(e.outcome),
       by: callers[e.caller],
     }));
+
+// The rest of present/words.rs `change_verb` and `change_outcome`, and its `readable` for a code
+// they have no words for.
+const moreVerbs: Record<string, string> = {
+  switch: "Switch",
+  "auto-switch": "Automatic switch",
+  "auto-stay": "Automatic switch not made",
+  forget: "Forget",
+  rename: "Rename",
+  renew: "Renew",
+  abandon: "Give up on a switch",
+  repair: "Repair",
+  adopt: "Adopt",
+  uninstall: "Uninstall",
+  "in-use": "Login in use changed",
+  stow: "Put away a login left in a file",
+  park: "Park for a sign-in",
+};
+const moreOutcomes: Record<string, string> = {
+  second_sign_in: "Second sign-in",
+  warm_up_not_started: "No period started",
+  warm_up_limit_reached: "A limit is used up",
+  warm_up_login_refused: "Login refused",
+  warm_up_unreachable: "Anthropic out of reach",
+  warm_up_timed_out: "Took too long",
+  warm_up_failed: "Claude Code failed",
+};
+const readable = (code: string) => capitalised(code.replaceAll("_", " "));
+export const changeVerb = (verb: string) => verbs[verb] ?? moreVerbs[verb] ?? readable(verb);
+export const changeOutcome = (outcome: string) =>
+  outcomes[outcome] ?? moreOutcomes[outcome] ?? readable(outcome);
+
+// The core's words for what switching by itself came to (words.rs `not_switching`,
+// `not_watching`, `share_of_limit`).
+export const shareOfLimit = (l: Limit) => `${figure(l.percent)} of its ${scopedLimitName(l)} limit`;
+// words.rs `listed`: "a", "a and b", "a, b and c".
+export const joined = (names: string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+export function notSwitching(why: Skip, share: number): string {
+  switch (why.code) {
+    case "no_room": {
+      const room = `no other Claude Code account has room below ${share}% in every limit`;
+      return why.unread.length
+        ? `${room}, and there is no reading of ${joined(why.unread)} from Anthropic yet`
+        : room;
+    }
+    case "already_switched":
+      return "this limit was switched away from once already, and is not again before it resets";
+    case "settling":
+      return `the account was put in use less than ${SETTLING_SECONDS / 60} minutes ago`;
+  }
+}
+
+export const notWatching = (account: string) =>
+  `there is no reading of ${account} from Anthropic yet`;
+
+// present/words.rs `sentence`: a clause as a sentence.
+export const sentence = (text: string) => {
+  const said = capitalised(text);
+  return /[.!?…]$/.test(said) ? said : `${said}.`;
+};
+
+// What the line under the setting says (words.rs `watching`, `auto_switched`, `auto_skipped`).
+export function autoStandingSaid(standing: AutoStanding): string {
+  switch (standing.came) {
+    case "watching": {
+      let said = `Watching ${standing.account}`;
+      if (standing.used) said += `: ${standing.used}`;
+      if (standing.asOf !== null) said += `, as of ${hm(standing.asOf)}`;
+      return `${said}.`;
+    }
+    case "switched":
+      return `Switched Claude Code from ${standing.from} to ${standing.to}: ${standing.from} has used ${standing.used}.`;
+    case "skipped": {
+      const said = `${standing.from} has used ${standing.used}. Pitboard is not switching: ${standing.why}.`;
+      return standing.until === null ? said : `${said} It decides again at ${hm(standing.until)}.`;
+    }
+    case "not-watching":
+      return `Pitboard is not switching Claude Code: ${standing.why}.`;
+  }
+}
+
+// present/machine.rs `at_limit`'s note under the choice.
+export function atLimitNote(p: Preferences): string | null {
+  switch (p.atLimit) {
+    case "nothing":
+      return null;
+    case "notify":
+      return `Pitboard notifies you once a limit of the account in use reaches ${p.share}%, while the app is open.`;
+    case "switch":
+      return `Pitboard switches Claude Code once a limit of the account in use reaches ${p.share}%, never back by itself, and notifies you of Codex. Sessions already running follow within about ${ADOPTION_CEILING_SECONDS} seconds.`;
+  }
+}
+
+// words.rs `after_a_switch`, for what a switch means to what already runs.
+export function afterSwitch(tool: Tool, sessions: string): string {
+  switch (tool) {
+    case "claude":
+      return `${sessions} already running follow within ${ADOPTION_CEILING_SECONDS} seconds`;
+    case "codex":
+      return "Restart any running `codex` for this to take effect";
+    case "desktop":
+      return "Claude opens signed in to it";
+  }
+}
+
+// words.rs `warm_standing`, with the app's clock or the command line's.
+export function warmSaid(standing: WarmStanding, moment: (at: number) => string = hm): string {
+  switch (standing.stands) {
+    case "due":
+      return "warms up now";
+    case "running":
+      if (standing.next === standing.until) return `warms up again at ${moment(standing.next)}`;
+      return standing.next === null
+        ? `has its 5-hour period running until ${moment(standing.until)}`
+        : `has its 5-hour period running until ${moment(standing.until)}, and warms up again at ${moment(standing.next)}`;
+    case "resting":
+      return `warms up at ${moment(standing.at)}`;
+    case "held":
+      switch (standing.why) {
+        case "no_reading":
+          return "waits for a reading from Anthropic";
+        case "nothing_to_start":
+          return "has no 5-hour limit to start";
+        case "parked_login_expired":
+          return "needs signing in again: its parked login has expired";
+        case "limit_used_up": {
+          const l = standing.limit!;
+          const name = scopedLimitName(l);
+          return l.resetsAt !== null
+            ? `has its ${name} limit used up until ${moment(l.resetsAt)}`
+            : `has its ${name} limit used up`;
+        }
+      }
+  }
+}
+
+// time.rs `moment`: "20:51" today, "Oct 14 05:53" on another day.
+export function moment(at: number, now: number): string {
+  const day = (t: number) => Math.floor((t + ZONE) / DAY);
+  const d = new Date((at + ZONE) * 1000);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const hm = `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+  return day(at) === day(now) ? hm : `${months[d.getUTCMonth()]} ${d.getUTCDate()} ${hm}`;
+}
