@@ -90,6 +90,7 @@ enum Symbol {
     static let limits = "gauge.open.with.lines.needle.33percent"
     static let advanced = "gearshape.2"
     static let site = "globe"
+    static let inspector = "sidebar.trailing"
     /// Back and forward in a window, which mirror for a language read right to left.
     static let back = "chevron.backward"
     static let forward = "chevron.forward"

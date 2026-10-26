@@ -233,9 +233,12 @@ final class AccountsWindowTests: FixtureTestCase {
     func testWarmUpNowIsLeftOutOfTheShortcutMenuAndDimmedInTheAccountMenu() {
         let app = launch(.warmUp)
         app.openWindow()
-        XCTAssertTrue(
-            app.text("BEGINSWITH", Words.warmsUpAgain).waitForExistence(timeout: 30))
         let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        XCTAssertTrue(
+            app.control("inspector").text("BEGINSWITH", Words.warmsUpAgain).waitForExistence(
+                timeout: 30))
         row.rightClick()
         XCTAssertTrue(app.shortcutMenu.menuItems[Words.rename].waitForExistence(timeout: 5))
         XCTAssertFalse(app.shortcutMenu.menuItems[Words.warmUpNow].exists)
@@ -338,7 +341,66 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(app.accountRow("claude/work").exists)
     }
 
-    /// The accounts come forward with the sheet over them, wherever Command-N was pressed.
+    // The account in use until another is selected.
+    @MainActor
+    func testTheInspectorShowsTheSelectedAccount() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let inspector = app.control("inspector")
+        let email = inspector.descendants(matching: .any)["inspector.email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            email.wait(
+                until: "value == 'dana@work.example' OR label == 'dana@work.example'",
+                timeout: 5))
+        XCTAssertFalse(inspector.buttons["inspector.action.switch"].exists)
+
+        let personal = app.accountRow("claude/personal")
+        personal.click()
+        XCTAssertTrue(
+            email.wait(
+                until: "value == 'dana@home.example' OR label == 'dana@home.example'",
+                timeout: 5))
+        let switchTo = inspector.buttons["inspector.action.switch"]
+        XCTAssertTrue(switchTo.waitForExistence(timeout: 5))
+        switchTo.click()
+        XCTAssertTrue(
+            personal.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 10))
+        XCTAssertTrue(switchTo.waitForNonExistence(timeout: 5), "not to the account in use")
+    }
+
+    // The list keeps the keyboard beside the inspector, which Option-Command-I hides.
+    @MainActor
+    func testTheInspectorHidesAndTheListKeepsTheKeyboard() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let inspector = app.control("inspector")
+        XCTAssertTrue(inspector.waitForExistence(timeout: 5))
+        let personal = app.accountRow("claude/personal")
+        personal.click()
+        app.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5), "Delete asks first")
+        app.alertCancel.click()
+        XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@home.example")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(
+            personal.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 10),
+            "Return switches")
+
+        app.typeKey("i", modifierFlags: [.command, .option])
+        XCTAssertTrue(inspector.waitForNonExistence(timeout: 5))
+        let toggle = app.accountsWindow.toolbars.buttons["toolbar.inspector"]
+        XCTAssertTrue(toggle.exists)
+        app.typeKey(.upArrow, modifierFlags: [])
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@work.example")
+        toggle.click()
+        XCTAssertTrue(inspector.waitForExistence(timeout: 5))
+    }
+
+    // The accounts come forward with the sheet over them.
     @MainActor
     func testCommandNAddsAnAccountFromAnyWindow() {
         let app = launch(.oneTool)

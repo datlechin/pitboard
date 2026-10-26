@@ -54,13 +54,14 @@ import Testing
     #expect(Set(severities.map(\.symbol)).count == severities.count)
 }
 
+// The inspector's buttons are what the shortcut menu shows.
 @Test func aShortcutMenuHidesWhatCannotBeChosenAndTheMenuBarDimsIt() {
-    let now = ItemOffer(
-        title: "Warm Up Now", intent: .warmNow(qualified: "claude/work"), enabled: false,
-        confirm: nil)
-    let rename = ItemOffer(
-        title: "Rename…",
-        intent: .presentSheet(sheet: .rename(provider: "claude", label: "work")),
+    let now = AccountAction(
+        kind: .warmUpNow, title: "Warm Up Now", intent: .warmNow(qualified: "claude/work"),
+        window: nil, enabled: false, confirm: nil)
+    let rename = AccountAction(
+        kind: .rename, title: "Rename…",
+        intent: .presentSheet(sheet: .rename(provider: "claude", label: "work")), window: nil,
         enabled: true, confirm: nil)
     #expect(AccountMenuItems.shown([rename, now], in: .shortcutMenu) == [rename])
     #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])

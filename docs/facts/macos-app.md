@@ -47,6 +47,21 @@ its own date.
   Notification Settings** opens
   `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=` and the app's
   bundle identifier. Nobody has opened the URL to see it land on Pitboard's page.
+- Measured on macOS 27.0.1 with Swift 6.4 on 27 October 2026, in an offscreen `NSWindow`
+  holding an `NSHostingController`: SwiftUI's `.inspector` adds its column's width to the
+  window's minimum only for a minimum set on the view it is attached to. With the list's
+  minimum width there, 560 beside a 260-point inspector, the window's `contentMinSize` was 820
+  while the inspector showed and 560 once `toggleInspector(_:)` hid it. With the minimum on a
+  frame outside `.inspector`, the window kept that minimum alone, and at that width the
+  inspector kept its width and clipped the list.
+  `theInspectorWidensTheWindowRatherThanNarrowingTheList` holds it.
+- Measured the same day: a test window that reaches the window server, such as one made by
+  `NSWindow(contentViewController:)`, let `NSAppleScript.executeAndReturnError` run by another
+  test on the main thread stop the main run loop, which ended `swift test` with status 0
+  before every test had run, in 2 of 3 runs. Its nested event loop pulled the window server's
+  events, and a block it left called `CFRunLoopStop` on the run loop Swift's main executor
+  runs. A window made with `defer: true`, which never reaches the window server, ended none of
+  9 runs.
 
 ## What the UI tests find a control by
 

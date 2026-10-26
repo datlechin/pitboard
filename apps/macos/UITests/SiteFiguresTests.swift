@@ -436,8 +436,8 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(
             seen.map { $0.1 },
             [
-                [], ["claude/personal"], ["claude/work"], ["claude/personal"], ["claude/work"],
-                ["claude/personal"],
+                ["claude/work"], ["claude/personal"], ["claude/work"], ["claude/personal"],
+                ["claude/work"], ["claude/personal"],
             ])
     }
 
@@ -522,7 +522,7 @@ final class SiteFiguresTests: FixtureTestCase {
                 + "dimmed seen: \(dimmed)\nwindow title: '\(window.title)'",
             as: "site-switch-and-read")
         XCTAssertTrue(inUse)
-        XCTAssertEqual(selected, [], "Use selected the row")
+        XCTAssertEqual(selected, ["claude/work"], "Switch left the selection where it was")
     }
 
     @MainActor
@@ -627,8 +627,12 @@ final class SiteFiguresTests: FixtureTestCase {
     func testTheWarmUpControls() {
         let app = launch(.warmUp)
         app.openWindow()
+        let warmed = app.accountRow("claude/personal")
+        XCTAssertTrue(warmed.waitForExistence(timeout: 5))
+        warmed.click()
         XCTAssertTrue(
-            app.text("BEGINSWITH", "Warms up again at ").waitForExistence(timeout: 30))
+            app.control("inspector").text("BEGINSWITH", "Warms up again at ").waitForExistence(
+                timeout: 30))
         app.openSettings()
         app.toolbars.buttons["Limits"].click()
         let personal = app.control("settings.warm.claude/personal")

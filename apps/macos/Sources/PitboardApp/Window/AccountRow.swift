@@ -1,6 +1,7 @@
 import PitboardKit
 import SwiftUI
 
+// Its email, sign-in and warm-up are the inspector's.
 struct AccountRow: View {
     let item: AccountItem
     let perform: (Intent) -> Void
@@ -10,59 +11,44 @@ struct AccountRow: View {
         let textInset = symbolWidth + Design.iconSpacing
         VStack(alignment: .leading, spacing: Design.rowSpacing) {
             HStack(spacing: Design.iconSpacing) {
-                Image(systemName: symbol)
+                Image(systemName: item.standing.symbol)
                     .font(.title2)
                     .foregroundStyle(
                         item.inUse ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary)
                     )
                     .frame(width: symbolWidth)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: Design.lineSpacing) {
-                    HStack(spacing: Design.iconSpacing) {
-                        Text(item.title)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-                        if let plan = item.plan {
-                            PlanTag(plan: plan)
-                        }
-                    }
-                    if let line = item.emailLine {
-                        Text(line)
-                            .font(.callout)
+                HStack(alignment: .firstTextBaseline, spacing: Design.iconSpacing) {
+                    Text(item.title)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    if let plan = item.plan {
+                        Text(plan)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .truncationMode(.middle)
                     }
                 }
                 Spacer(minLength: Design.iconSpacing)
                 trailing
             }
-            VStack(alignment: .leading, spacing: Design.rowSpacing) {
-                if !item.limits.isEmpty {
-                    UsageBars(limits: item.limits)
-                }
-                ForEach(item.lines, id: \.self) { line in
-                    Text(line).explanatory()
-                }
+            if !item.limits.isEmpty {
+                UsageBars(limits: item.limits)
+                    .padding(.leading, textInset)
             }
-            .padding(.leading, textInset)
+            // The most pressing; the inspector says the rest.
+            if let note = item.notes.first {
+                Text(note.text)
+                    .explanatory()
+                    .padding(.leading, textInset)
+                    .accessibilityIdentifier("account.note")
+            }
         }
         .padding(.vertical, 4)
-        // The line between rows starts under the name, where the text starts, whatever the
-        // row ends with: a list lines it up with a row's last label otherwise, which for the
-        // account in use is "In Use" at the far end.
+        // Under the name, where a list would line it up with the row's last label.
         .alignmentGuide(.listRowSeparatorLeading) { _ in textInset }
-        // One account, read as one thing with its controls in it, rather than a stop for
-        // every line on the way past.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(item.spoken)
         .accessibilityIdentifier("account.\(item.qualified ?? item.id)")
-    }
-
-    private var symbol: String {
-        if item.unplaced { return Symbol.warning }
-        if item.needsSignIn { return Symbol.signIn }
-        return item.inUse ? "person.crop.circle.fill" : Symbol.account
     }
 
     @ViewBuilder private var trailing: some View {
@@ -86,17 +72,14 @@ struct AccountRow: View {
     }
 }
 
-private struct PlanTag: View {
-    let plan: String
-
-    var body: some View {
-        Text(plan)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(.quaternary, in: Capsule())
-            .fixedSize()
+extension AccountStanding {
+    var symbol: String {
+        switch self {
+        case .inUse: "person.crop.circle.fill"
+        case .ready, .expiring, .switching: Symbol.account
+        case .needsSignIn: Symbol.signIn
+        case .notAdded: "person.crop.circle.badge.plus"
+        case .unusable: Symbol.warning
+        }
     }
 }

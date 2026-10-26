@@ -2,8 +2,7 @@ import AppKit
 import XCTest
 
 final class PanesAndSettingsTests: FixtureTestCase {
-    /// The fixture's switches and enrolments, in the order the model gives them, in a window
-    /// of their own beside the accounts.
+    // The fixture's switches and enrolments, in a window of their own.
     @MainActor
     func testActivityListsChanges() {
         let app = launch(.oneTool)
@@ -17,8 +16,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.accountsWindow.exists)
     }
 
-    /// The checks the fixture's doctor makes, under the line that sums them up, and the report
-    /// Copy Report copies.
+    // The fixture's checks under their summary, and doctor's report, redacted.
     @MainActor
     func testDiagnosticsShowsTheChecks() {
         let app = launch(.oneTool)
@@ -135,7 +133,10 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testWarmingUpAccounts() {
         let app = launch(.warmUp)
         app.openWindow()
-        let warmed = app.text("BEGINSWITH", Words.warmsUpAgain)
+        let personal = app.accountRow("claude/personal")
+        XCTAssertTrue(personal.waitForExistence(timeout: 5))
+        personal.click()
+        let warmed = app.control("inspector").text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30), "personal is warmed up")
 
         app.openSettings()

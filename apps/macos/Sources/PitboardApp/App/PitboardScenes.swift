@@ -39,26 +39,29 @@ public struct PitboardScenes: Scene {
         Window(words.window.accounts, id: PlaceWindow.accounts.id) {
             AccountsWindow(model: model, windows: windows)
         }
-        .defaultSize(width: 760, height: 560)
+        .defaultSize(width: 820, height: 560)
         .commands {
             // The standard item shows a beta's CFBundleShortVersionString, its X.Y.Z alone.
             CommandGroup(replacing: .appInfo) {
-                Button("About Pitboard") { AppVersion.showAboutPanel() }
+                Button(words.menu.about) { AppVersion.showAboutPanel() }
                 if updates.available {
-                    Button("Check for Updates…") { updates.check() }
+                    Button(words.menu.checkForUpdates) { updates.check() }
                 }
             }
             // Nothing here makes a document: what is new here is an account, from any window.
             CommandGroup(replacing: .newItem) {
-                Button("Add Account…") { model.send(.presentSheet(sheet: .add(provider: nil))) }
-                    .keyboardShortcut("n")
+                Button(words.menu.addAccount) {
+                    model.send(.presentSheet(sheet: .add(provider: nil)))
+                }
+                .keyboardShortcut("n")
             }
             AccountWindowCommands(windows: windows)
             AccountCommands(model: model)
+            InspectorCommands()
             RefreshCommands()
             // Pitboard's help is its documentation site; the app has no help book.
             CommandGroup(replacing: .help) {
-                Link("Pitboard Help", destination: Links.documentation)
+                Link(words.menu.help, destination: Links.documentation)
             }
         }
 
@@ -77,7 +80,7 @@ public struct PitboardScenes: Scene {
 
         // A link the Share extension hands over, as a Pitboard link, comes here whatever
         // else is open, and only here: no other scene makes a window for one.
-        Window("Open Link", id: AccountPicker.id) {
+        Window(words.window.openLink, id: AccountPicker.id) {
             AccountPicker(windows: windows)
                 .onOpenURL { windows.receive($0) }
         }

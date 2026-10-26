@@ -57,6 +57,8 @@ pub struct WindowWords {
     // the macOS toolbar's button that shows and hides the inspector
     pub inspector: Option<String>,
     pub inspector_help: Option<String>,
+    // what the inspector says while no account is selected
+    pub no_selection: Option<String>,
     // a check's detail's own menu, and an expanded row's email, on Windows
     pub copy: Option<String>,
     pub select_all: Option<String>,
@@ -292,6 +294,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             warm_up: words::warm_up(os),
             inspector: mac("Inspector"),
             inspector_help: mac("Show or hide the selected account’s details"),
+            no_selection: mac("No Account Selected"),
             copy: windows("Copy"),
             select_all: windows("Select all"),
             checks: windows("Checks"),
@@ -613,6 +616,13 @@ mod tests {
         assert_eq!(labels(&mac), ["Email", "Plan", "Sign-In", "Warm-Up"]);
         assert_eq!(labels(&windows), ["Email", "Plan", "Sign-in", "Warm-up"]);
         assert_eq!(mac.window.inspector.as_deref(), Some("Inspector"));
+        assert_eq!(
+            (
+                mac.window.no_selection.as_deref(),
+                windows.window.no_selection
+            ),
+            (Some("No Account Selected"), None)
+        );
         assert_eq!(
             windows.settings.diagnostics_about.as_deref(),
             Some("Check how Pitboard, Claude Code and Codex are set up on this PC.")

@@ -46,7 +46,8 @@ package func windowsShown(
 // What a model that has read nothing yet would make, apart from what a test says.
 package func snapshot(
     _ revision: UInt64, updated: String = "", reading: Bool = false,
-    windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = []
+    windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = [],
+    sections: [AccountSection] = [], notices: [PanelNotice] = []
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
@@ -55,13 +56,14 @@ package func snapshot(
         menuBar: MenuBarText(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
             tip: "Pitboard"),
-        sections: [],
+        sections: sections,
         accountMenu: AccountMenuShown(
             offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
-        notices: [],
+        notices: notices,
         menuNotices: MenuNotices(install: nil, switches: [], signIns: [], others: nil),
         footing: .ready,
-        setup: nil, accountsShown: .reading(title: "Reading accounts…"),
+        setup: nil,
+        accountsShown: sections.isEmpty ? .reading(title: "Reading accounts…") : .list,
         menuAccountsNote: nil, updatedAt: nil, updatedMenu: updated, updatedWindow: updated,
         sheetText: nil,
         signingInText: nil, stowText: nil, failureAlert: nil,

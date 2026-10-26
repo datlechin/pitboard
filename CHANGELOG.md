@@ -59,6 +59,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - After switching Claude Code by itself, the app's notification and its notice in the window
   offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
   switched until that limit resets.
+- The macOS app's window has an inspector of the selected account, shown at first and hidden or
+  shown with Option-Command-I: its email, each limit's reset and the time left to it, its
+  sign-in, its warm-up with **Warm-Up Settings**, and what its shortcut menu offers.
 
 ### Changed
 
@@ -150,6 +153,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app's window shows only the accounts, and **Diagnostics**, where **This Mac** was,
   and **Activity** open as windows of their own from the **Window** menu.
 - The macOS app draws only **Remove Account**'s answer in red, where every question's answer was.
+- The macOS app's window lists each account as its name, its plan, a line for each limit and
+  at most one line about what needs doing, under the notices and the tip, which no longer sit
+  among the accounts.
 
 ### Removed
 

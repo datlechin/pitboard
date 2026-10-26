@@ -21,7 +21,7 @@ private struct WindowAlerts: ViewModifier {
                     set: { if !$0 { model.send(.dismissFailure) } }),
                 presenting: model.failureAlert
             ) { _ in
-                Button("OK") {}
+                Button(words.window.ok) {}
             } message: { alert in
                 Text(alert.message)
             }
@@ -43,7 +43,7 @@ extension View {
             presenting: asked
         ) { asked in
             Button(asked.question.confirm) { model.send(asked.confirmed) }
-            Button("Cancel", role: .cancel) {}
+            Button(words.window.cancel, role: .cancel) {}
         } message: { asked in
             Text(asked.question.message)
         }

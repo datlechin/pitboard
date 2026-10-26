@@ -54,6 +54,12 @@ final class ScreenshotTests: FixtureTestCase {
 
         keep(item.screenshot().pngRepresentation, as: "macos-menu-bar-item")
 
+        app.accountRow("claude/personal").click()
+        XCTAssertTrue(
+            app.control("inspector").descendants(matching: .any)["inspector.action.switch"]
+                .waitForExistence(timeout: 5))
+        keep(window, as: "macos-window-inspector")
+
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
         let settings = app.windows[Words.limits]
@@ -89,7 +95,10 @@ final class ScreenshotTests: FixtureTestCase {
     func testWarmingUpForTheSite() {
         let app = launch(.warmUp)
         app.openWindow()
-        let warmed = app.text("BEGINSWITH", Words.warmsUpAgain)
+        let personal = app.accountRow("claude/personal")
+        XCTAssertTrue(personal.waitForExistence(timeout: 5))
+        personal.click()
+        let warmed = app.control("inspector").text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30))
         keep(app.accountsWindow, as: "macos-window-warm-up")
         app.openSettings()
@@ -302,6 +311,14 @@ final class ScreenshotTests: FixtureTestCase {
         let cleanUp = app.buttons["notice.action.stow"]
         XCTAssertTrue(cleanUp.waitForExistence(timeout: 10))
         keep(window, as: "macos-notice-left-in-file")
+        app.openFromWindowMenu(Words.diagnostics)
+        let diagnostics = app.windows["diagnostics"]
+        XCTAssertTrue(
+            diagnostics.descendants(matching: .any)["checks.summary"].waitForExistence(
+                timeout: 10))
+        keep(diagnostics, as: "macos-diagnostics-left-in-file")
+        diagnostics.buttons[XCUIIdentifierCloseWindow].click()
+        XCTAssertTrue(diagnostics.waitForNonExistence(timeout: 5))
         cleanUp.click()
         let confirm = app.buttons["sheet.stow"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))

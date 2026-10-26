@@ -69,6 +69,5 @@ struct ActivityWindow: View {
     }
 }
 
-// Numbered by the model: the log has no id of its own, and rows that claim the same identity
-// make a Table drop all but one of them.
+// By the model's number: a Table drops all but one of rows that share an identity.
 extension ActivityLine: Identifiable {}

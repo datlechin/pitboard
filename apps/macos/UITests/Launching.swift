@@ -58,7 +58,7 @@ extension XCUIApplication {
         windows["accounts"]
     }
 
-    // Opens a window the Window menu lists, or brings it forward.
+    // Opens it, or brings it forward.
     func openFromWindowMenu(_ title: String) {
         let menu = menuBars.menuBarItems[Words.windowMenu]
         menu.click()

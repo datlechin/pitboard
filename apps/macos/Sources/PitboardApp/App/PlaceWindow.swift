@@ -1,6 +1,6 @@
 import PitboardKit
 
-// By its scene's id. Settings is a scene of its own, which opens another way.
+// Settings is a scene of its own, which opens another way.
 enum PlaceWindow: String, CaseIterable {
     case accounts
     case activity
@@ -19,8 +19,7 @@ enum PlaceWindow: String, CaseIterable {
     var id: String { rawValue }
 }
 
-// The menu bar item sees a request as it first appears and as the serial moves: the first
-// launch's can come before it is drawn. Answered by serial, each is answered once.
+// The first launch's request can come before the menu bar item is drawn, so it looks twice.
 @MainActor
 final class WindowRequests {
     private var opened: UInt64 = 0

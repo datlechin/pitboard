@@ -69,8 +69,7 @@ struct DiagnosticsWindow: View {
                 model.send(.paneShown(pane: .checks))
             }
         )
-        // Each time it opens or is asked for: a check fixed in a terminal since would otherwise
-        // still read as failing. What was found stays up meanwhile.
+        // On each open or request: a check fixed in a terminal since would still read failed.
         .task { model.send(.paneShown(pane: .checks)) }
         .onChange(of: model.windowRequest) { _, request in
             if PlaceWindow(request.place) == .diagnostics {

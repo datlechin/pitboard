@@ -86,8 +86,7 @@ final class MenuBarTests: FixtureTestCase {
         XCTAssertFalse(app.accountRow("claude/work").exists)
     }
 
-    /// With the accounts closed and Diagnostics in front, the notice's item opens the accounts
-    /// on it.
+    // With only Diagnostics open, the notice's item opens the accounts.
     @MainActor
     func testShowingANoticeOpensTheAccounts() {
         let app = launch(.stuck)
