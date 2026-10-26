@@ -91,7 +91,8 @@
               AutomationProperties.Name="{x:Bind shown:Words.Settings.CheckForUpdatesAutomatically}"
               Toggled="OnAutomaticChecksToggled" />
         </toolkit:SettingsCard>
-        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.Version}">
+        <!-- A card that cannot be clicked is a group, which Narrator names only by its own name. -->
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.Version}" AutomationProperties.Name="{x:Bind shown:Words.Settings.Version}">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE946;" />
           </toolkit:SettingsCard.HeaderIcon>
@@ -293,7 +294,7 @@
         </toolkit:SettingsCard>
 
         <!-- Windows Settings' own uninstall says how it goes in its row, so this card does too. -->
-        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.Uninstall}">
+        <toolkit:SettingsCard Header="{x:Bind shown:Words.Settings.Uninstall}" AutomationProperties.Name="{x:Bind shown:Words.Settings.Uninstall}">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE74D;" />
           </toolkit:SettingsCard.HeaderIcon>

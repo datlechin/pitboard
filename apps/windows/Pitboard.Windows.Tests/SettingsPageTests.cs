@@ -100,6 +100,8 @@ public sealed class SettingsPageTests
         var uninstall = Views.Element<Button>(page, "settings.uninstall");
         Assert.AreEqual("Uninstall…", uninstall.Content);
         Assert.AreEqual("Uninstall Pitboard", Card(uninstall).Header);
+        Assert.AreEqual("Uninstall Pitboard", AutomationProperties.GetName(Card(uninstall)), "the group Narrator reads the button in");
+        Assert.AreEqual("U", uninstall.AccessKey);
 
         Views.Press(uninstall);
         await Views.Until(() => context.Dialogs.Open is { IsLoaded: true }, "no question");
@@ -123,6 +125,9 @@ public sealed class SettingsPageTests
         Assert.AreEqual(
             "Diagnostics: Check how Pitboard, Claude Code and Codex are set up on this PC. | Activity: Every switch and change Pitboard made.",
             string.Join(" | ", cards.Select(card => $"{card.Header}: {card.Description}")));
+        Assert.AreEqual(
+            string.Join(" | ", cards.Select(card => card.Description)), string.Join(" | ", cards.Select(AutomationProperties.GetHelpText)),
+            "what Narrator says after each card's name");
         Assert.IsTrue(cards.All(card => card.IsClickEnabled), "a card that does not open its page");
     }
 
@@ -167,6 +172,7 @@ public sealed class SettingsPageTests
         Assert.AreSame(
             Card(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn")), Card(Said(page, Words.Settings.OpenAtLoginNote)));
         Assert.AreEqual(Words.Settings.Version, Card(checkNow).Header);
+        Assert.AreEqual(Words.Settings.Version, AutomationProperties.GetName(Card(checkNow)), "the group Narrator reads the button in");
         Assert.AreSame(Card(checkNow), Card(Said(page, PitboardFfiMethods.NamedVersion("1.1.0"))));
         Assert.AreEqual("C", checkNow.AccessKey);
     }

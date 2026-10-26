@@ -1,5 +1,6 @@
 using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -76,6 +77,7 @@ public sealed class WelcomeWindowTests
         {
             await Views.Until(() => Views.Texts(window.Content).Contains("Codex"), "the tools were not listed");
             var claude = Card(window, "claude");
+            Assert.AreEqual("Claude Code, Codex", $"{AutomationProperties.GetName(claude)}, {AutomationProperties.GetName(Card(window, "codex"))}");
             Assert.Contains("dana@work.example", Views.Texts(claude));
             Assert.Contains("Added as work", Views.Texts(claude));
             Assert.IsFalse(Views.Visible<Button>(claude).Any(), "Add for a tool added already");
@@ -130,6 +132,7 @@ public sealed class WelcomeWindowTests
             var done = Views.Element<Button>(window.Content, "welcome.done");
             Assert.AreEqual("Get started", done.Content);
             Assert.AreEqual(Application.Current.Resources["AccentButtonStyle"], done.Style);
+            Assert.AreEqual("G", done.AccessKey);
 
             Views.Press(done);
 

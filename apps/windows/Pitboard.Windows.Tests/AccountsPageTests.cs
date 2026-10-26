@@ -269,6 +269,13 @@ public sealed class AccountsPageTests
             Assert.Contains(said, texts);
         }
 
+        // Narrator names each of the detail's cards, and Copy by what it copies.
+        Assert.AreEqual(Words.Menu.CopyEmail, AutomationProperties.GetName(Views.Element<Button>(spare, "detail.copyEmail")));
+        foreach (var header in new[] { Words.Window.Email, Words.Window.SignIn, Words.Window.WarmUp })
+        {
+            Assert.AreEqual(header, AutomationProperties.GetName(Views.Visible<SettingsCard>(spare).Single(card => card.Header as string == header)));
+        }
+
         Views.Press(Views.Element<Button>(spare, "detail.copyEmail"));
         new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(spare, "detail.warmUpSettings")).Invoke();
         Views.Press(Views.Element<Button>(spare, "detail.window.claude.ai"));

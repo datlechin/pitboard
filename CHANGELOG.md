@@ -64,7 +64,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An account's row in the Windows app opens on its email with **Copy**, until when its saved
   sign-in is valid, its warm-up with **Warm-up settings**, and **Open claude.ai**, **Rename** and
   **Remove account**.
-- The Windows app's commands and an account's shortcut menu have access keys.
+- The Windows app's commands, the buttons of its **Settings** and its welcome's **Get started**,
+  and an account's shortcut menu have access keys.
+- Narrator names each card of an opened account in the Windows app, says that **Copy** copies
+  the email address, and names the tool each **Add** in the welcome is for.
 - The Windows app's notices link **Learn more** where nothing in the app does something about
   them.
 - A failure in the Windows app offers what to do about it as its button, such as **Sign in

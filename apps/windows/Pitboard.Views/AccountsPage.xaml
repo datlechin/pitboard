@@ -165,24 +165,29 @@
                               Click="OnAction" />
                         </Grid>
                         <toolkit:SettingsExpander.Items>
+                          <!-- A card that cannot be clicked is a group, which Narrator names only by its own name. -->
                           <toolkit:SettingsCard
                               Header="{x:Bind shown:Words.Window.Email}"
                               Description="{x:Bind local:AccountsPage.EmailOf(Item), Mode=OneWay}"
-                              Visibility="{x:Bind local:AccountsPage.EmailShown(Item), Mode=OneWay}">
+                              Visibility="{x:Bind local:AccountsPage.EmailShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind shown:Words.Window.Email}">
                             <Button
                                 Content="{x:Bind shown:Words.Window.Copy}"
                                 Tag="{x:Bind}"
                                 AutomationProperties.AutomationId="detail.copyEmail"
+                                AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"
                                 Click="OnCopyEmail" />
                           </toolkit:SettingsCard>
                           <toolkit:SettingsCard
                               Header="{x:Bind shown:Words.Window.SignIn}"
                               Description="{x:Bind local:AccountsPage.SignInOf(Item), Mode=OneWay}"
-                              Visibility="{x:Bind local:AccountsPage.SignInShown(Item), Mode=OneWay}" />
+                              Visibility="{x:Bind local:AccountsPage.SignInShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind shown:Words.Window.SignIn}" />
                           <toolkit:SettingsCard
                               Header="{x:Bind shown:Words.Window.WarmUp}"
                               Description="{x:Bind local:AccountsPage.WarmOf(Item), Mode=OneWay}"
-                              Visibility="{x:Bind local:AccountsPage.WarmShown(Item), Mode=OneWay}">
+                              Visibility="{x:Bind local:AccountsPage.WarmShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind shown:Words.Window.WarmUp}">
                             <HyperlinkButton
                                 Content="{x:Bind local:AccountsPage.WarmSettingsTitle(Item), Mode=OneWay}"
                                 Tag="{x:Bind}"

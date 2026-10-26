@@ -58,10 +58,12 @@
           <!-- Its account, which Pitboard reads only once Add is chosen for a tool other than Claude Code, and Add, what it
                was added as, or how to install it. -->
           <DataTemplate x:DataType="core:WelcomeTool">
+            <!-- Named, so Narrator says whose Add it is: a card that cannot be clicked is a group with no name of its own. -->
             <toolkit:SettingsCard
                 Header="{x:Bind Name}"
                 Description="{x:Bind Account}"
-                AutomationProperties.AutomationId="{x:Bind local:WelcomeWindow.ToolId(Code)}">
+                AutomationProperties.AutomationId="{x:Bind local:WelcomeWindow.ToolId(Code)}"
+                AutomationProperties.Name="{x:Bind Name}">
               <toolkit:SettingsCard.HeaderIcon>
                 <FontIcon Glyph="&#xE756;" />
               </toolkit:SettingsCard.HeaderIcon>
@@ -105,6 +107,7 @@
           Margin="0,24,0,0"
           HorizontalAlignment="Right"
           Style="{StaticResource AccentButtonStyle}"
+          AccessKey="G"
           AutomationProperties.AutomationId="welcome.done"
           Click="OnDone" />
     </StackPanel>
