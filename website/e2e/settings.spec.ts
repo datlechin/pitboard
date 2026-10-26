@@ -234,6 +234,8 @@ test.describe("Windows", () => {
     const tall = await height(fig);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // the clock's next tick draws the figure again
+    await page.clock.runFor(1000);
     await expect(page.locator("#auto-win-items")).toBeHidden();
     expect(await height(fig)).toBe(tall);
     await fig.getByText("When a limit reaches", { exact: true }).click();

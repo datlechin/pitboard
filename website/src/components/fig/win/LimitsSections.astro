@@ -112,12 +112,14 @@ const icon = "size-20 shrink-0";
           <svg class={chevron}><use href="#fl-chevron-up"></use></svg>
         </button>
       </div>
-      <div class:list={[item, "rounded-b-u-4"]} id={items} data-share-card>
-        <span class="min-w-0 flex-1">
-          <span class="block">{page.share.header}</span>
-          <span class:list={["block", caption]}>{page.share.range}</span>
-        </span>
-        <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
+      <div id={items}>
+        <div class:list={[item, "rounded-b-u-4"]} data-share-card>
+          <span class="min-w-0 flex-1">
+            <span class="block">{page.share.header}</span>
+            <span class:list={["block", caption]}>{page.share.range}</span>
+          </span>
+          <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
+        </div>
       </div>
     </div>}
     {warming && <div data-section="warm">
