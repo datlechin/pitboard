@@ -373,7 +373,8 @@ says so in a comment naming its line here, which `website/src/scripts/departures
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
-- This PC stays on its spinner, and Check again is held back: the page draws no PC's checks yet.
+- Diagnostics stays on its spinner, and Check again and Copy report are held back: the page draws
+  no PC's checks yet.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn
   from the page's state yet.
 - On a phone each figure fits the page's width, so a macOS menu row on a 390 pixel phone is 13

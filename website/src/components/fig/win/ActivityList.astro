@@ -1,9 +1,9 @@
 ---
-// ActivityPage.xaml under 720 pixels of page, where each change stacks under its date. With
-// live/activity.ts it reads the page's log as the page does: when it shows, and on Refresh. Its
-// title's id starts `prefix`.
+// ActivityPage.xaml under 720 pixels of page, where each change stacks under its date, under
+// Settings. With live/activity.ts it reads the page's log as the page does: when it shows, and on
+// Refresh. Its title's id starts `prefix`.
 import PageHeader from "./PageHeader.astro";
-import { activityPage as page } from "../../../data/windows.ts";
+import { SETTINGS, activityPage as page } from "../../../data/windows.ts";
 
 interface Props {
   prefix: string;
@@ -15,6 +15,7 @@ const { prefix } = Astro.props;
   <PageHeader
     prefix={`${prefix}-activity`}
     title={page.title}
+    under={[SETTINGS, "settings"]}
     commands={[["fl-refresh", page.command, "read"]]}
   />
   <div class="mt-24 px-24 pb-16" data-part="log">

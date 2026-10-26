@@ -1,5 +1,6 @@
 // A window's panes (answer 4 a): macOS's sidebar and WinUI's NavigationView, in WAI-ARIA's tabs
-// pattern.
+// pattern. A page shown `under` another, as Windows' Diagnostics and Activity are under Settings,
+// keeps that page's tab selected and goes back to it.
 
 export interface PanesOptions {
   system: "macos" | "windows";
@@ -15,12 +16,19 @@ export class Panes {
   readonly tabs: HTMLElement[];
   readonly first: string;
   current: string;
+  // each page shown under another, and that page
+  readonly #under = new Map<string, string>();
 
   constructor(readonly o: PanesOptions) {
     this.tabs = [...o.window.querySelectorAll<HTMLElement>('[role="tab"][data-pane]')];
+    for (const panel of o.window.querySelectorAll<HTMLElement>("[data-pane-panel][data-under]"))
+      this.#under.set(panel.dataset.panePanel!, panel.dataset.under!);
+    const shownPanel = o.window.querySelector<HTMLElement>("[data-pane-panel]:not([hidden])");
     this.current = this.first =
-      this.tabs.find((t) => t.getAttribute("aria-selected") === "true")?.dataset.pane ?? "";
-    this.#rove(this.tabs.find((t) => t.dataset.pane === this.current) ?? this.tabs[0]);
+      shownPanel?.dataset.panePanel ??
+      this.tabs.find((t) => t.getAttribute("aria-selected") === "true")?.dataset.pane ??
+      "";
+    this.#rove(this.#tabOf(this.current) ?? this.tabs[0]);
     for (const tab of this.tabs) {
       tab.addEventListener("click", () => this.show(tab.dataset.pane!, true));
       tab.addEventListener("keydown", (e) => this.#key(e, tab));
@@ -34,6 +42,17 @@ export class Panes {
       const sidebar = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
       if (sidebar) sidebar.inert = hidden;
     });
+  }
+
+  #tabOf(pane: string) {
+    const tabbed = this.#under.get(pane) ?? pane;
+    return this.tabs.find((t) => t.dataset.pane === tabbed);
+  }
+
+  // the page the one shown is under, which the title bar's back button and Alt+Left go back to
+  back() {
+    const above = this.#under.get(this.current);
+    if (above) this.show(above);
   }
 
   #rove(to: HTMLElement | undefined) {
@@ -70,7 +89,7 @@ export class Panes {
 
   // Shows `pane`, keeping the window the size it had; the pane it first showed takes it back.
   show(pane: string, focus = false) {
-    const tab = this.tabs.find((t) => t.dataset.pane === pane);
+    const tab = this.#tabOf(pane);
     if (!tab) return;
     if (pane !== this.current) {
       const w = this.o.window;
@@ -86,6 +105,8 @@ export class Panes {
       for (const t of this.tabs) t.setAttribute("aria-selected", String(t === tab));
       for (const el of w.querySelectorAll<HTMLElement>("[data-pane-panel], [data-head]"))
         el.hidden = (el.dataset.panePanel ?? el.dataset.head) !== pane;
+      const back = w.querySelector<HTMLElement>('[data-does="back"]');
+      if (back) back.hidden = !this.#under.has(pane);
       this.o.shown(pane);
     }
     this.#rove(tab);

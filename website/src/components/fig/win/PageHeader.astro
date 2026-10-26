@@ -1,18 +1,37 @@
 ---
 // A page's title, a caption under it, and its commands as AppBarButtons with labels to the right,
-// each known to a live page by what it does.
+// each known to a live page by what it does. A page `under` another heads itself as
+// SettingsBreadcrumb.xaml does: the page above as an item that goes back to it, then its own title.
 interface Props {
   prefix: string;
   title: string;
   subtitle?: string;
+  under?: [title: string, pane: string];
   commands?: [icon: string, label: string, does?: string][];
 }
-const { prefix, title, subtitle, commands = [] } = Astro.props;
+const { prefix, title, subtitle, under, commands = [] } = Astro.props;
 ---
 
 <div class="flex items-center gap-12 px-24">
   <span class="min-w-0 flex-1">
-    <span class="block text-u-28/36 font-semibold" id={`${prefix}-title`}>{title}</span>
+    {under ? (
+      <span class="flex items-center gap-12 text-u-28/36 font-semibold">
+        <button
+          class="rounded-u-4 text-win-text-2 focus-win live:cursor-default live:hover:text-win-text"
+          type="button"
+          data-does="show"
+          data-page={under[1]}
+        >
+          {under[0]}
+        </button>
+        <svg class="size-16 shrink-0 text-win-text-2" aria-hidden="true">
+          <use href="#fl-chevron-right"></use>
+        </svg>
+        <span id={`${prefix}-title`} aria-current="page">{title}</span>
+      </span>
+    ) : (
+      <span class="block text-u-28/36 font-semibold" id={`${prefix}-title`}>{title}</span>
+    )}
     {subtitle && <span class="block text-u-12/16 text-win-text-2" data-part="updated"
       >{subtitle}</span
     >}

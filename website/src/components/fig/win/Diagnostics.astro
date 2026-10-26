@@ -1,0 +1,25 @@
+---
+// DiagnosticsPage.xaml before it has any checks, under Settings: its breadcrumb, Check again and
+// Copy report, and the EmptyState that says it is checking. No `pitboard doctor` run on Windows has
+// been read for the site to draw the checks from, so the page stays as it waits.
+import PageHeader from "./PageHeader.astro";
+import ProgressRing from "./ProgressRing.astro";
+import { checking } from "../../../data/machine.ts";
+import { SETTINGS, diagnostics } from "../../../data/windows.ts";
+---
+
+<div class="flex h-full flex-col">
+  <PageHeader
+    prefix="tpl-machine"
+    title={diagnostics.title}
+    under={[SETTINGS, "settings"]}
+    commands={[
+      ["fl-refresh", diagnostics.checkAgain, "check"],
+      ["fl-copy", diagnostics.copyReport, "copy-report"],
+    ]}
+  />
+  <div class="flex flex-1 flex-col items-center justify-center gap-12 py-48 text-center">
+    <ProgressRing class="size-32" />
+    <span class="text-u-14/20 font-semibold">{checking("windows")}</span>
+  </div>
+</div>

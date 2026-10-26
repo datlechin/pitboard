@@ -258,6 +258,10 @@ export class AccountsWindow extends LiveFigure {
           return this.#machine.check(model.get().now);
         case "navigation":
           return this.#navigation(this.window.dataset.state !== "open");
+        case "back":
+          return this.#panes.back();
+        case "show":
+          return this.#panes.show(does.dataset.page!);
         case "add":
           return sheets(this.system)?.signIn(
             this,

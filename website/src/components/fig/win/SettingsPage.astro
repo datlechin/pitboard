@@ -6,7 +6,7 @@
 import Button from "./Button.astro";
 import LimitsSections from "./LimitsSections.astro";
 import Toggle from "./Toggle.astro";
-import { settingsPage as page } from "../../../data/windows.ts";
+import { TROUBLESHOOT, settingsPage as page, subpages } from "../../../data/windows.ts";
 import {
   commandLine,
   inTerminal,
@@ -65,6 +65,25 @@ const notes = isBeta(version) ? [winGeneral.noFeed, winGeneral.betaNote] : [];
       <span class={caption}>{updateNote}</span>
       <span class="select-text">{commandLine.windows}</span>
     </div>
+    {/* As Windows Settings keeps Troubleshoot: a clickable card for each page under Settings */}
+    <div class:list={[head, "mt-30"]}>{TROUBLESHOOT}</div>
+    {subpages.map(([pane, title, icon, about]) => <button
+      class:list={[
+        card,
+        "w-full text-left focus-win live:cursor-default live:hover:bg-win-control-2",
+      ]}
+      type="button"
+      aria-describedby={`tpl-${pane}-about`}
+      data-does="show"
+      data-page={pane}
+    >
+      <svg class="size-20 shrink-0" aria-hidden="true"><use href={`#${icon}`}></use></svg>
+      <span class="min-w-0 flex-1">
+        <span class="block">{title}</span>
+        <span class={caption} id={`tpl-${pane}-about`}>{about}</span>
+      </span>
+      <svg class="size-12 shrink-0" aria-hidden="true"><use href="#fl-chevron-right"></use></svg>
+    </button>)}
     <div class:list={[head, "mt-30"]}>{winAbout.section}</div>
     <div class={card} data-header>
       <img class="size-20" src="/icon-192.png" alt="" width="20" height="20" />

@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  TROUBLESHOOT,
   accountsPage,
   activityPage,
   app,
+  diagnostics,
   iconMenu,
   joinsTheGroupBefore,
   panes,
   settingsPage,
+  subpages,
   switchNotice,
   toast,
 } from "./windows.ts";
@@ -194,11 +197,48 @@ test("the icon in the notification area draws the menu bar's level, from Tray's 
   assert.equal(menuBarLevel(moments.after), "g");
 });
 
-test("the window and its panes are named as MainWindow.xaml names them", () => {
+test("the window and its places are named as MainWindow.xaml and SettingsPage.xaml name them", () => {
   const source = views("MainWindow.xaml");
   assert.equal(app, "Pitboard");
-  assert.ok(source.includes(`Title="${app}"`));
-  for (const [, name] of panes) assert.ok(source.includes(`Content="${name}"`), name);
+  assert.ok(source.includes('Title="{x:Bind shown:Words.AppName}"'));
+  assert.ok(present("app_words.rs").includes("app_name: words::PITBOARD.into(),"));
+  assert.ok(owned(app));
+  // Accounts in the navigation, and NavigationView's own Settings at the foot
+  assert.deepEqual(
+    panes.map(([, name]) => name),
+    ["Accounts"],
+  );
+  assert.ok(source.includes('Content="{x:Bind shown:Words.Window.Accounts}"'));
+  assert.ok(source.includes('PaneDisplayMode="LeftCompact"'));
+  assert.ok(owned("Accounts"));
+  // Settings > Troubleshoot's cards open Diagnostics and Activity under Settings, with the title
+  // bar's back button
+  const settings = views("SettingsPage.xaml");
+  assert.ok(settings.includes('Text="{x:Bind shown:Words.Settings.Troubleshoot}"'));
+  assert.ok(owned(TROUBLESHOOT));
+  for (const [pane, title, , about] of subpages) {
+    const field = pane === "machine" ? "Diagnostics" : "Activity";
+    assert.ok(settings.includes(`Header="{x:Bind shown:Words.Window.${field}}"`), field);
+    assert.ok(
+      settings.includes(`Description="{x:Bind shown:Words.Settings.${field}About}"`),
+      field,
+    );
+    assert.ok(owned(title), title);
+    assert.ok(
+      owned(about) || said.includes(about.replace("Pitboard, Claude Code and Codex", "{}")),
+      about,
+    );
+  }
+  const window = views("MainWindow.xaml.cs");
+  assert.ok(
+    window.includes(
+      "AppTitleBar.IsBackButtonVisible = args.SourcePageType == typeof(DiagnosticsPage) || args.SourcePageType == typeof(ActivityPage);",
+    ),
+  );
+  assert.ok(views("SettingsBreadcrumb.xaml").includes("<BreadcrumbBar"));
+  assert.ok(
+    owned(diagnostics.title) && owned(diagnostics.checkAgain) && owned(diagnostics.copyReport),
+  );
 });
 
 test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the core say", () => {

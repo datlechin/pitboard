@@ -33,13 +33,25 @@ import {
 
 export const app = "Pitboard";
 
-// MainWindow.xaml's panes, and NavigationView's own Settings at the foot
-export const panes = [
-  ["accounts", "Accounts", "fl-people"],
-  ["activity", "Activity", "fl-history"],
-  ["machine", "This PC", "fl-desktop"],
+// MainWindow.xaml's navigation: Accounts, and NavigationView's own Settings at the foot
+export const panes = [["accounts", "Accounts", "fl-people"]] as const;
+// the pages Settings > Troubleshoot opens under Settings, each from its card (SettingsPage.xaml)
+export const SETTINGS = "Settings";
+export const subpages = [
+  [
+    "machine",
+    "Diagnostics",
+    "fl-pulse",
+    "Check how Pitboard, Claude Code and Codex are set up on this PC.",
+  ],
+  ["activity", "Activity", "fl-history", "Every switch and change Pitboard made."],
 ] as const;
-export type Pane = (typeof panes)[number][0] | "settings";
+export type Pane = (typeof panes)[number][0] | (typeof subpages)[number][0] | "settings";
+// the page a page shows under, whose item stays selected while it shows
+export const underOf = (pane: Pane) => (subpages.some(([p]) => p === pane) ? "settings" : null);
+// TitleBar's back button, and Settings' sections
+export const BACK = "Back";
+export const TROUBLESHOOT = "Troubleshoot";
 
 export type MenuEntry =
   | { heading: string }
@@ -175,6 +187,13 @@ export const settingsPage = {
       };
     }),
   },
+};
+
+// DiagnosticsPage.xaml's header
+export const diagnostics = {
+  title: "Diagnostics",
+  checkAgain: "Check again",
+  copyReport: "Copy report",
 };
 
 export const activityPage = {
