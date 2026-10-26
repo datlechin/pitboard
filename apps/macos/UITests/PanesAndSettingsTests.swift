@@ -167,6 +167,23 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(app.text("ENDSWITH", "/bin/pitboard").waitForExistence(timeout: 5))
     }
 
+    // The fixture's own app and folders are removed, nothing of the app under test.
+    @MainActor
+    func testUninstallingPitboardMovesItsCopyToTheTrashAndQuits() {
+        let app = launch(.oneTool)
+        app.openSettings()
+        app.toolbars.buttons[Words.advanced].click()
+        let uninstall = app.buttons["settings.uninstall"]
+        XCTAssertTrue(uninstall.waitForExistence(timeout: 5))
+        uninstall.click()
+        XCTAssertTrue(app.alertCancel.waitForExistence(timeout: 5))
+        app.alertAnswer.click()
+        let trash = app.buttons[Words.moveToTrash]
+        XCTAssertTrue(trash.waitForExistence(timeout: 30))
+        trash.click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))
+    }
+
     // A debug build carries no update key.
     @MainActor
     func testUpdatesSayWhenTheBuildCannotUpdate() {

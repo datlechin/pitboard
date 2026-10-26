@@ -50,7 +50,7 @@ package func snapshot(
     sections: [AccountSection] = [], notices: [PanelNotice] = [],
     menuNotices: MenuNotices = MenuNotices(
         install: nil, switches: [], signIns: [], others: nil),
-    welcomeTools: [WelcomeTool] = []
+    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = []
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
@@ -102,7 +102,7 @@ package func snapshot(
         accountWindows: windows,
         uninstall: ItemOffer(
             title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
-        removal: nil,
+        removal: removal,
         welcome: WelcomeShown(
             title: "Welcome to Pitboard", lines: [], iconLink: nil, toolsHeading: nil,
             tools: welcomeTools,

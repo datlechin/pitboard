@@ -358,6 +358,25 @@ final class ScreenshotTests: FixtureTestCase {
     }
 
     @MainActor
+    func testUninstallingPitboard() {
+        let app = launch(.oneTool)
+        app.openSettings()
+        app.toolbars.buttons[Words.advanced].click()
+        let settings = app.windows[Words.advanced]
+        let uninstall = app.buttons["settings.uninstall"]
+        XCTAssertTrue(uninstall.waitForExistence(timeout: 5))
+        uninstall.click()
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
+        keep(settings, as: "macos-alert-uninstall")
+        app.alertAnswer.click()
+        let trash = app.buttons[Words.moveToTrash]
+        XCTAssertTrue(trash.waitForExistence(timeout: 30))
+        keep(XCUIScreen.main.screenshot().pngRepresentation, as: "macos-alert-move-to-trash")
+        trash.click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))
+    }
+
+    @MainActor
     func testNoAccounts() {
         let app = launch(.empty)
         app.openWindow()

@@ -10,6 +10,7 @@ public struct PitboardScenes: Scene {
     let openAtLogin: OpenAtLogin
     let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
+    let removal: AppRemoval
     let defaults: UserDefaults
     let updates: any Updates
 
@@ -20,6 +21,7 @@ public struct PitboardScenes: Scene {
         openAtLogin = delegate.openAtLogin
         notificationsAllowed = delegate.notificationsAllowed
         commandLineLink = delegate.commandLineLink
+        removal = delegate.removal
         defaults = delegate.defaults
         self.updates = updates
     }
@@ -32,7 +34,7 @@ public struct PitboardScenes: Scene {
         MenuBarExtra {
             MenuBarContent(model: model, windows: windows, updates: updates)
         } label: {
-            MenuBarLabel(model: model, windows: windows, requests: requests)
+            MenuBarLabel(model: model, windows: windows, requests: requests, removal: removal)
         }
         .menuBarExtraStyle(.menu)
 

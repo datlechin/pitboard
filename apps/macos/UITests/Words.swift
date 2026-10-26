@@ -37,6 +37,9 @@ enum Words {
     static let switchAutomatically = "Switch Automatically"
     static let doNothing = "Do Nothing"
 
+    // The app's own question once Pitboard's folder is gone, an AppKit alert.
+    static let moveToTrash = "Move to Trash"
+
     // What Name and Rename say under an empty field.
     static let typeAName = "Type a name for this account."
 

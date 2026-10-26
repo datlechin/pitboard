@@ -29,6 +29,17 @@ final class TestDefaults: UserDefaults, @unchecked Sendable {
         object(forKey: key) as? [String]
     }
     override func bool(forKey key: String) -> Bool { object(forKey: key) as? Bool ?? false }
+
+    private var domains: [String] = []
+    var removedDomains: [String] { lock.withLock { domains } }
+
+    // Never the system's, which would remove the real domain the test names.
+    override func removePersistentDomain(forName domainName: String) {
+        lock.withLock {
+            domains.append(domainName)
+            values = [:]
+        }
+    }
 }
 
 // Keeps each script in place of running it, so no test runs one that asks for an

@@ -12,6 +12,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     let openAtLogin: OpenAtLogin
     let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
+    let removal: AppRemoval
     let windowRequests = WindowRequests()
     let defaults: UserDefaults
     private let quitting: @MainActor () -> Void
@@ -28,6 +29,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notificationsAllowed = NotificationsAllowed(status: dependencies.notificationStatus)
         commandLineLink = CommandLineLink(dependencies.commandLineTool, model: model)
+        removal = dependencies.removal
         quitting = dependencies.quitting
         super.init()
     }

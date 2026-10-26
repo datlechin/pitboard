@@ -4,6 +4,7 @@ import SwiftUI
 struct AdvancedSettings: View {
     let model: AppModel
     let link: CommandLineLink
+    @State private var asking: Asking?
 
     var body: some View {
         let schedule = model.machine.schedule
@@ -60,12 +61,58 @@ struct AdvancedSettings: View {
                     Text(note).footnote()
                 }
             }
+
+            UninstallSection(model: model) { offer in
+                if let question = offer.confirm {
+                    asking = Asking(question: question, intent: offer.intent)
+                } else {
+                    model.send(offer.intent)
+                }
+            }
         }
         .formStyle(.grouped)
+        .asking($asking, of: model)
         // A terminal can change both while the app runs.
         .task {
             model.send(.readSchedule)
             model.send(.lookForCommandLine)
+        }
+    }
+}
+
+// The model's removal of Pitboard's folder; the app's own removal follows (AppRemoval).
+private struct UninstallSection: View {
+    let model: AppModel
+    let ask: (ItemOffer) -> Void
+
+    var body: some View {
+        let offer = model.uninstall
+        Section {
+            LabeledContent {
+                Button(offer.title) { ask(offer) }
+                    .disabled(!offer.enabled)
+                    .accessibilityIdentifier("settings.uninstall")
+            } label: {
+                Text(words.settings.uninstall)
+                Text(words.settings.uninstallNote)
+            }
+            switch model.removal {
+            case .removing(let title)?:
+                WaitingRow(text: title)
+                    .accessibilityIdentifier("settings.uninstalling")
+            case .stopped(let title, let line, let again)?:
+                LabeledContent {
+                    Button(again.title) { model.send(again.intent) }
+                        .disabled(!again.enabled)
+                        .accessibilityIdentifier("settings.uninstallAgain")
+                } label: {
+                    Text(title)
+                    Text(line)
+                }
+                .accessibilityIdentifier("settings.uninstallStopped")
+            case .done?, nil:
+                EmptyView()
+            }
         }
     }
 }

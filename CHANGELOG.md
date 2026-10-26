@@ -67,6 +67,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app opens a welcome at its first launch, before the accounts, which says Pitboard
   lives in the menu bar, adds the account each tool has once you choose **Add**, and keeps
   **Open Pitboard at Login** off until you turn it on.
+- The macOS app's **Settings** > **Advanced** offers **Uninstall Pitboard…**, which deletes
+  Pitboard's saved sign-ins and settings, then the app's own settings, login item and command line
+  link, and moves the app to the Trash, or says how Homebrew removes a copy it installed.
 
 ### Changed
 

@@ -64,9 +64,33 @@ struct CommandLineTool: Sendable {
         }.value
     }
 
+    // The link Install Command Line Tool… makes.
+    var linksHere: Bool {
+        guard let helper else { return false }
+        return (try? FileManager.default.destinationOfSymbolicLink(atPath: link)) == helper
+    }
+
+    // Off the main thread, since the password prompt waits on a person.
+    func unlink() async -> Linked {
+        let (source, execute) = (Self.script(removing: link), execute)
+        return await Task.detached(priority: .userInitiated) {
+            Self.outcome(of: execute(source))
+        }.value
+    }
+
     /// macOS asks for the password in this app's name before anything runs.
     static func script(linking helper: String, at link: String) -> String {
         "do shell script \(command(linking: helper, at: link)) with administrator privileges"
+    }
+
+    static func script(removing link: String) -> String {
+        "do shell script \(command(removing: link)) with administrator privileges"
+    }
+
+    // Only while it is a link: whatever replaced it since is kept.
+    static func command(removing link: String) -> String {
+        "\"test -L \" & quoted form of \(literal(link)) & \" && rm \" & quoted form of "
+            + literal(link)
     }
 
     /// The shell command that makes the link, as an AppleScript expression. Each path is an

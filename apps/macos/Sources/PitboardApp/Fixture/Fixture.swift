@@ -53,31 +53,49 @@
             let folder = folder(environment: environment)
             let defaults = UserDefaults(suiteName: suite) ?? .standard
             defaults.removePersistentDomain(forName: suite)
+            let loginItem = FixtureLoginItem(refuses: environment[loginItemRefuses] != nil)
+            let tool = commandLineTool(in: folder)
             return Dependencies(
                 model: model,
                 defaults: defaults,
-                loginItem: FixtureLoginItem(refuses: environment[loginItemRefuses] != nil),
+                loginItem: loginItem,
                 notificationStatus: { nil },
-                commandLineTool: commandLineTool(in: folder),
+                commandLineTool: tool,
+                removal: removal(
+                    in: folder, loginItem: loginItem, defaults: defaults, commandLine: tool),
                 web: .fixture(folder: folder),
                 quitting: {})
         }
 
-        /// Links into the fixture's `bin`, where the model looks for the `pitboard` a terminal
-        /// runs, so linking can be tried with no password and no write to `/usr/local/bin`.
+        // The app's own shell commands, in the fixture's folder, run with no password.
         static func commandLineTool(in folder: URL) -> CommandLineTool {
             let helper = folder.appendingPathComponent("Pitboard.app/Contents/Helpers/pitboard")
-            let bin = folder.appendingPathComponent("bin")
-            let link = bin.appendingPathComponent("pitboard")
+            let link = folder.appendingPathComponent("bin/pitboard")
             return CommandLineTool(
                 helper: helper.path, link: link.path,
-                execute: { _ in
-                    try? FileManager.default.createDirectory(
-                        at: bin, withIntermediateDirectories: true)
-                    try? FileManager.default.createSymbolicLink(
-                        at: link, withDestinationURL: helper)
-                    return nil
+                execute: { source in
+                    CommandLineTool.execute(
+                        script: source.replacingOccurrences(
+                            of: " with administrator privileges", with: ""))
                 })
+        }
+    }
+
+    extension Fixture {
+        // Removes the fixture's own app and folders, and nothing of the app under test.
+        @MainActor
+        static func removal(
+            in folder: URL, loginItem: any LoginItem, defaults: UserDefaults,
+            commandLine: CommandLineTool
+        ) -> AppRemoval {
+            AppRemoval(
+                loginItem: loginItem, defaults: defaults, domain: suite,
+                support: folder.appendingPathComponent(
+                    "Application Support", isDirectory: true),
+                commandLine: commandLine,
+                app: folder.appendingPathComponent("Pitboard.app", isDirectory: true),
+                homebrew: [folder.appendingPathComponent("homebrew", isDirectory: true)],
+                trash: { try FileManager.default.removeItem(at: $0) })
         }
     }
 

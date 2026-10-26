@@ -7,6 +7,7 @@ struct MenuBarLabel: View {
     let model: AppModel
     let windows: AccountWindows
     let requests: WindowRequests
+    let removal: AppRemoval
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @AppStorage(DefaultsKey.menuBarShows) private var shows = MenuBarShows.nameAndUsage
@@ -39,6 +40,10 @@ struct MenuBarLabel: View {
                 settingsTab = SettingsView.Tab(section)
                 openSettings()
             }
+        }
+        // Whichever window asked for it may have closed meanwhile.
+        .onChange(of: model.removal) { _, removed in
+            if removed == .done { Task { await removal.finish() } }
         }
         .onChange(of: windows.requested) {
             for store in windows.takeRequests() {

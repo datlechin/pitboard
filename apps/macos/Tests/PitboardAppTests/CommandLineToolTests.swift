@@ -138,3 +138,61 @@ import Testing
             == .failed("ln: /usr/local/bin/pitboard: Permission denied"))
     #expect(CommandLineTool.outcome(of: error(1)) == .failed("The link couldn’t be made."))
 }
+
+// Uninstall removes only the link Install Command Line Tool… makes, to this copy's own.
+@Test func onlyALinkToThisCopysCommandLineIsItsOwn() throws {
+    let app = try StandInApp()
+    defer { app.remove() }
+    let tool = app.tool { _ in nil }
+    #expect(!tool.linksHere, "nothing there")
+    app.makeLink()
+    #expect(tool.linksHere)
+    try FileManager.default.removeItem(atPath: app.link)
+    try app.symlink(app.link, to: "/Applications/Moved.app/Contents/Helpers/pitboard")
+    #expect(!tool.linksHere, "another copy's")
+    try FileManager.default.removeItem(atPath: app.link)
+    try Data("mine".utf8).write(to: URL(fileURLWithPath: app.link))
+    #expect(!tool.linksHere, "somebody's own file")
+}
+
+// Run without administrator rights, in a scratch directory whose name a shell would otherwise
+// read commands in: it removes a link, and keeps a file put there in its place.
+@MainActor
+@Test func theCommandRemovesOnlyALink() throws {
+    let app = try StandInApp()
+    defer { app.remove() }
+    let hostile = try app.directory(#"a "b" \ $(echo injected)"#)
+    let link = "\(hostile)/pitboard"
+    let command = CommandLineTool.command(removing: link)
+    func run() -> NSDictionary? {
+        var error: NSDictionary?
+        NSAppleScript(source: "do shell script \(command)")?.executeAndReturnError(&error)
+        return error
+    }
+    try app.symlink(link, to: app.helper.path)
+    #expect(run() == nil)
+    #expect(!FileManager.default.fileExists(atPath: link))
+    #expect(
+        (try? FileManager.default.destinationOfSymbolicLink(atPath: link)) == nil,
+        "the link itself is gone")
+
+    try Data("mine".utf8).write(to: URL(fileURLWithPath: link))
+    #expect(run() != nil, "not a link")
+    #expect(try String(contentsOfFile: link, encoding: .utf8) == "mine")
+
+    #expect(
+        CommandLineTool.script(removing: link)
+            == "do shell script \(command) with administrator privileges")
+}
+
+@Test func unlinkingAsksForThePasswordAndSaysWhatCameOfIt() async throws {
+    let app = try StandInApp()
+    defer { app.remove() }
+    let scripts = Scripts()
+    let tool = app.tool(scripts.run)
+    #expect(await tool.unlink() == .linked)
+    scripts.raise(-128, "User canceled.")
+    #expect(await tool.unlink() == .cancelled)
+    let script = CommandLineTool.script(removing: app.link)
+    #expect(scripts.ran == [script, script])
+}
