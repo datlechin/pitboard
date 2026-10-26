@@ -8,7 +8,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:core="using:Pitboard.Core"
     xmlns:local="using:Pitboard.Views"
-    Title="Open link">
+    xmlns:shown="using:Pitboard.Windows">
   <Window.SystemBackdrop>
     <MicaBackdrop />
   </Window.SystemBackdrop>
@@ -46,7 +46,7 @@
           MaxHeight="360"
           SelectionMode="Single"
           AutomationProperties.AutomationId="picker.accounts"
-          AutomationProperties.Name="Accounts"
+          AutomationProperties.Name="{x:Bind shown:Words.Window.Accounts}"
           DoubleTapped="OnAccountDoubleTapped"
           KeyDown="OnAccountKeyDown">
         <ListView.ItemTemplate>
@@ -62,7 +62,7 @@
     <StackPanel Grid.Row="1" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
       <Button x:Name="PrimaryButton" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="OnPrimary" />
       <Button x:Name="SecondaryButton" MinWidth="96" Click="OnSecondary" />
-      <Button x:Name="CancelButton" MinWidth="96" Content="Cancel" Click="OnCancel" />
+      <Button x:Name="CancelButton" MinWidth="96" Content="{x:Bind shown:Words.Window.Cancel}" Click="OnCancel" />
     </StackPanel>
   </Grid>
 </Window>

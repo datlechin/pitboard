@@ -14,4 +14,6 @@ public static class Words
     public static ActivityWords Activity => All.Activity;
 
     public static SettingsWords Settings => All.Settings;
+
+    public static AccountWindowWords AccountWindow => All.AccountWindow;
 }

@@ -6,7 +6,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Pitboard.Views"
-    Title="Account">
+    xmlns:shown="using:Pitboard.Windows">
   <Window.SystemBackdrop>
     <MicaBackdrop />
   </Window.SystemBackdrop>
@@ -23,29 +23,44 @@
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
     <CommandBar HorizontalAlignment="Left" DefaultLabelPosition="Collapsed">
-      <AppBarButton x:Name="BackButton" Label="Back" Icon="Back" ToolTipService.ToolTip="Show the previous page" Click="OnBack" />
-      <AppBarButton x:Name="ForwardButton" Label="Forward" Icon="Forward" ToolTipService.ToolTip="Show the next page" Click="OnForward" />
-      <AppBarButton x:Name="ReloadButton" Label="Reload" Icon="Refresh" ToolTipService.ToolTip="Load this page again" Click="OnReload" />
+      <AppBarButton
+          x:Name="BackButton"
+          Label="{x:Bind shown:Words.AccountWindow.Back}"
+          Icon="Back"
+          ToolTipService.ToolTip="{x:Bind shown:Words.AccountWindow.BackHelp}"
+          Click="OnBack" />
+      <AppBarButton
+          x:Name="ForwardButton"
+          Label="{x:Bind shown:Words.AccountWindow.Forward}"
+          Icon="Forward"
+          ToolTipService.ToolTip="{x:Bind shown:Words.AccountWindow.ForwardHelp}"
+          Click="OnForward" />
+      <AppBarButton
+          x:Name="ReloadButton"
+          Label="{x:Bind shown:Words.AccountWindow.Reload}"
+          Icon="Refresh"
+          ToolTipService.ToolTip="{x:Bind shown:Words.AccountWindow.ReloadHelp}"
+          Click="OnReload" />
       <AppBarButton
           x:Name="StopButton"
-          Label="Stop"
+          Label="{x:Bind shown:Words.AccountWindow.Stop}"
           Icon="Cancel"
-          ToolTipService.ToolTip="Stop loading this page"
+          ToolTipService.ToolTip="{x:Bind shown:Words.AccountWindow.StopHelp}"
           Visibility="Collapsed"
           Click="OnStop" />
       <!-- Under it, at the left of the command bar, WebView2 opens its download list. -->
       <AppBarButton
           x:Name="DownloadsButton"
-          Label="Downloads"
+          Label="{x:Bind shown:Words.AccountWindow.Downloads}"
           Icon="Download"
-          ToolTipService.ToolTip="Show this window’s downloads"
+          ToolTipService.ToolTip="{x:Bind shown:Words.AccountWindow.DownloadsHelp}"
           Visibility="Collapsed"
           AutomationProperties.AutomationId="window.downloads"
           Click="OnShowDownloads" />
       <CommandBar.SecondaryCommands>
         <AppBarButton
             x:Name="RemoveDataButton"
-            Label="Remove website data…"
+            Label="{x:Bind shown:Words.AccountWindow.RemoveWebsiteData}"
             Icon="Delete"
             AutomationProperties.AutomationId="window.removeData"
             Click="OnRemoveData" />

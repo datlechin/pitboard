@@ -30,6 +30,7 @@ public sealed partial class OpenLinkWindow : Window
         _open = open;
         _inBrowser = inBrowser;
         InitializeComponent();
+        Title = Words.Window.OpenLink;
         AccountList.ContainerContentChanging += (_, args) => Name(args);
         AppWindow.SetPresenter(OverlappedPresenter.CreateForDialog());
         WindowChrome.Apply(this);
@@ -96,7 +97,7 @@ public sealed partial class OpenLinkWindow : Window
             case null:
                 Unavailable.Title = _noLink.Title;
                 Unavailable.Detail = _noLink.Detail;
-                Primary("Close", Close);
+                Primary(Words.Window.Close, Close);
                 break;
             case PickerShown.Reading reading:
                 WaitingText.Text = reading.Title;
@@ -109,7 +110,7 @@ public sealed partial class OpenLinkWindow : Window
             case PickerShown.Refused refused:
                 Heading.Text = refused.Title;
                 Explanation.Text = refused.Reason;
-                Primary("OK", Cancel);
+                Primary(Words.Window.Ok, Cancel);
                 break;
             case PickerShown.NoAccount none:
                 Heading.Text = none.Title;
