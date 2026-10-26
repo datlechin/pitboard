@@ -268,7 +268,13 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         action.clone().map(|action| RowEnd::Button { action })
     };
     let warm_note = warm_note(seen, account);
-    let lines = [&problem, &stale_note, &expiring, &warm_note]
+    // A row says a saved sign-in has expired, as it says one is about to.
+    let ended = expiring.clone().or_else(|| {
+        until
+            .filter(|_| account.standing == status::Standing::LoginExpired)
+            .map(|at| words::sign_in_expires(at - seen.now, lapses))
+    });
+    let lines = [&problem, &stale_note, &ended, &warm_note]
         .into_iter()
         .flatten()
         .cloned()

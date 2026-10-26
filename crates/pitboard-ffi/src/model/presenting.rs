@@ -968,6 +968,19 @@ fn an_accounts_own_menu_opens_its_windows() {
     );
 }
 
+// Its row said nothing but Sign In Again, where main's said the parked login had expired.
+#[test]
+fn a_saved_sign_in_that_has_expired_says_so_on_its_row() {
+    let old = described(
+        account(Some("old"))
+            .parked_until(NOON - DAY)
+            .standing(Standing::LoginExpired)
+            .build(),
+    );
+    assert_eq!(old.lines, [words::sign_in_expires(-DAY, false)]);
+    assert_eq!(old.notes.len(), 1, "said once: {:?}", old.notes);
+}
+
 /// Whether an account needs signing in again is a fact about the account, and a sign-in or a
 /// switch running elsewhere does not change it. Its item cannot be chosen meanwhile, and
 /// without the line saying why it reads as an account that simply does not work.
