@@ -1,6 +1,7 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
+using FlaUI.Core.Tools;
 using FlaUI.Core.WindowsAPI;
 
 namespace Pitboard.UITests;
@@ -235,7 +236,10 @@ public sealed class AccountsWindowTests
         launched.Answer("question", "PrimaryButton");
         var notice = launched.Element("notice.abandoned");
 
-        Assert.IsGreaterThan(1, Launched.Lines(notice).Count(), $"it says what was kept: {Launched.Said(notice)}");
+        // The notice shows before its lines do.
+        var said = Retry.WhileFalse(
+            () => Launched.Lines(notice).Count() > 1, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
+        Assert.IsTrue(said, $"it says what was kept: {Launched.Said(notice)}");
     }
 
     [TestMethod]
