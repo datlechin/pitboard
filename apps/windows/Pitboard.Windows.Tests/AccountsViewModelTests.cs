@@ -197,15 +197,13 @@ public sealed class AccountsViewModelTests
         var step = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add]);
         var (shown, _, app, told) = Over(Snapshots.Read(1));
 
-        Assert.IsFalse(shown.HasSetup);
+        Assert.IsNull(shown.Setup);
 
         app.Apply(Snapshots.Read(2) with { Setup = step, Footing = new Footing.OnlyOne(Provider: "claude", Label: "work") });
 
-        Assert.IsTrue(shown.HasSetup);
-        Assert.AreEqual("Add a second account", shown.SetupTitle);
-        Assert.AreEqual("Pitboard switches once there are two.", shown.SetupDetail);
+        Assert.AreSame(step, shown.Setup);
         Assert.IsInstanceOfType<Footing.OnlyOne>(shown.SetupFooting);
-        Assert.Contains(nameof(AccountsViewModel.HasSetup), told);
+        Assert.Contains(nameof(AccountsViewModel.Setup), told);
     }
 
     [TestMethod]

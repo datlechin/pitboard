@@ -231,7 +231,10 @@ Microsoft's documentation.
   so they line up with the rows under them. A `ContentDialog`'s buttons are the template
   parts `PrimaryButton`, `SecondaryButton` and `CloseButton`, with no AutomationId of their
   own, so UI Automation finds each by its part's name, as the UI tests find the InfoBar's
-  `CloseButton` and the command bar's `MoreButton`.
+  `CloseButton` and the command bar's `MoreButton`. A `TeachingTip`'s buttons are the parts
+  `ActionButton` and `CloseButton` in the popup it opens, and it raises `ActionButtonClick` and
+  `CloseButtonClick` (`Microsoft.WinUI.dll` metadata), so the setup tip's choice and Not now are
+  those two, which `Launched.Tip` and `AccountsPageTests` press.
 - `Shell_NotifyIconW` and `NOTIFYICONDATAW` (Microsoft Learn, updated 1 July 2025 and 20
   November 2024): `NIM_SETVERSION` follows every `NIM_ADD`; under `NOTIFYICON_VERSION_4` the
   event is `lParam`'s low word and the point `wParam`'s two words, the icon's upper-left

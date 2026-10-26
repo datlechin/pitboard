@@ -66,23 +66,8 @@
         ContextRequested="OnContextRequested"
         PreviewKeyDown="OnAccountKeyDown">
       <StackPanel Spacing="30">
-        <StackPanel x:Name="Above" Spacing="8">
-          <StackPanel x:Name="Notices" Spacing="8" />
-          <InfoBar
-              IsClosable="False"
-              IsOpen="{x:Bind ViewModel.HasSetup, Mode=OneWay}"
-              Visibility="{x:Bind ViewModel.HasSetup, Mode=OneWay}"
-              Title="{x:Bind ViewModel.SetupTitle, Mode=OneWay}"
-              Message="{x:Bind ViewModel.SetupDetail, Mode=OneWay}"
-              AutomationProperties.AutomationId="{x:Bind local:AccountsPage.SetupId(ViewModel.SetupFooting), Mode=OneWay}">
-            <InfoBar.IconSource>
-              <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupFooting), Mode=OneWay}" />
-            </InfoBar.IconSource>
-            <InfoBar.Content>
-              <StackPanel x:Name="SetupChoices" Margin="0,0,0,12" Orientation="Horizontal" Spacing="8" />
-            </InfoBar.Content>
-          </InfoBar>
-        </StackPanel>
+        <!-- What lasts until it is dealt with, as Microsoft's guidance keeps InfoBars; a tip is a TeachingTip. -->
+        <StackPanel x:Name="Notices" Spacing="8" />
         <!-- A tool's name heads its accounts once another tool's are shown, as the settings page heads its sections. -->
         <ItemsControl ItemsSource="{x:Bind ViewModel.Sections}" IsTabStop="False">
           <ItemsControl.ItemsPanel>
@@ -237,5 +222,15 @@
         Prominent="{x:Bind ViewModel.Empty.Prominent, Mode=OneWay}"
         IsChoiceEnabled="{x:Bind ViewModel.Empty.Enabled, Mode=OneWay}"
         Chosen="OnEmptyChosen" />
+    <!-- The one next step of setting Pitboard up: its choice, and Not now, which turns it down for good. -->
+    <TeachingTip
+        x:Name="Tip"
+        AutomationProperties.AutomationId="{x:Bind local:AccountsPage.SetupId(ViewModel.SetupFooting), Mode=OneWay}"
+        ActionButtonClick="OnTipChosen"
+        CloseButtonClick="OnTipDeclined">
+      <TeachingTip.IconSource>
+        <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupFooting), Mode=OneWay}" />
+      </TeachingTip.IconSource>
+    </TeachingTip>
   </Grid>
 </Page>

@@ -250,8 +250,8 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         launched.OpenWindow();
-        launched.Element("setup.codexUnused");
-        launched.Invoke("setup.action.declineTip");
+        launched.Tip(Words.UseWithCodex);
+        launched.DeclineTip();
 
         launched.Element("empty");
         launched.Invoke("empty.choice");
@@ -280,11 +280,10 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "onlyOne");
         launched.OpenWindow();
-        launched.Element("setup.onlyOne");
+        launched.Tip(Words.AddASecondAccount);
 
-        launched.Invoke("setup.action.declineSecondAccount");
+        launched.DeclineTip();
 
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.onlyOne")), "the tip stayed");
         launched.Row("claude/work");
     }
 
@@ -314,6 +313,6 @@ public sealed class AccountsWindowTests
 
         launched.Window("Pitboard");
 
-        launched.Element("setup.codexUnused");
+        launched.Tip(Words.UseWithCodex);
     }
 }

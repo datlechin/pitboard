@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Pitboard.Core;
 using Pitboard.Views;
@@ -344,22 +345,100 @@ public sealed class AccountsPageTests
     }
 
     [UITestMethod]
-    public async Task ANoticeAndTheSetupStepComeBeforeTheAccounts()
+    public async Task ANoticeComesBeforeTheAccounts()
     {
-        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
-        var (page, model, _) = await Over(Snapshots.Read(1) with
+        var (page, _, _) = await Over(Snapshots.Read(1) with
         {
             Notices = [Items.Notice("switch/codex", Items.Dismiss("codex"))],
-            Setup = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]),
             Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))],
         });
 
         var notice = Views.Element<InfoBar>(page, "notice.switch/codex");
+
         Assert.IsLessThan(Bounds(Row(page, "claude/work"), page).Top, Bounds(notice, page).Bottom);
-        Assert.Contains("Add a second account", Views.Texts(page));
-        Views.Press(Views.Button(page, "Not now"));
+    }
+
+    // With no notice, the accounts start at the top of what scrolls, with no gap held for one.
+    [UITestMethod]
+    public async Task WithNoNoticeTheAccountsStartAtTheTop()
+    {
+        var (page, _, _) = await Over(Listing(Work()));
+
+        Assert.AreEqual(Bounds(Views.Element<ScrollViewer>(page, "accounts"), page).Top, Bounds(Row(page, "claude/work"), page).Top, 0.5);
+    }
+
+    // Microsoft's guidance keeps an InfoBar for what lasts and gives a tip a TeachingTip: the step's choice is its action
+    // button, pointed at Add account, and Not now its close button.
+    [UITestMethod]
+    public async Task ASetupStepIsATipAtAddAccountWhoseCloseTurnsItDown()
+    {
+        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+        var step = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]);
+        var (page, model, _) = await Over(Snapshots.Read(1) with
+        {
+            Setup = step,
+            Footing = new Footing.OnlyOne(Provider: "claude", Label: "work"),
+            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))],
+        });
+        var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
+
+        await Views.Until(() => tip.IsOpen, "the tip did not open");
+        Assert.AreEqual(
+            "Add a second account | Pitboard switches once there are two. | Add account… | Not now",
+            string.Join(" | ", tip.Title, tip.Subtitle, tip.ActionButtonContent, tip.CloseButtonContent));
+        Assert.AreSame(Views.Element<AppBarButton>(page, "accounts.add"), tip.Target);
+        Assert.AreEqual("setup.onlyOne", AutomationProperties.GetAutomationId(tip));
+        Assert.IsFalse(Views.Descendants(page).OfType<InfoBar>().Any(bar => bar.IsOpen), "the step in an InfoBar");
+
+        var close = VisualTreeHelper.GetOpenPopupsForXamlRoot(page.XamlRoot).SelectMany(Views.Descendants).OfType<Button>()
+            .Single(button => button.Name == "CloseButton");
+        Views.Press(close);
 
         Assert.Contains(notNow.Intent, model.Sent);
+    }
+
+    // What happens at a limit is set in Settings, which is not on this page.
+    [UITestMethod]
+    public async Task TheTipAboutLimitsPointsAtNothing()
+    {
+        var notNow = new Choice("Not now", new Intent.DeclineTip(Tip.AtLimit), Enabled: true);
+        var settings = new Choice("Open settings", new Intent.ShowLimits(), Enabled: true);
+        var (page, model, _) = await Over(Snapshots.Read(1) with
+        {
+            Setup = new SetupStep("Switch before a limit runs out", "Pitboard notifies you at 95%.", [settings, notNow]),
+            Footing = new Footing.AtLimitUnchosen(),
+        });
+        var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
+        await Views.Until(() => tip.IsOpen, "the tip did not open");
+
+        Assert.IsNull(tip.Target);
+        var action = VisualTreeHelper.GetOpenPopupsForXamlRoot(page.XamlRoot).SelectMany(Views.Descendants).OfType<Button>()
+            .Single(button => button.Name == "ActionButton");
+        Views.Press(action);
+
+        Assert.Contains(settings.Intent, model.Sent);
+        Assert.IsFalse(tip.IsOpen, "the tip stayed up over Settings");
+    }
+
+    // A tip's popup stays over the window, so it goes with the page and comes back with it.
+    [UITestMethod]
+    public async Task TheTipGoesWithThePage()
+    {
+        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+        var (page, _, app) = await Over(Snapshots.Read(1) with
+        {
+            Setup = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]),
+            Footing = new Footing.OnlyOne(Provider: "claude", Label: "work"),
+        });
+        var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
+        await Views.Until(() => tip.IsOpen, "the tip did not open");
+
+        var frame = page.Frame;
+        await Views.Navigate<ActivityPage>(frame, Views.Context(app));
+        Assert.IsFalse(tip.IsOpen, "the tip stayed over another page");
+
+        await Views.Navigate<AccountsPage>(frame, Views.Context(app));
+        await Views.Until(() => tip.IsOpen, "the tip did not come back with the page");
     }
 
     // An empty page's one thing to do is its accent button, as Windows' own empty pages have; a retry is not.

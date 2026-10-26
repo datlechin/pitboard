@@ -26,7 +26,7 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
         [nameof(AppModel.UpdatedWindow)] = [nameof(Updated)],
         [nameof(AppModel.Reading)] = [nameof(CanRefresh)],
         [nameof(AppModel.Notices)] = [nameof(Notices)],
-        [nameof(AppModel.Setup)] = [nameof(Setup), nameof(HasSetup), nameof(SetupTitle), nameof(SetupDetail)],
+        [nameof(AppModel.Setup)] = [nameof(Setup)],
         [nameof(AppModel.Footing)] = [nameof(SetupFooting)],
         [nameof(AppModel.Sections)] = [nameof(Sections)],
     };
@@ -57,12 +57,6 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
     public PanelNotice[] Notices => model.Notices;
 
     public SetupStep? Setup => model.Setup;
-
-    public bool HasSetup => model.Setup is not null;
-
-    public string SetupTitle => model.Setup?.Title ?? "";
-
-    public string SetupDetail => model.Setup?.Detail ?? "";
 
     public Footing SetupFooting => model.Footing;
 

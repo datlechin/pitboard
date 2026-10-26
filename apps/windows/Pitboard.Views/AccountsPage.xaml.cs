@@ -22,8 +22,17 @@ public sealed partial class AccountsPage : Page
     public AccountsPage()
     {
         InitializeComponent();
-        Loaded += (_, _) => ViewModel?.Listen();
-        Unloaded += (_, _) => ViewModel?.Stop();
+        // A tip's popup stays over the window, so it goes with the page and comes back with it.
+        Loaded += (_, _) =>
+        {
+            ViewModel?.Listen();
+            Tip.IsOpen = _setup is not null;
+        };
+        Unloaded += (_, _) =>
+        {
+            ViewModel?.Stop();
+            Tip.IsOpen = false;
+        };
     }
 
     public AccountsViewModel? ViewModel { get; private set; }
@@ -128,40 +137,58 @@ public sealed partial class AccountsPage : Page
 
         if (all || args.PropertyName == nameof(AccountsViewModel.Setup))
         {
-            ShowSetupChoices();
+            ShowSetup();
         }
-
-        Above.Visibility = Look.Shown(Notices.Children.Count > 0 || ViewModel!.HasSetup);
     }
 
-    private void ShowNotices() =>
+    // None takes no room, where an empty panel would keep the gap above the accounts.
+    private void ShowNotices()
+    {
         Keyed.Sync<PanelNotice, UIElement>(
             Notices.Children, ViewModel!.Notices, notice => notice.Id, shown => ((NoticeBar)shown).Key,
-            notice => new NoticeBar(notice, action => Ask(action.Confirm, action.Intent), Context.Time),
+            notice => new NoticeBar(notice, action => Ask(action.Confirm, action.Intent), Context.Open, Context.Time),
             (shown, notice) => ((NoticeBar)shown).Show(notice));
+        Notices.Visibility = Look.Shown(Notices.Children.Count > 0);
+    }
 
-    // The first choice is the one the step is for.
-    private void ShowSetupChoices()
+    // The first choice is the one the step is for, and the second turns it down. Pointed at Add account where the step is
+    // to add one; about the settings, it points at nothing on this page.
+    private void ShowSetup()
     {
-        if (ViewModel!.Setup is not { } step || Structural.Equal(step, _setup))
+        var step = ViewModel!.Setup;
+        if (Structural.Equal(step, _setup))
         {
             return;
         }
 
         _setup = step;
-        SetupChoices.Children.Clear();
-        for (var index = 0; index < step.Actions.Length; index++)
+        if (step is not null)
         {
-            var choice = step.Actions[index];
-            var button = new Button { Content = choice.Title, IsEnabled = choice.Enabled };
-            AutomationProperties.SetAutomationId(button, $"setup.action.{Identifiers.Of(choice.Intent)}");
-            if (index == 0)
-            {
-                button.Style = Shared("AccentButtonStyle");
-            }
+            Tip.Title = step.Title;
+            Tip.Subtitle = step.Detail;
+            Tip.ActionButtonContent = step.Actions.ElementAtOrDefault(0)?.Title;
+            Tip.CloseButtonContent = step.Actions.ElementAtOrDefault(1)?.Title;
+            Tip.Target = ViewModel.SetupFooting is Footing.AtLimitUnchosen ? null : AddAccount;
+        }
 
-            button.Click += (_, _) => ViewModel.Send(choice.Intent);
-            SetupChoices.Children.Add(button);
+        Tip.IsOpen = step is not null && IsLoaded;
+    }
+
+    // It stays down once its choice is made, until the page comes back while the step is still to do.
+    private void OnTipChosen(TeachingTip sender, object args)
+    {
+        if (_setup?.Actions.ElementAtOrDefault(0) is { } choice)
+        {
+            sender.IsOpen = false;
+            ViewModel!.Send(choice.Intent);
+        }
+    }
+
+    private void OnTipDeclined(TeachingTip sender, object args)
+    {
+        if (_setup?.Actions.ElementAtOrDefault(1) is { } choice)
+        {
+            ViewModel!.Send(choice.Intent);
         }
     }
 

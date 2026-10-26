@@ -10,15 +10,17 @@ namespace Pitboard.Views;
 public sealed partial class NoticeBar : UserControl
 {
     private readonly Action<NoticeAction> _perform;
+    private readonly Action<Uri> _open;
     private readonly TimeProvider _time;
     private readonly DispatcherQueueTimer _timer;
     private PanelNotice _notice;
     private bool _shown;
 
-    public NoticeBar(PanelNotice notice, Action<NoticeAction> perform, TimeProvider time)
+    public NoticeBar(PanelNotice notice, Action<NoticeAction> perform, Action<Uri> open, TimeProvider time)
     {
         _notice = notice;
         _perform = perform;
+        _open = open;
         _time = time;
         InitializeComponent();
         _timer = DispatcherQueue.CreateTimer();
@@ -70,8 +72,10 @@ public sealed partial class NoticeBar : UserControl
         }
 
         Actions.Visibility = Look.Shown(buttons.Length > 0);
+        LearnLink.Content = notice.Learn?.Title;
+        LearnLink.Visibility = Look.Shown(notice.Learn is not null);
         Count();
-        Below.Visibility = Look.Shown(buttons.Length > 0 || notice.Until is not null);
+        Below.Visibility = Look.Shown(buttons.Length > 0 || notice.Learn is not null || notice.Until is not null);
     }
 
     // Counts down by itself between snapshots, and stops at nought.
@@ -102,6 +106,14 @@ public sealed partial class NoticeBar : UserControl
         if (sender is FrameworkElement { DataContext: NoticeAction action })
         {
             _perform(action);
+        }
+    }
+
+    private void OnLearn(object sender, RoutedEventArgs args)
+    {
+        if (_notice.Learn is { } learn)
+        {
+            _open(new Uri(learn.Link));
         }
     }
 

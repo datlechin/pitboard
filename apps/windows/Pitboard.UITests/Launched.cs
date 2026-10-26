@@ -284,6 +284,24 @@ internal sealed class Launched : IDisposable
     public void Select(string pane) =>
         Find(found => found.ByAutomationId(pane), pane).Patterns.SelectionItem.Pattern.Select();
 
+    // A setup tip is a TeachingTip, whose buttons are its template's ActionButton and CloseButton, which UI Automation
+    // finds by their names, as a ContentDialog's. Shown once its action button is, with the title the model gave it.
+    public void Tip(string title)
+    {
+        Element("ActionButton");
+        Named(title);
+    }
+
+    // Not now, which turns the step down for good, and the tip with it.
+    public void DeclineTip()
+    {
+        PressOnceEnabled(Find(found => found.ByAutomationId("CloseButton").And(found.ByName(Words.NotNow)), "the tip's Not now"));
+        if (!Gone(found => found.ByAutomationId("ActionButton")))
+        {
+            throw new AssertFailedException($"the tip stayed: {Shown()}");
+        }
+    }
+
     // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
     // name, not its id.
     public static AutomationElement Expander(AutomationElement group) =>

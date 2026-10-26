@@ -65,6 +65,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sign-in is valid, its warm-up with **Warm-up settings**, and **Open claude.ai**, **Rename** and
   **Remove account**.
 - The Windows app's commands and an account's shortcut menu have access keys.
+- The Windows app's notices link **Learn more** where nothing in the app does something about
+  them.
 
 ### Changed
 
@@ -160,6 +162,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app shows each account as a row with its name, its plan, a line for each limit and
   at most one note, and **In use** or its button at its end, its bars in the accent color until a
   limit runs low.
+- The Windows app shows its setup tips as a teaching tip, pointed at **Add account** where they
+  are about adding one, where they were a bar above the accounts.
 
 ### Removed
 
