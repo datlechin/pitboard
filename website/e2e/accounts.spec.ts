@@ -441,6 +441,16 @@ test.describe("on Windows", () => {
     await expect(bar).toHaveAccessibleName("Pitboard");
     // where WinUI draws no focus visual, the page draws one (WCAG 2.4.7)
     await expect(bar).not.toHaveCSS("outline-style", "none");
+    // work is left alone in its tool, so a TeachingTip under Add account asks for a second
+    const tip = fig.getByRole("dialog", { name: "Add a second Claude Code account" });
+    await expect(tip).toBeVisible();
+    await expect(tip.getByRole("button")).toHaveText(["Add account…", "Not now"]);
+    const add = (await fig.locator('[data-does="add"]').first().boundingBox())!;
+    const tail = (await tip.locator("svg").first().boundingBox())!;
+    expect(tail.y).toBeGreaterThanOrEqual(add.y + add.height);
+    expect(tail.x + tail.width / 2).toBeCloseTo(add.x + add.width / 2, -1);
+    await tip.getByRole("button", { name: "Not now" }).click();
+    await expect(tip).toBeHidden();
   });
 
   test("Ctrl+C copies the focused account's email", async ({ page }) => {

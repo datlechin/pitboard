@@ -1,6 +1,7 @@
 ---
-// AccountsPage.xaml: the notices NoticeBar.xaml shows after a switch, the setup step's InfoBar, and
-// each tool's accounts under its name, each a SettingsExpander (AccountRow.astro). Every node a
+// AccountsPage.xaml: the notices NoticeBar.xaml shows after a switch, the setup step's TeachingTip
+// at Add account, and each tool's accounts under its name, each a SettingsExpander
+// (AccountRow.astro). Every node a
 // state shows is drawn: each tool's notice, the step, each row's ends and cards, and templates for
 // a row and a limit; the context menu and the dialogs wait over the desk. live/accounts.ts follows
 // the one state with them. Shown on another page, the window draws its rows once the list shows,
@@ -99,23 +100,36 @@ const radio =
         </span>
       </InfoBar>
     </div>)}
-    {/* the setup step's InfoBar (AccountsPage.xaml), which is not closable */}
-    <div class="pb-8" data-part="setup" hidden>
-      <div
-        class="relative flex min-h-48 gap-12 rounded-u-4 bg-win-card-2 pt-14 pr-16 pb-12 pl-16 inset-shadow-win-layer-edge"
+    {/* the setup step's TeachingTip (AccountsPage.xaml) at Add account, placed BottomLeft as Auto
+       falls back to where the window has room: its choice the tip's action and Not now its close */}
+    <div
+      class="absolute top-72 right-70 z-2 w-320 rounded-u-8 bg-win-tip p-12 font-win text-win-text shadow-win-flyout ring-1 ring-win-surface-edge"
+      role="dialog"
+      aria-labelledby={`${prefix}-setup-title`}
+      aria-describedby={`${prefix}-setup-detail`}
+      data-part="setup"
+      hidden
+    >
+      <svg
+        class="absolute -top-10 right-10 h-10 w-20 overflow-visible fill-win-tip stroke-win-surface-edge"
+        viewBox="0 0 20 10"
+        aria-hidden="true"
       >
+        <path d="M0 10 10 0l10 10"></path>
+      </svg>
+      <span class="flex gap-12">
         <svg class="mt-2 size-16 shrink-0 text-win-accent" aria-hidden="true">
           <use href="#fl-arrow-swap" />
         </svg>
         <span class="min-w-0 flex-1">
-          <b class="block font-semibold" data-part="title"></b>
-          <span class="mt-4 block" data-part="detail"></span>
-          <span class="mt-12 flex gap-8">
-            <Button accent data-does="add">{addAccountAsks("windows")}</Button>
-            <Button data-does="not-now">{notNow("windows")}</Button>
-          </span>
+          <b class="block font-semibold" id={`${prefix}-setup-title`} data-part="title"></b>
+          <span class="block" id={`${prefix}-setup-detail`} data-part="detail"></span>
         </span>
-      </div>
+      </span>
+      <span class="mt-12 grid grid-cols-2 gap-8">
+        <Button stretch data-does="add">{addAccountAsks("windows")}</Button>
+        <Button stretch data-does="not-now">{notNow("windows")}</Button>
+      </span>
     </div>
     {/* a tool's name heads its accounts, as the settings page heads its sections */}
     <div class="flex flex-col gap-30" data-part="list">
