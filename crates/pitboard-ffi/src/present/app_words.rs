@@ -1,5 +1,6 @@
 // Every control and sentence the apps draw on their own; one only a system shows is None elsewhere.
 
+use super::SetupLink;
 use super::words::{self, titled};
 use pitboard_core::host::{OS, Os};
 
@@ -129,6 +130,14 @@ pub struct SettingsWords {
     // over Uninstall Pitboard… on macOS, beside Uninstall… on Windows
     pub uninstall: String,
     pub uninstall_note: String,
+    // what the macOS app asks of itself once Pitboard's own data is gone, `trash_says` the message
+    pub move_to_trash_question: Option<String>,
+    pub move_to_trash: Option<String>,
+    // a copy Homebrew installed, which Homebrew removes
+    pub remove_with_homebrew: Option<String>,
+    pub homebrew_removes_it: Option<String>,
+    // the docs' table of how to remove Pitboard by how it was installed
+    pub homebrew_help: Option<SetupLink>,
     // the Windows page's section with a card each that opens Diagnostics and Activity
     pub troubleshoot: Option<String>,
     pub diagnostics_about: Option<String>,
@@ -241,6 +250,21 @@ pub fn webview_runtime_too_old(minimum: String, have: Option<String>) -> String 
         "This window needs the Microsoft Edge WebView2 Runtime {minimum} or later, and this PC \
          has {have}. Windows Update keeps it up to date."
     )
+}
+
+const DELETED: &str = "Its saved sign-ins and settings are deleted.";
+
+const REMOVE_PAGE: &str = "https://docs.usepitboard.com/install/remove#remove-pitboard-itself";
+
+// What Move Pitboard to the Trash? says, `link` the command line link Move to Trash removes.
+#[uniffi::export]
+pub fn trash_says(link: Option<String>) -> String {
+    match link {
+        None => DELETED.into(),
+        Some(link) => format!(
+            "{DELETED} Removing the command line link at {link} takes an administrator’s password."
+        ),
+    }
 }
 
 #[uniffi::export]
@@ -389,6 +413,17 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             uninstall_note: "Deletes Pitboard’s saved sign-ins and settings, and leaves each tool \
                              signed in to the account in use."
                 .into(),
+            move_to_trash_question: mac("Move Pitboard to the Trash?"),
+            move_to_trash: mac("Move to Trash"),
+            remove_with_homebrew: mac("Remove Pitboard with Homebrew"),
+            homebrew_removes_it: mac(&format!(
+                "{DELETED} Homebrew installed the app, and removes it with brew uninstall --cask \
+                 pitboard-app."
+            )),
+            homebrew_help: (os != Os::Windows).then(|| SetupLink {
+                title: words::learn_more(os),
+                link: REMOVE_PAGE.into(),
+            }),
             troubleshoot: windows("Troubleshoot"),
             diagnostics_about: (os == Os::Windows).then(|| {
                 let names = crate::tools_on(os).into_iter().map(|tool| tool.name);
@@ -599,6 +634,67 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+    }
+
+    // Plan 6.5: once Pitboard's own data is gone, the macOS app takes itself to the Trash, or
+    // points a copy Homebrew installed at Homebrew.
+    #[test]
+    fn the_macos_uninstall_ends_with_the_app_itself() {
+        let (mac, windows) = (
+            app_words_on(Os::MacOs).settings,
+            app_words_on(Os::Windows).settings,
+        );
+        assert_eq!(
+            (
+                mac.move_to_trash_question.as_deref(),
+                mac.move_to_trash.as_deref()
+            ),
+            (Some("Move Pitboard to the Trash?"), Some("Move to Trash"))
+        );
+        assert_eq!(
+            trash_says(None),
+            "Its saved sign-ins and settings are deleted."
+        );
+        assert_eq!(
+            trash_says(Some("/usr/local/bin/pitboard".into())),
+            "Its saved sign-ins and settings are deleted. Removing the command line link at \
+             /usr/local/bin/pitboard takes an administrator’s password."
+        );
+        assert_eq!(
+            (
+                mac.remove_with_homebrew.as_deref(),
+                mac.homebrew_removes_it.as_deref()
+            ),
+            (
+                Some("Remove Pitboard with Homebrew"),
+                Some(
+                    "Its saved sign-ins and settings are deleted. Homebrew installed the app, and \
+                     removes it with brew uninstall --cask pitboard-app."
+                )
+            )
+        );
+        assert_eq!(
+            mac.homebrew_help,
+            Some(SetupLink {
+                title: "Learn More".into(),
+                link: "https://docs.usepitboard.com/install/remove#remove-pitboard-itself".into()
+            })
+        );
+        let page = include_str!("../../../../docs/install/remove.mdx");
+        assert!(
+            page.contains("\n## Remove Pitboard itself\n"),
+            "the anchor is a heading"
+        );
+        assert!(page.contains("`brew uninstall --cask pitboard-app`"));
+        assert_eq!(
+            (
+                windows.move_to_trash,
+                windows.remove_with_homebrew,
+                windows.homebrew_help
+            ),
+            (None, None, None),
+            "Windows' installer removes the app"
+        );
     }
 
     // Plan 4.3 and 4.9: what the inspector and an expanded row label an account's values.

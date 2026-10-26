@@ -3349,34 +3349,25 @@ fn tools_and_missing(sheet: &crate::present::SheetText) -> (Vec<&str>, Vec<&str>
     (codes, missing)
 }
 
-// Offered and refused once Sign In was pressed, a tool Pitboard could not find failed late.
+// Plan 4.4: the tools found, so a picker shows only with two; a Codex account added before
+// gives no Codex CLI to sign in with.
 #[test]
-fn every_tool_is_offered_and_one_not_found_says_how_to_get_it() {
+fn only_the_tools_found_are_offered() {
     let codex_known = adding(
         vec![claude_code()],
         vec![account(Some("work")).of("codex").signed_in().build()],
     )
     .sheet_text
     .expect("the sheet");
-    assert_eq!(
-        tools_and_missing(&codex_known),
-        (vec!["claude", "codex", "desktop"], vec!["codex", "desktop"])
-    );
+    assert_eq!(tools_and_missing(&codex_known), (vec!["claude"], vec![]));
     assert_eq!(codex_known.tool, "claude");
-    assert_eq!(
-        codex_known.tools[1].missing,
-        words::missing(Os::MacOs, "codex")
-    );
-    assert_eq!(
-        codex_known.tools[1].message,
-        words::sign_in_message("Codex", None)
-    );
 
     let codex_only = adding(vec![codex()], Vec::new())
         .sheet_text
         .expect("the sheet");
     assert_eq!(codex_only.tool, "codex", "the first tool found");
-    assert_eq!(codex_only.message, codex_only.tools[1].message);
+    assert_eq!(tools_and_missing(&codex_only), (vec!["codex"], vec![]));
+    assert_eq!(codex_only.message, words::sign_in_message("Codex", None));
 }
 
 // Nothing found leaves nothing to sign in with, which each tool says.
@@ -3386,13 +3377,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
         .sheet_text
         .expect("the sheet");
     assert_eq!(sheet.tool, "claude");
-    assert_eq!(
-        tools_and_missing(&sheet),
-        (
-            vec!["claude", "codex", "desktop"],
-            vec!["claude", "codex", "desktop"]
-        )
-    );
+    assert_eq!(tools_and_missing(&sheet), (vec!["claude"], vec!["claude"]));
     assert_eq!(
         sheet.tools[0].missing.as_ref().map(|m| m.link.as_str()),
         Some("https://docs.claude.com/en/docs/claude-code/setup")
@@ -3418,7 +3403,7 @@ fn what_is_installed_is_asked_once() {
     model.send(present_sheet(Sheet::Add { provider: None }));
     model.run(&mut machine);
     let sheet = model.on_a_mac().sheet_text.expect("the sheet");
-    assert_eq!(tools_and_missing(&sheet).1, ["desktop"]);
+    assert_eq!(tools_and_missing(&sheet).0, ["claude", "codex"]);
 }
 
 /// The sheet offers what the answer found once it is in. The asking is signing.rs's.
@@ -3430,14 +3415,14 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     machine.found = vec![claude_code(), codex()];
     model.send(present_sheet(Sheet::Add { provider: None }));
     assert_eq!(
-        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).1,
-        ["codex", "desktop"],
+        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).0,
+        ["claude"],
         "what was found before"
     );
     model.run(&mut machine);
     assert_eq!(
-        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).1,
-        ["desktop"]
+        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).0,
+        ["claude", "codex"]
     );
 }
 
@@ -3594,7 +3579,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     let text = model.shown().signing_in_text.expect("what it says");
     assert_eq!(text.title, words::signing_in_to(OS, "Claude Code"));
     assert!(text.offers_link, "a browser sign-in offers its page");
-    assert_eq!(text.message, words::finish_in_browser(None, "Claude Code"));
+    assert_eq!(text.message, words::finish_in_browser(None));
     assert_eq!(text.code_note, words::code_note("Claude Code"));
     assert_eq!(text.refused, None);
 

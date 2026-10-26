@@ -72,7 +72,7 @@ internal static class Items
         new(Id: provider, Heading: heading, Accounts: accounts);
 
     public static SheetTool Tool(string code, string name, Missing? missing = null) =>
-        new(Code: code, Name: name, Message: $"Pitboard opens {name}’s own sign-in in your browser.", Confirm: "Sign in", Missing: missing);
+        new(Code: code, Name: name, Message: $"Pitboard opens {name}’s own sign-in in your browser.", Confirm: "Sign in", Missing: missing, Steps: []);
 
     public static Missing CodexCliMissing() =>
         new(
@@ -96,11 +96,11 @@ internal static class Items
     public static SigningInText SigningIn(string tool) =>
         new(
             Title: $"Signing in to {tool}",
-            Message: $"Finish signing in in your browser. This closes once {tool} says you’re in.",
+            Message: "Finish signing in in your browser.",
             CodeNote: $"{tool} takes the code shown after you sign in, whether or not your browser came back to it.",
             Refused: null, Waiting: "Waiting for your browser", OffersLink: true,
             Cancel: new Choice("Cancel", new Intent.CancelSignIn(), Enabled: true), EscapeCancels: true, Undo: null,
-            Announce: null);
+            Announce: null, Steps: []);
 
     // `found`: what the look said the file holds, none while it looks.
     public static StowText Stow(string? found = null) =>

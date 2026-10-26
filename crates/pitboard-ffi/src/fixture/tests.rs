@@ -860,7 +860,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
         snapshot
             .signing_in_text
             .as_ref()
-            .is_some_and(|text| text.message == words::in_app_waiting("Claude", None, None, true))
+            .is_some_and(|text| text.steps == words::in_app_steps("Claude", None, true))
     });
     let text = waiting.signing_in_text.expect("the page");
     assert_eq!(text.waiting, words::waiting_to_quit("Claude"));
@@ -905,10 +905,8 @@ fn an_add_left_halfway_is_put_back_by_use() {
             .is_some_and(|text| text.undo.is_some())
     });
     let text = waiting.signing_in_text.expect("the page");
-    assert_eq!(
-        text.message,
-        words::in_app_waiting("Claude", None, None, false)
-    );
+    assert_eq!(text.message, words::in_app_note("Claude", None));
+    assert_eq!(text.steps, words::in_app_steps("Claude", None, false));
     assert_eq!(text.cancel.title, words::LATER);
     assert!(!text.escape_cancels);
     model.send(Intent::CancelSignIn);

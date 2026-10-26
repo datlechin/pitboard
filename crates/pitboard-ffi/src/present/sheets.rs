@@ -110,8 +110,9 @@ fn nothing_to_park(seen: &Seen, provider: &str) -> bool {
         || seen.state.refused_by(provider) == Some("live_credential_absent")
 }
 
-// The message and the default button of the form for a tool that signs in inside its app.
-fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
+// The message, the default button and the steps of the form for a tool that signs in inside
+// its app.
+fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String, Vec<String>) {
     let app = seen.program_of(provider);
     let park = seen
         .in_use_of(provider)
@@ -127,23 +128,25 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
         .accounts()
         .iter()
         .any(|account| account.provider == provider);
+    let signs_in = |again: Option<&str>| {
+        (
+            park.map(|work| words::signs_out_first(app, work, again))
+                .unwrap_or_default(),
+            words::CONTINUE.into(),
+            words::in_app_steps(app, again, false),
+        )
+    };
     match sheet {
-        Sheet::SignInAgain { label, .. } if current => {
-            (words::add_shown(app, label), words::add_as(label))
-        }
-        Sheet::SignInAgain { label, .. } => match park {
-            Some(work) => (
-                words::sign_out_to_sign_in_again(app, label, work),
-                words::CONTINUE.into(),
-            ),
-            None => (
-                words::wait_to_sign_in_again(app, label),
-                words::start_sign_in(seen.os),
-            ),
-        },
+        Sheet::SignInAgain { label, .. } if current => (
+            words::add_shown(app, label),
+            words::add_as(label),
+            Vec::new(),
+        ),
+        Sheet::SignInAgain { label, .. } => signs_in(Some(label)),
         _ if current && first => (
             words::add_shown_first(app),
             words::add_account(seen.os, false),
+            Vec::new(),
         ),
         _ if current => (
             match awaiting {
@@ -151,16 +154,14 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String) {
                 None => words::add_unidentified(app),
             },
             words::add_account_shown(seen.os, app, false),
+            Vec::new(),
         ),
-        _ => match park {
-            Some(work) => (words::sign_out_to_add(app, work), words::CONTINUE.into()),
-            None => (words::wait_to_add(app), words::start_sign_in(seen.os)),
-        },
+        _ => signs_in(None),
     }
 }
 
-// What a sign-in sheet says, and its button, with `tool` picked.
-fn form_words(seen: &Seen, sheet: &Sheet, tool: &str) -> (String, String) {
+// What a sign-in sheet says, its button and its steps, with `tool` picked.
+fn form_words(seen: &Seen, sheet: &Sheet, tool: &str) -> (String, String, Vec<String>) {
     if in_its_app(tool) {
         return in_app_form(seen, sheet, tool);
     }
@@ -171,17 +172,19 @@ fn form_words(seen: &Seen, sheet: &Sheet, tool: &str) -> (String, String) {
     (
         words::sign_in_message(&seen.tool_name(tool), again),
         words::sign_in_asking(seen.os),
+        Vec::new(),
     )
 }
 
 fn sheet_tool(seen: &Seen, sheet: &Sheet, tool: &Tool) -> SheetTool {
-    let (message, confirm) = form_words(seen, sheet, &tool.code);
+    let (message, confirm, steps) = form_words(seen, sheet, &tool.code);
     SheetTool {
         code: tool.code.clone(),
         name: tool.name.clone(),
         message,
         confirm,
         missing: missing(seen, &tool.code),
+        steps,
     }
 }
 
@@ -201,11 +204,14 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
     let progress = progress(seen);
     let text = match sheet {
         Sheet::Add { .. } => {
-            let (message, confirm) = form_words(seen, sheet, &tool);
+            let (message, confirm, _) = form_words(seen, sheet, &tool);
             SheetText {
                 title: words::add_account(seen.os, false),
                 message,
                 tools: (seen.tools.iter())
+                    .filter(|offered| {
+                        offered.code == tool || missing(seen, &offered.code).is_none()
+                    })
                     .map(|offered| sheet_tool(seen, sheet, offered))
                     .collect(),
                 tool,
@@ -218,7 +224,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
             }
         }
         Sheet::SignInAgain { label, .. } => {
-            let (message, confirm) = form_words(seen, sheet, &tool);
+            let (message, confirm, _) = form_words(seen, sheet, &tool);
             SheetText {
                 title: words::sign_in_to_again(seen.os, label, false),
                 message,
@@ -311,8 +317,9 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         escape_cancels: true,
         undo: None,
         announce: None,
+        steps: Vec::new(),
         title: words::signing_in_to(seen.os, &tool),
-        message: words::finish_in_browser(signing.again.as_deref(), &tool),
+        message: words::finish_in_browser(signing.again.as_deref()),
         code_note: words::code_note(&tool),
         refused: signing.code_refused().then(|| words::code_refused(&tool)),
     })
@@ -334,12 +341,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         }
     } else {
         (
-            words::in_app_waiting(
-                app,
-                signing.again.as_deref(),
-                signing.step,
-                signing.opened_for_it,
-            ),
+            words::in_app_note(app, signing.step),
             words::waiting_to_quit(app),
         )
     };
@@ -378,6 +380,11 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
             enabled: seen.state.switch_under_way().is_none(),
         }),
         announce,
+        steps: words::in_app_steps(
+            app,
+            signing.again.as_deref(),
+            signing.started && signing.opened_for_it,
+        ),
     }
 }
 
@@ -678,37 +685,79 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 ("claude", sign_in.clone()),
-                ("codex", sign_in.clone()),
                 ("desktop", words::CONTINUE.into())
             ]
         );
         assert_eq!(text.confirm, sign_in, "it starts on Claude Code");
     }
 
+    // Plan 4.4: the picker shows only with two tools found, and a tool not found says how to
+    // install it where the sheet starts on it.
+    #[test]
+    fn the_add_sheet_offers_the_tools_found() {
+        let offered = |found: Vec<Tool>, sheet: Sheet| {
+            let mut state = read(status(Vec::new(), Vec::new()), found);
+            let text = form_of(&mut state, sheet);
+            (text.tools.into_iter())
+                .map(|tool| (tool.code, tool.missing.is_some()))
+                .collect::<Vec<_>>()
+        };
+        let add = Sheet::Add { provider: None };
+        assert_eq!(
+            offered(vec![claude_code()], add.clone()),
+            [("claude".into(), false)]
+        );
+        assert_eq!(
+            offered(vec![claude_code(), claude_desktop()], add.clone()),
+            [("claude".into(), false), ("desktop".into(), false)]
+        );
+        assert_eq!(
+            offered(Vec::new(), add),
+            [("claude".into(), true)],
+            "nothing found: Claude Code, and how to install it"
+        );
+        assert_eq!(
+            offered(
+                vec![claude_code()],
+                Sheet::Add {
+                    provider: Some("codex".into())
+                }
+            ),
+            [("claude".into(), false), ("codex".into(), true)],
+            "asked for by name"
+        );
+    }
+
     #[test]
     fn the_add_sheet_for_claude_desktop_says_what_it_does_in_each_case() {
         let case = |accounts: Vec<Account>, warnings: Vec<crate::Warning>| {
             let text = form(add_desktop(), accounts, warnings);
-            (text.message, text.confirm)
+            let steps = (text.tools.iter())
+                .find(|tool| tool.code == "desktop")
+                .map(|tool| tool.steps.clone())
+                .unwrap_or_default();
+            (text.message, text.confirm, steps)
         };
         assert_eq!(
             case(Vec::new(), Vec::new()),
             (
                 words::add_shown_first("Claude"),
-                words::add_account(Os::MacOs, false)
+                words::add_account(Os::MacOs, false),
+                Vec::new()
             )
         );
+        // Plan 4.4: three short steps with Continue, in place of a paragraph.
+        let steps = words::in_app_steps("Claude", None, false);
+        assert_eq!(steps.len(), 3);
         assert_eq!(
             case(work_and_home(), Vec::new()),
             (
-                words::sign_out_to_add("Claude", "work"),
-                words::CONTINUE.into()
+                words::signs_out_first("Claude", "work", None),
+                words::CONTINUE.into(),
+                steps.clone()
             )
         );
-        let signed_out = (
-            words::wait_to_add("Claude"),
-            words::start_sign_in(Os::MacOs),
-        );
+        let signed_out = (String::new(), words::CONTINUE.into(), steps);
         assert_eq!(
             case(
                 vec![
@@ -732,6 +781,7 @@ mod tests {
         let doubt = (
             words::add_unidentified("Claude"),
             words::add_account_shown(Os::MacOs, "Claude", false),
+            Vec::new(),
         );
         for code in ["in_use_unconfirmed", "move_waiting"] {
             assert_eq!(
@@ -757,6 +807,7 @@ mod tests {
                 words::add_account_shown(Os::MacOs, "Claude", false),
             )
         );
+        assert!(text.tools.iter().all(|tool| tool.steps.is_empty()));
     }
 
     #[test]
@@ -769,10 +820,7 @@ mod tests {
             status(work_and_home(), warned),
             vec![claude_code(), claude_desktop()],
         );
-        assert_eq!(
-            form_of(&mut state, add_desktop()).confirm,
-            words::start_sign_in(Os::MacOs)
-        );
+        assert_eq!(form_of(&mut state, add_desktop()).confirm, words::CONTINUE);
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
             &seen,

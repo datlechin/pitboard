@@ -159,6 +159,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   at most one line about what needs doing, under the notices and the tip, which no longer sit
   among the accounts.
 - The macOS menu's items carry no symbols or tooltips, and the checkmark is its only mark.
+- The app's **Add Account** offers only the tools Pitboard found, and where it found none, says
+  how to install Claude Code.
+- The app's sheet says one sentence while you finish signing in in your browser.
+- Adding or signing in again to a Claude Desktop account lists what to do in three steps, with
+  **Continue**, where the app said it in a paragraph.
 
 ### Removed
 

@@ -67,7 +67,7 @@ pub use present::{
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
     already_there, app_words, install_update, links_to, named_version, path_too_long,
-    ready_to_install, webview_runtime_too_old,
+    ready_to_install, trash_says, webview_runtime_too_old,
 };
 
 mod account_windows;

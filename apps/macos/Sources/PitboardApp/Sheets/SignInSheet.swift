@@ -90,6 +90,7 @@ struct SignInSheet: View {
                         .controlSize(.small)
                 }
             }
+            Steps(steps: chosen?.steps ?? [])
             if let missing = chosen?.missing {
                 ToolMissing(missing: missing)
             }
@@ -134,6 +135,7 @@ struct SignInSheet: View {
     private func progress(_ signingIn: RunningSignIn, _ text: SigningInText) -> some View {
         let page = signingIn.url.flatMap(URL.init(string:))
         return SheetLayout(title: text.title, message: text.message) {
+            Steps(steps: text.steps)
             if text.offersLink {
                 Section {
                     LabeledContent("Sign-In Page") {
@@ -207,6 +209,26 @@ struct SignInSheet: View {
         guard !code.isEmpty else { return }
         model.send(.pasteCode(code: code))
         code = ""
+    }
+}
+
+// A sign-in inside the tool's own app, a numbered line each.
+private struct Steps: View {
+    let steps: [String]
+
+    var body: some View {
+        if !steps.isEmpty {
+            Section {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    Label {
+                        Text(step)
+                    } icon: {
+                        Text("\(index + 1).").monospacedDigit()
+                    }
+                }
+            }
+            .accessibilityIdentifier("sheet.steps")
+        }
     }
 }
 

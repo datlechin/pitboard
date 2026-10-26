@@ -49,7 +49,7 @@ pub(crate) mod testing;
 pub use app_words::{
     AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
     already_there, app_words, install_update, links_to, named_version, path_too_long,
-    ready_to_install, webview_runtime_too_old,
+    ready_to_install, trash_says, webview_runtime_too_old,
 };
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
@@ -576,8 +576,9 @@ pub struct SheetText {
     pub title: String,
     /// What the sheet is for, about the tool it starts on.
     pub message: String,
-    // Every tool Pitboard handles here for a new account, and the account's own for signing
-    // in again: a picker shows them where there is more than one.
+    // The tools Pitboard found here for a new account, the one it starts on whether found or
+    // not, and the account's own for signing in again: a picker shows them where there is
+    // more than one.
     pub tools: Vec<SheetTool>,
     /// The tool it starts on, as a `Tool`'s code.
     pub tool: String,
@@ -628,6 +629,8 @@ pub struct SheetTool {
     pub confirm: String,
     // where Pitboard did not find it, so nothing can sign in to it here
     pub missing: Option<Missing>,
+    // what a sign-in inside the tool's own app asks of the person, a short sentence each
+    pub steps: Vec<String>,
 }
 
 /// A tool Pitboard did not find: what it needs, and where to read how to get it.
@@ -667,6 +670,8 @@ pub struct SigningInText {
     pub undo: Option<Choice>,
     // said aloud as it appears: a step that asks for the sign-in again
     pub announce: Option<String>,
+    // what a sign-in inside its app asks of the person, a short sentence each
+    pub steps: Vec<String>,
 }
 
 /// What every part of a snapshot is worked out from.
