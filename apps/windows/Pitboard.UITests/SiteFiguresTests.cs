@@ -134,11 +134,9 @@ public sealed partial class SiteFiguresTests
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
         var row = launched.Row("claude/personal");
-        var toggle = Launched.Within(row, found => found.ByAutomationId("ExpanderToggleButton"), "personal's toggle");
         RequireForeground(window);
 
-        toggle.Focus();
-        Until(() => FocusedId(launched) == "ExpanderToggleButton");
+        Launched.FocusToggle(row);
         var focused = Focused(launched);
         Press(VirtualKeyShort.DELETE);
         Launched.Within(launched.Element("question"), found => found.ByAutomationId("PrimaryButton"), "the dialog's Remove");

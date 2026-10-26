@@ -117,6 +117,7 @@ public sealed class SettingsTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "warmUp");
         launched.OpenWindow();
+        Launched.Expand(launched.Row("claude/personal"));
         Assert.IsTrue(Says(launched, Words.WarmsUpAgain, TimeSpan.FromSeconds(30)), "personal is not warmed up");
 
         launched.Select("SettingsItem");

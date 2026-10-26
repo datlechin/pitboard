@@ -151,12 +151,14 @@ public sealed partial class LifecycleTests
         Assert.IsFalse(launched.Process.WaitForExit(TimeSpan.FromSeconds(3)), "Pitboard quit with its window");
     }
 
-    // empty's page starts with its command bar's buttons, accounts.refresh and accounts.add.
+    // empty's page starts with its command bar's buttons, accounts.refresh and accounts.add. Its tip goes first: WinUI's
+    // TeachingTip takes F6 to its close button while it is open.
     [TestMethod]
     public void F6MovesFocusBetweenThePaneAndThePage()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = launched.Window("Pitboard");
+        launched.DeclineTip(Words.UseWithCodex);
         Foreground.Require(window);
         window.FindFirstDescendant(found => found.ByAutomationId("pane.accounts"))!.Focus();
         string Focused() => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "";
