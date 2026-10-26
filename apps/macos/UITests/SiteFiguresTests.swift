@@ -730,8 +730,10 @@ final class SiteFiguresTests: FixtureTestCase {
         var found: [String] = []
         func walk(_ node: any XCUIElementSnapshot, inSelected: Bool) {
             let inSelected = inSelected || (node.elementType == .outlineRow && node.isSelected)
+            // A row's controls, account.action and the rest, are inside its own identifier.
             if inSelected, node.identifier.hasPrefix("account.") {
                 found.append(String(node.identifier.dropFirst("account.".count)))
+                return
             }
             for child in node.children { walk(child, inSelected: inSelected) }
         }
