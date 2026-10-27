@@ -164,7 +164,7 @@ public sealed class AccountsWindowTests
 
         Launched.FocusToggle(personal);
         Keyboard.Type(VirtualKeyShort.ENTER);
-        Launched.Within(personal, found => found.ByAutomationId("account.inUse"), "personal in use");
+        Assert.IsTrue(Becomes(() => launched.InUse("claude/personal")), $"personal is not in use: {launched.Shown()}");
     }
 
     // The other tests ask for a row's menu through UI Automation.

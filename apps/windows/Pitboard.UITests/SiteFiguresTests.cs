@@ -201,13 +201,13 @@ public sealed partial class SiteFiguresTests
         var watch = Stopwatch.StartNew();
         use.Invoke();
         var invoked = watch.ElapsedMilliseconds;
-        while (watch.Elapsed < Shortly && !InUse(launched))
+        while (watch.Elapsed < Shortly && !launched.InUse("claude/personal"))
         {
             switching |= launched.Row("claude/personal").FindFirstDescendant(found => found.ByAutomationId("account.switching")) is not null;
         }
 
         var switched = watch.ElapsedMilliseconds;
-        var inUse = InUse(launched);
+        var inUse = launched.InUse("claude/personal");
         var refresh = launched.Element("accounts.refresh");
         var dimmed = false;
         watch.Restart();
@@ -366,18 +366,6 @@ public sealed partial class SiteFiguresTests
         Assert.AreEqual(work.Right - 12, notifications.Right, "the notifications' card from the right");
         Assert.AreEqual(336, notifications.Width);
         Assert.AreEqual((work.Right - 12, work.Bottom - 12, 336, 100), (dated.Right, dated.Bottom, dated.Width, dated.Height), "the date's card");
-    }
-
-    private static bool InUse(Launched launched)
-    {
-        try
-        {
-            return launched.Row("claude/personal").FindFirstDescendant(found => found.ByAutomationId("account.inUse")) is not null;
-        }
-        catch (Exception gone) when (gone is InvalidOperationException or COMException)
-        {
-            return false;
-        }
     }
 
     // The menu lists the accounts once the model has read them, a moment after Pitboard starts, and one opened sooner

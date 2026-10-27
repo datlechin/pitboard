@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Text;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Conditions;
@@ -203,6 +204,19 @@ internal sealed class Launched : IDisposable
         ?? throw new AssertFailedException($"no {what} in {scope.Name} within {Shortly}: {Listed(scope)}");
 
     public AutomationElement Row(string qualified) => Find(found => found.ByAutomationId($"account.{qualified}"), $"row {qualified}");
+
+    // Found again each time: the account in use is listed first, so a switch makes its row again where it moves to.
+    public bool InUse(string qualified)
+    {
+        try
+        {
+            return Row(qualified).FindFirstDescendant(found => found.ByAutomationId("account.inUse")) is not null;
+        }
+        catch (Exception gone) when (gone is InvalidOperationException or COMException)
+        {
+            return false;
+        }
+    }
 
     public AutomationElement Named(string name) => Find(found => found.ByName(name), $"'{name}'");
 
