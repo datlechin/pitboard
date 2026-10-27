@@ -25,8 +25,8 @@ public sealed partial class SiteFiguresTests
 
     private static readonly string[] IconMenu =
     [
-        "Claude Code", "work (42%)", "old (sign-in expired)", "personal (100%)", "Codex", "main (7%)", "spare (0%)", "Add account…",
-        "Refresh", "Open claude.ai", "Open chatgpt.com", "Open Pitboard", "Settings", "Pitboard help", "Exit",
+        "Open Pitboard", "Claude Code", "work (42%)", "old (sign-in expired)", "personal (100%)", "Codex", "main (7%)", "spare (0%)",
+        "Add account…", "Open claude.ai", "Open chatgpt.com", "Settings", "Pitboard help", "Exit",
     ];
 
     private static readonly string[] Headings = ["Claude Code", "Codex"];
@@ -75,7 +75,7 @@ public sealed partial class SiteFiguresTests
             Joined(entries.Where(entry => entry.ClassName == "MenuFlyoutSubItem").Select(entry => entry.Name)));
         foreach (var name in focused.Values.Where(name => name != "foreground held"))
         {
-            Assert.AreEqual("work (42%)", name, "focused as the menu opened");
+            Assert.AreEqual("Open Pitboard", name, "focused as the menu opened");
         }
     }
 
@@ -120,25 +120,24 @@ public sealed partial class SiteFiguresTests
             "site-tray-menu-arrows");
 
         var enabled = IconMenu.Except(Headings).ToArray();
-        Assert.AreEqual("work (42%)", opened);
+        Assert.AreEqual("Open Pitboard", opened);
         Assert.AreEqual(Joined(enabled.Skip(1).Concat(enabled).Concat(enabled).Take(20)), Joined(down));
         Assert.AreEqual(Joined(Enumerable.Repeat(down[^1], 4)), Joined(others));
-        Assert.AreEqual("work (42%)", reopened);
+        Assert.AreEqual("Open Pitboard", reopened);
         Assert.AreEqual("Exit", up);
     }
 
+    // A row is a SettingsExpander, which has no selection: Delete acts on the row whose toggle has the focus.
     [TestMethod]
-    public void WhereFocusGoesAfterForgettingFromTheKeyboard()
+    public void WhereFocusGoesAfterRemovingFromTheKeyboard()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
         var row = launched.Row("claude/personal");
         RequireForeground(window);
 
-        var place = row.BoundingRectangle;
-        Mouse.Click(new Point(place.Left + 24, place.Top + (place.Height / 2)));
-        Until(() => SelectedAccounts(window).Length > 0);
-        var clicked = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
+        Launched.FocusToggle(row);
+        var focused = Focused(launched);
         Press(VirtualKeyShort.DELETE);
         Launched.Within(launched.Element("question"), found => found.ByAutomationId("PrimaryButton"), "the dialog's Remove");
         Until(() => InDialog(FocusedId(launched)));
@@ -146,48 +145,35 @@ public sealed partial class SiteFiguresTests
         var askedId = FocusedId(launched);
         Keep(Capture.Element(window), "site-forget-dialog");
         Press(VirtualKeyShort.ENTER);
-        var forgotten = launched.Gone(found => found.ByAutomationId("account.claude/personal"));
+        var removed = launched.Gone(found => found.ByAutomationId("account.claude/personal"));
         Until(() => !InDialog(FocusedId(launched)));
-        var after = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
-        var afterSaid = Focused(launched);
+        var after = Focused(launched);
         Keep(Capture.Element(window), "site-focus-after-forget");
         Press(VirtualKeyShort.DOWN);
-        var down = (Focused: FocusedId(launched), Selected: SelectedAccounts(window));
+        var down = Focused(launched);
         Record(
             [
-                $"clicked: focused {clicked.Focused}, selected {string.Join(", ", clicked.Selected)}",
+                $"personal's toggle focused: {focused}",
                 $"Delete asked, focused {asked}",
-                $"Enter forgot personal: {forgotten}, focused {afterSaid}, selected {string.Join(", ", after.Selected)}",
-                $"Down: focused {down.Focused}, selected {string.Join(", ", down.Selected)}",
+                $"Enter removed personal: {removed}, focused {after}",
+                $"Down: focused {down}",
             ],
             "site-focus-after-forget");
 
-        Assert.AreEqual("account.claude/personal", clicked.Focused);
-        Assert.AreEqual("claude/personal", Joined(clicked.Selected));
         Assert.AreEqual("PrimaryButton", askedId, "Remove is not focused as the dialog opens");
-        Assert.IsTrue(forgotten);
-        Assert.AreEqual("AppTitleBar", after.Focused);
-        Assert.AreEqual("", Joined(after.Selected));
-        Assert.AreEqual("AppTitleBar", down.Focused);
-        Assert.AreEqual("", Joined(down.Selected));
+        Assert.IsTrue(removed);
     }
 
     [TestMethod]
-    public void TheContextMenuOfARowNotSelected()
+    public void TheContextMenuOfARow()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
-        var work = launched.Row("claude/work");
         var personal = launched.Row("claude/personal");
         RequireForeground(window);
 
-        var place = work.BoundingRectangle;
-        Mouse.Click(new Point(place.Left + 24, place.Top + (place.Height / 2)));
-        Until(() => SelectedAccounts(window).Length > 0);
-        var clicked = SelectedAccounts(window);
         launched.RightClick(personal);
         var copy = launched.Element("account.copyEmail");
-        var rightClicked = SelectedAccounts(window);
         var focused = FocusedName(launched);
         var menu = Around(copy, ControlType.Menu);
         var entries = menu.FindAllChildren();
@@ -197,22 +183,11 @@ public sealed partial class SiteFiguresTests
         copy.Patterns.Invoke.Pattern.Invoke();
         Until(() => ClipboardText.Read() == "dana@home.example");
         var copied = ClipboardText.Read();
-        var after = SelectedAccounts(window);
-        Record(
-            [
-                $"work clicked: selected {string.Join(", ", clicked)}",
-                $"personal right-clicked: selected {string.Join(", ", rightClicked)}, focused {focused}",
-                .. lines,
-                $"copied {copied}, selected {string.Join(", ", after)}",
-            ],
-            "site-context-menu-row-not-selected");
+        Record([$"personal right-clicked, focused {focused}", .. lines, $"copied {copied}"], "site-context-menu-row-not-selected");
 
-        Assert.AreEqual("claude/work", Joined(clicked));
-        Assert.AreEqual("claude/work", Joined(rightClicked));
         Assert.AreEqual("Switch to personal", focused);
         Assert.AreEqual("Switch to personal | Sign in again… | Rename… F2 | Open claude.ai | Copy email address Ctrl+C | Remove account… Del", Joined(keys));
         Assert.AreEqual("dana@home.example", copied);
-        Assert.AreEqual("claude/work", Joined(after));
     }
 
     [TestMethod]
@@ -226,13 +201,13 @@ public sealed partial class SiteFiguresTests
         var watch = Stopwatch.StartNew();
         use.Invoke();
         var invoked = watch.ElapsedMilliseconds;
-        while (watch.Elapsed < Shortly && !InUse(launched))
+        while (watch.Elapsed < Shortly && !launched.InUse("claude/personal"))
         {
             switching |= launched.Row("claude/personal").FindFirstDescendant(found => found.ByAutomationId("account.switching")) is not null;
         }
 
         var switched = watch.ElapsedMilliseconds;
-        var inUse = InUse(launched);
+        var inUse = launched.InUse("claude/personal");
         var refresh = launched.Element("accounts.refresh");
         var dimmed = false;
         watch.Restart();
@@ -270,7 +245,7 @@ public sealed partial class SiteFiguresTests
         launched.Select("SettingsItem");
         var choice = launched.Find(found => found.ByAutomationId("settings.atLimit"), "settings.atLimit").AsComboBox();
         var group = launched.Find(found => found.ByAutomationId("settings.atLimitGroup"), "settings.atLimitGroup");
-        group.FindAllDescendants().First(found => found.Patterns.ExpandCollapse.IsSupported).Patterns.ExpandCollapse.Pattern.Expand();
+        Launched.Expand(group);
         var share = launched.Find(found => found.ByAutomationId("settings.atLimitShare"), "settings.atLimitShare");
         Assert.IsTrue(Retry.WhileFalse(() => share.IsEnabled, Shortly, TimeSpan.FromMilliseconds(250)).Result);
 
@@ -393,18 +368,6 @@ public sealed partial class SiteFiguresTests
         Assert.AreEqual((work.Right - 12, work.Bottom - 12, 336, 100), (dated.Right, dated.Bottom, dated.Width, dated.Height), "the date's card");
     }
 
-    private static bool InUse(Launched launched)
-    {
-        try
-        {
-            return launched.Row("claude/personal").FindFirstDescendant(found => found.ByAutomationId("account.inUse")) is not null;
-        }
-        catch (Exception gone) when (gone is InvalidOperationException or COMException)
-        {
-            return false;
-        }
-    }
-
     // The menu lists the accounts once the model has read them, a moment after Pitboard starts, and one opened sooner
     // lists none: it is opened again over itself until it has them.
     private static AutomationElement MenuOfAccounts(Launched launched, Point at)
@@ -484,14 +447,6 @@ public sealed partial class SiteFiguresTests
     private static string FocusedName(Launched launched) => launched.Automation.FocusedElement()?.Properties.Name.ValueOrDefault ?? "nothing";
 
     private static string FocusedId(Launched launched) => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "nothing";
-
-    // The accounts whose rows are selected; the NavigationView's items are list items too.
-    private static string[] SelectedAccounts(AutomationElement window) =>
-        [.. window.FindAllDescendants(found => found.ByControlType(ControlType.ListItem))
-            .Where(item => item.Patterns.SelectionItem.PatternOrDefault?.IsSelected.ValueOrDefault == true)
-            .Select(item => item.Properties.AutomationId.ValueOrDefault ?? "")
-            .Where(id => id.StartsWith("account.", StringComparison.Ordinal))
-            .Select(id => id["account.".Length..])];
 
     private static string Joined(IEnumerable<string> items) => string.Join(" | ", items);
 

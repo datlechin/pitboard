@@ -3,24 +3,38 @@ using Pitboard.Core;
 
 namespace Pitboard.Windows;
 
-// The step of the limit the menu bar names, and whether its menu opens on something to look at.
+// The step of the limit the menu bar names, and whether something needs attention.
 public readonly record struct IconLook(UsageLevel? Level, bool Attention);
 
-// The icon's image at the size the notification area draws it at, which Explorer would stretch from another.
+// Where the notification area draws the icon: at its size, and on a light taskbar or a dark one.
+public readonly record struct IconPlace(int Size, bool LightTaskbar)
+{
+    // Windows' mode colours the taskbar, light where it says nothing as PowerToys reads it, and under a contrast theme the
+    // icon takes the theme's text colour, as EarTrumpet's does: dark text is a light taskbar's.
+    public static bool Light(int? systemUsesLightTheme, uint? contrastText) =>
+        contrastText is { } text ? Luminance(text) < 128 : systemUsesLightTheme is not 0;
+
+    // A COLORREF is 0x00BBGGRR.
+    private static int Luminance(uint color) =>
+        (int)(((color & 0xFF) * 2126) + (((color >> 8) & 0xFF) * 7152) + (((color >> 16) & 0xFF) * 722)) / 10000;
+}
+
+// The icon's image at the size the notification area draws it at, which Explorer would stretch from another, in the ink
+// of its taskbar's theme.
 public sealed class IconImage
 {
-    private readonly Func<int> _size;
-    private readonly Func<int, IconLook, nint> _load;
+    private readonly Func<IconPlace> _place;
+    private readonly Func<IconPlace, IconLook, nint> _load;
     private readonly Action<nint> _destroy;
-    private int _loaded;
+    private IconPlace _loaded;
     private IconLook _look;
 
-    public IconImage(Func<int> size, Func<int, IconLook, nint> load, Action<nint> destroy)
+    public IconImage(Func<IconPlace> place, Func<IconPlace, IconLook, nint> load, Action<nint> destroy)
     {
-        _size = size;
+        _place = place;
         _load = load;
         _destroy = destroy;
-        _loaded = size();
+        _loaded = place();
         Handle = load(_loaded, _look);
     }
 
@@ -33,17 +47,17 @@ public sealed class IconImage
     // The image before is destroyed only once the new one is shown in its place.
     private void Change(IconLook look, Action<nint> show)
     {
-        int size;
+        IconPlace place;
         nint loaded;
         try
         {
-            size = _size();
-            if (size == _loaded && look == _look)
+            place = _place();
+            if (place == _loaded && look == _look)
             {
                 return;
             }
 
-            loaded = _load(size, look);
+            loaded = _load(place, look);
         }
         // ThrowOnFailure raises GetDpiForMonitor's E_INVALIDARG as ArgumentException, most other HRESULTs as COMException.
         catch (Exception failed) when (failed is COMException or ArgumentException)
@@ -53,7 +67,7 @@ public sealed class IconImage
 
         var before = Handle;
         Handle = loaded;
-        _loaded = size;
+        _loaded = place;
         _look = look;
         show(Handle);
         _destroy(before);

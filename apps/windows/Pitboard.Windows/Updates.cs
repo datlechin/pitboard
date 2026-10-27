@@ -32,13 +32,6 @@ public interface IUpdates
 
 public sealed class NoUpdates(string? refusal = null) : IUpdates
 {
-    public const string BadKey =
-        "This copy of Pitboard can’t update itself: the update key it was built with isn’t a valid key. "
-        + "Install a later version by hand.";
-
-    public const string NoWinSparkle =
-        "This copy of Pitboard can’t update itself: WinSparkle.dll, which updates it, is missing. Install Pitboard again.";
-
     public event EventHandler? Changed
     {
         add { }

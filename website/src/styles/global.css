@@ -216,6 +216,8 @@
   --color-win-layer-alt: light-dark(#ffffff, rgb(255 255 255 / 0.054));
   --color-win-surface-edge: rgb(117 117 117 / 0.4);
   --color-win-smoke: rgb(0 0 0 / 0.3);
+  /* a TeachingTip's SolidBackgroundFillColorTertiary, edged as a ContentDialog is */
+  --color-win-tip: light-dark(#f9f9f9, #282828);
   --color-win-group-rule: light-dark(rgb(0 0 0 / 0.2), rgb(255 255 255 / 0.2));
   --color-win-success: light-dark(#0f7b0f, #6ccb5f);
   --color-win-caution: light-dark(#9d5d00, #fce100);

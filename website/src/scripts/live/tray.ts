@@ -7,14 +7,7 @@ import { bringForward, help } from "./forward.ts";
 import { INSET, Menu, drawSites } from "./menu.ts";
 import { Tooltips } from "./tooltip.ts";
 import { showAccountWindow } from "./windows.ts";
-import {
-  model,
-  openWindow,
-  quit,
-  refreshFromApp,
-  switchFromApp,
-  type State,
-} from "../../lib/model.ts";
+import { model, openWindow, quit, switchFromApp, type State } from "../../lib/model.ts";
 import {
   SWITCHING,
   hm,
@@ -26,7 +19,6 @@ import {
   shortDate,
   statusLine,
   trayTip,
-  updated,
 } from "../../lib/words.ts";
 import { itemTitle } from "../../data/windows.ts";
 import type { Account, Tool } from "../../data/world.ts";
@@ -57,8 +49,7 @@ class TrayDesk extends LiveFigure {
     });
     this.#tips = new Tooltips({
       desk: this,
-      owners:
-        '[data-moment="after"] [data-tool] [data-account], [data-moment="after"] [data-does="Refresh"]',
+      owners: '[data-moment="after"] [data-tool] [data-account]',
       delay: { pointer: TIP_MS, keyboard: TIP_MS },
     });
     this.#listen();
@@ -154,8 +145,6 @@ class TrayDesk extends LiveFigure {
     switch (chosen.dataset.does) {
       case "Add account…":
         return bringForward("accounts", "windows", "add");
-      case "Refresh":
-        return refreshFromApp("windows");
       case "Open Pitboard":
         return bringForward("accounts", "windows");
       case "Settings":
@@ -188,12 +177,6 @@ class TrayDesk extends LiveFigure {
     const after = this.#menu.el.querySelector('[data-moment="after"]')!;
     for (const group of after.querySelectorAll<HTMLElement>("[data-tool]"))
       this.#accounts(s, group, group.dataset.tool as Tool);
-    attr(
-      after.querySelector('[data-does="Refresh"]'),
-      "aria-disabled",
-      s.reading !== null ? "true" : null,
-    );
-    text(document.getElementById(`${this.id}-tip-refresh`), updated(s.readAt));
     drawSites(this.#menu, s);
     this.#tips.refresh();
   }
@@ -202,12 +185,12 @@ class TrayDesk extends LiveFigure {
     return `${this.id}-tip-${id}`;
   }
 
-  // the line an account's item and tooltip say, and the item's one line: no figure while
-  // something stands in place of its limits (present/words.rs `named_in_menu`)
+  // the line an account's item and tooltip say, and the item's one line: why it can't be switched
+  // to in place of its figure (present/words.rs `named_in_menu`)
   #said(s: State, a: Account) {
     const switching = s.switching?.id === a.id;
     return {
-      title: switching ? a.label : itemTitle(a, s),
+      title: itemTitle(a, s, switching),
       tip: switching ? SWITCHING : menuLine(a, s, "windows"),
     };
   }

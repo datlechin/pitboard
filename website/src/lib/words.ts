@@ -186,12 +186,6 @@ export const menuBarClock = (epoch: number) => {
   return `${weekdays[d.getUTCDay()]} ${d.getUTCDate()} ${months[d.getUTCMonth()]} ${hm(epoch)}`;
 };
 
-// MacLocalTime `date`: the abbreviated month and its day, in the world's en-GB order
-export const dayAndMonth = (epoch: number) => {
-  const d = local(epoch);
-  return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
-};
-
 // the en-GB regional format's "d", under the taskbar's time
 // Windows' calendar flyout's date, in the en-GB format the taskbar's date is in
 const weekdaysLong = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split(" ");
@@ -202,6 +196,13 @@ const monthsLong =
 export const calendarDate = (epoch: number) => {
   const d = local(epoch);
   return `${weekdaysLong[d.getUTCDay()]} ${d.getUTCDate()} ${monthsLong[d.getUTCMonth()]}`;
+};
+
+// MacLocalTime `date` and WindowsLocalTime.cs `Date` in en-GB, the culture's day before its month
+// abbreviated: "9 Nov"
+export const dayAndMonth = (epoch: number) => {
+  const d = local(epoch);
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
 };
 
 export const shortDate = (epoch: number) => {
@@ -502,6 +503,10 @@ export function rowNote(a: Account, w: World): string | null {
     : null;
 }
 
+// An account's one note in the Windows window, its most pressing: what rowLines says but its
+// warm-up, which its details say (present/accounts.rs `notes`).
+export const windowsRowNote = (a: Account, w: World) => rowLines(a, w, null)[0] ?? null;
+
 // The inspector's Sign-In: in use, how long a saved sign-in is valid for, or that it expired
 // (present/accounts.rs `item`'s `sign_in`, present/words.rs `saved_until`).
 export function signInSaid(a: Account, w: World): string | null {
@@ -514,7 +519,8 @@ export function signInSaid(a: Account, w: World): string | null {
     : null;
 }
 
-// present/words.rs `resets_in`, beside the inspector's reset: "in 2 hr 9 min".
+// present/words.rs `resets_in`, beside a limit's reset in the inspector and in an opened row:
+// "in 2 hr 9 min".
 export const resetsIn = (at: number | null, now: number) =>
   at !== null && at > now ? `in ${appSpan(at - now)}` : "";
 

@@ -23,4 +23,9 @@ public sealed record PaneContext(AppModel Model, DialogHost Dialogs, StartAtSign
 
     // Why Windows shows none of a Release build's notifications, which the settings read at each visit.
     public Func<NotificationsBlocked?> Notifications { get; init; } = () => null;
+
+    public Action<Place> Show { get; init; } = _ => { };
+
+    // From one of Settings' own pages to Settings, as the title bar's back button goes.
+    public Action Back { get; init; } = () => { };
 }

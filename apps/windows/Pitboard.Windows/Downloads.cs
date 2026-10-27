@@ -35,7 +35,7 @@ public sealed class Downloads
 
     // Holds WebView2 until it is answered, so nothing is saved before the person says yes. Pitboard may quit meanwhile.
     public async Task Start(
-        string store, CoreWebView2DownloadStartingEventArgs args, bool ask, Func<AlertText, Task<bool>> allow)
+        string store, CoreWebView2DownloadStartingEventArgs args, bool ask, Func<Question, Task<bool>> allow)
     {
         var deferral = args.GetDeferral();
         var operation = args.DownloadOperation;

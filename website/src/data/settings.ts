@@ -22,18 +22,38 @@ export const macGeneral = {
   checkNow: "Check Now",
 };
 
+// SettingsPage.xaml's General, each card with its icon: what starting at sign-in is for, as the
+// welcome says it, automatic checks where the updater runs, and the version beside Check now
 export const winGeneral = {
   section: "General",
   startAtSignIn: "Start when you sign in to Windows",
-  checkFor: "Check for updates",
+  startNote: "Pitboard watches your limits only while it’s running.",
+  checksAutomatically: "Check for updates automatically",
+  version: "Version",
   checkNow: "Check now",
-  // SparkleUpdates.cs `NoFeed`, which a beta says while no full release for Windows is out
+  // app_words.rs `no_release_to_update_to`, which a beta says while no full release for Windows is
+  // out
   noFeed: "No full release of Pitboard for Windows is out yet, so there is no update to check for.",
-  // SettingsViewModel.cs `BetaNote`
+  // app_words.rs `beta_updates`
   betaNote: "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.",
 };
 
-// Versions.cs `Named`
+// SettingsPage.xaml's Advanced: Keep saved sign-ins fresh, where the command line is, and Uninstall
+// Pitboard, which asks first (present/words.rs `uninstall_pitboard`, `UNINSTALL_QUESTION`)
+export const winAdvanced = {
+  section: "Advanced",
+  commandLine: "Command line",
+  uninstall: {
+    title: "Uninstall Pitboard",
+    note: "Deletes Pitboard’s saved sign-ins and settings, and leaves each tool signed in to the account in use.",
+    button: "Uninstall…",
+    question: "Uninstall Pitboard?",
+    says: "Pitboard deletes its saved sign-ins, settings and account windows. Each tool stays signed in to the account in use, and you sign in to the others again to use them.",
+    confirm: "Uninstall",
+  },
+};
+
+// app_words.rs `named_version`
 export const named = (version: string) => (version ? `Pitboard ${version}` : "Pitboard");
 export const isBeta = (version: string) => version.includes("-beta.");
 
@@ -68,6 +88,7 @@ export const macUninstall = {
 export const winAbout = {
   section: "About",
   header: "Pitboard",
+  copyright: "Copyright 2026 the Pitboard authors",
   links: [
     ["usepitboard.com", "https://usepitboard.com"],
     ["Pitboard help", "https://docs.usepitboard.com"],

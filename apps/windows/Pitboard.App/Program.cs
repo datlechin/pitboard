@@ -57,7 +57,7 @@ public static class Program
                 Shell.Refuse(refusal!.Message);
                 return 1;
             case Start.LinkRefused:
-                Shell.Refuse(Launching.LinkRefusal);
+                Shell.Refuse(Words.Window.DebugLinkRefused!);
                 return 1;
             case Start.Redirect:
                 Redirection.To(running!);

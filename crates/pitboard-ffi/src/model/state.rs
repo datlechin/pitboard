@@ -1120,6 +1120,8 @@ pub(crate) struct State {
     /// so a run-out notified before a relaunch is never notified again because the read
     /// after it landed first.
     loading_kept: bool,
+    // the window asked for meanwhile, which the first launch's welcome stands in for
+    window_waits: bool,
     /// Whether what is shown is what stands in for a read that failed before anything was
     /// shown, the last numbers measured, which nothing has advised on: as AppModel.swift's
     /// fallback, it is not advised on once what is kept is in either.
@@ -1203,6 +1205,7 @@ impl State {
             opens_at_login: None,
             preferences_read: false,
             loading_kept: false,
+            window_waits: false,
             standing_in: false,
             machine: MachineState::default(),
             windows: Windows::new(cadence.arming),
@@ -1506,6 +1509,7 @@ impl State {
                 self.sheet_failure = None;
                 self.left = None;
             }
+            Intent::Show { place: None } if self.loading_kept => self.window_waits = true,
             Intent::Show { place } => self.show(place),
             Intent::NotificationClicked { argument } => match Clicked::read(&argument) {
                 Clicked::Accounts => self.show(Some(Place::Accounts)),
@@ -2351,6 +2355,7 @@ impl State {
                 .extend(self.preferences.second_account_declined.iter().cloned());
             if !preferences.has_been_seen {
                 preferences.has_been_seen = true;
+                self.window_waits = false;
                 self.show(Some(Place::Welcome));
             }
             if preferences != read || !from_file {
@@ -2362,6 +2367,9 @@ impl State {
             self.preferences_read = true;
         }
         self.loading_kept = false;
+        if std::mem::take(&mut self.window_waits) {
+            self.show(None);
+        }
         if let Some(status) = self.status.clone()
             && !self.standing_in
         {

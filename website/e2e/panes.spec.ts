@@ -121,16 +121,8 @@ test.describe("Windows", () => {
     const { tab, panel } = await open(page, "windows", "usage-win");
     await tab("accounts").focus();
     await page.keyboard.press("ArrowDown");
-    await expect(tab("activity")).toBeFocused();
-    await expect(tab("accounts")).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("Enter");
-    await expect(panel("activity")).toBeVisible();
-    await page.keyboard.press("ArrowDown");
-    await page.keyboard.press("Space");
-    await expect(panel("machine")).toContainText("Checking this PC…");
-    await expect(panel("machine").getByRole("button", { name: "Check again" })).toBeDisabled();
-    await page.keyboard.press("ArrowDown");
     await expect(tab("settings")).toBeFocused();
+    await expect(tab("accounts")).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("ArrowDown");
     await expect(tab("accounts")).toBeFocused();
     await page.keyboard.press("ArrowUp");
@@ -148,15 +140,42 @@ test.describe("Windows", () => {
     expect(await axe(page, ["#usage-win"])).toEqual([]);
   });
 
-  test("the title bar's button opens the navigation with its labels, and a pane chosen closes it", async ({
+  test("Troubleshoot's cards open Diagnostics and Activity under Settings, and back or the breadcrumb goes back", async ({
+    page,
+  }) => {
+    const { fig, tab, panel } = await open(page, "windows", "usage-win");
+    const back = fig.getByRole("button", { name: "Back" });
+    await expect(back).toBeHidden();
+    await tab("settings").click();
+    await panel("settings").getByRole("button", { name: "Diagnostics" }).click();
+    await expect(panel("machine")).toBeVisible();
+    await expect(tab("settings")).toHaveAttribute("aria-selected", "true");
+    await expect(panel("machine")).toContainText("Checking this PC…");
+    await expect(panel("machine").getByRole("button", { name: "Check again" })).toBeDisabled();
+    await expect(panel("machine").getByRole("button", { name: "Copy report" })).toBeDisabled();
+    await back.click();
+    await expect(panel("settings")).toBeVisible();
+    await expect(back).toBeHidden();
+    await panel("settings")
+      .getByRole("button", { name: "Activity" })
+      .and(page.getByRole("button", { description: "Every switch and change Pitboard made." }))
+      .click();
+    await expect(panel("activity")).toBeVisible();
+    await expect(panel("activity")).toContainText("Settings");
+    expect(await axe(page, ["#usage-win"])).toEqual([]);
+    await panel("activity").getByRole("button", { name: "Settings" }).click();
+    await expect(panel("settings")).toBeVisible();
+  });
+
+  test("the navigation's pane button opens it with its labels, and a page chosen closes it", async ({
     page,
   }) => {
     const { fig, tab, panel } = await open(page, "windows", "usage-win");
     await fig.getByRole("button", { name: "Open Navigation" }).click();
     await expect(fig.getByRole("button", { name: "Close Navigation" })).toBeVisible();
-    await expect(tab("activity")).toContainText("Activity");
-    await tab("activity").click();
-    await expect(panel("activity")).toBeVisible();
+    await expect(tab("settings")).toContainText("Settings");
+    await tab("settings").click();
+    await expect(panel("settings")).toBeVisible();
     await expect(fig.getByRole("button", { name: "Open Navigation" })).toHaveAttribute(
       "aria-expanded",
       "false",

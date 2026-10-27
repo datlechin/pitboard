@@ -135,12 +135,47 @@ public sealed class AccountsWindowTests
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 
+    // Plan 10 asked this be measured first: a row that is a SettingsExpander keeps the keyboard. Its toggle takes the
+    // focus, F2 renames, Space opens it, Ctrl+C copies its email, Tab goes on to its button, and Enter switches.
+    [TestMethod]
+    public void ARowsKeysActOnItsAccount()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
+        var window = launched.OpenWindow();
+        var personal = launched.Row("claude/personal");
+        Foreground.Require(window);
+        string Focused() => launched.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "";
+        bool Becomes(Func<bool> condition) => Retry.WhileFalse(condition, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(100)).Result;
+
+        Launched.FocusToggle(personal);
+        Keyboard.Type(VirtualKeyShort.F2);
+        Assert.AreEqual("personal", launched.Field("sheet.name").Text);
+        launched.Answer("sheet", "CloseButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the sheet stayed up");
+
+        Launched.FocusToggle(personal);
+        Keyboard.Type(VirtualKeyShort.SPACE);
+        Launched.Within(personal, found => found.ByAutomationId("detail.copyEmail"), "personal's email");
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
+        Assert.IsTrue(Becomes(() => ClipboardText.Read() == "dana@home.example"), $"Ctrl+C copied '{ClipboardText.Read()}'");
+
+        Keyboard.Type(VirtualKeyShort.TAB);
+        Assert.IsTrue(Becomes(() => Focused() == "account.action"), $"Tab left the focus on '{Focused()}'");
+
+        Launched.FocusToggle(personal);
+        Keyboard.Type(VirtualKeyShort.ENTER);
+        Assert.IsTrue(Becomes(() => launched.InUse("claude/personal")), $"personal is not in use: {launched.Shown()}");
+    }
+
     // The other tests ask for a row's menu through UI Automation.
     [TestMethod]
     public void ARightClickOpensTheRowsMenu()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "onlyOne");
         var window = launched.OpenWindow();
+        // The setup tips lie over the row's middle, where the click goes: Add a second account, then Codex's.
+        launched.DeclineTip(Words.AddASecondAccount);
+        launched.DeclineTip(Words.UseWithCodex);
         var row = launched.Row("claude/work");
         Foreground.Require(window);
 
@@ -217,8 +252,8 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         launched.OpenWindow();
-        launched.Element("setup.codexUnused");
-        launched.Invoke("setup.action.declineTip");
+        launched.Tip(Words.UseWithCodex);
+        launched.DeclineTip(Words.UseWithCodex);
 
         launched.Element("empty");
         launched.Invoke("empty.choice");
@@ -247,21 +282,20 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "onlyOne");
         launched.OpenWindow();
-        launched.Element("setup.onlyOne");
+        launched.Tip(Words.AddASecondAccount);
 
-        launched.Invoke("setup.action.declineSecondAccount");
+        launched.DeclineTip(Words.AddASecondAccount);
 
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.onlyOne")), "the tip stayed");
         launched.Row("claude/work");
     }
 
     // The window goes to the accounts, where the sheet comes up.
     [TestMethod]
-    public void CtrlNAddsAnAccountFromAnyPane()
+    public void CtrlNAddsAnAccountFromAnyPage()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = launched.OpenWindow();
-        launched.Select("pane.activity");
+        launched.OpenFromSettings(window, "settings.activity");
         Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
 
         Foreground.Require(window);
@@ -274,13 +308,18 @@ public sealed class AccountsWindowTests
         launched.Row("claude/work");
     }
 
+    // Plan 4.12: the first launch opens the welcome in place of the window, which Get started opens.
     [TestMethod]
-    public void TheFirstLaunchOpensTheWindow()
+    public void TheFirstLaunchOpensTheWelcomeAlone()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
 
-        launched.Window("Pitboard");
+        var welcome = launched.Window(Words.Welcome);
 
-        launched.Element("setup.codexUnused");
+        Assert.IsEmpty(launched.Windows("Pitboard"), "the window opened under the welcome");
+        Launched.Within(welcome, found => found.ByAutomationId("welcome.done"), "Get started").AsButton().Invoke();
+        launched.Window("Pitboard");
+        Assert.IsTrue(Retry.WhileTrue(() => welcome.IsAvailable, TimeSpan.FromSeconds(10)).Result, "the welcome stayed open");
+        launched.Tip(Words.UseWithCodex);
     }
 }

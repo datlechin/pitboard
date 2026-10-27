@@ -10,26 +10,23 @@ public sealed record SettingsLink(string Title, string Url);
 // model says, so a control set to the model's value sends nothing.
 public sealed partial class SettingsViewModel : INotifyPropertyChanged
 {
-    public const string TurnedOffNote = "Turned off in Settings > Apps > Startup, where you can turn it on again.";
-
     // Settings > Apps > Startup and System > Notifications, by the URIs Microsoft's "Launch the Windows Settings app" lists.
     public const string StartupSettings = "ms-settings:startupapps";
 
     public const string NotificationSettings = "ms-settings:notifications";
 
-    public const string BetaNote = "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.";
-
-    public const string Copyright = "Copyright 2026 the Pitboard authors";
-
     private const int MinutesInADay = 24 * 60;
 
+    private const string Site = "https://usepitboard.com";
+
+    // The site's own link says its name.
     public static readonly SettingsLink[] Links =
     [
-        new("usepitboard.com", "https://usepitboard.com"),
-        new("Pitboard help", IconMenu.HelpLink),
-        new("Source code on GitHub", "https://github.com/datlechin/pitboard"),
-        new("Report a problem", "https://github.com/datlechin/pitboard/issues"),
-        new("Apache License 2.0", "https://github.com/datlechin/pitboard/blob/main/LICENSE"),
+        new(new Uri(Site).Host, Site),
+        new(Words.Settings.Help, IconMenu.HelpLink),
+        new(Words.Settings.SourceCode, "https://github.com/datlechin/pitboard"),
+        new(Words.Settings.ReportAProblem, "https://github.com/datlechin/pitboard/issues"),
+        new(Words.Settings.License, "https://github.com/datlechin/pitboard/blob/main/LICENSE"),
     ];
 
     private readonly AppModel _model;
@@ -62,11 +59,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool StartsAtSignIn => _start.On;
 
-    public bool CanStartAtSignIn => _start.Refusal is null && !_start.TurnedOff;
+    public bool CanStartAtSignIn => _start.CanTurnOn;
 
-    public string StartupNote => _start.Refusal ?? (_start.TurnedOff ? TurnedOffNote : "");
-
-    public bool HasStartupNote => StartupNote.Length > 0;
+    public string StartupNote => _start.Note(Words.Settings.OpenAtLoginNote);
 
     public string? StartupFailed => _start.Failed;
 
@@ -98,14 +93,12 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasAtLimitNote => AtLimit.Note is not null;
 
-    public string AtLimitTerms => AtLimit.Terms?.Sentence ?? "";
-
     public bool HasAtLimitTerms => AtLimit.Terms is not null;
-
-    public string WarmTerms => Warm.Terms?.Sentence ?? "";
 
     // One page, said beside switching while it is chosen and beside warm-up otherwise.
     public string TermsLinkTitle => (AtLimit.Terms ?? Warm.Terms)?.LinkTitle ?? "";
+
+    public bool HasWarmTerms => Warm.Terms is not null;
 
     public string TermsLink => (AtLimit.Terms ?? Warm.Terms)?.Link ?? "";
 
@@ -120,6 +113,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public string ShareRange => AtLimit.ShareRange;
 
     public bool CanSetShare => AtLimit.ShareEnabled;
+
+    public bool ShowsShare => AtLimit.Choice != Core.AtLimit.Nothing;
 
     public string WarmRange => Warm.RangeLabel;
 
@@ -167,18 +162,44 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasTerminalNote => CommandLine.TerminalNote is not null;
 
+    // Uninstall…, or once it stopped short, Try again, which asks nothing more.
+    public Choice UninstallChoice =>
+        _model.Removal is RemovalShown.Stopped stopped
+            ? stopped.Again
+            : new Choice(_model.Uninstall.Title, _model.Uninstall.Intent, _model.Uninstall.Enabled && _model.Removal is null);
+
+    public Question? UninstallQuestion => _model.Removal is RemovalShown.Stopped ? null : _model.Uninstall.Confirm;
+
+    public bool Uninstalling => _model.Removal is RemovalShown.Removing or RemovalShown.Done;
+
+    public bool OffersUninstall => !Uninstalling;
+
+    // What it does, then what it is doing, and where it stopped short, why.
+    public string UninstallSays => _model.Removal switch
+    {
+        RemovalShown.Removing removing => removing.Title,
+        RemovalShown.Stopped stopped => stopped.Line,
+        _ => Words.Settings.UninstallNote,
+    };
+
+    public string? UninstallStopped => (_model.Removal as RemovalShown.Stopped)?.Title;
+
     public bool UpdatesAvailable => _updates.Available;
 
     public bool ChecksAutomatically => _updates.ChecksAutomatically;
 
-    public string UpdatesState => _updates.Waiting is { } waiting ? $"Pitboard {waiting} is ready to install." : Versions.Named(Version);
+    public string UpdatesState =>
+        _updates.Waiting is { } waiting ? PitboardFfiMethods.ReadyToInstall(waiting) : PitboardFfiMethods.NamedVersion(Version);
 
     public string[] UpdatesNoteLines => UpdatesNotes(_updates, Version);
 
     public string Version { get; }
 
     public static string[] UpdatesNotes(IUpdates updates, string version) =>
-        [.. updates.Refusal is { } refusal ? new[] { refusal } : [], .. Versions.IsBeta(version) ? new[] { BetaNote } : []];
+        [
+            .. updates.Refusal is { } refusal ? new[] { refusal } : [],
+            .. Versions.IsBeta(version) && Words.Settings.BetaUpdates is { } beta ? new[] { beta } : [],
+        ];
 
     // 24:00, the end of a day, shows as midnight, as the macOS pickers show it.
     public static TimeSpan TimeOfDay(ushort minutes) => TimeSpan.FromMinutes(minutes % MinutesInADay);
@@ -297,9 +318,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public void CheckNow() => _updates.Check();
 
+    public void Uninstall() => _model.Send(UninstallChoice.Intent);
+
     private void OnModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(AppModel.Machine))
+        if (args.PropertyName is nameof(AppModel.Machine) or nameof(AppModel.Uninstall) or nameof(AppModel.Removal))
         {
             Tell();
         }

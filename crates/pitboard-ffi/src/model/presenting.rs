@@ -3202,9 +3202,7 @@ fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Stub) {
     (model, machine)
 }
 
-/// Codex found with nothing of it enrolled is a tool Pitboard reads nothing of, so it cannot
-/// say whether Codex is signed in. It offers to use Pitboard with it after Claude Code's own
-/// steps, and over No Accounts where Claude Code is signed in to nothing.
+// Codex found and not added is offered after Claude Code's steps, and over No accounts.
 #[test]
 fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     let (model, _) = reading_with_codex(vec![

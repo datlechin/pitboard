@@ -1,9 +1,11 @@
 ---
-// SettingsPage.xaml's Limits: When a limit reaches, open on its share, and Warm-up, open on
-// its hours and accounts, each a section live/limits.ts works. Each control is named as the XAML
-// names it; each expander's button shows and hides its items, and their ids start `prefix`. Every
-// choice's words are drawn, those of the choice not shown hidden. The time pickers' flyouts open
-// over the window, from the desk, where `flyouts` draws them alone.
+// SettingsPage.xaml's Limits: When a limit reaches, open on its share, which shows only while
+// something happens at it, and Warm-up, open on its hours and accounts, what it does under its name
+// and its hours beside it, each a section live/limits.ts works, each with its icon. Each control is
+// named as the XAML names it; each expander's button shows and hides its items, and their ids start
+// `prefix`. Every choice's words are drawn, those of the choice not shown hidden. Is this allowed?
+// is the link alone, beside switching and under the warm-up's accounts. The time pickers' flyouts
+// open over the window, from the desk, where `flyouts` draws them alone.
 import ComboBox from "./ComboBox.astro";
 import NumberBox from "./NumberBox.astro";
 import TimePicker from "./TimePicker.astro";
@@ -51,7 +53,10 @@ const warmAccounts = toolAccounts(moments.after, "claude").map((a, i) => ({
   id: a.id,
   ...page.warm.accounts[i],
 }));
-const card = "min-h-48 last:rounded-b-u-4";
+const card = "min-h-48";
+const link =
+  "text-win-accent-text focus-win live:text-win-accent-text live:hover:text-win-accent-text";
+const icon = "size-20 shrink-0";
 ---
 
 {flyouts ? (
@@ -60,14 +65,15 @@ const card = "min-h-48 last:rounded-b-u-4";
   ))
 ) : (
   <>
-    {atLimit && <div data-section="at-limit">
+    {atLimit && <div class="group/section" data-section="at-limit">
       <div
         class:list={[
           header,
-          "has-[[data-expander][aria-expanded=false]]:rounded-b-u-4 live:hover:bg-win-control-2",
+          "group-has-[[data-share-card][hidden]]/section:rounded-b-u-4 has-[[data-expander][aria-expanded=false]]:rounded-b-u-4 live:hover:bg-win-control-2",
         ]}
         data-header
       >
+        <svg class={icon} aria-hidden="true"><use href="#fl-top-speed"></use></svg>
         <span class="min-w-0 flex-1">
           <span class="block">{page.atLimit.header}</span>
           <span class:list={["block", caption]} data-standing>{page.atLimit.standing}</span>
@@ -78,13 +84,8 @@ const card = "min-h-48 last:rounded-b-u-4";
               </span>
             ),
           )}
-          <span class:list={["block", caption]} data-terms>{page.atLimit.terms}</span>
           <a
-            class:list={[
-              "block w-fit no-underline",
-              caption,
-              "text-win-accent-text focus-win live:text-win-accent-text live:hover:text-win-accent-text",
-            ]}
+            class:list={["block w-fit no-underline", caption, link]}
             href={`${DOCS}/concepts/limits#is-this-allowed`}
             target="_blank"
             rel="noopener"
@@ -111,14 +112,14 @@ const card = "min-h-48 last:rounded-b-u-4";
           <svg class={chevron}><use href="#fl-chevron-up"></use></svg>
         </button>
       </div>
-      <div class:list={[item, "group/card rounded-b-u-4"]} id={items} data-share-card>
-        <span class="min-w-0 flex-1 group-data-[state=off]/card:text-win-text-off">
-          <span class="block">{page.share.header}</span>
-          <span class:list={["block", caption, "group-data-[state=off]/card:text-win-text-off"]}
-            >{page.share.range}</span
-          >
-        </span>
-        <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
+      <div id={items}>
+        <div class:list={[item, "rounded-b-u-4"]} data-share-card>
+          <span class="min-w-0 flex-1">
+            <span class="block">{page.share.header}</span>
+            <span class:list={["block", caption]}>{page.share.range}</span>
+          </span>
+          <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
+        </div>
       </div>
     </div>}
     {warming && <div data-section="warm">
@@ -129,11 +130,13 @@ const card = "min-h-48 last:rounded-b-u-4";
         ]}
         data-header
       >
+        <svg class={icon} aria-hidden="true"><use href="#fl-weather-sunny"></use></svg>
         <span class="min-w-0 flex-1">
           <span class="block">{page.warm.header}</span>
-          <span class:list={["block", caption]} data-range>{page.warm.range}</span>
+          <span class:list={["block", caption]}>{page.warm.note}</span>
           <span class:list={["block", caption]} data-next>{page.warm.standing}</span>
         </span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums" data-range>{page.warm.range}</span>
         <button
           class={toggle}
           id={`${prefix}-warm-expand`}
@@ -172,6 +175,15 @@ const card = "min-h-48 last:rounded-b-u-4";
             <Toggle />
           </div>
         </template>
+        <div class:list={[item, "min-h-48 rounded-b-u-4"]}>
+          <a
+            class:list={["no-underline", link]}
+            href={`${DOCS}/concepts/limits#is-this-allowed`}
+            target="_blank"
+            rel="noopener"
+            >{page.atLimit.link}</a
+          >
+        </div>
       </div>
     </div>}
   </>

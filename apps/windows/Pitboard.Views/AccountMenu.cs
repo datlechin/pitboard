@@ -2,81 +2,93 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Pitboard.Core;
 using Pitboard.Windows;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace Pitboard.Views;
 
-// An account's context menu, in the macOS order: its offers, its windows, copying its address, then forgetting it.
-// Microsoft's menu guidance leaves out what does not apply now, where the model dims it for the macOS menu bar.
+// An account's context menu, in the macOS order: what it does to the account, its windows, copying its address, then
+// removing it. Microsoft's menu guidance leaves out what does not apply now, where the model dims it for the macOS menu bar.
 public static class AccountMenu
 {
     public static MenuFlyout For(
-        AccountItem item, Action<Question?, Intent> ask, Action<WindowAccount>? open = null, IReadOnlyCollection<string>? held = null)
+        AccountItem item, Action<Question?, Intent> ask, Action<string> copy, Action<WindowAccount>? open = null,
+        IReadOnlyCollection<string>? held = null)
     {
         var menu = new MenuFlyout();
-        foreach (var offer in item.Offers.Where(offer => offer.Enabled))
+        foreach (var action in item.Actions.Where(action => action is { Enabled: true, Kind: not (ActionKind.OpenWindow or ActionKind.Remove) }))
         {
-            menu.Items.Add(Entry(offer, ask));
+            menu.Items.Add(Entry(action, ask));
         }
 
-        if (open is not null && item.Windows.Length > 0)
+        var windows = item.Actions.Where(action => action is { Kind: ActionKind.OpenWindow, Window: not null }).ToArray();
+        if (open is not null && windows.Length > 0)
         {
             Separate(menu);
-            foreach (var offer in item.Windows)
+            foreach (var action in windows)
             {
-                menu.Items.Add(Window(offer, open, held ?? []));
+                menu.Items.Add(Window(action.Title, action.Window!, open, held ?? []));
             }
         }
 
         if (item.Email.Length > 0)
         {
             Separate(menu);
-            var copy = new MenuFlyoutItem { Text = "Copy email address", KeyboardAcceleratorTextOverride = "Ctrl+C" };
-            AutomationProperties.SetAutomationId(copy, "account.copyEmail");
-            copy.Click += (_, _) =>
-            {
-                var package = new DataPackage();
-                package.SetText(item.Email);
-                Clipboard.SetContent(package);
-            };
-            menu.Items.Add(copy);
+            var entry = new MenuFlyoutItem { Text = Words.Menu.CopyEmail, AccessKey = "C", KeyboardAcceleratorTextOverride = "Ctrl+C" };
+            AutomationProperties.SetAutomationId(entry, "account.copyEmail");
+            entry.Click += (_, _) => copy(item.Email);
+            menu.Items.Add(entry);
         }
 
-        if (item.Forget is { Enabled: true } forget)
+        if (item.Actions.FirstOrDefault(action => action is { Kind: ActionKind.Remove, Enabled: true }) is { } remove)
         {
             Separate(menu);
-            var entry = Entry(forget, ask);
-            entry.KeyboardAcceleratorTextOverride = "Del";
-            menu.Items.Add(entry);
+            menu.Items.Add(Entry(remove, ask));
         }
 
         return menu;
     }
 
-    private static MenuFlyoutItem Entry(ItemOffer offer, Action<Question?, Intent> ask)
+    // Each kind's letter apart from the others it can share a menu with; Rename takes Explorer's M.
+    private static string AccessKeyOf(ActionKind kind) => kind switch
+    {
+        ActionKind.Switch => "S",
+        ActionKind.SignInAgain => "I",
+        ActionKind.Add => "A",
+        ActionKind.Rename => "M",
+        ActionKind.WarmUpNow => "W",
+        ActionKind.OpenWindow => "O",
+        ActionKind.Remove => "R",
+        _ => "",
+    };
+
+    private static MenuFlyoutItem Entry(AccountAction action, Action<Question?, Intent> ask)
     {
         var entry = new MenuFlyoutItem
         {
-            Text = offer.Title,
-            KeyboardAcceleratorTextOverride = AccountKeys.Renames(offer) ? "F2" : "",
+            Text = action.Title,
+            AccessKey = AccessKeyOf(action.Kind),
+            KeyboardAcceleratorTextOverride = AccountKeys.Shown(action.Kind),
         };
-        AutomationProperties.SetAutomationId(entry, $"account.{Identifiers.Of(offer.Intent)}");
-        entry.Click += (_, _) => ask(offer.Confirm, offer.Intent);
+        if (action.Intent is { } intent)
+        {
+            AutomationProperties.SetAutomationId(entry, $"account.{Identifiers.Of(intent)}");
+            entry.Click += (_, _) => ask(action.Confirm, intent);
+        }
+
         return entry;
     }
 
-    private static MenuFlyoutItem Window(WindowOffer offer, Action<WindowAccount> open, IReadOnlyCollection<string> held)
+    private static MenuFlyoutItem Window(string title, WindowAccount window, Action<WindowAccount> open, IReadOnlyCollection<string> held)
     {
-        var entry = new MenuFlyoutItem { Text = offer.Title };
-        AutomationProperties.SetAutomationId(entry, IconMenu.WindowId(offer.Window));
-        if (HeldStores.Note(offer.Window, held) is { } note)
+        var entry = new MenuFlyoutItem { Text = title, AccessKey = AccessKeyOf(ActionKind.OpenWindow) };
+        AutomationProperties.SetAutomationId(entry, IconMenu.WindowId(window));
+        if (HeldStores.Note(window, held) is { } note)
         {
             entry.IsEnabled = false;
             ToolTipService.SetToolTip(entry, note);
             AutomationProperties.SetHelpText(entry, note);
         }
 
-        entry.Click += (_, _) => open(offer.Window);
+        entry.Click += (_, _) => open(window);
         return entry;
     }
 

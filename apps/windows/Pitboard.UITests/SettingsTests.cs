@@ -20,15 +20,7 @@ public sealed class SettingsTests
     private static AutomationElement Control(Launched launched, string automationId) =>
         launched.Find(found => found.ByAutomationId(automationId), automationId);
 
-    // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
-    // name, not its id.
-    private static void Expand(Launched launched, string automationId)
-    {
-        var group = Control(launched, automationId);
-        var expander = group.FindAllDescendants().FirstOrDefault(found => found.Patterns.ExpandCollapse.IsSupported)
-            ?? throw new AssertFailedException($"{automationId} holds nothing that expands");
-        expander.Patterns.ExpandCollapse.Pattern.Expand();
-    }
+    private static void Expand(Launched launched, string automationId) => Launched.Expand(Control(launched, automationId));
 
     private static ToggleState State(AutomationElement toggle) => toggle.Patterns.Toggle.Pattern.ToggleState.Value;
 
@@ -115,7 +107,7 @@ public sealed class SettingsTests
         Assert.IsTrue(Names(choice, 96), "the model did not take the share");
 
         choice.Select(DoNothing);
-        Assert.IsTrue(Enables(share, false));
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.atLimitShare")), "the share shows while nothing happens at it");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.autoSwitchStanding")));
     }
 
@@ -125,6 +117,7 @@ public sealed class SettingsTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "warmUp");
         launched.OpenWindow();
+        Launched.Expand(launched.Row("claude/personal"));
         Assert.IsTrue(Says(launched, Words.WarmsUpAgain, TimeSpan.FromSeconds(30)), "personal is not warmed up");
 
         launched.Select("SettingsItem");

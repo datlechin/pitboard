@@ -15,6 +15,7 @@ public partial class App : Application, IIconTargets
     private readonly AppStart _start;
     private readonly Handovers _handovers;
     private readonly WindowRequests _requests = new();
+    private readonly Uninstaller _uninstaller;
     private readonly string _version = Versions.Of(typeof(App).Assembly);
     private IUpdates _updates = new NoUpdates();
     private AppModel? _model;
@@ -26,6 +27,7 @@ public partial class App : Application, IIconTargets
     private Lifetime? _lifetime;
     private MenuHost? _menu;
     private MainWindow? _window;
+    private WelcomeWindow? _welcome;
     private AccountWindows? _accountWindows;
     private WindowsNotifications? _notifications;
 
@@ -33,6 +35,7 @@ public partial class App : Application, IIconTargets
     {
         _start = start;
         _handovers = handovers;
+        _uninstaller = Uninstaller.For(start.Identity.Build);
 #if DEBUG
         // Unhandled, it fails fast with 0xC000027B and says nothing: the UI tests read why from here.
         UnhandledException += (_, args) => Console.Error.WriteLine($"{args.Message}{Environment.NewLine}{args.Exception}");
@@ -63,7 +66,7 @@ public partial class App : Application, IIconTargets
         // Turned off in Windows Settings is a choice made there, which the setup tip does not ask about again.
         startAtSignIn.Changed += (_, _) => model.Send(new Intent.OpensAtLogin(startAtSignIn.On || startAtSignIn.TurnedOff));
         model.PropertyChanged += OnModelChanged;
-        var image = new IconImage(Shell.NotificationIconSize, Shell.NotificationIcon, Shell.DestroyIcon);
+        var image = new IconImage(Shell.NotificationIconPlace, Shell.NotificationIcon, Shell.DestroyIcon);
         _image = image;
         _hidden = new HiddenWindow(
             sessionEnding: () => _lifetime?.EndSession(),
@@ -86,6 +89,14 @@ public partial class App : Application, IIconTargets
         // A click arrives on a thread of COM's; the model takes a message from any.
         var launchedBy = notifications.Start(intent => _model?.Send(intent));
         model.Send(new Intent.Start());
+        // Windows puts a new icon in the overflow, so a launch from Start shows only through its window. Asked for with the
+        // start, while the model reads what it keeps: asked later, it takes the first launch's welcome's place, and the
+        // model tells only the newest snapshot waiting.
+        if (_start.Link is null && Launching.OpensWindow(_start.Arguments))
+        {
+            model.Send(new Intent.Show(Place: null));
+        }
+
         if (startAtSignIn.Refusal is null)
         {
             startAtSignIn.Read();
@@ -99,11 +110,6 @@ public partial class App : Application, IIconTargets
         if (_start.Link is { } link)
         {
             model.Send(new Intent.LinkArrived(link));
-        }
-        else if (Launching.OpensWindow(_start.Arguments))
-        {
-            // Windows puts a new icon in the overflow, so a launch from Start shows only through its window.
-            model.Send(new Intent.Show(Place: null));
         }
 
         // A second launch's handover arrives on a thread of its own.
@@ -186,6 +192,11 @@ public partial class App : Application, IIconTargets
             case nameof(AppModel.AccountWindows):
                 _accountWindows?.Follow(_model.AccountWindows);
                 break;
+            // What was Pitboard's is gone, and the MSI takes the program once Pitboard.exe has exited.
+            case nameof(AppModel.Removal) when _model.Removal is RemovalShown.Done:
+                _uninstaller.Run();
+                _lifetime?.End();
+                break;
         }
     }
 
@@ -214,7 +225,7 @@ public partial class App : Application, IIconTargets
     void IIconTargets.ShowSettings()
     {
         ShowWindow();
-        _window?.Select(null);
+        _window?.ShowSettings();
     }
 
     Task<bool> IIconTargets.MayQuit() => _accountWindows?.MayQuit() ?? Task.FromResult(true);
@@ -225,17 +236,19 @@ public partial class App : Application, IIconTargets
     {
         if (_requests.Opens(request))
         {
+            // The first launch's welcome is a window of its own, which stands in for the main window while it is open.
+            if (request.Place is Place.Welcome || (request.Place is null && _welcome is not null))
+            {
+                ShowWelcome();
+                return;
+            }
+
             ShowWindow();
         }
 
-        if (_window is { } window)
+        if (_window is not null && _requests.PlaceFor(request) is { } place)
         {
-            var (pane, limits) = _requests.PaneFor(request, window.Selected);
-            window.Select(pane);
-            if (limits)
-            {
-                window.ShowLimits();
-            }
+            _window.Show(place);
         }
     }
 
@@ -256,6 +269,23 @@ public partial class App : Application, IIconTargets
         }
 
         _window.Bring();
+    }
+
+    private void ShowWelcome()
+    {
+        if (_model is null || _startAtSignIn is null)
+        {
+            return;
+        }
+
+        if (_welcome is null)
+        {
+            var welcome = new WelcomeWindow(_model, _startAtSignIn, page => _ = Launcher.LaunchUriAsync(page));
+            welcome.Closed += (_, _) => _welcome = null;
+            _welcome = welcome;
+        }
+
+        _welcome.Bring();
     }
 
     // Closed first, where the main window keeps its placement.

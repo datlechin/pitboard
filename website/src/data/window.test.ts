@@ -26,13 +26,14 @@ test("a name says its tool once two tools have accounts, on each system's list",
 test("the window's toolbar, rows and offers say what the apps say", () => {
   const pane = repo("apps/macos/Sources/PitboardApp/Window/AccountsWindow.swift");
   const page = repo("apps/windows/Pitboard.Views/AccountsPage.xaml");
-  for (const [word, made, help] of [
-    ["refreshHelp", "refresh_help", w.REFRESH_HELP],
-    ["addAccountHelp", "add_account_help", w.ADD_HELP],
+  for (const [word, made, field, help] of [
+    ["refreshHelp", "refresh_help", "RefreshHelp", w.REFRESH_HELP],
+    ["addAccountHelp", "add_account_help", "AddAccountHelp", w.ADD_HELP],
   ]) {
     assert.ok(pane.includes(`.help(words.window.${word})`), help);
     assert.ok(appWords.includes(`${made}: "${help}".into(),`), help);
-    assert.ok(page.includes(`ToolTipService.ToolTip="${help}"`), help);
+    // the Windows page binds the model's own words
+    assert.ok(page.includes(`ToolTipService.ToolTip="{x:Bind shown:Words.Window.${field}}"`), help);
   }
   assert.ok(words.includes('titled(os, "In Use", IN_USE)'));
   assert.equal(w.inUse("windows"), "In use");
@@ -51,9 +52,10 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
   assert.ok(appWords.includes(`copy_email: titled(os, "${w.copyEmail("macos")}", `));
   assert.ok(
     repo("apps/windows/Pitboard.Views/AccountMenu.cs").includes(
-      `Text = "${w.copyEmail("windows")}", KeyboardAcceleratorTextOverride = "Ctrl+C"`,
+      'Text = Words.Menu.CopyEmail, AccessKey = "C", KeyboardAcceleratorTextOverride = "Ctrl+C"',
     ),
   );
+  assert.ok(appWords.includes(`titled(os, "Copy Email Address", "${w.copyEmail("windows")}")`));
 });
 
 test("Remove Account asks with the account's name and says what goes, on this Mac or this PC", () => {

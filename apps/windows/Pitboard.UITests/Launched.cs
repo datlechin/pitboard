@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Text;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Conditions;
 using FlaUI.Core.Input;
 using FlaUI.Core.Tools;
+using FlaUI.Core.WindowsAPI;
 using FlaUI.UIA3;
 
 // One Pitboard at a time: they share the fixture's folder, the mouse and the foreground.
@@ -203,6 +205,19 @@ internal sealed class Launched : IDisposable
 
     public AutomationElement Row(string qualified) => Find(found => found.ByAutomationId($"account.{qualified}"), $"row {qualified}");
 
+    // Found again each time: the account in use is listed first, so a switch makes its row again where it moves to.
+    public bool InUse(string qualified)
+    {
+        try
+        {
+            return Row(qualified).FindFirstDescendant(found => found.ByAutomationId("account.inUse")) is not null;
+        }
+        catch (Exception gone) when (gone is InvalidOperationException or COMException)
+        {
+            return false;
+        }
+    }
+
     public AutomationElement Named(string name) => Find(found => found.ByName(name), $"'{name}'");
 
     public AutomationElement Element(string automationId) => Find(found => found.ByAutomationId(automationId), automationId);
@@ -282,6 +297,51 @@ internal sealed class Launched : IDisposable
 
     public void Select(string pane) =>
         Find(found => found.ByAutomationId(pane), pane).Patterns.SelectionItem.Pattern.Select();
+
+    // A setup tip is a TeachingTip, whose buttons are its template's ActionButton and CloseButton, which UI Automation
+    // finds by their names, as a ContentDialog's. Shown once its action button is, with the title the model gave it.
+    public void Tip(string title)
+    {
+        Element("ActionButton");
+        Named(title);
+    }
+
+    // Not now, which turns the step down for good, and the tip with it. The next step's tip can follow.
+    public void DeclineTip(string title)
+    {
+        PressOnceEnabled(Find(found => found.ByAutomationId("CloseButton").And(found.ByName(Words.NotNow)), "the tip's Not now"));
+        if (!Gone(found => found.ByName(title)))
+        {
+            throw new AssertFailedException($"the tip stayed: {Shown()}");
+        }
+    }
+
+    // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
+    // name, not its id.
+    public static AutomationElement Expander(AutomationElement group) =>
+        group.FindAllDescendants().FirstOrDefault(found => found.Patterns.ExpandCollapse.IsSupported)
+            ?? throw new AssertFailedException($"{group.AutomationId} holds nothing that expands");
+
+    public static void Expand(AutomationElement group) => Expander(group).Patterns.ExpandCollapse.Pattern.Expand();
+
+    // An account row's toggle, as the keyboard reaches it: Shift+Tab from the row's button. WinUI's ExpanderAutomationPeer
+    // keeps the toggle out of UI Automation's tree.
+    public static void FocusToggle(AutomationElement row)
+    {
+        Within(row, found => found.ByAutomationId("account.action"), "the row's button").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.TAB);
+    }
+
+    // One of Settings' own pages, from its card as a person opens it: a SettingsCard takes Enter, and gives UI Automation
+    // no Invoke.
+    public void OpenFromSettings(Window window, string card)
+    {
+        Select("SettingsItem");
+        var found = Element(card);
+        Foreground.Require(window);
+        found.Focus();
+        Keyboard.Type(VirtualKeyShort.ENTER);
+    }
 
     public bool Selected(string pane) =>
         Retry.WhileFalse(

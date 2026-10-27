@@ -70,10 +70,10 @@ public sealed class ActivityPageTests
         var header = (FrameworkElement)list.Header;
 
         Assert.AreEqual(
-            "Date, Change, Account, Result, Asked by",
+            "Date, Change, Account, Result, By",
             string.Join(", ", Views.Visible<TextBlock>(header).Select(text => text.Text)));
         var first = Views.Visible<ListViewItem>(page).First();
-        foreach (var (title, cell) in new[] { ("Date", "15/01/2027 09:00"), ("Account", "claude/work"), ("Asked by", "pitboard") })
+        foreach (var (title, cell) in new[] { ("Date", "15/01/2027 09:00"), ("Account", "claude/work"), ("By", "pitboard") })
         {
             var column = Views.Visible<TextBlock>(header).Single(text => text.Text == title);
             Assert.AreEqual(Bounds(column, page).Left, Bounds(Cell(first, cell), page).Left, 0.5, $"{title} is not over its column");

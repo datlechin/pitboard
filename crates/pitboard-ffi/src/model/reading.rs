@@ -284,7 +284,7 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
             body: replaced.message.clone(),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::sign_in_again(OS, false),
+                title: words::sign_in_again_button(OS),
                 clicked: "sign-in-again/claude/work".into(),
             }),
         }]
@@ -420,7 +420,7 @@ fn a_parked_login_that_stops_being_usable_is_posted_once() {
             body: words::sign_in_to_keep("work"),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::sign_in_again(OS, false),
+                title: words::sign_in_again_button(OS),
                 clicked: "sign-in-again/claude/work".into(),
             }),
         }]

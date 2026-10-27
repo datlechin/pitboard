@@ -344,6 +344,12 @@ pub(crate) fn sign_in_again(os: Os, asks: bool) -> String {
     }
 }
 
+// A notification's button, which opens the sign-in: Windows ends a command that asks for more
+// with an ellipsis, a toast's too, where a macOS action is a short term.
+pub(crate) fn sign_in_again_button(os: Os) -> String {
+    sign_in_again(os, matches!(os, Os::Windows))
+}
+
 pub(crate) fn add_account_shown(os: Os, app: &str, asks: bool) -> String {
     let (title, sentence) = (
         format!("Add the Account {app} Shows"),
@@ -708,6 +714,8 @@ pub(crate) fn remove_account(os: Os) -> String {
 }
 
 pub(crate) const REMOVE: &str = "Remove";
+
+pub(crate) const DOWNLOAD: &str = "Download";
 
 pub(crate) fn remove_title(name: &str) -> String {
     format!("Remove “{name}”?")
@@ -1500,8 +1508,12 @@ pub(crate) const USE_WITH_CODEX: &str = "Use Pitboard with Codex";
 pub(crate) const CODEX_UNUSED: &str =
     "Codex is installed. Pitboard reads nothing of it until you add the account it’s signed in to.";
 
+// The Windows tip's title names Codex, and its half-width button has room for one line.
 pub(crate) fn add_codex_account(os: Os) -> String {
-    titled(os, "Add Codex Account…", "Add Codex account…")
+    match os {
+        Os::Windows => add_account(os, true),
+        Os::MacOs | Os::Linux => "Add Codex Account…".into(),
+    }
 }
 
 // The welcome's switch to open at login: its title, and what it says.
@@ -2133,8 +2145,9 @@ pub(crate) fn clean_up_title(os: Os) -> String {
 // What the Clean Up sheet says until it has looked.
 pub(crate) fn clean_up_message(os: Os) -> String {
     format!(
-        "Clean Up deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
+        "{} deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
          account needs.",
+        clean_up(os, false),
         pitboard_core::words::store_in_front(os)
     )
 }
@@ -2406,7 +2419,8 @@ pub(crate) fn stale_explanation(row: &pitboard_core::status::Row) -> Option<Stri
 // The Clean Up sheet's one sentence once it has looked: what the file holds, and what Clean Up does.
 pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> String {
     use pitboard_core::switch::{Foreseen, Kept};
-    let only = "so Clean Up only deletes";
+    let button = clean_up(os, false);
+    let only = format!("so {button} only deletes");
     match &left.login {
         Foreseen::Kept(Kept::NoLogin) => format!("The file holds no sign-in, {only} it."),
         Foreseen::Kept(Kept::Refused) => {
@@ -2422,24 +2436,25 @@ pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> Stri
             format!("The file holds {label}’s saved sign-in, {only} the file.")
         }
         Foreseen::Kept(Kept::SecondSignIn { label }) => format!(
-            "The file holds a second sign-in of {label}, the account in use, which Clean Up \
+            "The file holds a second sign-in of {label}, the account in use, which {button} \
              deletes with the file."
         ),
         Foreseen::Kept(Kept::ParkedNow { label }) => format!(
-            "The file holds {label}’s sign-in, which Clean Up saves for {label} before it deletes \
+            "The file holds {label}’s sign-in, which {button} saves for {label} before it deletes \
              the file."
         ),
         Foreseen::Kept(Kept::ParkKept { label }) => format!(
-            "The file holds another sign-in of {label}, which Clean Up deletes with the file."
+            "The file holds another sign-in of {label}, which {button} deletes with the file."
         ),
         Foreseen::NotEnrolled(owner) => format!(
             "The file holds {}’s sign-in, an account you haven’t added, so add it before you \
              clean up.",
             owner.email
         ),
-        Foreseen::Untold => "The file’s sign-in has expired, so Clean Up renews it first and goes \
-                             on only for an account you’ve added."
-            .into(),
+        Foreseen::Untold => format!(
+            "The file’s sign-in has expired, so {button} renews it first and goes on only for an \
+             account you’ve added."
+        ),
         _ => clean_up_message(os),
     }
 }
@@ -4290,6 +4305,10 @@ mod tests {
             pair("Sign In Again", "Sign in again")
         );
         assert_eq!(
+            both(&sign_in_again_button),
+            pair("Sign In Again", "Sign in again…")
+        );
+        assert_eq!(
             both(&|os| add_account_shown(os, "Claude", true)),
             pair(
                 "Add the Account Claude Shows…",
@@ -4318,6 +4337,11 @@ mod tests {
             sign_in_message("Codex", None),
             "Pitboard opens Codex’s sign-in in your browser, where you sign in to the account \
              you’re adding."
+        );
+        assert_eq!(
+            sign_in_message("Claude Code", None),
+            "Pitboard opens Claude Code’s sign-in in your browser, where you sign in to the \
+             account you’re adding."
         );
         assert_eq!(
             sign_in_message("Codex", Some("work")),
@@ -4393,7 +4417,7 @@ mod tests {
         );
         assert_eq!(
             clean_up_message(Os::Windows),
-            "Clean Up deletes the sign-in file Claude Code left behind Credential Manager, and \
+            "Clean up deletes the sign-in file Claude Code left behind Credential Manager, and \
              keeps any sign-in an account needs."
         );
         assert_eq!(
@@ -4408,6 +4432,11 @@ mod tests {
             code_note("Claude Code"),
             "Claude Code takes the code shown after you sign in, whether or not your browser \
              came back to it."
+        );
+        assert_eq!(
+            code_note("Codex"),
+            "Codex takes the code shown after you sign in, whether or not your browser came back \
+             to it."
         );
         assert_eq!(
             code_refused("Claude Code"),
@@ -4659,6 +4688,10 @@ mod tests {
         assert_eq!(in_bar("work", "42%"), "work 42%");
         assert_eq!(bar_spoken(None, None, false), "Pitboard");
         assert_eq!(
+            bar_spoken(Some("work 42%"), None, false),
+            "Pitboard, work 42%"
+        );
+        assert_eq!(
             bar_spoken(Some("work 42%"), Some("Codex"), true),
             "Pitboard, work 42%, Codex, needs attention"
         );
@@ -4667,6 +4700,10 @@ mod tests {
             "Pitboard, needs attention"
         );
         assert_eq!(bar_tip(false, []), "Pitboard");
+        assert_eq!(
+            bar_tip(false, [("work".into(), "5-hour 42% used".into())]),
+            "Pitboard\nwork: 5-hour 42% used"
+        );
         assert_eq!(
             bar_tip(
                 true,
@@ -4680,6 +4717,7 @@ mod tests {
         assert_eq!(nameless_login(true), "Sign-in Pitboard can’t use");
         assert_eq!(nameless_login(false), "Unknown sign-in");
         assert_eq!(row_spoken("work", None, false, None), "work");
+        assert_eq!(row_spoken("work", None, true, None), "work, in use");
         assert_eq!(
             row_spoken("work", Some("Team 5x"), true, None),
             "work, Team 5x, in use"
@@ -4814,7 +4852,7 @@ mod tests {
         );
         assert_eq!(
             both(&add_codex_account),
-            pair("Add Codex Account…", "Add Codex account…")
+            pair("Add Codex Account…", "Add account…")
         );
         assert_eq!(
             open_at_login(Os::MacOs),
@@ -6275,7 +6313,15 @@ mod tests {
             ),
         ];
         for (kept, said) in found {
-            assert_eq!(clean_up_found(Os::MacOs, &left(Foreseen::Kept(kept))), said);
+            let windows = said.replace("Clean Up", "Clean up");
+            assert_eq!(
+                clean_up_found(Os::MacOs, &left(Foreseen::Kept(kept.clone()))),
+                said
+            );
+            assert_eq!(
+                clean_up_found(Os::Windows, &left(Foreseen::Kept(kept))),
+                windows
+            );
         }
         assert_eq!(
             clean_up_found(
@@ -6292,6 +6338,11 @@ mod tests {
         assert_eq!(
             clean_up_found(Os::MacOs, &left(Foreseen::Untold)),
             "The file’s sign-in has expired, so Clean Up renews it first and goes on only for \
+             an account you’ve added."
+        );
+        assert_eq!(
+            clean_up_found(Os::Windows, &left(Foreseen::Untold)),
+            "The file’s sign-in has expired, so Clean up renews it first and goes on only for \
              an account you’ve added."
         );
         let did = [

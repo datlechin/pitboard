@@ -184,6 +184,18 @@ public sealed class PackageTests
         Assert.AreEqual("[LocalAppDataFolder]Pitboard App", folder[0]);
     }
 
+    // Uninstall Pitboard starts the MSI's uninstall only from the copy in this folder.
+    [TestMethod]
+    public void ItRecordsTheFolderItInstallsPitboardIn()
+    {
+        using var database = Open();
+
+        var location = Rows(database, "SELECT `Action`, `Target` FROM `CustomAction` WHERE `Source` = 'ARPINSTALLLOCATION'", 2).Single();
+        Assert.AreEqual("[INSTALLFOLDER]", location[1]);
+        Assert.IsGreaterThan(Sequence(database, "CostFinalize"), Sequence(database, location[0]!));
+        Assert.IsGreaterThan(Sequence(database, location[0]!), Sequence(database, "RegisterProduct"), "set after RegisterProduct wrote it");
+    }
+
     [TestMethod]
     public void AnUpdateStartsPitboardAgainOnlyWhenItsInstallAsks()
     {
@@ -197,6 +209,25 @@ public sealed class PackageTests
         Assert.AreEqual("PitboardExe --updated", string.Join(' ', launch[1..]));
         Assert.AreEqual("LAUNCHAFTERINSTALL = \"1\" AND NOT REMOVE", Condition(database, "LaunchAfterInstall"));
         Assert.IsGreaterThan(Sequence(database, "InstallFinalize"), Sequence(database, "LaunchAfterInstall"));
+    }
+
+    // Plan 4.12: once a first install is done, Pitboard starts as from Start, which shows its welcome. An upgrade, whose
+    // MajorUpgrade finds the product it replaces, starts it only where WinSparkle asks.
+    [TestMethod]
+    public void AFirstInstallStartsPitboardAsStartDoes()
+    {
+        using var database = Open();
+
+        var start = Rows(database, "SELECT `Type`, `Source`, `Target` FROM `CustomAction` WHERE `Action` = 'StartAfterFirstInstall'", 3).Single();
+        var type = int.Parse(start[0]!, CultureInfo.InvariantCulture);
+        Assert.AreEqual(ExeFromInstalledFile, type & 0x3F);
+        Assert.AreEqual(AsyncNoWait, type & AsyncNoWait);
+        Assert.AreEqual(0, type & Deferred);
+        Assert.AreEqual("PitboardExe", start[1]);
+        Assert.IsNull(start[2], "an argument a launch from Start has none of");
+        var upgrading = Rows(database, "SELECT `ActionProperty` FROM `Upgrade` WHERE `VersionMax` IS NOT NULL", 1).Single()[0];
+        Assert.AreEqual($"NOT Installed AND NOT {upgrading}", Condition(database, "StartAfterFirstInstall"));
+        Assert.IsGreaterThan(Sequence(database, "InstallFinalize"), Sequence(database, "StartAfterFirstInstall"));
     }
 
     // Each ignored on failure: the install goes on without the share target. Pitboard.exe removes the package, since

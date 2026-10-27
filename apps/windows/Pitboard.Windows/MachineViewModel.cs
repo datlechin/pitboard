@@ -11,11 +11,13 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
 
     private ChecksShown Checks => model.Machine.Checks;
 
-    public CheckLine[] Lines => [.. Checks.Groups.SelectMany(group => group.Lines)];
+    public CheckGroup[] Groups => Checks.Groups;
 
     public bool HasSummary => Checks.Summary is not null;
 
     public string Summary => Checks.Summary ?? "";
+
+    public string Verdict => Checks.Verdict ?? "";
 
     public Level Level => Checks.Level;
 
@@ -28,6 +30,10 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
     public bool Waiting => Checks.Waiting is not null;
 
     public string WaitingText => Checks.Waiting ?? "";
+
+    public string? Report => Checks.Report;
+
+    public bool CanCopyReport => Checks.Report is not null;
 
     public void Listen()
     {
@@ -50,7 +56,7 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
         }
     }
 
-    // A list told its lines again goes back to its top, so they are told only when they changed.
+    // The checks made again go back to the page's top, so they are told only when they changed.
     private void Show()
     {
         var checks = Checks;
@@ -69,12 +75,12 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
 
         if (!Structural.Equal(checks.Groups, before.Groups))
         {
-            Tell(nameof(Lines));
+            Tell(nameof(Groups));
         }
 
-        if (checks.Summary != before.Summary)
+        if (checks.Summary != before.Summary || checks.Verdict != before.Verdict)
         {
-            Tell(nameof(HasSummary), nameof(Summary));
+            Tell(nameof(HasSummary), nameof(Summary), nameof(Verdict));
         }
 
         if (checks.Level != before.Level)
@@ -95,6 +101,11 @@ public sealed partial class MachineViewModel(AppModel model) : INotifyPropertyCh
         if (checks.Waiting != before.Waiting)
         {
             Tell(nameof(Waiting), nameof(WaitingText));
+        }
+
+        if (checks.Report != before.Report)
+        {
+            Tell(nameof(Report), nameof(CanCopyReport));
         }
     }
 

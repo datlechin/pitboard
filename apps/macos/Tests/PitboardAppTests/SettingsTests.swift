@@ -190,6 +190,7 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
 @Test func eachSectionTheModelAsksForOpensItsPane() {
     let sections: [SettingsSection] = [.general, .limits, .advanced]
     #expect(sections.map(SettingsView.Tab.init) == SettingsView.Tab.allCases)
+    #expect(SettingsView.Tab(.warmUp) == .limits)
 }
 
 // MARK: - The share a limit is reached at

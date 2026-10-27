@@ -16,8 +16,8 @@ public sealed class SheetPageTests
         var text = Items.AddAccount(Items.Tool("claude", "Claude Code"), Items.Tool("codex", "Codex"));
         var form = (SheetPage.Form)Shown(Snapshots.Read(1) with { Sheet = Add, SheetText = text })!;
 
-        Assert.AreEqual("Pitboard opens Codex’s own sign-in in your browser.", form.Message("codex"));
-        Assert.AreEqual("Sign in", form.Confirm("codex"));
+        Assert.AreEqual("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", form.Message("codex"));
+        Assert.AreEqual("Sign in…", form.Confirm("codex"));
         Assert.AreEqual(text.Message, form.Message("desktop"), "a tool the picker does not offer");
     }
 
@@ -43,6 +43,16 @@ public sealed class SheetPageTests
         Assert.IsNull(form.NotFound("claude"));
         Assert.IsNull(form.Start("codex"), "a tool Pitboard did not find");
         Assert.AreEqual(new Intent.SignIn("claude", null), form.Start("claude"));
+    }
+
+    // Plan 4.4: the account a sign-in added is already saved under the name its step starts on, so that step has Done
+    // alone; a rename keeps Cancel.
+    [TestMethod]
+    public void OnlyTheNameStepAfterASignInHasNoCancel()
+    {
+        Assert.IsNull(new SheetPage.Naming(new Sheet.Name("claude", "work", "dana@work.example"), Items.Rename("work")).CloseTitle);
+        Assert.AreEqual("Cancel", new SheetPage.Naming(new Sheet.Rename("claude", "work"), Items.Rename("work")).CloseTitle);
+        Assert.AreEqual("Cancel", new SheetPage.Form(Add, Items.AddAccount(), Running: false).CloseTitle);
     }
 
     // The button was dimmed under an empty field whose placeholder read "work", with nothing to say why.

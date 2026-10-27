@@ -1196,10 +1196,7 @@ fn a_machine_without_claude_code_says_so_first() {
     model.shutdown();
 }
 
-/// A machine nobody is signed in on, with Codex installed, offers to use Pitboard with it over
-/// No Accounts, and No Accounts alone once that is declined, as AccountsWindowTests.swift's
-/// testAnEmptyMachineOffersAnAccount reads it. Only the first launch ever opens the window by
-/// itself, as its testTheFirstLaunchOpensTheWindow reads it.
+// As testAnEmptyMachineOffersAnAccount and testTheFirstLaunchOpensTheWindow read it on macOS.
 #[test]
 fn a_machine_nobody_is_signed_in_on_offers_an_account() {
     for world in [World::Empty, World::FirstLaunch] {
@@ -1209,7 +1206,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
             read_in(snapshot) && snapshot.footing == Footing::CodexUnused
         });
         assert!(
-            matches!(&shown.accounts_shown, AccountsShown::NoAccounts { .. }),
+            matches!(&shown.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(OS).0),
             "{}: {:?}",
             world.name(),
             shown.accounts_shown
@@ -2465,7 +2462,7 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
             words::sign_in_replaced(OS),
             words::in_app_warning(OS, &replaced).expect("the app's words"),
             Some(NotificationButton {
-                title: words::sign_in_again(OS, false),
+                title: words::sign_in_again_button(OS),
                 clicked: "sign-in-again/claude/work".into(),
             })
         )]

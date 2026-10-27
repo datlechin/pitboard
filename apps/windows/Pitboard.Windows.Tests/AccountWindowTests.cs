@@ -65,7 +65,7 @@ public sealed partial class AccountWindowTests
     private static async Task Saving(AccountWindow window, StandInSite site, Func<IEnumerable<Intent>> sent)
     {
         await Page(window)!.Script(StalledFrame(site));
-        Views.Press(await DialogButton(window, "Download"));
+        Views.Press(await DialogButton(window, Words.AccountWindow.Download));
         await Views.Until(() => sent().OfType<Intent.DownloadSaving>().Any(), "the download did not start saving", Webs.Patience);
     }
 
@@ -116,7 +116,7 @@ public sealed partial class AccountWindowTests
         {
             window.Follow(Shown(new WaitingShown.Reading("Reading accounts…")));
             await Views.Until(() => Views.Texts(window.Content).Contains("Reading accounts…"), "it did not say it reads the accounts");
-            Assert.AreEqual("Account", window.Title);
+            Assert.AreEqual(Words.Menu.Account, window.Title);
 
             var retry = new Choice("Try again", new Intent.Refresh(Asked: true), Enabled: true);
             window.Follow(Shown(new WaitingShown.ReadFailed("Couldn’t read accounts", "The index is damaged.", retry)));
@@ -234,7 +234,7 @@ public sealed partial class AccountWindowTests
             window.Follow(Shown(new WaitingShown.Reading("Reading accounts…"), webs.Opened(Main, Home)));
             await Views.Until(() => sent.Contains(new Intent.PageShown(store, Home)), "the page did not load", Webs.Patience);
             await Page(window)!.Script(StalledFrame(site));
-            await DialogButton(window, "Download");
+            await DialogButton(window, Words.AccountWindow.Download);
 
             CloseAsAPersonDoes(window);
 
@@ -490,7 +490,7 @@ public sealed partial class AccountWindowTests
                     ClearDownloads: new Choice("Clear", new Intent.ClearDownloads(refused.Store), Enabled: false))));
 
             await Views.Until(
-                () => Views.Texts(window.Content).Contains("Couldn’t open this window"), "the window did not say it could not open",
+                () => Views.Texts(window.Content).Contains(Words.AccountWindow.CouldNotOpen!), "the window did not say it could not open",
                 Webs.Patience);
             Assert.DoesNotContain("Object reference not set to an instance of an object.", Views.Texts(window.Content));
         }
@@ -518,7 +518,7 @@ public sealed partial class AccountWindowTests
             window.Follow(Shown(new WaitingShown.Reading("Reading accounts…"), webs.Opened(Main, Home)));
 
             await Views.Until(
-                () => sent.Contains(new Intent.PageShown(store, Home)) || Views.Texts(window.Content).Contains("Couldn’t open this window"),
+                () => sent.Contains(new Intent.PageShown(store, Home)) || Views.Texts(window.Content).Contains(Words.AccountWindow.CouldNotOpen!),
                 "the window neither opened nor said why", Webs.Patience);
             Assert.Contains(new Intent.PageShown(store, Home), sent, string.Join(" ", Views.Texts(window.Content)));
             Assert.IsEmpty(await Page(window)!.CookieManager.GetCookiesAsync(site.Address("/")));
@@ -607,7 +607,7 @@ public sealed partial class AccountWindowTests
             Assert.HasCount(1, await first.CookieManager.GetCookiesAsync("https://chatgpt.com/"));
 
             RemoveWebsiteData(window);
-            Views.Press(await DialogButton(window, "Remove"));
+            Views.Press(await DialogButton(window, Words.AccountWindow.Remove));
 
             await Views.Until(() => sent.Contains(new Intent.WebsiteDataRemoved(store)), "the model was not told", Webs.Patience);
             await Views.Until(
@@ -634,7 +634,7 @@ public sealed partial class AccountWindowTests
         await Views.Until(() => sent.Contains(new Intent.PageShown(store, Home)), "the page did not load", Webs.Patience);
 
         RemoveWebsiteData(window);
-        Views.Press(await DialogButton(window, "Remove"));
+        Views.Press(await DialogButton(window, Words.AccountWindow.Remove));
         window.Close();
         await window.Removing!.WaitAsync(Webs.Patience);
 

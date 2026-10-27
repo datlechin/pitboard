@@ -15,6 +15,7 @@ public sealed partial class ActivityPage : Page
 
     private readonly UISettings _settings = new();
     private double[] _widths = [];
+    private PaneContext? _context;
 
     public ActivityPage()
     {
@@ -35,6 +36,9 @@ public sealed partial class ActivityPage : Page
 
     public ActivityViewModel? ViewModel { get; private set; }
 
+    private PaneContext Context =>
+        _context ?? throw new InvalidOperationException("The page was shown before its frame navigated to it.");
+
     // A change that went as asked is said quietly, and one that did not stands out.
     public static Style ResultStyle(bool done) =>
         (Style)Application.Current.Resources[done ? "SecondaryTextBlockStyle" : "BodyTextBlockStyle"];
@@ -44,7 +48,8 @@ public sealed partial class ActivityPage : Page
         base.OnNavigatedTo(e);
         if (ViewModel is null)
         {
-            ViewModel = new ActivityViewModel(((PaneContext)e.Parameter).Model);
+            _context = (PaneContext)e.Parameter;
+            ViewModel = new ActivityViewModel(_context.Model);
             ViewModel.PropertyChanged += (_, _) => Fit();
             Bindings.Update();
         }
@@ -146,6 +151,8 @@ public sealed partial class ActivityPage : Page
 
     // Settings > Accessibility > Text size, raised on a thread of its own.
     private void OnTextScaleFactorChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(Ui.Guarded(Fit));
+
+    private void OnBack(object sender, RoutedEventArgs args) => Context.Back();
 
     private void OnRefresh(object sender, RoutedEventArgs args) => ViewModel?.Read();
 }

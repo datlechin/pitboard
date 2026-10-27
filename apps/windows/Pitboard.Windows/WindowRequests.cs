@@ -19,24 +19,15 @@ public sealed class WindowRequests
         return true;
     }
 
-    // Null is the settings page, which one long page scrolls to Limits for, as macOS opens its Limits pane.
-    public (Pane? Pane, bool Limits) PaneFor(WindowRequest request, Pane? pane)
+    // None where the window stays as it was left: a request with no place, or one answered already.
+    public Place? PlaceFor(WindowRequest request)
     {
         if (request.Serial <= _shown)
         {
-            return (pane, false);
+            return null;
         }
 
         _shown = request.Serial;
-        return request.Place switch
-        {
-            Place.Activity => (Pane.Activity, false),
-            Place.Checks => (Pane.Checks, false),
-            Place.Settings { Section: var section } => (null, section == SettingsSection.Limits),
-            // The welcome has no window of its own yet, so it opens on the accounts.
-            Place.Accounts or Place.Welcome => (Pane.Accounts, false),
-            // None asks for the window as it was left.
-            _ => (pane, false),
-        };
+        return request.Place;
     }
 }

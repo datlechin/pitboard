@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -17,10 +18,10 @@ public sealed class SettingsPageTests
 {
     private const string Watching = "Pitboard watches work: 42% used at 09:00.";
 
-    private static readonly string[] Sections = ["General", "Limits", "Advanced", "About"];
+    private static readonly string[] Sections = ["General", "Limits", "Advanced", "Troubleshoot", "About"];
 
     private static readonly WarmShown TwoWarmed = new(
-        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
@@ -65,24 +66,97 @@ public sealed class SettingsPageTests
         Views.Visible<TextBlock>(page).SingleOrDefault(shown => shown.Text == text)
         ?? throw new AssertFailedException($"'{text}' is not among: {string.Join(", ", Views.Texts(page))}");
 
-    // A notice about a limit, or the tip about one, opens the page on Limits, wherever it was scrolled to.
+    // A notice about a limit, or the tip about one, opens the page on Limits, and a check's fix on Advanced, wherever it
+    // was scrolled to.
     [UITestMethod]
-    public async Task ShowingTheLimitsBringsTheirSectionToTheTop()
+    public async Task ShowingASectionBringsItToTheTop()
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
         page.Height = 300;
         page.UpdateLayout();
         var scroller = Views.Descendants(page).OfType<ScrollViewer>().First();
-        var limits = Said(page, "Limits");
 
-        page.ShowLimits();
+        foreach (var (section, heading) in new[] { (SettingsSection.Limits, "Limits"), (SettingsSection.Advanced, "Advanced"), (SettingsSection.General, "General") })
+        {
+            var header = Said(page, heading);
+            page.Show(section);
 
-        await Views.Until(
-            () => scroller.VerticalOffset > 0 && Bounds(limits, scroller).Top is > -1 and < 60,
-            () => $"Limits at {Bounds(limits, scroller).Top}, scrolled {scroller.VerticalOffset}");
+            await Views.Until(
+                () => Bounds(header, scroller).Top is > -1 and < 60,
+                () => $"{heading} at {Bounds(header, scroller).Top}, scrolled {scroller.VerticalOffset}");
+        }
     }
 
-    // The macOS Settings' three panes, then About.
+    // An account's Warm-up settings link opens the warm-up's expander on its hours and toggles, with the focus there.
+    [UITestMethod]
+    public async Task TheWarmUpsLinkOpensItsExpanderWithTheFocus()
+    {
+        var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))));
+        page.Height = 300;
+        page.UpdateLayout();
+        var warm = Views.Element<SettingsExpander>(page, "settings.warm");
+
+        page.Show(SettingsSection.Limits);
+        Assert.IsFalse(warm.IsExpanded, "Limits alone opened the warm-up");
+        page.Show(SettingsSection.WarmUp);
+
+        Assert.IsTrue(warm.IsExpanded);
+        Assert.IsFalse(Views.Element<SettingsExpander>(page, "settings.atLimitGroup").IsExpanded);
+        await Views.Until(
+            () => Views.Descendants(warm).Contains(FocusManager.GetFocusedElement(page.XamlRoot) as DependencyObject),
+            "the focus is not in the warm-up");
+        await Views.Until(() => Views.Texts(page).Contains("personal · Max"), "its accounts' toggles did not show");
+    }
+
+    // Plan 4.11: Uninstall Pitboard in Advanced asks the model's question, which opens on Cancel, the button Enter presses,
+    // and only then asks the model to uninstall.
+    [UITestMethod]
+    public async Task UninstallAsksTheModelsQuestionFirst()
+    {
+        var question = new Question(
+            "Uninstall Pitboard?", "Pitboard deletes its saved sign-ins, settings and account windows.", "Uninstall",
+            Destructive: false, ConfirmIsDefault: false);
+        var model = new StandInModel(Snapshots.Read(1) with { Uninstall = new ItemOffer("Uninstall…", new Intent.Uninstall(), Enabled: true, question) });
+        var context = Views.Context(new AppModel(model));
+        var page = await Views.Navigated<SettingsPage>(context);
+        var uninstall = Views.Element<Button>(page, "settings.uninstall");
+        Assert.AreEqual("Uninstall…", uninstall.Content);
+        Assert.AreEqual("Uninstall Pitboard", Card(uninstall).Header);
+        Assert.AreEqual("Uninstall Pitboard", AutomationProperties.GetName(Card(uninstall)), "the group Narrator reads the button in");
+        Assert.AreEqual("U", uninstall.AccessKey);
+
+        Views.Press(uninstall);
+        await Views.Until(() => context.Dialogs.Open is { IsLoaded: true }, "no question");
+        var asked = context.Dialogs.Open!;
+        Assert.AreEqual("Uninstall Pitboard?", asked.Title);
+        Assert.AreEqual(ContentDialogButton.Close, asked.DefaultButton);
+        await Views.Until(
+            () => FocusManager.GetFocusedElement(asked.XamlRoot) is Button { Name: "CloseButton" },
+            () => $"the question opened on {(FocusManager.GetFocusedElement(asked.XamlRoot) as FrameworkElement)?.Name}");
+        Assert.IsEmpty(model.Sent.OfType<Intent.Uninstall>(), "uninstalled before the answer");
+        Views.Press(Views.Descendants(asked).OfType<Button>().Single(button => button.Name == "PrimaryButton"));
+
+        await Views.Until(() => model.Sent.Contains(new Intent.Uninstall()), "the answer did not uninstall");
+    }
+
+    // As Windows Settings keeps Troubleshoot: a card for each of the pages that look into Pitboard, which open them.
+    [UITestMethod]
+    public async Task TroubleshootHasACardForDiagnosticsAndActivity()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
+
+        SettingsCard[] cards = [Views.Element<SettingsCard>(page, "settings.diagnostics"), Views.Element<SettingsCard>(page, "settings.activity")];
+
+        Assert.AreEqual(
+            "Diagnostics: Check how Pitboard, Claude Code and Codex are set up on this PC. | Activity: Every switch and change Pitboard made.",
+            string.Join(" | ", cards.Select(card => $"{card.Header}: {card.Description}")));
+        Assert.AreEqual(
+            string.Join(" | ", cards.Select(card => card.Description)), string.Join(" | ", cards.Select(AutomationProperties.GetHelpText)),
+            "what Narrator says after each card's name");
+        Assert.IsTrue(cards.All(card => card.IsClickEnabled), "a card that does not open its page");
+    }
+
+    // The macOS Settings' three panes, Troubleshoot, then About.
     [UITestMethod]
     public async Task ThePageHasTheSectionsOfTheMacOSPanes()
     {
@@ -91,6 +165,41 @@ public sealed class SettingsPageTests
 
         CollectionAssert.AreEqual(
             Sections, Views.Visible<TextBlock>(page).Where(text => text.Style == heading).Select(text => text.Text).ToArray());
+    }
+
+    // Plan 4.11 and the approved mockup: each setting with its icon, as Windows Settings draws its own.
+    [UITestMethod]
+    public async Task EachSettingHasItsIcon()
+    {
+        var page = await Shown(
+            new AppModel(new StandInModel(Snapshots.Read(1))), updates: new StandInUpdates(),
+            notifications: () => new("Off.", InSettings: true));
+        var settings = ((Panel)Said(page, Words.Settings.General).Parent).Children
+            .Where(setting => setting is SettingsCard or SettingsExpander && setting.Visibility == Visibility.Visible)
+            .ToArray();
+
+        Assert.HasCount(12, settings, "4 in General, 2 in Limits, 3 in Advanced, 2 in Troubleshoot and About");
+        Assert.AreEqual(
+            "",
+            string.Join(", ", settings
+                .Where(setting => setting is SettingsCard { HeaderIcon: null } or SettingsExpander { HeaderIcon: null })
+                .Select(setting => (setting as SettingsCard)?.Header ?? (setting as SettingsExpander)?.Header)));
+    }
+
+    // The welcome's sentence under the same switch, and the version under its own name with Check now, as the mockup has
+    // them.
+    [UITestMethod]
+    public async Task GeneralSaysWhatStartingAtSignInIsForAndWhichVersionThisIs()
+    {
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), updates: new StandInUpdates(), version: "1.1.0");
+        var checkNow = Views.Element<Button>(page, "settings.checkNow");
+
+        Assert.AreSame(
+            Card(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn")), Card(Said(page, Words.Settings.OpenAtLoginNote)));
+        Assert.AreEqual(Words.Settings.Version, Card(checkNow).Header);
+        Assert.AreEqual(Words.Settings.Version, AutomationProperties.GetName(Card(checkNow)), "the group Narrator reads the button in");
+        Assert.AreSame(Card(checkNow), Card(Said(page, PitboardFfiMethods.NamedVersion("1.1.0"))));
+        Assert.AreEqual("C", checkNow.AccessKey);
     }
 
     [UITestMethod]
@@ -134,7 +243,7 @@ public sealed class SettingsPageTests
 
         Assert.IsFalse(toggle.IsOn);
         Assert.IsFalse(toggle.IsEnabled);
-        Assert.Contains(SettingsViewModel.TurnedOffNote, Views.Texts(page));
+        Assert.Contains(Words.Settings.StartupTurnedOff!, Views.Texts(page));
         Assert.AreSame(Card(toggle), Card(link));
         new HyperlinkButtonAutomationPeer(link).Invoke();
         Assert.AreEqual(new Uri("ms-settings:startupapps"), opened.Single());
@@ -154,7 +263,7 @@ public sealed class SettingsPageTests
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), start);
 
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn").IsEnabled);
-        Assert.Contains("A Debug build never starts when you sign in to Windows.", Views.Texts(page));
+        Assert.Contains(Words.Settings.DebugNeverStarts!, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -189,7 +298,7 @@ public sealed class SettingsPageTests
         var app = new AppModel(model);
         var page = await Shown(app);
         var choice = Views.Element<ComboBox>(page, "settings.atLimit");
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
 
         Assert.IsTrue(choice.IsEnabled);
@@ -209,7 +318,9 @@ public sealed class SettingsPageTests
         }));
         Assert.IsTrue(Shows(page, "settings.autoSwitchStanding"));
         Assert.Contains(Watching, Views.Texts(page));
-        Assert.Contains(Snapshots.Terms.Sentence, Views.Texts(page));
+        // Plan 4.11: the note and Is this allowed?, the terms' own sentence left to the page it opens.
+        Assert.IsTrue(Views.Visible<HyperlinkButton>(page).Any(link => AutomationProperties.GetAutomationId(link) == "settings.atLimitTerms"));
+        Assert.DoesNotContain(Snapshots.Terms.Sentence, Views.Texts(page));
 
         share.Value = 96;
         Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 96), model.Sent);
@@ -220,7 +331,7 @@ public sealed class SettingsPageTests
     {
         var unread = With(1, machine => machine with { AtLimit = machine.AtLimit with { Enabled = false, ShareEnabled = false } });
         var page = await Shown(new AppModel(new StandInModel(unread)));
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
 
         Assert.IsFalse(Views.Element<ComboBox>(page, "settings.atLimit").IsEnabled);
         Assert.IsFalse(Views.Element<NumberBox>(page, "settings.atLimitShare").IsEnabled);
@@ -231,8 +342,9 @@ public sealed class SettingsPageTests
     {
         var opened = new List<Uri>();
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))), open: opened.Add);
-        await Expand(page, "settings.warm", Snapshots.Terms.Sentence);
+        await Expand(page, "settings.warm", Snapshots.Terms.LinkTitle);
 
+        Assert.DoesNotContain(Snapshots.Terms.Sentence, Views.Texts(page));
         new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(page, "settings.warmTerms")).Invoke();
 
         Assert.AreEqual(new Uri(Snapshots.Terms.Link), opened.Single());
@@ -245,8 +357,8 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.warm", "No Claude Code account is enrolled yet.");
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.warm", "Add a Claude Code account to warm it up.");
+        await Expand(page, "settings.atLimitGroup", "At");
         var sent = model.Sent.Count;
 
         app.Apply(With(2, machine => machine with
@@ -274,12 +386,14 @@ public sealed class SettingsPageTests
         var page = await Shown(new AppModel(model));
 
         Assert.IsTrue(Shows(page, "settings.warmStanding"), "what comes next shows while it is closed");
+        Assert.AreSame(Said(page, TwoWarmed.Note).Parent, Said(page, TwoWarmed.Standing!).Parent);
+        Assert.AreEqual(TwoWarmed.RangeLabel, (Views.Element<SettingsExpander>(page, "settings.warm").Content as TextBlock)?.Text);
         await Expand(page, "settings.warm", "work");
 
         var texts = Views.Texts(page);
         Assert.Contains("Warms up again at 22:50", texts);
         Assert.Contains("Next warm-up: personal at 22:50.", texts);
-        Assert.DoesNotContain("No Claude Code account is enrolled yet.", texts);
+        Assert.DoesNotContain("Add a Claude Code account to warm it up.", texts);
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
 
         Views.Element<ToggleSwitch>(page, "settings.warm.claude/work").IsOn = true;
@@ -291,7 +405,7 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
 
-        await Expand(page, "settings.warm", "No Claude Code account is enrolled yet.");
+        await Expand(page, "settings.warm", "Add a Claude Code account to warm it up.");
 
         Assert.IsFalse(Views.Element<TimePicker>(page, "settings.warmFrom").IsEnabled);
         Assert.IsFalse(Views.Element<TimePicker>(page, "settings.warmTo").IsEnabled);
@@ -318,7 +432,7 @@ public sealed class SettingsPageTests
 
     // The toolkit's own sample gives a card in ItemsHeader or ItemsFooter the style of the expander's items.
     [UITestMethod]
-    public async Task TheWarmUpsHoursAndNoteAreCardsAsItsAccountsAre()
+    public async Task TheWarmUpsHoursAndLinkAreCardsAsItsAccountsAre()
     {
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))));
         await Expand(page, "settings.warm", "personal · Max");
@@ -328,7 +442,7 @@ public sealed class SettingsPageTests
         {
             ("From", Card(Views.Element<TimePicker>(page, "settings.warmFrom"))),
             ("To", Card(Views.Element<TimePicker>(page, "settings.warmTo"))),
-            ("the note", Card(Said(page, "Pitboard warms up Claude Code accounts only."))),
+            ("Is this allowed?", Card(Views.Element<HyperlinkButton>(page, "settings.warmTerms"))),
         })
         {
             Assert.AreEqual(account.Padding, card.Padding, name);
@@ -385,6 +499,7 @@ public sealed class SettingsPageTests
 
         Assert.Contains(bundled, texts);
         Assert.Contains("The one inside this app, so it updates with the app.", texts);
+        Assert.AreEqual(Words.Settings.CommandLine, Card(Said(page, bundled)).Header);
         Assert.DoesNotContain(NewTerminals, texts);
         Assert.IsFalse(Views.Visible<Button>(page).Any(button => button.Content is string said && said.StartsWith("Install", StringComparison.Ordinal)));
     }
@@ -408,7 +523,8 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))));
 
-        Assert.IsTrue(Views.Visible<ProgressRing>(page).Single(ring => AutomationProperties.GetName(ring) == "Looking for pitboard").IsActive);
+        Assert.IsTrue(
+            Views.Visible<ProgressRing>(page).Single(ring => AutomationProperties.GetName(ring) == Words.Settings.LookingForCommandLine).IsActive);
     }
 
     [UITestMethod]
@@ -419,7 +535,7 @@ public sealed class SettingsPageTests
 
         Assert.IsTrue(texts.Any(text => text.StartsWith("This copy of Pitboard can", StringComparison.Ordinal)));
         Assert.Contains("Pitboard 0.0.0", texts);
-        Assert.DoesNotContain(SettingsViewModel.BetaNote, texts);
+        Assert.DoesNotContain(Words.Settings.BetaUpdates!, texts);
         Assert.IsFalse(Views.Element<Button>(page, "settings.checkNow").IsEnabled);
     }
 
@@ -452,7 +568,7 @@ public sealed class SettingsPageTests
 
         updates.Found("1.0.1");
 
-        Assert.Contains("Pitboard 1.0.1 is ready to install.", Views.Texts(page));
+        Assert.Contains(PitboardFfiMethods.ReadyToInstall("1.0.1"), Views.Texts(page));
     }
 
     [UITestMethod]
@@ -460,7 +576,7 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), version: "1.0.0-beta.1");
 
-        Assert.Contains(SettingsViewModel.BetaNote, Views.Texts(page));
+        Assert.Contains(Words.Settings.BetaUpdates!, Views.Texts(page));
     }
 
     // Before 1.0.0 the feed of full releases is GitHub's 404, which Check now showed as WinSparkle's error.
@@ -473,7 +589,7 @@ public sealed class SettingsPageTests
         var checkNow = Views.Element<Button>(page, "settings.checkNow");
 
         Assert.IsFalse(checkNow.IsEnabled);
-        Assert.Contains(SparkleUpdates.NoFeed, Views.Texts(page));
+        Assert.Contains(Words.Settings.NoReleaseToUpdateTo!, Views.Texts(page));
         Assert.IsFalse(
             Views.Visible<ToggleSwitch>(page).Any(shown => AutomationProperties.GetAutomationId(shown) == "settings.checkAutomatically"),
             "automatic checks are offered");
@@ -483,10 +599,10 @@ public sealed class SettingsPageTests
 
         Assert.IsTrue(checkNow.IsEnabled);
         await Views.Until(
-            () => !Views.Texts(page).Contains(SparkleUpdates.NoFeed)
+            () => !Views.Texts(page).Contains(Words.Settings.NoReleaseToUpdateTo!)
                 && Views.Visible<ToggleSwitch>(page).Any(shown => AutomationProperties.GetAutomationId(shown) == "settings.checkAutomatically"),
             "the page still holds checks back once a full release has a feed");
-        Assert.Contains(SettingsViewModel.BetaNote, Views.Texts(page));
+        Assert.Contains(Words.Settings.BetaUpdates!, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -503,13 +619,18 @@ public sealed class SettingsPageTests
         await Views.Until(() => Views.Visible<HyperlinkButton>(page).Any(), "About did not open");
 
         Assert.Contains("1.2.3", Views.Texts(page));
-        Assert.Contains(SettingsViewModel.Copyright, Views.Texts(page));
-        var report = Views.Visible<HyperlinkButton>(page).Single(link => link.Content as string == "Report a problem");
+        Assert.Contains(Words.Settings.Copyright, Views.Texts(page));
+        Assert.AreEqual(Words.AppName, about.Header);
+        Assert.AreEqual(Words.Menu.About, AutomationProperties.GetName(about));
+        CollectionAssert.AreEqual(
+            new[] { "usepitboard.com", Words.Settings.Help, Words.Settings.SourceCode, Words.Settings.ReportAProblem, Words.Settings.License },
+            Views.Visible<HyperlinkButton>(page).Select(link => link.Content as string).ToArray());
+        var report = Views.Visible<HyperlinkButton>(page).Single(link => link.Content as string == Words.Settings.ReportAProblem);
         new HyperlinkButtonAutomationPeer(report).Invoke();
         Assert.AreEqual(new Uri("https://github.com/datlechin/pitboard/issues"), opened.Single());
 
         // The window had no way to the help but the icon's menu.
-        var help = Views.Visible<HyperlinkButton>(page).Single(link => link.Content as string == "Pitboard help");
+        var help = Views.Visible<HyperlinkButton>(page).Single(link => link.Content as string == Words.Settings.Help);
         new HyperlinkButtonAutomationPeer(help).Invoke();
         Assert.AreEqual(new Uri("https://docs.usepitboard.com"), opened.Last());
     }
@@ -539,24 +660,24 @@ public sealed class SettingsPageTests
         }
     }
 
-    // A setting that does nothing while another is off is dimmed, header and all, as Windows Settings dims one.
+    // Plan 4.5 and the approved mockup: At shows only where something happens at the share.
     [UITestMethod]
-    public async Task ATurnedOffSettingDimsItsHeader()
+    public async Task TheShareHidesWhileNothingHappensAtIt()
     {
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
         var card = Card(Views.Element<NumberBox>(page, "settings.atLimitShare"));
 
-        Assert.IsTrue(card.IsEnabled);
+        Assert.AreEqual(Visibility.Visible, card.Visibility);
 
         app.Apply(With(2, machine => machine with
         {
             AtLimit = machine.AtLimit with { Choice = AtLimit.Nothing, ShareEnabled = false },
         }));
 
-        Assert.IsFalse(card.IsEnabled);
+        Assert.AreEqual(Visibility.Collapsed, card.Visibility);
     }
 
     // The header repeated the share the box beside it held; the choice's name says it for Narrator.
@@ -566,7 +687,7 @@ public sealed class SettingsPageTests
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
-        await Expand(page, "settings.atLimitGroup", "Share of a limit");
+        await Expand(page, "settings.atLimitGroup", "At");
         var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
         var card = Card(share);
 
@@ -575,9 +696,9 @@ public sealed class SettingsPageTests
             AtLimit = machine.AtLimit with { At = 90, AtLabel = "When a limit reaches 90%" },
         }));
 
-        Assert.AreEqual("Share of a limit", card.Header);
+        Assert.AreEqual("At", card.Header);
         Assert.AreEqual("From 50% to 99%", card.Description);
-        Assert.AreEqual("Share of a limit", AutomationProperties.GetName(share));
+        Assert.AreEqual("At", AutomationProperties.GetName(share));
         Assert.AreEqual("When a limit reaches 90%", AutomationProperties.GetName(Views.Element<ComboBox>(page, "settings.atLimit")));
         Assert.AreEqual(90.0, share.Value);
     }
@@ -601,7 +722,7 @@ public sealed class SettingsPageTests
     [UITestMethod]
     public async Task AReleaseBuildWhoseNotificationsAreOffSaysWhy()
     {
-        const string why = WindowsNotifications.Unoffered;
+        var why = Words.Settings.NotificationsUnoffered!;
         var off = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), notifications: () => new(why, InSettings: false));
 
         Assert.AreSame(Card(Said(off, why)), Views.Element<SettingsCard>(off, "settings.notifications"));
@@ -619,13 +740,15 @@ public sealed class SettingsPageTests
     public async Task NotificationsTurnedOffInWindowsSettingsLinkThere()
     {
         var opened = new List<Uri>();
-        NotificationsBlocked? blocked = new(WindowsNotifications.OffForPitboard, InSettings: true);
+        NotificationsBlocked? blocked = new(Words.Settings.NotificationsOff, InSettings: true);
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), open: opened.Add, notifications: () => blocked);
         var card = Views.Element<SettingsCard>(page, "settings.notifications");
         var link = Views.Element<HyperlinkButton>(page, "settings.notificationSettings");
 
-        Assert.AreSame(card, Card(Said(page, WindowsNotifications.OffForPitboard)));
+        Assert.AreEqual(Words.Settings.Notifications, card.Header);
+        Assert.AreSame(card, Card(Said(page, Words.Settings.NotificationsOff)));
         Assert.AreSame(card, Card(link));
+        Assert.AreEqual(Words.Settings.OpenNotificationSettings, link.Content);
         new HyperlinkButtonAutomationPeer(link).Invoke();
         Assert.AreEqual(new Uri("ms-settings:notifications"), opened.Single());
 

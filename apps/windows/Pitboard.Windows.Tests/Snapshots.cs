@@ -2,7 +2,8 @@ using Pitboard.Core;
 
 namespace Pitboard.Windows.Tests;
 
-// Each call makes every list anew, as the bindings do for every snapshot told.
+// Each call makes every list anew, as the bindings do for every snapshot told. Each sentence is the model's own, as
+// present/words.rs pins it, which StandInsTests checks.
 internal static class Snapshots
 {
     public static Snapshot Read(ulong revision) =>
@@ -12,13 +13,14 @@ internal static class Snapshots
             SigningIn: null, Sheet: null, SheetFailure: null,
             MenuBar: new MenuBarText(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
-                Tip: "Pitboard\nwork: 5-hour 42%"),
-            Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
+                Tip: "Pitboard\nwork: 5-hour 42% used"),
+            Sections: [],
+            AccountMenu: new AccountMenuShown(Offers: ["Switch", "Sign in again…", "Rename…"], Forget: "Remove account…"),
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], SignIns: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
-            UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
+            UpdatedMenu: "Updated 12:00", UpdatedWindow: "Updated 12:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
             Machine: Unread(),
             AccountWindows: new AccountWindowsShown(
@@ -30,18 +32,19 @@ internal static class Snapshots
                     Title: "No link to open",
                     Detail: "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share menu to open it as one of your accounts."),
                 Held: []),
-            Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
+            Uninstall: new ItemOffer(Title: "Uninstall…", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
             Removal: null,
             Welcome: new WelcomeShown(
                 Title: "Welcome to Pitboard", Lines: [], IconLink: null, ToolsHeading: "Found on this PC", Tools: [],
-                OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: ""),
+                OpenAtLogin: new WelcomeLogin(
+                    Title: "Start when you sign in to Windows", On: false, Note: "Pitboard watches your limits only while it’s running."),
                 Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
             GlanceRevision: 0, Answers: []);
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(
             On: false, Enabled: true, Note: null, Failed: null,
-            About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
+            About: "Your PC refreshes your saved sign-ins once a day, so one you leave alone doesn’t expire."),
         Checks: new ChecksShown(
             Groups: [], Summary: null, Verdict: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…",
             Report: null),
@@ -55,10 +58,12 @@ internal static class Snapshots
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
             AtLabel: "When a limit reaches 95%",
-            ShareLabel: "Share of a limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: null),
+            ShareLabel: "At", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: null),
         Warm: new WarmShown(
-            Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
-            NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false, Terms: Terms));
+            Title: "Warm-up", From: 360, To: 1320, RangeLabel: "6:00 AM to 10:00 PM", Accounts: [],
+            NoneEnrolled: "Add a Claude Code account to warm it up.", Standing: null,
+            Note: "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, while it’s open.",
+            Enabled: false, Terms: Terms));
 
     // One array, so two snapshots made here are equal.
     private static readonly AtLimitChoice[] AtLimitChoices =

@@ -3,43 +3,43 @@
     x:Class="Pitboard.Views.AccountsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:core="using:Pitboard.Core"
     xmlns:local="using:Pitboard.Views"
     xmlns:shown="using:Pitboard.Windows"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     NavigationCacheMode="Required">
+  <!-- For the style of the expander's own items, which a card in an opened row's lists takes, as Settings' warm-up hours do. -->
+  <Page.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///CommunityToolkit.WinUI.Controls.SettingsControls/SettingsExpander/SettingsExpander.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Page.Resources>
   <Grid Padding="0,16,0,0" RowSpacing="24">
-    <VisualStateManager.VisualStateGroups>
-      <VisualStateGroup x:Name="Sides">
-        <VisualState x:Name="Wide" />
-        <VisualState x:Name="Minimal">
-          <VisualState.Setters>
-            <Setter Target="PageHeader.Margin" Value="{StaticResource PageHeaderMarginMinimal}" />
-            <Setter Target="AccountList.Padding" Value="{StaticResource PageContentPaddingMinimal}" />
-          </VisualState.Setters>
-        </VisualState>
-      </VisualStateGroup>
-    </VisualStateManager.VisualStateGroups>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
-    <Grid x:Name="PageHeader" Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
+    <Grid Margin="{StaticResource PageHeaderMargin}" ColumnSpacing="12">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
-      <StackPanel VerticalAlignment="Center">
-        <TextBlock Text="Accounts" Style="{StaticResource PageTitleTextBlockStyle}" />
+      <StackPanel VerticalAlignment="Top">
+        <TextBlock Text="{x:Bind shown:Words.Window.Accounts}" Style="{StaticResource PageTitleTextBlockStyle}" />
         <TextBlock Text="{x:Bind ViewModel.Updated, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
       </StackPanel>
       <CommandBar
           Grid.Column="1"
-          VerticalAlignment="Center"
+          VerticalAlignment="Top"
           Background="Transparent"
           DefaultLabelPosition="Right"
           OverflowButtonVisibility="Collapsed">
         <AppBarButton
-            Label="Refresh"
-            ToolTipService.ToolTip="Read every account’s usage again"
+            Label="{x:Bind shown:Words.Window.Refresh}"
+            ToolTipService.ToolTip="{x:Bind shown:Words.Window.RefreshHelp}"
+            AccessKey="R"
             IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"
             AutomationProperties.AutomationId="accounts.refresh"
             Click="OnRefresh">
@@ -52,8 +52,10 @@
           </AppBarButton.KeyboardAccelerators>
         </AppBarButton>
         <AppBarButton
-            Label="Add account"
-            ToolTipService.ToolTip="Sign in to another account"
+            x:Name="AddAccount"
+            Label="{x:Bind shown:Words.Window.AddAccount}"
+            ToolTipService.ToolTip="{x:Bind shown:Words.Window.AddAccountHelp}"
+            AccessKey="A"
             KeyboardAcceleratorTextOverride="Ctrl+N"
             AutomationProperties.AutomationId="accounts.add"
             Click="OnAdd">
@@ -63,58 +65,215 @@
         </AppBarButton>
       </CommandBar>
     </Grid>
-    <ListView
-        x:Name="AccountList"
+    <!-- Each account is a SettingsExpander, as plan 4.9 has it: the account and its limits, and its details opened. -->
+    <ScrollViewer
         Grid.Row="1"
         Padding="{StaticResource PageContentPadding}"
-        SelectionMode="Single"
-        IsSynchronizedWithCurrentItem="False"
         Visibility="{x:Bind ViewModel.Listed, Mode=OneWay}"
         AutomationProperties.AutomationId="accounts"
-        AutomationProperties.Name="Accounts"
+        AutomationProperties.Name="{x:Bind shown:Words.Window.Accounts}"
         ContextRequested="OnContextRequested"
-        DoubleTapped="OnDoubleTapped">
-      <ListView.Header>
-        <StackPanel Padding="0,0,0,8" Spacing="8">
-          <StackPanel x:Name="Notices" Spacing="8" />
-          <InfoBar
-              IsClosable="False"
-              IsOpen="{x:Bind ViewModel.HasSetup, Mode=OneWay}"
-              Title="{x:Bind ViewModel.SetupTitle, Mode=OneWay}"
-              Message="{x:Bind ViewModel.SetupDetail, Mode=OneWay}"
-              AutomationProperties.AutomationId="{x:Bind local:AccountsPage.SetupId(ViewModel.SetupFooting), Mode=OneWay}">
-            <InfoBar.IconSource>
-              <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupFooting), Mode=OneWay}" />
-            </InfoBar.IconSource>
-            <InfoBar.Content>
-              <StackPanel x:Name="SetupChoices" Margin="0,0,0,12" Orientation="Horizontal" Spacing="8" />
-            </InfoBar.Content>
-          </InfoBar>
-        </StackPanel>
-      </ListView.Header>
-      <ListView.ItemContainerStyle>
-        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
-          <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        </Style>
-      </ListView.ItemContainerStyle>
-      <ListView.ItemTemplate>
-        <DataTemplate x:DataType="shown:ShownAccount">
-          <local:AccountRow Account="{x:Bind}" />
-        </DataTemplate>
-      </ListView.ItemTemplate>
-      <ListView.GroupStyle>
-        <GroupStyle>
-          <GroupStyle.HeaderTemplate>
+        PreviewKeyDown="OnAccountKeyDown">
+      <StackPanel Spacing="30">
+        <!-- What lasts until it is dealt with, as Microsoft's guidance keeps InfoBars; a tip is a TeachingTip. -->
+        <StackPanel x:Name="Notices" Spacing="8" />
+        <!-- A tool's name heads its accounts once another tool's are shown, as the settings page heads its sections. -->
+        <ItemsControl ItemsSource="{x:Bind ViewModel.Sections}" IsTabStop="False">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="30" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="shown:ShownSection">
-              <TextBlock
-                  Text="{x:Bind Heading, Mode=OneWay}"
-                  Style="{StaticResource BodyStrongTextBlockStyle}"
-                  AutomationProperties.HeadingLevel="Level2" />
+              <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                <TextBlock
+                    Margin="1,0,0,6"
+                    Text="{x:Bind Heading, Mode=OneWay}"
+                    Visibility="{x:Bind Headed, Mode=OneWay}"
+                    Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" />
+                <ItemsControl ItemsSource="{x:Bind}" IsTabStop="False">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="{StaticResource SettingsCardSpacing}" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="shown:ShownAccount">
+                      <toolkit:SettingsExpander
+                          IsExpanded="{x:Bind Expanded, Mode=TwoWay}"
+                          AutomationProperties.AutomationId="{x:Bind local:AccountsPage.RowId(Item), Mode=OneWay}"
+                          AutomationProperties.Name="{x:Bind Item.Spoken, Mode=OneWay}">
+                        <toolkit:SettingsExpander.HeaderIcon>
+                          <FontIcon
+                              x:Name="Mark"
+                              Glyph="{x:Bind local:AccountsPage.MarkOf(Item), Mode=OneWay}"
+                              Style="{x:Bind local:AccountsPage.MarkStyle(Item), Mode=OneWay}"
+                              IsTextScaleFactorEnabled="False" />
+                        </toolkit:SettingsExpander.HeaderIcon>
+                        <toolkit:SettingsExpander.Header>
+                          <!-- Left-aligned, its star column takes only the name's width, so the plan follows the name and a long name is cut. -->
+                          <Grid HorizontalAlignment="Left" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TitleText" Text="{x:Bind Item.Title, Mode=OneWay}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="PlanText"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Text="{x:Bind local:AccountsPage.PlanOf(Item), Mode=OneWay}"
+                                Style="{StaticResource SecondaryCaptionTextBlockStyle}"
+                                TextWrapping="NoWrap" />
+                          </Grid>
+                        </toolkit:SettingsExpander.Header>
+                        <!-- A line per limit, and one line more only where there is something to do. -->
+                        <toolkit:SettingsExpander.Description>
+                          <StackPanel Spacing="4">
+                            <local:LimitLines Limits="{x:Bind Item.Limits, Mode=OneWay}" />
+                            <TextBlock
+                                Text="{x:Bind local:AccountsPage.NoteOf(Item), Mode=OneWay}"
+                                Visibility="{x:Bind local:AccountsPage.NoteShown(Item), Mode=OneWay}" />
+                            <!-- Where nothing in the app does something about the note, the docs that say what to do. -->
+                            <HyperlinkButton
+                                Content="{x:Bind local:AccountsPage.NoteLearnTitle(Item), Mode=OneWay}"
+                                Visibility="{x:Bind local:AccountsPage.NoteLearnShown(Item), Mode=OneWay}"
+                                Tag="{x:Bind}"
+                                AutomationProperties.AutomationId="account.note.learn"
+                                Click="OnNoteLearn" />
+                          </StackPanel>
+                        </toolkit:SettingsExpander.Description>
+                        <Grid>
+                          <ProgressRing
+                              Width="16"
+                              Height="16"
+                              IsActive="{x:Bind local:AccountsPage.Switching(Item), Mode=OneWay}"
+                              Visibility="{x:Bind local:AccountsPage.SwitchingShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind local:AccountsPage.SwitchingSpoken(Item), Mode=OneWay}"
+                              AutomationProperties.AutomationId="account.switching" />
+                          <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{x:Bind local:AccountsPage.InUseShown(Item), Mode=OneWay}">
+                            <FontIcon
+                                x:Name="InUseCheck"
+                                Glyph="&#xE73E;"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                IsTextScaleFactorEnabled="False"
+                                AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock
+                                Text="{x:Bind local:AccountsPage.InUseTitle(Item), Mode=OneWay}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                AutomationProperties.AutomationId="account.inUse" />
+                          </StackPanel>
+                          <Button
+                              Content="{x:Bind local:AccountsPage.ActionTitle(Item), Mode=OneWay}"
+                              Visibility="{x:Bind local:AccountsPage.ActionShown(Item), Mode=OneWay}"
+                              Tag="{x:Bind}"
+                              AutomationProperties.Name="{x:Bind local:AccountsPage.ActionSpoken(Item), Mode=OneWay}"
+                              AutomationProperties.AutomationId="account.action"
+                              Click="OnAction" />
+                        </Grid>
+                        <!-- An ItemsControl goes in ItemsHeader: the expander gives each of its Items a SettingsCard's style. -->
+                        <toolkit:SettingsExpander.ItemsHeader>
+                          <StackPanel>
+                            <!-- Each limit with how long until it resets, which the row's line has no room for. -->
+                            <ItemsControl ItemsSource="{x:Bind Item.Limits, Mode=OneWay}" IsTabStop="False">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="core:LimitRow">
+                                  <toolkit:SettingsCard
+                                      Header="{x:Bind Name}"
+                                      Description="{x:Bind Used}"
+                                      Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                                      AutomationProperties.Name="{x:Bind Name}">
+                                    <StackPanel HorizontalAlignment="Right">
+                                      <TextBlock HorizontalAlignment="Right" Text="{x:Bind Resets}" />
+                                      <TextBlock HorizontalAlignment="Right" Text="{x:Bind ResetsIn}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
+                                    </StackPanel>
+                                  </toolkit:SettingsCard>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- The notes past the one the row has room for. -->
+                            <ItemsControl ItemsSource="{x:Bind MoreNotes}" IsTabStop="False">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="shown:ShownNote">
+                                  <toolkit:SettingsCard
+                                      Header="{x:Bind Text}"
+                                      Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                                      AutomationProperties.Name="{x:Bind Text}">
+                                    <HyperlinkButton
+                                        Content="{x:Bind LearnTitle}"
+                                        Visibility="{x:Bind HasLearn}"
+                                        Tag="{x:Bind}"
+                                        AutomationProperties.AutomationId="detail.note.learn"
+                                        Click="OnMoreNoteLearn" />
+                                  </toolkit:SettingsCard>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </toolkit:SettingsExpander.ItemsHeader>
+                        <toolkit:SettingsExpander.Items>
+                          <!-- A card that cannot be clicked is a group, which Narrator names only by its own name. -->
+                          <toolkit:SettingsCard
+                              Header="{x:Bind shown:Words.Window.Email}"
+                              Description="{x:Bind local:AccountsPage.EmailOf(Item), Mode=OneWay}"
+                              Visibility="{x:Bind local:AccountsPage.EmailShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind shown:Words.Window.Email}">
+                            <Button
+                                Content="{x:Bind shown:Words.Window.Copy}"
+                                Tag="{x:Bind}"
+                                AutomationProperties.AutomationId="detail.copyEmail"
+                                AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"
+                                Click="OnCopyEmail" />
+                          </toolkit:SettingsCard>
+                          <toolkit:SettingsCard
+                              Header="{x:Bind shown:Words.Window.SignIn}"
+                              Description="{x:Bind local:AccountsPage.SignInOf(Item), Mode=OneWay}"
+                              Visibility="{x:Bind local:AccountsPage.SignInShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind shown:Words.Window.SignIn}" />
+                          <toolkit:SettingsCard
+                              Header="{x:Bind shown:Words.Window.WarmUp}"
+                              Description="{x:Bind local:AccountsPage.WarmOf(Item), Mode=OneWay}"
+                              Visibility="{x:Bind local:AccountsPage.WarmShown(Item), Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind shown:Words.Window.WarmUp}">
+                            <HyperlinkButton
+                                Content="{x:Bind local:AccountsPage.WarmSettingsTitle(Item), Mode=OneWay}"
+                                Tag="{x:Bind}"
+                                AutomationProperties.AutomationId="detail.warmUpSettings"
+                                Click="OnWarmUpSettings" />
+                          </toolkit:SettingsCard>
+                          <toolkit:SettingsCard ContentAlignment="Left" Visibility="{x:Bind HasCommands, Mode=OneWay}">
+                            <ItemsControl ItemsSource="{x:Bind Commands}" IsTabStop="False">
+                              <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                  <StackPanel Orientation="Horizontal" Spacing="8" />
+                                </ItemsPanelTemplate>
+                              </ItemsControl.ItemsPanel>
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="shown:ShownCommand">
+                                  <Button
+                                      Content="{x:Bind Action.Title}"
+                                      IsEnabled="{x:Bind Enabled}"
+                                      ToolTipService.ToolTip="{x:Bind Held}"
+                                      AutomationProperties.HelpText="{x:Bind HelpText}"
+                                      AutomationProperties.AutomationId="{x:Bind Id}"
+                                      Click="OnCommand" />
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </toolkit:SettingsCard>
+                        </toolkit:SettingsExpander.Items>
+                      </toolkit:SettingsExpander>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
             </DataTemplate>
-          </GroupStyle.HeaderTemplate>
-        </GroupStyle>
-      </ListView.GroupStyle>
-    </ListView>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
     <local:EmptyState
         Grid.Row="1"
         Visibility="{x:Bind ViewModel.ShowsEmpty, Mode=OneWay}"
@@ -126,5 +285,15 @@
         Prominent="{x:Bind ViewModel.Empty.Prominent, Mode=OneWay}"
         IsChoiceEnabled="{x:Bind ViewModel.Empty.Enabled, Mode=OneWay}"
         Chosen="OnEmptyChosen" />
+    <!-- The one next step of setting Pitboard up: its choice, and Not now, which turns it down for good. -->
+    <TeachingTip
+        x:Name="Tip"
+        AutomationProperties.AutomationId="{x:Bind local:AccountsPage.SetupId(ViewModel.SetupFooting), Mode=OneWay}"
+        ActionButtonClick="OnTipChosen"
+        CloseButtonClick="OnTipDeclined">
+      <TeachingTip.IconSource>
+        <FontIconSource Glyph="{x:Bind local:AccountsPage.SetupGlyph(ViewModel.SetupFooting), Mode=OneWay}" />
+      </TeachingTip.IconSource>
+    </TeachingTip>
   </Grid>
 </Page>

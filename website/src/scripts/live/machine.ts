@@ -1,6 +1,6 @@
-// This PC (answer 4 a), which stays on its spinner: no `pitboard doctor` run on Windows has been
-// read for the site to draw its checks from.
-// departs from the apps: This PC stays on its spinner
+// Windows' Diagnostics (answer 4 a), which stays on its spinner: no `pitboard doctor` run on
+// Windows has been read for the site to draw its checks from.
+// departs from the apps: Diagnostics stays on its spinner
 import { attr, cloned } from "./draw.ts";
 
 export class MachinePane {
@@ -17,6 +17,9 @@ export class MachinePane {
           ),
         ),
       );
-    attr(this.panel.querySelector('[data-does="check"]'), "disabled", "");
+    for (const held of this.panel.querySelectorAll(
+      '[data-does="check"], [data-does="copy-report"]',
+    ))
+      attr(held, "disabled", "");
   }
 }

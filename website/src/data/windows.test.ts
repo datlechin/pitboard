@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  TROUBLESHOOT,
   accountsPage,
   activityPage,
   app,
+  detail,
+  diagnostics,
   iconMenu,
+  joinsTheGroupBefore,
   panes,
   settingsPage,
+  subpages,
   switchNotice,
   toast,
 } from "./windows.ts";
@@ -21,39 +26,61 @@ const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`
 const core = (file: string) => repo(`crates/pitboard-core/src/${file}`);
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
+// app_words.rs and words.rs, where every word the Windows views draw is the model's: each holds
+// the words as a literal, and a view binds the field of app_words() that gives it.
+const said = joined(present("app_words.rs") + present("words.rs"));
+const owned = (words: string) => said.includes(`"${words}"`);
 
 const headings = new Set(tools.map(([, name]) => name));
 const menu = (updates: boolean) => iconMenu(moments.after, updates).flat();
 
-test("the icon's menu says what IconMenu.cs gives it, in its order", () => {
+test("the icon's menu says what IconMenu.cs gives it, in Microsoft's order, Open Pitboard first and Exit last", () => {
   const source = shell("IconMenu.cs");
   const commands = menu(true).flatMap((e) => ("command" in e && !e.submenu ? [e.command] : []));
   assert.deepEqual(commands, [
-    "Add account…",
-    "Refresh",
     "Open Pitboard",
+    "Add account…",
     "Settings",
     "Check for updates",
     "Pitboard help",
     "Exit",
   ]);
-  for (const c of commands) assert.ok(source.includes(`new IconMenuEntry.Command("${c}"`), c);
+  for (const c of commands) assert.ok(owned(c), c);
+  // in the order IconMenu.cs's groups take app_words()' menu words, Check for updates among
+  // Updates' and the accounts and sites between
+  const at = (part: string) => source.indexOf(part);
+  const order = [
+    "words.OpenPitboard",
+    "Accounts(model.Sections),",
+    "words.AddAccount",
+    "Sites(model.AccountWindows),",
+    "words.Settings",
+    ".. Updates(updates),",
+    "words.Help",
+    "words.Quit",
+  ];
+  for (const part of order) assert.ok(at(part) > 0, part);
+  assert.deepEqual(
+    order.map(at),
+    order.map(at).toSorted((a, b) => a - b),
+  );
+  assert.ok(source.includes("Words.Menu.CheckForUpdates"));
   assert.ok(
     menu(true).some((e) => "command" in e && e.command === "Open Pitboard" && e.bold),
     "the click's default is bold",
   );
   assert.match(
     source,
-    /"Open Pitboard", new IconCommand\.Send\(new Intent\.Show\(Place: null\)\)\)\s*\{\s*Default = true,/,
+    /words\.OpenPitboard, new IconCommand\.Send\(new Intent\.Show\(Place: null\)\)\)\s*\{\s*Default = true,/,
   );
 });
 
 test("a beta's menu has no Check for updates, as IconMenu.cs offers it only beside a release", () => {
-  assert.ok(shell("IconMenu.cs").includes("updates.Available && !updates.Beta"));
+  assert.ok(shell("IconMenu.cs").includes("return updates.Beta"));
   assert.ok(!menu(false).some((e) => "command" in e && e.command === "Check for updates"));
 });
 
-test("the menu heads each tool's accounts with its name, and names each account with the menu bar's figure", () => {
+test("the menu heads each tool's accounts with its name, one group of them, and names each account with how much it has used", () => {
   const words = present("words.rs");
   assert.ok(
     words.includes('(Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),'),
@@ -74,11 +101,18 @@ test("the menu heads each tool's accounts with its name, and names each account 
     checked.map((e) => ("account" in e ? e.account : "")),
     ["work (40%)", "main (7%)"],
   );
+  // each tool's accounts follow the one before with no separator, as IconMenu.cs makes them one
+  // group
+  const groups = iconMenu(moments.after, false);
+  const tools = groups.filter((g) => "heading" in g[0]);
+  assert.equal(tools.length, 2);
+  assert.ok(joinsTheGroupBefore(tools[1], tools[0]));
+  assert.ok(!joinsTheGroupBefore(tools[0], groups[0]));
 });
 
 test("an account's tooltip in the icon's menu is the line the menu bar app shows under it", () => {
   assert.ok(shell("IconMenu.cs").includes("Lines(item.Summary, item.Help)"));
-  assert.ok(views("IconMenuFlyout.cs").includes("ToolTipService.SetToolTip(item, detail);"));
+  assert.ok(views("IconMenuFlyout.cs").includes("ToolTipService.SetToolTip(radio, detail);"));
   assert.ok(
     present("accounts.rs").includes(
       "in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))",
@@ -143,54 +177,174 @@ test("the Shell holds 127 UTF-16 units of the icon's tooltip, cut never inside a
   assert.equal(shellTip(`${"a".repeat(126)}😀`), "a".repeat(126));
 });
 
-test("the icon in the notification area draws the menu bar's level, from Tray's drawings", () => {
-  assert.ok(shell("Shell.cs").includes('"Tray", $"{look.Level?.ToString() ?? "None"}.ico"'));
+test("the icon in the notification area draws the menu bar's level, from Tray's drawings in the taskbar's ink", () => {
+  assert.ok(
+    shell("Shell.cs").includes(
+      '"Tray", place.LightTaskbar ? "Light" : "Dark", $"{look.Level?.ToString() ?? "None"}.ico"',
+    ),
+  );
   const make = repo("apps/windows/Icon/make-ico.py");
   assert.ok(make.includes('for level in ("Plenty", "Low", "Out", "None"):'));
   assert.ok(make.includes('f"tray-{level.lower()}-{grid}.svg"'));
+  // one ink, which the page's taskbar gives as its text colour, as make-ico.py's stylesheet does
+  assert.ok(make.includes('".ink { color: #ffffff; }"'));
   for (const file of ["plenty", "low", "out"]) {
-    assert.match(repo(`apps/windows/Icon/tray-${file}-16.svg`), /^<svg /);
+    const drawing = repo(`apps/windows/Icon/tray-${file}-16.svg`);
+    assert.match(drawing, /^<svg /);
+    assert.ok(drawing.includes('<g class="ink" fill="currentColor">'), file);
   }
   assert.ok(present("accounts.rs").includes(".map(|limit| crate::usage_level(limit.percent)),"));
   assert.equal(menuBarLevel(moments.before), "y");
   assert.equal(menuBarLevel(moments.after), "g");
 });
 
-test("the window and its panes are named as MainWindow.xaml names them", () => {
+test("the window and its places are named as MainWindow.xaml and SettingsPage.xaml name them", () => {
   const source = views("MainWindow.xaml");
   assert.equal(app, "Pitboard");
-  assert.ok(source.includes(`Title="${app}"`));
-  for (const [, name] of panes) assert.ok(source.includes(`Content="${name}"`), name);
+  assert.ok(source.includes('Title="{x:Bind shown:Words.AppName}"'));
+  assert.ok(present("app_words.rs").includes("app_name: words::PITBOARD.into(),"));
+  assert.ok(owned(app));
+  // Accounts in the navigation, and NavigationView's own Settings at the foot
+  assert.deepEqual(
+    panes.map(([, name]) => name),
+    ["Accounts"],
+  );
+  assert.ok(source.includes('Content="{x:Bind shown:Words.Window.Accounts}"'));
+  assert.ok(source.includes('PaneDisplayMode="LeftCompact"'));
+  assert.ok(owned("Accounts"));
+  // Settings > Troubleshoot's cards open Diagnostics and Activity under Settings, with the title
+  // bar's back button
+  const settings = views("SettingsPage.xaml");
+  assert.ok(settings.includes('Text="{x:Bind shown:Words.Settings.Troubleshoot}"'));
+  assert.ok(owned(TROUBLESHOOT));
+  for (const [pane, title, , about] of subpages) {
+    const field = pane === "machine" ? "Diagnostics" : "Activity";
+    assert.ok(settings.includes(`Header="{x:Bind shown:Words.Window.${field}}"`), field);
+    assert.ok(
+      settings.includes(`Description="{x:Bind shown:Words.Settings.${field}About}"`),
+      field,
+    );
+    assert.ok(owned(title), title);
+    assert.ok(
+      owned(about) || said.includes(about.replace("Pitboard, Claude Code and Codex", "{}")),
+      about,
+    );
+  }
+  const window = views("MainWindow.xaml.cs");
+  assert.ok(
+    window.includes(
+      "AppTitleBar.IsBackButtonVisible = args.SourcePageType == typeof(DiagnosticsPage) || args.SourcePageType == typeof(ActivityPage);",
+    ),
+  );
+  assert.ok(views("SettingsBreadcrumb.xaml").includes("<BreadcrumbBar"));
+  assert.ok(
+    owned(diagnostics.title) && owned(diagnostics.checkAgain) && owned(diagnostics.copyReport),
+  );
 });
 
-test("the Accounts page says what AccountsPage.xaml, AccountRow.xaml and the core say", () => {
+test("the Accounts page says what AccountsPage.xaml binds and the core says", () => {
   const page = accountsPage(moments.after, switchNotice);
   const xaml = views("AccountsPage.xaml");
-  assert.ok(xaml.includes(`Text="${page.title}"`));
-  for (const c of page.commands) assert.ok(xaml.includes(`Label="${c}"`), c);
+  assert.ok(xaml.includes('Text="{x:Bind shown:Words.Window.Accounts}"'));
+  for (const field of ["Refresh", "AddAccount"])
+    assert.ok(xaml.includes(`Label="{x:Bind shown:Words.Window.${field}}"`), field);
+  for (const said of [page.title, ...page.commands]) assert.ok(owned(said), said);
   assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
   assert.match(page.updated, /^Updated \d\d:\d\d$/);
   assert.ok(present("words.rs").includes('titled(os, "In Use", IN_USE)'));
-  assert.ok(present("accounts.rs").includes("title: words::switch_account(None),"));
   assert.deepEqual(
     page.sections.map((s) => s.name),
     ["Claude Code", "Codex"],
   );
   const rows = page.sections.flatMap((s) => s.rows);
   assert.ok(rows.every((r) => r.inUse !== (r.action?.title === "Switch")));
-  // Narrator hears a row, its button and each limit as present/accounts.rs says them
+  // Narrator hears a row's toggle, its button and each limit as present/accounts.rs says them
+  assert.ok(xaml.includes('AutomationProperties.Name="{x:Bind Item.Spoken, Mode=OneWay}"'));
   assert.ok(
-    views("AccountRow.xaml").includes(
-      'AutomationProperties.Name="{x:Bind local:AccountRow.ActionSpoken(Account.Item)',
+    xaml.includes(
+      'AutomationProperties.Name="{x:Bind local:AccountsPage.ActionSpoken(Item), Mode=OneWay}"',
     ),
   );
-  assert.ok(
-    views("AccountRow.xaml.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"),
-  );
+  assert.ok(views("LimitLines.cs").includes("AutomationProperties.SetName(name, limit.Spoken);"));
   const personal = rows.find((r) => r.label === "personal")!;
   assert.equal(personal.spoken, "personal, Max 20x");
   assert.equal(personal.action?.spoken, "Switch to personal");
   assert.equal(personal.limits[0].spoken, "5-hour limit, 59 percent used, resets 22:00");
+  assert.equal(personal.keys, "Delete F2 Control+C");
+});
+
+test("an opened row's cards say what AccountsPage.xaml binds from app_words() and the core, and its commands follow", () => {
+  const xaml = views("AccountsPage.xaml");
+  for (const [field, words] of [
+    ["Email", detail.email],
+    ["SignIn", detail.signIn],
+    ["WarmUp", detail.warmUp],
+  ]) {
+    assert.ok(xaml.includes(`Header="{x:Bind shown:Words.Window.${field}}"`), field);
+    assert.ok(
+      xaml.includes(`AutomationProperties.Name="{x:Bind shown:Words.Window.${field}}"`),
+      field,
+    );
+    assert.ok(owned(words), words);
+  }
+  assert.ok(xaml.includes('Content="{x:Bind shown:Words.Window.Copy}"'));
+  assert.ok(xaml.includes('AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"'));
+  assert.ok(owned(detail.copy) && owned("Copy email address"));
+  assert.ok(
+    present("words.rs").includes(`titled(os, "Warm-Up Settings…", "${detail.warmUpSettings}")`),
+  );
+  assert.ok(present("words.rs").includes('format!("Saved sign-in valid until {until}")'));
+  assert.ok(present("words.rs").includes(`pub(crate) const WARM_UP_OFF: &str = "${detail.off}";`));
+  // the day and month in the regional format's order, its month abbreviated
+  assert.ok(
+    shell("WindowsLocalTime.cs").includes(
+      'MonthDayPattern.Replace("MMMM", "MMM", StringComparison.Ordinal)',
+    ),
+  );
+  const rows = accountsPage(moments.after, null).sections.flatMap((s) => s.rows);
+  const row = (id: string) => rows.find((r) => r.id === id)!;
+  assert.equal(row("work").signIn, "In use");
+  assert.equal(row("personal").signIn, "Saved sign-in valid until 9 Nov");
+  assert.equal(row("spare").signIn, null, "no saved sign-in's date to say");
+  assert.deepEqual(
+    [row("personal").warm, row("work").warm, row("main").warm],
+    ["Warms up again at 22:00", "Off", null],
+  );
+  // its windows, then what its shortcut menu offers past its own button, and Remove, which the
+  // account in use holds back
+  const shown = shell("ShownAccount.cs");
+  assert.ok(
+    shown.includes(
+      "action is { Kind: ActionKind.SignInAgain or ActionKind.Rename or ActionKind.WarmUpNow, Enabled: true }",
+    ),
+  );
+  assert.ok(shown.includes("&& !Equals(action.Intent, item.Action?.Intent))"));
+  assert.ok(shown.includes(".. item.Actions.Where(action => action.Kind is ActionKind.Remove)"));
+  assert.ok(owned("Sign in again…") && owned("Warm up now"));
+  assert.deepEqual(
+    rows.map((r) => r.commands.signInAgain),
+    rows.map((r) => (r.action?.title === "Sign in…" ? null : "Sign in again…")),
+  );
+  // each limit's card, its reset then how long until it
+  for (const bound of [
+    'Header="{x:Bind Name}"',
+    'Description="{x:Bind Used}"',
+    'Text="{x:Bind ResetsIn}"',
+  ])
+    assert.ok(xaml.includes(bound), bound);
+  assert.ok(present("words.rs").includes('format!("in {}", span(seconds))'));
+  const [card, line] = [row("work").cards[0], row("work").limits[0]];
+  assert.deepEqual(
+    [card.name, card.used, card.resets],
+    ["5-hour limit", `${line.figure} used`, line.resets],
+  );
+  assert.match(card.resetsIn, /^in \d/);
+  assert.equal(row("work").commands.open, "Open claude.ai");
+  assert.equal(row("main").commands.open, "Open chatgpt.com");
+  assert.deepEqual(
+    [row("work").commands.remove.enabled, row("personal").commands.remove.enabled],
+    [false, true],
+  );
 });
 
 test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put together", () => {
@@ -206,32 +360,39 @@ test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put t
   assert.equal(switchNotice.countdown, "Claude Code sessions already open follow in 0:21");
 });
 
-test("an account's lines are the app's, a saved sign-in's only once it expires within days, then when it warms up", () => {
-  const said = core("words.rs");
-  assert.ok(said.includes('format!("warms up again at {}", moment(*next))'));
+test("an account's note is its most pressing, a saved sign-in's only once it expires within days", () => {
   const accounts = present("accounts.rs");
-  assert.ok(accounts.includes("let lines = [&problem, &stale_note, &ended, &warm_note]"));
+  assert.ok(accounts.includes("let notes: Vec<AccountNote> = ["));
   assert.ok(accounts.includes(".filter(|_| account.standing == status::Standing::Expiring)"));
-  assert.ok(views("AccountRow.xaml.cs").includes("foreach (var line in item.Lines)"));
-  const lines = (moment: "before" | "after") =>
-    accountsPage(moments[moment], null).sections.flatMap((s) => s.rows.flatMap((r) => r.lines));
-  assert.deepEqual(lines("before"), ["Warms up again at 22:00"]);
-  assert.deepEqual(lines("after"), ["Warms up again at 22:00"]);
+  assert.ok(
+    views("AccountsPage.xaml.cs").includes(
+      'public static string NoteOf(AccountItem item) => item.Notes.FirstOrDefault()?.Text ?? "";',
+    ),
+  );
+  const notes = (moment: "before" | "after") =>
+    accountsPage(moments[moment], null).sections.flatMap((s) => s.rows.map((r) => r.note));
+  assert.deepEqual(notes("before"), [null, null, null, null]);
+  assert.deepEqual(notes("after"), [null, null, null, null]);
   // two days before work's saved sign-in expires, and once it has
   const work = moments.after.accounts.find((a) => a.id === "work")!;
   const at = (now: number) =>
     accountsPage({ ...moments.before, now }, null).sections[0].rows.find((r) => r.id === "work")!;
-  assert.deepEqual(at(work.refreshExpiresAt! - 2 * 86_400 - 60).lines, [
-    "Sign-in expires in 2 days",
-  ]);
-  assert.deepEqual(at(work.refreshExpiresAt!).lines, ["Sign-in expired"]);
+  assert.equal(at(work.refreshExpiresAt! - 2 * 86_400 - 60).note, "Sign-in expires in 2 days");
+  const expired = at(work.refreshExpiresAt!);
+  assert.equal(expired.note, "Sign-in expired");
+  // and its button signs in, as a row's does (present/accounts.rs `action`)
+  assert.equal(expired.action?.title, "Sign in…");
+  assert.ok(owned("Sign in…"));
 });
 
 test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs say", () => {
   const s = settingsPage;
   const xaml = views("SettingsPage.xaml");
-  assert.ok(xaml.includes(`Text="${s.title}"`));
-  assert.ok(xaml.includes(`Text="${s.section}"`));
+  assert.ok(xaml.includes('Text="{x:Bind shown:Words.Settings.Title}"'));
+  assert.ok(xaml.includes('Text="{x:Bind shown:Words.Settings.Limits}"'));
+  assert.ok(owned(s.title) && owned(s.section));
+  // When a limit reaches with its icon, SpeedHigh, the site's Fluent top speed
+  assert.ok(xaml.includes('<FontIcon Glyph="&#xEC4A;" />'));
   assert.ok(
     xaml.includes(
       '<toolkit:SettingsExpander Header="{x:Bind ViewModel.AtLimitHeading, Mode=OneWay}"',
@@ -273,13 +434,20 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(machine.includes("pitboard_core::switch::ADOPTION_CEILING_SECONDS,"));
   assert.ok(core("switch/mod.rs").includes("pub const ADOPTION_CEILING_SECONDS: u32 = 33;"));
   assert.equal(s.atLimit.note, note);
-  // The apps curl the core's apostrophe, as words.rs's typeset does.
-  assert.ok(core("words.rs").includes(`"${s.atLimit.terms.slice(0, -1).replace("’", "'")}";`));
-  assert.ok(
-    machine.includes("sentence: words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS),"),
-  );
+  // Is this allowed? alone after the note, the terms' own sentence left to the page it opens
   assert.ok(machine.includes("link_title: words::IS_THIS_ALLOWED.into(),"));
   assert.ok(words.includes(`pub(crate) const IS_THIS_ALLOWED: &str = "${s.atLimit.link}";`));
+  assert.ok(xaml.includes('Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"'));
+  assert.ok(
+    !xaml.includes("Terms.Sentence") && !shell("SettingsViewModel.cs").includes("Terms.Sentence"),
+  );
+  // At, only where something happens at the share
+  assert.ok(xaml.includes('Visibility="{x:Bind ViewModel.ShowsShare, Mode=OneWay}"'));
+  assert.ok(
+    shell("SettingsViewModel.cs").includes(
+      "public bool ShowsShare => AtLimit.Choice != Core.AtLimit.Nothing;",
+    ),
+  );
 });
 
 test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say", () => {
@@ -288,8 +456,20 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
   assert.ok(xaml.includes('Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"'));
   assert.ok(present("machine.rs").includes("title: words::warm_up(seen.os),"));
   assert.ok(present("words.rs").includes(`titled(os, "Warm-Up", "${w.header}")`));
+  // what a warm-up does under its name, its hours beside it, and its icon, Brightness
+  assert.ok(xaml.includes('<TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" />'));
+  assert.ok(present("machine.rs").includes("note: words::WARM_UP_NOTE.into(),"));
+  assert.ok(owned(w.note));
+  assert.ok(
+    xaml.includes(
+      '<TextBlock Text="{x:Bind ViewModel.WarmRange, Mode=OneWay}" AutomationProperties.AutomationId="settings.warmRange" />',
+    ),
+  );
+  assert.ok(xaml.includes('<FontIcon Glyph="&#xE706;" />'));
   for (const [name] of w.hours) {
-    assert.ok(xaml.includes(`<toolkit:SettingsCard Header="${name}"`), name);
+    const field = name === "From" ? "From" : "To";
+    assert.ok(xaml.includes(`Header="{x:Bind shown:Words.Settings.${field}}"`), name);
+    assert.ok(owned(name), name);
   }
   assert.ok(present("words.rs").includes('Some(format!("{} to {to}", time_of_day(from)?))'));
   assert.equal(w.range, "07:00 to 23:00");
@@ -308,8 +488,13 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
 test("Activity lists Windows' changes in the app's words, dated as the regional format's g", () => {
   const page = activityPage;
   const xaml = views("ActivityPage.xaml");
-  assert.ok(xaml.includes(`Text="${page.title}"`));
-  assert.ok(xaml.includes(`Label="${page.command}"`));
+  assert.ok(
+    xaml.includes(
+      '<local:SettingsBreadcrumb VerticalAlignment="Top" Title="{x:Bind shown:Words.Window.Activity}"',
+    ),
+  );
+  assert.ok(xaml.includes('Label="{x:Bind shown:Words.Window.Refresh}"'));
+  assert.ok(owned(page.title) && owned(page.command));
   assert.ok(shell("WindowsLocalTime.cs").includes('At(epoch).ToString("g", Culture)'));
   const words = present("words.rs");
   assert.ok(words.includes('"use" | "switch" => "Switch".into(),'));
@@ -362,9 +547,16 @@ test("the notification at the share says what WindowsNotifications.cs builds fro
 
 test("the questions' Windows shortcuts are AccountKeys.cs's: F2, Delete and Ctrl+C", () => {
   const keys = shell("AccountKeys.cs");
-  assert.ok(keys.includes("VirtualKey.F2 when item.Offers.FirstOrDefault(Renames)"));
-  assert.ok(keys.includes("Intent: Intent.PresentSheet { Sheet: Sheet.Rename }"));
-  assert.ok(keys.includes("VirtualKey.Delete when item.Forget is { Enabled: true }"));
+  assert.ok(
+    keys.includes(
+      "VirtualKey.F2 when Offered(item, ActionKind.Rename) is { Intent: { } intent } rename",
+    ),
+  );
+  assert.ok(
+    keys.includes(
+      "VirtualKey.Delete when Offered(item, ActionKind.Remove) is { Intent: { } intent } remove",
+    ),
+  );
   assert.ok(keys.includes("key == VirtualKey.C && control && item.Email.Length > 0 ? item.Email"));
   const page = views("AccountsPage.xaml.cs");
   assert.ok(page.includes("AccountKeys.Copied(args.Key, control, shown.Item)"));
