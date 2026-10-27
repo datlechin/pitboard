@@ -1,7 +1,7 @@
 import PitboardKit
 import SwiftUI
 
-// The account Name names is added already, so it has nothing to cancel: Done keeps the name.
+// The account Name names is added already under the name shown: Cancel keeps that name.
 struct NameSheet: View {
     let model: AppModel
     let sheet: Sheet
@@ -39,13 +39,11 @@ struct NameSheet: View {
         }
         .sheetForm()
         .toolbar {
-            if case .rename = sheet {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(words.window.cancel, role: .cancel) { dismiss() }
-                        .keyboardShortcut(.cancelAction)
-                        .disabled(busy)
-                        .accessibilityIdentifier("sheet.cancel")
-                }
+            ToolbarItem(placement: .cancellationAction) {
+                Button(words.window.cancel, role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(busy)
+                    .accessibilityIdentifier("sheet.cancel")
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(text?.confirm ?? "", action: save)

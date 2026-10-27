@@ -122,15 +122,13 @@ class Sheets {
   }
 
   // Rename, or Name This Account for one just added under the name the core picked, which Done
-  // keeps where it is not changed (present/sheets.rs `check_name`)
+  // and Cancel keep where it is not changed (present/sheets.rs `check_name`)
   rename(from: SheetOwner, a: Account, added = false) {
     const d = this.renameDialog;
     this.#renaming = { a, added };
     text(part(d, "title"), added ? nameThisAccount(this.system) : renameTitle(a.label));
     text(part(d, "message"), added ? naming(a.email, toolName(a.tool)) : RENAMING);
     text(part(d, "confirm"), added ? DONE : RENAME);
-    // macOS names an account already added with Done alone
-    shown(d.querySelector('[data-does="cancel"]'), !(added && this.system === "macos"));
     const field = d.querySelector<HTMLInputElement>('input[name="name"]')!;
     field.value = a.label;
     field.placeholder = added ? NAME_PROMPT : a.label;

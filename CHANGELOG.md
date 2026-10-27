@@ -175,8 +175,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Continue**, where the app said it in a paragraph.
 - The macOS app's sheets put their title and one sentence over their fields, and Cancel and the
   button that does what they are for in a bar of their own, and fit what they show.
-- The macOS app's **Name This Account** offers only **Done**, since the account is added
-  already.
+- The macOS app's **Name This Account** says **Done**, and its **Cancel** keeps the name the
+  account was added under.
 - The macOS app no longer draws **Clean Up** as destructive.
 - The macOS app's alerts and sheets that say something went wrong offer what to do next, such
   as **Sign In Again…** or **Learn More**.
