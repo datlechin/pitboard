@@ -173,39 +173,50 @@ struct Limits: View {
     }
 }
 
-// The large widget: every account it has room for, under its tool where there are two.
+// The large widget: every account, or as many as it has room for, under its tool where there
+// are two. One grid, so each limit's columns line up across the accounts.
 struct AccountRows: View {
     let glance: Glance
     let at: Date
-    private static let room = 4
 
     var body: some View {
-        let shown = Array(glance.accounts.prefix(Self.room))
-        let tools = shown.reduce(into: [String]()) { tools, account in
-            if !tools.contains(account.toolName) { tools.append(account.toolName) }
-        }
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(tools, id: \.self) { tool in
-                if tools.count > 1 {
-                    Text(tool)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(shown.filter { $0.toolName == tool }) { account in
-                    VStack(alignment: .leading, spacing: 4) {
-                        AccountHeading(
-                            account: account, aside: account.plan, words: glance.words)
-                        LimitGrid(account: account, at: at, words: glance.words)
-                    }
-                }
+        // every account first, then one fewer, until they fit
+        ViewThatFits(in: .vertical) {
+            ForEach(glance.accounts.indices.reversed(), id: \.self) {
+                rows(Array(glance.accounts[...$0]))
             }
         }
     }
+
+    private func rows(_ shown: [GlanceAccount]) -> some View {
+        let tools = shown.reduce(into: [String]()) { tools, account in
+            if !tools.contains(account.toolName) { tools.append(account.toolName) }
+        }
+        // the heading at the very top, which needs no space above it
+        let top = tools.count > 1 ? nil : shown.first?.id
+        return Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 3) {
+            ForEach(tools, id: \.self) { tool in
+                if tools.count > 1 {
+                    Text(tool)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, tool == tools.first ? 0 : 5)
+                }
+                ForEach(shown.filter { $0.toolName == tool }) { account in
+                    AccountHeading(account: account, aside: account.plan, words: glance.words)
+                        .padding(.top, account.id == top ? 0 : 5)
+                    LimitRows(account: account, at: at, words: glance.words)
+                }
+            }
+        }
+        .font(.caption)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
-// One line per limit, its columns lined up as the app's rows have them.
-struct LimitGrid: View {
+// A grid row per limit, its columns and its words as the app's rows have them, or why there is
+// none. A countdown here would widen its column as it ticks.
+struct LimitRows: View {
     let account: GlanceAccount
     let at: Date
     let words: GlanceWords
@@ -213,27 +224,24 @@ struct LimitGrid: View {
     var body: some View {
         if account.limits.isEmpty {
             Text(account.said)
-                .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
-            Grid(alignment: .leading, horizontalSpacing: 6, verticalSpacing: 3) {
-                ForEach(account.limits, id: \.name) { limit in
-                    GridRow {
-                        Text(limit.short)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        UsageGauge(limit: limit)
-                        Text(limit.figure)
-                            .monospacedDigit()
-                            .gridColumnAlignment(.trailing)
-                        Resets(limit: limit, at: at, words: words)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(limit.spoken)
+            ForEach(account.limits, id: \.name) { limit in
+                GridRow {
+                    Text(limit.short)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    UsageGauge(limit: limit)
+                    Text(limit.figure)
+                        .monospacedDigit()
+                        .gridColumnAlignment(.trailing)
+                    Text(limit.resetting(at: at) ? words.resettingNow : limit.resets)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(limit.spoken)
             }
-            .font(.caption)
         }
     }
 }
@@ -262,11 +270,11 @@ struct Resets: View {
     var body: some View {
         if let reset = limit.resetsAt {
             Group {
-                if reset > at {
+                if limit.resetting(at: at) {
+                    Text(words.resettingNow)
+                } else {
                     Text("\(words.resetsIn) \(Text(reset, style: .relative))")
                         .monospacedDigit()
-                } else {
-                    Text(words.resettingNow)
                 }
             }
             .lineLimit(1)
@@ -290,6 +298,13 @@ struct SwitchButton: View {
                 .controlSize(.small)
             }
         #endif
+    }
+}
+
+extension GlanceLimit {
+    // From its reset until the app's next read brings the new numbers.
+    func resetting(at date: Date) -> Bool {
+        resetsAt.map { $0 <= date } ?? false
     }
 }
 

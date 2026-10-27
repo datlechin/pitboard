@@ -100,25 +100,75 @@ private func draw(
     return picture
 }
 
+// The size the content takes when the widget offers it its own, as WidgetKit does: more than
+// that is cut off.
 @MainActor
-private func height(_ family: Family, _ entry: GlanceEntry) -> CGFloat {
-    let measured = NSHostingView(
-        rootView: family.view(entry).fixedSize(horizontal: false, vertical: true)
-            .frame(width: family.size.width - 2 * margin))
-    return measured.fittingSize.height
+private func taken(_ family: Family, _ entry: GlanceEntry) -> CGSize {
+    let room = CGSize(
+        width: family.size.width - 2 * margin, height: family.size.height - 2 * margin)
+    return NSHostingController(rootView: family.view(entry)).sizeThatFits(in: room)
+}
+
+// The golden's instants moved to now, since the system counts a countdown from the clock, and
+// its accounts as `change` makes them.
+private func glance(
+    at now: Date, _ change: ([[String: Any]]) -> [[String: Any]] = { $0 }
+) throws -> Glance {
+    let golden = try JSONSerialization.jsonObject(with: Data(contentsOf: golden))
+    var root = try #require(moved(golden, by: now.timeIntervalSince(readAt)) as? [String: Any])
+    root["accounts"] = change(try #require(root["accounts"] as? [[String: Any]]))
+    return try #require(Glance(try JSONSerialization.data(withJSONObject: root)))
+}
+
+private func moved(_ value: Any, by shift: TimeInterval) -> Any {
+    switch value {
+    case let object as [String: Any]:
+        object.reduce(into: [String: Any]()) { object, field in
+            if field.key.hasSuffix("_at"), let at = field.value as? Double {
+                object[field.key] = at + shift
+            } else {
+                object[field.key] = moved(field.value, by: shift)
+            }
+        }
+    case let array as [Any]: array.map { moved($0, by: shift) }
+    default: value
+    }
+}
+
+// Six Claude Code accounts with three limits each, more than a large widget has room for.
+private func crowded(_ accounts: [[String: Any]]) -> [[String: Any]] {
+    let limits =
+        (accounts[0]["limits"] as? [Any] ?? [])
+        + (accounts[1]["limits"] as? [Any] ?? []).suffix(1)
+    return (1...6).map { copy in
+        var account = accounts[0]
+        account["id"] = "work-\(copy)"
+        account["name"] = "work-\(copy)"
+        account["in_use"] = copy == 1
+        account["standing"] = copy == 1 ? "in_use" : "ready"
+        account["limits"] = limits
+        return account
+    }
 }
 
 @MainActor
 @Test(arguments: Family.allCases)
 private func eachWidgetDrawsItsAccountsInEveryLookWithinItsSize(_ family: Family) throws {
+    let now = Date.now
     let entries = [
-        "now": GlanceEntry(date: readAt, glance: try goldenGlance()),
+        "now": GlanceEntry(date: now, glance: try glance(at: now)),
         "reset": GlanceEntry(
-            date: readAt.addingTimeInterval(2 * 3_600), glance: try goldenGlance()),
-        "empty": GlanceEntry(date: readAt, glance: nil),
+            date: now.addingTimeInterval(2 * 3_600), glance: try glance(at: now)),
+        "empty": GlanceEntry(date: now, glance: nil),
+        "one-tool": GlanceEntry(
+            date: now,
+            glance: try glance(at: now) { $0.filter { $0["tool"] as? String == "claude" } }),
+        "crowded": GlanceEntry(date: now, glance: try glance(at: now, crowded)),
     ]
     for (state, entry) in entries {
-        #expect(height(family, entry) <= family.size.height - 2 * margin, "\(family) \(state)")
+        #expect(
+            taken(family, entry).height <= family.size.height - 2 * margin, "\(family) \(state)"
+        )
         for (look, mode) in [("full", WidgetRenderingMode.fullColor), ("tinted", .accented)] {
             for dark in [false, true] {
                 let picture = try draw(
