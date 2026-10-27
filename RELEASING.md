@@ -25,7 +25,10 @@ that signs Pitboard for Windows, and 1.0.0, also rewrite what
 
 1. Pick the version: minor for anything people would notice, patch for fixes alone.
 2. In `CHANGELOG.md`, add `## [<version>] - YYYY-MM-DD` directly under `## [Unreleased]`.
-   The entries under it become the release notes.
+   The entries under it become the release notes. Until a measurement shows that an update
+   keeps the macOS widgets and controls a person placed, the notes say they may need adding
+   again: macOS took a placed widget away when a Homebrew upgrade replaced another app's
+   bundle (CodexBar #3627), and Sparkle replaces Pitboard's bundle too.
 3. At the bottom of `CHANGELOG.md`, point `[Unreleased]` at `v<version>...HEAD`. Add a
    `[<version>]` line that compares the previous tag with `v<version>`.
 4. For every release, betas included, add a line for the version in

@@ -339,8 +339,8 @@ jobs:
       - run: >
           swift format lint --strict --recursive --configuration apps/macos/.swift-format
           apps/macos/Sources/PitboardApp apps/macos/Sources/PitboardKit apps/macos/Sources/PitboardLinkTarget
-          apps/macos/Sources/PitboardGlance
-          apps/macos/App apps/macos/ShareExtension apps/macos/UITests apps/macos/Tests apps/macos/scripts
+          apps/macos/Sources/PitboardGlance apps/macos/Sources/PitboardWidgetViews
+          apps/macos/App apps/macos/ShareExtension apps/macos/Widgets apps/macos/UITests apps/macos/Tests apps/macos/scripts
           .github/scripts
       - uses: ./.github/actions/xcodegen
       # Proves the core still links into the app, that its bindings still match, and that

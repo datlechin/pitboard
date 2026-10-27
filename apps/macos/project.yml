@@ -136,6 +136,8 @@ targets:
       - package: Sparkle
       - target: PitboardShare
         embed: true
+      - target: PitboardWidgets
+        embed: true
 
   PitboardShare:
     type: app-extension
@@ -168,6 +170,38 @@ targets:
         product: PitboardShareBindings
       - package: Pitboard
         product: PitboardLinkTarget
+
+  # Sandboxed and with no Rust: it reads the glance the app keeps in their App Group, which
+  # scripts/build-app.sh gives both only when it signs with a team.
+  PitboardWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Widgets
+        excludes: [PitboardWidgets.entitlements]
+      # The control's symbol is the menu bar item's.
+      - path: App
+        includes: ["Assets.xcassets"]
+    settings:
+      base:
+        INFOPLIST_FILE: Widgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widgets/PitboardWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.usepitboard.Pitboard.debug.widgets
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.usepitboard.Pitboard.widgets
+    dependencies:
+      - package: Pitboard
+        product: PitboardWidgetViews
 
   PitboardUITests:
     type: bundle.ui-testing

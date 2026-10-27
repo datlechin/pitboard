@@ -145,13 +145,16 @@ The apps:
   - `Sources/PitboardBindings`, `PitboardShareBindings`: the two libraries' bindings.
   - `Sources/PitboardKit`: `AppModel`, the model and its newest snapshot on the main actor.
   - `Sources/PitboardLinkTarget`: where a Pitboard link goes, for the app and the extension.
-  - `Sources/PitboardGlance`: the glance and the account Shortcuts and widgets know, no Rust.
+  - `Sources/PitboardGlance`: the glance and the account Shortcuts and widgets know, the App
+    Group it is kept in and the control's button, no Rust.
+  - `Sources/PitboardWidgetViews`: what the widgets draw and their timeline, no Rust.
   - `Sources/PitboardApp`: the views (`MenuBar`, `Window`, `Sheets`, `Settings`, `Design`),
     the account windows (`AccountWindows`), the launch (`App`), what the model asks of macOS
     (`System`), what the Shortcuts actions do (`Intents`) and the fixtures' stand-ins
     (`Fixture`).
-  - `App`, `ShareExtension`, `UITests`: the app's target with its Shortcuts actions and App
-    Shortcuts, the Share extension and the UI tests.
+  - `App`, `ShareExtension`, `Widgets`, `UITests`: the app's target with its Shortcuts
+    actions and App Shortcuts, the Share extension, the widget extension with its widgets and
+    control, and the UI tests.
   - `scripts/`: the libraries' build, the app's build, which fails a bundle that breaks a
     rule below, its build number and the docs' pictures.
 - `apps/windows/`: the Windows app.
@@ -499,6 +502,12 @@ on.
   core's bindings check every export as they load, and two Rust static libraries never meet in
   one binary. `build-app.sh` fails a signature that is not sandboxed and either binary that
   holds the other library's symbols.
+- The widget extension stays sandboxed, links no Rust and reads only the glance, which holds
+  no secret. Only a build signed by a team claims the App Group `<team>.com.usepitboard.Pitboard`,
+  so an ad hoc build touches no group container and macOS never asks about one
+  (`aBuildWithNoTeamKeepsOutOfEveryGroup`, `scripts/build-app.sh`). The widgets and the
+  control reload only with `glance_revision`
+  (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`).
 - `pitboard-sites` stays a leaf: no I/O, nothing of the core and no UniFFI (its `Cargo.toml`
   depends on `url` alone). Each binding crate declares its own types over it, since the C#
   generator cannot use another crate's.

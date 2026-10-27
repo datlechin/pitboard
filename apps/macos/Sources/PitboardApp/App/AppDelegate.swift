@@ -32,6 +32,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             dependency: GlanceSource {
                 await model.glance(within: Actions.patience).flatMap { Glance(Data($0.utf8)) }
             })
+        AppDependencyManager.shared.add(
+            dependency: GlanceActions(open: { await Actions.opening(model) }))
         GlanceWatch.live(shortcuts: AppDelegate.shortcuts).watch(model)
         self.model = model
         defaults = dependencies.defaults

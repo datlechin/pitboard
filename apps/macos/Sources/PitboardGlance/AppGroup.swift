@@ -31,14 +31,15 @@ public enum AppGroup {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)?
             .appending(path: "glance.json")
     }
-}
 
-extension GlanceSource {
-    // What the app last wrote, for a widget extension, which reads nothing else.
-    public static let group = GlanceSource {
-        guard let group = AppGroup.own, let file = AppGroup.glanceFile(in: group),
-            let data = try? Data(contentsOf: file)
+    // What the app last wrote, for the widget extension, which reads nothing else.
+    public static func glance() -> Glance? {
+        guard let own, let file = glanceFile(in: own), let data = try? Data(contentsOf: file)
         else { return nil }
         return Glance(data)
     }
+}
+
+extension GlanceSource {
+    public static let group = GlanceSource { AppGroup.glance() }
 }
