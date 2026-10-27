@@ -4,8 +4,9 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Pitboard.Views">
-  <!-- Its items at the size and weight of a page's title, which TitleTextBlockStyle sets elsewhere. -->
-  <BreadcrumbBar x:Name="Crumbs" ItemClicked="OnItemClicked">
+  <!-- Its items at the size and weight of a page's title, in TitleTextBlockStyle's lines. Each item pads its text 1,3,
+       which the bar takes back, so its title sits where every other page's does. -->
+  <BreadcrumbBar x:Name="Crumbs" Margin="-1,-3,0,-3" ItemClicked="OnItemClicked">
     <BreadcrumbBar.Resources>
       <x:Double x:Key="BreadcrumbBarItemThemeFontSize">28</x:Double>
       <FontWeight x:Key="BreadcrumbBarItemFontWeight">SemiBold</FontWeight>
@@ -14,7 +15,7 @@
     </BreadcrumbBar.Resources>
     <BreadcrumbBar.ItemTemplate>
       <DataTemplate x:DataType="local:Crumb">
-        <TextBlock Text="{x:Bind Title}" AutomationProperties.HeadingLevel="{x:Bind Level}" />
+        <TextBlock Text="{x:Bind Title}" Style="{StaticResource TitleTextBlockStyle}" AutomationProperties.HeadingLevel="{x:Bind Level}" />
       </DataTemplate>
     </BreadcrumbBar.ItemTemplate>
   </BreadcrumbBar>

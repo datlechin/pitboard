@@ -87,10 +87,10 @@
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
-      <local:SettingsBreadcrumb VerticalAlignment="Center" Title="{x:Bind shown:Words.Window.Activity}" Back="OnBack" />
+      <local:SettingsBreadcrumb VerticalAlignment="Top" Title="{x:Bind shown:Words.Window.Activity}" Back="OnBack" />
       <CommandBar
           Grid.Column="1"
-          VerticalAlignment="Center"
+          VerticalAlignment="Top"
           Background="Transparent"
           DefaultLabelPosition="Right"
           OverflowButtonVisibility="Collapsed">

@@ -180,6 +180,36 @@ public sealed class MainWindowTests
         }
     }
 
+    // A breadcrumb's page title sat 3 to 5 epx below where every other page's does, and the command bars moved with it, so
+    // the heading jumped from Settings to one of its pages.
+    [UITestMethod]
+    public async Task EveryPagesTitleAndCommandBarSitWhereTheOthersDo()
+    {
+        var window = await Views.Activated(Made(Filled()));
+        try
+        {
+            var frame = Pages(window);
+            var titles = new List<Rect>();
+            var bars = new List<Rect>();
+            foreach (var place in Places)
+            {
+                var page = await Showing(window, place);
+                titles.Add(Bounds(Title(page), frame));
+                bars.AddRange(Views.Visible<CommandBar>(page).Take(1).Select(bar => Bounds(bar, frame)));
+            }
+
+            var said = string.Join(" | ", titles.Select(at => $"{at.Left},{at.Top}"));
+            Assert.IsLessThanOrEqualTo(1.0, titles.Max(at => at.Top) - titles.Min(at => at.Top), $"titles at {said}");
+            Assert.IsLessThanOrEqualTo(1.0, titles.Max(at => at.Left) - titles.Min(at => at.Left), $"titles at {said}");
+            Assert.HasCount(3, bars);
+            Assert.IsLessThanOrEqualTo(1.0, bars.Max(at => at.Top) - bars.Min(at => at.Top), string.Join(" | ", bars.Select(at => at.Top)));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     [UITestMethod]
     public async Task EachPagesTitleIsALevel1Heading()
     {

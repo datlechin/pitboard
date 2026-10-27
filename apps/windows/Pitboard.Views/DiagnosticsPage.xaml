@@ -31,7 +31,7 @@
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
-      <StackPanel VerticalAlignment="Center">
+      <StackPanel VerticalAlignment="Top">
         <local:SettingsBreadcrumb Title="{x:Bind shown:Words.Window.Diagnostics}" Back="OnBack" />
         <!-- When the checks were made, where Accounts says when it read them. -->
         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -46,7 +46,7 @@
       </StackPanel>
       <CommandBar
           Grid.Column="1"
-          VerticalAlignment="Center"
+          VerticalAlignment="Top"
           Background="Transparent"
           DefaultLabelPosition="Right"
           OverflowButtonVisibility="Collapsed">

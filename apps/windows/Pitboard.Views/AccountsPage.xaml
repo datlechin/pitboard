@@ -26,13 +26,13 @@
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
-      <StackPanel VerticalAlignment="Center">
+      <StackPanel VerticalAlignment="Top">
         <TextBlock Text="{x:Bind shown:Words.Window.Accounts}" Style="{StaticResource PageTitleTextBlockStyle}" />
         <TextBlock Text="{x:Bind ViewModel.Updated, Mode=OneWay}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
       </StackPanel>
       <CommandBar
           Grid.Column="1"
-          VerticalAlignment="Center"
+          VerticalAlignment="Top"
           Background="Transparent"
           DefaultLabelPosition="Right"
           OverflowButtonVisibility="Collapsed">

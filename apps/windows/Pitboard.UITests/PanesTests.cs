@@ -1,4 +1,6 @@
+using System.Drawing;
 using FlaUI.Core.Definitions;
+using FlaUI.Core.Input;
 
 namespace Pitboard.UITests;
 
@@ -47,5 +49,21 @@ public sealed class PanesTests
         launched.Element("settings.diagnostics");
         Assert.IsTrue(launched.Gone(found => found.ByAutomationId("machine.check")), "Diagnostics stayed");
         Assert.IsTrue(launched.Selected("SettingsItem"), "Settings is not selected");
+    }
+
+    // Microsoft's back navigation guidance: the mouse's back button goes back as Alt+Left does.
+    [TestMethod]
+    public void TheMouseBackButtonGoesBackToSettings()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
+        var window = launched.OpenWindow();
+        launched.OpenFromSettings(window, "settings.diagnostics");
+        var summary = launched.Element("machine.summary").BoundingRectangle;
+
+        Foreground.Require(window);
+        Mouse.Click(new Point(summary.X + (summary.Width / 2), summary.Y + (summary.Height / 2)), MouseButton.XButton1);
+
+        launched.Element("settings.diagnostics");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("machine.check")), "Diagnostics stayed");
     }
 }

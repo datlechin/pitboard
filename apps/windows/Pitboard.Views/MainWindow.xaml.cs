@@ -94,6 +94,7 @@ public sealed partial class MainWindow : Window
             ShowSettings();
         };
         Navigation.KeyboardAccelerators.Add(settings);
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPointerPressed), handledEventsToo: true);
         Show(new Place.Accounts());
     }
 
@@ -150,6 +151,16 @@ public sealed partial class MainWindow : Window
         AppTitleBar.IsBackButtonVisible = args.SourcePageType == typeof(DiagnosticsPage) || args.SourcePageType == typeof(ActivityPage);
 
     private void OnBackRequested(TitleBar sender, object args) => ShowSettings();
+
+    // The mouse's back button goes back as Alt+Left does, as Microsoft's back navigation guidance has it.
+    private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        if (AppTitleBar.IsBackButtonVisible && args.GetCurrentPoint(Root).Properties.IsXButton1Pressed)
+        {
+            args.Handled = true;
+            ShowSettings();
+        }
+    }
 
     private void OnBack(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
