@@ -55,7 +55,7 @@ final class ShareViewController: NSViewController {
         guard let app = LinkTarget.containingApp(of: Bundle.main.bundleURL), scheme != nil,
             let link = URL(string: pitboardLink)
         else {
-            state.phase = .failed("Pitboard couldn’t find the app this extension came with.")
+            state.phase = .failed(words.noApp)
             return
         }
         do {
