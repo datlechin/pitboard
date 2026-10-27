@@ -14,26 +14,26 @@ struct ActivityWindow: View {
                 Text(line.date).monospacedDigit()
             }
             .width(min: 120, ideal: 160)
-            // Ideal widths that show "Sign-in in use changed" and "Signed in outside" whole at
-            // the window's default size.
+            // Ideal widths that show every column whole at the window's default 720 points, as
+            // measured in CI's macos-activity picture: "Sign-in in use changed" is 138 wide.
             TableColumn(columns.change) { line in
                 Text(line.change)
                     .accessibilityIdentifier("activity.change")
             }
-            .width(min: 70, ideal: 150)
+            .width(min: 70, ideal: 145)
             TableColumn(columns.account) { line in
                 Text(line.account).lineLimit(1).truncationMode(.middle)
             }
-            .width(min: 80, ideal: 120)
+            .width(min: 60, ideal: 90)
             TableColumn(columns.result) { line in
                 Text(line.result)
                     .foregroundStyle(line.done ? .secondary : .primary)
             }
-            .width(min: 60, ideal: 120)
+            .width(min: 60, ideal: 110)
             TableColumn(columns.by) { line in
                 Text(line.askedBy).foregroundStyle(.secondary)
             }
-            .width(min: 80, ideal: 120)
+            .width(min: 80, ideal: 100)
         }
         .overlay {
             if let empty = activity.empty {
