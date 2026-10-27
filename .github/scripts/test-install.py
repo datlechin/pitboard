@@ -1358,8 +1358,8 @@ class CaskZap(unittest.TestCase):
             "~/Library/Preferences/com.usepitboard.Pitboard.plist",
             self.log,
         }
-        # macOS makes the extensions' and the App Group's; the core deletes the glance in the group.
-        containers = {
+        # macOS makes the extensions' folders and the App Group's: the core deletes the glance.
+        made = {
             "~/Library/Application Scripts/com.usepitboard.Pitboard.share",
             "~/Library/Application Scripts/com.usepitboard.Pitboard.widgets",
             "~/Library/Containers/com.usepitboard.Pitboard.share",
@@ -1367,10 +1367,8 @@ class CaskZap(unittest.TestCase):
             "~/Library/Group Containers/D7HJ5TFYCU.com.usepitboard.Pitboard",
         }
         trash = set(directive("trash", self.zaps["pitboard-app"]))
-        self.assertLessEqual(elsewhere | containers, trash)
-        self.assertEqual(
-            trash - elsewhere - containers, {f"~/Library/{folder}" for folder in folders}
-        )
+        self.assertLessEqual(elsewhere | made, trash)
+        self.assertEqual(trash - elsewhere - made, {f"~/Library/{folder}" for folder in folders})
 
     def test_the_linux_zap_trashes_every_unit_and_its_link(self):
         trash = directive("trash", self.linux)

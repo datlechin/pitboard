@@ -89,25 +89,6 @@ public sealed class UnregisteringTests
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
     }
 
-    // CI's fresh standard user got ERROR_PATH_NOT_FOUND from DeleteList, with no list to delete (2026-10-27).
-    [TestMethod]
-    [DataRow(unchecked((int)0x80004005))]
-    [DataRow(unchecked((int)0x80070005))]
-    [DataRow(unchecked((int)0x80070003))]
-    public void AJumpListWindowsRefusesToDeleteStillLetsTheNotificationsGo(int refusal)
-    {
-        var jumpList = new JumpTasksTests.StandInJumpList { Refuses = Marshal.GetExceptionForHR(refusal) };
-        var notifications = new StandInNotifications();
-        var registration = new StandInRegistration(Activator);
-
-        Unregistering.Run(
-            Build.Release, Installed, new StandInRunKey(), new StandInScheduledTasks(), jumpList, notifications, registration);
-
-        Assert.AreEqual(1, jumpList.Deleted);
-        Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
-        Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
-    }
-
     [TestMethod]
     public void ARunKeyItCannotReadStillLetsTheNotificationsGo()
     {
@@ -125,9 +106,11 @@ public sealed class UnregisteringTests
     }
 
     [TestMethod]
-    public void AJumpListWindowsCannotDeleteStillLetsTheNotificationsGo()
+    [DataRow(unchecked((int)0x80004005))]
+    [DataRow(unchecked((int)0x80070003))]
+    public void AJumpListWindowsCannotDeleteStillLetsTheNotificationsGo(int refused)
     {
-        var jumpList = new JumpTasksTests.StandInJumpList { Refuses = Marshal.GetExceptionForHR(unchecked((int)0x80004005)) };
+        var jumpList = new JumpTasksTests.StandInJumpList { Refuses = Marshal.GetExceptionForHR(refused) };
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 

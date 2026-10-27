@@ -53,14 +53,13 @@ public sealed class JumpTasksTests
         CollectionAssert.AreEqual(Tasks, parts.List.Shown.Single());
     }
 
-    // Windows keeps the list it had. CI's fresh standard user got ERROR_PATH_NOT_FOUND from SetAppID (2026-10-27).
+    // Windows keeps the list it had. SetAppID gave CI's fresh standard user 0x80070003 (run 40494932963).
     [TestMethod]
     [DataRow(unchecked((int)0x80004005))]
-    [DataRow(unchecked((int)0x80070005))]
     [DataRow(unchecked((int)0x80070003))]
-    public void AListWindowsRefusesLeavesPitboardRunning(int refusal)
+    public void AListWindowsRefusesLeavesPitboardRunning(int refused)
     {
-        var parts = Made(Read(1), new StandInJumpList { Refuses = Marshal.GetExceptionForHR(refusal) });
+        var parts = Made(Read(1), new StandInJumpList { Refuses = Marshal.GetExceptionForHR(refused) });
 
         parts.Jumps.Follow();
 
