@@ -273,8 +273,8 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(
             titles("\(Words.appMenu) first"),
             [
-                "About Pitboard", "Settings…", "Services", "Hide \(Words.appMenu)",
-                "Hide Others", "Show All", "Quit \(Words.appMenu)",
+                "About Pitboard", "Settings…", "Services", "Hide \(Words.debugBuild)",
+                "Hide Others", "Show All", "Quit \(Words.debugBuild)",
             ])
         XCTAssertEqual(dimmed("\(Words.appMenu) first"), ["Show All"])
         XCTAssertEqual(

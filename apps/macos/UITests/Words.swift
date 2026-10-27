@@ -5,8 +5,9 @@ enum Words {
     static let settings = "Settings…"
     static let quit = "Quit Pitboard"
     static let debugBuild = "Pitboard Debug"
-    // SwiftUI names the app menu and its Hide and Quit items by CFBundleName up to macOS 26 (CI's
-    // runner, 2026-10-27), and by a debug build's CFBundleDisplayName from macOS 27 (a scratch app).
+    // The menu bar titles the app menu by CFBundleName up to macOS 26 (CI's runner, 2026-10-27)
+    // and by a debug build's CFBundleDisplayName from macOS 27 (a scratch app). Hide and Quit
+    // use the display name on both.
     static var appMenu: String {
         if #available(macOS 27, *) {
             return debugBuild
