@@ -47,7 +47,9 @@ link from a page here to an id usepitboard.com does not have. Run them as
   the pictures of the menu and the window. `menu.png` and `window.png` come from the macOS
   app, as [Run the debug build](../CONTRIBUTING.md#run-the-debug-build) says.
   `menu-windows.png` and `window-windows.png` come from CI's `windows-app-pictures`, as
-  [The app on CI](../CONTRIBUTING.md#the-app-on-ci) says.
+  [The app on CI](../CONTRIBUTING.md#the-app-on-ci) says. `widget.png` is
+  `macos-widget-medium-data.png` from CI's `macos-widget-pictures`, as
+  [Run the debug build](../CONTRIBUTING.md#run-the-debug-build) says.
 - `.mintignore` lists the files Mintlify must not publish, such as `AGENTS.md` and `facts/`,
   the measured facts the code rests on.
 
