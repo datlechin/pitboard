@@ -228,6 +228,37 @@ fn the_picker_offers_the_sites_accounts_with_one_chosen() {
     );
 }
 
+// Anything on the machine can open a Pitboard link, so none switches, whatever it names.
+#[test]
+fn a_pitboard_link_never_switches_an_account() {
+    let mut machine = machine();
+    let mut model = started(&mut machine);
+    let personal = crate::present::glance_id("claude:p");
+    for text in [
+        format!("pitboard://switch?account={personal}"),
+        "pitboard://switch?to=claude%2Fpersonal".into(),
+        format!("pitboard://open?account={personal}"),
+        "pitboard://open?url=https%3A%2F%2Fclaude.ai%2F&switch=claude%2Fpersonal".into(),
+    ] {
+        model.send(Intent::LinkArrived { text: text.clone() });
+        model.run(&mut machine);
+        assert!(
+            matches!(picker(&model).shown, PickerShown::Refused { .. }),
+            "{text}"
+        );
+    }
+    model.send(shared("https://claude.ai/new", "pitboard"));
+    armed(&mut model);
+    choose(&mut model, &claude("p"));
+    model.run(&mut machine);
+    assert!(model.state.switch_under_way().is_none());
+    assert_eq!(
+        model.count(|job| matches!(job, Job::Holding { .. } | Job::Switch { .. })),
+        0
+    );
+    assert!(machine.switched_to.is_empty());
+}
+
 /// AccountPickerTests.swift's thePickerSaysWhatStandsInTheWay: a link of another site is
 /// refused, saying why; before any read the picker waits for one, and says why one failed;
 /// and a site no account opens offers to add one.

@@ -475,8 +475,9 @@ on.
 - A records file that cannot be read is never written over, and nothing is deleted by it
   (`a_file_that_cannot_be_read_is_never_written_over`).
 - Nothing from outside opens a window by itself. A Pitboard link only shows the **Open Link**
-  window, a site's sign-in link is refused, and only a person's choice opens a window, on the
-  link's own site (`a_sign_in_link_is_refused_from_outside`).
+  window and never switches an account, a site's sign-in link is refused, and only a person's
+  choice opens a window, on the link's own site (`a_sign_in_link_is_refused_from_outside`,
+  `a_pitboard_link_never_switches_an_account`).
 - A window's page goes only to its site, its sign-in hosts and blank pages. Google's sign-in is
   refused, other pages go to the browser, a frame gets no sign-in window, and a window's last
   page is never a sign-in path (`account_windows/policy.rs`).
