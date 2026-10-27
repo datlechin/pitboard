@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
+using Pitboard.Core;
 using Pitboard.Views;
 
 namespace Pitboard.Windows.Tests;
@@ -88,6 +89,29 @@ public sealed class DialogHostTests
 
         Assert.AreEqual(ContentDialogResult.None, await firstShown);
         Assert.AreEqual(ContentDialogResult.None, await secondShown);
+    }
+
+    // Microsoft's dialog guidance draws the default button in the accent colour, Enter presses it and the focus opens on it.
+    // Uninstall Pitboard's question makes Cancel its default, so it is read first.
+    [UITestMethod]
+    public async Task AQuestionsVerbIsItsDefaultButtonWhereTheModelSays()
+    {
+        var content = await Views.Shown(new Grid());
+        var dialogs = new DialogHost(() => content.XamlRoot);
+        foreach (var (confirmIsDefault, expected) in new[] { (true, ContentDialogButton.Primary), (false, ContentDialogButton.Close) })
+        {
+            var asked = dialogs.Confirm(new Question(
+                "Remove “spare”?", "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your browser.", "Remove",
+                Destructive: true, ConfirmIsDefault: confirmIsDefault));
+            await Views.Until(() => dialogs.Open is not null, "the question did not show");
+            var shown = dialogs.Open!;
+
+            Assert.AreEqual(expected, shown.DefaultButton, $"confirm is default: {confirmIsDefault}");
+            Assert.AreEqual("Remove", shown.PrimaryButtonText);
+            Assert.AreEqual("Cancel", shown.CloseButtonText);
+            shown.Hide();
+            Assert.IsFalse(await asked);
+        }
     }
 
     // A switch to dark while Pitboard ran left the Add account sheet light under white text.

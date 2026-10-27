@@ -1,18 +1,18 @@
 //! What the settings and the window's other panes show of this machine rather than its
 //! accounts, as SettingsView.swift, MachinePane.swift and ActivityPane.swift said it from
-//! MachineModel.swift: daily renewal and why it cannot be turned on, doctor's checks with the
-//! line over them, every change Pitboard made, and the `pitboard` a terminal runs and how it
-//! is kept up to date.
+//! MachineModel.swift: daily renewal and why it cannot be turned on, doctor's checks, every
+//! change Pitboard made, and the `pitboard` a terminal runs and how it is kept up to date.
 //!
 //! What only labels a control, such as "Renew parked logins daily", "Check Again" or "In your
 //! terminal", and what is about the app's own system, such as opening at login or linking the
 //! command line with an administrator's password, is each app's own.
 
+use super::checks::{ChecksShown, checks};
 use super::{Seen, words};
 use crate::model::AtLimit;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
-use crate::{AutoSwitched, Check, FoundCommandLine, Level, Schedule};
+use crate::{AutoSwitched, FoundCommandLine, Schedule};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::host::Os;
 
@@ -22,7 +22,6 @@ use pitboard_core::host::Os;
 pub struct MachineShown {
     /// Daily renewal, the settings' switch and what is said around it.
     pub schedule: ScheduleShown,
-    /// Doctor's checks, as the window's machine pane shows them.
     pub checks: ChecksShown,
     /// Every change Pitboard made, as the window's activity pane lists them.
     pub activity: ActivityShown,
@@ -62,7 +61,6 @@ pub struct WarmShown {
 pub struct WarmAccountShown {
     /// Its label with its tool, which `Intent::SetWarm` takes back.
     pub qualified: String,
-    /// Its name, with the plan its login says it is on: "work · Team 5x".
     pub title: String,
     /// Whether it is warmed up.
     pub on: bool,
@@ -127,42 +125,6 @@ pub struct ScheduleShown {
     pub failed: Option<String>,
     // what daily renewal does, under its switch
     pub about: String,
-}
-
-/// Doctor's checks, as the window shows them.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ChecksShown {
-    // every check, in the order doctor makes them, then a notification the app's system refused
-    pub lines: Vec<CheckLine>,
-    // over them, in the words of the last line of `pitboard doctor`, once there are checks to head
-    pub summary: Option<String>,
-    // the worst of the checks, which the line over them shows in its colour and symbol
-    pub level: Level,
-    /// A check is under way: Check Again holds back, and the line over the checks shows it.
-    pub checking: bool,
-    /// When the checks shown were made, beside the line over them, once nothing is checking:
-    /// "Checked at 14:05", or with its weekday once that is not today.
-    pub checked: Option<String>,
-    /// What stands in for the checks before there are any: "Checking this Mac…".
-    pub waiting: Option<String>,
-}
-
-/// One of doctor's checks. Not called `CheckRow`, which MachinePane.swift has a view of.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct CheckLine {
-    /// Its place in the list, in the order doctor makes the checks, from 0. A check's code is
-    /// not its own: doctor makes one check of each enrolled account's parked login, and every
-    /// one of a tool's is `parked_login`, or `codex_parked_login`, so a list whose rows
-    /// claimed the code would have two or more rows of one identity.
-    pub id: u64,
-    pub name: String,
-    pub level: Level,
-    /// The level in words, where a symbol shows it: "Passed", "Worth looking at", "Failed".
-    pub spoken_level: String,
-    /// What it looked at.
-    pub detail: String,
-    /// What to do about it, for a check that did not pass and says what.
-    pub advice: Option<String>,
 }
 
 /// Every change Pitboard made, as the window lists them.
@@ -251,15 +213,7 @@ fn warm(seen: &Seen) -> WarmShown {
                 .iter()
                 .map(|choice| WarmAccountShown {
                     qualified: choice.qualified.clone(),
-                    title: words::named_in_menu(
-                        seen.os,
-                        &choice.account,
-                        seen.accounts()
-                            .iter()
-                            .find(|account| account.qualified.as_deref() == Some(&choice.qualified))
-                            .and_then(|account| account.plan.as_deref()),
-                        None,
-                    ),
+                    title: choice.account.clone(),
                     on: choice.on,
                     standing: choice.standing.as_ref().map(|standing| {
                         words::typeset(&pitboard_core::words::capitalised(&words::warm_standing(
@@ -447,48 +401,6 @@ fn schedule(seen: &Seen) -> ScheduleShown {
     }
 }
 
-/// Doctor's checks, as MachinePane.swift showed them.
-fn checks(seen: &Seen) -> ChecksShown {
-    let machine = &seen.state.machine;
-    let checking = machine.checking > 0;
-    let any = !machine.checks.is_empty();
-    // Doctor cannot know what the app's system refused, so the app says it after doctor's checks.
-    let refused = machine
-        .post_refused
-        .as_ref()
-        .filter(|_| any)
-        .map(|refused| Check {
-            code: "notification_not_posted".into(),
-            name: words::NOTIFICATIONS.into(),
-            level: Level::Warn,
-            detail: words::not_posted(&refused.title, &seen.clock(refused.at), &refused.reason),
-            advice: String::new(),
-        });
-    let checks: Vec<Check> = machine.checks.iter().cloned().chain(refused).collect();
-    ChecksShown {
-        lines: (0..)
-            .zip(&checks)
-            .map(|(id, check)| CheckLine {
-                id,
-                name: words::check_name(&check.code, &check.name),
-                level: check.level,
-                spoken_level: words::spoken_level(check.level).to_owned(),
-                detail: words::check_text(&check.detail),
-                advice: (check.level != Level::Ok && !check.advice.is_empty())
-                    .then(|| words::check_text(&check.advice)),
-            })
-            .collect(),
-        summary: any.then(|| words::typeset(&crate::doctor_summary(&checks))),
-        level: crate::doctor_level(&checks),
-        checking,
-        checked: machine
-            .checked_at
-            .filter(|_| any && !checking)
-            .map(|at| words::checked_at(&seen.clock(at))),
-        waiting: (!any).then(|| words::checking(seen.os)),
-    }
-}
-
 /// Every change, newest first, as ActivityPane.swift listed them.
 fn activity(seen: &Seen) -> ActivityShown {
     let log = &seen.state.machine.log;
@@ -539,13 +451,12 @@ fn command_line(seen: &Seen) -> CommandLineShown {
 
 #[cfg(test)]
 mod tests {
-    use super::{CheckLine, ChecksShown, words};
-    use crate::launch::Check;
+    use super::words;
     use crate::present::present_on;
     use crate::present::testing::{
         Unreadable, Utc, account, claude_code, claude_desktop, desktop_account, read, status,
     };
-    use crate::{Level, LocalTime, PlatformError};
+    use crate::{LocalTime, PlatformError};
     use pitboard_core::duty::warm::{Overview, Range};
     use pitboard_core::host::Os;
 
@@ -569,6 +480,10 @@ mod tests {
             let (hours, minutes) = (minutes / 60, minutes % 60);
             let half = if hours < 12 { "AM" } else { "PM" };
             Ok(format!("{}:{minutes:02} {half}", (hours + 11) % 12 + 1))
+        }
+
+        fn date(&self, epoch: i64) -> Result<String, PlatformError> {
+            Utc.date(epoch)
         }
     }
 
@@ -614,6 +529,23 @@ mod tests {
         );
     }
 
+    // A sentence of the core's as the apps say one: its apostrophe curled and a full stop.
+    #[test]
+    fn the_terms_are_said_in_one_sentence_beside_their_link() {
+        let terms = super::terms();
+        assert_eq!(
+            terms.sentence,
+            "Anthropic’s terms may cover automatic switching and warm-ups."
+        );
+        assert_eq!(
+            (terms.link_title.as_str(), terms.link.as_str()),
+            (
+                words::IS_THIS_ALLOWED,
+                pitboard_core::words::IS_THIS_ALLOWED_URL
+            )
+        );
+    }
+
     #[test]
     fn warm_up_says_so_while_no_claude_code_account_is_enrolled() {
         let state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
@@ -624,113 +556,6 @@ mod tests {
                 .none_enrolled
                 .as_deref(),
             Some(words::NONE_TO_WARM)
-        );
-    }
-
-    fn checks(checks: &[(&str, &str, Level, &str, &str)]) -> ChecksShown {
-        let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
-        state.machine.checks = checks
-            .iter()
-            .map(|&(code, name, level, detail, advice)| Check {
-                code: code.into(),
-                name: name.into(),
-                level,
-                detail: detail.into(),
-                advice: advice.into(),
-            })
-            .collect();
-        present_on(Os::Windows, &state, 0, &Utc).machine.checks
-    }
-
-    fn lines(shown: &[(&str, &str, Level, &str, &str)]) -> Vec<CheckLine> {
-        checks(shown).lines
-    }
-
-    // The line over the checks is as bad as the worst of them, in its colour as in doctor's
-    // words.
-    #[test]
-    fn the_line_over_the_checks_takes_the_worst_level() {
-        let level = |levels: &[Level]| {
-            let shown: Vec<_> = levels
-                .iter()
-                .map(|&level| ("state", "accounts", level, "", ""))
-                .collect();
-            let shown = checks(&shown);
-            let said = (!levels.is_empty()).then(|| {
-                words::typeset(&pitboard_core::words::doctor_summary(levels.iter().map(
-                    |level| match level {
-                        Level::Ok => pitboard_core::doctor::Level::Ok,
-                        Level::Warn => pitboard_core::doctor::Level::Warn,
-                        Level::Fail => pitboard_core::doctor::Level::Fail,
-                    },
-                )))
-            });
-            assert_eq!(shown.summary, said);
-            shown.level
-        };
-        assert_eq!(level(&[Level::Ok, Level::Ok]), Level::Ok);
-        assert_eq!(level(&[Level::Warn, Level::Ok]), Level::Warn);
-        assert_eq!(level(&[Level::Ok, Level::Fail, Level::Warn]), Level::Fail);
-        assert_eq!(level(&[]), Level::Ok);
-    }
-
-    // Each line says its check in the apps' words, and what to do only where it did not pass.
-    #[test]
-    fn a_check_line_says_its_check_in_the_apps_words() {
-        let shown = lines(&[
-            (
-                "storage_v5",
-                "storage v5",
-                Level::Ok,
-                "inactive",
-                "Nothing to do.",
-            ),
-            (
-                "desktop_login",
-                "Claude Desktop in use",
-                Level::Warn,
-                "`work` is recorded in use and also holds a parked login",
-                "Run `pitboard enroll work --sign-in`.",
-            ),
-            ("state", "accounts", Level::Fail, "unreadable", ""),
-        ]);
-        let said: Vec<_> = shown
-            .iter()
-            .map(|line| {
-                (
-                    line.id,
-                    line.name.clone(),
-                    line.spoken_level.clone(),
-                    line.detail.clone(),
-                    line.advice.clone(),
-                )
-            })
-            .collect();
-        assert_eq!(
-            said,
-            [
-                (
-                    0,
-                    words::check_name("storage_v5", "storage v5"),
-                    words::spoken_level(Level::Ok).to_owned(),
-                    words::check_text("inactive"),
-                    None
-                ),
-                (
-                    1,
-                    words::check_name("desktop_login", "Claude Desktop in use"),
-                    words::spoken_level(Level::Warn).to_owned(),
-                    words::check_text("`work` is recorded in use and also holds a parked login"),
-                    Some(words::check_text("Run `pitboard enroll work --sign-in`."))
-                ),
-                (
-                    2,
-                    words::check_name("state", "accounts"),
-                    words::spoken_level(Level::Fail).to_owned(),
-                    words::check_text("unreadable"),
-                    None
-                ),
-            ]
         );
     }
 
@@ -793,11 +618,7 @@ mod tests {
             );
             assert!(windows.enabled, "{on}");
             assert_eq!(windows.none_enrolled, None);
-            assert_eq!(
-                windows.accounts[0].title,
-                words::named_in_menu(Os::Windows, "work", Some("Team 5x"), None),
-                "with its plan, as the menu names it"
-            );
+            assert_eq!(windows.accounts[0].title, "work", "its name alone");
             assert_eq!(windows.standing, said, "{on}");
             assert_eq!(windows.note, words::WARM_UP_NOTE);
         }

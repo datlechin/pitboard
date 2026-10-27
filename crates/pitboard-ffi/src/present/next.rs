@@ -8,6 +8,9 @@ use pitboard_core::state::Key;
 
 const ERRORS: &str = "https://docs.usepitboard.com/reference/errors";
 
+// Its table says what each of doctor's checks checks, and where a failed one is put right.
+const CHECKS: &str = "https://docs.usepitboard.com/reference/maintenance-commands#doctor";
+
 // A failure's next step, by its code and the account it is about; with no code, it was lost.
 pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&str>) -> NextStep {
     let act = |title: String, intent: Intent| NextStep::Act {
@@ -103,6 +106,14 @@ pub(crate) fn of_warning(os: Os) -> SetupLink {
 // The error page's part about why a row's numbers are old or its account can't be used.
 pub(crate) fn of_stale(os: Os) -> SetupLink {
     learn_more(os, Some("stale-codes"))
+}
+
+// A check nothing in the app puts right.
+pub(crate) fn of_check(os: Os) -> SetupLink {
+    SetupLink {
+        title: words::learn_more(os),
+        link: CHECKS.into(),
+    }
 }
 
 fn learn_more(os: Os, section: Option<&str>) -> SetupLink {

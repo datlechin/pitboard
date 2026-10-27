@@ -59,7 +59,8 @@ package func snapshot(
         accountMenu: AccountMenuShown(
             offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
         notices: [],
-        menuNotices: MenuNotices(install: nil, switches: [], others: nil), footing: .ready,
+        menuNotices: MenuNotices(install: nil, switches: [], signIns: [], others: nil),
+        footing: .ready,
         setup: nil, accountsShown: .reading(title: "Reading accounts…"),
         menuAccountsNote: nil, updatedAt: nil, updatedMenu: updated, updatedWindow: updated,
         sheetText: nil,
@@ -68,8 +69,8 @@ package func snapshot(
             schedule: ScheduleShown(
                 on: false, enabled: true, note: nil, failed: nil, about: ""),
             checks: ChecksShown(
-                lines: [], summary: nil, level: .ok, checking: false, checked: nil,
-                waiting: nil),
+                groups: [], summary: nil, verdict: nil, level: .ok, checking: false,
+                checked: nil, waiting: nil, report: nil),
             activity: ActivityShown(lines: [], empty: nil),
             commandLine: CommandLineShown(
                 found: nil, inTerminal: nil, updateNote: nil, offersLink: false,
@@ -98,7 +99,8 @@ package func snapshot(
             title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
         removal: nil,
         welcome: WelcomeShown(
-            title: "Welcome to Pitboard", lines: [], iconLink: nil, tools: [],
+            title: "Welcome to Pitboard", lines: [], iconLink: nil, toolsHeading: nil,
+            tools: [],
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),

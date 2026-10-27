@@ -1,5 +1,6 @@
 // The Accounts window on both systems (plan 3.3 to 3.5); every view of it, the cut ones too,
-// follows the one state.
+// follows the one state. macOS's list is a grid with a selection; Windows' accounts are
+// SettingsExpanders, which hold none, their keys acting on the account whose toggle has focus.
 import { attr, cloned, keyed, shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";
 import { Grid } from "./grid.ts";
@@ -13,6 +14,7 @@ import { Panes } from "./panes.ts";
 import { disclosure } from "./disclosure.ts";
 import { AtLimitControls, WarmControls } from "./limits.ts";
 import { showAccountWindow } from "./windows.ts";
+import { closeDialog, openDialog } from "./dialog.ts";
 import { say } from "./say.ts";
 import { sheets } from "./sheets.ts";
 import {
@@ -20,6 +22,7 @@ import {
   dismissNotice,
   model,
   openWindow,
+  quit,
   refreshFromApp,
   setGeneral,
   setSchedule,
@@ -36,6 +39,7 @@ import {
   limitRow,
   listed,
   rowLines,
+  rowNote,
   signInExpired,
   switchSpoken,
   updated,
@@ -44,10 +48,14 @@ import {
   SWITCH,
   keysOf,
   noticeOf,
+  openSite,
   setupStepOf,
   signInAgain,
+  siteOf,
   type System,
 } from "../../data/window.ts";
+import { detail, limitCard, rowAction, signInSaid } from "../../data/windows.ts";
+import { winAdvanced } from "../../data/settings.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
 const part = <T extends Element = HTMLElement>(in_: ParentNode, name: string) =>
@@ -62,7 +70,10 @@ interface Settings {
 export class AccountsWindow extends LiveFigure {
   system: System = "macos";
   window!: HTMLElement;
-  #grid!: Grid;
+  // macOS's list; Windows' accounts hold no selection
+  #grid: Grid | null = null;
+  // what an account's row is
+  #rowSelector = '[role="row"]';
   #menu!: Menu;
   #menuFor: string | null = null;
   // what raised the coming contextmenu: a right or Control press, or the keys that open a menu
@@ -118,16 +129,19 @@ export class AccountsWindow extends LiveFigure {
         readLog(this.#panel("activity")!, this.system, model.get());
     });
     this.#seen.observe(this);
-    const grid = this.querySelector<HTMLElement>('[role="grid"]')!;
-    this.#grid = new Grid({
-      system: this.system,
-      grid,
-      rows: () => [...grid.querySelectorAll<HTMLElement>('[role="row"]')].filter((r) => !r.hidden),
-      act: (row) => this.#act(row),
-      forget: (row) => this.#ask("forget", row),
-      rename: (row) => this.#ask("rename", row),
-      name: (row) => accountOf(model.get(), row.dataset.account)?.label ?? "",
-    });
+    if (this.system === "windows") this.#rowSelector = "[data-row]";
+    const grid = this.querySelector<HTMLElement>('[role="grid"], [data-part="list"]')!;
+    if (this.system === "macos")
+      this.#grid = new Grid({
+        system: this.system,
+        grid,
+        rows: () =>
+          [...grid.querySelectorAll<HTMLElement>(this.#rowSelector)].filter((r) => !r.hidden),
+        act: (row) => this.#act(row),
+        forget: (row) => this.#ask("forget", row),
+        rename: (row) => this.#ask("rename", row),
+        name: (row) => accountOf(model.get(), row.dataset.account)?.label ?? "",
+      });
     this.#menu = new Menu(this.querySelector<HTMLElement>(`#${this.id}-menu`)!, {
       system: this.system,
       desk: this,
@@ -136,7 +150,10 @@ export class AccountsWindow extends LiveFigure {
         const row = this.#rowFor(this.#menuFor);
         // macOS outlines the row a shortcut menu acts on while it is open
         if (this.system === "macos") attr(row, "data-state", open ? "menu" : null);
-        if (!open && refocus) row?.focus({ preventScroll: true });
+        if (!open && refocus)
+          (row?.querySelector<HTMLElement>('[data-does="expand"]') ?? row)?.focus({
+            preventScroll: true,
+          });
       },
     });
     this.#listen(grid);
@@ -152,7 +169,8 @@ export class AccountsWindow extends LiveFigure {
   protected restart() {
     this.#menu.closeAll(false);
     sheets(this.system)?.close();
-    this.#grid.select(null, false);
+    this.#grid?.select(null, false);
+    for (const row of this.querySelectorAll<HTMLElement>("[data-row]")) this.#expand(row, false);
     this.#settings?.atLimit?.restart();
     this.#settings?.warm?.restart();
     this.#navigation(false);
@@ -213,7 +231,31 @@ export class AccountsWindow extends LiveFigure {
       const now = model.get();
       if (control.dataset.setting === "login")
         setGeneral({ opensAtLogin: !now.general.opensAtLogin });
+      if (control.dataset.setting === "updates")
+        setGeneral({ checksForUpdates: !now.general.checksForUpdates });
       if (control.dataset.setting === "renew") setSchedule(!now.schedule, "app");
+      if (control.dataset.setting === "uninstall") this.#uninstall();
+    });
+  }
+
+  // Uninstall Pitboard asks first, its answer no default, as SettingsPage.xaml.cs does
+  // departs from the apps: Uninstall Pitboard on Windows quits Pitboard until Reset
+  #uninstall() {
+    const d = document.querySelector<HTMLDialogElement>("#win-accounts-uninstall");
+    if (!d) return;
+    text(part(d, "title"), winAdvanced.uninstall.question);
+    text(part(d, "message"), winAdvanced.uninstall.says);
+    openDialog(d, {
+      system: this.system,
+      window: this.window,
+      desk: this,
+      answer: (value) => {
+        if (value !== "uninstall") return;
+        closeDialog(d);
+        quit();
+      },
+      cancel: () => true,
+      focus: d.querySelector<HTMLElement>('[data-does="cancel"]'),
     });
   }
 
@@ -238,17 +280,50 @@ export class AccountsWindow extends LiveFigure {
   }
 
   #rowFor(id: string | null) {
-    return id ? this.querySelector<HTMLElement>(`[role="row"][data-account="${id}"]`) : null;
+    return id
+      ? this.querySelector<HTMLElement>(`${this.#rowSelector}[data-account="${id}"]`)
+      : null;
+  }
+
+  // a Windows row opened on its cards, or closed
+  #expand(row: HTMLElement, open: boolean) {
+    attr(row.querySelector('[data-does="expand"]'), "aria-expanded", String(open));
+    shown(part(row, "details"), open);
+  }
+
+  #toggle(row: HTMLElement) {
+    this.#expand(row, row.querySelector('[data-does="expand"]')?.ariaExpanded !== "true");
   }
 
   #listen(grid: HTMLElement) {
     this.addEventListener("click", (e) => {
-      const does = (e.target as Element).closest<HTMLElement>("[data-does]");
+      const at = e.target as Element;
+      // a press on an expander's header opens or closes it, but on a button in it
+      const header = this.system === "windows" ? at.closest('[data-part="header"]') : null;
+      if (header && !at.closest("button"))
+        return this.#toggle(header.closest<HTMLElement>("[data-row]")!);
+      const does = at.closest<HTMLElement>("[data-does]");
       if (!does || !this.window.contains(does)) return;
-      const row = does.closest<HTMLElement>('[role="row"]');
+      const row = does.closest<HTMLElement>(this.#rowSelector);
+      const account = accountOf(model.get(), row?.dataset.account);
       switch (does.dataset.does) {
         case "use":
           if (row) this.#act(row);
+          return;
+        case "expand":
+          if (row) this.#toggle(row);
+          return;
+        case "copy-email":
+          if (account?.email) void navigator.clipboard?.writeText(account.email).catch(() => {});
+          return;
+        case "warm-settings":
+          return this.#panes.show("settings");
+        case "open":
+        case "sign-in-again":
+        case "rename":
+        case "warm":
+        case "forget":
+          if (account) this.#offer(does.dataset.does, account);
           return;
         case "refresh":
           return refreshFromApp(this.system);
@@ -258,6 +333,10 @@ export class AccountsWindow extends LiveFigure {
           return this.#machine.check(model.get().now);
         case "navigation":
           return this.#navigation(this.window.dataset.state !== "open");
+        case "back":
+          return this.#panes.back();
+        case "show":
+          return this.#panes.show(does.dataset.page!);
         case "add":
           return sheets(this.system)?.signIn(
             this,
@@ -301,9 +380,26 @@ export class AccountsWindow extends LiveFigure {
       if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) return;
       e.preventDefault();
       this.#raised = "keys";
-      const row = (e.target as Element).closest<HTMLElement>('[role="row"]');
+      const row = (e.target as Element).closest<HTMLElement>(this.#rowSelector);
       if (row && this.system === "windows") this.#openMenu(row, null, null);
     });
+    // an expander's toggle: Enter switches to its account, as its button does, and F2 and Delete
+    // rename and remove it (AccountKeys.cs)
+    if (this.system === "windows")
+      grid.addEventListener("keydown", (e) => {
+        const row = (e.target as Element)
+          .closest('[data-does="expand"]')
+          ?.closest<HTMLElement>(this.#rowSelector);
+        if (!row || e.ctrlKey || e.altKey || e.shiftKey) return;
+        const does = {
+          Enter: () => this.#act(row),
+          F2: () => this.#ask("rename", row),
+          Delete: () => this.#ask("forget", row),
+        }[e.key];
+        if (!does) return;
+        e.preventDefault();
+        does();
+      });
     grid.addEventListener(
       "click",
       (e) => {
@@ -316,7 +412,7 @@ export class AccountsWindow extends LiveFigure {
       const by = this.#raised;
       this.#raised = null;
       this.#swallow = by === "pointer";
-      const row = (e.target as Element).closest<HTMLElement>('[role="row"]');
+      const row = (e.target as Element).closest<HTMLElement>(this.#rowSelector);
       // the keys above answered it already, where a browser raises one after them
       if (!row || by === "keys") return;
       // a touch held still opened it already (hold.ts)
@@ -325,23 +421,23 @@ export class AccountsWindow extends LiveFigure {
       if (by === "pointer") this.#openMenu(row, e.clientX, e.clientY);
       else this.#openMenu(row, null, null);
     });
-    hold(grid, '[role="row"]', (row, x, y) => this.#openMenu(row, x, y));
+    hold(grid, this.#rowSelector, (row, x, y) => this.#openMenu(row, x, y));
     // ⌘⌫, the Account menu's Remove Account…, wherever focus is in the window but a field
     this.addEventListener("keydown", (e) => {
       const at = e.target as Element;
       if (this.system !== "macos" || e.defaultPrevented || !e.metaKey || e.key !== "Backspace")
         return;
-      if (at.closest("dialog, input") || !this.#grid.selected || this.#panes.current !== "accounts")
-        return;
+      const selected = this.#grid?.selected;
+      if (at.closest("dialog, input") || !selected || this.#panes.current !== "accounts") return;
       e.preventDefault();
-      this.#ask("forget", this.#grid.selected);
+      this.#ask("forget", selected);
     });
     // ⌘C and Ctrl+C copy the account's email, with nothing on screen saying so
     grid.addEventListener("copy", (e) => {
       const row =
         this.system === "macos"
-          ? this.#grid.selected
-          : (document.activeElement as Element | null)?.closest<HTMLElement>('[role="row"]');
+          ? this.#grid?.selected
+          : (document.activeElement as Element | null)?.closest<HTMLElement>(this.#rowSelector);
       const email = accountOf(model.get(), row?.dataset.account)?.email;
       if (!email) return;
       e.preventDefault();
@@ -451,7 +547,7 @@ export class AccountsWindow extends LiveFigure {
     const pane = this.#panes.current;
     // only the Accounts pane puts its account up for the menu bar (AccountsPane.swift)
     const account =
-      pane === "accounts" ? (accountOf(s, this.#grid.selected?.dataset.account) ?? null) : null;
+      pane === "accounts" ? (accountOf(s, this.#grid?.selected?.dataset.account) ?? null) : null;
     const refresh =
       pane === "machine"
         ? { title: "Check Again", enabled: !this.#machine.checking }
@@ -460,7 +556,7 @@ export class AccountsWindow extends LiveFigure {
   }
 
   protected fromMenuBar(does: string): boolean {
-    const row = this.#panes.current === "accounts" ? this.#grid.selected : null;
+    const row = this.#panes.current === "accounts" ? (this.#grid?.selected ?? null) : null;
     const a = accountOf(model.get(), row?.dataset.account);
     if (does.startsWith("offer:")) {
       this.#offer(does.slice("offer:".length), a);
@@ -489,7 +585,7 @@ export class AccountsWindow extends LiveFigure {
   // after Remove Account the row has gone and nothing is selected; macOS's list keeps focus, and
   // Windows gives it to the window's title bar
   forgotten() {
-    this.#grid.lost();
+    this.#grid?.lost();
     if (this.system !== "windows") return;
     const bar = this.querySelector<HTMLElement>('[data-part="title-bar"]');
     if (!bar) return;
@@ -509,6 +605,7 @@ export class AccountsWindow extends LiveFigure {
     if (settings) {
       for (const [name, on] of [
         ["login", s.general.opensAtLogin],
+        ["updates", s.general.checksForUpdates],
         ["renew", s.schedule],
       ] as const) {
         const toggle = settings.querySelector(`[data-setting="${name}"]`);
@@ -523,9 +620,11 @@ export class AccountsWindow extends LiveFigure {
       '[data-notice]:not([hidden]), [data-part="setup"]:not([hidden])',
     );
     attr(part(this, "first"), "data-state", above.length ? null : "top");
-    for (const group of this.querySelectorAll<HTMLElement>('[role="rowgroup"][data-tool]'))
+    for (const group of this.querySelectorAll<HTMLElement>(
+      '[role="rowgroup"][data-tool], [data-part="list"] > [data-tool]',
+    ))
       this.#rows(s, group, group.dataset.tool as Tool);
-    this.#grid.refresh();
+    this.#grid?.refresh();
   }
 
   #notices(s: State) {
@@ -555,10 +654,13 @@ export class AccountsWindow extends LiveFigure {
     }
   }
 
+  // Windows holds its tip back while a notice shows, whose message it would cover.
   #setup(s: State) {
     const box = part(this, "setup");
     if (!box) return;
-    const step = setupStepOf(s, s.declinedSecond, this.system);
+    const noticed =
+      this.system === "windows" && !!this.querySelector("[data-notice]:not([hidden])");
+    const step = noticed ? null : setupStepOf(s, s.declinedSecond, this.system);
     this.#setupTool = step?.tool ?? null;
     shown(box, !!step);
     if (!step) return;
@@ -566,18 +668,24 @@ export class AccountsWindow extends LiveFigure {
     text(part(box, "detail"), step.detail);
   }
 
-  // a tool's accounts, the one in use first
+  // a tool's accounts, the one in use first; macOS's after its heading, Windows' in their own stack,
+  // where a row a visitor adds takes ids of its own
   #rows(s: State, group: HTMLElement, tool: Tool) {
     const want = listed(s, tool);
-    // the heading, and on Windows the rule under it, come first
-    const offset = this.system === "windows" ? 2 : 1;
+    const windows = this.system === "windows";
     const rows = keyed(
-      group,
+      windows ? part(group, "rows")! : group,
       want.map((a) => a.id),
-      offset,
+      windows ? 0 : 1,
       this.#template("row"),
+      (row, id) => {
+        const details = part(row, "details");
+        if (!details) return;
+        details.id = `${this.id}-${id}-details`;
+        row.querySelector('[data-does="expand"]')?.setAttribute("aria-controls", details.id);
+      },
     );
-    want.forEach((a, i) => this.#row(s, rows[i], a));
+    want.forEach((a, i) => (windows ? this.#expander(s, rows[i], a) : this.#row(s, rows[i], a)));
   }
 
   // the templates the window's top view draws for every view of its system
@@ -619,6 +727,64 @@ export class AccountsWindow extends LiveFigure {
         }),
       );
     }
+  }
+
+  // Windows' row: its header's toggle named as Narrator hears the account, its one note, its end, and
+  // its cards
+  #expander(s: State, row: HTMLElement, a: Account) {
+    const on = isInUse(a, s);
+    const switching = s.switching?.id === a.id;
+    const toggle = row.querySelector('[data-does="expand"]');
+    attr(toggle, "aria-label", accountSpoken(a, s));
+    attr(toggle, "aria-keyshortcuts", keysOf(a, s, this.system));
+    shown(part(row, "in-use-symbol"), on);
+    shown(part(row, "parked-symbol"), !on);
+    text(part(row, "label"), a.label);
+    shown(part(row, "plan"), !!a.plan);
+    text(part(row, "plan"), a.plan ?? "");
+    this.#limits(s, row, a);
+    const note = rowNote(a, s);
+    shown(part(row, "note"), !!note);
+    text(part(row, "note"), note ?? "");
+    const action = rowAction(a, s);
+    shown(part(row, "action"), !!action && !switching);
+    shown(part(row, "in-use"), on && !switching);
+    shown(part(row, "switching"), switching);
+    const button = row.querySelector('[data-does="use"]');
+    text(button, action?.title ?? SWITCH);
+    attr(button, "aria-label", action?.spoken ?? null);
+    attr(button, "disabled", s.switching && !switching ? "" : null);
+    shown(part(row, "email-card"), !!a.email);
+    text(part(row, "email"), a.email);
+    const signIn = signInSaid(a, s);
+    shown(part(row, "sign-in-card"), !!signIn);
+    text(part(row, "sign-in"), signIn ?? "");
+    shown(part(row, "warm-card"), a.tool === "claude");
+    text(part(row, "warm"), warmNote(s, a) ?? detail.off);
+    this.#cards(s, row, a);
+    const site = siteOf(a.tool);
+    shown(part(row, "open-command"), !!site);
+    text(row.querySelector('[data-does="open"]'), site ? openSite(site) : "");
+    // what the shortcut menu offers past the row's own button
+    const o = offersOf(a, s);
+    shown(part(row, "sign-in-again-command"), o.signInAgain && !signInExpired(a, s));
+    shown(part(row, "warm-command"), !!o.warm?.enabled);
+    attr(row.querySelector('[data-does="forget"]'), "disabled", on ? "" : null);
+  }
+
+  // an opened row's card a limit, its countdown to the reset moving with the clock
+  #cards(s: State, row: HTMLElement, a: Account) {
+    const box = part(row, "limit-cards")!;
+    if (box.children.length !== a.limits.length)
+      box.replaceChildren(...a.limits.map(() => cloned(this.#template("limit-card"))));
+    a.limits.forEach((limit, i) => {
+      const card = box.children[i] as HTMLElement;
+      const c = limitCard(limit, s);
+      text(part(card, "name"), c.name);
+      text(part(card, "used"), c.used);
+      text(part(card, "resets"), c.resets);
+      text(part(card, "resets-in"), c.resetsIn);
+    });
   }
 
   #limits(s: State, row: HTMLElement, a: Account) {

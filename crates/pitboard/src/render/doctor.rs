@@ -1,9 +1,8 @@
-//! `pitboard doctor` for a person and for a program.
+//! `pitboard doctor` for a person; a program reads `Diagnosis::report`.
 
 use crate::ui::{self, BAD, BOLD, DIM, GOOD, WARN, pad, paint};
-use pitboard_core::doctor::{self, Check, Diagnosis, Level};
+use pitboard_core::doctor::{self, Check, Level};
 use pitboard_core::words;
-use serde_json::{Value, json};
 
 pub(crate) fn human(checks: &[Check]) -> String {
     // Each section lines up on its own, so what one tool's checks are called can never move
@@ -58,23 +57,6 @@ pub(crate) fn human(checks: &[Check]) -> String {
     out
 }
 
-/// What the bug template promises: labels, codes, paths and times, and no email address,
-/// account identifier or login name. The human-readable report above is not touched; a
-/// person looking at their own machine should see their own account.
-pub(crate) fn json(diagnosis: &Diagnosis) -> Value {
-    let report = json!({
-        "environment": diagnosis.environment,
-        "checks": diagnosis.checks.iter().map(|c| json!({
-            "code": c.code,
-            "name": c.name,
-            "level": match c.level { Level::Ok => "ok", Level::Warn => "warn", Level::Fail => "fail" },
-            "detail": c.detail,
-            "advice": c.advice,
-        })).collect::<Vec<_>>(),
-    });
-    diagnosis.redaction.over_json(&report)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +72,7 @@ mod tests {
             } else {
                 "do this".into()
             },
+            account: None,
         }
     }
 

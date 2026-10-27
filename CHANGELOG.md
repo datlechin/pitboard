@@ -59,6 +59,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - After switching Claude Code by itself, the app's notification and its notice in the window
   offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
   switched until that limit resets.
+- The Windows app's **Diagnostics** offers each check's fix, or **Learn more**, beside it, and
+  **Copy report** copies the checks for a bug report.
+- An account's row in the Windows app opens on each limit with how long until it resets, the notes
+  its row has no room for, its email with **Copy**, until when its saved sign-in is valid, its
+  warm-up with **Warm-up settings**, and what its shortcut menu offers, such as **Open
+  claude.ai**, **Sign in again…**, **Rename** and **Remove account**.
+- The Windows app's commands, the buttons of its **Settings** and its welcome's **Get started**,
+  and an account's shortcut menu have access keys.
+- Narrator names each card of an opened account in the Windows app, says that **Copy** copies
+  the email address, and names the tool each **Add** in the welcome is for.
+- The Windows app's notices link **Learn more** where nothing in the app does something about
+  them.
+- A failure in the Windows app offers what to do about it as its button, such as **Sign in
+  again…**, or links **Learn more**, and so does an account's note.
+- The Windows app opens a welcome at its first launch, in place of its window: what Pitboard
+  does, where its icon is with **Taskbar settings**, each tool found with **Add**, **Start when
+  you sign in to Windows** and **Get started**.
+- The Windows app's **Settings** > **Advanced** has **Uninstall Pitboard**, which asks first,
+  deletes Pitboard's saved sign-ins and settings, then, in the copy its installer put there,
+  uninstalls the app as **Settings** > **Apps** does.
 
 ### Changed
 
@@ -135,6 +155,50 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's notifications are titled in the system's case, such as **5-Hour Limit Almost
   Reached** on macOS, under the name of the tool they are about.
 - What the app says went wrong names no `pitboard` command.
+- The Windows app's icon menu names an account with how much it has used, or why it can't be
+  switched to, as **work (42%)** or **old (sign-in expired)**, and the macOS menu names it
+  alone, where both added its plan.
+- The menu bar mark and the Windows icon flag that something needs attention while an account
+  needs a sign-in.
+- An account's row offers **Sign In…** where it said **Sign In Again…**.
+- The app's **Clean Up** sheet, its notices, and the questions before **Remove Account** and
+  **Cancel Switch** say one sentence each.
+- The app's checks of the machine say what each found in the app's words, under the tool they
+  are about, and show a check that passed only where it says something to look for.
+- The Windows icon's tooltip goes on in lower case after an account's name, as **work: weekly
+  18% used**.
+- The Windows app's window has a title bar of the standard height and a compact pane with
+  **Accounts** and **Settings**, and opens at 960 by 680.
+- The Windows app's **Activity** and **This PC**, now **Diagnostics**, open from **Settings** >
+  **Troubleshoot**, with a back button in the title bar, and Activity's last column is **By**.
+- The Windows app shows each account as a row with its name, its plan, a line for each limit and
+  at most one note, and **In use** or its button at its end, its bars in the accent color until a
+  limit runs low.
+- The Windows app shows its setup tips as a teaching tip beside **Add account** where they are
+  about adding one, and holds them back while a notice or a dialog is up, where they were a bar
+  above the accounts.
+- A Windows notification's **Sign in again…** ends with an ellipsis, as a command that opens a
+  dialog does.
+- The Windows app's icon is drawn dark on a light taskbar and white on a dark one, as Windows' own
+  icons are, and follows a contrast theme's text colour, where it was a dark board on both.
+- The Windows app's icon menu opens on **Open Pitboard** and ends with **Exit**, as Windows'
+  guidance orders it, and says **Install Pitboard 1.2.0…** in place of **Check for updates** once
+  an update is found.
+- The Windows app's questions answer Enter with their verb, drawn as the accent button, except
+  **Uninstall Pitboard?**, which opens on **Cancel**, and a failure's next step sits beside
+  **Close**.
+- A question or failure that comes while the Windows app's dialog is up takes the dialog over
+  until it is answered, and the dialog then goes back to its step, where it was a bar inside it.
+- The Windows installer starts Pitboard once a first install is done, which opens its welcome,
+  where it started Pitboard only after an update.
+- The Windows app's **Settings** shows each setting with its icon, as Windows Settings does, says
+  what **Start when you sign in to Windows** is for, and names the version under **Version**
+  beside **Check now**.
+- The Windows app's **Settings** shows **At** only while something happens when a limit reaches
+  it, says what a warm-up does under **Warm-up** with its hours beside it, and links **Is this
+  allowed?** without a sentence on the terms before it.
+- The Windows app's **Settings** calls the card that says where `pitboard` is **Command line**,
+  where it said **In your terminal**.
 
 ### Removed
 
@@ -147,6 +211,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's **Settings** no longer show **Renew Now**, **Runs** or **Scheduled in**: the app
   refreshes saved sign-ins as it reads usage, and `pitboard renew` and `pitboard schedule status`
   keep both.
+- The Windows app no longer switches to an account on a double click of its row: Enter on the row
+  or its button does.
+- The Windows app's icon menu no longer lists **Refresh** or the notices, which the window has,
+  and leaves out an account window that can't open yet, where it dimmed it.
 
 ### Fixed
 

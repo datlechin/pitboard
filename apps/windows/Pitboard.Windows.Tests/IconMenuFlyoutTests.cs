@@ -13,21 +13,15 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class IconMenuFlyoutTests
 {
-    private static readonly MenuEntry Stuck = new(
-        "An interrupted switch is waiting", null, "Pitboard can finish it or give it up.", null,
-        new Intent.Show(new Place.Accounts()), null, true);
+    private static AppModel TwoTools() => new(TwoToolsRead());
 
-    private static AppModel TwoTools(bool reading = false) => new(TwoToolsRead(reading));
-
-    private static Snapshot TwoToolsRead(bool reading = false) => Snapshots.Read(1) with
+    private static Snapshot TwoToolsRead() => Snapshots.Read(1) with
     {
-        Reading = reading,
-        MenuNotices = new MenuNotices(null, [], Stuck),
         Sections =
         [
             Items.Section(
                 "claude", "Claude Code",
-                Items.Account("claude", "work", inUse: true) with { Summary = "5h 42% · resets in 2h" },
+                Items.Account("claude", "work", inUse: true) with { Summary = "5-hour 42% used, Weekly 12%" },
                 Items.Account("claude", "personal")),
             Items.Section("codex", "Codex", Items.Account("codex", "main", inUse: true)),
         ],
@@ -62,9 +56,8 @@ public sealed class IconMenuFlyoutTests
         var menu = Menu(TwoTools());
 
         Assert.AreEqual(
-            "menu.others | - | Claude Code | (x) menu.account.claude/work | ( ) menu.account.claude/personal | - | Codex "
-            + "| (x) menu.account.codex/main | - | menu.addAccount | menu.refresh | - | menu.openPitboard | menu.settings | - "
-            + "| menu.help | menu.exit",
+            "menu.openPitboard | - | Claude Code | (x) menu.account.claude/work | ( ) menu.account.claude/personal | Codex "
+            + "| (x) menu.account.codex/main | - | menu.addAccount | - | menu.settings | menu.help | - | menu.exit",
             Said(menu));
     }
 
@@ -116,22 +109,14 @@ public sealed class IconMenuFlyoutTests
     }
 
     [UITestMethod]
-    public void EachSecondLineIsTheItemsTooltipAndHelpText()
+    public void AnAccountsLimitsAreItsTooltipAndHelpText()
     {
         var menu = Menu(TwoTools());
 
-        foreach (var (id, detail) in new[]
-        {
-            ("menu.account.claude/work", "5h 42% · resets in 2h"),
-            ("menu.refresh", "Updated 08:00"),
-            ("menu.others", "Pitboard can finish it or give it up."),
-        })
-        {
-            var item = Item(menu, id);
-            Assert.AreEqual(detail, ToolTipService.GetToolTip(item), id);
-            Assert.AreEqual(detail, AutomationProperties.GetHelpText(item), id);
-        }
-
+        var work = Item(menu, "menu.account.claude/work");
+        Assert.AreEqual("5-hour 42% used, Weekly 12%", ToolTipService.GetToolTip(work));
+        Assert.AreEqual("5-hour 42% used, Weekly 12%", AutomationProperties.GetHelpText(work));
+        Assert.IsNull(ToolTipService.GetToolTip(Item(menu, "menu.account.claude/personal")));
         Assert.IsNull(ToolTipService.GetToolTip(Item(menu, "menu.exit")));
     }
 
@@ -153,18 +138,13 @@ public sealed class IconMenuFlyoutTests
         Assert.AreEqual(FontWeights.Normal.Weight, Item(menu, "menu.settings").FontWeight.Weight);
     }
 
+    // The tools' names are the only items nobody can choose.
     [UITestMethod]
-    public void ANoticeShowsItsMark()
+    public void OnlyTheHeadingsAreDimmed()
     {
-        var mark = Item(Menu(TwoTools()), "menu.others").Icon as FontIcon;
+        var dimmed = Menu(TwoTools()).Items.OfType<MenuFlyoutItem>().Where(item => !item.IsEnabled);
 
-        Assert.AreEqual("\uE7BA", mark?.Glyph);
-    }
-
-    [UITestMethod]
-    public void RefreshWaitsForTheReadUnderWay()
-    {
-        Assert.IsFalse(Item(Menu(TwoTools(reading: true)), "menu.refresh").IsEnabled);
+        Assert.AreEqual("Claude Code, Codex", string.Join(", ", dimmed.Select(item => item.Text)));
     }
 
     [UITestMethod]

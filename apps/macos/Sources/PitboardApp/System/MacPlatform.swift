@@ -241,6 +241,12 @@ final class MacLocalTime: LocalTime {
             .formatted(style(date: .abbreviated, time: .shortened))
     }
 
+    func date(epoch: Int64) throws -> String {
+        Date(timeIntervalSince1970: TimeInterval(epoch)).formatted(
+            Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+                .month(.abbreviated).day())
+    }
+
     // On a day with no clock change, so every time of day is one.
     func timeOfDay(minutes: UInt16) throws -> String {
         let day = DateComponents(

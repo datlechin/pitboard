@@ -15,7 +15,7 @@ public sealed class SettingsViewModelTests
     private static readonly string[] AtLimitChoices = ["Do nothing", "Notify me", "Switch automatically"];
 
     private static readonly WarmShown TwoWarmed = new(
-        Title: "Warm up limits", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
+        Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
             new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
@@ -42,14 +42,66 @@ public sealed class SettingsViewModelTests
         return (shown, model, app);
     }
 
+    // Plan 4.11: Uninstall… asks the model's question first, then says what it is doing, and where it stopped short why,
+    // with Try again.
+    [TestMethod]
+    public void UninstallAsksFirstThenSaysHowItGoes()
+    {
+        var question = new Question(
+            "Uninstall Pitboard?", "Pitboard deletes its saved sign-ins, settings and account windows.", "Uninstall",
+            Destructive: false, ConfirmIsDefault: false);
+        var offered = Snapshots.Read(1) with { Uninstall = new ItemOffer("Uninstall…", new Intent.Uninstall(), Enabled: true, question) };
+        var (shown, model, app) = Over(offered);
+
+        Assert.AreEqual(new Choice("Uninstall…", new Intent.Uninstall(), Enabled: true), shown.UninstallChoice);
+        Assert.AreEqual(question, shown.UninstallQuestion);
+        Assert.AreEqual(Words.Settings.UninstallNote, shown.UninstallSays);
+        Assert.IsNull(shown.UninstallStopped);
+        shown.Uninstall();
+        CollectionAssert.AreEqual(new Intent[] { new Intent.Uninstall() }, model.Sent.ToArray());
+
+        app.Apply(offered with
+        {
+            Revision = 2,
+            Uninstall = offered.Uninstall with { Enabled = false },
+            Removal = new RemovalShown.Removing("Uninstalling Pitboard…"),
+        });
+        Assert.IsTrue(shown.Uninstalling);
+        Assert.IsFalse(shown.OffersUninstall);
+        Assert.AreEqual("Uninstalling Pitboard…", shown.UninstallSays);
+
+        var again = new Choice("Try again", new Intent.Uninstall(), Enabled: true);
+        app.Apply(offered with
+        {
+            Revision = 3,
+            Removal = new RemovalShown.Stopped(
+                "Pitboard couldn’t remove everything", "A saved sign-in couldn’t be deleted yet, so Pitboard kept its folder.", again),
+        });
+        Assert.IsFalse(shown.Uninstalling);
+        Assert.AreEqual(again, shown.UninstallChoice);
+        Assert.IsNull(shown.UninstallQuestion, "asked again after it was answered");
+        Assert.AreEqual("Pitboard couldn’t remove everything", shown.UninstallStopped);
+        Assert.AreEqual("A saved sign-in couldn’t be deleted yet, so Pitboard kept its folder.", shown.UninstallSays);
+    }
+
     [TestMethod]
     public void TheVersionLeavesOutTheCommitTheSdkAdds()
     {
         Assert.AreEqual("0.0.0", Versions.Of("0.0.0+3f2a9c1"));
         Assert.AreEqual("1.0.0-beta.1", Versions.Of("1.0.0-beta.1"));
         Assert.AreEqual("", Versions.Of((string?)null));
-        Assert.AreEqual("Pitboard 1.0.0", Versions.Named("1.0.0"));
-        Assert.AreEqual("Pitboard", Versions.Named(""));
+    }
+
+    [TestMethod]
+    public void TheVersionIsNamedAsTheModelNamesItAndAnUpdateFoundAsReadyToInstall()
+    {
+        var updates = new StandInUpdates();
+        var (shown, _, _) = Over(Snapshots.Read(1), updates: updates, version: "1.0.0");
+
+        Assert.AreEqual(PitboardFfiMethods.NamedVersion("1.0.0"), shown.UpdatesState);
+
+        updates.Found("1.0.1");
+        Assert.AreEqual(PitboardFfiMethods.ReadyToInstall("1.0.1"), shown.UpdatesState);
     }
 
     [TestMethod]
@@ -57,15 +109,18 @@ public sealed class SettingsViewModelTests
     {
         Assert.AreEqual(PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
         CollectionAssert.AreEqual(
-            new[] { PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.BetaNote },
+            new[] { PitboardFfiMethods.NoUpdateKey(), Words.Settings.BetaUpdates },
             SettingsViewModel.UpdatesNotes(new NoUpdates(), "1.0.0-beta.1"));
         Assert.IsEmpty(SettingsViewModel.UpdatesNotes(new StandInUpdates(), "1.0.0"));
-        Assert.AreEqual(NoUpdates.BadKey, SettingsViewModel.UpdatesNotes(new NoUpdates(NoUpdates.BadKey), "1.0.0").Single());
+        Assert.AreEqual(
+            Words.Settings.UpdateKeyInvalid,
+            SettingsViewModel.UpdatesNotes(new NoUpdates(Words.Settings.UpdateKeyInvalid), "1.0.0").Single());
 
         var waiting = new StandInUpdates(beta: true);
         waiting.Feed(found: false);
         CollectionAssert.AreEqual(
-            new[] { SparkleUpdates.NoFeed, SettingsViewModel.BetaNote }, SettingsViewModel.UpdatesNotes(waiting, "1.0.0-beta.4"));
+            new[] { Words.Settings.NoReleaseToUpdateTo, Words.Settings.BetaUpdates },
+            SettingsViewModel.UpdatesNotes(waiting, "1.0.0-beta.4"));
     }
 
     // A beta that found no feed when Pitboard started looks again, as 1.0.0 may have come out since.
@@ -193,11 +248,11 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("When a limit reaches 95%", shown.AtLimitLabel);
         CollectionAssert.AreEqual(AtLimitChoices, shown.AtLimitTitles);
         Assert.AreEqual(2, shown.AtLimitIndex);
-        Assert.AreEqual("Share of a limit", shown.ShareTitle);
+        Assert.AreEqual("At", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
+        Assert.IsTrue(shown.ShowsShare);
         Assert.IsTrue(shown.HasAtLimitTerms);
-        Assert.AreEqual("Anthropic’s terms may cover automatic switching and warm-ups.", shown.AtLimitTerms);
 
         app.Apply(With(2, machine => machine with
         {
@@ -206,6 +261,7 @@ public sealed class SettingsViewModelTests
 
         Assert.AreEqual(0, shown.AtLimitIndex);
         Assert.IsFalse(shown.CanSetShare, "no share while nothing happens at it");
+        Assert.IsFalse(shown.ShowsShare);
         Assert.IsFalse(shown.HasAtLimitNote);
         Assert.IsFalse(shown.HasAtLimitTerms);
     }
@@ -240,7 +296,16 @@ public sealed class SettingsViewModelTests
         var (shown, _, _) = Over(Snapshots.Read(1), start);
 
         Assert.IsFalse(shown.CanStartAtSignIn);
-        Assert.AreEqual("A Debug build never starts when you sign in to Windows.", shown.StartupNote);
+        Assert.AreEqual(Words.Settings.DebugNeverStarts, shown.StartupNote);
+    }
+
+    // As the welcome says under the same switch: what starting at sign-in is for, where nothing holds it back.
+    [TestMethod]
+    public void StartAtSignInSaysWhatItIsFor()
+    {
+        var (shown, _, _) = Over(Snapshots.Read(1));
+
+        Assert.AreEqual(Words.Settings.OpenAtLoginNote, shown.StartupNote);
     }
 
     [TestMethod]
@@ -256,7 +321,7 @@ public sealed class SettingsViewModelTests
 
         Assert.IsFalse(shown.StartsAtSignIn);
         Assert.IsFalse(shown.CanStartAtSignIn);
-        Assert.AreEqual(SettingsViewModel.TurnedOffNote, shown.StartupNote);
+        Assert.AreEqual(Words.Settings.StartupTurnedOff, shown.StartupNote);
         Assert.IsTrue(shown.OffersStartupSettings);
     }
 
@@ -293,17 +358,17 @@ public sealed class SettingsViewModelTests
         on.Shown();
         Assert.IsFalse(on.HasNotificationsOff);
 
-        NotificationsBlocked? blocked = new(WindowsNotifications.Unoffered, InSettings: false);
+        NotificationsBlocked? blocked = new(Words.Settings.NotificationsUnoffered!, InSettings: false);
         var (off, _, _) = Over(Snapshots.Read(1), notifications: () => blocked);
         off.Shown();
 
         Assert.IsTrue(off.HasNotificationsOff);
-        Assert.AreEqual(WindowsNotifications.Unoffered, off.NotificationsOff);
+        Assert.AreEqual(Words.Settings.NotificationsUnoffered, off.NotificationsOff);
         Assert.IsFalse(off.OffersNotificationSettings, "a link to a switch that is not the person's");
 
-        blocked = new(WindowsNotifications.OffForPitboard, InSettings: true);
+        blocked = new(Words.Settings.NotificationsOff, InSettings: true);
         off.ReadWindowsSettings();
-        Assert.AreEqual(WindowsNotifications.OffForPitboard, off.NotificationsOff);
+        Assert.AreEqual(Words.Settings.NotificationsOff, off.NotificationsOff);
         Assert.IsTrue(off.OffersNotificationSettings);
 
         blocked = null;

@@ -32,19 +32,22 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
         var window = InFront(launched.OpenWindow());
-        launched.Element("setup.atLimitUnchosen");
+        launched.Tip(Words.SwitchBeforeRunningOut);
         KeepWindow(window, "windows-window-tip-at-limit");
 
         // The other pictures show the accounts, past the tip on what happens at a limit.
-        launched.Invoke("setup.action.declineTip");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.atLimitUnchosen")), "the tip stayed");
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
         launched.Row("codex/spare");
-        Launched.Within(launched.Row("claude/work"), found => found.ByAutomationId("account.inUse"), "work in use");
+        var work = launched.Row("claude/work");
+        Launched.Within(work, found => found.ByAutomationId("account.inUse"), "work in use");
         KeepWindow(window, "windows-window-accounts");
+        Launched.Expand(work);
+        Launched.Within(work, found => found.ByAutomationId("detail.copyEmail"), "work's email");
+        KeepWindow(window, "windows-window-account-detail");
 
-        launched.Select("pane.machine");
+        launched.OpenFromSettings(window, "settings.diagnostics");
         launched.Element("machine.summary");
-        KeepWindow(window, "windows-checks");
+        KeepWindow(window, "windows-diagnostics");
 
         // The menu opens over the window, as the macOS picture shows it.
         var frame = Frame(window);
@@ -54,10 +57,26 @@ public sealed partial class ScreenshotTests
     }
 
     [TestMethod]
+    public void TheDetailsOfASavedAndAnExpiredAccount()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
+        var window = InFront(launched.OpenWindow());
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
+        var personal = launched.Row("claude/personal");
+        Opened(personal);
+        KeepWindow(window, "windows-window-account-detail-saved");
+
+        Launched.Expander(personal).Patterns.ExpandCollapse.Pattern.Collapse();
+        Opened(launched.Row("claude/old"));
+        KeepWindow(window, "windows-window-account-detail-expired");
+    }
+
+    [TestMethod]
     public void AnAccountsMenuAndItsNameDialog()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = InFront(launched.OpenWindow());
+        launched.DeclineTip(Words.UseWithCodex);
         var row = launched.Row("claude/personal");
         Launched.OpenMenu(row);
         var menu = Around(launched.Element("account.copyEmail"), ControlType.Menu);
@@ -118,8 +137,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
         var window = InFront(launched.OpenWindow());
-        launched.Invoke("setup.action.declineTip");
-        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("setup.atLimitUnchosen")), "the tip stayed");
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
 
         Switch(launched, "claude/old");
         launched.Element("sheet");
@@ -141,7 +159,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "chatGPTOpen");
         var window = InFront(launched.OpenWindow());
-        launched.Invoke("setup.action.declineTip");
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
         Switch(launched, "codex/spare");
         launched.Element("question");
         KeepWindow(window, "windows-question-quit-chatgpt");
@@ -206,9 +224,34 @@ public sealed partial class ScreenshotTests
     public void TheFirstLaunch()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        var welcome = InFront(launched.Window(Words.Welcome));
+        launched.Element("welcome.done");
+        KeepWindow(welcome, "windows-welcome");
+        launched.Invoke("welcome.done");
         var window = InFront(launched.Window("Pitboard"));
-        launched.Element("setup.codexUnused");
+        launched.Tip(Words.UseWithCodex);
         KeepWindow(window, "windows-window-first-launch");
+    }
+
+    // Claude Code's sign-in from the welcome goes through the window's dialog, and the welcome then says what it added.
+    [TestMethod]
+    public void TheWelcomeOnceAnAccountIsAdded()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        var welcome = launched.Window(Words.Welcome);
+        var claude = Launched.Within(welcome, found => found.ByAutomationId("welcome.tool.claude"), "Claude Code");
+        Launched.Within(claude, found => found.ByAutomationId("welcome.add"), "Claude Code's sign-in").AsButton().Invoke();
+        launched.Answer("sheet", "PrimaryButton");
+        var code = launched.Field("sheet.code");
+        Assert.IsTrue(Launched.Enables(launched.Element("sheet.openLink")), "Open stayed dimmed");
+        Launched.Type(code, "fixture-code#state");
+        launched.Answer("sheet", "PrimaryButton");
+        launched.Field("sheet.name");
+        launched.Answer("sheet", "PrimaryButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the dialog stayed up");
+
+        Launched.Shows(welcome, Words.AddedAs, exact: false);
+        KeepWindow(InFront(welcome), "windows-welcome-added");
     }
 
     [TestMethod]
@@ -216,8 +259,8 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "empty");
         var window = InFront(launched.OpenWindow());
-        launched.Element("setup.codexUnused");
-        launched.Invoke("setup.action.declineTip");
+        launched.Tip(Words.UseWithCodex);
+        launched.DeclineTip(Words.UseWithCodex);
         launched.Element("empty.choice");
         KeepWindow(window, "windows-window-no-accounts");
     }
@@ -241,8 +284,8 @@ public sealed partial class ScreenshotTests
 
         var frame = Frame(window);
         HiddenWindows.OpenMenu(launched.Process, frame.Left + 40, frame.Top + 60);
-        var menu = Around(launched.Element("menu.others"), ControlType.Menu);
-        Keep(menu.BoundingRectangle, menu, "windows-tray-menu-issue");
+        var menu = Around(launched.Element("menu.openPitboard"), ControlType.Menu);
+        Keep(menu.BoundingRectangle, menu, "windows-tray-menu-read-failure");
     }
 
     [TestMethod]
@@ -250,6 +293,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "unnamed");
         var window = InFront(launched.OpenWindow());
+        launched.DeclineTip(Words.UseWithCodex);
         launched.Element("account.action");
         KeepWindow(window, "windows-window-unnamed");
         launched.Invoke("account.action");
@@ -262,7 +306,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "onlyOne");
         var window = InFront(launched.OpenWindow());
-        launched.Element("setup.onlyOne");
+        launched.Tip(Words.AddASecondAccount);
         KeepWindow(window, "windows-window-tip-second-account");
     }
 
@@ -271,15 +315,11 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = InFront(launched.OpenWindow());
-        launched.Select("pane.activity");
-        Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
-        KeepWindow(window, "windows-activity");
-
         launched.Select("SettingsItem");
         launched.Element("settings.startAtSignIn");
         KeepWindow(window, "windows-settings-general");
         var choice = launched.Element("settings.atLimit").AsComboBox();
-        Expand(launched.Element("settings.atLimitGroup"));
+        Launched.Expand(launched.Element("settings.atLimitGroup"));
         Assert.IsTrue(Launched.Enables(choice), "the choice stayed dimmed");
         // The model's choices, in its order: Do nothing, Notify me, Switch automatically.
         choice.Select(2);
@@ -289,6 +329,17 @@ public sealed partial class ScreenshotTests
         var scroller = Scroller(launched.Element("settings.renewDaily"));
         scroller.Patterns.Scroll.Pattern.SetScrollPercent(NoScroll, 100);
         KeepWindow(window, "windows-settings-advanced");
+
+        // Asked, and never answered: Uninstall would end the app.
+        launched.Invoke("settings.uninstall");
+        launched.Element("question");
+        KeepWindow(window, "windows-question-uninstall");
+        launched.Answer("question", "CloseButton");
+
+        // Last, since its card opens by Enter, after which WinUI draws the focus where it moves.
+        launched.OpenFromSettings(window, "settings.activity");
+        Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
+        KeepWindow(window, "windows-activity");
     }
 
     // The fixture's personal is on for warm-ups with no five-hour period running, so it warms up as the app starts.
@@ -297,13 +348,40 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "warmUp");
         var window = InFront(launched.OpenWindow());
+        Launched.Expand(launched.Row("claude/personal"));
         Launched.Shows(window, Words.WarmsUpAgain, exact: false, within: TimeSpan.FromSeconds(30));
         KeepWindow(window, "windows-window-warm-up");
 
-        launched.Select("SettingsItem");
-        Expand(launched.Element("settings.warm"));
+        // Its link opens Settings on the warm-up's expander.
+        launched.Invoke("detail.warmUpSettings");
         launched.Element("settings.warmStanding");
         KeepWindow(window, "windows-settings-warm-up");
+    }
+
+    // Neither question is answered: the fixture's page saves nothing, and its window keeps its data.
+    [TestMethod]
+    public void AnAccountsWindowAsksFirst()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
+        launched.OpenWindow();
+        AccountWindowTests.OpenFromItsRow(launched, "codex/main");
+        var window = launched.AccountWindow("main");
+        Launched.Loads(window, "chatgpt.com stand-in");
+        InFront(window);
+        // As the main window opens: its own size runs past the runner's screen, under the taskbar.
+        window.Patterns.Transform.Pattern.Resize(960, 680);
+
+        Launched.Press(window, "Download notes");
+        launched.Element("question");
+        KeepWindow(window, "windows-question-download");
+        launched.Answer("question", "CloseButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("question")), "the question stayed");
+
+        Launched.Within(window, found => found.ByAutomationId("MoreButton"), "the command bar's More").Patterns.Invoke.Pattern.Invoke();
+        launched.Invoke("window.removeData");
+        launched.Element("question");
+        KeepWindow(window, "windows-question-remove-website-data");
+        launched.Answer("question", "CloseButton");
     }
 
     // A picture is of the screen, so it shows whatever is in front.
@@ -321,6 +399,13 @@ public sealed partial class ScreenshotTests
     private static bool Dims(AutomationElement button, bool dimmed) =>
         Retry.WhileFalse(() => button.IsEnabled != dimmed, Patience, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
 
+    // Open once its last command is there.
+    private static void Opened(AutomationElement row)
+    {
+        Launched.Expand(row);
+        Launched.Within(row, found => found.ByAutomationId("detail.remove"), $"{row.AutomationId}'s Remove account");
+    }
+
     private static void Switch(Launched launched, string qualified) =>
         Launched.Within(launched.Row(qualified), found => found.ByAutomationId("account.action"), $"{qualified}'s button")
             .AsButton().Invoke();
@@ -330,13 +415,6 @@ public sealed partial class ScreenshotTests
         Assert.IsTrue(
             Retry.WhileFalse(() => Launched.Lines(notice).Count() > 1, Patience, TimeSpan.FromMilliseconds(250), ignoreException: true).Result,
             $"{notice.AutomationId} says nothing: {Launched.Said(notice)}");
-
-    // A SettingsExpander's own peer is a group with no ExpandCollapse, and its template gives the Expander inside it its
-    // name, not its id.
-    private static void Expand(AutomationElement group) =>
-        (group.FindAllDescendants().FirstOrDefault(found => found.Patterns.ExpandCollapse.IsSupported)
-            ?? throw new AssertFailedException($"{group.AutomationId} holds nothing that expands"))
-            .Patterns.ExpandCollapse.Pattern.Expand();
 
     private static AutomationElement Scroller(AutomationElement inside)
     {

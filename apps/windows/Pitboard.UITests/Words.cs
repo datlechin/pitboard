@@ -4,7 +4,19 @@ namespace Pitboard.UITests;
 // there changes it here.
 internal static class Words
 {
+    public const string Welcome = "Welcome to Pitboard";
+
     public const string WarmsUpAgain = "Warms up again at ";
+
+    public const string NotNow = "Not now";
+
+    public const string AddedAs = "Added as ";
+
+    public const string UseWithCodex = "Use Pitboard with Codex";
+
+    public const string SwitchBeforeRunningOut = "Switch before a limit runs out";
+
+    public const string AddASecondAccount = "Add a second account";
 
     public const string GoogleStopped = "Pitboard stopped it";
 

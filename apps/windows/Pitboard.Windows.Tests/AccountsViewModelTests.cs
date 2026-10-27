@@ -90,19 +90,19 @@ public sealed class AccountsViewModelTests
         Assert.AreSame(EmptyShown.None, shown.Empty);
     }
 
-    // An empty group header still takes room, so one tool's accounts are rows with no group.
+    // A tool's name heads its accounts once another tool's are shown, as one list of sections either way.
     [TestMethod]
-    public void AccountsAreGroupedOnlyOnceAToolsHeadingIsShown()
+    public void EachToolsAccountsAreASectionHeadedOnceAnotherToolsAreShown()
     {
         var one = Snapshots.Read(1) with
         {
             Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare"))],
         };
-        var (shown, _, app, told) = Over(one);
+        var (shown, _, app, _) = Over(one);
+        string Said() => string.Join(" | ", shown.Sections.Select(section => $"{section.Heading}: {string.Join(", ", section.Select(row => row.Item.Title))}"));
 
-        Assert.IsFalse(shown.Grouped);
-        Assert.AreEqual("work, spare", string.Join(", ", shown.Rows.Select(row => row.Item.Title)));
-        Assert.IsEmpty(shown.Sections);
+        Assert.AreEqual(": work, spare", Said());
+        Assert.IsFalse(shown.Sections.Single().Headed);
 
         app.Apply(one with
         {
@@ -114,10 +114,70 @@ public sealed class AccountsViewModelTests
             ],
         });
 
-        Assert.IsTrue(shown.Grouped);
-        Assert.IsEmpty(shown.Rows);
-        Assert.AreEqual("Claude Code, Codex", string.Join(", ", shown.Sections.Select(section => section.Heading)));
-        Assert.Contains(nameof(AccountsViewModel.Grouped), told);
+        Assert.AreEqual("Claude Code: work | Codex: main", Said());
+        Assert.IsTrue(shown.Sections.All(section => section.Headed));
+    }
+
+    // The model makes every list anew for each snapshot: a row it still lists is the same object, open if it was opened.
+    [TestMethod]
+    public void AnOpenedRowStaysOpenAcrossSnapshots()
+    {
+        var first = Snapshots.Read(1) with
+        {
+            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare"))],
+        };
+        var (shown, _, app, _) = Over(first);
+        var spare = shown.Sections.Single()[1];
+        spare.Expanded = true;
+
+        app.Apply(first with
+        {
+            Revision = 2,
+            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare") with { Title = "spare 12%" })],
+        });
+
+        Assert.AreSame(spare, shown.Sections.Single()[1]);
+        Assert.IsTrue(spare.Expanded);
+        Assert.AreEqual("spare 12%", spare.Item.Title);
+    }
+
+    // Plan 4.9's expanded row: the account's windows, Rename and Remove account, in that order. Made again only when they
+    // change, a button with focus keeps it through a read of the usage.
+    [TestMethod]
+    public void AnOpenedRowsCommandsAreMadeAgainOnlyWhenTheyChange()
+    {
+        var spare = Items.Account("claude", "spare") with
+        {
+            Limits = [Items.Limit(42)],
+            Actions =
+            [
+                Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare")), Items.RenameAction("claude", "spare"),
+                Items.WindowAction(Items.Window("claude", "spare")), Items.RemoveAction("claude/spare"),
+            ],
+        };
+        var first = Snapshots.Read(1) with { Sections = [Items.Section("claude", null, spare)] };
+        var (shown, _, app, _) = Over(first);
+        var row = shown.Sections.Single().Single();
+        var commands = row.Commands.ToArray();
+        var told = new List<string>();
+        row.PropertyChanged += (_, args) => told.Add(args.PropertyName ?? "");
+
+        Assert.AreEqual("detail.window.claude.ai, detail.rename, detail.remove", string.Join(", ", commands.Select(command => command.Id)));
+
+        app.Apply(first with { Revision = 2, Sections = [Items.Section("claude", null, spare with { Limits = [Items.Limit(50)] })] });
+
+        Assert.IsTrue(commands.SequenceEqual(row.Commands, ReferenceEqualityComparer.Instance), "a read made the buttons again");
+        Assert.AreEqual(nameof(ShownAccount.Item), string.Join(", ", told));
+
+        told.Clear();
+        app.Apply(first with
+        {
+            Revision = 3,
+            Sections = [Items.Section("claude", null, spare with { Actions = [.. spare.Actions.SkipLast(1), Items.RemoveAction("claude/spare", enabled: false)] })],
+        });
+
+        Assert.IsFalse(row.Commands[^1].Action.Enabled);
+        Assert.AreEqual($"{nameof(ShownAccount.HasCommands)}, {nameof(ShownAccount.Item)}", string.Join(", ", told));
     }
 
     // As the model tells its own parts: a read's end changes the refresh button and nothing else.
@@ -137,15 +197,13 @@ public sealed class AccountsViewModelTests
         var step = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add]);
         var (shown, _, app, told) = Over(Snapshots.Read(1));
 
-        Assert.IsFalse(shown.HasSetup);
+        Assert.IsNull(shown.Setup);
 
         app.Apply(Snapshots.Read(2) with { Setup = step, Footing = new Footing.OnlyOne(Provider: "claude", Label: "work") });
 
-        Assert.IsTrue(shown.HasSetup);
-        Assert.AreEqual("Add a second account", shown.SetupTitle);
-        Assert.AreEqual("Pitboard switches once there are two.", shown.SetupDetail);
+        Assert.AreSame(step, shown.Setup);
         Assert.IsInstanceOfType<Footing.OnlyOne>(shown.SetupFooting);
-        Assert.Contains(nameof(AccountsViewModel.HasSetup), told);
+        Assert.Contains(nameof(AccountsViewModel.Setup), told);
     }
 
     [TestMethod]
@@ -156,8 +214,8 @@ public sealed class AccountsViewModelTests
             Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare"))],
         });
 
-        shown.Rows[1].Act();
-        shown.Rows[0].Act();
+        shown.Sections.Single()[1].Act();
+        shown.Sections.Single()[0].Act();
 
         Assert.AreEqual(new Intent.SwitchTo("claude/spare"), model.Sent.OfType<Intent.SwitchTo>().Single());
     }

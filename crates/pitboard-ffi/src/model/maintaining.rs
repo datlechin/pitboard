@@ -62,12 +62,8 @@ fn move_it_first() -> String {
     words::cannot_schedule(Os::MacOs, true)
 }
 
-/// What doctor's summary says of one check worth looking at.
-fn one_worth_looking_at() -> String {
-    words::typeset(&pitboard_core::words::doctor_summary([
-        pitboard_core::doctor::Level::Ok,
-        pitboard_core::doctor::Level::Warn,
-    ]))
+fn one_issue() -> Option<String> {
+    Some(words::check_issues(Os::MacOs, 1))
 }
 
 /// Daily renewal reads as on only while the scheduler has the job. A scheduler this Mac does
@@ -427,23 +423,17 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
     let mut model = Hand::new();
     let mut machine = machine();
     machine.checks = vec![
+        check("network", "network", Level::Ok, "direct", ""),
         check(
-            "keychain",
-            "Keychain",
-            Level::Ok,
-            "login keychain, unlocked",
-            "",
-        ),
-        check(
-            "schedule",
-            "Daily renewal",
+            "auth_source",
+            "what a session authenticates with",
             Level::Warn,
-            "not scheduled",
-            "Turn on daily renewal in Pitboard's settings.",
+            "something else: ANTHROPIC_API_KEY",
+            "Remove it.",
         ),
     ];
     let checks = shown(&model).checks;
-    assert!(checks.lines.is_empty());
+    assert!(checks.lines().is_empty());
     assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
     assert_eq!((checks.summary, checks.checked), (None, None));
     assert_eq!(machine.doctor_asks, 0);
@@ -457,63 +447,78 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
     let checks = shown(&model).checks;
     assert!(!checks.checking);
     assert_eq!(
-        checks.lines,
+        checks.lines(),
         [
             CheckLine {
                 id: 0,
-                name: words::check_name("keychain", "Keychain"),
+                name: words::check_name(Os::MacOs, "network", "network"),
                 level: Level::Ok,
                 spoken_level: words::spoken_level(Level::Ok).into(),
-                detail: words::check_text("login keychain, unlocked"),
+                detail: words::check_text("direct"),
                 advice: None,
+                action: None,
+                learn: None,
             },
             CheckLine {
                 id: 1,
-                name: words::check_name("schedule", "Daily renewal"),
+                name: words::check_name(Os::MacOs, "auth_source", ""),
                 level: Level::Warn,
                 spoken_level: words::spoken_level(Level::Warn).into(),
-                detail: words::check_text("not scheduled"),
-                advice: Some(words::check_text(
-                    "Turn on daily renewal in Pitboard's settings."
-                )),
+                detail: words::check_text("something else: ANTHROPIC_API_KEY"),
+                advice: Some(words::check_text("Remove it.")),
+                action: None,
+                learn: Some(crate::present::next::of_check(Os::MacOs)),
             },
         ]
     );
-    assert_eq!(checks.summary, Some(one_worth_looking_at()));
+    assert_eq!(checks.summary, one_issue());
     assert_eq!(checks.checked, Some(words::checked_at("08:00")));
     assert_eq!(checks.waiting, None);
 
     machine.checks = vec![check(
-        "keychain",
-        "Keychain",
+        "state",
+        "accounts",
         Level::Fail,
-        "locked",
-        "Unlock the login keychain.",
+        "unreadable",
+        "Pitboard will not switch until its account list can be read.",
     )];
     model.later(Duration::from_secs(5 * 60));
     model.send(Intent::PaneShown { pane: Pane::Checks });
     let checks = shown(&model).checks;
     assert!(checks.checking);
-    assert_eq!(checks.lines.len(), 2, "what was found stays up meanwhile");
+    assert_eq!(checks.lines().len(), 2, "what was found stays up meanwhile");
     assert_eq!(
         checks.checked, None,
         "the line over them says it is checking"
     );
     model.run(&mut machine);
     let checks = shown(&model).checks;
-    assert_eq!(checks.lines.len(), 1);
+    assert_eq!(checks.lines().len(), 1);
     assert_eq!(
-        checks.lines[0].advice,
-        Some(words::check_text("Unlock the login keychain."))
+        checks.lines()[0].advice,
+        Some(words::check_text(
+            "Pitboard will not switch until its account list can be read."
+        ))
     );
     assert_eq!(
-        checks.summary,
-        Some(words::typeset(&pitboard_core::words::doctor_summary([
-            pitboard_core::doctor::Level::Fail
-        ])))
+        (checks.summary, checks.verdict.as_deref()),
+        (one_issue(), Some(words::checks_verdict(1, 1)))
     );
     assert_eq!(checks.checked, Some(words::checked_at("08:05")));
     assert_eq!(machine.doctor_asks, 2);
+}
+
+// Plan 4.6: Copy Report copies doctor's report as `pitboard doctor --json` gives it.
+#[test]
+fn copy_report_copies_doctors_own_report() {
+    let mut model = Hand::new();
+    let mut machine = machine();
+    machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
+    machine.report = "{\"checks\": [{\"code\": \"keychain\"}]}".into();
+    assert_eq!(shown(&model).checks.report, None);
+    model.send(Intent::PaneShown { pane: Pane::Checks });
+    model.run(&mut machine);
+    assert_eq!(shown(&model).checks.report, Some(machine.report.clone()));
 }
 
 /// Each check is a line of its own, though doctor names several by one code: it makes one
@@ -524,32 +529,45 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
 fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
     let mut model = Hand::new();
     let mut machine = machine();
+    let of = |account: &str, check| crate::Check {
+        account: Some(account.into()),
+        ..check
+    };
     machine.checks = vec![
-        check(
-            "parked_login",
-            "account work",
-            Level::Ok,
-            "lasts 9 days",
-            "",
+        of(
+            "claude/work",
+            check(
+                "parked_login",
+                "account work",
+                Level::Ok,
+                "lasts 9 days",
+                "",
+            ),
         ),
-        check(
-            "parked_login",
-            "account personal",
-            Level::Warn,
-            "its parked login expires in 2 days",
-            "Run `pitboard renew`.",
+        of(
+            "claude/personal",
+            check(
+                "parked_login",
+                "account personal",
+                Level::Warn,
+                "its parked login expires in 2 days",
+                "Run `pitboard renew`.",
+            ),
         ),
-        check(
-            "codex_parked_login",
-            "account codex/main",
-            Level::Ok,
-            "kept",
-            "",
+        of(
+            "codex/main",
+            check(
+                "codex_parked_login",
+                "account codex/main",
+                Level::Ok,
+                "kept",
+                "",
+            ),
         ),
     ];
     model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
-    let lines = shown(&model).checks.lines;
+    let lines = shown(&model).checks.lines();
     let ids: Vec<(u64, String)> = lines
         .iter()
         .map(|line| (line.id, line.name.clone()))
@@ -557,12 +575,9 @@ fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
     assert_eq!(
         ids,
         [
-            (0, words::check_name("parked_login", "account work")),
-            (1, words::check_name("parked_login", "account personal")),
-            (
-                2,
-                words::check_name("codex_parked_login", "account codex/main")
-            )
+            (0, "work".into()),
+            (1, "personal".into()),
+            (2, "main".into())
         ]
     );
     let checks = &model.state.machine.checks;
@@ -577,20 +592,7 @@ fn only_a_check_that_did_not_pass_says_what_to_do() {
     let mut model = Hand::new();
     let mut machine = machine();
     machine.checks = vec![
-        check(
-            "keychain",
-            "Keychain",
-            Level::Ok,
-            "unlocked",
-            "Keep it unlocked.",
-        ),
-        check(
-            "schedule",
-            "Daily renewal",
-            Level::Warn,
-            "not scheduled",
-            "",
-        ),
+        check("network", "network", Level::Ok, "direct", "Keep it so."),
         check(
             "state",
             "Accounts",
@@ -598,18 +600,25 @@ fn only_a_check_that_did_not_pass_says_what_to_do() {
             "unreadable",
             "Run pitboard doctor.",
         ),
+        check(
+            "auth_source",
+            "what a session authenticates with",
+            Level::Warn,
+            "something else",
+            "",
+        ),
     ];
     model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let advice: Vec<Option<String>> = shown(&model)
         .checks
-        .lines
+        .lines()
         .into_iter()
         .map(|line| line.advice)
         .collect();
     assert_eq!(
         advice,
-        [None, None, Some(words::check_text("Run pitboard doctor."))]
+        [None, Some(words::check_text("Run pitboard doctor.")), None]
     );
 }
 
@@ -640,7 +649,7 @@ fn the_pane_checks_until_the_last_check_asked_for_is_in() {
 fn doctor_is_only_read_when_asked_for() {
     let mut model = Hand::new();
     let mut machine = machine();
-    machine.checks = vec![check("state", "Accounts", Level::Ok, "readable", "")];
+    machine.checks = vec![check("network", "network", Level::Ok, "direct", "")];
     model.send(Intent::Start);
     model.run(&mut machine);
     model.send(Intent::Refresh { asked: true });
@@ -653,17 +662,17 @@ fn doctor_is_only_read_when_asked_for() {
     model.run(&mut machine);
     assert_eq!(machine.doctor_asks, 0);
     let checks = shown(&model).checks;
-    assert!(checks.lines.is_empty());
+    assert!(checks.lines().is_empty());
     assert_eq!(checks.checked, None);
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let checks = shown(&model).checks;
-    assert_eq!(checks.lines.len(), 1);
+    assert_eq!(checks.lines().len(), 1);
     let codes: Vec<&str> = (model.state.machine.checks.iter())
         .map(|check| check.code.as_str())
         .collect();
-    assert_eq!(codes, ["state"]);
+    assert_eq!(codes, ["network"]);
     assert!(checks.checked.is_some());
     assert_eq!(machine.doctor_asks, 1);
 }
@@ -681,23 +690,26 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     let accounts = || vec![claude("home", true, 5.0), claude("work", false, 0.0)];
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(warned(accounts(), vec![replaced("work")])));
-    machine.checks = vec![check("keychain", "Keychain", Level::Ok, "unlocked", "")];
+    machine.checks = vec![check("network", "network", Level::Ok, "direct", "")];
     machine.post_refused = Some("COMException 0x80070490".into());
 
     model.refresh(&mut machine);
     assert_eq!(machine.posted.len(), 1);
     let checks = shown(&model).checks;
-    assert!(checks.lines.is_empty(), "said beside doctor's checks alone");
+    assert!(
+        checks.lines().is_empty(),
+        "said beside doctor's checks alone"
+    );
     assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
     let checks = shown(&model).checks;
     assert_eq!(
-        checks.lines[1..],
+        checks.lines()[1..],
         [CheckLine {
             id: 1,
-            name: words::check_name("notification_not_posted", words::NOTIFICATIONS),
+            name: words::NOTIFICATIONS.into(),
             level: Level::Warn,
             spoken_level: words::spoken_level(Level::Warn).into(),
             detail: words::check_text(&words::not_posted(
@@ -706,12 +718,11 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
                 "COMException 0x80070490"
             )),
             advice: None,
+            action: None,
+            learn: Some(crate::present::next::of_check(Os::MacOs)),
         }]
     );
-    assert_eq!(
-        (checks.summary, checks.level),
-        (Some(one_worth_looking_at()), Level::Warn)
-    );
+    assert_eq!((checks.summary, checks.level), (one_issue(), Level::Warn));
 
     machine.post_refused = None;
     machine.answer = Ok(warned(accounts(), vec![replaced("work"), replaced("home")]));
@@ -719,12 +730,10 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
     model.run(&mut machine);
     assert_eq!(machine.posted.len(), 2);
     let checks = shown(&model).checks;
-    let names: Vec<String> = checks.lines.iter().map(|line| line.name.clone()).collect();
-    assert_eq!(
-        names,
-        [words::check_name("keychain", "Keychain")],
-        "gone once one is posted"
-    );
+    let names: Vec<String> = (checks.lines().iter())
+        .map(|line| line.name.clone())
+        .collect();
+    assert_eq!(names, ["Network"], "gone once one is posted");
     assert_eq!(checks.level, Level::Ok);
 }
 

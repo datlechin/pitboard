@@ -5,6 +5,8 @@ use pitboard_core::host::{OS, Os};
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AppWords {
+    // what the Windows title bar, About and the icon's first tooltip line call the app
+    pub app_name: String,
     pub menu: MenuWords,
     pub window: WindowWords,
     pub activity: ActivityWords,
@@ -42,17 +44,29 @@ pub struct WindowWords {
     pub add_account_help: String,
     pub check_again: String,
     pub check_again_help: String,
+    pub copy_report: String,
+    pub copy_report_help: String,
     pub open_link: String,
     pub cancel: String,
     pub close: String,
     pub ok: String,
     pub dismiss: String,
-    // a check's detail's own menu, on Windows
+    // beside an account's values in the macOS inspector and an expanded Windows row
+    pub email: String,
+    pub plan: String,
+    pub sign_in: String,
+    pub warm_up: String,
+    // the macOS toolbar's button that shows and hides the inspector
+    pub inspector: Option<String>,
+    pub inspector_help: Option<String>,
+    // a check's detail's own menu, and an expanded row's email, on Windows
     pub copy: Option<String>,
     pub select_all: Option<String>,
     // what Narrator calls the checks, and the ring while they run
     pub checks: Option<String>,
     pub checking: Option<String>,
+    // a Windows Debug build's refusal of a link outside a fixture
+    pub debug_link_refused: Option<String>,
 }
 
 // The activity list's columns and toolbar.
@@ -76,6 +90,9 @@ pub struct SettingsWords {
     pub about: Option<String>,
     // "Open Pitboard at Login", "Start when you sign in to Windows"
     pub open_at_login: String,
+    pub open_at_login_note: String,
+    // a Windows Debug build, which never writes the Run key
+    pub debug_never_starts: Option<String>,
     // macOS waits for Login Items to allow it, with a button to them
     pub login_items_waiting: Option<String>,
     pub open_login_items: Option<String>,
@@ -92,6 +109,8 @@ pub struct SettingsWords {
     pub account_and_usage: Option<String>,
     pub usage_only: Option<String>,
     pub icon_only: Option<String>,
+    // over General's update settings
+    pub updates: String,
     pub check_for_updates_automatically: String,
     pub download_and_install_automatically: Option<String>,
     pub version: String,
@@ -101,6 +120,8 @@ pub struct SettingsWords {
     pub beta_updates: Option<String>,
     pub keep_saved_sign_ins_fresh: String,
     pub command_line: String,
+    // beside where the command line is
+    pub path: String,
     pub install_command_line: Option<String>,
     pub link_failed: Option<String>,
     pub cannot_link_command_line: Option<String>,
@@ -110,6 +131,13 @@ pub struct SettingsWords {
     pub update_key_invalid: Option<String>,
     pub win_sparkle_missing: Option<String>,
     pub notifications_unoffered: Option<String>,
+    // over Uninstall Pitboard… on macOS, beside Uninstall… on Windows
+    pub uninstall: String,
+    pub uninstall_note: String,
+    // the Windows page's section with a card each that opens Diagnostics and Activity
+    pub troubleshoot: Option<String>,
+    pub diagnostics_about: Option<String>,
+    pub activity_about: Option<String>,
     // what Narrator calls the warm-up hours' pickers
     pub warm_from: Option<String>,
     pub warm_to: Option<String>,
@@ -229,6 +257,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
     let mac = |words: &str| (os != Os::Windows).then(|| words.to_owned());
     let windows = |words: &str| (os == Os::Windows).then(|| words.to_owned());
     AppWords {
+        app_name: words::PITBOARD.into(),
         menu: MenuWords {
             add_account: words::add_account(os, true),
             refresh: words::REFRESH.into(),
@@ -252,19 +281,32 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             diagnostics: "Diagnostics".into(),
             refresh: words::REFRESH.into(),
             refresh_help: "Read every account’s usage again".into(),
-            add_account: words::add_account(os, false),
+            add_account: words::add_account(os, os == Os::Windows),
             add_account_help: "Sign in to another account".into(),
             check_again: titled(os, "Check Again", "Check again"),
             check_again_help: "Make every check again".into(),
+            copy_report: titled(os, "Copy Report", "Copy report"),
+            copy_report_help: "Copy the checks for a bug report, with email addresses and \
+                               account identifiers hidden"
+                .into(),
             open_link: titled(os, "Open Link", "Open link"),
             cancel: words::CANCEL.into(),
             close: "Close".into(),
             ok: "OK".into(),
             dismiss: words::DISMISS.into(),
+            email: "Email".into(),
+            plan: "Plan".into(),
+            sign_in: titled(os, "Sign-In", "Sign-in"),
+            warm_up: words::warm_up(os),
+            inspector: mac("Inspector"),
+            inspector_help: mac("Show or hide the selected account’s details"),
             copy: windows("Copy"),
             select_all: windows("Select all"),
             checks: windows("Checks"),
             checking: windows("Checking"),
+            debug_link_refused: windows(
+                "A Debug build opens a pitboard-debug link only in a fixture.",
+            ),
         },
         activity: ActivityWords {
             date: "Date".into(),
@@ -281,6 +323,8 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             advanced: "Advanced".into(),
             about: windows("About"),
             open_at_login: words::open_at_login(os).0.into(),
+            open_at_login_note: words::open_at_login(os).1.into(),
+            debug_never_starts: windows("A Debug build never starts when you sign in to Windows."),
             login_items_waiting: mac("macOS is waiting for you to allow Pitboard in Login Items."),
             open_login_items: mac("Open Login Items Settings…"),
             startup_turned_off: windows(
@@ -313,6 +357,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             account_and_usage: mac("Account and Usage"),
             usage_only: mac("Usage Only"),
             icon_only: mac("Icon Only"),
+            updates: "Updates".into(),
             check_for_updates_automatically: titled(
                 os,
                 "Check for Updates Automatically",
@@ -328,12 +373,9 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             beta_updates: windows(
                 "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.",
             ),
-            keep_saved_sign_ins_fresh: titled(
-                os,
-                "Keep Saved Sign-Ins Fresh",
-                "Keep saved sign-ins fresh",
-            ),
+            keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(os),
             command_line: titled(os, "Command Line", "Command line"),
+            path: "Path".into(),
             install_command_line: mac("Install Command Line Tool…"),
             link_failed: mac("The link couldn’t be made."),
             cannot_link_command_line: mac(
@@ -349,6 +391,25 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
                  missing. Install Pitboard again.",
             ),
             notifications_unoffered: windows("Windows offers this process no app notifications."),
+            uninstall: match os {
+                Os::Windows => "Uninstall Pitboard",
+                Os::MacOs | Os::Linux => words::UNINSTALL,
+            }
+            .into(),
+            uninstall_note: "Deletes Pitboard’s saved sign-ins and settings, and leaves each tool \
+                             signed in to the account in use."
+                .into(),
+            troubleshoot: windows("Troubleshoot"),
+            diagnostics_about: (os == Os::Windows).then(|| {
+                let names = crate::tools_on(os).into_iter().map(|tool| tool.name);
+                format!(
+                    "Check how {} are set up on this PC.",
+                    pitboard_core::words::listed(
+                        std::iter::once(words::PITBOARD.into()).chain(names)
+                    )
+                )
+            }),
+            activity_about: windows("Every switch and change Pitboard made."),
             warm_from: windows("Warm up from"),
             warm_to: windows("Warm up to"),
             from: "From".into(),
@@ -390,7 +451,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             zoom_in: titled(os, "Zoom In", "Zoom in"),
             zoom_out: titled(os, "Zoom Out", "Zoom out"),
             go: "Go".into(),
-            download: "Download".into(),
+            download: words::DOWNLOAD.into(),
             stop_download_help: "Stop this download".into(),
             show_file: match os {
                 Os::Windows => "Show in folder",
@@ -435,14 +496,21 @@ mod tests {
                 "Notifications from Pitboard are turned off in Settings > System > Notifications.",
             ),
             ("Show in Finder", "Show in folder"),
+            ("Uninstall", "Uninstall Pitboard"),
             ("Show the file in Finder", "Show the file in its folder"),
+            (
+                "Pitboard watches your limits only while it’s open.",
+                "Pitboard watches your limits only while it’s running.",
+            ),
         ];
         for (mac, windows) in pairs() {
             if mac.is_empty() || windows.is_empty() {
                 continue;
             }
-            let alike = mac.to_lowercase() == windows.to_lowercase()
-                || mac.to_lowercase().strip_suffix('…') == Some(&windows.to_lowercase());
+            let (one, other) = (mac.to_lowercase(), windows.to_lowercase());
+            let alike = one == other
+                || one.strip_suffix('…') == Some(&other)
+                || other.strip_suffix('…') == Some(&one);
             let apart = named_apart.contains(&(mac.as_str(), windows.as_str()));
             assert!(alike || apart, "{mac:?} and {windows:?}");
         }
@@ -451,8 +519,12 @@ mod tests {
     // Past a sentence's first word, a capital is a name's, or a Settings page's the words name.
     #[test]
     fn windows_says_every_control_in_sentence_case() {
-        const NAMES: [&str; 15] = [
+        const NAMES: [&str; 19] = [
             "Pitboard",
+            "Debug",
+            "Claude",
+            "Code",
+            "Codex",
             "WinSparkle.dll",
             "Windows",
             "GitHub",
@@ -518,6 +590,38 @@ mod tests {
         );
     }
 
+    // Plan 2: the Windows views said these themselves.
+    #[test]
+    fn the_windows_views_words_of_their_own_are_here() {
+        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        assert_eq!(windows.app_name, "Pitboard");
+        assert_eq!(
+            (
+                mac.settings.open_at_login_note.as_str(),
+                windows.settings.open_at_login_note.as_str()
+            ),
+            (
+                "Pitboard watches your limits only while it’s open.",
+                "Pitboard watches your limits only while it’s running."
+            )
+        );
+        assert_eq!(
+            windows.settings.debug_never_starts.as_deref(),
+            Some("A Debug build never starts when you sign in to Windows.")
+        );
+        assert_eq!(
+            windows.window.debug_link_refused.as_deref(),
+            Some("A Debug build opens a pitboard-debug link only in a fixture.")
+        );
+        assert_eq!(
+            (
+                mac.settings.debug_never_starts,
+                mac.window.debug_link_refused
+            ),
+            (None, None)
+        );
+    }
+
     #[test]
     fn a_word_only_one_system_shows_is_none_on_the_other() {
         let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
@@ -544,5 +648,54 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+    }
+
+    // Plan 3: a command that asks for more says so on Windows; the macOS toolbar's has no ellipsis.
+    #[test]
+    fn the_windows_command_bar_says_add_account_asks_for_more() {
+        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        assert_eq!(
+            (
+                mac.window.add_account.as_str(),
+                windows.window.add_account.as_str()
+            ),
+            ("Add Account", "Add account…")
+        );
+    }
+
+    // Plan 4.3 and 4.9: what the inspector and an expanded row label an account's values.
+    #[test]
+    fn an_accounts_values_are_labelled_in_each_systems_case() {
+        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        let labels = |words: &AppWords| {
+            [
+                words.window.email.clone(),
+                words.window.plan.clone(),
+                words.window.sign_in.clone(),
+                words.window.warm_up.clone(),
+            ]
+        };
+        assert_eq!(labels(&mac), ["Email", "Plan", "Sign-In", "Warm-Up"]);
+        assert_eq!(labels(&windows), ["Email", "Plan", "Sign-in", "Warm-up"]);
+        assert_eq!(mac.window.inspector.as_deref(), Some("Inspector"));
+        assert_eq!(
+            windows.settings.diagnostics_about.as_deref(),
+            Some("Check how Pitboard, Claude Code and Codex are set up on this PC.")
+        );
+        assert_eq!(
+            (
+                mac.settings.uninstall.as_str(),
+                windows.settings.uninstall.as_str()
+            ),
+            ("Uninstall", "Uninstall Pitboard")
+        );
+        assert_eq!(
+            (mac.settings.troubleshoot, mac.settings.path.as_str()),
+            (None, "Path")
+        );
+        assert_eq!(
+            (windows.window.inspector, windows.window.copy.as_deref()),
+            (None, Some("Copy"))
+        );
     }
 }

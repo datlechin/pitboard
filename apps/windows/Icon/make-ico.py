@@ -5,6 +5,7 @@
 import io
 import struct
 import subprocess
+import tempfile
 from pathlib import Path
 
 from PIL import Image
@@ -22,9 +23,10 @@ DRAWN = {
 }
 
 
-def rendered(size, drawing):
+def rendered(size, drawing, stylesheet=None):
+    styled = ["-s", stylesheet] if stylesheet else []
     png = subprocess.run(
-        ["rsvg-convert", "-w", str(size), "-h", str(size), str(HERE / drawing)],
+        ["rsvg-convert", *styled, "-w", str(size), "-h", str(size), str(HERE / drawing)],
         check=True,
         capture_output=True,
     ).stdout
@@ -55,8 +57,8 @@ def frame(image):
     return header + colour + mask
 
 
-def write_ico(path, drawn):
-    frames = [(size, frame(rendered(size, drawing))) for size, drawing in drawn.items()]
+def write_ico(path, drawn, stylesheet=None):
+    frames = [(size, frame(rendered(size, drawing, stylesheet))) for size, drawing in drawn.items()]
     offset = 6 + 16 * len(frames)
     directory = struct.pack("<HHH", 0, 1, len(frames))
     for size, data in frames:
@@ -68,11 +70,20 @@ def write_ico(path, drawn):
 write_ico(HERE.parent / "Pitboard.App" / "Pitboard.ico", DRAWN)
 
 # One for each step a limit's colour changes at, and None for no reading, at the sizes the
-# notification area draws, up to 300%: its lit row is as long as what is left, in a neutral tone.
+# notification area draws, up to 300%: its lit row is as long as what is left. Each is drawn in
+# one ink, Fluent's primary text colour on the taskbar it is for: Light holds them for a light
+# taskbar and Dark for a dark one.
 GRID = {16: 16, 20: 16, 24: 24, 32: 16, 40: 48, 48: 48}
-for level in ("Plenty", "Low", "Out", "None"):
-    drawn = {size: f"tray-{level.lower()}-{grid}.svg" for size, grid in GRID.items()}
-    write_ico(HERE.parent / "Pitboard.App" / "Tray" / f"{level}.ico", drawn)
+INK = {"Light": ".ink { color: #000000; opacity: 0.894; }", "Dark": ".ink { color: #ffffff; }"}
+for taskbar, ink in INK.items():
+    with tempfile.NamedTemporaryFile("w", suffix=".css") as stylesheet:
+        stylesheet.write(ink)
+        stylesheet.flush()
+        for level in ("Plenty", "Low", "Out", "None"):
+            drawn = {size: f"tray-{level.lower()}-{grid}.svg" for size, grid in GRID.items()}
+            folder = HERE.parent / "Pitboard.App" / "Tray" / taskbar
+            folder.mkdir(parents=True, exist_ok=True)
+            write_ico(folder / f"{level}.ico", drawn, stylesheet.name)
 
 # Unqualified files: a sparse package has no resources.pri to pick a scale or target size by.
 LOGOS = {"StoreLogo.png": 50, "Square44x44Logo.png": 44, "Square150x150Logo.png": 150}

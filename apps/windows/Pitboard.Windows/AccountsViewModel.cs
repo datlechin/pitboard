@@ -26,19 +26,15 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
         [nameof(AppModel.UpdatedWindow)] = [nameof(Updated)],
         [nameof(AppModel.Reading)] = [nameof(CanRefresh)],
         [nameof(AppModel.Notices)] = [nameof(Notices)],
-        [nameof(AppModel.Setup)] = [nameof(Setup), nameof(HasSetup), nameof(SetupTitle), nameof(SetupDetail)],
+        [nameof(AppModel.Setup)] = [nameof(Setup)],
         [nameof(AppModel.Footing)] = [nameof(SetupFooting)],
         [nameof(AppModel.Sections)] = [nameof(Sections)],
+        [nameof(AppModel.AccountWindows)] = [nameof(HeldWindows)],
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    // Without headings while there is one tool: an empty group header still takes room.
-    public ObservableCollection<ShownAccount> Rows { get; } = [];
-
     public ObservableCollection<ShownSection> Sections { get; } = [];
-
-    public bool Grouped { get; private set; }
 
     public string Updated => model.UpdatedWindow;
 
@@ -62,12 +58,6 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
     public PanelNotice[] Notices => model.Notices;
 
     public SetupStep? Setup => model.Setup;
-
-    public bool HasSetup => model.Setup is not null;
-
-    public string SetupTitle => model.Setup?.Title ?? "";
-
-    public string SetupDetail => model.Setup?.Detail ?? "";
 
     public Footing SetupFooting => model.Footing;
 
@@ -116,7 +106,8 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
             return;
         }
 
-        if (part == nameof(AppModel.Sections))
+        // An opened row dims a window whose store is still held.
+        if (part is nameof(AppModel.Sections) or nameof(AppModel.AccountWindows))
         {
             ShowSections();
         }
@@ -127,35 +118,14 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
         }
     }
 
-    private void ShowSections()
-    {
-        var sections = model.Sections;
-        var grouped = sections.Any(section => section.Heading is not null);
-        if (grouped)
-        {
-            Rows.Clear();
-            Keyed.Sync(
-                Sections, sections, section => section.Id, shown => shown.Key,
-                section =>
-                {
-                    var shown = new ShownSection(section.Id, section.Heading, model.Send);
-                    shown.Show(section);
-                    return shown;
-                },
-                (shown, section) => shown.Show(section));
-        }
-        else
-        {
-            Sections.Clear();
-            Keyed.Sync(
-                Rows, sections.SelectMany(section => section.Accounts).ToArray(), item => item.Id, shown => shown.Key,
-                item => new ShownAccount(item, model.Send), (shown, item) => shown.Show(item));
-        }
-
-        if (grouped != Grouped)
-        {
-            Grouped = grouped;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Grouped)));
-        }
-    }
+    private void ShowSections() =>
+        Keyed.Sync(
+            Sections, model.Sections, section => section.Id, shown => shown.Key,
+            section =>
+            {
+                var shown = new ShownSection(section.Id, section.Heading, model.Send, () => model.AccountWindows.Held);
+                shown.Show(section);
+                return shown;
+            },
+            (shown, section) => shown.Show(section));
 }

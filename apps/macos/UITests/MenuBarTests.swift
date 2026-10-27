@@ -6,9 +6,7 @@ final class MenuBarTests: FixtureTestCase {
         let app = launch(.twoTools)
         app.openMenu()
         for title in [
-            "Claude Code", "Codex", "work", "personal", "old",
-            Words.inMenu("main", plan: "Pro"),
-            Words.inMenu("spare", plan: "Pro"),
+            "Claude Code", "Codex", "work", "personal", "old", "main", "spare",
         ] {
             XCTAssertTrue(app.menuItem(title).waitForExistence(timeout: 5), title)
         }

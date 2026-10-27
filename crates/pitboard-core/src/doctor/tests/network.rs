@@ -20,6 +20,7 @@ fn network(proxy: Option<ProxyFact>, passed_over: &[&'static str]) -> Check {
         level: found.level,
         detail: found.detail.clone(),
         advice: found.advice.clone(),
+        account: None,
     }
 }
 

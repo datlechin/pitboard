@@ -145,11 +145,11 @@ fn cancel_switch() -> NoticeAction {
         dismisses: false,
         switches: false,
         enabled: true,
-        confirm: Some(Question {
-            title: words::CANCEL_SWITCH_QUESTION.into(),
-            message: words::cancel_stuck(&[]),
-            confirm: words::cancel_switch(OS, false),
-        }),
+        confirm: Some(Question::asking(
+            words::CANCEL_SWITCH_QUESTION.into(),
+            words::cancel_stuck(&[]),
+            words::cancel_switch(OS, false),
+        )),
     }
 }
 
@@ -202,17 +202,14 @@ fn an_account_is_called_by_its_name_or_its_address_or_what_is_wrong_with_it() {
     );
 }
 
-/// The menu and VoiceOver say the plan after the name, and an account with none is its name.
+// VoiceOver says the plan after the name; the menu names the account alone.
 #[test]
 fn an_account_carries_the_plan_its_login_says() {
     let mut team = account(Some("work")).signed_in().build();
     team.plan = Some("Team 5x".into());
     let team = described(team);
     assert_eq!(team.plan.as_deref(), Some("Team 5x"));
-    assert_eq!(
-        team.menu_title,
-        words::named_in_menu(OS, "work", Some("Team 5x"), None)
-    );
+    assert_eq!(team.menu_title, "work");
     assert_eq!(
         team.spoken,
         words::row_spoken("work", Some("Team 5x"), true, None)
@@ -454,7 +451,7 @@ fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
             email: Some("spare@example.com".into()),
             plan: Some("Max 5x".into()),
             signed_in_until: Some(lasting),
-            sign_in: Some(words::saved_until("Tue 12:00", false)),
+            sign_in: Some(words::saved_until("Feb 3", false)),
             warm: None,
             read_at: Some(NOON - 300),
             read: Some(words::updated("11:55")),
@@ -629,8 +626,12 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         }))
     );
     assert_eq!(
-        stale.action.map(|action| action.spoken),
-        Some(words::sign_in_to_again(OS, "stale", true))
+        stale.action.map(|action| (action.title, action.spoken)),
+        Some((
+            words::sign_in_asking(OS),
+            words::sign_in_to_again(OS, "stale", true)
+        )),
+        "plan 4.3's row button"
     );
     let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
     assert_eq!(
@@ -861,9 +862,12 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
             },
             enabled: true,
             confirm: Some(Question {
-                title: words::remove_title("spare"),
-                message: forget_message_on(OS, &spare, &accounts),
-                confirm: words::REMOVE.into(),
+                destructive: true,
+                ..Question::asking(
+                    words::remove_title("spare"),
+                    forget_message_on(OS, &spare, &accounts),
+                    words::REMOVE.into(),
+                )
             }),
         })
     );
@@ -1294,7 +1298,7 @@ fn a_saved_sign_ins_life_is_said_only_of_an_account_not_in_use() {
     let spare = described(account(Some("spare")).parked_until(parking).build());
     assert_eq!(
         spare.detail.sign_in,
-        Some(words::saved_until("Sat 12:01", false))
+        Some(words::saved_until("Jan 17", false))
     );
     assert!(
         spare.lines.is_empty(),
@@ -1449,6 +1453,8 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
             title: words::remove_title("spare"),
             message: forget_message_on(OS, &spare, &accounts),
             confirm: words::REMOVE.into(),
+            destructive: true,
+            confirm_is_default: true,
         })
     );
     assert_eq!(
@@ -2778,6 +2784,44 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     );
 }
 
+// Plan 4.2: each account to sign in to again is an item at the menu's top, and flags the bar.
+#[test]
+fn the_menu_offers_each_sign_in_again_at_its_top() {
+    let (model, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("gone"))
+            .standing(Standing::NothingParked)
+            .build(),
+    ]);
+    let shown = model.shown();
+    let entry = |label: &str, standing| MenuEntry {
+        title: words::sign_in_to_again(OS, label, true),
+        subtitle: Some(words::sign_in_standing(standing).into()),
+        help: None,
+        severity: None,
+        intent: Some(present_sheet(Sheet::SignInAgain {
+            provider: "claude".into(),
+            label: label.into(),
+        })),
+        link: None,
+        enabled: true,
+    };
+    assert_eq!(
+        shown.menu_notices.sign_ins,
+        [
+            entry("old", Standing::LoginExpired),
+            entry("gone", Standing::NothingParked)
+        ]
+    );
+    assert!(shown.menu_bar.attention);
+    let (calm, _) = reading(vec![account(Some("work")).signed_in().build()]);
+    assert!(calm.shown().menu_notices.sign_ins.is_empty());
+    assert!(!calm.shown().menu_bar.attention);
+}
+
 /// When the numbers were read is said as a time rather than an age, since a menu can stay
 /// open, and "just now" would still say so ten minutes later; while a read runs, that it
 /// does; before one has answered, that nothing is read yet or that the last numbers measured
@@ -3090,10 +3134,7 @@ fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Stub) {
     (model, machine)
 }
 
-/// Codex found with nothing of it enrolled is a tool Pitboard reads nothing of, so it cannot
-/// say whether Codex is signed in. It offers to use Pitboard with it after Claude Code's own
-/// steps, and in place of No Accounts where Claude Code is signed in to nothing, which said
-/// nobody was signed in while Codex was.
+// Codex found and not added is offered after Claude Code's steps, and over No accounts.
 #[test]
 fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     let (model, _) = reading_with_codex(vec![
@@ -3132,10 +3173,16 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
         (model, machine)
     };
     assert_eq!(alone.shown().footing, Footing::CodexUnused);
-    assert_eq!(alone.shown().accounts_shown, AccountsShown::List);
+    assert!(matches!(
+        alone.shown().accounts_shown,
+        AccountsShown::NoAccounts { .. }
+    ));
     let (both, _) = reading_with_codex(Vec::new());
     assert_eq!(both.shown().footing, Footing::CodexUnused);
-    assert_eq!(both.shown().accounts_shown, AccountsShown::List);
+    assert!(matches!(
+        both.shown().accounts_shown,
+        AccountsShown::NoAccounts { .. }
+    ));
 
     let (enrolled, _) = reading_with_codex(vec![
         account(Some("work")).signed_in().build(),

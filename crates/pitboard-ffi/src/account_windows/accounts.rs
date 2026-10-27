@@ -134,14 +134,14 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
         let app = pitboard_core::provider::ProviderId::parse(&account.provider)
             .map_or(account.provider.as_str(), |tool| tool.program());
         return format!(
-            "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using \
-             it again needs a sign-in in {app}."
+            "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again \
+             needs a sign-in in {app}."
         );
     }
     let windows = windows_of_account(account, accounts);
     if windows.is_empty() {
-        return "Pitboard deletes this account’s saved sign-in. Using it again needs a sign-in in \
-                your browser."
+        return "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your \
+                browser."
             .into();
     }
     let sites: Vec<&str> = windows
@@ -149,8 +149,8 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
         .map(|window| window.site.name.as_str())
         .collect();
     format!(
-        "Pitboard deletes this account’s saved sign-in, and everything its {} window keeps on \
-         {}, its sign-in included. Using it again needs a sign-in in your browser.",
+        "Pitboard deletes its saved sign-in and what its {} window keeps on {}, so using it again \
+         needs a sign-in in your browser.",
         pitboard_sites::listed(&sites, Conjunction::And),
         this_machine(os)
     )
@@ -324,25 +324,22 @@ pub(crate) mod tests {
         let work = || account(Some("work"), "claude", "a");
         assert_eq!(
             forget_message_on(Os::MacOs, &work(), &[work()]),
-            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
-             keeps on this Mac, its sign-in included. Using it again needs a sign-in in your \
-             browser."
+            "Pitboard deletes its saved sign-in and what its claude.ai window keeps on this Mac, \
+             so using it again needs a sign-in in your browser."
         );
         assert_eq!(
             forget_message_on(Os::Linux, &work(), &[work()]),
-            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
-             keeps on this computer, its sign-in included. Using it again needs a sign-in in \
-             your browser."
+            "Pitboard deletes its saved sign-in and what its claude.ai window keeps on this \
+             computer, so using it again needs a sign-in in your browser."
         );
         assert_eq!(
             forget_message_on(Os::Windows, &work(), &[work()]),
-            "Pitboard deletes this account’s saved sign-in, and everything its claude.ai window \
-             keeps on this PC, its sign-in included. Using it again needs a sign-in in your \
-             browser."
+            "Pitboard deletes its saved sign-in and what its claude.ai window keeps on this PC, \
+             so using it again needs a sign-in in your browser."
         );
         let api = || unplaced("codex");
-        let said = "Pitboard deletes this account’s saved sign-in. Using it again needs a \
-                    sign-in in your browser.";
+        let said = "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your \
+                    browser.";
         for os in [Os::MacOs, Os::Linux, Os::Windows] {
             assert_eq!(forget_message_on(os, &api(), &[api()]), said);
         }
@@ -353,8 +350,8 @@ pub(crate) mod tests {
         let home = account(Some("home"), "desktop", "5b1e");
         assert_eq!(
             forget_message_on(Os::MacOs, &home, std::slice::from_ref(&home)),
-            "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using \
-             it again needs a sign-in in Claude."
+            "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again \
+             needs a sign-in in Claude."
         );
     }
 }

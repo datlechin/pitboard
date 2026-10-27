@@ -13,8 +13,6 @@ public sealed class SparkleUpdates : IUpdates
     // The assembly metadata the build writes the public key into, from WINDOWS_UPDATE_PUBLIC_KEY.
     public const string KeyName = "WindowsUpdatePublicKey";
 
-    public const string NoFeed = "No full release of Pitboard for Windows is out yet, so there is no update to check for.";
-
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     private readonly ISparkle _sparkle;
@@ -49,7 +47,7 @@ public sealed class SparkleUpdates : IUpdates
     // A beta offers checks only once WinSparkle has started over a feed.
     public bool Available => !Beta || _started;
 
-    public string? Refusal => _noFeed ? NoFeed : null;
+    public string? Refusal => _noFeed ? Words.Settings.NoReleaseToUpdateTo : null;
 
     public bool Beta => Versions.IsBeta(_version);
 
@@ -87,12 +85,12 @@ public sealed class SparkleUpdates : IUpdates
         {
             if (sparkle.SetKey(key) == 0)
             {
-                return new NoUpdates(NoUpdates.BadKey);
+                return new NoUpdates(Words.Settings.UpdateKeyInvalid);
             }
         }
         catch (DllNotFoundException)
         {
-            return new NoUpdates(NoUpdates.NoWinSparkle);
+            return new NoUpdates(Words.Settings.WinSparkleMissing);
         }
 
         var settings = new UpdateSettings(Path.Combine(dataFolder, "updates.json"));

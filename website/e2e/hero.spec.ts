@@ -12,6 +12,7 @@ const mac = {
 const win = {
   icon: "#hero-win-icon",
   menu: "#hero-win-menu",
+  open: '#hero-win-menu [data-moment="after"] [data-does="Open Pitboard"]',
   account: (id: string) =>
     `#hero-win-menu [data-moment="after"] [data-tool] [data-account="${id}"]`,
 };
@@ -332,12 +333,13 @@ test.describe("on Windows", () => {
     await expect(page.locator(win.menu)).toBeHidden();
   });
 
-  test("a right click opens the menu on the account in use, and choosing another switches", async ({
+  test("a right click opens the menu on Open Pitboard, and choosing another account switches", async ({
     page,
   }) => {
     await page.locator(win.icon).click({ button: "right" });
     await expect(page.locator(win.menu)).toBeVisible();
-    await expect(page.locator(win.account("work"))).toBeFocused();
+    await expect(page.locator(win.open)).toBeFocused();
+    await expect(page.locator(win.open)).toHaveCSS("font-weight", "600");
     await page.locator(win.account("spare")).click();
     await expect(page.locator(win.menu)).toBeHidden();
     await expect(page.locator(win.icon)).toHaveAttribute(
@@ -382,10 +384,10 @@ test.describe("on Windows", () => {
     await page.clock.runFor(200);
     await expect(tip).toBeVisible();
     await expect(tip).toHaveText(
-      "Pitboardwork (Claude Code): 5-hour 12% used, weekly 40%main (Codex): Weekly 7% used",
+      "Pitboardwork (Claude Code): 5-hour 12% used, weekly 40%main (Codex): weekly 7% used",
     );
     await expect(page.locator(win.icon)).toHaveAccessibleName(
-      "Pitboard work (Claude Code): 5-hour 12% used, weekly 40% main (Codex): Weekly 7% used",
+      "Pitboard work (Claude Code): 5-hour 12% used, weekly 40% main (Codex): weekly 7% used",
     );
   });
 
@@ -394,14 +396,16 @@ test.describe("on Windows", () => {
   }) => {
     await page.locator(win.icon).focus();
     await page.keyboard.press("Shift+F10");
-    await expect(page.locator(win.account("work"))).toBeFocused();
+    await expect(page.locator(win.open)).toBeFocused();
     await page.keyboard.press("ArrowUp");
     await expect(page.locator('#hero-win-menu [data-does="Exit"]')).toBeFocused();
     await page.keyboard.press("ArrowDown");
+    await expect(page.locator(win.open)).toBeFocused();
+    // each tool's heading is skipped
+    await page.keyboard.press("ArrowDown");
     await expect(page.locator(win.account("work"))).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
-    // the Codex heading is skipped
     await expect(page.locator(win.account("main"))).toBeFocused();
     for (const key of ["Tab", "Home", "End", "s"]) {
       await page.keyboard.press(key);

@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Pitboard.Core;
+using Pitboard.Windows;
 
 namespace Pitboard.Views;
 
@@ -13,8 +14,20 @@ public sealed class DialogHost(Func<XamlRoot?> root)
     private static Task? _turn;
 
     private bool _withdrawn;
+    private ContentDialog? _open;
 
-    public ContentDialog? Open { get; private set; }
+    // As a dialog shows and as it goes.
+    public event EventHandler? OpenChanged;
+
+    public ContentDialog? Open
+    {
+        get => _open;
+        private set
+        {
+            _open = value;
+            OpenChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     // As its window closes: the dialog it shows goes, and none waiting shows.
     public void Withdraw()
@@ -58,17 +71,33 @@ public sealed class DialogHost(Func<XamlRoot?> root)
         }
     }
 
-    public async Task<bool> Confirm(Question question)
+    public async Task<bool> Confirm(Question question) => await Show(Asking(question)) == ContentDialogResult.Primary;
+
+    public static ContentDialog Asking(Question question)
     {
-        var dialog = new ContentDialog
-        {
-            Title = question.Title,
-            Content = question.Message,
-            PrimaryButtonText = question.Confirm,
-            CloseButtonText = "Cancel",
-        };
+        var dialog = new ContentDialog { Title = question.Title, Content = question.Message };
+        Buttons(dialog, question);
         AutomationProperties.SetAutomationId(dialog, "question");
-        return await Show(dialog) == ContentDialogResult.Primary;
+        return dialog;
+    }
+
+    // The default button is the accent one, which Enter presses and the focus opens on: Cancel where the model says its
+    // verb is not the default, as Uninstall's is. WinUI has no destructive style.
+    public static void Buttons(ContentDialog dialog, Question question)
+    {
+        dialog.PrimaryButtonText = question.Confirm;
+        dialog.IsPrimaryButtonEnabled = true;
+        dialog.CloseButtonText = Words.Window.Cancel;
+        dialog.DefaultButton = question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.Close;
+    }
+
+    // A failure's next step is its default button, beside which OK would read as taking it.
+    public static void Buttons(ContentDialog dialog, WindowAlert.Failed failed)
+    {
+        dialog.PrimaryButtonText = failed.Act?.Title ?? "";
+        dialog.IsPrimaryButtonEnabled = failed.Act?.Enabled ?? false;
+        dialog.CloseButtonText = failed.Act is null ? Words.Window.Ok : Words.Window.Close;
+        dialog.DefaultButton = failed.Act is null ? ContentDialogButton.None : ContentDialogButton.Primary;
     }
 
     // A dialog draws in a popup, which takes no theme from its window's content, so it is given the content's, as the WinUI

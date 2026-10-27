@@ -6,11 +6,8 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountKeysTests
 {
-    private static readonly ItemOffer Rename = new(
-        Title: "Rename…", Intent: new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), Enabled: true, Confirm: null);
-
-    private static AccountItem Spare(params ItemOffer[] offers) =>
-        Items.Account("claude", "spare") with { Offers = offers, Forget = Items.Forget("claude/spare") };
+    private static AccountItem Spare(params AccountAction[] actions) =>
+        Items.Account("claude", "spare") with { Actions = [.. actions, Items.RemoveAction("claude/spare")] };
 
     [TestMethod]
     public void EnterDoesWhatTheRowsButtonDoes()
@@ -19,11 +16,12 @@ public sealed class AccountKeysTests
     }
 
     [TestMethod]
-    public void DeleteAsksBeforeItForgets()
+    public void DeleteAsksBeforeItRemoves()
     {
-        var forget = Items.Forget("claude/spare");
+        var remove = Items.RemoveAction("claude/spare");
 
-        Assert.AreEqual((forget.Confirm, forget.Intent), AccountKeys.Pressed(VirtualKey.Delete, Spare()));
+        Assert.AreEqual((remove.Confirm, remove.Intent!), AccountKeys.Pressed(VirtualKey.Delete, Spare()));
+        Assert.IsNull(AccountKeys.Pressed(VirtualKey.Delete, Spare() with { Actions = [remove with { Enabled = false }] }), "the account in use");
     }
 
     [TestMethod]
@@ -38,8 +36,19 @@ public sealed class AccountKeysTests
     [TestMethod]
     public void F2RenamesTheAccountAsItsMenuDoes()
     {
-        Assert.AreEqual((null, Rename.Intent), AccountKeys.Pressed(VirtualKey.F2, Spare(Rename)));
-        Assert.IsNull(AccountKeys.Pressed(VirtualKey.F2, Spare(Rename with { Enabled = false })));
+        var rename = Items.RenameAction("claude", "spare");
+
+        Assert.AreEqual((null, rename.Intent!), AccountKeys.Pressed(VirtualKey.F2, Spare(rename)));
+        Assert.IsNull(AccountKeys.Pressed(VirtualKey.F2, Spare(rename with { Enabled = false })));
         Assert.IsNull(AccountKeys.Pressed(VirtualKey.F2, Spare()));
+    }
+
+    // What the menu shows beside the items the keys do too.
+    [TestMethod]
+    public void TheMenuShowsTheKeysOfRenameAndRemove()
+    {
+        ActionKind[] kinds = [ActionKind.Rename, ActionKind.Remove, ActionKind.Switch];
+
+        Assert.AreEqual("F2, Del, ", string.Join(", ", kinds.Select(AccountKeys.Shown)));
     }
 }

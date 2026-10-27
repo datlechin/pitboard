@@ -1,8 +1,10 @@
+using Microsoft.Win32;
 using Pitboard.Core;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.System.Recovery;
+using Windows.Win32.UI.Accessibility;
 using Windows.Win32.UI.HiDpi;
 using Windows.Win32.UI.Shell;
 using Windows.Win32.UI.WindowsAndMessaging;
@@ -57,10 +59,13 @@ public static class Shell
 
     public static void DestroyIcon(nint icon) => PInvoke.DestroyIcon((HICON)icon);
 
-    // Tray holds a drawing for each level, and None for no reading, beside Pitboard.exe, which ../Icon/make-ico.py writes.
-    public static unsafe nint NotificationIcon(int size, IconLook look)
+    // Tray holds a drawing for each level, and None for no reading, for a light taskbar and a dark one, beside Pitboard.exe,
+    // which ../Icon/make-ico.py writes.
+    public static unsafe nint NotificationIcon(IconPlace place, IconLook look)
     {
-        var drawn = Path.Combine(AppContext.BaseDirectory, "Tray", $"{look.Level?.ToString() ?? "None"}.ico");
+        var size = place.Size;
+        var drawn = Path.Combine(
+            AppContext.BaseDirectory, "Tray", place.LightTaskbar ? "Light" : "Dark", $"{look.Level?.ToString() ?? "None"}.ico");
         HANDLE loaded;
         fixed (char* file = drawn)
         {
@@ -159,12 +164,31 @@ public static class Shell
         }
     }
 
+    public static IconPlace NotificationIconPlace() =>
+        new(NotificationIconSize(), IconPlace.Light(SystemUsesLightTheme(), ContrastText()));
+
     // At the primary display's scale, where the notification area is: GetSystemMetrics answers at the session's first one.
-    public static int NotificationIconSize()
+    private static int NotificationIconSize()
     {
         var primary = PInvoke.MonitorFromPoint(default, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
         PInvoke.GetDpiForMonitor(primary, MONITOR_DPI_TYPE.MDT_EFFECTIVE_DPI, out var dpi, out _).ThrowOnFailure();
         return PInvoke.GetSystemMetricsForDpi(SYSTEM_METRICS_INDEX.SM_CXSMICON, dpi);
+    }
+
+    // The mode Settings > Personalization > Colors sets for the taskbar and Start, apart from the apps'.
+    private static int? SystemUsesLightTheme()
+    {
+        using var personalize = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+        return personalize?.GetValue("SystemUsesLightTheme") as int?;
+    }
+
+    private static unsafe uint? ContrastText()
+    {
+        var contrast = new HIGHCONTRASTW { cbSize = (uint)sizeof(HIGHCONTRASTW) };
+        return PInvoke.SystemParametersInfo(SYSTEM_PARAMETERS_INFO_ACTION.SPI_GETHIGHCONTRAST, contrast.cbSize, &contrast, 0)
+            && contrast.dwFlags.HasFlag(HIGHCONTRASTW_FLAGS.HCF_HIGHCONTRASTON)
+            ? PInvoke.GetSysColor(SYS_COLOR_INDEX.COLOR_WINDOWTEXT)
+            : null;
     }
 
     // Allowed while the icon's click has handed this process the foreground.
@@ -180,5 +204,5 @@ public static class Shell
         PInvoke.SetWindowLongPtr((HWND)window, WINDOW_LONG_PTR_INDEX.GWLP_HWNDPARENT, owner);
 
     public static void Refuse(string message) =>
-        PInvoke.MessageBox(HWND.Null, message, "Pitboard", MESSAGEBOX_STYLE.MB_OK | MESSAGEBOX_STYLE.MB_ICONERROR);
+        PInvoke.MessageBox(HWND.Null, message, Words.AppName, MESSAGEBOX_STYLE.MB_OK | MESSAGEBOX_STYLE.MB_ICONERROR);
 }

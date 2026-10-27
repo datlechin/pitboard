@@ -29,8 +29,6 @@ public static class Launching
     // What COM starts Pitboard.exe with for a click on its notification, as Register writes it.
     public const string Notified = "----AppNotificationActivated:";
 
-    public const string LinkRefusal = "A Debug build opens a pitboard-debug link only in a fixture.";
-
     // A link launch reads no flag: Microsoft's guide to URI schemes warns that a link's unencoded quotes or spaces split
     // it into more arguments, which another app can make look like Pitboard's own.
     public static Start Decide(

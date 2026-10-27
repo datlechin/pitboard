@@ -25,9 +25,15 @@ test("a name says its tool once two tools have accounts, on each system's list",
 test("the window's toolbar, rows and offers say what the apps say", () => {
   const pane = repo("apps/macos/Sources/PitboardApp/Window/AccountsPane.swift");
   const page = repo("apps/windows/Pitboard.Views/AccountsPage.xaml");
-  for (const help of [w.REFRESH_HELP, w.ADD_HELP]) {
+  const appWords = present("app_words.rs");
+  for (const [field, help] of [
+    ["RefreshHelp", w.REFRESH_HELP],
+    ["AddAccountHelp", w.ADD_HELP],
+  ]) {
     assert.ok(pane.includes(`.help("${help}")`), help);
-    assert.ok(page.includes(`ToolTipService.ToolTip="${help}"`), help);
+    // the Windows page binds the model's own words
+    assert.ok(page.includes(`ToolTipService.ToolTip="{x:Bind shown:Words.Window.${field}}"`), help);
+    assert.ok(appWords.includes(`"${help}"`), help);
   }
   assert.ok(words.includes('titled(os, "In Use", IN_USE)'));
   assert.equal(w.inUse("windows"), "In use");
@@ -45,9 +51,10 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
   );
   assert.ok(
     repo("apps/windows/Pitboard.Views/AccountMenu.cs").includes(
-      `Text = "${w.copyEmail("windows")}", KeyboardAcceleratorTextOverride = "Ctrl+C"`,
+      'Text = Words.Menu.CopyEmail, AccessKey = "C", KeyboardAcceleratorTextOverride = "Ctrl+C"',
     ),
   );
+  assert.ok(appWords.includes(`titled(os, "Copy Email Address", "${w.copyEmail("windows")}")`));
 });
 
 test("Remove Account asks with the account's name and says what goes, on this Mac or this PC", () => {
@@ -59,12 +66,12 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
   const windows = joined(repo("crates/pitboard-ffi/src/account_windows/accounts.rs"));
   assert.ok(
     windows.includes(
-      "Pitboard deletes this account’s saved sign-in, and everything its {} window keeps on {}, its sign-in included. Using it again needs a sign-in in your browser.",
+      "Pitboard deletes its saved sign-in and what its {} window keeps on {}, so using it again needs a sign-in in your browser.",
     ),
   );
   assert.ok(
     windows.includes(
-      "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using it again needs a sign-in in {app}.",
+      "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again needs a sign-in in {app}.",
     ),
   );
   const machines = repo("crates/pitboard-ffi/src/account_windows/mod.rs");
@@ -73,7 +80,7 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
   );
   assert.match(
     w.removeMessage(account("main", "codex"), "windows"),
-    /its chatgpt\.com window keeps on this PC,/,
+    /its chatgpt\.com window keeps on this PC, so/,
   );
   assert.match(w.removeMessage(account("office", "desktop"), "macos"), /sign-in in Claude\.$/);
 });

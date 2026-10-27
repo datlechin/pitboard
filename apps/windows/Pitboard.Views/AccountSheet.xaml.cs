@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Pitboard.Core;
 using Pitboard.Windows;
@@ -18,17 +19,17 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     [
         nameof(AppModel.Sheet), nameof(AppModel.SheetText), nameof(AppModel.SigningIn), nameof(AppModel.SigningInText),
         nameof(AppModel.StowText), nameof(AppModel.SheetFailure), nameof(AppModel.FailureAlert),
-        nameof(AppModel.QuitQuestion),
+        nameof(AppModel.QuitQuestion), nameof(AppModel.ReplaceQuestion),
     ];
 
     private readonly AppModel _model;
     private readonly Action<Uri> _open;
     private readonly CancellationTokenSource _withdrawn = new();
     private SheetPage? _page;
+    private WindowAlert? _alert;
     private string _tool = "";
     private bool _filled;
     private SheetTool[]? _tools;
-    private string[]? _lines;
     private ulong? _failureShown;
     private string? _announced;
     private bool _told;
@@ -39,9 +40,9 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         _open = open;
         Sheet = sheet;
         InitializeComponent();
+        CloseButtonText = Words.Window.Cancel;
         // The tool picker marks the focus it takes from the keyboard handled.
         AddHandler(GettingFocusEvent, new TypedEventHandler<UIElement, GettingFocusEventArgs>(OnGettingFocus), handledEventsToo: true);
-        AlertSpace.Content = new AlertBar(model);
         model.PropertyChanged += OnModelChanged;
         Show();
     }
@@ -100,7 +101,6 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         AccountPart.Visibility = Look.Shown(form is { Text.Account: not null });
         NameField.Visibility = Look.Shown(page is SheetPage.Naming);
         Working.Visibility = Look.Shown((form?.Text.Progress ?? stowing?.Text.Looking) is not null);
-        Lines.Visibility = Look.Shown(stowing is { Text.Lines.Length: > 0 });
         Link.Visibility = Look.Shown(signingIn is { Text.OffersLink: true });
         CodePart.Visibility = Look.Shown(signingIn is { SignIn.WantsCode: true });
         MissingBar.Visibility = Look.Shown(form is not null);
@@ -130,8 +130,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         }
 
         ShowFailure(_model.SheetFailure);
-        AlertSpace.Margin = new Thickness(0, 0, 0, WindowAlert.Of(_model) is null ? 0 : 12);
-        CloseButtonText = signingIn?.Text.Cancel.Title ?? "Cancel";
+        CloseButtonText = page.CloseTitle ?? "";
         if (page.Closable)
         {
             ClearValue(CloseButtonStyleProperty);
@@ -142,6 +141,58 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         }
 
         Enable();
+        ShowAlert(WindowAlert.Of(_model));
+    }
+
+    // In place of the step until it is answered, which the step then comes back from as it was left.
+    private void ShowAlert(WindowAlert? alert)
+    {
+        var fresh = !Equals(alert, _alert);
+        _alert = alert;
+        Steps.Visibility = Look.Shown(alert is null);
+        Asked.Visibility = Look.Shown(alert is not null);
+        AutomationProperties.SetAutomationId(this, alert switch
+        {
+            WindowAlert.Asking => "question",
+            WindowAlert.Failed => "failure",
+            _ => "sheet",
+        });
+        switch (alert)
+        {
+            case WindowAlert.Asking asked:
+                Title = asked.Question.Title;
+                AskedMessage.Text = asked.Question.Message;
+                DialogHost.Buttons(this, asked.Question);
+                break;
+            case WindowAlert.Failed failed:
+                Title = failed.Text.Title;
+                AskedMessage.Text = failed.Text.Message;
+                DialogHost.Buttons(this, failed);
+                break;
+        }
+
+        AskedLearn.Content = (alert as WindowAlert.Failed)?.Learn?.Title;
+        AskedLearn.Visibility = Look.Shown(alert is WindowAlert.Failed { Learn: not null });
+        if (alert is not null)
+        {
+            SecondaryButtonText = "";
+            ClearValue(CloseButtonStyleProperty);
+        }
+
+        if (!fresh)
+        {
+            return;
+        }
+
+        if (alert is null)
+        {
+            DispatcherQueue.TryEnqueue(Ui.Guarded(FocusField));
+            return;
+        }
+
+        Say(AskedMessage, $"{Title} {AskedMessage.Text}");
+        var button = DefaultButton == ContentDialogButton.Primary ? "PrimaryButton" : "CloseButton";
+        DispatcherQueue.TryEnqueue(Ui.Guarded(() => (GetTemplateChild(button) as Control)?.Focus(FocusState.Programmatic)));
     }
 
     private void ShowForm(SheetPage.Form form)
@@ -212,7 +263,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         RefusedBar.Margin = new Thickness(0, text.Refused is null ? 0 : 8, 0, 0);
         RefusedBar.IsOpen = text.Refused is not null;
         Describe(CodeField, text.CodeNote);
-        PrimaryButtonText = running.WantsCode ? "Submit code" : "";
+        PrimaryButtonText = running.WantsCode ? Words.Sheet.SubmitCode : "";
         SecondaryButtonText = text.Undo?.Title ?? "";
         DefaultButton = running.WantsCode ? ContentDialogButton.Primary : ContentDialogButton.None;
         Announce(text.Announce);
@@ -224,16 +275,6 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         Title = text.Title;
         Message.Text = text.Message;
         WorkingText.Text = text.Looking ?? "";
-        if (!Structural.Equal(_lines, text.Lines))
-        {
-            _lines = text.Lines;
-            Lines.Children.Clear();
-            foreach (var line in text.Lines)
-            {
-                Lines.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
-            }
-        }
-
         PrimaryButtonText = text.Confirm;
         SecondaryButtonText = "";
         DefaultButton = ContentDialogButton.Primary;
@@ -279,11 +320,36 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         FailureBar.Margin = new Thickness(0, 12, 0, 0);
         if (fresh)
         {
+            FailureBar.ActionButton = NextStepOf(failure.Next);
             FailureBar.IsOpen = false;
             DispatcherQueue.TryEnqueue(Ui.Guarded(FocusField));
         }
 
         FailureBar.IsOpen = true;
+    }
+
+    // An action in the app as the bar's button, or the docs about it as its link.
+    private ButtonBase NextStepOf(NextStep next)
+    {
+        ButtonBase button = next switch
+        {
+            NextStep.Act { Choice: var choice } => new Button { Content = choice.Title, IsEnabled = choice.Enabled },
+            NextStep.Learn { Link: var link } => new HyperlinkButton { Content = link.Title },
+            _ => throw new ArgumentOutOfRangeException(nameof(next)),
+        };
+        AutomationProperties.SetAutomationId(button, "sheet.failure.next");
+        button.Click += (_, _) =>
+        {
+            if (next is NextStep.Act { Choice: var choice })
+            {
+                _model.Send(choice.Intent);
+            }
+            else if (next is NextStep.Learn { Link: var link } && Uri.TryCreate(link.Link, UriKind.Absolute, out var page))
+            {
+                _open(page);
+            }
+        };
+        return button;
     }
 
     private void Enable()
@@ -377,10 +443,24 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
     private void OnCodeChanged(object sender, TextChangedEventArgs args) => Enable();
 
+    private void OnAskedLearn(object sender, RoutedEventArgs args)
+    {
+        if (_alert is WindowAlert.Failed { Learn: { } learn } && Uri.TryCreate(learn.Link, UriKind.Absolute, out var page))
+        {
+            _open(page);
+        }
+    }
+
     // The model closes the sheet once it is done, so the dialog stays up meanwhile, saying what went wrong if anything does.
     private void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
         args.Cancel = true;
+        if (_alert is { } alert)
+        {
+            Send(alert.Answered(confirmed: true));
+            return;
+        }
+
         var intent = _page switch
         {
             SheetPage.Form form => form.Start(_tool),
@@ -417,13 +497,26 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
             return;
         }
 
+        // Cancel and OK answer what the window asked, and the step it asked over stays.
+        if (_alert is { } alert)
+        {
+            args.Cancel = true;
+            Send(alert.Answered(confirmed: false));
+            return;
+        }
+
         if (_page is { Closable: false })
         {
             args.Cancel = true;
             return;
         }
 
-        foreach (var intent in Dismissed())
+        Send(Dismissed());
+    }
+
+    private void Send(IEnumerable<Intent> intents)
+    {
+        foreach (var intent in intents)
         {
             _model.Send(intent);
         }
@@ -432,7 +525,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     // Esc presses the close button, which a sign-in waiting on its app keeps for a click.
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key == VirtualKey.Escape && _page is { EscapeCloses: false })
+        if (args.Key == VirtualKey.Escape && _alert is null && _page is { EscapeCloses: false })
         {
             args.Handled = true;
         }

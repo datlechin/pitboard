@@ -22,7 +22,6 @@ import {
   statusLine,
   toolsOn,
   trayTip,
-  updated,
 } from "../../../lib/words.ts";
 
 interface Props {
@@ -45,15 +44,15 @@ const status =
 const rule =
   "bg-linear-to-b from-win-term-dim to-win-term-dim bg-size-[100%_1px] bg-position-[0_50%] bg-no-repeat";
 // The pointer right-clicks the icon at 500, where the menu's right edge stands. WinUI centres a
-// tooltip above the pointer, and Check for updates' row puts each row 32 higher.
+// tooltip above the pointer, and Check for updates' row puts each row above it 32 higher.
 const pointer = submenu
   ? updates
-    ? "-translate-x-54 -translate-y-225"
-    : "-translate-x-54 -translate-y-193"
+    ? "-translate-x-54 -translate-y-195"
+    : "-translate-x-54 -translate-y-163"
   : updates
-    ? "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:-translate-x-154 demo-row:-translate-y-413"
-    : "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:-translate-x-154 demo-row:-translate-y-381";
-const rowTip = updates ? "bottom-450" : "bottom-418";
+    ? "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:-translate-x-154 demo-row:-translate-y-350"
+    : "demo-start:-translate-x-180 demo-start:-translate-y-240 demo-row:-translate-x-154 demo-row:-translate-y-318";
+const rowTip = updates ? "bottom-387" : "bottom-355";
 // a live tooltip sits where live/tooltip.ts puts it: centred over the pointer or its owner
 const tipAt = "absolute top-(--y) left-(--x) z-4 -mt-8 -translate-x-1/2 -translate-y-full";
 const shell = shellTip(trayTip(after)).split("\n");
@@ -125,14 +124,11 @@ const accounts = toolsOn("windows").flatMap(([tool]) =>
     data-part="shell-tip"
     >{shell.map((line) => <span class="block" data-part="line">{line}</span>)}</Tooltip
   >}
-  {/* WinUI's tooltip of each account and of Refresh in the menu, its UI Automation help text */}
+  {/* WinUI's tooltip of each account in the menu, its UI Automation help text */}
   {live && <div data-part="tips">
     {accounts.map((a) => <Tooltip class={tipAt} id={`${prefix}-tip-${a.id}`} hidden>
       {menuLine(a, after, "windows")}
     </Tooltip>)}
-    <Tooltip class={tipAt} id={`${prefix}-tip-refresh`} hidden>
-      {updated(after.readAt)}
-    </Tooltip>
     <template data-part="tip">
       <Tooltip class={tipAt} hidden />
     </template>

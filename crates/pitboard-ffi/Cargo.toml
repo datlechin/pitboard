@@ -20,6 +20,7 @@ crate-type = ["lib", "staticlib", "cdylib"]
 fixture = ["pitboard-core/test-support"]
 
 [dependencies]
+jiff.workspace = true
 pitboard-core.workspace = true
 pitboard-sites.workspace = true
 serde.workspace = true

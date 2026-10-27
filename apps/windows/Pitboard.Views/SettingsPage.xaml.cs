@@ -3,7 +3,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using Pitboard.Core;
 using Pitboard.Windows;
 
 namespace Pitboard.Views;
@@ -15,7 +17,6 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        About.Description = SettingsViewModel.Copyright;
         foreach (var link in SettingsViewModel.Links)
         {
             var button = new HyperlinkButton { Content = link.Title };
@@ -54,12 +55,19 @@ public sealed partial class SettingsPage : Page
         ViewModel.Shown();
     }
 
-    // The page keeps where it was scrolled to, and a notice about a limit opens it on that setting.
-    public void ShowLimits()
+    // The page keeps where it was scrolled to, and what the model asks for opens it on its section.
+    public void Show(SettingsSection section)
     {
+        FrameworkElement shown = section switch
+        {
+            SettingsSection.Limits => LimitsHeader,
+            SettingsSection.WarmUp => WarmUp,
+            SettingsSection.Advanced => AdvancedHeader,
+            _ => GeneralHeader,
+        };
         if (IsLoaded)
         {
-            BringLimitsIntoView();
+            BringIntoView(shown);
             return;
         }
 
@@ -67,18 +75,32 @@ public sealed partial class SettingsPage : Page
         once = (_, _) =>
         {
             Loaded -= once;
-            BringLimitsIntoView();
+            BringIntoView(shown);
         };
         Loaded += once;
     }
 
-    private void BringLimitsIntoView() =>
-        LimitsHeader.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+    // An account's Warm-up settings link is for the hours and toggles inside the warm-up's expander.
+    private void BringIntoView(FrameworkElement shown)
+    {
+        if (shown == WarmUp)
+        {
+            WarmUp.IsExpanded = true;
+            (FocusManager.FindFirstFocusableElement(WarmUp) as UIElement)?.Focus(FocusState.Programmatic);
+        }
+
+        shown.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+    }
+
+    private void OnShowDiagnostics(object sender, RoutedEventArgs args) => Context.Show(new Place.Checks());
+
+    private void OnShowActivity(object sender, RoutedEventArgs args) => Context.Show(new Place.Activity());
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         Announce(StartupFailed, ViewModel!.StartupFailed);
         Announce(ScheduleFailed, ViewModel.ScheduleFailed);
+        Announce(UninstallStopped, ViewModel.UninstallStopped);
     }
 
     // WinUI's live region: Narrator reads the text again only when its peer says it changed.
@@ -154,4 +176,14 @@ public sealed partial class SettingsPage : Page
         ViewModel?.SetChecksAutomatically(((ToggleSwitch)sender).IsOn);
 
     private void OnCheckNow(object sender, RoutedEventArgs args) => ViewModel?.CheckNow();
+
+    private async void OnUninstall(object sender, RoutedEventArgs args)
+    {
+        if (ViewModel is not { } shown || (shown.UninstallQuestion is { } question && !await Context.Dialogs.Confirm(question)))
+        {
+            return;
+        }
+
+        shown.Uninstall();
+    }
 }

@@ -7,7 +7,7 @@
 //! password are the app's own, as its system's: once it has linked it, the app sends
 //! `Intent::LookForCommandLine`, and the model looks for the command line again.
 
-use crate::{Change, Check, FoundCommandLine, OwnCommandLine, PitboardError, Schedule};
+use crate::{Change, Check, Doctored, FoundCommandLine, OwnCommandLine, PitboardError, Schedule};
 
 /// How many changes the activity pane reads, the newest of them, as ActivityPane.swift
 /// asked MachineModel.swift's `readChanges` for them.
@@ -30,6 +30,8 @@ pub(crate) struct MachineState {
     pub(crate) own: Option<OwnCommandLine>,
     /// Doctor's checks, the last ones made.
     pub(crate) checks: Vec<Check>,
+    // doctor's report of them, which Copy Report copies
+    pub(crate) report: Option<String>,
     /// Checks under way. Counted, as reads are: one asked for while another runs answers
     /// after it, and the first to end does not say none is running.
     pub(crate) checking: u32,
@@ -126,10 +128,11 @@ impl MachineState {
     }
 
     /// Doctor's checks came in at `at`, in place of the last ones, or a check came to nothing.
-    pub(crate) fn checked(&mut self, checks: Option<Vec<Check>>, at: i64) {
+    pub(crate) fn checked(&mut self, doctored: Option<Doctored>, at: i64) {
         self.checking = self.checking.saturating_sub(1);
-        if let Some(checks) = checks {
+        if let Some(Doctored { checks, report }) = doctored {
             self.checks = checks;
+            self.report = Some(report);
             self.checked_at = Some(at);
         }
     }

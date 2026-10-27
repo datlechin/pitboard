@@ -46,9 +46,9 @@ public sealed class IconCommandsTests
         var (commands, model, _, targets) = Made();
         commands.Heard(new IconEvent.Menu(0, 0));
 
-        targets.Menu!.Chosen(new IconCommand.Send(new Intent.Refresh(Asked: true)));
+        targets.Menu!.Chosen(new IconCommand.Send(new Intent.SwitchTo("claude/personal")));
 
-        CollectionAssert.AreEqual(new Intent[] { new Intent.Refresh(Asked: true) }, model.Sent.ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.SwitchTo("claude/personal") }, model.Sent.ToArray());
     }
 
     [TestMethod]

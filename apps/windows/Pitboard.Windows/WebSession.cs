@@ -14,7 +14,7 @@ public interface ISessionWindow
     void CloseSignIn();
 
     // Whether the person lets a download the policy asks about save, asked over the account's window.
-    Task<bool> AllowDownload(AlertText question);
+    Task<bool> AllowDownload(Question question);
 
     // The window's page is now at this address.
     void Shown(string address);

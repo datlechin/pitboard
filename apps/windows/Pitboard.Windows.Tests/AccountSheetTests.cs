@@ -18,6 +18,11 @@ public sealed class AccountSheetTests
 
     private static readonly Sheet Add = new Sheet.Add(Provider: null);
 
+    private static readonly WindowQuestion QuitChatGPT = new(
+        new Question("Quit ChatGPT to sign in?", "ChatGPT signs in again.", "Quit ChatGPT and continue", Destructive: false, ConfirmIsDefault: true),
+        Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+        Declined: new Intent.KeepAppOpen());
+
     // The account just added, which the model saved under the name it starts on.
     private static readonly Snapshot Naming = Snapshots.Read(1) with
     {
@@ -43,9 +48,20 @@ public sealed class AccountSheetTests
         picker.SelectedIndex = 1;
         Views.Press(up.Part("PrimaryButton"));
 
-        Assert.Contains("Pitboard opens Codex’s own sign-in in your browser.", Views.Texts(up.Sheet));
+        Assert.Contains("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", Views.Texts(up.Sheet));
         await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn("codex", null)), "no sign-in to Codex");
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went before the model closed it");
+    }
+
+    // The mockup's step 3: the account is saved already, so Done is the one button and Cancel would cancel nothing.
+    [UITestMethod]
+    public async Task TheNameStepAfterASignInOffersDoneAlone()
+    {
+        await using var up = await Up.Over(Naming);
+
+        Assert.AreEqual("Save", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual("", up.Sheet.CloseButtonText);
+        Assert.AreEqual("", up.Sheet.SecondaryButtonText);
     }
 
     // Save was dimmed under an empty field, with nothing to say why.
@@ -145,6 +161,37 @@ public sealed class AccountSheetTests
         await Views.Until(() => bar.IsOpen, "the failure was not said");
         Assert.AreEqual("Couldn’t rename personal", bar.Title);
         Assert.AreEqual("work", up.Element<TextBox>("sheet.name").Text);
+    }
+
+    // Plan 3: what went wrong ends with what to do, an action in the app or the docs about it, as the bar's own button.
+    [UITestMethod]
+    public async Task AFailureInTheSheetEndsWithItsNextStep()
+    {
+        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
+        await using var up = await Up.Over(renaming);
+        var bar = up.Element<InfoBar>("sheet.failure");
+        up.App.Apply(renaming with
+        {
+            Revision = 2,
+            SheetFailure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", [], Items.LearnMore),
+        });
+        await Views.Until(() => bar.IsOpen, "the failure was not said");
+
+        var learn = Assert.IsInstanceOfType<HyperlinkButton>(bar.ActionButton);
+        Assert.AreEqual("Learn more", learn.Content);
+        new HyperlinkButtonAutomationPeer(learn).Invoke();
+        CollectionAssert.AreEqual(new[] { new Uri("https://docs.usepitboard.com/reference/errors") }, up.Opened);
+
+        var refresh = new Choice("Refresh", new Intent.Refresh(Asked: true), Enabled: true);
+        up.App.Apply(renaming with
+        {
+            Revision = 3,
+            SheetFailure = new FailureText(8, "Couldn’t rename personal", "Pitboard stopped before it could say.", [], new NextStep.Act(refresh)),
+        });
+        await Views.Until(() => bar.ActionButton is Button { Content: "Refresh" }, "the failure's action was not offered");
+        Views.Press((Button)bar.ActionButton);
+
+        await Views.Until(() => up.Model.Sent.Contains(refresh.Intent), "the failure's action was not taken");
     }
 
     // Microsoft's InfoBar guidance closes and opens the bar again for a new message, which Narrator hears as the bar opens.
@@ -295,7 +342,7 @@ public sealed class AccountSheetTests
         ((ISelectionItemProvider)new RadioButtonAutomationPeer(codex)).Select();
 
         await Views.Until(() => picker.SelectedIndex == 1, "Codex was not picked");
-        Assert.Contains("Pitboard opens Codex’s own sign-in in your browser.", Views.Texts(up.Sheet));
+        Assert.Contains("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", Views.Texts(up.Sheet));
     }
 
     // A code is no word to check or predict, and what to paste is said under the field, as a field's description.
@@ -449,7 +496,11 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task ASheetSavingANameCannotBeClosed()
     {
-        await using var up = await Up.Over(Naming with { SheetText = Naming.SheetText! with { Saving = true } });
+        await using var up = await Up.Over(Snapshots.Read(1) with
+        {
+            Sheet = new Sheet.Rename("claude", "work"),
+            SheetText = Items.Rename("work") with { Saving = true },
+        });
 
         Assert.IsFalse(up.Part("CloseButton").IsEnabled, "Cancel while saving");
         Assert.IsFalse(up.Element<TextBox>("sheet.name").IsEnabled);
@@ -513,7 +564,7 @@ public sealed class AccountSheetTests
     {
         var stowing = Snapshots.Read(1) with { Sheet = new Sheet.Stow(), StowText = Items.Stow() };
         await using var up = await Up.Over(stowing);
-        Assert.Contains("Finding out whose login it is…", Views.Texts(up.Sheet));
+        Assert.Contains("Finding out whose sign-in it is…", Views.Texts(up.Sheet));
         Assert.IsFalse(up.Sheet.IsPrimaryButtonEnabled, "Put away before the look");
 
         up.App.Apply(stowing with { Revision = 2, StowText = Items.Stow("The file holds work’s login, signed in 2 days ago.") });
@@ -522,6 +573,111 @@ public sealed class AccountSheetTests
 
         Assert.Contains("The file holds work’s login, signed in 2 days ago.", Views.Texts(up.Sheet));
         await Views.Until(() => up.Model.Sent.Contains(new Intent.Stow()), "nothing was put away");
+    }
+
+    // A window shows one ContentDialog at a time, so the question the sign-in asks is the sheet's, where it was a bar inside it.
+    [UITestMethod]
+    public async Task AQuestionDuringASignInTakesTheDialogOver()
+    {
+        var signingIn = Snapshots.Read(1) with
+        {
+            Sheet = new Sheet.Add(Provider: "codex"),
+            SheetText = Items.AddAccount(),
+            SigningIn = Items.Running(),
+            SigningInText = Items.SigningIn("Codex"),
+        };
+        await using var up = await Up.Over(signingIn);
+
+        up.App.Apply(signingIn with { Revision = 2, QuitQuestion = QuitChatGPT });
+
+        await Views.Until(() => up.Sheet.Title as string == "Quit ChatGPT to sign in?", "the question did not take the sheet over");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "a second dialog");
+        Assert.AreEqual("question", AutomationProperties.GetAutomationId(up.Sheet));
+        Assert.Contains("ChatGPT signs in again.", Views.Texts(up.Sheet));
+        Assert.DoesNotContain("Finish signing in in your browser. This closes once Codex says you’re in.", Views.Texts(up.Sheet));
+        Assert.AreEqual("Quit ChatGPT and continue", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.Primary, up.Sheet.DefaultButton);
+        Assert.AreEqual("Cancel", up.Sheet.CloseButtonText);
+
+        Views.Press(up.Part("PrimaryButton"));
+
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.QuitAndSwitch("codex/spare")), "the answer did not reach the model");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the question");
+    }
+
+    // Cancel declines the question, and the step it was asked over comes back as it was left.
+    [UITestMethod]
+    public async Task CancelingAQuestionInTheSheetGivesTheStepBack()
+    {
+        var renaming = Snapshots.Read(1) with
+        {
+            Sheet = new Sheet.Rename("claude", "personal"),
+            SheetText = Items.Rename("personal"),
+            QuitQuestion = QuitChatGPT,
+        };
+        await using var up = await Up.Over(renaming);
+        await Views.Until(() => up.Sheet.Title as string == "Quit ChatGPT to sign in?", "the question did not take the sheet over");
+
+        Views.Press(up.Part("CloseButton"));
+
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.KeepAppOpen()), "Cancel did not decline the question");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the question");
+        Assert.DoesNotContain(new Intent.CloseSheet(), up.Model.Sent.ToArray());
+
+        up.App.Apply(renaming with { Revision = 2, QuitQuestion = null });
+
+        await Views.Until(() => up.Sheet.Title as string == "Rename “personal”", "the step did not come back");
+        Assert.AreEqual("sheet", AutomationProperties.GetAutomationId(up.Sheet));
+        Assert.AreEqual("personal", up.Element<TextBox>("sheet.name").Text);
+        Assert.AreEqual("Rename", up.Sheet.PrimaryButtonText);
+    }
+
+    // A failure of something done elsewhere, such as a switch from the icon's menu, is read in the sheet and then put away.
+    [UITestMethod]
+    public async Task AFailureDuringASheetIsReadInItAndOkGivesTheStepBack()
+    {
+        var naming = Naming with { FailureAlert = new AlertText("Couldn’t switch to spare", "Claude Code is signing in.", null) };
+        await using var up = await Up.Over(naming);
+        await Views.Until(() => up.Sheet.Title as string == "Couldn’t switch to spare", "the failure did not take the sheet over");
+        Assert.AreEqual("failure", AutomationProperties.GetAutomationId(up.Sheet));
+        Assert.Contains("Claude Code is signing in.", Views.Texts(up.Sheet));
+        Assert.AreEqual("OK", up.Sheet.CloseButtonText);
+        Assert.AreEqual("", up.Sheet.PrimaryButtonText);
+
+        Views.Press(up.Part("CloseButton"));
+
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.DismissFailure()), "OK did not put the failure away");
+        Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the failure");
+        up.App.Apply(naming with { Revision = 2, FailureAlert = null });
+        await Views.Until(() => up.Sheet.Title as string == "Name this account", "the step did not come back");
+    }
+
+    // Plan 3: a failure said in the sheet ends with its next step there too.
+    [UITestMethod]
+    public async Task AFailureDuringASheetOffersItsNextStepInIt()
+    {
+        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), Enabled: true);
+        var failed = new AlertText("Couldn’t switch to spare", "spare’s saved sign-in no longer works.", new NextStep.Act(signIn));
+        var naming = Naming with { FailureAlert = failed };
+        await using var up = await Up.Over(naming);
+        await Views.Until(() => up.Sheet.Title as string == "Couldn’t switch to spare", "the failure did not take the sheet over");
+        Assert.AreEqual("Sign in again…", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.Primary, up.Sheet.DefaultButton);
+        Assert.AreEqual("Close", up.Sheet.CloseButtonText);
+        Assert.AreEqual(Visibility.Collapsed, up.Element<HyperlinkButton>("failure.learn").Visibility);
+
+        Views.Press(up.Part("PrimaryButton"));
+        await Views.Until(() => up.Model.Sent.Count == 2, "the next step was not taken");
+        CollectionAssert.AreEqual(new Intent[] { new Intent.DismissFailure(), signIn.Intent }, up.Model.Sent.ToArray());
+
+        up.App.Apply(naming with { Revision = 2, FailureAlert = failed with { Message = "Claude Code is signing in.", Next = Items.LearnMore } });
+        var learn = up.Element<HyperlinkButton>("failure.learn");
+        await Views.Until(() => learn.Visibility == Visibility.Visible, "the docs were not offered");
+        Assert.AreEqual("", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual(ContentDialogButton.None, up.Sheet.DefaultButton);
+        new HyperlinkButtonAutomationPeer(learn).Invoke();
+
+        CollectionAssert.AreEqual(new[] { new Uri("https://docs.usepitboard.com/reference/errors") }, up.Opened);
     }
 
     // The sheet over a window's content, up once it is in front, and taken down after each test, since one dialog shows at a time.

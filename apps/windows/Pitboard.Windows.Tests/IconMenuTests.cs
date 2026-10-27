@@ -13,14 +13,13 @@ public sealed class IconMenuTests
         new Intent.SwitchTo("claude/personal"), null, true);
 
     private static readonly MenuEntry Stuck = new(
-        "An interrupted switch is waiting", null, "Pitboard can finish it or give it up.", null,
+        "1 issue", "A switch didn’t finish", "Pitboard keeps trying until Anthropic answers.", Severity.Error,
         new Intent.Show(new Place.Accounts()), null, true);
 
     private static AppModel Model(Func<Snapshot, Snapshot> change) => new(change(Snapshots.Read(1)));
 
-    private static AppModel TwoTools(bool reading = false) => Model(snapshot => snapshot with
+    private static AppModel TwoTools() => Model(snapshot => snapshot with
     {
-        Reading = reading,
         Sections =
         [
             Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true), Items.Account("claude", "personal")),
@@ -28,13 +27,12 @@ public sealed class IconMenuTests
         ],
     });
 
-    // One line per entry, by what UI Automation finds it by: a separator as "-", a heading as "# " and a note as "> " with
-    // their words, an account as "( )" or "(x)".
+    // One line per entry, by what UI Automation finds it by: a separator as "-", a heading as "# " and its words, an
+    // account as "( )" or "(x)".
     private static string Said(IEnumerable<IconMenuEntry> entries) => string.Join(" | ", entries.Select(entry => entry switch
     {
         IconMenuEntry.Separator => "-",
-        IconMenuEntry.Label { Heading: true } label => "# " + label.Text,
-        IconMenuEntry.Label label => "> " + label.Text,
+        IconMenuEntry.Heading heading => "# " + heading.Text,
         IconMenuEntry.Account account => (account.InUse ? "(x) " : "( ) ") + account.Id,
         IconMenuEntry.Command command => command.Id,
         IconMenuEntry.Submenu submenu => $"{submenu.Id} > {Said(submenu.Entries).Replace(" | ", ", ", StringComparison.Ordinal)}",
@@ -45,12 +43,14 @@ public sealed class IconMenuTests
         entries.OfType<IconMenuEntry.Command>().FirstOrDefault(command => command.Id == id)
         ?? throw new AssertFailedException($"no '{id}' in: {Said(entries)}");
 
+    // Microsoft's notification area guidance: Open first and in bold, Exit last. What needs attention shows in the window
+    // the icon's warning points to, and the window refreshes.
     [TestMethod]
-    public void TheMenuGoesInTheMacOSOrder()
+    public void TheMenuGoesInMicrosoftsOrder()
     {
         var model = Model(snapshot => snapshot with
         {
-            MenuNotices = new MenuNotices(Install, [Advice], Stuck),
+            MenuNotices = new MenuNotices(Install, [Advice], [], Stuck),
             Sections =
             [
                 Items.Section("claude", "Claude Code", Items.Account("claude", "work", inUse: true), Items.Account("claude", "personal")),
@@ -61,10 +61,29 @@ public sealed class IconMenuTests
         var entries = IconMenu.Entries(model, new NoUpdates());
 
         Assert.AreEqual(
-            "menu.install | menu.switch.0 | menu.others | - "
-            + "| # Claude Code | (x) menu.account.claude/work | ( ) menu.account.claude/personal | - | # Codex | (x) menu.account.codex/main | - "
-            + "| menu.addAccount | menu.refresh | - | menu.openPitboard | menu.settings | - | menu.help | menu.exit",
+            "menu.openPitboard | - "
+            + "| # Claude Code | (x) menu.account.claude/work | ( ) menu.account.claude/personal | # Codex | (x) menu.account.codex/main | - "
+            + "| menu.addAccount | - | menu.settings | menu.help | - | menu.exit",
             Said(entries));
+    }
+
+    [TestMethod]
+    public void EachItemSaysWhatTheModelSays()
+    {
+        var entries = IconMenu.Entries(TwoTools(), new StandInUpdates());
+
+        foreach (var (id, words) in new[]
+        {
+            ("menu.openPitboard", Words.Menu.OpenPitboard),
+            ("menu.addAccount", Words.Menu.AddAccount),
+            ("menu.settings", Words.Menu.Settings),
+            ("menu.checkForUpdates", Words.Menu.CheckForUpdates),
+            ("menu.help", Words.Menu.Help),
+            ("menu.exit", Words.Menu.Quit),
+        })
+        {
+            Assert.AreEqual(words, Command(entries, id).Text, id);
+        }
     }
 
     [TestMethod]
@@ -75,7 +94,7 @@ public sealed class IconMenuTests
         Assert.AreEqual("claude, claude, codex", string.Join(", ", accounts.Select(account => account.Group)));
     }
 
-    // A machine with one tool shows its accounts unheaded, as the macOS menu does.
+    // A machine with one tool shows its accounts unheaded, as the window does.
     [TestMethod]
     public void OneToolsAccountsHaveNoHeading()
     {
@@ -85,47 +104,44 @@ public sealed class IconMenuTests
         });
 
         Assert.AreEqual(
-            "(x) menu.account.claude/work | - | menu.addAccount | menu.refresh | - | menu.openPitboard | menu.settings | - | menu.help | menu.exit",
+            "menu.openPitboard | - | (x) menu.account.claude/work | - | menu.addAccount | - | menu.settings | menu.help | - | menu.exit",
             Said(IconMenu.Entries(model, new NoUpdates())));
     }
 
+    // "Reading accounts…" or "No accounts yet" would be an item nobody can choose.
     [TestMethod]
-    public void TheNoteStandsInForTheAccounts()
+    public void NoAccountsLeaveTheirPlaceOut()
     {
-        var model = Model(snapshot => snapshot with
-        {
-            MenuAccountsNote = "Couldn’t read usage",
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))],
-        });
+        var model = Model(snapshot => snapshot with { MenuAccountsNote = "No accounts yet", Sections = [] });
 
-        var entries = IconMenu.Entries(model, new NoUpdates());
-
-        Assert.StartsWith("> Couldn’t read usage | - | menu.addAccount", Said(entries));
-        Assert.IsEmpty(entries.OfType<IconMenuEntry.Account>());
+        Assert.AreEqual(
+            "menu.openPitboard | - | menu.addAccount | - | menu.settings | menu.help | - | menu.exit",
+            Said(IconMenu.Entries(model, new NoUpdates())));
     }
 
-    // What macOS shows as a second line: an account's summary, a notice's subtitle, when the menu last read.
+    // Its name says how much it has used or why it can't be switched to; its tooltip says the rest.
     [TestMethod]
-    public void EachSecondLineIsTheEntrysDetail()
+    public void AnAccountIsNamedAsTheModelNamesItInTheMenu()
     {
         var model = Model(snapshot => snapshot with
         {
-            MenuNotices = new MenuNotices(null, [Advice], Stuck),
             Sections =
             [
                 Items.Section(
                     "claude", null,
-                    Items.Account("claude", "work", inUse: true) with { Summary = "5h 42% · resets in 2h", Help = "In use by Claude Code" }),
+                    Items.Account("claude", "work", inUse: true) with
+                    {
+                        MenuTitle = "work (42%)",
+                        Summary = "5-hour 42% used, Weekly 12%",
+                        Help = "Usage is from 5 minutes ago.",
+                    }),
             ],
         });
 
-        var entries = IconMenu.Entries(model, new NoUpdates());
+        var account = IconMenu.Entries(model, new NoUpdates()).OfType<IconMenuEntry.Account>().Single();
 
-        Assert.AreEqual("5h 42% · resets in 2h\nIn use by Claude Code", entries.OfType<IconMenuEntry.Account>().Single().Detail);
-        Assert.AreEqual("work is at 91%", Command(entries, "menu.switch.0").Detail);
-        Assert.AreEqual("Pitboard can finish it or give it up.", Command(entries, "menu.others").Detail);
-        Assert.AreEqual("Updated 08:00", Command(entries, "menu.refresh").Detail);
-        Assert.IsNull(Command(entries, "menu.openPitboard").Detail);
+        Assert.AreEqual("work (42%)", account.Text);
+        Assert.AreEqual("5-hour 42% used, Weekly 12%\nUsage is from 5 minutes ago.", account.Detail);
     }
 
     [TestMethod]
@@ -133,12 +149,13 @@ public sealed class IconMenuTests
     {
         var expired = Items.Account("claude", "old") with
         {
-            Action = new ItemAction("Sign in", "Sign in to old again", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "old"))),
+            MenuTitle = "old (sign-in expired)",
+            Action = new ItemAction("Sign in…", "Sign in to old again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "old"))),
         };
-        var unusable = Items.Account("claude", "broken") with { Action = null };
+        var switching = Items.Account("claude", "spare") with { MenuTitle = "spare (switching now)", Action = null };
         var model = Model(snapshot => snapshot with
         {
-            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "personal"), expired, unusable)],
+            Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true), Items.Account("claude", "personal"), expired, switching)],
         });
 
         var accounts = IconMenu.Entries(model, new NoUpdates()).OfType<IconMenuEntry.Account>().ToDictionary(account => account.Id!);
@@ -148,53 +165,23 @@ public sealed class IconMenuTests
             new IconCommand.Send(new Intent.PresentSheet(new Sheet.SignInAgain("claude", "old"))), accounts["menu.account.claude/old"].Does);
         Assert.IsNull(accounts["menu.account.claude/work"].Does);
         Assert.IsTrue(accounts["menu.account.claude/work"].Enabled, "the account in use");
-        Assert.IsFalse(accounts["menu.account.claude/broken"].Enabled, "an account with nothing to do");
+        // Each account stays in the list it makes, so the list keeps its place while a switch runs.
+        Assert.IsFalse(accounts["menu.account.claude/spare"].Enabled, "an account with nothing to do now");
     }
 
     [TestMethod]
-    public void ANoticeSendsItsIntentOrOpensItsLink()
-    {
-        var held = Advice with { Enabled = false };
-        var entries = IconMenu.Entries(Model(snapshot => snapshot with { MenuNotices = new MenuNotices(Install, [held], Stuck) }), new NoUpdates());
-
-        Assert.AreEqual(new IconCommand.OpenLink("https://example.com/install"), Command(entries, "menu.install").Does);
-        Assert.AreEqual(IconMark.Help, Command(entries, "menu.install").Mark);
-        Assert.AreEqual(new IconCommand.Send(Advice.Intent!), Command(entries, "menu.switch.0").Does);
-        Assert.AreEqual(IconMark.Warning, Command(entries, "menu.switch.0").Mark);
-        Assert.IsFalse(Command(entries, "menu.switch.0").Enabled);
-        Assert.AreEqual(new IconCommand.Send(new Intent.Show(new Place.Accounts())), Command(entries, "menu.others").Does);
-        Assert.AreEqual(IconMark.Warning, Command(entries, "menu.others").Mark);
-    }
-
-    [TestMethod]
-    public void AnAdviceWithoutASeverityShowsTheSwitchMark()
-    {
-        var entries = IconMenu.Entries(Model(snapshot => snapshot with { MenuNotices = new MenuNotices(null, [Advice with { Severity = null }], null) }), new NoUpdates());
-
-        Assert.AreEqual(IconMark.Switch, Command(entries, "menu.switch.0").Mark);
-    }
-
-    [TestMethod]
-    public void RefreshWaitsForTheReadUnderWay()
-    {
-        Assert.IsTrue(Command(IconMenu.Entries(TwoTools(), new NoUpdates()), "menu.refresh").Enabled);
-        Assert.IsFalse(Command(IconMenu.Entries(TwoTools(reading: true), new NoUpdates()), "menu.refresh").Enabled);
-    }
-
-    [TestMethod]
-    public void TheCommandsSendWhatTheMacOSMenuSends()
+    public void TheCommandsSendWhatTheWindowsCommandsSend()
     {
         var entries = IconMenu.Entries(TwoTools(), new NoUpdates());
 
         Assert.AreEqual(new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))), Command(entries, "menu.addAccount").Does);
-        Assert.AreEqual(new IconCommand.Send(new Intent.Refresh(Asked: true)), Command(entries, "menu.refresh").Does);
         Assert.AreEqual(new IconCommand.Send(new Intent.Show(Place: null)), Command(entries, "menu.openPitboard").Does);
         Assert.AreEqual(new IconCommand.ShowSettings(), Command(entries, "menu.settings").Does);
         Assert.AreEqual(new IconCommand.OpenLink("https://docs.usepitboard.com"), Command(entries, "menu.help").Does);
         Assert.AreEqual(new IconCommand.Quit(), Command(entries, "menu.exit").Does);
     }
 
-    // Between Refresh and Open Pitboard, as the macOS menu has them.
+    // After Add account, as the plan's menu has them.
     [TestMethod]
     public void EachSiteOffersItsAccountsWindows()
     {
@@ -218,8 +205,8 @@ public sealed class IconMenuTests
         var entries = IconMenu.Entries(model, new NoUpdates());
 
         Assert.Contains(
-            "menu.refresh | - | window.claude.ai/work | menu.site.chatgpt.com > window.chatgpt.com/main, window.chatgpt.com/spare | - "
-            + "| menu.openPitboard",
+            "menu.addAccount | - | window.claude.ai/work | menu.site.chatgpt.com > window.chatgpt.com/main, window.chatgpt.com/spare | - "
+            + "| menu.settings",
             Said(entries));
         Assert.AreEqual(new IconCommand.OpenWindow(work), Command(entries, "window.claude.ai/work").Does);
         var chatGPT = entries.OfType<IconMenuEntry.Submenu>().Single();
@@ -234,25 +221,46 @@ public sealed class IconMenuTests
 
     // Its old store is still being deleted, which WebView2 does only as its browser process exits.
     [TestMethod]
-    public void AWindowWhoseStoreIsHeldSaysWhyAndCannotBeChosen()
+    public void AWindowWhoseStoreIsHeldIsLeftOutUntilItOpens()
     {
         var work = Items.Window("claude", "work", inUse: true);
+        var main = Items.Window("codex", "main");
+        var spare = Items.Window("codex", "spare");
         var model = Model(snapshot => snapshot with
         {
             AccountWindows = snapshot.AccountWindows with
             {
-                Accounts = [work],
-                Menus = [new SiteMenu.One("Open claude.ai as work", work)],
-                Held = [work.Store.ToUpperInvariant()],
+                Accounts = [work, main, spare],
+                Menus =
+                [
+                    new SiteMenu.One("Open claude.ai as work", work),
+                    new SiteMenu.Several("Open chatgpt.com", main.Site, [main, spare]),
+                ],
+                Held = [work.Store.ToUpperInvariant(), main.Store],
             },
         });
 
-        var entry = Command(IconMenu.Entries(model, new NoUpdates()), "window.claude.ai/work");
+        Assert.Contains(
+            "menu.addAccount | - | menu.site.chatgpt.com > window.chatgpt.com/spare | - | menu.settings",
+            Said(IconMenu.Entries(model, new NoUpdates())));
+    }
 
-        Assert.IsFalse(entry.Enabled);
-        Assert.AreEqual(
-            "What this window kept before is deleted once every account window has closed. It opens after that.",
-            entry.Detail);
+    [TestMethod]
+    public void ASiteWhoseWindowsAreAllHeldIsLeftOut()
+    {
+        var main = Items.Window("codex", "main");
+        var spare = Items.Window("codex", "spare");
+        var model = Model(snapshot => snapshot with
+        {
+            AccountWindows = snapshot.AccountWindows with
+            {
+                Accounts = [main, spare],
+                Menus = [new SiteMenu.Several("Open chatgpt.com", main.Site, [main, spare])],
+                Held = [main.Store, spare.Store],
+            },
+        });
+
+        Assert.DoesNotContain("menu.site.", Said(IconMenu.Entries(model, new NoUpdates())));
     }
 
     [TestMethod]
@@ -271,7 +279,18 @@ public sealed class IconMenuTests
         var entries = IconMenu.Entries(TwoTools(), new StandInUpdates(waiting: null));
 
         Assert.AreEqual(new IconCommand.CheckForUpdates(), Command(entries, "menu.checkForUpdates").Does);
-        Assert.Contains("menu.openPitboard | menu.settings | menu.checkForUpdates | -", Said(entries));
+        Assert.Contains("menu.settings | menu.checkForUpdates | menu.help | -", Said(entries));
+    }
+
+    // In Check for updates' place, which opens WinSparkle's dialog on it.
+    [TestMethod]
+    public void AnUpdateWaitingIsOfferedByItsVersion()
+    {
+        var entries = IconMenu.Entries(TwoTools(), new StandInUpdates(waiting: "1.2.0"));
+
+        Assert.Contains("menu.settings | menu.update | menu.help | -", Said(entries));
+        Assert.AreEqual(PitboardFfiMethods.InstallUpdate("1.2.0"), Command(entries, "menu.update").Text);
+        Assert.AreEqual(new IconCommand.CheckForUpdates(), Command(entries, "menu.update").Does);
     }
 
     // A beta finds no later beta, so the menu offers no check; it still says when 1.0.0 is found.
@@ -280,17 +299,6 @@ public sealed class IconMenuTests
     {
         Assert.DoesNotContain("menu.checkForUpdates", Said(IconMenu.Entries(TwoTools(), new StandInUpdates(beta: true))));
         var waiting = IconMenu.Entries(TwoTools(), new StandInUpdates(waiting: "1.0.0", beta: true));
-        Assert.StartsWith("menu.update", Said(waiting));
-        Assert.AreEqual("Install Pitboard 1.0.0…", Command(waiting, "menu.update").Text);
-    }
-
-    [TestMethod]
-    public void AnUpdateWaitingIsOfferedFirst()
-    {
-        var entries = IconMenu.Entries(TwoTools(), new StandInUpdates(waiting: "1.2.0"));
-
-        Assert.StartsWith("menu.update | - | # Claude Code", Said(entries));
-        Assert.AreEqual("Install Pitboard 1.2.0…", Command(entries, "menu.update").Text);
-        Assert.AreEqual(IconMark.Update, Command(entries, "menu.update").Mark);
+        Assert.Contains("menu.settings | menu.update | menu.help", Said(waiting));
     }
 }

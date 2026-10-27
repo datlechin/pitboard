@@ -1148,6 +1148,10 @@ impl LocalTime for Counting {
     fn time_of_day(&self, minutes: u16) -> Result<String, PlatformError> {
         Ok(format!("{:02}:{:02}", minutes / 60, minutes % 60))
     }
+
+    fn date(&self, epoch: i64) -> Result<String, PlatformError> {
+        self.clock(epoch, false)
+    }
 }
 
 /// A model over `core` telling `told`, its clock times said by `clock`, doing what it does by
@@ -1286,7 +1290,7 @@ fn putting_away_a_login_left_in_a_file_reaches_the_core() {
             .is_some_and(|text| text.can_confirm)
     });
     let text = model.snapshot().stow_text.expect("the sheet's words");
-    assert!(text.lines[0].contains("spare"), "{:?}", text.lines);
+    assert!(text.message.contains("spare"), "{:?}", text.message);
 
     model.send(Intent::Stow);
     told.until("put away, and read after", |told| {
@@ -1792,7 +1796,7 @@ fn the_machine_is_kept_over_the_real_core() {
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
     let checked = told.last_where("the checks", |last| {
-        !last.machine.checks.lines.is_empty() && !last.machine.checks.checking
+        !last.machine.checks.lines().is_empty() && !last.machine.checks.checking
     });
     assert!(checked.machine.checks.summary.is_some());
     assert!(checked.machine.checks.checked.is_some());

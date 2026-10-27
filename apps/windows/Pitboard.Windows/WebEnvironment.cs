@@ -62,9 +62,7 @@ public sealed class WebEnvironment
             return null;
         }
 
-        var have = version is null ? "none" : $"version {version}";
-        return $"This window needs the Microsoft Edge WebView2 Runtime {MinimumRuntime} or later, and this PC has {have}. "
-            + "Windows Update keeps it up to date.";
+        return PitboardFfiMethods.WebviewRuntimeTooOld(MinimumRuntime, version);
     }
 
     public static string? Refusal()

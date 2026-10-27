@@ -6,12 +6,16 @@ namespace Pitboard.Windows.Tests;
 public sealed class MachineViewModelTests
 {
     private static readonly ChecksShown Checked = new(
-        Lines:
+        Groups:
         [
-            new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null),
-            new CheckLine(1, "Account personal", Level.Warn, "Worth looking at", "Lapses in 2 days", "Use it to renew it."),
+            new CheckGroup("claude", "Claude Code",
+            [
+                new CheckLine(0, "Claude Code", Level.Ok, "Passed", "2.1.299", Advice: null, Action: null, Learn: null),
+                new CheckLine(1, "Account personal", Level.Warn, "Worth looking at", "Lapses in 2 days", "Use it to renew it.", Action: null, Learn: null),
+            ]),
         ],
-        Summary: "One thing is worth looking at.", Level: Level.Warn, Checking: false, Checked: "Checked at 09:00", Waiting: null);
+        Summary: "One thing is worth looking at.", Verdict: null, Level: Level.Warn, Checking: false, Checked: "Checked at 09:00",
+        Waiting: null, Report: null);
 
     private static Snapshot With(ulong revision, ChecksShown checks)
     {
@@ -34,7 +38,7 @@ public sealed class MachineViewModelTests
     {
         var (shown, _, _) = Over(Checked);
 
-        Assert.HasCount(2, shown.Lines);
+        Assert.HasCount(2, shown.Groups.Single().Lines);
         Assert.IsTrue(shown.HasSummary);
         Assert.AreEqual("One thing is worth looking at.", shown.Summary);
         Assert.AreEqual(Level.Warn, shown.Level);
@@ -54,14 +58,16 @@ public sealed class MachineViewModelTests
     [TestMethod]
     public void BeforeTheFirstCheckItSaysItIsChecking()
     {
-        var (shown, _, _) = Over(new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…"));
+        var (shown, _, _) = Over(new ChecksShown(
+            Groups: [], Summary: null, Verdict: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this PC…",
+            Report: null));
 
         Assert.IsTrue(shown.Waiting);
         Assert.AreEqual("Checking this PC…", shown.WaitingText);
         Assert.IsFalse(shown.HasSummary);
     }
 
-    // A list told its lines again goes back to its top: checking again leaves them be until they change.
+    // Checks told again go back to the page's top: checking again leaves them be until they change.
     [TestMethod]
     public void CheckingAgainLeavesTheLinesBe()
     {
@@ -74,9 +80,16 @@ public sealed class MachineViewModelTests
         Assert.AreEqual("", shown.Checked);
 
         told.Clear();
-        app.Apply(With(3, Checked with { Lines = [Checked.Lines[0]], Summary = "Everything looks right.", Level = Level.Ok }));
+        app.Apply(With(3, Checked with
+        {
+            Groups = [Checked.Groups[0] with { Lines = [Checked.Groups[0].Lines[0]] }],
+            Summary = "Everything is set up.",
+            Level = Level.Ok,
+            Report = "{}",
+        }));
 
-        Assert.AreEqual("Lines, HasSummary, Summary, Level, Checking, CanCheck, Checked", string.Join(", ", told));
+        Assert.AreEqual(
+            "Groups, HasSummary, Summary, Verdict, Level, Checking, CanCheck, Checked, Report, CanCopyReport", string.Join(", ", told));
         Assert.AreEqual(Level.Ok, shown.Level);
     }
 

@@ -40,18 +40,33 @@ Microsoft's documentation.
   `dev/Templates/Source/ProjectTemplates/Desktop/CSharp/NavigationApp`, read on 16 October
   2026) puts a `TitleBar` with the app's icon and the pane toggle above a `NavigationView`
   under `MicaBackdrop`, extends the content into the title bar, asks for the tall one and calls
-  `AppWindow.SetIcon`. `MainWindow` does the same, so Mica reaches the title bar, and its
-  icon names the window in the title bar and Alt+Tab (`LifecycleTests.TheWindowCarriesPitboardsIcon`).
+  `AppWindow.SetIcon`. `MainWindow` does the same but for the height, so Mica reaches the title
+  bar, and its icon names the window in the title bar and Alt+Tab (`LifecycleTests.TheWindowCarriesPitboardsIcon`).
+  The title bar guidance (read on 25 October 2026) gives the standard title bar 32 px and the
+  tall one to a title bar with a search box or a person picture, which Pitboard's has neither
+  of. WinUI 2.3.9's `Themes/generic.xaml` draws a `TitleBar` 32 epx tall in its `CompactHeight`
+  state and 48 in `ExpandedHeight`, and its back button as the template part `PART_BackButton`,
+  which `PanesTests` presses; its `BackRequested` is a `TypedEventHandler<TitleBar, object>`
+  (`Microsoft.WinUI.dll` metadata). `MainWindowTests.TheTitleBarIsTheStandardHeight` holds the
+  height.
   The PRI file indexes `Pitboard.ico` as `Files/Pitboard.ico` (run 38774669459), which
   `ms-appx:///Pitboard.ico` reads. The template's pages own their titles, in
   `TitleTextBlockStyle` at the top of a Grid padded 24,16,24,16 with 24 between its rows, and
-  the NavigationView page (updated 2 October 2026) recommends 12 epx margins for the content
-  in Minimal and 24 otherwise, and navigates its frame only to a page not shown already. So
+  the NavigationView page (updated 2 October 2026) recommends 24 epx margins for the content
+  outside Minimal, where a LeftCompact pane never goes, and navigates its frame only to a page
+  not shown already. So
   `MainWindow` sets no `Header`: each page carries its title as a Level1 heading, its content
-  24 epx under it and the sides the window sets from `DisplayModeChanged`, whose thicknesses
-  `Styles.xaml` holds, and the lists and the settings' scroll viewer reach the window's edges
-  and pad what they hold, which keeps a scroll bar at the edge. Its pages are kept
-  (`NavigationCacheMode.Required`), with no back stack (`MainWindowTests`).
+  24 epx under it and 24 epx from its sides, which `Styles.xaml` holds, and the lists and the
+  settings' scroll viewer reach the window's edges and pad what they hold, which keeps a scroll
+  bar at the edge. Its pages are kept (`NavigationCacheMode.Required`), with no back stack
+  (`MainWindowTests`).
+- WinUI 2.3.9's `Themes/generic.xaml` sizes a `BreadcrumbBar`'s items by the theme resources
+  `BreadcrumbBarItemThemeFontSize` and `BreadcrumbBarItemFontWeight`, and its chevron by
+  `BreadcrumbBarChevronFontSize` and `BreadcrumbBarChevronPadding`, and its
+  `BreadcrumbBarItemAutomationPeer` implements `IInvokeProvider` (`Microsoft.WinUI.dll`
+  metadata). So `SettingsBreadcrumb` sets them in its own resources to head Diagnostics and
+  Activity at a page title's size, as Windows Settings heads a page under another, and
+  `MainWindowTests` presses its Settings item.
 - `AppWindowTitleBar.PreferredTheme`'s reference gives `Legacy` as its default, and WinUI's
   window class carries no icon. So `WindowChrome` gives every window of Pitboard's
   `UseDefaultAppMode` and the app's icon (`WindowChromeTests`,
@@ -177,12 +192,12 @@ Microsoft's documentation.
 - The code WinUI 2.3.9's XAML compiler writes for a OneWay `x:Bind` function calls it again,
   as a path in its argument changes, only for a value that is not null (`AccountRow.g.cs`,
   `Update_Account_Item_Plan`). So a row the list gave an account without a plan kept the tag
-  of the account before, and a function there takes the account item, which is never null
-  (`AccountRowTests.ARowGivenAnAccountWithoutAPlanHasNoTag`). The same compiler
+  of the account before, and the functions an account's row binds take the account item, which
+  is never null (`AccountsPageTests.ARowGivenAnAccountWithoutAPlanSaysNone`). The same compiler
   stops on WMC9999 where a template's `x:Bind` names both a member of its `x:DataType` and an
   element its page names: it goes to warn and finds no resources for the warning
   (`BindPathListener.ResolveNameOnRoot` in microsoft-ui-xaml's main, read on 16 October 2026).
-  So each page names its title row `PageHeader`, which no template binds.
+  So no page names an element after a member its templates bind.
 - A Selector's `IsSynchronizedWithCurrentItem` is null by default, which keeps its selection on
   a collection view's current item ([Selector.IsSynchronizedWithCurrentItem](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.primitives.selector.issynchronizedwithcurrentitem)).
   The Accounts page groups its rows through a CollectionViewSource, so twoTools opened with a
@@ -216,7 +231,10 @@ Microsoft's documentation.
   so they line up with the rows under them. A `ContentDialog`'s buttons are the template
   parts `PrimaryButton`, `SecondaryButton` and `CloseButton`, with no AutomationId of their
   own, so UI Automation finds each by its part's name, as the UI tests find the InfoBar's
-  `CloseButton` and the command bar's `MoreButton`.
+  `CloseButton` and the command bar's `MoreButton`. A `TeachingTip`'s buttons are the parts
+  `ActionButton` and `CloseButton` in the popup it opens, and it raises `ActionButtonClick` and
+  `CloseButtonClick` (`Microsoft.WinUI.dll` metadata), so the setup tip's choice and Not now are
+  those two, which `Launched.Tip` and `AccountsPageTests` press.
 - `Shell_NotifyIconW` and `NOTIFYICONDATAW` (Microsoft Learn, updated 1 July 2025 and 20
   November 2024): `NIM_SETVERSION` follows every `NIM_ADD`; under `NOTIFYICON_VERSION_4` the
   event is `lParam`'s low word and the point `wParam`'s two words, the icon's upper-left
@@ -231,15 +249,20 @@ Microsoft's documentation.
   return on `TaskbarCreated`.
 - The notification area guidance (updated 15 April 2025) has a right click bring up a normal
   shortcut menu and a left click show what the person expects, the program window among
-  them, and prefers the standard tooltip. Its Windows 7 page (updated 11 March 2025) gives
-  the icon's menu no About command where the program has a window. The Windows 7 menu
-  guidance (updated 26 July 2026) names Exit, puts no ellipsis on Help or Settings, shows a
-  context menu's default command in bold and no shortcut keys, and writes labels in
-  sentence-style capitalization, keeping title style for a legacy program that would
-  otherwise mix styles. So the icon's menu says Exit, bolds Open Pitboard, shows no shortcuts
-  and leaves About to the settings page, and the Windows app writes all its text in sentence
-  case: its own, and the model's buttons, menu items and headings, which `words::titled`
-  words for each system, title case on macOS as Apple's guidelines have it.
+  them, and prefers the standard tooltip. Its Windows 7 page (updated 11 March 2025) puts
+  Open first and in bold and Exit last, removes rather than disables a menu item that does
+  not apply, and gives the icon's menu no About command where the program has a window. The
+  Windows 7 menu guidance (updated 26 July 2026) names Exit, puts no ellipsis on Help or
+  Settings, shows a context menu's default command in bold and no shortcut keys, and writes
+  labels in sentence-style capitalization, keeping title style for a legacy program that
+  would otherwise mix styles. So the icon's menu opens on Open Pitboard in bold and ends
+  with Exit, leaves out Refresh, which the window has, the notices, which the window shows,
+  and a window whose store is still held, shows no shortcuts and leaves About to the
+  settings page (`IconMenuTests`). Its only dimmed rows are the tools' names, since
+  `MenuFlyout` has no heading, and an account while nothing can be done with it, such as
+  during a switch, so the accounts it lists keep their places. The Windows app writes all its
+  text in sentence case: its own, and the model's buttons, menu items and headings, which
+  `words::titled` words for each system, title case on macOS as Apple's guidelines have it.
 - WinUI 2.3.9's `Themes/generic.xaml` draws a `RadioMenuFlyoutItem`'s text in one
   TextBlock that trims, where the macOS menu puts an account's limits on a line under its
   name. So on Windows `AccountItem.menu_title` ends with the figure the menu bar would show
@@ -284,11 +307,24 @@ Microsoft's documentation.
   green in a base icon; the icon shows no title, where the macOS menu bar item shows the
   figure. So the model's `MenuBarText` carries the step of the limit the bar names and
   whether the menu opens on something to look at, and its tooltip as whether it does, which
-  Narrator reads with the icon, then a line for each account in use. `Tray/Plenty.ico`,
+  Narrator reads with the icon, then a line for each account in use. `Tray/*/Plenty.ico`,
   `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16, 20, 24, 32, 40 and 48 px, the
-  sizes `NotificationIconSize` gives up to 300%, light the mark's row in a neutral tone as
-  long as what is left, `None.ico` lights none before a reading, and attention draws the
-  shell's stock `SIID_WARNING` over the bottom right at five eighths of the icon.
+  sizes `NotificationIconSize` gives up to 300%, light the mark's row as long as what is
+  left, `None.ico` lights none before a reading, and attention draws the shell's stock
+  `SIID_WARNING` over the bottom right at five eighths of the icon.
+- Windows' own notification area icons follow the taskbar's light or dark mode. PowerToys'
+  runner (`src/runner/tray_icon.cpp` and `src/common/Themes/theme_helpers.cpp` at
+  da5def38) loads a dark icon or a white one by `SystemUsesLightTheme` under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, light where the
+  value is missing. EarTrumpet (`TaskbarIconSource.cs`, `SystemSettings.cs` and
+  `UI/Themes/Manager.cs` at f492b8fa) reads the same value, colours its icon in
+  `COLOR_WINDOWTEXT` under a contrast theme, and draws again on `WM_SETTINGCHANGE` with
+  `ImmersiveColorSet` or `WindowsThemeElement`. So each drawing is one ink, Fluent's primary
+  text colour on the taskbar it is for, black at 89.4% in `Tray/Light` and white in
+  `Tray/Dark`, `IconPlace.Light` picks by that value or, under a contrast theme, by how dark
+  its text colour is, and `IconImage` loads the other set when `HiddenWindow` hears
+  `WM_SETTINGCHANGE` and the pick has changed (`IconImageTests`). How the icon looks on each
+  taskbar is seen by hand.
   `DrawIconEx` blends into a 32-bit DIB premultiplied, and an icon's pixels are
   straight, so `Shell.NotificationIcon` straightens them before `CreateIconIndirect`
   (`IconImageTests.AttentionPutsTheStandardWarningOverTheBottomRight`, which compares the
@@ -322,7 +358,10 @@ Microsoft's documentation.
   (`SettingsCardAutomationPeer.cs`), and WinUI 2.3.9's `ButtonBaseAutomationPeer` implements
   no `IInvokeProvider` (`Microsoft.WinUI.dll` metadata), so UI Automation could not press it:
   the page copies through a Copy button, as Settings > System > About copies its
-  specifications, and links through HyperlinkButtons. `ControlSizeTrigger` is active while
+  specifications, and links through HyperlinkButtons. Troubleshoot's cards to Diagnostics and
+  Activity are clickable, as Windows Settings draws a card that opens a page of its
+  own, and take Enter and Space as a button does, so the UI tests open them from the keyboard
+  (`Launched.OpenFromSettings`). `ControlSizeTrigger` is active while
   `MinWidth <= ActualWidth < MaxWidth` of an element it names (`ControlSizeTrigger.cs`), the
   trigger SettingsCard wraps its own content with; AdaptiveTrigger reads the window's width
   instead, so the Activity page stacks its changes by its own width with it.

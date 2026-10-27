@@ -31,6 +31,7 @@
 
 mod accounts;
 mod app_words;
+mod checks;
 mod glance;
 mod machine;
 pub(crate) mod next;
@@ -50,13 +51,13 @@ pub use app_words::{
     already_there, app_words, install_update, links_to, named_version, path_too_long,
     ready_to_install, webview_runtime_too_old,
 };
+pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
 pub(crate) use glance::{glance, id as glance_id};
 pub use machine::{
-    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CheckLine, ChecksShown,
-    CommandLineShown, EmptyList, MachineShown, ScheduleShown, TermsShown, WarmAccountShown,
-    WarmShown,
+    ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
+    MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
 };
 pub use removal::RemovalShown;
 pub use sheets::check_name;
@@ -149,8 +150,7 @@ pub struct AccountItem {
     pub email_line: Option<String>,
     /// The plan its login says it is on, as the window's tag beside its name: "Team 5x".
     pub plan: Option<String>,
-    /// Its title as the menu says it, with its plan: "work · Team 5x", and on Windows the
-    /// figure the menu bar would show of it: "work · Team 5x · 64%".
+    // "work" on macOS; on Windows its figure or why it can't be switched to: "work (42%)"
     pub menu_title: String,
     /// The row as VoiceOver reads it as one thing: "work (Codex), in use".
     pub spoken: String,
@@ -234,7 +234,7 @@ pub struct AccountDetail {
     pub plan: Option<String>,
     // when its parked login stops working, for an account not in use
     pub signed_in_until: Option<i64>,
-    // "In Use", "Saved sign-in valid until Nov 20, 2026 at 3:45 PM", "Sign-in expired"
+    // "In use", "Saved sign-in valid until Nov 20", "Sign-in expired"
     pub sign_in: Option<String>,
     // for a Claude Code account Pitboard can warm up
     pub warm: Option<WarmDetail>,
@@ -251,6 +251,8 @@ pub struct WarmDetail {
     pub next_at: Option<i64>,
     // when its five-hour period ends, while one runs
     pub running_until: Option<i64>,
+    // "Warm-Up Settings…", to its hours and its toggle
+    pub settings: Choice,
 }
 
 // From an account's menu, its detail or one of its notes.
@@ -372,6 +374,22 @@ pub struct Question {
     pub message: String,
     /// What the button that does it says: "Remove", "Cancel Switch".
     pub confirm: String,
+    // only Remove's, as plan 4.4 has it
+    pub destructive: bool,
+    // Return answers it; Uninstall's is read first, as Apple's alerts guide asks
+    pub confirm_is_default: bool,
+}
+
+impl Question {
+    pub(crate) fn asking(title: String, message: String, confirm: String) -> Question {
+        Question {
+            title,
+            message,
+            confirm,
+            destructive: false,
+            confirm_is_default: true,
+        }
+    }
 }
 
 /// A question the window asks by itself, with what each answer sends. The model takes either
@@ -449,6 +467,8 @@ pub struct MenuNotices {
     pub install: Option<MenuEntry>,
     /// Advice, as items that switch, and an add left halfway, as its way on and its way back.
     pub switches: Vec<MenuEntry>,
+    // "Sign In to old Again…", for each account that needs it
+    pub sign_ins: Vec<MenuEntry>,
     /// Everything else to know about that is more than a note, as one item.
     pub others: Option<MenuEntry>,
 }
@@ -584,11 +604,8 @@ pub struct SheetText {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct StowText {
     pub title: String,
-    /// What putting it away is for.
+    // one sentence: what Clean Up does, and once it has looked, with what the file holds
     pub message: String,
-    /// What the look found, a paragraph each. Empty while it looks, and where it could not
-    /// look, which the sheet's failure says.
-    pub lines: Vec<String>,
     /// What the sheet says while it looks: "Finding out whose sign-in it is…".
     pub looking: Option<String>,
     /// What its default button says: "Clean Up".
@@ -730,9 +747,8 @@ impl<'a> Seen<'a> {
         clock_of(self.local, at, self.now)
     }
 
-    // A moment as the person's calendar and clock say it, or in UTC where they can't.
-    pub(crate) fn date_and_time_of(&self, at: i64) -> String {
-        (self.local.date_and_time(at)).unwrap_or_else(|_| words::utc_clock(at, self.now))
+    pub(crate) fn date_of(&self, at: i64) -> String {
+        (self.local.date(at)).unwrap_or_else(|_| words::utc_date(at))
     }
 
     pub(crate) fn time_of_day(&self, minutes: u16) -> Option<String> {
@@ -1037,6 +1053,18 @@ mod tests {
         assert_eq!(seen.clock(MIDDAY + 3 * 86_400), "Sat 12:00 UTC");
     }
 
+    // A day is the person's calendar's, and UTC's, named so, where the app's code can't say it.
+    #[test]
+    fn a_date_is_the_persons_or_utcs_named_so() {
+        let state = State::new(Cadence::APP);
+        let at = MIDDAY + 37 * 86_400;
+        assert_eq!(Seen::new(&state, MIDDAY, &Utc, OS).date_of(at), "Feb 20");
+        assert_eq!(
+            Seen::new(&state, MIDDAY, &Unreadable, OS).date_of(at),
+            "Feb 20 UTC"
+        );
+    }
+
     /// The log keeps local time with its offset. The same moment written in three time zones
     /// is one moment, said as the person's own calendar and clock say it, and text that is
     /// not a time is said as the log keeps it, as is a time the app's own code cannot say.
@@ -1063,6 +1091,37 @@ mod tests {
             unreadable.date_and_time("2026-09-27T14:05:09+07:00"),
             "2026-09-27T14:05:09+07:00"
         );
+    }
+
+    // Plan 4.4: the verb answers Return, red only on Remove; Uninstall asks to be read first.
+    #[test]
+    fn only_removes_answer_is_destructive_and_only_uninstall_has_no_default() {
+        use crate::present::testing::{account, claude_code, read, status};
+        let accounts = vec![
+            account(Some("work")).signed_in().build(),
+            account(Some("spare")).build(),
+        ];
+        let mut state = read(status(accounts, Vec::new()), vec![claude_code()]);
+        state.stuck = true;
+        let shown = present_on(Os::MacOs, &state, MIDDAY, &Utc);
+        let seen = Seen::new(&state, MIDDAY, &Utc, Os::MacOs);
+        let asked = |question: &Question| (question.destructive, question.confirm_is_default);
+        let remove = (shown.sections[0].accounts[1].actions.iter())
+            .find(|action| action.kind == ActionKind::Remove)
+            .and_then(|action| action.confirm.clone())
+            .expect("spare may be removed");
+        assert_eq!(asked(&remove), (true, true));
+        let cancel = (shown.notices.iter())
+            .flat_map(|notice| &notice.actions)
+            .find_map(|action| action.confirm.clone())
+            .expect("Cancel Switch asks");
+        assert_eq!(asked(&cancel), (false, true));
+        let replace = sheets::replace_question(&seen, "claude/spare", "Anthropic refuses it.");
+        assert_eq!(asked(&replace.question), (false, true));
+        let quit = downloads_quit_question(1).expect("a download runs");
+        assert_eq!(asked(&quit), (false, true));
+        let uninstall = shown.uninstall.confirm.expect("Uninstall asks");
+        assert_eq!(asked(&uninstall), (false, false));
     }
 
     #[test]

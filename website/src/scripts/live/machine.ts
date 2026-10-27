@@ -1,6 +1,6 @@
-// This Mac and This PC (answer 4 a): a check takes as long as a read, and finds what `pitboard
-// doctor` finds as the state stands.
-// departs from the apps: This PC stays on its spinner
+// This Mac and Windows' Diagnostics (answer 4 a): a check takes as long as a read, and finds what
+// `pitboard doctor` finds as the state stands.
+// departs from the apps: Diagnostics stays on its spinner
 import doctor from "../../../../crates/pitboard/src/render/snapshots/pitboard__render__doctor__tests__doctor_on_a_healthy_mac.snap?raw";
 import { attr, cloned, shown, text } from "./draw.ts";
 import { TAKES_MS, model, type State } from "../../lib/model.ts";
@@ -29,7 +29,10 @@ export class MachinePane {
     }
     if (this.system === "windows") {
       this.checking = true;
-      attr(this.panel.querySelector('[data-does="check"]'), "disabled", "");
+      for (const held of this.panel.querySelectorAll(
+        '[data-does="check"], [data-does="copy-report"]',
+      ))
+        attr(held, "disabled", "");
       return;
     }
     this.#checks(s);

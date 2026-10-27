@@ -89,7 +89,7 @@ public sealed class SparkleUpdatesTests
         var updates = Made(sparkle);
 
         Assert.IsFalse(updates.Available);
-        Assert.AreEqual(NoUpdates.BadKey, updates.Refusal);
+        Assert.AreEqual(Words.Settings.UpdateKeyInvalid, updates.Refusal);
         Assert.IsFalse(sparkle.Started);
     }
 
@@ -99,7 +99,7 @@ public sealed class SparkleUpdatesTests
     {
         var updates = SparkleUpdates.For(Build.Release, "not a key", "1.0.0", DataFolder(), _ => true, () => Task.FromResult(true), () => { });
 
-        Assert.AreEqual(NoUpdates.BadKey, updates.Refusal);
+        Assert.AreEqual(Words.Settings.UpdateKeyInvalid, updates.Refusal);
         Assert.AreEqual(0, new WinSparkle().SetKey(Convert.ToBase64String(new byte[31])));
         Assert.AreEqual(1, new WinSparkle().SetKey(Key));
     }
@@ -164,7 +164,7 @@ public sealed class SparkleUpdatesTests
 
         Assert.IsFalse(sparkle.Started, "WinSparkle checks on its own");
         Assert.IsFalse(updates.Available);
-        Assert.AreEqual(SparkleUpdates.NoFeed, updates.Refusal);
+        Assert.AreEqual(Words.Settings.NoReleaseToUpdateTo, updates.Refusal);
         Assert.IsFalse(updates.ChecksAutomatically);
         Assert.AreEqual(0, sparkle.Checks);
         Assert.AreEqual(1, changes);

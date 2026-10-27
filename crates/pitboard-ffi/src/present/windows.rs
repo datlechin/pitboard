@@ -387,9 +387,5 @@ pub fn downloads_quit_question(running: u32) -> Option<Question> {
         return None;
     }
     let (title, message, confirm) = words::quit_with_downloads(OS, running);
-    Some(Question {
-        title,
-        message: message.into(),
-        confirm: confirm.into(),
-    })
+    Some(Question::asking(title, message.into(), confirm.into()))
 }

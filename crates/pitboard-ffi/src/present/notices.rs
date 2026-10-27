@@ -174,6 +174,29 @@ fn mark(message: &str) -> String {
     format!("{hash:016x}")
 }
 
+// Each tool whose switch in its app waits, with its program; their own notices are left out:
+// every change they offer waits for the switch that didn't finish.
+fn moving<'a>(seen: &'a Seen) -> Vec<(String, &'a str)> {
+    let mut moving: Vec<(String, &str)> = Vec::new();
+    let waiting = (seen.state.warnings.iter()).filter(|warning| warning.code == "move_waiting");
+    for tool in waiting.filter_map(|warning| warning.provider.as_deref()) {
+        let name = seen.tool_name(tool);
+        if !moving.iter().any(|(named, _)| *named == name) {
+            moving.push((name, seen.program_of(tool)));
+        }
+    }
+    moving
+}
+
+// Asked before a switch that didn't finish is cancelled, from its notice or its check.
+pub(crate) fn cancel_stuck_question(seen: &Seen) -> Question {
+    Question::asking(
+        words::CANCEL_SWITCH_QUESTION.into(),
+        words::cancel_stuck(&moving(seen)),
+        words::cancel_switch(seen.os, false),
+    )
+}
+
 /// Everything to tell somebody, the most pressing first: what stops Pitboard working, then
 /// accounts that ran out, then what the last switch of each tool said, then any warning the
 /// last read or change carried, then what is only worth knowing.
@@ -184,18 +207,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         let reason = seen
             .problem()
             .map_or_else(|| words::switch_waits_for(&seen.services()), str::to_owned);
-        // Their own notices are left out: every change they offer waits for this switch.
-        let mut moving: Vec<(String, &str)> = Vec::new();
-        let waiting = state
-            .warnings
-            .iter()
-            .filter(|warning| warning.code == "move_waiting");
-        for tool in waiting.filter_map(|warning| warning.provider.as_deref()) {
-            let name = seen.tool_name(tool);
-            if !moving.iter().any(|(named, _)| *named == name) {
-                moving.push((name, seen.program_of(tool)));
-            }
-        }
+        let moving = moving(seen);
         let mut lines = vec![reason, words::CANCELLING_KEEPS_SIGN_INS.into()];
         lines.extend(
             moving
@@ -213,11 +225,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
                 dismisses: false,
                 switches: false,
                 enabled: true,
-                confirm: Some(Question {
-                    title: words::CANCEL_SWITCH_QUESTION.into(),
-                    message: words::cancel_stuck(&moving),
-                    confirm: words::cancel_switch(seen.os, false),
-                }),
+                confirm: Some(cancel_stuck_question(seen)),
             }],
         ));
     } else if let Some(problem) = seen.problem()
@@ -329,10 +337,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             "stowed".into(),
             Severity::Info,
             words::CLEANED_UP.into(),
-            words::cleaned_up_lines(seen.os, stowed)
-                .iter()
-                .map(|line| words::typeset(line))
-                .collect(),
+            vec![words::cleaned_up(stowed)],
             vec![dismiss(Intent::DismissStowed)],
         ));
     }
@@ -428,11 +433,11 @@ fn in_app_actions(seen: &Seen, provider: &str, code: &str) -> Vec<NoticeAction> 
             dismisses: false,
             switches: false,
             enabled: true,
-            confirm: Some(Question {
-                title: words::CANCEL_MOVE_QUESTION.into(),
-                message: words::cancel_move(app),
-                confirm: words::cancel_switch(seen.os, false),
-            }),
+            confirm: Some(Question::asking(
+                words::CANCEL_MOVE_QUESTION.into(),
+                words::cancel_move(app),
+                words::cancel_switch(seen.os, false),
+            )),
         });
     }
     actions
@@ -611,7 +616,7 @@ pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
             symbol: "arrow.uturn.backward".into(),
         },
         NotificationButtonKind {
-            title: words::sign_in_again(OS, false),
+            title: words::sign_in_again_button(OS),
             opens_window: true,
             symbol: "person.crop.circle".into(),
         },
@@ -706,7 +711,7 @@ pub(crate) fn standing_notice(warning: &Warning, again: Option<&str>) -> RunOutN
     RunOutNotice {
         button: again.and_then(|qualified| {
             button(
-                words::sign_in_again(OS, false),
+                words::sign_in_again_button(OS),
                 &Clicked::SignInAgain(qualified.to_owned()),
             )
         }),
@@ -726,7 +731,7 @@ pub(crate) fn unusable_notice(account: &Account) -> RunOutNotice {
     RunOutNotice {
         button: account.qualified.as_ref().and_then(|qualified| {
             button(
-                words::sign_in_again(OS, false),
+                words::sign_in_again_button(OS),
                 &Clicked::SignInAgain(qualified.clone()),
             )
         }),
@@ -811,7 +816,28 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             enabled: true,
         }
     });
+    let sign_ins = (seen.accounts().iter())
+        .filter(|account| super::needs_sign_in(account))
+        .filter_map(|account| {
+            let label = account.label.clone()?;
+            Some(MenuEntry {
+                title: words::sign_in_to_again(seen.os, &seen.name_of(account), true),
+                subtitle: Some(words::sign_in_standing(account.standing).into()),
+                help: None,
+                severity: None,
+                intent: Some(Intent::PresentSheet {
+                    sheet: Sheet::SignInAgain {
+                        provider: account.provider.clone(),
+                        label,
+                    },
+                }),
+                link: None,
+                enabled: !seen.state.sign_in_under_way(),
+            })
+        })
+        .collect();
     MenuNotices {
+        sign_ins,
         install: (*footing == Footing::NoClaudeCode).then(|| MenuEntry {
             title: words::claude_code_not_installed(seen.os),
             subtitle: Some(words::LEARN_TO_INSTALL.into()),

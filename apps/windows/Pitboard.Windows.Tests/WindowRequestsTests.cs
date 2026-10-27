@@ -17,32 +17,18 @@ public sealed class WindowRequestsTests
         Assert.IsFalse(requests.Opens(new WindowRequest(2, null)), "an older one");
     }
 
-    // Opened again some other way, the window stays on the pane it was left on.
+    // Opened again some other way, the window stays where it was left.
     [TestMethod]
-    public void TheWindowShowsThePaneItIsAskedForOnce()
+    public void TheWindowShowsThePlaceItIsAskedForOnce()
     {
         var requests = new WindowRequests();
-        var notice = new WindowRequest(1, new Place.Accounts());
+        var notice = new WindowRequest(1, new Place.Checks());
 
-        Assert.AreEqual(Pane.Accounts, requests.PaneFor(notice, Pane.Checks).Pane);
-        Assert.AreEqual(Pane.Activity, requests.PaneFor(notice, Pane.Activity).Pane, "answered already");
-        Assert.AreEqual(Pane.Activity, requests.PaneFor(new WindowRequest(2, null), Pane.Activity).Pane);
-        Assert.AreEqual(Pane.Checks, requests.PaneFor(new WindowRequest(3, new Place.Checks()), Pane.Activity).Pane);
-        Assert.AreEqual(Pane.Activity, requests.PaneFor(new WindowRequest(4, new Place.Activity()), null).Pane);
-        Assert.AreEqual(Pane.Accounts, requests.PaneFor(new WindowRequest(5, new Place.Welcome()), null).Pane, "no welcome yet");
-        Assert.IsNull(requests.PaneFor(new WindowRequest(6, null), null).Pane, "the settings page");
-    }
-
-    // What switching or warming up by itself came to is said beside its setting, under Limits.
-    [TestMethod]
-    public void ARequestForTheSettingsShowsTheSettingsPageOnItsSection()
-    {
-        var requests = new WindowRequests();
-        var limits = new WindowRequest(1, new Place.Settings(SettingsSection.Limits));
-
-        Assert.AreEqual((null, true), requests.PaneFor(limits, Pane.Accounts));
-        Assert.AreEqual((Pane.Accounts, false), requests.PaneFor(limits, Pane.Accounts), "answered already");
-        Assert.AreEqual((null, false), requests.PaneFor(new WindowRequest(2, new Place.Settings(SettingsSection.General)), Pane.Accounts));
-        Assert.AreEqual((null, false), requests.PaneFor(new WindowRequest(3, null), null), "the settings page as it was left");
+        Assert.AreEqual(new Place.Checks(), requests.PlaceFor(notice));
+        Assert.IsNull(requests.PlaceFor(notice), "answered already");
+        Assert.IsNull(requests.PlaceFor(new WindowRequest(2, null)), "the window as it was left");
+        Assert.AreEqual(new Place.Activity(), requests.PlaceFor(new WindowRequest(3, new Place.Activity())));
+        Assert.AreEqual(
+            new Place.Settings(SettingsSection.Limits), requests.PlaceFor(new WindowRequest(4, new Place.Settings(SettingsSection.Limits))));
     }
 }

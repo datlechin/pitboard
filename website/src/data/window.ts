@@ -51,9 +51,9 @@ export const removeTitle = (a: Account, w: World, system: System) =>
   `Remove “${nameOf(a, w, system)}”?`;
 export function removeMessage(a: Account, system: System): string {
   if (a.tool === "desktop")
-    return "Pitboard deletes this account’s saved sign-in and the folders it kept for it. Using it again needs a sign-in in Claude.";
+    return "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again needs a sign-in in Claude.";
   const machine = system === "windows" ? "this PC" : "this Mac";
-  return `Pitboard deletes this account’s saved sign-in, and everything its ${siteOf(a.tool)} window keeps on ${machine}, its sign-in included. Using it again needs a sign-in in your browser.`;
+  return `Pitboard deletes its saved sign-in and what its ${siteOf(a.tool)} window keeps on ${machine}, so using it again needs a sign-in in your browser.`;
 }
 export const REMOVE = "Remove";
 export const CANCEL = "Cancel";

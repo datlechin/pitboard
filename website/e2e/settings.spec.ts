@@ -180,8 +180,8 @@ test.describe("Windows", () => {
     await expect(fig.locator("[data-standing]")).toHaveText(watching);
     await page.keyboard.press("Home");
     await expect(chosen(box)).toHaveText("Do nothing");
-    await expect(page.locator("#auto-win-share")).toBeDisabled();
-    await expect(fig.locator("[data-share-card]")).toHaveAttribute("data-state", "off");
+    // At shows only while something happens at the share
+    await expect(fig.locator("[data-share-card]")).toBeHidden();
     await page.keyboard.press("Alt+ArrowDown");
     await expect(page.locator("#auto-win-choices")).toBeVisible();
     await page.keyboard.press("ArrowDown");
@@ -234,6 +234,8 @@ test.describe("Windows", () => {
     const tall = await height(fig);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // the clock's next tick draws the figure again
+    await page.clock.runFor(1000);
     await expect(page.locator("#auto-win-items")).toBeHidden();
     expect(await height(fig)).toBe(tall);
     await fig.getByText("When a limit reaches", { exact: true }).click();

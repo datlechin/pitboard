@@ -6,7 +6,7 @@ import XCTest
 // before it asserts what it read.
 final class SiteFiguresTests: FixtureTestCase {
     private static let statusMenu = [
-        "Claude Code", "work", "old", "personal", "Codex", "main · Pro", "spare · Pro",
+        "Claude Code", "work", "old", "personal", "Codex", "main", "spare",
         "Add Account…", "Refresh", "Open claude.ai", "Open chatgpt.com", "Open Pitboard",
         "Settings…", "About Pitboard", "Pitboard Help", "Quit Pitboard",
     ]
@@ -29,7 +29,7 @@ final class SiteFiguresTests: FixtureTestCase {
         keep(menu, as: "site-status-menu")
         keep(XCUIScreen.main.screenshot(), as: "site-status-menu-screen")
         XCTAssertTrue(highlighted)
-        XCTAssertEqual(item.title, "Pitboard, work 42%, Claude Code")
+        XCTAssertEqual(item.title, "Pitboard, work 42%, Claude Code, needs attention")
         XCTAssertEqual(shown.map(\.title), Self.statusMenu)
         XCTAssertEqual(shown.filter { !$0.enabled }.map(\.title), Self.headings)
     }
@@ -107,7 +107,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let slow = typed("o", then: "p", after: 3)
         record(seen.joined(separator: "\n"), as: "site-status-menu-type-select")
 
-        XCTAssertEqual(spa, "spare · Pro")
+        XCTAssertEqual(spa, "spare")
         XCTAssertEqual(openP, "Open Pitboard")
         XCTAssertEqual(o, "old")
         XCTAssertEqual(subtitle, "old", "a subtitle is not matched")

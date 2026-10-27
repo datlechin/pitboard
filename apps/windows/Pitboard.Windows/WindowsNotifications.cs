@@ -12,15 +12,8 @@ public sealed record NotificationsBlocked(string Why, bool InSettings);
 
 public sealed class WindowsNotifications(Build build, Func<IAppNotifications> system, string icon) : Notifications
 {
+    // What Windows registers the app's notifications under; the probe registers it with no core to ask.
     public const string DisplayName = "Pitboard";
-
-    public const string Unoffered = "Windows offers this process no app notifications.";
-
-    public const string OffForPitboard = "Notifications from Pitboard are turned off in Settings > System > Notifications.";
-
-    public const string OffForEveryApp = "Notifications are turned off for every app in Settings > System > Notifications.";
-
-    public const string OffByPolicy = "Group Policy turns off app notifications on this PC.";
 
     public const string IconFile = "Pitboard.ico";
 
@@ -29,11 +22,12 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     private readonly Lock _lock = new();
     private IAppNotifications? _registered;
 
-    // Why nothing is posted, once Start has asked.
+    // Why Windows refused to register them, once Start has asked. A Debug build registers nothing and says nothing of
+    // it, or its settings would say it in the docs' pictures.
     public string? Off { get; private set; }
 
-    // A Debug build's own off is no refusal: its settings would say it in the docs' pictures.
-    public string? Refusal => build is Build.Debug ? null : Off;
+    // Windows offers this process no notifications at all; the settings say so in the model's words.
+    public bool Unoffered { get; private set; }
 
     // Register takes the icon as a file, which Pitboard.exe carries beside it.
     public static WindowsNotifications For(Build build, string folder) =>
@@ -44,7 +38,6 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     {
         if (build is Build.Debug)
         {
-            Off = "A Debug build posts no notifications.";
             return null;
         }
 
@@ -53,7 +46,7 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
         {
             if (!notifications.IsSupported())
             {
-                Off = Unoffered;
+                Unoffered = true;
                 return null;
             }
 
@@ -104,9 +97,14 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     // At each settings visit, since the person turns them off and on in Settings while Pitboard runs.
     public NotificationsBlocked? Read()
     {
-        if (Refusal is { } refusal)
+        if (Unoffered)
         {
-            return new(refusal, InSettings: false);
+            return Blocked(AppNotificationSetting.Unsupported);
+        }
+
+        if (Off is { } off)
+        {
+            return new(off, InSettings: false);
         }
 
         IAppNotifications? registered;
@@ -129,10 +127,10 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     public static NotificationsBlocked? Blocked(AppNotificationSetting setting) => setting switch
     {
         AppNotificationSetting.Enabled => null,
-        AppNotificationSetting.DisabledForApplication => new(OffForPitboard, InSettings: true),
-        AppNotificationSetting.DisabledForUser => new(OffForEveryApp, InSettings: true),
-        AppNotificationSetting.DisabledByGroupPolicy => new(OffByPolicy, InSettings: false),
-        _ => new(Unoffered, InSettings: false),
+        AppNotificationSetting.DisabledForApplication => new(Words.Settings.NotificationsOff, InSettings: true),
+        AppNotificationSetting.DisabledForUser => new(Words.Settings.NotificationsOffForEveryApp!, InSettings: true),
+        AppNotificationSetting.DisabledByGroupPolicy => new(Words.Settings.NotificationsOffByPolicy!, InSettings: false),
+        _ => new(Words.Settings.NotificationsUnoffered!, InSettings: false),
     };
 
     // Before Pitboard exits, so a later click starts it again.

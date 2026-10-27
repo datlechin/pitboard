@@ -121,6 +121,20 @@ fn claude_desktops_checks_say_what_the_index_and_the_settings_say() {
             (Level::Warn, words::NOTHING_PARKED.into()),
         ]
     );
+    let accounts: Vec<Option<&str>> = (checks.iter())
+        .filter(|c| c.code == "desktop_parked_login")
+        .map(|c| c.account.as_deref())
+        .collect();
+    assert_eq!(
+        accounts,
+        [
+            Some("desktop/work"),
+            Some("desktop/home"),
+            Some("desktop/old"),
+            Some("desktop/lost"),
+            Some("desktop/none")
+        ]
+    );
     assert_eq!(
         said(&checks, "desktop_settings"),
         [(Level::Ok, words::SETTINGS_READ.into())]

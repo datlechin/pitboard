@@ -830,7 +830,7 @@ impl Worker {
                 }
             }
             Job::Check => Answer::Checked {
-                checks: core.doctor(self.local_time.as_ref()),
+                doctored: core.doctor(self.local_time.as_ref()),
             },
             Job::ReadLog { limit } => Answer::Logged {
                 changes: core.log(limit),

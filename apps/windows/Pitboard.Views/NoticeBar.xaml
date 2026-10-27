@@ -9,22 +9,26 @@
   <InfoBar x:Name="Bar" IsOpen="True" Closing="OnClosing">
     <StackPanel x:Name="Below" Margin="0,0,0,12" Spacing="8">
       <TextBlock x:Name="CountdownText" />
-      <ItemsControl x:Name="Actions" IsTabStop="False">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" Spacing="8" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="core:NoticeAction">
-            <Button
-                Content="{x:Bind Title}"
-                IsEnabled="{x:Bind Enabled}"
-                AutomationProperties.AutomationId="{x:Bind local:NoticeBar.ActionId(Intent)}"
-                Click="OnAction" />
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ItemsControl x:Name="Actions" IsTabStop="False">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="8" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="core:NoticeAction">
+              <Button
+                  Content="{x:Bind Title}"
+                  IsEnabled="{x:Bind Enabled}"
+                  AutomationProperties.AutomationId="{x:Bind local:NoticeBar.ActionId(Intent)}"
+                  Click="OnAction" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <!-- Where nothing in the app does something about it, the docs that say what to do. -->
+        <HyperlinkButton x:Name="LearnLink" AutomationProperties.AutomationId="notice.learn" Click="OnLearn" />
+      </StackPanel>
     </StackPanel>
   </InfoBar>
 </UserControl>

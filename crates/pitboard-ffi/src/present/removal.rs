@@ -26,9 +26,12 @@ pub(crate) fn uninstall(seen: &Seen) -> ItemOffer {
         intent: Intent::Uninstall,
         enabled: seen.state.may_uninstall(),
         confirm: Some(Question {
-            title: words::UNINSTALL_QUESTION.into(),
-            message: words::UNINSTALL_SAYS.into(),
-            confirm: words::UNINSTALL.into(),
+            confirm_is_default: false,
+            ..Question::asking(
+                words::UNINSTALL_QUESTION.into(),
+                words::UNINSTALL_SAYS.into(),
+                words::UNINSTALL.into(),
+            )
         }),
     }
 }

@@ -21,11 +21,6 @@ struct StowSheet: View {
                         .controlSize(.small)
                         .accessibilityIdentifier("sheet.stowLooking")
                 }
-                ForEach(text?.lines ?? [], id: \.self) { line in
-                    Text(line)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
             if let failure = model.sheetFailure {
                 SheetFailure(failure: failure)

@@ -1,21 +1,22 @@
 ---
 // SettingsPage.xaml from its top, as the window shows it the first time it goes to Settings:
-// General, Limits, Advanced and About, in a release from the MSI (data/settings.ts). Drawn once as
-// a template every window that draws no Settings of its own clones; its ids start `tpl-`, which
-// the clone makes its own, and its time pickers' flyouts, marked `data-desk`, go to the desk.
+// General, Limits, Advanced, Troubleshoot and About, each setting with its icon, in a release from
+// the MSI (data/settings.ts). Drawn once as a template every window that draws no Settings of its
+// own clones; its ids start `tpl-`, which the clone makes its own, and its time pickers' flyouts,
+// marked `data-desk`, go to the desk.
 import Button from "./Button.astro";
 import LimitsSections from "./LimitsSections.astro";
 import Toggle from "./Toggle.astro";
-import { settingsPage as page } from "../../../data/windows.ts";
+import { TROUBLESHOOT, settingsPage as page, subpages } from "../../../data/windows.ts";
 import {
   commandLine,
-  inTerminal,
   isBeta,
   named,
   renew,
   renewalAbout,
   updateNote,
   winAbout,
+  winAdvanced,
   winGeneral,
 } from "../../../data/settings.ts";
 
@@ -30,8 +31,9 @@ const card =
 const toggle =
   "group/toggle flex size-32 shrink-0 items-center justify-center rounded-u-4 focus-win live:hover:bg-win-subtle";
 const chevron = "size-12 transition-transform group-aria-[expanded=false]/toggle:rotate-180";
-// a beta while no full release is out: nothing to check for, and why
+// a beta while no full release is out: nothing to check for, and why, and no automatic checks
 const notes = isBeta(version) ? [winGeneral.noFeed, winGeneral.betaNote] : [];
+const icon = "size-20 shrink-0";
 ---
 
 <div class="flex h-full flex-col">
@@ -39,12 +41,23 @@ const notes = isBeta(version) ? [winGeneral.noFeed, winGeneral.betaNote] : [];
   <div class="mt-24 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-24 pb-24">
     <div class={head}>{winGeneral.section}</div>
     <div class={card}>
-      <span class="min-w-0 flex-1" id="tpl-start">{winGeneral.startAtSignIn}</span>
+      <svg class={icon} aria-hidden="true"><use href="#fl-power"></use></svg>
+      <span class="min-w-0 flex-1">
+        <span class="block" id="tpl-start">{winGeneral.startAtSignIn}</span>
+        <span class={caption}>{winGeneral.startNote}</span>
+      </span>
       <Toggle aria-labelledby="tpl-start" data-setting="login" />
     </div>
-    <div class={card}>
+    {notes.length === 0 && <div class={card}>
+      <svg class={icon} aria-hidden="true"><use href="#fl-arrow-sync"></use></svg>
+      <span class="min-w-0 flex-1" id="tpl-checks">{winGeneral.checksAutomatically}</span>
+      <Toggle on aria-labelledby="tpl-checks" data-setting="updates" />
+    </div>}
+    {/* named, as Narrator reads a card with a button in it by its own name (SettingsPage.xaml) */}
+    <div class={card} role="group" aria-labelledby="tpl-version">
+      <svg class={icon} aria-hidden="true"><use href="#fl-info"></use></svg>
       <span class="min-w-0 flex-1">
-        <span class="block">{winGeneral.checkFor}</span>
+        <span class="block" id="tpl-version">{winGeneral.version}</span>
         <span class={caption}>{named(version)}</span>
         {notes.map((n) => <span class={caption}>{n}</span>)}
       </span>
@@ -52,23 +65,57 @@ const notes = isBeta(version) ? [winGeneral.noFeed, winGeneral.betaNote] : [];
     </div>
     <div class:list={[head, "mt-30"]}>{page.section}</div>
     <LimitsSections prefix="tpl" show="both" />
-    <div class:list={[head, "mt-30"]}>Advanced</div>
+    <div class:list={[head, "mt-30"]}>{winAdvanced.section}</div>
     <div class={card}>
-      <span class="min-w-0 flex-1" id="tpl-renew">
-        <span class="block">{renew.windows}</span>
+      <svg class={icon} aria-hidden="true"><use href="#fl-key"></use></svg>
+      <span class="min-w-0 flex-1">
+        <span class="block" id="tpl-renew">{renew.windows}</span>
         <span class={caption}>{renewalAbout("windows")}</span>
       </span>
       <Toggle aria-labelledby="tpl-renew" data-setting="renew" />
     </div>
-    <div class:list={[card, "flex-col items-start gap-4"]}>
-      <span class="block">{inTerminal}</span>
-      <span class={caption}>{updateNote}</span>
-      <span class="select-text">{commandLine.windows}</span>
+    <div class={card}>
+      <svg class={icon} aria-hidden="true"><use href="#fl-console"></use></svg>
+      <span class="min-w-0 flex-1">
+        <span class="block">{winAdvanced.commandLine}</span>
+        <span class:list={[caption, "select-text"]}>{commandLine.windows}</span>
+        <span class={caption}>{updateNote}</span>
+      </span>
     </div>
+    <div class={card} role="group" aria-labelledby="tpl-uninstall">
+      <svg class={icon} aria-hidden="true"><use href="#fl-delete"></use></svg>
+      <span class="min-w-0 flex-1">
+        <span class="block" id="tpl-uninstall">{winAdvanced.uninstall.title}</span>
+        <span class={caption}>{winAdvanced.uninstall.note}</span>
+      </span>
+      <Button data-setting="uninstall">{winAdvanced.uninstall.button}</Button>
+    </div>
+    {/* As Windows Settings keeps Troubleshoot: a clickable card for each page under Settings */}
+    <div class:list={[head, "mt-30"]}>{TROUBLESHOOT}</div>
+    {subpages.map(([pane, title, icon, about]) => <button
+      class:list={[
+        card,
+        "w-full text-left focus-win live:cursor-default live:hover:bg-win-control-2",
+      ]}
+      type="button"
+      aria-describedby={`tpl-${pane}-about`}
+      data-does="show"
+      data-page={pane}
+    >
+      <svg class="size-20 shrink-0" aria-hidden="true"><use href={`#${icon}`}></use></svg>
+      <span class="min-w-0 flex-1">
+        <span class="block">{title}</span>
+        <span class={caption} id={`tpl-${pane}-about`}>{about}</span>
+      </span>
+      <svg class="size-12 shrink-0" aria-hidden="true"><use href="#fl-chevron-right"></use></svg>
+    </button>)}
     <div class:list={[head, "mt-30"]}>{winAbout.section}</div>
     <div class={card} data-header>
       <img class="size-20" src="/icon-192.png" alt="" width="20" height="20" />
-      <span class="min-w-0 flex-1">{winAbout.header}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block">{winAbout.header}</span>
+        <span class={caption}>{winAbout.copyright}</span>
+      </span>
       <span class="text-win-text-2 select-text">{version}</span>
       <button
         class={toggle}

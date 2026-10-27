@@ -1,9 +1,10 @@
 ---
 // The icon's MenuFlyout as IconMenuFlyout.cs builds it from IconMenu.cs, on its narrow padding, with
-// a menu's roles: a group per tool headed by a disabled item, as WinUI shows the heading. With
+// a menu's roles: a group per tool headed by a disabled item, as WinUI shows the heading, each
+// following the one before with no separator. With
 // `live`, the moment after the switch is the one live/tray.ts keeps to the state, and every node a
 // state shows is drawn: each site's single item, and a template for an account a visitor adds.
-import { iconMenu, sites, type MenuEntry } from "../../../data/windows.ts";
+import { iconMenu, joinsTheGroupBefore, sites, type MenuEntry } from "../../../data/windows.ts";
 import { account, moments, type Moment, type Tool } from "../../../data/world.ts";
 import { toolsOn } from "../../../lib/words.ts";
 
@@ -39,8 +40,9 @@ const works =
 const picked = (e: MenuEntry, moment: Moment) =>
   demo && moment === "before" && "account" in e && e.label === "work";
 const open = (e: MenuEntry) => submenu !== undefined && "site" in e && e.site === submenu;
-// each tool's group comes first, in the order the tools are listed
-const groupTool = (i: number): Tool | undefined => toolsOn("windows")[i]?.[0];
+// a tool's group, by the name it is headed with
+const toolNamed = (name: string): Tool | undefined =>
+  toolsOn("windows").find(([, shown]) => shown === name)?.[0];
 const siteTool = (site: string) => sites.find(([s]) => s === site)![1];
 const tip = (key: string) => `${prefix}-tip-${key}`;
 ---
@@ -64,17 +66,20 @@ const tip = (key: string) => `${prefix}-tip-${key}`;
     ]}
     data-moment={live ? moment : undefined}
   >
-    {iconMenu(moments[moment], updates).map((group, i) => {
+    {iconMenu(moments[moment], updates).map((group, i, groups) => {
       const heading = group.find((e) => "heading" in e);
+      const tool = heading && "heading" in heading ? toolNamed(heading.heading) : undefined;
       const id = heading && `${prefix}-${moment}-${i}`;
       const own = live && moment === "after";
       return (
         <>
-          {i > 0 && <div class="my-1 h-1 bg-win-divider" role="separator" />}
+          {i > 0 && !joinsTheGroupBefore(group, groups[i - 1]) && (
+            <div class="my-1 h-1 bg-win-divider" role="separator" />
+          )}
           <div
             role={id ? "group" : "none"}
             aria-labelledby={id}
-            data-tool={own && heading ? groupTool(i) : undefined}
+            data-tool={own && tool ? tool : undefined}
           >
             {group.map((e) =>
               "heading" in e ? (
@@ -105,11 +110,11 @@ const tip = (key: string) => `${prefix}-tip-${key}`;
                     picked(e, moment)
                       ? `${prefix}-tip`
                       : own
-                        ? tip(account(e.label, groupTool(i)!).id)
+                        ? tip(account(e.label, tool!).id)
                         : undefined
                   }
                   tabindex={own ? "-1" : undefined}
-                  data-account={own ? account(e.label, groupTool(i)!).id : undefined}
+                  data-account={own ? account(e.label, tool!).id : undefined}
                 >
                   <span
                     class="absolute top-1/2 left-14 -mt-2.5 hidden size-5 rounded-circle bg-win-text-2 group-aria-checked/item:block"
@@ -182,7 +187,6 @@ const tip = (key: string) => `${prefix}-tip-${key}`;
                 <div
                   class:list={[row, { "font-semibold": e.bold }, { [works]: own }]}
                   role="menuitem"
-                  aria-describedby={own && e.command === "Refresh" ? tip("refresh") : undefined}
                   tabindex={own ? "-1" : undefined}
                   data-does={own ? e.command : undefined}
                 >

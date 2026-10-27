@@ -31,8 +31,7 @@ final class ScreenshotTests: FixtureTestCase {
         keep(window, as: "macos-checks")
         move(window, to: CGPoint(x: below.maxX + 20 - window.frame.width, y: below.minY - 4))
         app.openMenu()
-        XCTAssertTrue(
-            app.menuItem(Words.inMenu("main", plan: "Pro")).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.menuItem("main").waitForExistence(timeout: 5))
         keep(menu, as: "macos-menu-accounts")
         app.typeKey(.escape, modifierFlags: [])
 

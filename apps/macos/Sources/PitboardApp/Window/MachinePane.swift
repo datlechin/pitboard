@@ -12,7 +12,7 @@ struct MachinePane: View {
         Form {
             Section {
                 // By its place: doctor gives every account's parked login one code.
-                ForEach(checks.lines, id: \.id) { line in
+                ForEach(checks.groups.flatMap(\.lines), id: \.id) { line in
                     CheckRow(line: line)
                         .accessibilityIdentifier("check.\(line.id)")
                 }

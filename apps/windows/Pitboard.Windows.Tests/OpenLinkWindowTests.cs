@@ -112,7 +112,7 @@ public sealed class OpenLinkWindowTests
         var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => Assert.Fail("a window opened"), _ => { }));
         window.Follow(Choose(5, armed: true));
 
-        Views.Press(Views.Button(window.Content, "Cancel"));
+        Views.Press(Views.Button(window.Content, Words.Window.Cancel));
         window.Close();
 
         CollectionAssert.AreEqual(new Intent[] { new Intent.DismissLink(5), new Intent.DismissLink(5) }, sent);
@@ -143,7 +143,7 @@ public sealed class OpenLinkWindowTests
             var texts = Views.Texts(window.Content);
             Assert.Contains("Can’t open this link", texts);
             Assert.Contains("This link is on example.com.", texts);
-            Views.Press(Views.Button(window.Content, "OK"));
+            Views.Press(Views.Button(window.Content, Words.Window.Ok));
             Assert.AreEqual(new Intent.DismissLink(7), sent.Single());
         }
         finally
@@ -240,7 +240,7 @@ public sealed class OpenLinkWindowTests
         var texts = Views.Texts(window.Content);
         Assert.Contains(NoLink.Title, texts);
         Assert.Contains(NoLink.Detail, texts);
-        Views.Press(Views.Button(window.Content, "Close"));
+        Views.Press(Views.Button(window.Content, Words.Window.Close));
         Assert.IsTrue(closed);
         Assert.IsEmpty(sent);
     }

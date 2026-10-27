@@ -563,6 +563,8 @@ pub enum SettingsSection {
     General,
     Limits,
     Advanced,
+    // Limits, opened on the warm-up's hours and its accounts' toggles
+    WarmUp,
 }
 
 // Shown each time `serial` moves; a failure or a question asked from a menu is said in a window.
@@ -730,6 +732,8 @@ pub trait LocalTime: Send + Sync {
     fn date_and_time(&self, epoch: i64) -> Result<String, PlatformError>;
     // `minutes` past midnight, under a day, as the person's clock says it: "06:00", "6:00 AM".
     fn time_of_day(&self, minutes: u16) -> Result<String, PlatformError>;
+    // The day of `epoch`, its month abbreviated and no year: "Nov 20", "20 Nov".
+    fn date(&self, epoch: i64) -> Result<String, PlatformError>;
 }
 
 /// Told of every snapshot, by the app.

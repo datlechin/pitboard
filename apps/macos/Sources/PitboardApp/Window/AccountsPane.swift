@@ -87,6 +87,9 @@ struct AccountsPane: View {
                     .disabled(!retry.enabled)
                     .accessibilityIdentifier("accounts.retry")
             }
+        // The list holds the setup tip, so it stays up with nothing in it until the tip is answered.
+        case .noAccounts where model.setup != nil:
+            list
         case .noAccounts(let title, let detail, let add):
             ContentUnavailableView {
                 Label(title, systemImage: Symbol.accounts)

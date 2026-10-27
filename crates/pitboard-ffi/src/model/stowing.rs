@@ -16,11 +16,6 @@ use std::path::PathBuf;
 
 const FILE: &str = "/Users/dana/.claude/.credentials.json";
 
-// The core's lines, as the app writes them.
-fn typeset(lines: Vec<String>) -> Vec<String> {
-    lines.iter().map(|line| words::typeset(line)).collect()
-}
-
 /// The warning every read gives while the file is behind the keychain, holding `held`.
 fn fallback_login(held: Held) -> crate::Warning {
     crate::Warning {
@@ -120,7 +115,7 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
     assert_eq!(model.count(a_look_left), 1);
     let looking = model.shown().stow_text.expect("the sheet's words");
     assert_eq!(looking.looking.as_deref(), Some(words::FINDING_OUT_WHOSE));
-    assert!(looking.lines.is_empty());
+    assert_eq!(looking.message, words::clean_up_message(OS));
     assert!(!looking.can_confirm);
 
     model.run(&mut machine);
@@ -131,17 +126,10 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
     assert!(!text.saving);
-    let lines = |os| {
-        typeset(words::clean_up_lines(
-            os,
-            &left(Foreseen::Kept(parked_now("work"))),
-        ))
-    };
-    assert_eq!(text.lines, lines(Os::MacOs));
-    assert_eq!(text.message, words::clean_up_message(Os::MacOs));
+    let found = |os| words::clean_up_found(os, &left(Foreseen::Kept(parked_now("work"))));
+    assert_eq!(text.message, found(Os::MacOs));
     let text = model.on_windows().stow_text.expect("the sheet's words");
-    assert_eq!(text.message, words::clean_up_message(Os::Windows));
-    assert_eq!(text.lines, lines(Os::Windows));
+    assert_eq!(text.message, found(Os::Windows));
 }
 
 /// Put Away sends what the sheet showed, which is put away only while the file still holds
@@ -178,7 +166,7 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
         .expect("what it did");
     assert_eq!(notice.severity, Severity::Info);
     assert_eq!(notice.title, words::CLEANED_UP);
-    assert_eq!(notice.lines, typeset(words::cleaned_up_lines(OS, &stowed)));
+    assert_eq!(notice.lines, [words::cleaned_up(&stowed)]);
     assert!(
         shown
             .notices
@@ -214,9 +202,9 @@ fn a_login_of_an_account_not_enrolled_is_not_offered_to_put_away() {
     let text = model.shown().stow_text.expect("the sheet's words");
     assert!(!text.can_confirm);
     assert!(
-        text.lines[0].contains("stranger@example.com"),
+        text.message.contains("stranger@example.com"),
         "{:?}",
-        text.lines
+        text.message
     );
     assert!(model.send(Intent::Stow).is_empty());
 }

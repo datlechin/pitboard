@@ -198,6 +198,12 @@ export const calendarDate = (epoch: number) => {
   return `${weekdaysLong[d.getUTCDay()]} ${d.getUTCDate()} ${monthsLong[d.getUTCMonth()]}`;
 };
 
+// WindowsLocalTime.cs `Date` in en-GB, the culture's day before its month abbreviated: "9 Nov"
+export const dayAndMonth = (epoch: number) => {
+  const d = local(epoch);
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
+};
+
 export const shortDate = (epoch: number) => {
   const d = local(epoch);
   return `${two(d.getUTCDate())}/${two(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
@@ -400,13 +406,14 @@ export const accountSpoken = (a: Account, w: World) =>
 export const switchSpoken = (a: Account) => `Switch to ${a.label}`;
 
 // The icon's tooltip in the notification area: Pitboard, then each account in use with its tool and
-// the line the menu shows under it (present/words.rs `bar_tip`).
+// the line the menu shows under it, going on in lower case after its colon (present/words.rs
+// `bar_tip`).
 export const trayTip = (w: World) =>
   [
     "Pitboard",
     ...(["claude", "codex"] as Tool[]).map((tool) => {
       const a = inUseOf(w, tool);
-      return `${a.label} (${toolName(tool)}): ${menuLine(a, w, "windows")}`;
+      return `${a.label} (${toolName(tool)}): ${uncapitalised(menuLine(a, w, "windows"))}`;
     }),
   ].join("\n");
 
@@ -481,6 +488,14 @@ export function rowLines(a: Account, w: World, warm: string | null): string[] {
         : null;
   return [staleNote(a, w), ended, warm].filter((n): n is string => n !== null);
 }
+
+// An account's one note in the Windows window, its most pressing: what rowLines says but its
+// warm-up, which its details say (present/accounts.rs `notes`).
+export const rowNote = (a: Account, w: World) => rowLines(a, w, null)[0] ?? null;
+
+// present/words.rs `resets_in`, beside a limit's reset in an opened row: "in 2 hr 9 min".
+export const resetsIn = (at: number | null, now: number) =>
+  at !== null && at > now ? `in ${appSpan(at - now)}` : "";
 
 // The world's warm-up note: personal's period runs until its five hours reset.
 export function warmsAgainNote(a: Account): string | null {

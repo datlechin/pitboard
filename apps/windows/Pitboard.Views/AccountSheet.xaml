@@ -3,8 +3,8 @@
     x:Class="Pitboard.Views.AccountSheet"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shown="using:Pitboard.Windows"
     Style="{StaticResource DefaultContentDialogStyle}"
-    CloseButtonText="Cancel"
     AutomationProperties.AutomationId="sheet"
     PrimaryButtonClick="OnPrimaryButtonClick"
     SecondaryButtonClick="OnSecondaryButtonClick"
@@ -17,90 +17,100 @@
     <!-- Lightweight styling of the dialog's template: as wide as it can be whatever it shows, so it keeps one width as the tool changes. -->
     <StaticResource x:Key="ContentDialogMinWidth" ResourceKey="ContentDialogMaxWidth" />
   </ContentDialog.Resources>
-  <!-- The InfoBars stay in the tree while closed, so Narrator hears each as it opens; outside the spaced stack, a closed one takes no room. -->
-  <StackPanel>
-    <ContentControl x:Name="AlertSpace" HorizontalContentAlignment="Stretch" IsTabStop="False" />
-    <StackPanel Spacing="12">
-      <Grid ColumnSpacing="12">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <TextBlock x:Name="Message" TextWrapping="Wrap" />
-        <ProgressRing
-            x:Name="Waiting"
-            Grid.Column="1"
-            Width="20"
-            Height="20"
-            VerticalAlignment="Top"
-            IsActive="False"
-            Visibility="Collapsed" />
-      </Grid>
-      <RadioButtons
-          x:Name="ToolPicker"
-          Header="Tool"
-          AutomationProperties.AutomationId="sheet.tool"
-          SelectionChanged="OnToolChanged" />
-      <StackPanel x:Name="AccountPart">
-        <!-- Labelled as a field's header is, and selectable as read-only text is: Microsoft's text box guidance. -->
-        <TextBlock
-            Text="Account"
-            Margin="{StaticResource TextBoxTopHeaderMargin}"
-            Foreground="{ThemeResource TextControlHeaderForeground}" />
-        <TextBlock x:Name="AccountText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
-      </StackPanel>
-      <TextBox
-          x:Name="NameField"
-          Header="Name"
-          AutomationProperties.AutomationId="sheet.name"
-          AutomationProperties.IsRequiredForForm="True"
-          TextChanged="OnNameChanged" />
-      <StackPanel x:Name="Working" Orientation="Horizontal" Spacing="8">
-        <ProgressRing Width="20" Height="20" IsActive="True" AutomationProperties.AccessibilityView="Raw" />
-        <TextBlock x:Name="WorkingText" VerticalAlignment="Center" TextWrapping="Wrap" />
-      </StackPanel>
-      <StackPanel x:Name="Lines" Spacing="8" />
-      <StackPanel x:Name="Link" Spacing="8">
-        <TextBlock Text="Sign-in page" />
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button x:Name="CopyLink" Content="Copy link" AutomationProperties.AutomationId="sheet.copyLink" Click="OnCopyLink" />
-          <Button x:Name="OpenLink" Content="Open" AutomationProperties.AutomationId="sheet.openLink" Click="OnOpenLink" />
+  <Grid>
+    <!-- The InfoBars stay in the tree while closed, so Narrator hears each as it opens; outside the spaced stack, a closed one takes no room. -->
+    <StackPanel x:Name="Steps">
+      <StackPanel Spacing="12">
+        <Grid ColumnSpacing="12">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <TextBlock x:Name="Message" TextWrapping="Wrap" />
+          <ProgressRing
+              x:Name="Waiting"
+              Grid.Column="1"
+              Width="20"
+              Height="20"
+              VerticalAlignment="Top"
+              IsActive="False"
+              Visibility="Collapsed" />
+        </Grid>
+        <RadioButtons
+            x:Name="ToolPicker"
+            Header="{x:Bind shown:Words.Sheet.Tool}"
+            AutomationProperties.AutomationId="sheet.tool"
+            SelectionChanged="OnToolChanged" />
+        <StackPanel x:Name="AccountPart">
+          <!-- Labelled as a field's header is, and selectable as read-only text is: Microsoft's text box guidance. -->
+          <TextBlock
+              Text="{x:Bind shown:Words.Sheet.Account}"
+              Margin="{StaticResource TextBoxTopHeaderMargin}"
+              Foreground="{ThemeResource TextControlHeaderForeground}" />
+          <TextBlock x:Name="AccountText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+        </StackPanel>
+        <TextBox
+            x:Name="NameField"
+            Header="{x:Bind shown:Words.Sheet.Name}"
+            AutomationProperties.AutomationId="sheet.name"
+            AutomationProperties.IsRequiredForForm="True"
+            TextChanged="OnNameChanged" />
+        <StackPanel x:Name="Working" Orientation="Horizontal" Spacing="8">
+          <ProgressRing Width="20" Height="20" IsActive="True" AutomationProperties.AccessibilityView="Raw" />
+          <TextBlock x:Name="WorkingText" VerticalAlignment="Center" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel x:Name="Link" Spacing="8">
+          <TextBlock Text="{x:Bind shown:Words.Sheet.SignInPage}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="CopyLink" Content="{x:Bind shown:Words.Sheet.CopyLink}" AutomationProperties.AutomationId="sheet.copyLink" Click="OnCopyLink" />
+            <Button x:Name="OpenLink" Content="{x:Bind shown:Words.Sheet.Open}" AutomationProperties.AutomationId="sheet.openLink" Click="OnOpenLink" />
+          </StackPanel>
+        </StackPanel>
+        <StackPanel x:Name="CodePart">
+          <TextBox
+              x:Name="CodeField"
+              Header="{x:Bind shown:Words.Sheet.Code}"
+              PlaceholderText="{x:Bind shown:Words.Sheet.PasteCode}"
+              IsSpellCheckEnabled="False"
+              IsTextPredictionEnabled="False"
+              AutomationProperties.AutomationId="sheet.code"
+              TextChanged="OnCodeChanged" />
+          <InfoBar
+              x:Name="RefusedBar"
+              Severity="Error"
+              IsClosable="False"
+              IsOpen="False"
+              AutomationProperties.AutomationId="sheet.refused" />
         </StackPanel>
       </StackPanel>
-      <StackPanel x:Name="CodePart">
-        <TextBox
-            x:Name="CodeField"
-            Header="Code"
-            PlaceholderText="Paste the code from your browser"
-            IsSpellCheckEnabled="False"
-            IsTextPredictionEnabled="False"
-            AutomationProperties.AutomationId="sheet.code"
-            TextChanged="OnCodeChanged" />
-        <InfoBar
-            x:Name="RefusedBar"
-            Severity="Error"
-            IsClosable="False"
-            IsOpen="False"
-            AutomationProperties.AutomationId="sheet.refused" />
-      </StackPanel>
+      <InfoBar
+          x:Name="MissingBar"
+          Severity="Warning"
+          IsClosable="False"
+          IsOpen="False"
+          AutomationProperties.AutomationId="sheet.missing">
+        <InfoBar.ActionButton>
+          <HyperlinkButton x:Name="MissingLink" AutomationProperties.AutomationId="sheet.missing.link" Click="OnMissingLink" />
+        </InfoBar.ActionButton>
+      </InfoBar>
+      <InfoBar
+          x:Name="FailureBar"
+          Severity="Error"
+          IsClosable="False"
+          IsOpen="False"
+          AutomationProperties.AutomationId="sheet.failure">
+        <StackPanel x:Name="Warnings" Margin="0,0,0,12" Spacing="4" />
+      </InfoBar>
     </StackPanel>
-    <InfoBar
-        x:Name="MissingBar"
-        Severity="Warning"
-        IsClosable="False"
-        IsOpen="False"
-        AutomationProperties.AutomationId="sheet.missing">
-      <InfoBar.ActionButton>
-        <HyperlinkButton x:Name="MissingLink" AutomationProperties.AutomationId="sheet.missing.link" Click="OnMissingLink" />
-      </InfoBar.ActionButton>
-    </InfoBar>
-    <InfoBar
-        x:Name="FailureBar"
-        Severity="Error"
-        IsClosable="False"
-        IsOpen="False"
-        AutomationProperties.AutomationId="sheet.failure">
-      <StackPanel x:Name="Warnings" Margin="0,0,0,12" Spacing="4" />
-    </InfoBar>
-  </StackPanel>
+    <!-- What the window asks or says meanwhile, in place of the step: a window shows one ContentDialog at a time. -->
+    <StackPanel x:Name="Asked" Spacing="8" Visibility="Collapsed">
+      <TextBlock x:Name="AskedMessage" TextWrapping="Wrap" />
+      <HyperlinkButton
+          x:Name="AskedLearn"
+          Padding="0"
+          Visibility="Collapsed"
+          AutomationProperties.AutomationId="failure.learn"
+          Click="OnAskedLearn" />
+    </StackPanel>
+  </Grid>
 </ContentDialog>

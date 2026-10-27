@@ -72,3 +72,8 @@ GetIconInfo
 GetDIBits
 GetDC
 ReleaseDC
+SystemParametersInfo
+HIGHCONTRASTW
+GetSysColor
+MsiEnumRelatedProducts
+MsiGetProductInfo

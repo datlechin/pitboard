@@ -1530,11 +1530,7 @@ fn a_window_on_windows_offers_no_clear_of_its_downloads() {
 fn quitting_while_downloads_run_asks_first() {
     let question = |running| {
         let (title, message, confirm) = words::quit_with_downloads(OS, running);
-        Question {
-            title,
-            message: message.into(),
-            confirm: confirm.into(),
-        }
+        Question::asking(title, message.into(), confirm.into())
     };
     assert_eq!(downloads_quit_question(0), None);
     assert_eq!(downloads_quit_question(1), Some(question(1)));

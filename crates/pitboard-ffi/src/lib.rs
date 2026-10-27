@@ -28,7 +28,7 @@ use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::{Stale, Standing};
-use pitboard_core::{doctor, words};
+use pitboard_core::words;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -55,14 +55,14 @@ mod present;
 pub use present::{
     AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
     AccountStanding, AccountWindowsShown, AccountsShown, ActionKind, ActivityLine, ActivityShown,
-    AtLimitChoice, AtLimitShown, CheckLine, ChecksShown, Choice, CommandLineShown, DownloadShown,
-    DownloadState, EmptyList, FailureText, Footing, ItemAction, ItemOffer, LimitKind, LimitRow,
-    LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing, NameCheck, NextStep,
-    NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount, PickerShown,
-    Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity, SheetText,
-    SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown, WarmAccountShown,
-    WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool, WindowOffer,
-    WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    AtLimitChoice, AtLimitShown, CheckGroup, CheckLine, ChecksShown, Choice, CommandLineShown,
+    DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction, ItemOffer,
+    LimitKind, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
+    NameCheck, NextStep, NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount,
+    PickerShown, Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
+    SheetText, SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown,
+    WarmAccountShown, WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool,
+    WindowOffer, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
@@ -84,9 +84,9 @@ pub use account_windows::{
 // answers that only the model reads. None of it is exported.
 mod launch;
 pub(crate) use launch::{
-    Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Enrolled, EnrolledAs, GaveUp,
-    Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched, Uninstalled,
-    WarmRefused,
+    Adoption, AppCore, AutoLooked, AutoSwitched, Change, Check, Doctored, Enrolled, EnrolledAs,
+    GaveUp, Holding, OwnCommandLine, PitboardError, Remedy, SignInSession, Switch, Switched,
+    Uninstalled, WarmRefused,
 };
 // What a test or a fixture makes the app's core of, in place of the environment.
 #[cfg(any(test, feature = "fixture"))]
@@ -341,11 +341,8 @@ pub enum Level {
     Fail,
 }
 
-// What `present` says of the records above in the core's words, where a record's fields are
-// not the core's own types: the step a limit's colour is at, how long an account lasts, what
-// a renewal run did and the line over doctor's checks. Each wraps the core's function of the
-// same name, which the command line calls directly wherever it says the same thing. None
-// reads a clock, a file or the keychain.
+// The core's judgements of the records above, where a record's fields are not the core's own
+// types, as the command line makes them.
 
 /// How much of a limit is used, in the three steps its colour changes at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -368,17 +365,7 @@ pub(crate) fn usage_level(percent: f64) -> UsageLevel {
     }
 }
 
-/// The line over a diagnosis's checks: what is worth looking at while checks only warn,
-/// and not to switch accounts while one fails.
-pub(crate) fn doctor_summary(checks: &[Check]) -> String {
-    words::doctor_summary(checks.iter().map(|c| match c.level {
-        Level::Ok => doctor::Level::Ok,
-        Level::Warn => doctor::Level::Warn,
-        Level::Fail => doctor::Level::Fail,
-    }))
-}
-
-// One failure outweighs every warning, as in the summary's words.
+// One failure outweighs every warning.
 pub(crate) fn doctor_level(checks: &[Check]) -> Level {
     let has = |level| checks.iter().any(|c| c.level == level);
     if has(Level::Fail) {
@@ -393,31 +380,6 @@ pub(crate) fn doctor_level(checks: &[Check]) -> Level {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Each check keeps doctor's level, so the line over the checks says what doctor says.
-    #[test]
-    fn the_doctor_summary_says_not_to_switch_while_a_check_fails() {
-        let check = |level: Level| Check {
-            code: "credential".into(),
-            name: "credential".into(),
-            level,
-            detail: String::new(),
-            advice: String::new(),
-        };
-        use doctor::Level as Core;
-        assert_eq!(
-            doctor_summary(&[check(Level::Ok)]),
-            words::doctor_summary([Core::Ok])
-        );
-        assert_eq!(
-            doctor_summary(&[check(Level::Warn), check(Level::Ok), check(Level::Fail)]),
-            words::doctor_summary([Core::Warn, Core::Ok, Core::Fail])
-        );
-        assert_eq!(
-            doctor_summary(&[check(Level::Warn), check(Level::Warn)]),
-            words::doctor_summary([Core::Warn, Core::Warn])
-        );
-    }
 
     // So the app has no rule of its own for any of them.
     #[test]

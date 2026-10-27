@@ -58,6 +58,14 @@ public sealed class WindowsLocalTimeTests
         Assert.AreEqual("22:30", new WindowsLocalTime(culture, TimeZoneInfo.Utc).TimeOfDay((22 * 60) + 30));
     }
 
+    // "Saved sign-in valid until Nov 20": the culture orders the day and its month.
+    [TestMethod]
+    public void ADateIsItsDayAndShortMonth()
+    {
+        Assert.AreEqual("Jan 15", In("en-US").Date(At));
+        Assert.AreEqual("15 Jan", In("en-GB").Date(At));
+    }
+
     [TestMethod]
     public void ADayIsTheOneInThePersonsTimeZone()
     {

@@ -270,25 +270,22 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
         return None;
     }
     let saving = state.saving.contains(&Sheet::Stow);
-    let (lines, looking, can_confirm) = match state.left.as_ref() {
+    let unknown = || words::clean_up_message(seen.os);
+    let (message, looking, can_confirm) = match state.left.as_ref() {
         None | Some(Leftover::Looking) => {
-            (Vec::new(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
+            (unknown(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
         }
-        Some(Leftover::Unknown) => (Vec::new(), None, false),
-        Some(Leftover::Found(None)) => (vec![words::nothing_to_clean_up(seen.os)], None, false),
+        Some(Leftover::Unknown) => (unknown(), None, false),
+        Some(Leftover::Found(None)) => (words::nothing_to_clean_up(seen.os), None, false),
         Some(Leftover::Found(Some(left))) => (
-            words::clean_up_lines(seen.os, left)
-                .iter()
-                .map(|line| words::typeset(line))
-                .collect(),
+            words::clean_up_found(seen.os, left),
             None,
             !saving && !matches!(left.login, Foreseen::NotEnrolled(_)),
         ),
     };
     Some(StowText {
         title: words::clean_up_title(seen.os),
-        message: words::clean_up_message(seen.os),
-        lines,
+        message,
         looking,
         confirm: words::clean_up(seen.os, false),
         can_confirm,
@@ -389,11 +386,11 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
 pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> WindowQuestion {
     let tool = seen.tool_name(Key::parse(qualified).provider.code());
     WindowQuestion {
-        question: Question {
-            title: words::replace_title(&tool),
-            message: why.to_owned(),
-            confirm: words::REPLACE.into(),
-        },
+        question: Question::asking(
+            words::replace_title(&tool),
+            why.to_owned(),
+            words::REPLACE.into(),
+        ),
         confirmed: Intent::ReplaceAndSwitch {
             qualified: qualified.to_owned(),
         },
@@ -417,49 +414,49 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     let Key { provider, label } = Key::parse(&question.qualified);
     let tool = provider.code();
     if !in_its_app(tool) {
-        return Question {
-            title: words::quit_to_switch(name),
-            message: words::quit_and_reopen(name),
-            confirm: words::quit_and_switch(seen.os, name),
-        };
+        return Question::asking(
+            words::quit_to_switch(name),
+            words::quit_and_reopen(name),
+            words::quit_and_switch(seen.os, name),
+        );
     }
     match then {
-        After::Switch => Question {
-            title: words::quit_to_switch(name),
-            message: words::quit_to_move(name, &label),
-            confirm: words::quit_and_switch(seen.os, name),
-        },
+        After::Switch => Question::asking(
+            words::quit_to_switch(name),
+            words::quit_to_move(name, &label),
+            words::quit_and_switch(seen.os, name),
+        ),
         After::SignIn { again, .. } => {
             let title = words::quit_to_sign_in(name, again.as_deref());
             match seen
                 .in_use_of(tool)
                 .filter(|_| !nothing_to_park(seen, tool))
             {
-                Some(work) => Question {
+                Some(work) => Question::asking(
                     title,
-                    message: words::quit_to_sign_out(name, work),
-                    confirm: words::quit_and_continue(seen.os, name),
-                },
-                None => Question {
+                    words::quit_to_sign_out(name, work),
+                    words::quit_and_continue(seen.os, name),
+                ),
+                None => Question::asking(
                     title,
-                    message: words::quit_to_wait(name),
-                    confirm: words::quit_and_start_sign_in(seen.os, name),
-                },
+                    words::quit_to_wait(name),
+                    words::quit_and_start_sign_in(seen.os, name),
+                ),
             }
         }
-        After::Enrol { again, .. } => Question {
-            title: match again {
+        After::Enrol { again, .. } => Question::asking(
+            match again {
                 Some(label) => words::quit_to_add(name, label),
                 None => words::quit_to_sign_in(name, None),
             },
-            message: words::quit_to_read(name, again.as_deref()),
-            confirm: words::quit_and_add(seen.os, name),
-        },
-        After::Uninstall => Question {
-            title: words::quit_to_uninstall(name),
-            message: words::quit_to_delete(name),
-            confirm: words::quit_and_uninstall(seen.os, name),
-        },
+            words::quit_to_read(name, again.as_deref()),
+            words::quit_and_add(seen.os, name),
+        ),
+        After::Uninstall => Question::asking(
+            words::quit_to_uninstall(name),
+            words::quit_to_delete(name),
+            words::quit_and_uninstall(seen.os, name),
+        ),
     }
 }
 
@@ -656,11 +653,11 @@ mod tests {
         );
         assert_eq!(
             asked,
-            Question {
-                title: words::quit_to_switch("ChatGPT"),
-                message: words::quit_and_reopen("ChatGPT"),
-                confirm: words::quit_and_switch(Os::MacOs, "ChatGPT"),
-            }
+            Question::asking(
+                words::quit_to_switch("ChatGPT"),
+                words::quit_and_reopen("ChatGPT"),
+                words::quit_and_switch(Os::MacOs, "ChatGPT")
+            )
         );
     }
 
@@ -818,11 +815,11 @@ mod tests {
         );
         assert_eq!(
             question,
-            Question {
-                title: words::quit_to_add("Claude", "home"),
-                message: words::quit_to_read("Claude", Some("home")),
-                confirm: words::quit_and_add(Os::MacOs, "Claude"),
-            }
+            Question::asking(
+                words::quit_to_add("Claude", "home"),
+                words::quit_to_read("Claude", Some("home")),
+                words::quit_and_add(Os::MacOs, "Claude")
+            )
         );
     }
 
@@ -838,16 +835,18 @@ mod tests {
         };
         assert_eq!(
             said("desktop/home", After::Switch),
-            Question {
-                title: words::quit_to_switch("Claude"),
-                message: words::quit_to_move("Claude", "home"),
-                confirm: words::quit_and_switch(Os::MacOs, "Claude"),
-            }
+            Question::asking(
+                words::quit_to_switch("Claude"),
+                words::quit_to_move("Claude", "home"),
+                words::quit_and_switch(Os::MacOs, "Claude")
+            )
         );
-        let parks = |again| Question {
-            title: words::quit_to_sign_in("Claude", again),
-            message: words::quit_to_sign_out("Claude", "work"),
-            confirm: words::quit_and_continue(Os::MacOs, "Claude"),
+        let parks = |again| {
+            Question::asking(
+                words::quit_to_sign_in("Claude", again),
+                words::quit_to_sign_out("Claude", "work"),
+                words::quit_and_continue(Os::MacOs, "Claude"),
+            )
         };
         assert_eq!(
             said(
@@ -883,11 +882,11 @@ mod tests {
                     from: Some(add_desktop()),
                 }
             ),
-            Question {
-                title: words::quit_to_sign_in("Claude", None),
-                message: words::quit_to_read("Claude", None),
-                confirm: words::quit_and_add(Os::MacOs, "Claude"),
-            }
+            Question::asking(
+                words::quit_to_sign_in("Claude", None),
+                words::quit_to_read("Claude", None),
+                words::quit_and_add(Os::MacOs, "Claude")
+            )
         );
     }
 

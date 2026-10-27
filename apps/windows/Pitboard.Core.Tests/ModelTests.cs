@@ -30,6 +30,8 @@ public sealed class ModelTests
 
         public string TimeOfDay(ushort minutes) =>
             TimeSpan.FromMinutes(minutes).ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+
+        public string Date(long epoch) => At(epoch).ToString("MMM d", CultureInfo.InvariantCulture);
     }
 
     private sealed class Posting : Notifications
@@ -87,6 +89,20 @@ public sealed class ModelTests
                 return [.. _calls];
             }
         }
+
+        public T? First(Func<T, bool> matching, TimeSpan patience)
+        {
+            var until = DateTime.UtcNow + patience;
+            lock (_calls)
+            {
+                for (var left = patience; !_calls.Any(matching) && left > TimeSpan.Zero; left = until - DateTime.UtcNow)
+                {
+                    Monitor.Wait(_calls, left);
+                }
+
+                return _calls.FirstOrDefault(matching);
+            }
+        }
     }
 
     private static Snapshot Read(ulong revision) =>
@@ -99,7 +115,7 @@ public sealed class ModelTests
                 Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
             Notices: [],
-            MenuNotices: new MenuNotices(Install: null, Switches: [], Others: null),
+            MenuNotices: new MenuNotices(Install: null, Switches: [], SignIns: [], Others: null),
             Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
@@ -109,7 +125,7 @@ public sealed class ModelTests
             Uninstall: new ItemOffer(Title: "Uninstall Pitboard", Intent: new Intent.Uninstall(), Enabled: true, Confirm: null),
             Removal: null,
             Welcome: new WelcomeShown(
-                Title: "Welcome to Pitboard", Lines: [], IconLink: null, Tools: [],
+                Title: "Welcome to Pitboard", Lines: [], IconLink: null, ToolsHeading: "Found on this PC", Tools: [],
                 OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: ""),
                 Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
             GlanceRevision: 0, Answers: []);
@@ -126,7 +142,9 @@ public sealed class ModelTests
         Schedule: new ScheduleShown(
             On: false, Enabled: true, Note: null, Failed: null,
             About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
-        Checks: new ChecksShown(Lines: [], Summary: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…"),
+        Checks: new ChecksShown(
+            Groups: [], Summary: null, Verdict: null, Level: Level.Ok, Checking: false, Checked: null, Waiting: "Checking this Mac…",
+            Report: null),
         Activity: new ActivityShown(
             Lines: [], Empty: new EmptyList(Title: "No Activity", Detail: "Pitboard lists every change it makes here.")),
         CommandLine: new CommandLineShown(
@@ -236,7 +254,7 @@ public sealed class ModelTests
             Assert.AreEqual("", first.MenuBar.NameAndUsage);
             Assert.AreEqual("", first.UpdatedWindow);
             Assert.IsFalse(first.Machine.Schedule.On);
-            Assert.IsEmpty(first.Machine.Checks.Lines);
+            Assert.IsEmpty(first.Machine.Checks.Groups);
             Assert.IsNotNull(first.Machine.Checks.Waiting);
             Assert.IsNotNull(first.Machine.Activity.Empty);
             Assert.IsNull(first.Machine.CommandLine.Found);
@@ -288,7 +306,7 @@ public sealed class ModelTests
         var snapshot = Read(4) with
         {
             QuitQuestion = new WindowQuestion(
-                new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch"),
+                new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
                 Confirmed: new Intent.QuitAndSwitch("codex/spare"),
                 Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
@@ -551,7 +569,8 @@ public sealed class ModelTests
                 Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
                 Confirm: new Question(
                     Title: "Forget “spare (Codex)”?",
-                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget")),
+                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget",
+                    Destructive: true, ConfirmIsDefault: true)),
             Actions:
             [
                 new AccountAction(
@@ -563,7 +582,7 @@ public sealed class ModelTests
             Enabled: true,
             Confirm: new Question(
                 Title: "Give up on the interrupted switch?", Message: "Every login is kept, and nothing is deleted.",
-                Confirm: "Give Up"));
+                Confirm: "Give Up", Destructive: false, ConfirmIsDefault: true));
         var stuck = new PanelNotice(
             Id: "stuck", Severity: Severity.Error, SpokenSeverity: "Problem", Title: "An interrupted switch is waiting",
             Lines: ["An interrupted switch can’t be finished until OpenAI answers."], Until: null, UntilLabel: null,
@@ -575,7 +594,7 @@ public sealed class ModelTests
         {
             Sections = [new AccountSection(Id: "codex", Heading: "Codex", Accounts: [spare])],
             Notices = [stuck],
-            MenuNotices = new MenuNotices(Install: null, Switches: [], Others: others),
+            MenuNotices = new MenuNotices(Install: null, Switches: [], SignIns: [], Others: others),
             Setup = new SetupStep(
                 Title: "Add a second Codex account", Detail: "job is the only Codex account Pitboard knows.",
                 Actions: [new Choice("Add Account…", new Intent.PresentSheet(new Sheet.Add("codex")), Enabled: true)]),
@@ -633,7 +652,9 @@ public sealed class ModelTests
     {
         var keychain = new CheckLine(
             Id: 0, Name: "Keychain", Level: Level.Fail, SpokenLevel: "Failed", Detail: "locked",
-            Advice: "Unlock the login keychain.");
+            Advice: "Unlock the login keychain.", Action: null,
+            Learn: new SetupLink(Title: "Learn More", Link: "https://docs.usepitboard.com/reference/maintenance-commands#doctor"));
+        var pitboard = new CheckGroup(Id: "pitboard", Heading: "Pitboard", Lines: [keychain]);
         var switched = new ActivityLine(
             Id: 0, Date: "Oct 5, 2026 at 2:05 PM", Change: "Switch", Account: "codex/spare",
             Result: "Nothing parked", Done: false, AskedBy: "Pitboard app");
@@ -643,8 +664,8 @@ public sealed class ModelTests
                 On: true, Enabled: true, Note: null, Failed: null,
                 About: "A parked login is renewed whenever Pitboard runs, and otherwise not."),
             Checks = new ChecksShown(
-                Lines: [keychain], Summary: "1 broken: do not switch accounts until fixed.", Level: Level.Fail,
-                Checking: false, Checked: "Checked at 14:05", Waiting: null),
+                Groups: [pitboard], Summary: "1 Issue", Verdict: "Don’t switch accounts until the failed check is fixed.",
+                Level: Level.Fail, Checking: false, Checked: "Checked at 14:05", Waiting: null, Report: "{}"),
             Activity = new ActivityShown(Lines: [switched], Empty: null),
             CommandLine = new CommandLineShown(
                 Found: new FoundCommandLine.Bundled(Path: "/usr/local/bin/pitboard"),
@@ -655,10 +676,10 @@ public sealed class ModelTests
         var snapshot = Read(7) with { Machine = machine };
 
         Assert.IsTrue(snapshot.Machine.Schedule.On);
-        Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Lines[0].Level);
-        Assert.AreEqual("Failed", snapshot.Machine.Checks.Lines[0].SpokenLevel);
-        Assert.AreEqual(0UL, snapshot.Machine.Checks.Lines[0].Id);
-        Assert.AreEqual(keychain, snapshot.Machine.Checks.Lines[0]);
+        Assert.AreEqual(Level.Fail, snapshot.Machine.Checks.Groups[0].Lines[0].Level);
+        Assert.AreEqual("Failed", snapshot.Machine.Checks.Groups[0].Lines[0].SpokenLevel);
+        Assert.AreEqual(0UL, snapshot.Machine.Checks.Groups[0].Lines[0].Id);
+        Assert.AreEqual(keychain, snapshot.Machine.Checks.Groups[0].Lines[0]);
         Assert.AreEqual(0UL, snapshot.Machine.Activity.Lines[0].Id);
         Assert.IsFalse(snapshot.Machine.Activity.Lines[0].Done);
         Assert.IsNull(snapshot.Machine.Activity.Empty);
@@ -666,10 +687,10 @@ public sealed class ModelTests
             new FoundCommandLine.Bundled("/usr/local/bin/pitboard"), snapshot.Machine.CommandLine.Found);
         Assert.IsFalse(snapshot.Machine.CommandLine.OffersLink);
         Assert.AreNotEqual(
-            machine, machine with { Checks = machine.Checks with { Lines = [keychain] } },
+            machine, machine with { Checks = machine.Checks with { Groups = [pitboard] } },
             "its lists are arrays, compared by reference");
         Assert.AreEqual(Unread(), Unread(), "every list made with [], so the same array");
-        Assert.AreSame(Unread().Checks.Lines, Unread().Checks.Lines);
+        Assert.AreSame(Unread().Checks.Groups, Unread().Checks.Groups);
     }
 
     [TestMethod]
@@ -939,7 +960,7 @@ public sealed class ModelTests
         var posted = posting.Posted.Until(2, Patience);
         model.Shutdown();
 
-        var again = OperatingSystem.IsWindows() ? "Sign in again" : "Sign In Again";
+        var again = OperatingSystem.IsWindows() ? "Sign in again…" : "Sign In Again";
         var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
         Assert.AreEqual(OperatingSystem.IsWindows() ? "Sign-in replaced" : "Sign-In Replaced", notice.Title);
         Assert.AreEqual(
@@ -947,6 +968,29 @@ public sealed class ModelTests
             "and Pitboard has no sign-in saved for work.",
             notice.Body);
         Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
+    }
+
+    // Plan 4.13: whom it switched to, under the tool, and Switch Back, which switches to the account it left.
+    [TestMethod]
+    public void AnAutomaticSwitchIsPostedWithSwitchBack()
+    {
+        NeedsFixtures();
+        var waiting = new Waiting();
+        var posting = new Posting();
+        using var model = PitboardModel.FixtureIn("switchedByItself", _own, waiting, new StandInApps(), posting, new InUtc());
+        Start(model, waiting);
+
+        var notice = posting.Posted.First(posted => posted.Id.StartsWith("auto/", StringComparison.Ordinal), Patience);
+        Assert.IsNotNull(notice, "no automatic switch was posted");
+        Assert.AreEqual("Switched to personal", notice.Title);
+        Assert.AreEqual("Claude Code", notice.Subtitle);
+        Assert.AreEqual(OperatingSystem.IsWindows() ? "Switch back" : "Switch Back", notice.Button?.Title);
+
+        model.Send(new Intent.NotificationClicked(notice.Button!.Clicked));
+        var back = waiting.Until(snapshot => Uses(snapshot, "claude/work"), Patience);
+        model.Shutdown();
+
+        Assert.IsNotNull(back, "Switch Back left Claude Code on personal");
     }
 
     [TestMethod]
@@ -961,12 +1005,13 @@ public sealed class ModelTests
         Assert.HasCount(2, posting.Posted.Until(2, Patience));
 
         model.Send(new Intent.PaneShown(Pane.Checks));
-        var checkedIn = waiting.Until(
-            snapshot => snapshot.Machine.Checks.Lines.LastOrDefault()?.Name == "Notifications", Patience);
+        static CheckLine? Refused(Snapshot snapshot) =>
+            snapshot.Machine.Checks.Groups.SelectMany(group => group.Lines).FirstOrDefault(line => line.Name == "Notifications");
+        var checkedIn = waiting.Until(snapshot => Refused(snapshot) is not null, Patience);
         model.Shutdown();
 
         Assert.IsNotNull(checkedIn, "the machine pane never said the refusal");
-        var line = checkedIn.Machine.Checks.Lines[^1];
+        var line = Refused(checkedIn)!;
         Assert.AreEqual(Level.Warn, line.Level);
         Assert.StartsWith($"“{LimitReached}” not posted at ", line.Detail);
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);

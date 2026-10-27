@@ -129,8 +129,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
     public void CloseSignIn() => _signIn?.Close();
 
     // As the macOS app asks, over the window.
-    public Task<bool> AllowDownload(AlertText question) =>
-        Confirm(new Question(question.Title, question.Message, "Download"));
+    public Task<bool> AllowDownload(Question question) => Confirm(question);
 
     public void Shown(string address) => _send(new Intent.PageShown(Store, address));
 
@@ -140,7 +139,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
     {
         if (open is null)
         {
-            Title = "Account";
+            Title = Words.Menu.Account;
             RemoveDataButton.IsEnabled = false;
             BackButton.IsEnabled = ForwardButton.IsEnabled = ReloadButton.IsEnabled = false;
             return;
@@ -279,7 +278,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
         ShowHistory();
         if (session.Failure is { } failure)
         {
-            ShowStandIn(Glyphs.Warning, "Couldn’t load the page", failure, "Try again", enabled: true, TryAgain);
+            ShowStandIn(Glyphs.Warning, Words.AccountWindow.CouldNotLoad, failure, Words.AccountWindow.TryAgain, enabled: true, TryAgain);
             return;
         }
 
@@ -321,7 +320,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
     }
 
     private void Unopened(string why) =>
-        ShowStandIn(Glyphs.Warning, "Couldn’t open this window", why, choice: null, enabled: false, chosen: null);
+        ShowStandIn(Glyphs.Warning, Words.AccountWindow.CouldNotOpen!, why, choice: null, enabled: false, chosen: null);
 
     private void ShowHistory()
     {
@@ -439,8 +438,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
             return;
         }
 
-        var alert = PitboardFfiMethods.RemoveDataAlert(session.Account);
-        if (!await Confirm(new Question(alert.Title, alert.Message, "Remove")))
+        if (!await Confirm(PitboardFfiMethods.RemoveDataAlert(session.Account)))
         {
             return;
         }

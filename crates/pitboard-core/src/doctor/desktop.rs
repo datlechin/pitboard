@@ -418,6 +418,10 @@ pub(super) fn judge_desktop_login(
 }
 
 pub(super) fn judge_desktop_park(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check {
+    desktop_park_judged(facts, fact, now).about(&fact.key())
+}
+
+fn desktop_park_judged(facts: &DesktopFacts, fact: &ParkFact, now: i64) -> Check {
     let name = format!("account {}", fact.typed());
     let renew = words::sign_in_again(&fact.typed());
     let code = "desktop_parked_login";

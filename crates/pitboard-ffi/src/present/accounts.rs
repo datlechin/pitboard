@@ -5,12 +5,12 @@
 use super::words;
 use super::{
     AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
-    AccountStanding, ActionKind, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
+    AccountStanding, ActionKind, Choice, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
     MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail, WindowOffer,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::advice::window;
-use crate::model::{Intent, Sheet};
+use crate::model::{Intent, Place, SettingsSection, Sheet};
 use crate::{Account, Limit, Tool};
 use pitboard_core::duty::warm;
 use pitboard_core::host::Os;
@@ -120,8 +120,10 @@ pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
     let accounts = seen.accounts();
     let name_and_usage = bar_title(accounts, &seen.tools, false);
     let titled = titled(accounts, &seen.tools);
-    let attention =
-        notices.install.is_some() || !notices.switches.is_empty() || notices.others.is_some();
+    let attention = notices.install.is_some()
+        || !notices.switches.is_empty()
+        || !notices.sign_ins.is_empty()
+        || notices.others.is_some();
     // The bar follows the account closest to running out, and two tools can each have a `work`.
     let tool = titled
         .filter(|_| seen.shows_tools())
@@ -238,7 +240,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         Some((None, at)) => (at, true),
         None => (None, false),
     };
-    let life = until.map(|at| words::saved_until(&seen.date_and_time_of(at), lapses));
+    let life = until.map(|at| words::saved_until(&seen.date_of(at), lapses));
     let expiring = until
         .filter(|_| account.standing == status::Standing::Expiring)
         .map(|at| words::sign_in_expires(at - seen.now, lapses));
@@ -247,8 +249,19 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let figure = headline(account.usage.as_ref().map_or(&[], |usage| &usage.windows))
         .filter(|_| in_place_of_limits.is_none())
         .map(|limit| said::figure(limit.percent));
-    let menu_title =
-        words::named_in_menu(seen.os, &title, account.plan.as_deref(), figure.as_deref());
+    let unnamed = account.label.is_none() && account.signed_in && !account.unplaced;
+    let why_not = if switching {
+        Some(words::SWITCHING_NOW)
+    } else if sign_in_standing.is_some() {
+        sign_in_standing
+    } else if unnamed {
+        Some(words::NOT_ADDED_YET)
+    } else if account.standing == status::Standing::LoginUnread && !account.unplaced {
+        Some(words::CANNOT_READ_OR_SWITCH)
+    } else {
+        None
+    };
+    let menu_title = words::named_in_menu(seen.os, &title, why_not.or(figure.as_deref()));
     let spoken = words::row_spoken(
         &spoken_name,
         account.plan.as_deref(),
@@ -280,7 +293,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         .cloned()
         .collect();
     let actions = actions(seen, account, action.as_ref(), busy, &spoken_name);
-    let unnamed = account.label.is_none() && account.signed_in && !account.unplaced;
     let acting = |kind| actions.iter().find(|action| action.kind == kind).cloned();
     // A note nothing in the app does anything about says where the docs explain it.
     let note = |kind, text, action: Option<AccountAction>| AccountNote {
@@ -333,7 +345,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         } else {
             life
         },
-        warm: warm_choice(seen, account).map(|choice| warm_detail(choice, warm_note)),
+        warm: warm_choice(seen, account).map(|choice| warm_detail(seen.os, choice, warm_note)),
         read_at,
         read: read_ago.or_else(|| read_at.map(|at| words::updated(&seen.clock(at)))),
     };
@@ -404,7 +416,7 @@ pub(crate) fn standing_of(account: &Account, switching: bool) -> AccountStanding
     }
 }
 
-fn offer_of(action: &AccountAction) -> Option<ItemOffer> {
+pub(crate) fn offer_of(action: &AccountAction) -> Option<ItemOffer> {
     Some(ItemOffer {
         title: action.title.clone(),
         intent: action.intent.clone()?,
@@ -549,7 +561,7 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
 }
 
 // `note` is what its line says, where it says anything.
-fn warm_detail(choice: &warm::Choice, note: Option<String>) -> WarmDetail {
+fn warm_detail(os: Os, choice: &warm::Choice, note: Option<String>) -> WarmDetail {
     let (next_at, running_until) = match &choice.standing {
         Some(warm::Standing::Running { until, next }) => (*next, Some(*until)),
         Some(warm::Standing::Resting { at }) => (Some(*at), None),
@@ -562,6 +574,15 @@ fn warm_detail(choice: &warm::Choice, note: Option<String>) -> WarmDetail {
         said: note.unwrap_or_else(|| words::WARM_UP_OFF.into()),
         next_at,
         running_until,
+        settings: Choice {
+            title: words::warm_up_settings(os),
+            intent: Intent::Show {
+                place: Some(Place::Settings {
+                    section: SettingsSection::WarmUp,
+                }),
+            },
+            enabled: true,
+        },
     }
 }
 
@@ -584,6 +605,8 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
             title: words::remove_title(spoken_name),
             message: forget_message_on(seen.os, account, seen.accounts()),
             confirm: words::REMOVE.into(),
+            destructive: true,
+            confirm_is_default: true,
         }),
     })
 }
@@ -638,7 +661,7 @@ fn action(
         });
     }
     (!busy).then(|| ItemAction {
-        title: words::sign_in_again(os, true),
+        title: words::sign_in_asking(os),
         spoken: words::sign_in_to_again(os, spoken, true),
         intent: Intent::PresentSheet {
             sheet: Sheet::SignInAgain {
@@ -1334,9 +1357,9 @@ mod tests {
             .collect()
     }
 
-    // A Windows menu item has one line, where macOS puts the account's limits on a second.
+    // Plan 4.8: a Windows menu item has one line, where macOS puts the rest on a second.
     #[test]
-    fn a_windows_menu_item_ends_with_the_figure_the_bar_would_show() {
+    fn a_windows_menu_item_says_its_figure_or_why_it_cannot_be_switched_to() {
         let mut work = account(Some("work"))
             .signed_in()
             .limits(vec![window("session", 12.0), window("weekly_all", 64.4)])
@@ -1353,25 +1376,20 @@ mod tests {
                 .limits(vec![window("session", 3.0)])
                 .build(),
         ];
-        let named = |os, name, plan, figure| words::named_in_menu(os, name, plan, figure);
+        let named = |name, aside| words::named_in_menu(Os::Windows, name, aside);
         assert_eq!(
             menu_titles(Os::Windows, accounts.clone()),
             [
-                named(Os::Windows, "work", Some("Team 5x"), Some("64%")),
-                named(Os::Windows, "personal", None, Some("100%")),
-                named(Os::Windows, "spare", None, None),
-                named(Os::Windows, "old", None, None)
+                named("work", Some("64%")),
+                named("personal", Some("100%")),
+                named("spare", None),
+                named("old", Some("sign-in expired"))
             ],
-            "no figure where the line under it says something else"
+            "the reason in place of the figure"
         );
         assert_eq!(
             menu_titles(Os::MacOs, accounts),
-            [
-                named(Os::MacOs, "work", Some("Team 5x"), Some("64%")),
-                named(Os::MacOs, "personal", None, Some("100%")),
-                named(Os::MacOs, "spare", None, None),
-                named(Os::MacOs, "old", None, None)
-            ]
+            ["work", "personal", "spare", "old"]
         );
     }
 
