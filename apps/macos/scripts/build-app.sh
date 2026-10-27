@@ -141,6 +141,20 @@ for bundle in "$app" "$appex"; do
         exit 1
     }
 done
+# Shortcuts and Spotlight read the app's actions, its entity and its App Shortcuts from what
+# Xcode extracts as it builds, and an app built without them runs all the same, offering none.
+intents=$app/Contents/Resources/Metadata.appintents/extract.actionsdata
+for wanted in actions.SwitchAccountIntent actions.GetUsageIntent actions.OpenPitboardIntent \
+    entities.AccountEntity; do
+    plutil -extract "$wanted" raw "$intents" >/dev/null 2>&1 || {
+        echo "the app's App Intents metadata has no $wanted" >&2
+        exit 1
+    }
+done
+[ "$(plutil -extract autoShortcuts raw "$intents" 2>/dev/null || echo 0)" -gt 0 ] || {
+    echo "the app's App Intents metadata has no App Shortcuts" >&2
+    exit 1
+}
 
 links_the_systems_sqlite "$app/Contents/MacOS/Pitboard" "the app"
 

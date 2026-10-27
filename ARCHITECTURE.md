@@ -452,6 +452,9 @@ keeps it is in the header of the module named.
 - A macOS debug build started without `PITBOARD_FIXTURE` quits before anything of the app
   starts, since Shortcuts, Spotlight, a widget or a control start it through Launch Services
   on the real home (`aDebugBuildStartedOutsideAFixtureStartsNothing`).
+- The macOS app's Shortcuts actions run in the app, over its model, and the release holds
+  the metadata Shortcuts and Spotlight read them and their App Shortcuts from
+  (`scripts/build-app.sh`).
 - The Windows app's own data folder is `Pitboard App` in the known folder Local AppData, never
   in Pitboard's directory, so `pitboard uninstall` never deletes the account windows'
   sign-ins (`host::pitboard_app_on_windows`).
