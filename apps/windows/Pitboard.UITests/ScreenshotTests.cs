@@ -76,6 +76,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = InFront(launched.OpenWindow());
+        launched.DeclineTip(Words.UseWithCodex);
         var row = launched.Row("claude/personal");
         Launched.OpenMenu(row);
         var menu = Around(launched.Element("account.copyEmail"), ControlType.Menu);
@@ -313,10 +314,6 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
         var window = InFront(launched.OpenWindow());
-        launched.OpenFromSettings(window, "settings.activity");
-        Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
-        KeepWindow(window, "windows-activity");
-
         launched.Select("SettingsItem");
         launched.Element("settings.startAtSignIn");
         KeepWindow(window, "windows-settings-general");
@@ -337,6 +334,11 @@ public sealed partial class ScreenshotTests
         launched.Element("question");
         KeepWindow(window, "windows-question-uninstall");
         launched.Answer("question", "CloseButton");
+
+        // Last, since its card opens by Enter, after which WinUI draws the focus where it moves.
+        launched.OpenFromSettings(window, "settings.activity");
+        Launched.Within(launched.Element("activity"), found => found.ByControlType(ControlType.ListItem), "a change");
+        KeepWindow(window, "windows-activity");
     }
 
     // The fixture's personal is on for warm-ups with no five-hour period running, so it warms up as the app starts.
@@ -365,6 +367,8 @@ public sealed partial class ScreenshotTests
         var window = launched.AccountWindow("main");
         Launched.Loads(window, "chatgpt.com stand-in");
         InFront(window);
+        // As the main window opens: its own size runs past the runner's screen, under the taskbar.
+        window.Patterns.Transform.Pattern.Resize(960, 680);
 
         Launched.Press(window, "Download notes");
         launched.Element("question");
