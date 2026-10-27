@@ -2219,7 +2219,7 @@ impl State {
     }
 
     /// Puts `sheet` over the main window, opening it on the accounts the sheet is about, or
-    /// over the welcome while it is shown.
+    /// over the macOS welcome while it is shown.
     fn present_sheet(&mut self, sheet: Sheet, jobs: &mut Vec<Job>) {
         // A sign-in under way keeps its sheet, and so does a change of an app's login from
         // the moment Pitboard asks whether the app runs: replacing it would leave the change
@@ -4493,10 +4493,11 @@ impl State {
         };
     }
 
-    // Where a sheet, a question or a failure comes up: over the welcome while it is shown,
-    // whose Add starts them, so its Continue is still in front.
+    // Where a sheet, a question or a failure comes up: over the macOS welcome while it is shown,
+    // whose Add starts them, so its Continue is still in front. Windows' window hosts them.
     fn show_over(&mut self, place: Option<Place>) {
-        let welcome = self.window.place == Some(Place::Welcome);
+        let welcome = self.window.place == Some(Place::Welcome)
+            && pitboard_core::host::OS != pitboard_core::host::Os::Windows;
         self.show(if welcome { Some(Place::Welcome) } else { place });
     }
 
