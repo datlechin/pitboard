@@ -436,8 +436,9 @@ jobs:
           retention-days: 7
 
   # The app, its widget extension and PitboardGlance built with Xcode 27, unsigned, so the code
-  # behind compiler(>=6.4) compiles somewhere; nothing here runs, and nothing is kept. The image
-  # and its Xcode are printed first, and the job's first run on a pull request reads both.
+  # behind compiler(>=6.4) compiles somewhere; nothing here runs, and nothing is kept. Run
+  # 40506912858 read the image as xcode-27-arm64 on macOS 27.0.1, with Xcode 27.1 selected, the
+  # one development uses, so it is named, as the apple job names its own.
   xcode-27:
     runs-on: xcode-27
     timeout-minutes: 45
@@ -446,10 +447,8 @@ jobs:
         with:
           persist-credentials: false
       - run: |
-          sw_vers
-          xcode-select --print-path
+          sudo xcode-select --switch /Applications/Xcode_27.1.app
           xcodebuild -version
-          ls -d /Applications/Xcode*.app
       - uses: ./.github/actions/rust
         with:
           targets: aarch64-apple-darwin x86_64-apple-darwin
