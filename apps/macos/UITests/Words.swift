@@ -4,6 +4,8 @@ enum Words {
     static let openPitboard = "Open Pitboard"
     static let settings = "Settings…"
     static let quit = "Quit Pitboard"
+    // A debug build's CFBundleDisplayName, which names SwiftUI's app menu and its items.
+    static let debugBuild = "Pitboard Debug"
     static let addAccount = "Add Account…"
     static let refresh = "Refresh"
     static let copyEmail = "Copy Email Address"

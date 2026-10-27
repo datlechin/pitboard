@@ -221,8 +221,8 @@ env PITBOARD_FIXTURE=twoTools HOME="$scratch" PITBOARD_HOME="$scratch/.pitboard"
 `<build>` is `Products/Debug` in the folder **Product** > **Show Build Folder in Finder**
 opens. To run it from Xcode, add the same variables to the scheme's Run environment in
 **Product** > **Scheme** > **Edit Scheme**. `xcodegen generate` writes the scheme again
-without them, so check them before each Run. [AGENTS.md](AGENTS.md#never) lists the ways it
-must never be started.
+without them, so check them before each Run: started without `PITBOARD_FIXTURE`, the debug
+build quits at once. [AGENTS.md](AGENTS.md#never) lists the ways it must never be started.
 
 `fixture_names()` lists the worlds, and a name that is none of them stops the launch and
 names them all. A fixture's Claude Code sign-in takes a code typed back as `<code>#<state>`,

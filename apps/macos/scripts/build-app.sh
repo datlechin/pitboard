@@ -111,6 +111,13 @@ for scheme in \
     }
 done
 for bundle in "$app" "$appex"; do
+    said=$(plutil -extract CFBundleDisplayName raw "$bundle/Contents/Info.plist")
+    [ "$said" = Pitboard ] || {
+        echo "$bundle is named $said, not Pitboard" >&2
+        exit 1
+    }
+done
+for bundle in "$app" "$appex"; do
     said=$(plutil -extract CFBundleShortVersionString raw "$bundle/Contents/Info.plist")
     [ "$said" = "$short" ] || {
         echo "$bundle says it is $said, not $short" >&2

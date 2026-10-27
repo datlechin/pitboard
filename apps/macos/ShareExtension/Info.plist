@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- The name the Share menu shows: Pitboard, or Pitboard Debug for a debug build. -->
+	<!-- The name the Share menu shows, the app's. -->
 	<key>CFBundleDisplayName</key>
-	<string>$(PITBOARD_SHARE_NAME)</string>
+	<string>$(PITBOARD_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

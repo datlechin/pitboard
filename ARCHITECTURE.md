@@ -442,6 +442,9 @@ keeps it is in the header of the module named.
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).
 - The Windows app asks the core's gate, `launch_refusal`, before anything else a launch does
   but `--unregister` and `--unregister-share` (`ReleaseGateTests`).
+- A macOS debug build started without `PITBOARD_FIXTURE` quits before anything of the app
+  starts, since Shortcuts, Spotlight, a widget or a control start it through Launch Services
+  on the real home (`aDebugBuildStartedOutsideAFixtureStartsNothing`).
 - The Windows app's own data folder is `Pitboard App` in the known folder Local AppData, never
   in Pitboard's directory, so `pitboard uninstall` never deletes the account windows'
   sign-ins (`host::pitboard_app_on_windows`).

@@ -4,19 +4,54 @@ import Testing
 
 @testable import PitboardApp
 
-/// A renewal schedule an app up to 0.3.0 wrote starts the app with `renew`, and the command
-/// line inside this one does the renewal in its place. A copy with none inside it starts
-/// nothing, rather than a menu bar app that would repair the schedule from inside its job.
+private let inAFixture = ["PITBOARD_FIXTURE": "twoTools"]
+
+// A schedule an app up to 0.3.0 wrote starts the app with `renew`.
 @Test func aScheduleThatStartsTheAppRenewsWithTheCommandLineInsideIt() {
     let app = "/Applications/Pitboard.app/Contents/MacOS/Pitboard"
     let helper = "/Applications/Pitboard.app/Contents/Helpers/pitboard"
-    #expect(Launch.action(for: [app, "renew"], helper: helper) == .renew(helper))
-    #expect(Launch.action(for: [app, "renew"], helper: nil) == .fail)
+    func action(_ arguments: [String], helper: String?) -> Launch.Action {
+        Launch.action(for: arguments, helper: helper, environment: inAFixture)
+    }
+    #expect(action([app, "renew"], helper: helper) == .renew(helper))
+    #expect(action([app, "renew"], helper: nil) == .fail)
 
-    #expect(Launch.action(for: [app], helper: helper) == .app)
-    #expect(Launch.action(for: [], helper: helper) == .app)
-    #expect(Launch.action(for: [app, "renew", "--json"], helper: helper) == .app)
-    #expect(Launch.action(for: [app, "-AppleLanguages", "(en)"], helper: helper) == .app)
+    #expect(action([app], helper: helper) == .app)
+    #expect(action([], helper: helper) == .app)
+    #expect(action([app, "renew", "--json"], helper: helper) == .app)
+    #expect(action([app, "-AppleLanguages", "(en)"], helper: helper) == .app)
+}
+
+#if DEBUG
+    // Shortcuts, Spotlight, widgets and controls start it by Launch Services: no fixture.
+    @Test func aDebugBuildStartedOutsideAFixtureStartsNothing() {
+        let app = "/tmp/Build/Products/Debug/Pitboard.app/Contents/MacOS/Pitboard"
+        let helper = "/tmp/Build/Products/Debug/Pitboard.app/Contents/Helpers/pitboard"
+        #expect(Launch.action(for: [app], helper: helper, environment: [:]) == .outsideFixture)
+        #expect(
+            Launch.action(for: [app, "renew"], helper: helper, environment: ["HOME": "/tmp"])
+                == .outsideFixture)
+        #expect(Launch.action(for: [app], helper: helper, environment: inAFixture) == .app)
+    }
+#endif
+
+// Shortcuts, Spotlight and the widget gallery list a debug build and a release by this name.
+@Test func aDebugBuildAndItsShareExtensionAreNamedPitboardDebug() throws {
+    let macos = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    for plist in ["App/Info.plist", "ShareExtension/Info.plist"] {
+        let data = try Data(contentsOf: macos.appending(path: plist))
+        let info = try PropertyListSerialization.propertyList(from: data, format: nil)
+        #expect(
+            (info as? [String: Any])?["CFBundleDisplayName"] as? String
+                == "$(PITBOARD_DISPLAY_NAME)", "\(plist)")
+    }
+    let project = try String(contentsOf: macos.appending(path: "project.yml"), encoding: .utf8)
+    let named = project.split(separator: "\n").compactMap { line in
+        line.trimmingCharacters(in: .whitespaces).wholeMatch(of: /PITBOARD_DISPLAY_NAME: (.+)/)
+            .map { String($0.output.1) }
+    }
+    #expect(named == ["Pitboard Debug", "Pitboard"], "Debug's, then Release's")
 }
 
 /// Stands in for both the Pitboard directory and the app's own folder.
