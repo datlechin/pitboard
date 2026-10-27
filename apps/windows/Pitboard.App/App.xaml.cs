@@ -89,6 +89,14 @@ public partial class App : Application, IIconTargets
         // A click arrives on a thread of COM's; the model takes a message from any.
         var launchedBy = notifications.Start(intent => _model?.Send(intent));
         model.Send(new Intent.Start());
+        // Windows puts a new icon in the overflow, so a launch from Start shows only through its window. Asked for with the
+        // start, while the model reads what it keeps: asked later, it takes the first launch's welcome's place, and the
+        // model tells only the newest snapshot waiting.
+        if (_start.Link is null && Launching.OpensWindow(_start.Arguments))
+        {
+            model.Send(new Intent.Show(Place: null));
+        }
+
         if (startAtSignIn.Refusal is null)
         {
             startAtSignIn.Read();
@@ -102,11 +110,6 @@ public partial class App : Application, IIconTargets
         if (_start.Link is { } link)
         {
             model.Send(new Intent.LinkArrived(link));
-        }
-        else if (Launching.OpensWindow(_start.Arguments))
-        {
-            // Windows puts a new icon in the overflow, so a launch from Start shows only through its window.
-            model.Send(new Intent.Show(Place: null));
         }
 
         // A second launch's handover arrives on a thread of its own.
@@ -233,8 +236,7 @@ public partial class App : Application, IIconTargets
     {
         if (_requests.Opens(request))
         {
-            // The first launch's welcome is a window of its own, which stands in for the main window while it is open: the
-            // launch's own request for the window can come after it.
+            // The first launch's welcome is a window of its own, which stands in for the main window while it is open.
             if (request.Place is Place.Welcome || (request.Place is null && _welcome is not null))
             {
                 ShowWelcome();
