@@ -232,6 +232,41 @@ fn the_glance_is_written_to_the_file_the_app_names() {
     model.shutdown();
 }
 
+// A widget would go on showing accounts Pitboard no longer has.
+#[test]
+fn an_uninstall_deletes_the_glance() {
+    let world = World::new("glance-uninstalled");
+    world.enrolled("work", "here", 42.0);
+    let glance = world
+        .pitboard_dir()
+        .with_file_name("group")
+        .join("glance.json");
+    let told = Arc::new(Told::default());
+    let model = PitboardModel::over(
+        world.core(),
+        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Platform {
+            glance: Some(glance.clone()),
+            ..platform(StandInApps::new(&[], true))
+        },
+        QUICK,
+    );
+    model.send(Intent::Start);
+    eventually("the glance written", || glance.exists());
+    model.send(Intent::Uninstall);
+    told.until("Pitboard removed", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| last.removal == Some(crate::RemovalShown::Done))
+    });
+    assert!(!glance.exists());
+    assert!(
+        glance.parent().is_some_and(std::path::Path::exists),
+        "the app's folder stays"
+    );
+    model.shutdown();
+}
+
 /// A change another front end makes, here a rename typed in a terminal, reaches the
 /// listener within a look or two, read from what is already known: nobody is asked.
 #[test]

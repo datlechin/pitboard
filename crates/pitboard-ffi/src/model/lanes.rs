@@ -839,7 +839,15 @@ impl Worker {
                 found: core.command_line(),
                 own: core.own_command_line(),
             },
-            Job::Uninstall => Answer::Uninstalled(core.uninstall()),
+            Job::Uninstall => {
+                let done = core.uninstall();
+                if done.is_ok()
+                    && let Some(path) = &self.glance
+                {
+                    let _ = std::fs::remove_file(path);
+                }
+                Answer::Uninstalled(done)
+            }
             // Typed back as the Swift model typed it, whatever comes of it: the tool says
             // itself whether it took the code.
             Job::PasteCode { id, code } => {

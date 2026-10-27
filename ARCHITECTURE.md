@@ -428,9 +428,10 @@ keeps it is in the header of the module named.
   `after_uninstall_nothing_writes_pitboards_directory_again`).
 - The glance for widgets and intents names each account by an id derived from its own, never
   by an email, a token, a uuid, a path or a notice's lines. It is written only where the app
-  names a file, again with each read, and `glance_revision` moves only with what a widget
-  shows, since WidgetKit budgets reloads. A request from outside does no more than a click in
-  the app, and one that needs a question only the app asks is refused in words
+  names a file, again with each read, and deleted once the app uninstalls Pitboard
+  (`an_uninstall_deletes_the_glance`). `glance_revision` moves only with what a widget shows,
+  since WidgetKit budgets reloads. A request from outside does no more than a click in the
+  app, and one that needs a question only the app asks is refused in words
   (`model/glancing.rs`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
