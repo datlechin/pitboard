@@ -231,8 +231,7 @@ public sealed class PackageTests
         Assert.IsGreaterThan(Sequence(database, "InstallFinalize"), Sequence(database, "StartAfterFirstInstall"));
     }
 
-    // The condition as Windows Installer reads it, in a session that ignores this machine and can change nothing on it, whose
-    // UILevel is the UI level the session was opened with.
+    // MsiOpenPackageEx's restricted session, which cannot change this machine (docs/facts/windows-documented.md).
     [TestMethod]
     [DataRow(InstallUIOptions.Silent, false, DisplayName = "/quiet")]
     [DataRow(InstallUIOptions.Basic, true, DisplayName = "/passive")]

@@ -466,7 +466,7 @@ test.describe("on Windows", () => {
     ]);
     const above = (await row("personal").boundingBox())!;
     const box = (await menu.boundingBox())!;
-    // a box's edges in single precision, as Firefox gives them, can miss each other by a hair
+    // Firefox's boxes are single precision (docs/facts/site.md)
     expect(box.y + box.height).toBeLessThanOrEqual(above.y + 1 + 1e-3);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();

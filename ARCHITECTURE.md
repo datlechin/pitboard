@@ -131,7 +131,8 @@ The other crates:
   may be (`site.rs`, `link.rs`), the Pitboard link (`handoff.rs`) and a link read as
   Foundation reads one (`address.rs`, `web.rs`).
 - `crates/pitboard-share-ffi`: `pitboard-sites` as bindings for the macOS Share extension and
-  `PitboardShare.exe`: `share_link`, and `share_words`, every sentence they show.
+  `PitboardShare.exe`: `share_link`, and `share_words`, every sentence they show beside a
+  refusal's own.
 - `crates/uniffi-bindgen-swift`, `crates/uniffi-bindgen-csharp`: the bindings' generators, at
   exactly the UniFFI version the libraries use.
 - `crates/pitboard-conformance`: checks a tool's register against a build of the tool.
