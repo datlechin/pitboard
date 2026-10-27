@@ -188,11 +188,13 @@ fn the_welcome_offers_open_at_login_as_the_system_says_and_continues_to_the_acco
 // Windows puts them up in its window, whose dialog hosts them (#333).
 #[test]
 fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
-    let over = Some(if pitboard_core::host::OS == Os::Windows {
-        Place::Accounts
-    } else {
-        Place::Welcome
-    });
+    let over = |place: Option<Place>| {
+        if pitboard_core::host::OS == Os::Windows {
+            place
+        } else {
+            Some(Place::Welcome)
+        }
+    };
     let mut machine = Stub::reading(Ok(status(vec![
         account(None).signed_in().uuid("dana").build(),
     ])));
@@ -209,7 +211,7 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
         "{:?}",
         named.sheet
     );
-    assert_eq!(named.window_request.place, over);
+    assert_eq!(named.window_request.place, over(Some(Place::Accounts)));
     assert!(
         named.window_request.serial > asked.serial,
         "brought to the front"
@@ -227,7 +229,7 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
     model.run(&mut machine);
     let failed = model.shown();
     assert!(failed.failure_alert.is_some());
-    assert_eq!(failed.window_request.place, over);
+    assert_eq!(failed.window_request.place, over(None));
 
     model.send(Intent::DismissFailure);
     model.send(model.shown().welcome.done.intent);
