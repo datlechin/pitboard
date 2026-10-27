@@ -20,7 +20,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let quitting: @MainActor () -> Void
     private var watching: [NSObjectProtocol] = []
 
-    // The app target's App Shortcuts, read again as the glance moves; Main sets it at launch.
+    // The app target's App Shortcuts; Main sets it at launch.
     public static var shortcuts: (any AppShortcutsProvider.Type)?
 
     override public init() {
@@ -32,7 +32,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             dependency: GlanceSource {
                 await model.glance(within: Actions.patience).flatMap { Glance(Data($0.utf8)) }
             })
-        model.glanceChanged = { AppDelegate.shortcuts?.updateAppShortcutParameters() }
+        GlanceWatch.live(shortcuts: AppDelegate.shortcuts).watch(model)
         self.model = model
         defaults = dependencies.defaults
         windows = AccountWindows(

@@ -1,4 +1,5 @@
 import Foundation
+import PitboardGlance
 import PitboardKit
 import PitboardLinkTarget
 import UserNotifications
@@ -35,7 +36,8 @@ struct Dependencies {
                 directory: records.path,
                 key: WebEnvironment.recordKey(environment: environment),
                 linkScheme: LinkTarget.scheme(in: .main) ?? "pitboard",
-                earlier: earlier.handOverWindows()))
+                earlier: earlier.handOverWindows()),
+            glance: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
         let model = AppModel.listening { listener in
             PitboardModel(
                 launch: launch, listener: listener, apps: MacAppControl.live(),
