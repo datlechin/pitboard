@@ -32,6 +32,7 @@ mod accounts;
 mod app_words;
 mod checks;
 mod glance;
+mod jump_list;
 mod machine;
 pub(crate) mod next;
 mod notices;
@@ -54,6 +55,9 @@ pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
 pub(crate) use glance::{GlanceText, glance, id as glance_id};
+#[cfg(test)]
+pub(crate) use jump_list::jump_refused_on;
+pub use jump_list::{JumpAsk, JumpTask, jump_refused};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
@@ -899,6 +903,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         welcome: welcome::welcome(&seen),
         glance_revision: state.glance_revision(),
         answers: glance::answers(&seen),
+        jump_list: jump_list::jump_list(&seen),
     }
 }
 

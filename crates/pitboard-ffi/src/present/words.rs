@@ -415,6 +415,11 @@ pub(crate) fn could_not_switch_itself(os: Os) -> String {
     )
 }
 
+// A Jump List task's switch refused, as a notification's title.
+pub(crate) fn could_not_switch_from_outside(os: Os) -> String {
+    titled(os, "Couldn’t Switch", "Couldn’t switch")
+}
+
 pub(crate) fn could_not_warm_itself(os: Os) -> String {
     titled(os, "Warm-Up Didn’t Start", "Warm-up didn’t start")
 }
@@ -5038,6 +5043,13 @@ mod tests {
         assert_eq!(
             open_pitboard_to_replace("work"),
             "Open Pitboard to switch to work."
+        );
+        assert_eq!(
+            (
+                could_not_switch_from_outside(Os::MacOs),
+                could_not_switch_from_outside(Os::Windows)
+            ),
+            ("Couldn’t Switch".into(), "Couldn’t switch".into())
         );
     }
 

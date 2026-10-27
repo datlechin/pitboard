@@ -69,6 +69,7 @@ pub use present::{
     already_there, app_words, install_update, links_to, named_version, path_too_long,
     ready_to_install, trash_says, webview_runtime_too_old,
 };
+pub use present::{JumpAsk, JumpTask, jump_refused};
 
 mod account_windows;
 pub use account_windows::{

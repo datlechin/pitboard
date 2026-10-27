@@ -51,6 +51,8 @@ mod changing;
 #[cfg(test)]
 mod glancing;
 #[cfg(test)]
+mod jumping;
+#[cfg(test)]
 mod keeping;
 #[cfg(test)]
 mod maintaining;
@@ -78,6 +80,7 @@ mod welcoming;
 mod windowing;
 
 use crate::account_windows::AlertText;
+use crate::present::JumpTask;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
     ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, RemovalShown,
@@ -661,6 +664,9 @@ pub struct Snapshot {
     // one higher each time what a widget shows of the glance changed, which reloads widgets
     pub glance_revision: u64,
     pub answers: Vec<OutsideAnswer>,
+    // the Windows Jump List's tasks, none where it stays as it was
+    #[uniffi(default)]
+    pub jump_list: Option<Vec<JumpTask>>,
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements
