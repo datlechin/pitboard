@@ -313,8 +313,8 @@ public sealed partial class ScreenshotTests
         Launched.Shows(window, Words.WarmsUpAgain, exact: false, within: TimeSpan.FromSeconds(30));
         KeepWindow(window, "windows-window-warm-up");
 
-        launched.Select("SettingsItem");
-        Launched.Expand(launched.Element("settings.warm"));
+        // Its link opens Settings on the warm-up's expander.
+        launched.Invoke("detail.warmUpSettings");
         launched.Element("settings.warmStanding");
         KeepWindow(window, "windows-settings-warm-up");
     }

@@ -18,7 +18,7 @@ struct SettingsView: View {
         init(_ section: SettingsSection) {
             switch section {
             case .general: self = .general
-            case .limits: self = .limits
+            case .limits, .warmUp: self = .limits
             case .advanced: self = .advanced
             }
         }

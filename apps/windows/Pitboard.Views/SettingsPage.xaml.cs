@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 using Pitboard.Core;
 using Pitboard.Windows;
@@ -57,15 +58,16 @@ public sealed partial class SettingsPage : Page
     // The page keeps where it was scrolled to, and what the model asks for opens it on its section.
     public void Show(SettingsSection section)
     {
-        var header = section switch
+        FrameworkElement shown = section switch
         {
             SettingsSection.Limits => LimitsHeader,
+            SettingsSection.WarmUp => WarmUp,
             SettingsSection.Advanced => AdvancedHeader,
             _ => GeneralHeader,
         };
         if (IsLoaded)
         {
-            BringIntoView(header);
+            BringIntoView(shown);
             return;
         }
 
@@ -73,13 +75,22 @@ public sealed partial class SettingsPage : Page
         once = (_, _) =>
         {
             Loaded -= once;
-            BringIntoView(header);
+            BringIntoView(shown);
         };
         Loaded += once;
     }
 
-    private static void BringIntoView(TextBlock header) =>
-        header.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+    // An account's Warm-up settings link is for the hours and toggles inside the warm-up's expander.
+    private void BringIntoView(FrameworkElement shown)
+    {
+        if (shown == WarmUp)
+        {
+            WarmUp.IsExpanded = true;
+            (FocusManager.FindFirstFocusableElement(WarmUp) as UIElement)?.Focus(FocusState.Programmatic);
+        }
+
+        shown.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+    }
 
     private void OnShowDiagnostics(object sender, RoutedEventArgs args) => Context.Show(new Place.Checks());
 

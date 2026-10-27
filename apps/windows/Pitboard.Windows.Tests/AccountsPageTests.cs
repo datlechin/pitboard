@@ -43,7 +43,7 @@ public sealed class AccountsPageTests
                 Email: "spare@example.com", Plan: "Max 5x", SignedInUntil: 1_800_172_800, SignIn: "Saved sign-in valid until Nov 20",
                 Warm: new WarmDetail(
                     On: true, Said: "Warms up again at 3:45 PM", NextAt: null, RunningUntil: null,
-                    Settings: new Choice("Warm-up settings", new Intent.Show(new Place.Settings(SettingsSection.Limits)), Enabled: true)),
+                    Settings: new Choice("Warm-up settings", new Intent.Show(new Place.Settings(SettingsSection.WarmUp)), Enabled: true)),
                 ReadAt: null, Read: null),
             Actions =
             [
@@ -292,7 +292,7 @@ public sealed class AccountsPageTests
 
         Assert.AreEqual("spare@example.com", copied.Single());
         Assert.IsTrue(Structural.Equal(Items.Window("claude", "spare"), opened.Single()), "another window opened");
-        Assert.Contains(new Intent.Show(new Place.Settings(SettingsSection.Limits)), model.Sent);
+        Assert.Contains(new Intent.Show(new Place.Settings(SettingsSection.WarmUp)), model.Sent);
         Assert.Contains(new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), model.Sent);
         Assert.AreEqual(
             "detail.window.claude.ai, detail.rename, detail.remove",

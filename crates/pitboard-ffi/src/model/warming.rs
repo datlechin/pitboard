@@ -23,13 +23,13 @@ use std::time::Duration;
 /// Two hours after the moment the hand's clock starts at, 10:00 in UTC on the same day.
 const UNTIL: i64 = 1_800_007_200;
 
-// Plan 4.3: the inspector's warm-up standing comes with Warm-Up Settings….
+// Plan 4.3: the inspector's warm-up standing comes with Warm-Up Settings…, to its hours and toggles.
 fn to_its_settings() -> crate::present::Choice {
     crate::present::Choice {
         title: words::warm_up_settings(OS),
         intent: Intent::Show {
             place: Some(super::Place::Settings {
-                section: super::SettingsSection::Limits,
+                section: super::SettingsSection::WarmUp,
             }),
         },
         enabled: true,

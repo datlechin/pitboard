@@ -563,6 +563,8 @@ pub enum SettingsSection {
     General,
     Limits,
     Advanced,
+    // Limits, opened on the warm-up's hours and its accounts' toggles
+    WarmUp,
 }
 
 // Shown each time `serial` moves; a failure or a question asked from a menu is said in a window.

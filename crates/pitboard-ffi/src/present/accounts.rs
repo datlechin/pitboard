@@ -578,7 +578,7 @@ fn warm_detail(os: Os, choice: &warm::Choice, note: Option<String>) -> WarmDetai
             title: words::warm_up_settings(os),
             intent: Intent::Show {
                 place: Some(Place::Settings {
-                    section: SettingsSection::Limits,
+                    section: SettingsSection::WarmUp,
                 }),
             },
             enabled: true,

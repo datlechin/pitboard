@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -84,6 +85,27 @@ public sealed class SettingsPageTests
                 () => Bounds(header, scroller).Top is > -1 and < 60,
                 () => $"{heading} at {Bounds(header, scroller).Top}, scrolled {scroller.VerticalOffset}");
         }
+    }
+
+    // An account's Warm-up settings link opens the warm-up's expander on its hours and toggles, with the focus there.
+    [UITestMethod]
+    public async Task TheWarmUpsLinkOpensItsExpanderWithTheFocus()
+    {
+        var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))));
+        page.Height = 300;
+        page.UpdateLayout();
+        var warm = Views.Element<SettingsExpander>(page, "settings.warm");
+
+        page.Show(SettingsSection.Limits);
+        Assert.IsFalse(warm.IsExpanded, "Limits alone opened the warm-up");
+        page.Show(SettingsSection.WarmUp);
+
+        Assert.IsTrue(warm.IsExpanded);
+        Assert.IsFalse(Views.Element<SettingsExpander>(page, "settings.atLimitGroup").IsExpanded);
+        await Views.Until(
+            () => Views.Descendants(warm).Contains(FocusManager.GetFocusedElement(page.XamlRoot) as DependencyObject),
+            "the focus is not in the warm-up");
+        await Views.Until(() => Views.Texts(page).Contains("personal · Max"), "its accounts' toggles did not show");
     }
 
     // Plan 4.11: Uninstall Pitboard in Advanced asks the model's question, whose Uninstall Enter does not press, and only

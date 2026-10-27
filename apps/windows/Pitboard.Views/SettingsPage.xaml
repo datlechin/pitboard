@@ -169,6 +169,7 @@
         </toolkit:SettingsExpander>
         <!-- What a warm-up does under its name and its hours beside it, as the approved mockup draws it. -->
         <toolkit:SettingsExpander
+            x:Name="WarmUp"
             Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"
             ItemsSource="{x:Bind ViewModel.WarmAccounts}"
             AutomationProperties.AutomationId="settings.warm">
