@@ -145,12 +145,11 @@
               AutomationProperties.Name="{x:Bind ViewModel.AtLimitLabel, Mode=OneWay}"
               SelectionChanged="OnAtLimitChosen" />
           <toolkit:SettingsExpander.Items>
-            <!-- Only where something happens at the share, as the macOS pane shows its field. -->
+            <!-- Dimmed while nothing happens at the share: hidden, it left the open expander empty. -->
             <toolkit:SettingsCard
                 Header="{x:Bind ViewModel.ShareTitle, Mode=OneWay}"
                 Description="{x:Bind ViewModel.ShareRange, Mode=OneWay}"
-                IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.ShowsShare, Mode=OneWay}">
+                IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}">
               <NumberBox
                   MinWidth="120"
                   Minimum="{x:Bind ViewModel.LowestShare, Mode=OneWay}"

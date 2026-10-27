@@ -109,8 +109,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool CanSetShare => AtLimit.ShareEnabled;
 
-    public bool ShowsShare => AtLimit.Choice != Core.AtLimit.Nothing;
-
     public string WarmRange => Warm.RangeLabel;
 
     public string WarmStanding => Warm.Standing ?? "";

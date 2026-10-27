@@ -250,7 +250,6 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("At", shown.ShareTitle);
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
-        Assert.IsTrue(shown.ShowsShare);
 
         app.Apply(With(2, machine => machine with
         {
@@ -259,7 +258,6 @@ public sealed class SettingsViewModelTests
 
         Assert.AreEqual(0, shown.AtLimitIndex);
         Assert.IsFalse(shown.CanSetShare, "no share while nothing happens at it");
-        Assert.IsFalse(shown.ShowsShare);
         Assert.IsFalse(shown.HasAtLimitNote);
     }
 

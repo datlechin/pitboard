@@ -659,24 +659,27 @@ public sealed class SettingsPageTests
         }
     }
 
-    // Plan 4.5 and the approved mockup: At shows only where something happens at the share.
+    // Hidden, At left the open expander empty under Do nothing (owner, 2026-10-27).
     [UITestMethod]
-    public async Task TheShareHidesWhileNothingHappensAtIt()
+    public async Task TheShareDimsWhileNothingHappensAtIt()
     {
         var model = new StandInModel(Snapshots.Read(1));
         var app = new AppModel(model);
         var page = await Shown(app);
         await Expand(page, "settings.atLimitGroup", "At");
-        var card = Card(Views.Element<NumberBox>(page, "settings.atLimitShare"));
+        var share = Views.Element<NumberBox>(page, "settings.atLimitShare");
+        var card = Card(share);
 
-        Assert.AreEqual(Visibility.Visible, card.Visibility);
+        Assert.IsTrue(card.IsEnabled);
 
         app.Apply(With(2, machine => machine with
         {
             AtLimit = machine.AtLimit with { Choice = AtLimit.Nothing, ShareEnabled = false },
         }));
 
-        Assert.AreEqual(Visibility.Collapsed, card.Visibility);
+        Assert.AreEqual(Visibility.Visible, card.Visibility);
+        Assert.IsFalse(card.IsEnabled);
+        Assert.IsFalse(share.IsEnabled);
     }
 
     // The header repeated the share the box beside it held; the choice's name says it for Narrator.
