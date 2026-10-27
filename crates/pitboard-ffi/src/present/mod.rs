@@ -885,6 +885,8 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
     let footing = setup::footing(&seen);
     let notices = notices::notices(&seen, &footing);
     let menu_notices = notices::menu_notices(&seen, &footing, &notices);
+    let accounts_shown = setup::accounts_shown(&seen, &footing);
+    let notices = notices::over(&accounts_shown, notices);
     Snapshot {
         revision: 0,
         reading: state.reads > 0,
@@ -905,7 +907,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         menu_notices,
         notices,
         setup: setup::step(&seen, &footing),
-        accounts_shown: setup::accounts_shown(&seen, &footing),
+        accounts_shown,
         menu_accounts_note: setup::menu_accounts_note(&seen, &footing),
         updated_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
         updated_menu: setup::updated_menu(&seen),

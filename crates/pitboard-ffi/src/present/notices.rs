@@ -3,7 +3,10 @@
 //! has to say, and what the menu says of all of it, from MenuBarContent.swift.
 
 use super::words;
-use super::{Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen, Severity};
+use super::{
+    AccountsShown, Footing, MenuEntry, MenuNotices, NoticeAction, PanelNotice, Question, Seen,
+    Severity,
+};
 use crate::model::advice::HeadsUp;
 use crate::model::state::in_its_app;
 use crate::model::{Intent, LastSwitch, Place, Sheet};
@@ -765,6 +768,14 @@ pub(crate) fn warm_failed_notice(told_apart: &str, message: &str) -> RunOutNotic
         message.into(),
         &Clicked::Limits,
     )
+}
+
+// The window's notices: a failed read with nothing to list is its whole content already.
+pub(crate) fn over(shown: &AccountsShown, mut notices: Vec<PanelNotice>) -> Vec<PanelNotice> {
+    if matches!(shown, AccountsShown::ReadFailed { .. }) {
+        notices.retain(|notice| notice.id != "read");
+    }
+    notices
 }
 
 /// What the menu says of the notices: advice and an add left halfway as items that act on

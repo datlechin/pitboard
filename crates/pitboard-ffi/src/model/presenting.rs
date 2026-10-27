@@ -1823,9 +1823,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     assert_eq!(notices[1].lines, [overridden().message]);
 }
 
-/// The line saying the numbers shown are the last ones measured is said only where there are
-/// numbers shown. With nothing measured, or nothing known at all, it pointed at numbers that
-/// were not there.
+// The numbers are said to be the last measured only where some are shown.
 #[test]
 fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
     let reason = "Anthropic could not be reached";
@@ -1844,14 +1842,12 @@ fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
         let mut machine = Stub::reading(Err(refusal("unreachable", reason, Vec::new())));
         machine.offline = known;
         model.refresh(&mut machine);
-        assert_eq!(model.shown().notices[0].lines, [reason]);
+        let item = model.shown().menu_notices.others.expect("an item");
+        assert_eq!(item.help.as_deref(), Some(reason));
     }
 }
 
-/// A failed read with nothing to list is the window's whole content, with why and a way to
-/// try again, and not a spinner that never stops or a list with nothing in it, whether
-/// nothing is known at all or what is known is empty. A machine without Claude Code says that
-/// instead. With accounts to show, the list stays, with the failure above it as a notice.
+// Nothing to list: the failure is the window's whole content, said once. Accounts: a notice.
 #[test]
 fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let reason = "/Users/dana/.pitboard/state.json was written on another Mac.";
@@ -1878,6 +1874,11 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
         "not a machine without Claude Code"
     );
     assert_eq!(shown.accounts_shown, read_failed);
+    assert_eq!(ids(&shown), Vec::<String>::new(), "said once in the window");
+    assert_eq!(
+        shown.menu_notices.others.and_then(|item| item.subtitle),
+        Some(words::COULD_NOT_READ_USAGE.into())
+    );
 
     let mut empty = at_noon();
     empty.refresh(&mut Stub::reading(failed()));
@@ -1892,6 +1893,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
         "the read's problem is said ahead of it"
     );
     assert_eq!(shown.accounts_shown, read_failed);
+    assert_eq!(ids(&shown), Vec::<String>::new(), "said once in the window");
 
     let mut some = at_noon();
     let mut listed = Stub::reading(failed());
