@@ -69,9 +69,6 @@ final class AppRemoval {
         // Nowhere is left to say a failure in.
         try? loginItem.unregister()
         try? FileManager.default.removeItem(at: support)
-        for folder in Self.leftInLibrary(by: domain) {
-            try? trash(library.appendingPathComponent(folder))
-        }
         if Self.installedByHomebrew(app, prefixes: homebrew) {
             let help = words.settings.homebrewHelp.flatMap { URL(string: $0.link) }
             _ = ask(.homebrew(help: help))
@@ -83,6 +80,9 @@ final class AppRemoval {
             }
         }
         // Last, as AppKit writes to them until the app stops.
+        for folder in Self.leftInLibrary(by: domain) {
+            try? trash(library.appendingPathComponent(folder))
+        }
         defaults.removePersistentDomain(forName: domain)
         quit()
     }
