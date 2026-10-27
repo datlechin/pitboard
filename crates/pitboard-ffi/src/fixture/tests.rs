@@ -15,7 +15,7 @@ use crate::model::{
 };
 use crate::present::testing::Utc;
 use crate::present::words;
-use crate::present::{AccountItem, AccountsShown, Footing, RowEnd};
+use crate::present::{AccountItem, AccountsShown, ActionKind, Footing, RowEnd};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::{self, ProviderId};
@@ -1539,17 +1539,15 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     let shown = told.last_where("the accounts read", read_in);
-    // Each row's own menu, by its items' titles, with Forget… last.
+    // Each row's own menu but its windows, by its items' titles, with Remove Account… last.
     let menus: Vec<(String, Vec<String>)> = shown
         .sections
         .iter()
         .flat_map(|section| &section.accounts)
         .map(|item| {
-            let titles = item
-                .offers
-                .iter()
-                .chain(&item.forget)
-                .map(|offer| offer.title.clone())
+            let titles = (item.actions.iter())
+                .filter(|action| action.kind != ActionKind::OpenWindow)
+                .map(|action| action.title.clone())
                 .collect();
             (item.title.clone(), titles)
         })
@@ -1571,7 +1569,8 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         ]
     );
     let work = &shown.sections[0].accounts[0];
-    assert!(!work.offers[0].enabled && work.forget.as_ref().is_some_and(|f| !f.enabled));
+    let enabled = |kind| (work.actions.iter()).any(|action| action.kind == kind && action.enabled);
+    assert!(!enabled(ActionKind::Switch) && !enabled(ActionKind::Remove));
 
     model.send(Intent::PresentSheet {
         sheet: Sheet::Rename {
@@ -1944,10 +1943,13 @@ fn the_account_windows_are_what_their_ui_tests_read() {
         .flat_map(|section| &section.accounts)
         .find(|item| item.qualified.as_deref() == Some("codex/spare"))
         .expect("spare's row");
-    let opens: Vec<(&str, &str)> = spare_row
-        .windows
-        .iter()
-        .map(|offer| (offer.title.as_str(), offer.window.label.as_str()))
+    let opens: Vec<(&str, &str)> = (spare_row.actions.iter())
+        .filter_map(|action| {
+            Some((
+                action.title.as_str(),
+                action.window.as_ref()?.label.as_str(),
+            ))
+        })
         .collect();
     assert_eq!(opens, [(words::open_site("chatgpt.com").as_str(), "spare")]);
     let shown = read.account_windows;

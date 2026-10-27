@@ -539,7 +539,7 @@ public sealed class ModelTests
             InUse: false, Title: "spare");
         var spare = new AccountItem(
             Id: "codex:spare", Qualified: "codex/spare", Title: "spare",
-            Email: "spare@example.com", EmailLine: "spare@example.com", Plan: null, MenuTitle: "spare",
+            Email: "spare@example.com", Plan: null, MenuTitle: "spare",
             Spoken: "spare (Codex)", InUse: false,
             NeedsSignIn: false, Standing: AccountStanding.Ready, Unplaced: false, End: new RowEnd.Button(use), Action: use,
             Summary: "5-hour 72% used",
@@ -549,34 +549,30 @@ public sealed class ModelTests
                     Kind: NoteKind.Expiring, Text: "Parked login good for 3 more days: sign in again to keep it",
                     Action: null, Learn: null),
             ],
-            Lines: ["Parked login good for 3 more days: sign in again to keep it"],
             Detail: new AccountDetail(
                 Email: "spare@example.com", Plan: null, SignedInUntil: 1_800_259_200,
                 SignIn: "Parked login good for 3 more days", Warm: null, ReadAt: 1_800_000_000, Read: "Updated 08:00",
                 Notes: []),
             Help: null, Limits: [limit],
-            Offers:
-            [
-                new ItemOffer(Title: "Use spare", Intent: use.Intent, Enabled: true, Confirm: null),
-                new ItemOffer(
-                    Title: "Sign In Again…", Intent: new Intent.PresentSheet(new Sheet.SignInAgain("codex", "spare")),
-                    Enabled: false, Confirm: null),
-                new ItemOffer(
-                    Title: "Rename…", Intent: new Intent.PresentSheet(new Sheet.Rename("codex", "spare")),
-                    Enabled: true, Confirm: null),
-            ],
-            Windows: [new WindowOffer(Title: "Open chatgpt.com", Window: window)],
-            Forget: new ItemOffer(
-                Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Enabled: true,
-                Confirm: new Question(
-                    Title: "Forget “spare (Codex)”?",
-                    Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget",
-                    Destructive: true, ConfirmIsDefault: true)),
             Actions:
             [
                 new AccountAction(
+                    Kind: ActionKind.Switch, Title: "Use spare", Intent: use.Intent, Window: null, Enabled: true,
+                    Confirm: null),
+                new AccountAction(
+                    Kind: ActionKind.SignInAgain, Title: "Sign In Again…",
+                    Intent: new Intent.PresentSheet(new Sheet.SignInAgain("codex", "spare")), Window: null,
+                    Enabled: false, Confirm: null),
+                new AccountAction(
                     Kind: ActionKind.OpenWindow, Title: "Open chatgpt.com", Intent: null, Window: window, Enabled: true,
                     Confirm: null),
+                new AccountAction(
+                    Kind: ActionKind.Remove, Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Window: null,
+                    Enabled: true,
+                    Confirm: new Question(
+                        Title: "Forget “spare (Codex)”?",
+                        Message: "Pitboard deletes the login it parked for this account.", Confirm: "Forget",
+                        Destructive: true, ConfirmIsDefault: true)),
             ]);
         var giveUp = new NoticeAction(
             Title: "Give Up…", Intent: new Intent.AbandonStuckSwitch(), Dismisses: false, Switches: false,
@@ -611,14 +607,13 @@ public sealed class ModelTests
         Assert.AreEqual(1_800_003_900L, row.Limits[0].ResetsAt);
         Assert.AreEqual(NoteKind.Expiring, row.Notes[0].Kind);
         Assert.AreEqual(1_800_259_200L, row.Detail.SignedInUntil);
-        Assert.AreEqual(ActionKind.OpenWindow, row.Actions[0].Kind);
-        Assert.AreEqual("chatgpt.com", row.Actions[0].Window?.Site.Host);
+        Assert.AreEqual<Intent?>(row.Action!.Intent, row.Actions[0].Intent);
+        Assert.IsFalse(row.Actions[1].Enabled);
+        Assert.AreEqual(ActionKind.OpenWindow, row.Actions[2].Kind);
+        Assert.AreEqual("chatgpt.com", row.Actions[2].Window?.Site.Host);
+        Assert.AreEqual<Intent?>(new Intent.Forget("codex/spare"), row.Actions[3].Intent);
+        Assert.AreEqual("Forget", row.Actions[3].Confirm?.Confirm);
         Assert.AreEqual(1_800_000_000L, snapshot.UpdatedAt);
-        Assert.AreEqual<Intent>(row.Action!.Intent, row.Offers[0].Intent);
-        Assert.IsFalse(row.Offers[1].Enabled);
-        Assert.AreEqual("chatgpt.com", row.Windows[0].Window.Site.Host);
-        Assert.AreEqual<Intent?>(new Intent.Forget("codex/spare"), row.Forget?.Intent);
-        Assert.AreEqual("Forget", row.Forget?.Confirm?.Confirm);
         Assert.IsFalse(((AccountsShown.ReadFailed)snapshot.AccountsShown).Retry.Enabled);
         Assert.IsTrue(snapshot.Notices[0].Severity > Severity.Warning);
         Assert.AreEqual<Intent>(new Intent.AbandonStuckSwitch(), snapshot.Notices[0].Actions[0].Intent);

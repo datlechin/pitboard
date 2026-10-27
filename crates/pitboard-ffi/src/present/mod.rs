@@ -145,9 +145,6 @@ pub struct AccountItem {
     pub title: String,
     /// Its email address; empty for a login Pitboard cannot read.
     pub email: String,
-    /// The line under its name in the window: its email address, where its name is not that
-    /// already.
-    pub email_line: Option<String>,
     /// The plan its login says it is on, as the window's tag beside its name: "Team 5x".
     pub plan: Option<String>,
     // "work" on macOS; on Windows its figure or why it can't be switched to: "work (42%)"
@@ -170,23 +167,12 @@ pub struct AccountItem {
     pub summary: String,
     // what needs doing about it, the most pressing first
     pub notes: Vec<AccountNote>,
-    // the window's lines under its limits: its notes, a sign-in due to expire and its warm-up
-    pub lines: Vec<String>,
     pub detail: AccountDetail,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
     pub limits: Vec<LimitRow>,
-    // in order: naming it, where pressing it does that, or for an account Pitboard has a name
-    // for, switching to it, signing in to it again and renaming it, each dimmed while it
-    // cannot be chosen, which a shortcut menu leaves out
-    pub offers: Vec<ItemOffer>,
-    /// Its windows, one for each site of its tool, as its own menu offers to open them.
-    pub windows: Vec<WindowOffer>,
-    // for an enrolled account, dimmed for the one in use, whose record is the only one of who
-    // is signed in; what its own menu offers last, and what deleting its row does
-    pub forget: Option<ItemOffer>,
-    // everything its own menu offers, in its order: offers, windows and forget, by kind
+    // everything its own menu offers, in its order, each dimmed while it cannot be chosen
     pub actions: Vec<AccountAction>,
 }
 
@@ -313,7 +299,7 @@ pub struct ItemAction {
     pub intent: Intent,
 }
 
-// Something an account's own menu offers to do to it.
+// What a check's fix or Uninstall Pitboard… offers to do, asked first where `confirm` says.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ItemOffer {
     pub title: String,
@@ -321,16 +307,6 @@ pub struct ItemOffer {
     pub intent: Intent,
     pub enabled: bool,
     pub confirm: Option<Question>,
-}
-
-/// One of an account's windows, as its own menu offers to open it. Opening a window is the
-/// app's own doing; the app says it has with `Intent::WindowOpened`.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct WindowOffer {
-    /// What its item says: "Open chatgpt.com".
-    pub title: String,
-    /// The window it opens, as the menus and the picker list it.
-    pub window: WindowAccount,
 }
 
 /// One limit of an account, as a row of its bars.

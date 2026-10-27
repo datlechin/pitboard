@@ -6,7 +6,7 @@ use super::words;
 use super::{
     AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
     AccountStanding, ActionKind, Choice, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
-    MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail, WindowOffer,
+    MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
 use crate::model::advice::window;
@@ -281,17 +281,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         action.clone().map(|action| RowEnd::Button { action })
     };
     let warm_note = warm_note(seen, account);
-    // A row says a saved sign-in has expired, as it says one is about to.
-    let ended = expiring.clone().or_else(|| {
-        until
-            .filter(|_| account.standing == status::Standing::LoginExpired)
-            .map(|at| words::sign_in_expires(at - seen.now, lapses))
-    });
-    let lines = [&problem, &stale_note, &ended, &warm_note]
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect();
     let actions = actions(seen, account, action.as_ref(), busy, &spoken_name);
     let acting = |kind| actions.iter().find(|action| action.kind == kind).cloned();
     // A note nothing in the app does anything about says where the docs explain it.
@@ -361,8 +350,6 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         id: account.id.clone(),
         qualified: account.qualified.clone(),
         summary: summary(seen, account),
-        email_line: (!account.email.is_empty() && account.email != title)
-            .then(|| account.email.clone()),
         title,
         email: account.email.clone(),
         plan: account.plan.clone(),
@@ -373,29 +360,10 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         standing: standing_of(account, switching),
         unplaced: account.unplaced,
         end,
-        offers: actions
-            .iter()
-            .filter(|action| !matches!(action.kind, ActionKind::OpenWindow | ActionKind::Remove))
-            .filter_map(offer_of)
-            .collect(),
-        windows: actions
-            .iter()
-            .filter_map(|action| {
-                Some(WindowOffer {
-                    title: action.title.clone(),
-                    window: action.window.clone()?,
-                })
-            })
-            .collect(),
-        forget: actions
-            .iter()
-            .find(|action| action.kind == ActionKind::Remove)
-            .and_then(offer_of),
         actions,
         action,
         help: problem.or(stale_note),
         notes,
-        lines,
         detail,
         limits: account
             .usage
@@ -1286,6 +1254,10 @@ mod tests {
 
     const NOW: i64 = 1_800_000_000;
 
+    fn noted(row: &AccountItem) -> Vec<&str> {
+        row.notes.iter().map(|note| note.text.as_str()).collect()
+    }
+
     fn desktop_rows(accounts: Vec<Account>) -> Vec<AccountItem> {
         let state = read(status(accounts, Vec::new()), vec![claude_desktop()]);
         present_on(Os::MacOs, &state, NOW, &Utc)
@@ -1308,7 +1280,7 @@ mod tests {
         assert_eq!(rows[0].summary, words::NO_USAGE_READ);
         assert_eq!(rows[1].summary, words::NO_USAGE_READ);
         assert!(
-            rows[1].lines.is_empty(),
+            rows[1].notes.is_empty(),
             "no usage said once, in the menu's line, and its life in the detail"
         );
         let lapsed = Account {
@@ -1320,7 +1292,7 @@ mod tests {
             ..desktop_account("home", false)
         };
         assert_eq!(
-            desktop_rows(vec![lapsed])[0].lines,
+            noted(&desktop_rows(vec![lapsed])[0]),
             [words::sign_in_expires(-1, true)],
             "as `pitboard status` hints a sign-in for it"
         );
@@ -1343,7 +1315,10 @@ mod tests {
             .parked_until(due)
             .standing(status::Standing::Expiring)
             .build());
-        assert_eq!(expiring.lines, [words::sign_in_expires(2 * 86_400, false)]);
+        assert_eq!(
+            noted(&expiring),
+            [words::sign_in_expires(2 * 86_400, false)]
+        );
         assert!(!expiring.needs_sign_in);
         assert!(matches!(
             expiring.action.map(|action| action.intent),
@@ -1352,7 +1327,7 @@ mod tests {
 
         let lasting = NOW + 20 * 86_400;
         let ready = row(account(Some("work")).parked_until(lasting).build());
-        assert!(ready.lines.is_empty(), "nothing until three days are left");
+        assert!(ready.notes.is_empty(), "nothing until three days are left");
     }
 
     fn menu_titles(os: Os, accounts: Vec<Account>) -> Vec<String> {
@@ -1409,7 +1384,6 @@ mod tests {
         };
         let rows = desktop_rows(vec![work]);
         let read = words::read_ago(2 * 3_600, "Claude");
-        assert_eq!(rows[0].lines, [read.as_str()]);
         assert!(rows[0].notes.is_empty(), "nothing to do");
         assert_eq!(
             (rows[0].detail.read_at, rows[0].detail.read.as_ref()),
