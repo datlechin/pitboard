@@ -10,14 +10,14 @@ internal static class Items
         Acting(
             new(
                 Id: $"{provider}:{label}", Qualified: $"{provider}/{label}", Title: label,
-                Email: $"{label}@example.com", EmailLine: $"{label}@example.com", Plan: null, MenuTitle: label,
+                Email: $"{label}@example.com", Plan: null, MenuTitle: label,
                 Spoken: inUse ? $"{label}, in use" : label, InUse: inUse, NeedsSignIn: false,
                 Standing: inUse ? AccountStanding.InUse : AccountStanding.Ready, Unplaced: false,
-                End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Lines: [],
+                End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [],
                 Detail: new AccountDetail(
                     Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
                     ReadAt: null, Read: null, Notes: []),
-                Help: null, Limits: [], Offers: [], Windows: [], Forget: null, Actions: []),
+                Help: null, Limits: [], Actions: []),
             inUse ? null : new ItemAction("Switch", $"Switch to {label}", new Intent.SwitchTo($"{provider}/{label}")));
 
     // What pressing it does, and the button at its row's end that does it.

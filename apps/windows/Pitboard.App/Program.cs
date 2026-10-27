@@ -39,7 +39,7 @@ public static class Program
         AppInstance.GetCurrent().Activated += (_, activated) => handovers.Arrived(
             activated.Data is ILaunchActivatedEventArgs launch
                 ? Launching.Handed(launch.Arguments, Running, fixtureFolder)
-                : null);
+                : new Handover.Window());
         var start = Launching.Decide(
             args,
             Running,
@@ -68,6 +68,7 @@ public static class Program
                     Exe,
                     new RegistryRunKey(),
                     new CoreScheduledTasks(environment),
+                    new SystemJumpList(Running, Exe),
                     new SystemAppNotifications(),
                     new RegistryNotificationRegistration(Running.Aumid));
                 return 0;

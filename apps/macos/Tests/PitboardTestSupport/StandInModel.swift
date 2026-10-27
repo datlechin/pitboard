@@ -9,6 +9,7 @@ package final class StandInModel: PitboardModelProtocol, @unchecked Sendable {
     private let first: Snapshot
     private var intents: [Intent] = []
     private var stops = 0
+    private var glanced: String?
 
     package init(_ first: Snapshot) {
         self.first = first
@@ -16,8 +17,13 @@ package final class StandInModel: PitboardModelProtocol, @unchecked Sendable {
 
     package var sent: [Intent] { lock.withLock { intents } }
     package var stopped: Int { lock.withLock { stops } }
+    package var glanceText: String? {
+        get { lock.withLock { glanced } }
+        set { lock.withLock { glanced = newValue } }
+    }
 
     package func send(intent: Intent) { lock.withLock { intents.append(intent) } }
     package func shutdown() { lock.withLock { stops += 1 } }
     package func snapshot() -> Snapshot { first }
+    package func glance() -> String? { glanceText }
 }

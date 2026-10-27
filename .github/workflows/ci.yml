@@ -321,8 +321,9 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
-      # The newest Xcode on macos-26. Development uses 27.1, which GitHub has only on its
-      # preview xcode-27 image.
+      # The newest Xcode on macos-26, which the release's macos-latest builds with too.
+      # Development uses 27.1, which GitHub has only on its preview xcode-27 image, and what
+      # only macOS 27's SDK knows sits behind compiler(>=6.4).
       - run: |
           sudo xcode-select --switch /Applications/Xcode_26.6.app
           xcodebuild -version
@@ -339,7 +340,8 @@ jobs:
       - run: >
           swift format lint --strict --recursive --configuration apps/macos/.swift-format
           apps/macos/Sources/PitboardApp apps/macos/Sources/PitboardKit apps/macos/Sources/PitboardLinkTarget
-          apps/macos/App apps/macos/ShareExtension apps/macos/UITests apps/macos/Tests apps/macos/scripts
+          apps/macos/Sources/PitboardGlance apps/macos/Sources/PitboardWidgetViews
+          apps/macos/App apps/macos/ShareExtension apps/macos/Widgets apps/macos/UITests apps/macos/Tests apps/macos/scripts
           .github/scripts
       - uses: ./.github/actions/xcodegen
       # Proves the core still links into the app, that its bindings still match, and that

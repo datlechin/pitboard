@@ -14,6 +14,14 @@ pub struct AppWords {
     pub settings: SettingsWords,
     pub sheet: SheetWords,
     pub account_window: AccountWindowWords,
+    pub shortcuts: ShortcutsWords,
+}
+
+// What a Shortcuts action says that the model's answers don't: macOS's alone.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ShortcutsWords {
+    pub not_read_yet: Option<String>,
+    pub none_in_use: Option<String>,
 }
 
 // The menu bar item's and the notification area icon's menus, and the app's own menus.
@@ -206,6 +214,18 @@ pub struct AccountWindowWords {
     pub could_not_open: Option<String>,
     // what VoiceOver calls the link the Open Link window opens
     pub link: Option<String>,
+}
+
+// A switch Pitboard hasn't answered in the time Shortcuts gives an action.
+#[uniffi::export]
+pub fn still_switching(label: String) -> String {
+    format!("Pitboard is still switching to {label}.")
+}
+
+// One account in what Get Usage says: "work: 5-hour 42% used, Weekly 12%".
+#[uniffi::export]
+pub fn usage_of(name: String, said: String) -> String {
+    format!("{name}: {said}")
 }
 
 #[uniffi::export]
@@ -504,6 +524,10 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             could_not_open: windows("Couldn’t open this window"),
             link: mac("Link"),
         },
+        shortcuts: ShortcutsWords {
+            not_read_yet: mac("Pitboard hasn’t read its accounts yet. Try again in a moment."),
+            none_in_use: mac(words::NONE_IN_USE),
+        },
     }
 }
 
@@ -594,6 +618,14 @@ mod tests {
 
     #[test]
     fn a_sentence_with_a_value_is_made_here_not_in_a_view() {
+        assert_eq!(
+            still_switching("personal".into()),
+            "Pitboard is still switching to personal."
+        );
+        assert_eq!(
+            usage_of("work".into(), "5-hour 42% used, Weekly 12%".into()),
+            "work: 5-hour 42% used, Weekly 12%"
+        );
         assert_eq!(install_update("1.1.0".into()), "Install Pitboard 1.1.0…");
         assert_eq!(
             ready_to_install("1.1.0".into()),
@@ -686,6 +718,22 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+        assert_eq!(
+            mac.shortcuts,
+            ShortcutsWords {
+                not_read_yet: Some(
+                    "Pitboard hasn’t read its accounts yet. Try again in a moment.".into()
+                ),
+                none_in_use: Some("No account is in use.".into()),
+            }
+        );
+        assert_eq!(
+            windows.shortcuts,
+            ShortcutsWords {
+                not_read_yet: None,
+                none_in_use: None,
+            }
+        );
     }
 
     // A spinner says nothing on screen, so each system's screen reader is told what it waits for.

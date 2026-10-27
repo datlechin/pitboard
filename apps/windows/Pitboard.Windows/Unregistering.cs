@@ -9,7 +9,8 @@ namespace Pitboard.Windows;
 public static class Unregistering
 {
     public static void Run(
-        Build build, string exe, IRunKey run, IScheduledTasks tasks, IAppNotifications notifications, INotificationRegistration registration)
+        Build build, string exe, IRunKey run, IScheduledTasks tasks, IJumpList jumpList, IAppNotifications notifications,
+        INotificationRegistration registration)
     {
         if (build is Build.Debug)
         {
@@ -32,6 +33,14 @@ public static class Unregistering
             tasks.Remove(exe);
         }
         catch (Exception error) when (error is UniffiException or TypeInitializationException or DllNotFoundException)
+        {
+        }
+
+        try
+        {
+            jumpList.Delete();
+        }
+        catch (Exception error) when (error is COMException or UnauthorizedAccessException)
         {
         }
 

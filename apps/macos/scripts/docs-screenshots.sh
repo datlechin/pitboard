@@ -31,10 +31,11 @@ results=$build/Screenshots.xcresult
 attachments=$(mktemp -d)
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
-# Building registers the debug build's scheme and Share extension with macOS until undone.
+# Building registers the debug build's scheme and extensions with macOS until undone.
 unregister() {
-    for appex in "$debug/PitboardShare.appex" \
-        "$debug/Pitboard.app/Contents/PlugIns/PitboardShare.appex"; do
+    for appex in "$debug/PitboardShare.appex" "$debug/PitboardWidgets.appex" \
+        "$debug/Pitboard.app/Contents/PlugIns/PitboardShare.appex" \
+        "$debug/Pitboard.app/Contents/PlugIns/PitboardWidgets.appex"; do
         pluginkit -r "$appex" 2>/dev/null || true
     done
     for app in "$debug"/Pitboard.app/Contents/Frameworks/Sparkle.framework/Versions/*/Updater.app \

@@ -320,10 +320,36 @@ fn a_request_from_outside_while_uninstalling_is_answered() {
         request,
         done: false,
         said: words::BEING_UNINSTALLED.into(),
+        question: None,
     };
     assert_eq!(model.shown().answers, [answered(1), answered(2)]);
     model.run(&mut machine);
     assert!(machine.switched_to.is_empty());
+}
+
+#[test]
+fn a_switch_from_outside_waiting_for_the_first_read_is_answered_once_uninstalling() {
+    let mut machine = two_accounts();
+    let mut model = Hand::new();
+    model.send(Intent::Start);
+    model.send(Intent::Outside {
+        request: 1,
+        ask: OutsideAsk::Switch {
+            account: crate::present::glance_id("claude:p"),
+        },
+    });
+    model.send(Intent::Uninstall);
+    model.run(&mut machine);
+    assert!(machine.switched_to.is_empty());
+    assert_eq!(
+        model.shown().answers,
+        [OutsideAnswer {
+            request: 1,
+            done: false,
+            said: words::BEING_UNINSTALLED.into(),
+            question: None,
+        }]
+    );
 }
 
 // The core may have removed the accounts and let go of Pitboard's folder before the job was lost.

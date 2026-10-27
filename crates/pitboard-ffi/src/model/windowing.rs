@@ -15,8 +15,8 @@ use crate::account_windows::{WindowNoteKind, stores::derive};
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{
-    Account, Choice, DownloadState, LinkPicker, OpenWindow, PickerShown, Question, SiteMenu,
-    WaitingShown, WindowWaiting, downloads_quit_question,
+    Account, Choice, DownloadState, JumpAsk, LinkPicker, OpenWindow, PickerShown, Question,
+    SiteMenu, WaitingShown, WindowWaiting, downloads_quit_question,
 };
 use pitboard_core::host::{OS, Os};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -226,6 +226,37 @@ fn the_picker_offers_the_sites_accounts_with_one_chosen() {
         claude("w"),
         "an account no longer offered is never chosen"
     );
+}
+
+// Anything on the machine can open a Pitboard link, so none switches, whatever it names.
+#[test]
+fn a_pitboard_link_never_switches_an_account() {
+    let mut machine = machine();
+    let mut model = started(&mut machine);
+    let personal = crate::present::glance_id("claude:p");
+    for text in [
+        format!("pitboard://switch?account={personal}"),
+        "pitboard://switch?to=claude%2Fpersonal".into(),
+        format!("pitboard://open?account={personal}"),
+        "pitboard://open?url=https%3A%2F%2Fclaude.ai%2F&switch=claude%2Fpersonal".into(),
+    ] {
+        model.send(Intent::LinkArrived { text: text.clone() });
+        model.run(&mut machine);
+        assert!(
+            matches!(picker(&model).shown, PickerShown::Refused { .. }),
+            "{text}"
+        );
+    }
+    model.send(shared("https://claude.ai/new", "pitboard"));
+    armed(&mut model);
+    choose(&mut model, &claude("p"));
+    model.run(&mut machine);
+    assert!(model.state.switch_under_way().is_none());
+    assert_eq!(
+        model.count(|job| matches!(job, Job::Holding { .. } | Job::Switch { .. })),
+        0
+    );
+    assert!(machine.switched_to.is_empty());
 }
 
 /// AccountPickerTests.swift's thePickerSaysWhatStandsInTheWay: a link of another site is
@@ -1058,6 +1089,14 @@ fn a_window_waits_while_its_old_store_is_held() {
         SiteMenu::One { window, .. } => window.store == personal,
         SiteMenu::Several { windows, .. } => windows.iter().any(|w| w.store == personal),
     }));
+    let opens = JumpAsk::OpenWindow {
+        store: personal.clone(),
+    };
+    let jumps = |model: &Hand| model.on_windows().jump_list.expect("read");
+    assert!(
+        !jumps(&model).iter().any(|task| task.ask == opens),
+        "the Jump List leaves it out"
+    );
 
     model.refresh(&mut machine);
     assert_eq!(open_window(&model, &personal), None);
@@ -1068,6 +1107,7 @@ fn a_window_waits_while_its_old_store_is_held() {
     assert!(model.shown().account_windows.held.is_empty());
     let window = open_window(&model, &personal).expect("open once deleted");
     assert_eq!(window.note, Some(WindowNoteKind::SignIn));
+    assert!(jumps(&model).iter().any(|task| task.ask == opens));
 }
 
 #[test]

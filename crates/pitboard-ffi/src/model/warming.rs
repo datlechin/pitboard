@@ -463,7 +463,6 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         &|_| "10:00".to_owned(),
     );
     let said = words::typeset(&pitboard_core::words::capitalised(&standing));
-    assert_eq!(item.lines.last(), Some(&said));
     assert_eq!(
         item.detail.warm,
         Some(WarmDetail {

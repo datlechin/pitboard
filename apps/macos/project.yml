@@ -75,10 +75,10 @@ settings:
     PITBOARD_VERSION: 0.0.0
     CURRENT_PROJECT_VERSION: 1
   configs:
-    # A debug build answers its own scheme and has a Share menu entry of its own, so a
-    # link or a share never reaches it in place of the release, or the release in its place.
-    # Its icon lights its row amber, so it is never mistaken for the release in the Dock, in
-    # Login Items, in the Share menu or beside it in Applications.
+    # A debug build answers its own scheme and has a name of its own, so a link, a share,
+    # a shortcut or a widget never reaches it in place of the release, or the release in its
+    # place. Its icon lights its row amber, so it is never mistaken for the release in the
+    # Dock, in Login Items, in the Share menu or beside it in Applications.
     Debug:
       DEBUG_INFORMATION_FORMAT: dwarf
       ENABLE_TESTABILITY: YES
@@ -89,7 +89,7 @@ settings:
       ONLY_ACTIVE_ARCH: YES
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG $(inherited)"
       SWIFT_OPTIMIZATION_LEVEL: -Onone
-      PITBOARD_SHARE_NAME: Pitboard Debug
+      PITBOARD_DISPLAY_NAME: Pitboard Debug
       PITBOARD_URL_SCHEME: pitboard-debug
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Debug
     Release:
@@ -97,7 +97,7 @@ settings:
       ENABLE_NS_ASSERTIONS: NO
       MTL_ENABLE_DEBUG_INFO: NO
       SWIFT_COMPILATION_MODE: wholemodule
-      PITBOARD_SHARE_NAME: Pitboard
+      PITBOARD_DISPLAY_NAME: Pitboard
       PITBOARD_URL_SCHEME: pitboard
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
@@ -136,6 +136,8 @@ targets:
       - package: Sparkle
       - target: PitboardShare
         embed: true
+      - target: PitboardWidgets
+        embed: true
 
   PitboardShare:
     type: app-extension
@@ -168,6 +170,38 @@ targets:
         product: PitboardShareBindings
       - package: Pitboard
         product: PitboardLinkTarget
+
+  # Sandboxed and with no Rust: it reads the glance the app keeps in their App Group, which
+  # scripts/build-app.sh gives both only when it signs with a team.
+  PitboardWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Widgets
+        excludes: [PitboardWidgets.entitlements]
+      # The control's symbol is the menu bar item's.
+      - path: App
+        includes: ["Assets.xcassets"]
+    settings:
+      base:
+        INFOPLIST_FILE: Widgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Widgets/PitboardWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.usepitboard.Pitboard.debug.widgets
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.usepitboard.Pitboard.widgets
+    dependencies:
+      - package: Pitboard
+        product: PitboardWidgetViews
 
   PitboardUITests:
     type: bundle.ui-testing

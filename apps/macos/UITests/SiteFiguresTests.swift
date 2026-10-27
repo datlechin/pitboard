@@ -266,14 +266,17 @@ final class SiteFiguresTests: FixtureTestCase {
         }
         XCTAssertEqual(
             bar,
-            ["Apple", "Pitboard", "File", "Edit", "View", "Go", "Account", "Window", "Help"])
-        XCTAssertEqual(
-            titles("Pitboard first"),
             [
-                "About Pitboard", "Settings…", "Services", "Hide Pitboard", "Hide Others",
-                "Show All", "Quit Pitboard",
+                "Apple", Words.debugBuild, "File", "Edit", "View", "Go", "Account", "Window",
+                "Help",
             ])
-        XCTAssertEqual(dimmed("Pitboard first"), ["Show All"])
+        XCTAssertEqual(
+            titles("\(Words.debugBuild) first"),
+            [
+                "About Pitboard", "Settings…", "Services", "Hide \(Words.debugBuild)",
+                "Hide Others", "Show All", "Quit \(Words.debugBuild)",
+            ])
+        XCTAssertEqual(dimmed("\(Words.debugBuild) first"), ["Show All"])
         XCTAssertEqual(
             titles("File first"),
             ["Add Account…", "Open claude.ai", "Remove Website Data…", "Close", "Close All"])
@@ -320,7 +323,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testTheAboutPanel() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.menuBars.menuBarItems["Pitboard"].click()
+        app.menuBars.menuBarItems[Words.debugBuild].click()
         app.menuBars.menuItems["About Pitboard"].firstMatch.click()
         // The standard About panel is a dialog, not one of the app's windows.
         let panel = app.dialogs.firstMatch
@@ -762,7 +765,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let menu = entry.menus.firstMatch
         guard menu.waitForExistence(timeout: 3) else { return [] }
         let shown = items(of: menu)
-        keep(menu, as: "site-menu-bar-\(title.lowercased())-\(state)")
+        keep(menu, as: "site-menu-bar-\(title.lowercased().replacing(" ", with: "-"))-\(state)")
         app.typeKey(.escape, modifierFlags: [])
         return shown
     }

@@ -53,7 +53,7 @@ use crate::present::words::{
     could_not_remove, could_not_rename, could_not_sign_in, could_not_switch, could_not_warm,
     signed_in_now,
 };
-use crate::present::{Clicked, UNUSABLE};
+use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
@@ -659,7 +659,8 @@ pub(crate) enum Answered {
     NeedsSignIn { label: String },
     Unusable { label: String },
     Busy,
-    AppOpen { app: String },
+    // the app holding its login is open, which the asker may let Pitboard quit
+    AppOpen { question: QuitQuestion },
     // its login in use is refused for good, which only the app asks to replace
     Replace { label: String },
     // a question the person has open at the Mac would go
@@ -669,11 +670,14 @@ pub(crate) enum Answered {
     Failed { title: String },
 }
 
-// The glance's last text written, and how many times it changed.
+// The glance's last text, what a widget shows of it, how many times that changed, and whether
+// the app named a file to write it to.
 #[derive(Debug, Default)]
 struct Glancing {
-    written: Option<String>,
+    text: Option<String>,
+    shown: Option<String>,
     revision: u64,
+    file: bool,
 }
 
 const ANSWERS_KEPT: usize = 10;
@@ -1133,11 +1137,18 @@ pub(crate) struct State {
     pub(crate) removing: Option<Removing>,
     // jobs `Job::writes` counts, until each has answered
     at_work: u32,
-    // where the app named a file for the glance
-    glancing: Option<Glancing>,
+    glancing: Glancing,
     pub(crate) answered: VecDeque<(u64, Answered)>,
-    // the request from outside the switch under way answers
-    outside_switch: Option<u64>,
+    outside_switch: Option<OutsideSwitch>,
+    // switches asked from outside before the accounts were first read
+    outside_held: Vec<(u64, OutsideAsk)>,
+}
+
+// The request from outside the switch under way answers, and whether it let Pitboard quit an app.
+#[derive(Debug, Clone, Copy)]
+struct OutsideSwitch {
+    request: u64,
+    quit: bool,
 }
 
 impl State {
@@ -1211,9 +1222,10 @@ impl State {
             windows: Windows::new(cadence.arming),
             removing: None,
             at_work: 0,
-            glancing: None,
+            glancing: Glancing::default(),
             answered: VecDeque::new(),
             outside_switch: None,
+            outside_held: Vec::new(),
         }
     }
 
@@ -1239,6 +1251,7 @@ impl State {
         }
         self.go_off(now, &mut jobs);
         self.follow_windows(now, &mut jobs);
+        self.take_held(now, &mut jobs);
         if self.removing.is_some() {
             jobs.retain(|job| {
                 !matches!(
@@ -1621,49 +1634,64 @@ impl State {
     }
 
     pub(crate) fn glance_to_a_file(&mut self) {
-        self.glancing = Some(Glancing::default());
+        self.glancing.file = true;
     }
 
-    pub(crate) fn glances(&self) -> bool {
-        self.glancing.is_some()
+    pub(crate) fn glance(&self) -> Option<&str> {
+        self.glancing.text.as_deref()
     }
 
     pub(crate) fn glance_revision(&self) -> u64 {
-        self.glancing
-            .as_ref()
-            .map_or(0, |glancing| glancing.revision)
+        self.glancing.revision
     }
 
-    // Kept where it changed, once the accounts are read, and not once Pitboard is being removed.
-    pub(crate) fn glanced(&mut self, text: String) -> Option<Job> {
-        let glancing = self.glancing.as_mut()?;
+    // Made again as each read changes it, from the first read on, until Pitboard is being
+    // removed, and written where the app named a file.
+    pub(crate) fn glanced(&mut self, glance: GlanceText) -> Option<Job> {
+        let glancing = &mut self.glancing;
         if self.status.is_none()
             || self.removing.is_some()
-            || glancing.written.as_ref() == Some(&text)
+            || glancing.text.as_ref() == Some(&glance.file)
         {
             return None;
         }
-        glancing.written = Some(text.clone());
-        glancing.revision += 1;
+        if glancing.shown.as_ref() != Some(&glance.shown) {
+            glancing.shown = Some(glance.shown);
+            glancing.revision += 1;
+        }
+        glancing.text = Some(glance.file.clone());
+        if !glancing.file {
+            return None;
+        }
         self.at_work += 1;
-        Some(Job::KeepGlance { text })
+        Some(Job::KeepGlance { text: glance.file })
     }
 
     // As a click in the app would, short of a question only the app can ask.
     fn outside(&mut self, request: u64, ask: OutsideAsk, now: Now, jobs: &mut Vec<Job>) {
-        let OutsideAsk::Switch { account } = ask else {
-            let asked = Asked {
-                fresh: true,
-                request: Some(request),
-                ..Asked::default()
-            };
-            return self.refresh(asked, now, jobs);
+        let (account, quit) = match ask {
+            OutsideAsk::Switch { account } => (account, false),
+            OutsideAsk::QuitAndSwitch { account } => (account, true),
+            OutsideAsk::Refresh => {
+                let asked = Asked {
+                    fresh: true,
+                    request: Some(request),
+                    ..Asked::default()
+                };
+                return self.refresh(asked, now, jobs);
+            }
         };
-        let found = self.status.as_ref().and_then(|read| {
-            read.accounts
-                .iter()
-                .find(|known| !known.unplaced && crate::present::glance_id(&known.id) == account)
-        });
+        let Some(read) = &self.status else {
+            let ask = if quit {
+                OutsideAsk::QuitAndSwitch { account }
+            } else {
+                OutsideAsk::Switch { account }
+            };
+            self.outside_held.push((request, ask));
+            return;
+        };
+        let found = (read.accounts.iter())
+            .find(|known| !known.unplaced && crate::present::glance_id(&known.id) == account);
         let Some((found, qualified)) =
             found.and_then(|found| Some((found, found.qualified.clone()?)))
         else {
@@ -1687,7 +1715,25 @@ impl State {
             Some(answered) => self.answer_outside(request, answered),
             None => {
                 self.switch_asked(qualified, jobs);
-                self.outside_switch = Some(request);
+                self.outside_switch = Some(OutsideSwitch { request, quit });
+            }
+        }
+    }
+
+    // Once the accounts are first read, or could not be, the switches asked before it.
+    fn take_held(&mut self, now: Now, jobs: &mut Vec<Job>) {
+        if self.removing.is_some() {
+            for (request, _) in std::mem::take(&mut self.outside_held) {
+                self.answer_outside(request, Answered::Uninstalling);
+            }
+        } else if self.status.is_some() {
+            for (request, ask) in std::mem::take(&mut self.outside_held) {
+                self.outside(request, ask, now, jobs);
+            }
+        } else if self.failure.is_some() && self.reads == 0 {
+            for (request, _) in std::mem::take(&mut self.outside_held) {
+                let title = COULD_NOT_READ_USAGE.into();
+                self.answer_outside(request, Answered::Failed { title });
             }
         }
     }
@@ -3703,12 +3749,19 @@ impl State {
         match question {
             Some(question) => {
                 if then == After::Switch {
-                    self.switching = None;
                     // The app runs again, so a quit gives the copy to open again, if any.
                     self.reopen_after_switch = None;
-                    if let Some(request) = self.outside_switch.take() {
-                        let app = question.name;
-                        return self.answer_outside(request, Answered::AppOpen { app });
+                    match self.outside_switch {
+                        Some(OutsideSwitch { quit: true, .. }) => {
+                            jobs.push(Job::Quit { question, then });
+                            return;
+                        }
+                        Some(OutsideSwitch { request, .. }) => {
+                            self.switching = None;
+                            self.outside_switch = None;
+                            return self.answer_outside(request, Answered::AppOpen { question });
+                        }
+                        None => self.switching = None,
                     }
                 }
                 self.drop_question();
@@ -3809,7 +3862,13 @@ impl State {
             After::Switch => {
                 self.switching = None;
                 self.reopen_after_switch = None;
-                self.present(failed(could_not_switch(&qualified), switching));
+                let title = could_not_switch(&qualified);
+                match self.outside_switch.take() {
+                    Some(OutsideSwitch { request, .. }) => {
+                        self.answer_outside(request, Answered::Failed { title });
+                    }
+                    None => self.present(failed(title, switching)),
+                }
             }
             After::SignIn { again, from, .. } => {
                 self.saved(from.as_ref());
@@ -3872,7 +3931,7 @@ impl State {
                 front: false,
             });
         }
-        let outside = self.outside_switch.take();
+        let outside = self.outside_switch.take().map(|outside| outside.request);
         let label = Key::parse(qualified).label;
         match done {
             Ok(done) => {

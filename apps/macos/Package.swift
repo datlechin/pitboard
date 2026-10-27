@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PitboardApp", targets: ["PitboardApp"]),
         .library(name: "PitboardShareBindings", targets: ["PitboardShareBindings"]),
         .library(name: "PitboardLinkTarget", targets: ["PitboardLinkTarget"]),
+        .library(name: "PitboardWidgetViews", targets: ["PitboardWidgetViews"]),
     ],
     targets: [
         // Each built with its bindings by scripts/build-xcframework.sh, and not committed.
@@ -42,9 +43,17 @@ let package = Package(
         ),
         // Foundation only, so the app, its extension and a test target can each link it.
         .target(name: "PitboardLinkTarget", swiftSettings: handWritten),
+        // No Rust, so a sandboxed extension that reads the glance can link it.
+        .target(name: "PitboardGlance", swiftSettings: handWritten),
+        // What the widget extension draws, which its tests draw offscreen.
+        .target(
+            name: "PitboardWidgetViews",
+            dependencies: ["PitboardGlance"],
+            swiftSettings: handWritten
+        ),
         .target(
             name: "PitboardApp",
-            dependencies: ["PitboardKit", "PitboardLinkTarget"],
+            dependencies: ["PitboardKit", "PitboardLinkTarget", "PitboardGlance"],
             swiftSettings: handWritten
         ),
         // Only test targets depend on it.
@@ -62,6 +71,16 @@ let package = Package(
         .testTarget(
             name: "PitboardLinkTargetTests",
             dependencies: ["PitboardLinkTarget"],
+            swiftSettings: handWritten
+        ),
+        .testTarget(
+            name: "PitboardGlanceTests",
+            dependencies: ["PitboardGlance"],
+            swiftSettings: handWritten
+        ),
+        .testTarget(
+            name: "PitboardWidgetViewsTests",
+            dependencies: ["PitboardWidgetViews"],
             swiftSettings: handWritten
         ),
         .testTarget(

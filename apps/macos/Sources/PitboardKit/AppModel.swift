@@ -80,6 +80,15 @@ public final class AppModel {
     @ObservationIgnored public var accountWindowsChanged:
         (@MainActor (AccountWindowsShown) -> Void)?
 
+    @ObservationIgnored private var lastRequest: UInt64 = 0
+    @ObservationIgnored private var answering: [UInt64: Answering] = [:]
+    @ObservationIgnored private var lastGlance = 0
+    @ObservationIgnored private var glancing: [Int: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored private var glanceRevision: UInt64
+
+    // Told each time what a widget shows of the glance changes, once its snapshot is shown.
+    @ObservationIgnored public var glanceChanged: (@MainActor () -> Void)?
+
     /// The app's model over `model`, showing its last snapshot until a newer one comes.
     public init(model: any PitboardModelProtocol) {
         self.model = model
@@ -112,6 +121,7 @@ public final class AppModel {
         uninstall = first.uninstall
         removal = first.removal
         welcome = first.welcome
+        glanceRevision = first.glanceRevision
     }
 
     /// The model `make` makes, told of its snapshots through a listener that hands each to
@@ -130,6 +140,37 @@ public final class AppModel {
     /// arrives as a newer snapshot.
     public func send(_ intent: Intent) {
         model.send(intent: intent)
+    }
+
+    // As a widget, a control or a shortcut asks, answered by the model's snapshot, or nil once
+    // `patience` is up.
+    public func ask(_ ask: OutsideAsk, within patience: Duration) async -> OutsideAnswer? {
+        lastRequest += 1
+        let request = lastRequest
+        let late = Task {
+            try? await Task.sleep(for: patience)
+            answering.removeValue(forKey: request)?.resume(returning: nil)
+        }
+        defer { late.cancel() }
+        return await withCheckedContinuation { answer in
+            answering[request] = answer
+            send(.outside(request: request, ask: ask))
+        }
+    }
+
+    // What a widget reads, for an intent in the app: after the launch's first read, which it
+    // waits for as long as `patience`.
+    public func glance(within patience: Duration) async -> String? {
+        if let glance = model.glance() { return glance }
+        lastGlance += 1
+        let waiting = lastGlance
+        let late = Task {
+            try? await Task.sleep(for: patience)
+            glancing.removeValue(forKey: waiting)?.resume()
+        }
+        defer { late.cancel() }
+        await withCheckedContinuation { glancing[waiting] = $0 }
+        return model.glance()
     }
 
     /// Stops the model, a sign-in under way with it, for the app to call as it quits.
@@ -182,6 +223,16 @@ public final class AppModel {
         let windowsMoved = accountWindows != snapshot.accountWindows
         update(\.accountWindows, snapshot.accountWindows)
         if windowsMoved { accountWindowsChanged?(accountWindows) }
+        for answer in snapshot.answers {
+            answering.removeValue(forKey: answer.request)?.resume(returning: answer)
+        }
+        // The model makes its glance before it tells the snapshot that moved its revision.
+        if snapshot.glanceRevision != glanceRevision {
+            glanceRevision = snapshot.glanceRevision
+            for waiting in glancing.values { waiting.resume() }
+            glancing = [:]
+            glanceChanged?()
+        }
         return assigned
     }
 
@@ -192,6 +243,8 @@ public final class AppModel {
         sections.lazy.flatMap(\.accounts).first { $0.id == id }
     }
 }
+
+private typealias Answering = CheckedContinuation<OutsideAnswer?, Never>
 
 /// Hands each snapshot the model tells of to the main actor, in the order it is told.
 ///

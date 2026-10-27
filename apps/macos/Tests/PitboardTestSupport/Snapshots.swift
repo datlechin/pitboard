@@ -50,7 +50,8 @@ package func snapshot(
     sections: [AccountSection] = [], notices: [PanelNotice] = [],
     menuNotices: MenuNotices = MenuNotices(
         install: nil, switches: [], signIns: [], others: nil),
-    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = []
+    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = [], glanceRevision: UInt64 = 0,
+    answers: [OutsideAnswer] = []
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
@@ -109,5 +110,5 @@ package func snapshot(
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),
-        glanceRevision: 0, answers: [])
+        glanceRevision: glanceRevision, answers: answers)
 }

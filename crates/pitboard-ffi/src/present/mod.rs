@@ -11,9 +11,8 @@
 //! minute tick, and a countdown is the app's native one, from [`PanelNotice::until`].
 //!
 //! The words both apps say and the command line does not are in `words.rs`, each a function
-//! of typed values. What the command line says too, a limit's names, a reset, a parked
-//! login's life, a renewal's note and doctor's summary, is `pitboard_core::words`',
-//! called from here.
+//! of typed values. What the command line says too, a limit's names, a reset, a renewal's
+//! note and doctor's summary, is `pitboard_core::words`', called from here.
 //!
 //! A button the snapshot offers comes with its words and what it sends, and with whether it
 //! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`,
@@ -33,6 +32,7 @@ mod accounts;
 mod app_words;
 mod checks;
 mod glance;
+mod jump_list;
 mod machine;
 pub(crate) mod next;
 mod notices;
@@ -47,14 +47,18 @@ pub(crate) mod words;
 pub(crate) mod testing;
 
 pub use app_words::{
-    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
-    already_there, app_words, install_update, links_to, named_version, path_too_long,
-    ready_to_install, trash_says, webview_runtime_too_old,
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords,
+    ShortcutsWords, WindowWords, already_there, app_words, install_update, links_to, named_version,
+    path_too_long, ready_to_install, still_switching, trash_says, usage_of,
+    webview_runtime_too_old,
 };
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
-pub(crate) use glance::{glance, id as glance_id};
+pub(crate) use glance::{GlanceText, glance, id as glance_id};
+#[cfg(test)]
+pub(crate) use jump_list::jump_refused_on;
+pub use jump_list::{JumpAsk, JumpTask, jump_refused};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
@@ -145,9 +149,6 @@ pub struct AccountItem {
     pub title: String,
     /// Its email address; empty for a login Pitboard cannot read.
     pub email: String,
-    /// The line under its name in the window: its email address, where its name is not that
-    /// already.
-    pub email_line: Option<String>,
     /// The plan its login says it is on, as the window's tag beside its name: "Team 5x".
     pub plan: Option<String>,
     // "work" on macOS; on Windows its figure or why it can't be switched to: "work (42%)"
@@ -170,23 +171,12 @@ pub struct AccountItem {
     pub summary: String,
     // what needs doing about it, the most pressing first
     pub notes: Vec<AccountNote>,
-    // the window's lines under its limits: its notes, a sign-in due to expire and its warm-up
-    pub lines: Vec<String>,
     pub detail: AccountDetail,
     /// What a menu item's help says of it: why it cannot be used, or why its numbers are old.
     pub help: Option<String>,
     /// Each of its limits, in the order its service gave them.
     pub limits: Vec<LimitRow>,
-    // in order: naming it, where pressing it does that, or for an account Pitboard has a name
-    // for, switching to it, signing in to it again and renaming it, each dimmed while it
-    // cannot be chosen, which a shortcut menu leaves out
-    pub offers: Vec<ItemOffer>,
-    /// Its windows, one for each site of its tool, as its own menu offers to open them.
-    pub windows: Vec<WindowOffer>,
-    // for an enrolled account, dimmed for the one in use, whose record is the only one of who
-    // is signed in; what its own menu offers last, and what deleting its row does
-    pub forget: Option<ItemOffer>,
-    // everything its own menu offers, in its order: offers, windows and forget, by kind
+    // everything its own menu offers, in its order, each dimmed while it cannot be chosen
     pub actions: Vec<AccountAction>,
 }
 
@@ -313,7 +303,7 @@ pub struct ItemAction {
     pub intent: Intent,
 }
 
-// Something an account's own menu offers to do to it.
+// What a check's fix or Uninstall Pitboard… offers to do, asked first where `confirm` says.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ItemOffer {
     pub title: String,
@@ -321,16 +311,6 @@ pub struct ItemOffer {
     pub intent: Intent,
     pub enabled: bool,
     pub confirm: Option<Question>,
-}
-
-/// One of an account's windows, as its own menu offers to open it. Opening a window is the
-/// app's own doing; the app says it has with `Intent::WindowOpened`.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct WindowOffer {
-    /// What its item says: "Open chatgpt.com".
-    pub title: String,
-    /// The window it opens, as the menus and the picker list it.
-    pub window: WindowAccount,
 }
 
 /// One limit of an account, as a row of its bars.
@@ -924,6 +904,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         welcome: welcome::welcome(&seen),
         glance_revision: state.glance_revision(),
         answers: glance::answers(&seen),
+        jump_list: jump_list::jump_list(&seen),
     }
 }
 

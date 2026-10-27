@@ -106,7 +106,7 @@ func account(
             window: nil, enabled: !inUse, confirm: nil),
     ]
     return AccountItem(
-        id: qualified, qualified: qualified, title: label, email: email, emailLine: email,
+        id: qualified, qualified: qualified, title: label, email: email,
         plan: plan, menuTitle: label, spoken: label, inUse: inUse,
         needsSignIn: standing == .needsSignIn, standing: standing, unplaced: false,
         end: inUse
@@ -119,7 +119,6 @@ func account(
         summary: summary,
         notes: note.map { [AccountNote(kind: .problem, text: $0, action: nil, learn: nil)] }
             ?? [],
-        lines: [],
         detail: AccountDetail(
             email: email, plan: plan, signedInUntil: nil, signIn: signIn,
             warm: WarmDetail(
@@ -128,7 +127,7 @@ func account(
                     title: "Warm-Up Settings…",
                     intent: .show(place: .settings(section: .limits)), enabled: true)),
             readAt: nil, read: nil, notes: []),
-        help: nil, limits: limits, offers: [], windows: [], forget: nil, actions: actions)
+        help: nil, limits: limits, actions: actions)
 }
 
 let sample = [

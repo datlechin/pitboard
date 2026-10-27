@@ -594,19 +594,6 @@ pub fn runs_out(limit: &str, in_seconds: i64) -> String {
     }
 }
 
-/// How long a parked login stays usable, in the sentence form: a note under an account not
-/// in use, counted in whole days. Without it nothing says a switch to the account is about
-/// to stop working. Nothing when the login says nothing about it.
-pub fn parked_life(refresh_expires_at: Option<i64>, now: i64) -> Option<String> {
-    let left = refresh_expires_at? - now;
-    Some(match left / DAY {
-        _ if left <= 0 => "Its parked login has expired".into(),
-        0 => "Parked login good for under a day".into(),
-        1 => "Parked login good for 1 more day".into(),
-        days => format!("Parked login good for {days} more days"),
-    })
-}
-
 /// How long a parked login stays usable, in the column form `pitboard status` puts after
 /// "ready" and doctor's parked login check after words of its own: "good for 20d 0h";
 /// "expires in 2d 4h" once it is due to be renewed, as [`renewal_due`] decides; and
@@ -1122,17 +1109,6 @@ pub fn desktop_named(
     format!("Claude's settings have named {} {since}", said(named))
 }
 
-// By the date the session cookie carries, hedged: claude.ai may end it sooner or keep it.
-pub fn session_life(session_expires_at: Option<i64>, now: i64) -> Option<String> {
-    let left = session_expires_at? - now;
-    Some(match left / DAY {
-        _ if left <= 0 => "Its sign-in may have lapsed".into(),
-        0 => "Its sign-in may lapse in under a day".into(),
-        1 => "Its sign-in may lapse in 1 day".into(),
-        days => format!("Its sign-in may lapse in {days} days"),
-    })
-}
-
 // Nobody tells Pitboard a Claude Desktop account's email, so its name stands alone.
 pub fn with_email(name: &str, email: &str) -> String {
     if email.is_empty() {
@@ -1142,7 +1118,7 @@ pub fn with_email(name: &str, email: &str) -> String {
     }
 }
 
-// Hedged, as `session_life` is: the date is the cookie's, and claude.ai may end it sooner.
+// By the date the session cookie carries, hedged: claude.ai may end it sooner or keep it.
 pub fn session_life_column(session_expires_at: i64, now: i64) -> String {
     match session_expires_at - now {
         left if left <= 0 => "sign-in may have lapsed".into(),
@@ -1518,19 +1494,6 @@ mod tests {
     #[test]
     fn claude_desktops_words_hedge_what_nobody_measured() {
         use crate::provider::ProviderId;
-        let now = 1_791_000_000;
-        let life = |left: i64| session_life(Some(now + left), now);
-        assert_eq!(
-            life(25 * DAY + 60).as_deref(),
-            Some("Its sign-in may lapse in 25 days")
-        );
-        assert_eq!(life(DAY).as_deref(), Some("Its sign-in may lapse in 1 day"));
-        assert_eq!(
-            life(60).as_deref(),
-            Some("Its sign-in may lapse in under a day")
-        );
-        assert_eq!(life(0).as_deref(), Some("Its sign-in may have lapsed"));
-        assert_eq!(session_life(None, now), None);
         assert_eq!(
             adopted_folders(&["desktop/work".into(), "desktop/home".into()]),
             "Pitboard set aside the parked Claude Desktop logins of `desktop/work` and \
@@ -1754,12 +1717,7 @@ mod tests {
         assert_eq!(column(0), "sign-in may have lapsed");
         assert_eq!(column(-DAY), "sign-in may have lapsed");
         for left in [-DAY, 0, 30, DAY, 40 * DAY] {
-            let said = format!(
-                "{} {}",
-                column(left),
-                session_life(Some(NOW + left), NOW).unwrap_or_default()
-            );
-            assert!(!said.contains("expire"), "{said}");
+            assert!(!column(left).contains("expire"), "{}", column(left));
         }
     }
 
@@ -2099,42 +2057,6 @@ mod tests {
         );
         assert_eq!(runs_out("5-hour", 30), "5-hour limit is about to run out");
         assert_eq!(runs_out("5-hour", 0), "5-hour limit is about to run out");
-    }
-
-    /// When a parked login stops working decides whether a switch to it will. The sentence
-    /// form says nothing with nothing to go on, says a login past it has expired, and
-    /// otherwise counts whole days left, one day in the singular.
-    #[test]
-    fn a_parked_logins_life_in_a_sentence_is_counted_in_whole_days() {
-        const NOW: i64 = 1_789_935_000;
-        let life = |left: i64| parked_life(Some(NOW + left), NOW);
-        assert_eq!(parked_life(None, NOW), None);
-        assert_eq!(life(-60).as_deref(), Some("Its parked login has expired"));
-        assert_eq!(life(0).as_deref(), Some("Its parked login has expired"));
-        assert_eq!(
-            life(1).as_deref(),
-            Some("Parked login good for under a day")
-        );
-        assert_eq!(
-            life(86_399).as_deref(),
-            Some("Parked login good for under a day")
-        );
-        assert_eq!(
-            life(86_400).as_deref(),
-            Some("Parked login good for 1 more day")
-        );
-        assert_eq!(
-            life(2 * 86_400 - 1).as_deref(),
-            Some("Parked login good for 1 more day")
-        );
-        assert_eq!(
-            life(2 * 86_400).as_deref(),
-            Some("Parked login good for 2 more days")
-        );
-        assert_eq!(
-            life(30 * 86_400).as_deref(),
-            Some("Parked login good for 30 more days")
-        );
     }
 
     /// The column form beside "ready" in `pitboard status`: what is left of a parked login

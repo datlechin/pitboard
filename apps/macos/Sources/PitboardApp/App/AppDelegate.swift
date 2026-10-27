@@ -1,4 +1,6 @@
+import AppIntents
 import AppKit
+import PitboardGlance
 import PitboardKit
 import SwiftUI
 
@@ -18,9 +20,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let quitting: @MainActor () -> Void
     private var watching: [NSObjectProtocol] = []
 
+    // The app target's App Shortcuts; Main sets it at launch.
+    public static var shortcuts: (any AppShortcutsProvider.Type)?
+
     override public init() {
         let dependencies = Dependencies.forLaunch()
-        model = dependencies.model
+        let model = dependencies.model
+        // Before anything else: the system can run an intent as soon as the app has launched.
+        AppDependencyManager.shared.add(dependency: model)
+        AppDependencyManager.shared.add(
+            dependency: GlanceSource {
+                await model.glance(within: Actions.patience).flatMap { Glance(Data($0.utf8)) }
+            })
+        AppDependencyManager.shared.add(
+            dependency: GlanceActions(
+                open: { await Actions.opening(model) },
+                switchTo: { _ = try await Actions.switching(to: $0, with: model, asking: nil) }
+            ))
+        GlanceWatch.live(shortcuts: AppDelegate.shortcuts).watch(model)
+        self.model = model
         defaults = dependencies.defaults
         windows = AccountWindows(
             model: model, environment: dependencies.web, presence: .live())

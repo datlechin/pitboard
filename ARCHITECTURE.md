@@ -146,18 +146,23 @@ The apps:
   - `Sources/PitboardBindings`, `PitboardShareBindings`: the two libraries' bindings.
   - `Sources/PitboardKit`: `AppModel`, the model and its newest snapshot on the main actor.
   - `Sources/PitboardLinkTarget`: where a Pitboard link goes, for the app and the extension.
+  - `Sources/PitboardGlance`: the glance and the account Shortcuts and widgets know, the App
+    Group it is kept in and the widgets' and control's buttons, no Rust.
+  - `Sources/PitboardWidgetViews`: what the widgets draw and their timeline, no Rust.
   - `Sources/PitboardApp`: the views (`MenuBar`, `Window`, `Sheets`, `Settings`, `Design`),
     the account windows (`AccountWindows`), the launch (`App`), what the model asks of macOS
-    (`System`) and the fixtures' stand-ins (`Fixture`).
-  - `App`, `ShareExtension`, `UITests`: the app's target, the Share extension and the UI
-    tests.
+    (`System`), what the Shortcuts actions do (`Intents`) and the fixtures' stand-ins
+    (`Fixture`).
+  - `App`, `ShareExtension`, `Widgets`, `UITests`: the app's target with its Shortcuts
+    actions and App Shortcuts, the Share extension, the widget extension with its widgets and
+    control, and the UI tests.
   - `scripts/`: the libraries' build, the app's build, which fails a bundle that breaks a
     rule below, its build number and the docs' pictures.
 - `apps/windows/`: the Windows app.
   - `Pitboard.Core`, `Pitboard.Share.Core`: the two libraries' C# bindings, generated into
     `Generated/`, the second with what `PitboardShare.exe` does with a share, and their tests.
-  - `Pitboard.Windows`: the glue, no XAML: `AppModel`, the icon, notifications, the other
-    apps, updates, start at sign-in and the account windows' WebView2 code.
+  - `Pitboard.Windows`: the glue, no XAML: `AppModel`, the icon, notifications, the Jump List,
+    the other apps, updates, start at sign-in and the account windows' WebView2 code.
   - `Pitboard.Views`: every window and page, in WinUI.
   - `Pitboard.App`: `Pitboard.exe`, its composition root, and `--unregister`.
   - `Pitboard.Share`: `PitboardShare.exe`, the share target.
@@ -428,10 +433,15 @@ keeps it is in the header of the module named.
   went starts the model again (`model/removing.rs`,
   `after_uninstall_nothing_writes_pitboards_directory_again`).
 - The glance for widgets and intents names each account by an id derived from its own, never
-  by an email, a token, a uuid, a path or a notice's lines, and is written only where the app
-  names a file and only once it changed. A request from outside does no more than a click in
-  the app, and one that needs a question only the app asks is refused in words
-  (`model/glancing.rs`).
+  by an email, a token, a uuid, a path or a notice's lines. The model hands it to the app before
+  the snapshot it changed with, writes it only where the app names a file, again with each
+  read, and deletes that file once the app uninstalls Pitboard
+  (`the_glance_is_given_to_the_app_with_or_without_a_file`, `an_uninstall_deletes_the_glance`).
+  `glance_revision` moves only with what a widget shows, since WidgetKit budgets reloads. A
+  request from outside does no more than a click in the app and waits for the launch's first
+  read. One that would quit an app answers with the quit question and quits it only when asked
+  again with `QuitAndSwitch`, and one that needs another question only the app asks is
+  refused in words (`model/glancing.rs`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).
@@ -443,6 +453,12 @@ keeps it is in the header of the module named.
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).
 - The Windows app asks the core's gate, `launch_refusal`, before anything else a launch does
   but `--unregister` and `--unregister-share` (`ReleaseGateTests`).
+- A macOS debug build started without `PITBOARD_FIXTURE` quits before anything of the app
+  starts, since Shortcuts, Spotlight, a widget or a control start it through Launch Services
+  on the real home (`aDebugBuildStartedOutsideAFixtureStartsNothing`).
+- The macOS app's Shortcuts actions run in the app, over its model, and the release holds
+  the metadata Shortcuts and Spotlight read them and their App Shortcuts from
+  (`scripts/build-app.sh`).
 - The Windows app's own data folder is `Pitboard App` in the known folder Local AppData, never
   in Pitboard's directory, so `pitboard uninstall` never deletes the account windows'
   sign-ins (`host::pitboard_app_on_windows`).
@@ -453,6 +469,10 @@ keeps it is in the header of the module named.
 - Only `PitboardShare.exe` has a package identity, which `check-windows-app.ps1` holds. It
   loads none of the core and hands a page to `Pitboard.exe` only as a Pitboard link
   ([Documented, not measured](docs/facts/windows-documented.md) has what is still to be seen).
+- The Windows Jump List is Win32's, kept under the AppUserModelId with no package identity.
+  Each task starts `Pitboard.exe` with a flag and the GUID the model gave it, read only where a
+  link would be, and its switch is a request from outside (`LaunchingTests`, `model/jumping.rs`).
+  Only a Release build writes the list, and `--unregister` deletes it.
 
 ### Account windows
 
@@ -473,8 +493,9 @@ on.
 - A records file that cannot be read is never written over, and nothing is deleted by it
   (`a_file_that_cannot_be_read_is_never_written_over`).
 - Nothing from outside opens a window by itself. A Pitboard link only shows the **Open Link**
-  window, a site's sign-in link is refused, and only a person's choice opens a window, on the
-  link's own site (`a_sign_in_link_is_refused_from_outside`).
+  window and never switches an account, a site's sign-in link is refused, and only a person's
+  choice opens a window, on the link's own site (`a_sign_in_link_is_refused_from_outside`,
+  `a_pitboard_link_never_switches_an_account`).
 - A window's page goes only to its site, its sign-in hosts and blank pages. Google's sign-in is
   refused, other pages go to the browser, a frame gets no sign-in window, and a window's last
   page is never a sign-in path (`account_windows/policy.rs`).
@@ -486,6 +507,14 @@ on.
   core's bindings check every export as they load, and two Rust static libraries never meet in
   one binary. `build-app.sh` fails a signature that is not sandboxed and either binary that
   holds the other library's symbols.
+- The widget extension stays sandboxed, links no Rust and reads only the glance, which holds
+  no secret. Only a build signed by a team claims the App Group `<team>.com.usepitboard.Pitboard`,
+  so an ad hoc build touches no group container and macOS never asks about one
+  (`aBuildWithNoTeamKeepsOutOfEveryGroup`, `scripts/build-app.sh`). The widgets and the
+  control reload only with `glance_revision`
+  (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`). A widget's Switch, on macOS 27
+  and from Xcode 27, runs in the app alone, and asked of the extension it switches nothing
+  (`aSwitchTheWidgetExtensionIsAskedForSwitchesNothingAndSaysWhere`).
 - `pitboard-sites` stays a leaf: no I/O, nothing of the core and no UniFFI (its `Cargo.toml`
   depends on `url` alone). Each binding crate declares its own types over it, since the C#
   generator cannot use another crate's.

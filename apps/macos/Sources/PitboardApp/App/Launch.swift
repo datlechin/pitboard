@@ -1,25 +1,25 @@
 import Foundation
 import PitboardKit
 
-/// What this program was started to do, decided before any of the app starts.
-///
-/// A renewal schedule an app up to 0.3.0 wrote starts the app itself with `renew`, and
-/// nothing else starts it with arguments. When this app has replaced that one, the command
-/// line inside it does the renewal in the same process, which launchd goes on tracking as
-/// the job. Started as the menu bar app, it would repair the schedule from inside that job,
-/// and launchd would stop it when the repair unloads the job, before it is loaded again.
+// A 0.3.0 schedule starts the app with `renew`; the app would repair that job from inside it.
 public enum Launch {
     public enum Action: Equatable, Sendable {
         case app
-        /// The command line at this path, with `renew`, in this process's place.
+        // the command line at this path, with `renew`, in this process's place
         case renew(String)
-        /// Nothing: a renewal was asked for, and there is no command line here to do it.
+        // a renewal asked of a copy with no command line inside it
         case fail
+        // a debug build started with no fixture, as Launch Services starts it for an intent
+        case outsideFixture
     }
 
-    /// `helper` is the command line inside this app, nil where it is not running from an app
-    /// bundle.
-    public static func action(for arguments: [String], helper: String?) -> Action {
+    // `helper` is nil where this is not running from an app bundle.
+    public static func action(
+        for arguments: [String], helper: String?, environment: [String: String]
+    ) -> Action {
+        #if DEBUG
+            guard environment[Fixture.variable] != nil else { return .outsideFixture }
+        #endif
         guard arguments.dropFirst() == ["renew"] else { return .app }
         return helper.map(Action.renew) ?? .fail
     }

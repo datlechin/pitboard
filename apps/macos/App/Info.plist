@@ -4,8 +4,9 @@
 <dict>
 	<key>CFBundleName</key>
 	<string>Pitboard</string>
+	<!-- Pitboard Debug for a debug build, in Shortcuts, Spotlight and the app menu. -->
 	<key>CFBundleDisplayName</key>
-	<string>Pitboard</string>
+	<string>$(PITBOARD_DISPLAY_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<!-- AppIcon.icon, or AppIcon-Debug.icon in a debug build, made in Icon Composer. -->

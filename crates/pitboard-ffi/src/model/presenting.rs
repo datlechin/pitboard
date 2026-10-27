@@ -12,13 +12,14 @@ use super::testing::records::{
     enrolled_as, refusal, status, switched, warned, warning,
 };
 use super::{Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
+use crate::account_windows::WindowAccount;
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
 use crate::present::{
-    AccountDetail, AccountItem, AccountMenuShown, AccountStanding, AccountsShown, ActionKind,
-    Choice, Footing, ItemOffer, LimitKind, MenuEntry, NoteKind, NoticeAction, PanelNotice,
-    Question, RowEnd, SetupStep, Severity, WindowOffer, present,
+    AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountStanding, AccountsShown,
+    ActionKind, Choice, Footing, ItemOffer, LimitKind, MenuEntry, NoteKind, NoticeAction,
+    PanelNotice, Question, RowEnd, SetupStep, Severity, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
 use pitboard_core::host::{OS, Os};
@@ -89,10 +90,44 @@ fn sends(row: &AccountItem) -> Option<Intent> {
 /// What an account's own menu offers above its windows, by what each sends, and whether each
 /// can be chosen now.
 fn offered(row: &AccountItem) -> Vec<(Intent, bool)> {
-    row.offers
-        .iter()
-        .map(|offer| (offer.intent.clone(), offer.enabled))
+    menu(row)
+        .into_iter()
+        .map(|offer| (offer.intent, offer.enabled))
         .collect()
+}
+
+// What its own menu offers above its windows and its Remove Account….
+fn menu(row: &AccountItem) -> Vec<ItemOffer> {
+    (row.actions.iter())
+        .filter(|action| !matches!(action.kind, ActionKind::OpenWindow | ActionKind::Remove))
+        .map(offer)
+        .collect()
+}
+
+fn offer(action: &AccountAction) -> ItemOffer {
+    ItemOffer {
+        title: action.title.clone(),
+        intent: action.intent.clone().expect("an intent"),
+        enabled: action.enabled,
+        confirm: action.confirm.clone(),
+    }
+}
+
+fn removes(row: &AccountItem) -> Option<ItemOffer> {
+    (row.actions.iter())
+        .find(|action| action.kind == ActionKind::Remove)
+        .map(offer)
+}
+
+// What each of its windows' items says, and the window it opens.
+fn windows_of(row: &AccountItem) -> Vec<(String, WindowAccount)> {
+    (row.actions.iter())
+        .filter_map(|action| Some((action.title.clone(), action.window.clone()?)))
+        .collect()
+}
+
+fn noted(row: &AccountItem) -> Vec<String> {
+    row.notes.iter().map(|note| note.text.clone()).collect()
 }
 
 fn switch_to(qualified: &str) -> Intent {
@@ -531,7 +566,6 @@ fn the_detail_carries_email_plan_and_sign_in_life() {
     assert_eq!(codex.sign_in, None, "no expiry known");
 }
 
-// The old `offers`, `windows` and `forget` are the same items.
 #[test]
 fn each_action_says_its_kind() {
     let (model, _) = reading(vec![
@@ -584,37 +618,6 @@ fn each_action_says_its_kind() {
             })
         ]
     );
-    for row in [work, spare] {
-        let offered: Vec<ItemOffer> = row.actions[..3]
-            .iter()
-            .map(|action| ItemOffer {
-                title: action.title.clone(),
-                intent: action.intent.clone().expect("an intent"),
-                enabled: action.enabled,
-                confirm: action.confirm.clone(),
-            })
-            .collect();
-        assert_eq!(row.offers, offered);
-        let removes = row.actions.last().expect("forget");
-        assert_eq!(
-            row.forget.as_ref().map(|forget| (
-                &forget.title,
-                &forget.intent,
-                forget.enabled,
-                &forget.confirm
-            )),
-            Some((
-                &removes.title,
-                removes.intent.as_ref().expect("an intent"),
-                removes.enabled,
-                &removes.confirm
-            ))
-        );
-        assert_eq!(
-            (&row.windows[0].title, Some(&row.windows[0].window)),
-            (&row.actions[3].title, row.actions[3].window.as_ref())
-        );
-    }
     assert_eq!(
         kinds(&described(account(None).signed_in().uuid("u").build())),
         [(ActionKind::Add, true)]
@@ -638,7 +641,7 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         )
     );
     assert_eq!(
-        spare.offers.first().map(|offer| offer.title.clone()),
+        menu(&spare).first().map(|offer| offer.title.clone()),
         Some(words::switch_account(Some("spare"))),
         "as the account's own menu says it"
     );
@@ -748,7 +751,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
             (rename("other"), true)
         ]
     );
-    assert!(other.forget.as_ref().is_some_and(|forget| forget.enabled));
+    assert!(removes(&other).is_some_and(|forget| forget.enabled));
     let unnamed = || account(None).signed_in().uuid("u").build();
     assert_eq!(described_while(unnamed(), switching(running)).action, None);
     assert!(
@@ -762,12 +765,10 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
     assert!(!described_while(unnamed(), switching(running)).switching());
 }
 
-/// What both apps draw of a row: its email under its name where its name is not that already,
-/// and at its far end a switch's spinner, the account in use, or its action's button.
+// At its far end a switch's spinner, the account in use, or its action's button.
 #[test]
-fn a_row_says_its_email_line_and_what_ends_it() {
+fn a_row_says_what_ends_it() {
     let work = described(account(Some("work")).signed_in().build());
-    assert_eq!(work.email_line, Some(work.email.clone()));
     assert_eq!(
         work.end,
         Some(RowEnd::InUse {
@@ -784,8 +785,7 @@ fn a_row_says_its_email_line_and_what_ends_it() {
         })
     );
     let unnamed = described(account(None).signed_in().uuid("u").build());
-    assert_eq!(unnamed.title, unnamed.email);
-    assert_eq!(unnamed.email_line, None, "its name is its email");
+    assert_eq!(unnamed.title, unnamed.email, "its name is its email");
 }
 
 /// A sign-in waits on somebody in a browser. It holds back another sign-in and nothing else:
@@ -803,7 +803,7 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
             (rename("spare"), true)
         ]
     );
-    assert!(spare.forget.as_ref().is_some_and(|forget| forget.enabled));
+    assert!(removes(&spare).is_some_and(|forget| forget.enabled));
     assert_eq!(
         sends(&described_while(
             account(None).signed_in().uuid("u").build(),
@@ -872,7 +872,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     };
 
     assert_eq!(
-        work.offers,
+        menu(work),
         [
             dimmed(&switches("work"), switch("work")),
             offer(&sign_in_again, again("work")),
@@ -881,13 +881,13 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         "nothing to switch to: it is the one in use"
     );
     assert_eq!(
-        work.forget.as_ref().map(|forget| forget.enabled),
+        removes(work).map(|forget| forget.enabled),
         Some(false),
         "the core refuses to forget the one in use"
     );
 
     assert_eq!(
-        spare_row.offers,
+        menu(spare_row),
         [
             offer(&switches("spare"), switch("spare")),
             offer(&sign_in_again, again("spare")),
@@ -895,7 +895,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         ]
     );
     assert_eq!(
-        spare_row.forget,
+        removes(spare_row),
         Some(ItemOffer {
             title: words::remove_account(OS),
             intent: Intent::Forget {
@@ -914,7 +914,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     );
 
     assert_eq!(
-        stale.offers,
+        menu(stale),
         [
             dimmed(&switches("stale"), switch("stale")),
             offer(&sign_in_again, again("stale")),
@@ -922,11 +922,11 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         ],
         "its own action, offered once"
     );
-    assert!(stale.forget.is_some());
+    assert!(removes(stale).is_some());
 
     let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
     assert_eq!(
-        unnamed.offers,
+        menu(&unnamed),
         [offer(
             &words::add_account_signed_in(None),
             Intent::Enrol {
@@ -934,16 +934,15 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
             }
         )]
     );
-    assert_eq!(unnamed.forget, None);
+    assert_eq!(removes(&unnamed), None);
     assert!(
-        described(account(None).uuid("u").build()).offers.is_empty(),
+        described(account(None).uuid("u").build())
+            .actions
+            .is_empty(),
         "a login not signed in has no name and cannot be named from here"
     );
     for signed_in in [false, true] {
-        let cannot = described(unplaced("codex", signed_in));
-        assert!(cannot.offers.is_empty());
-        assert!(cannot.windows.is_empty());
-        assert_eq!(cannot.forget, None);
+        assert!(described(unplaced("codex", signed_in)).actions.is_empty());
     }
 }
 
@@ -992,25 +991,15 @@ fn an_accounts_own_menu_opens_its_windows() {
         panic!("two rows");
     };
     assert_eq!(
-        work.windows,
-        [WindowOffer {
-            title: words::open_site("claude.ai"),
-            window: listed[0].clone(),
-        }]
+        windows_of(work),
+        [(words::open_site("claude.ai"), listed[0].clone())]
     );
     assert_eq!(
-        main.windows,
-        [WindowOffer {
-            title: words::open_site("chatgpt.com"),
-            window: listed[1].clone(),
-        }]
+        windows_of(main),
+        [(words::open_site("chatgpt.com"), listed[1].clone())]
     );
-    assert_eq!(main.windows[0].window.site.host, "chatgpt.com");
-    assert!(
-        described(account(None).signed_in().uuid("u").build())
-            .windows
-            .is_empty()
-    );
+    assert_eq!(listed[1].site.host, "chatgpt.com");
+    assert!(windows_of(&described(account(None).signed_in().uuid("u").build())).is_empty());
 }
 
 // Its row said nothing but Sign In Again, where main's said the parked login had expired.
@@ -1022,8 +1011,11 @@ fn a_saved_sign_in_that_has_expired_says_so_on_its_row() {
             .standing(Standing::LoginExpired)
             .build(),
     );
-    assert_eq!(old.lines, [words::sign_in_expires(-DAY, false)]);
-    assert_eq!(old.notes.len(), 1, "said once: {:?}", old.notes);
+    assert_eq!(
+        noted(&old),
+        [words::sign_in_expires(-DAY, false)],
+        "said once"
+    );
 }
 
 /// Whether an account needs signing in again is a fact about the account, and a sign-in or a
@@ -1286,17 +1278,14 @@ fn a_reset_is_said_as_a_clock_time_and_counted_down_in_the_detail() {
     );
 }
 
-/// Why an account cannot be used, where it cannot be, or else why its numbers are not new,
-/// where it can be used all the same, is said once under its limits, and the menu's help says
-/// it too. Numbers that are merely not live do not stop anybody choosing an account. An
-/// account with nothing wrong, or nothing to say, says nothing.
+// Said once in its row's notes, and in the menu's help; old numbers stop nobody choosing it.
 #[test]
 fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
     let refused_login = "Its parked login was refused. Sign in to it again.";
     let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
     let said = |account: Account| {
         let item = described(account);
-        (item.lines, item.help)
+        (noted(&item), item.help)
     };
     let told = |why: &str| (vec![why.to_owned()], Some(why.to_owned()));
     let login = unplaced("codex", false);
@@ -1307,7 +1296,14 @@ fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
         said(stale().explained(refused_login).build()),
         told(refused_login)
     );
-    assert_eq!(said(stale().build()), (Vec::new(), None), "nothing to say");
+    assert_eq!(
+        said(stale().build()),
+        (
+            vec![words::sign_in_standing(Standing::LoginExpired).to_owned()],
+            None
+        ),
+        "only that it needs signing in again"
+    );
     assert_eq!(
         said(account(Some("spare")).explained(old_numbers).build()),
         told(old_numbers),
@@ -1342,7 +1338,7 @@ fn a_saved_sign_ins_life_is_said_only_of_an_account_not_in_use() {
         Some(words::saved_until("Jan 17", false))
     );
     assert!(
-        spare.lines.is_empty(),
+        spare.notes.is_empty(),
         "three days and more are the detail's"
     );
     assert!(
@@ -1352,10 +1348,10 @@ fn a_saved_sign_ins_life_is_said_only_of_an_account_not_in_use() {
                 .parked_until(parking)
                 .build()
         )
-        .lines
+        .notes
         .is_empty()
     );
-    assert!(described(account(Some("spare")).build()).lines.is_empty());
+    assert!(described(account(Some("spare")).build()).notes.is_empty());
 }
 
 const HOUR: i64 = 3_600;
@@ -1469,19 +1465,9 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
     let accounts = vec![account(Some("work")).signed_in().build(), spare.clone()];
     let (model, _) = reading(accounts.clone());
     let shown = rows(&model);
-    assert!(
-        shown[0]
-            .forget
-            .as_ref()
-            .is_some_and(|forget| !forget.enabled)
-    );
-    assert!(
-        shown[1]
-            .forget
-            .as_ref()
-            .is_some_and(|forget| forget.enabled)
-    );
-    let forget = shown[1].forget.as_ref().expect("spare may be forgotten");
+    assert!(removes(&shown[0]).is_some_and(|forget| !forget.enabled));
+    assert!(removes(&shown[1]).is_some_and(|forget| forget.enabled));
+    let forget = removes(&shown[1]).expect("spare may be forgotten");
     assert_eq!(
         forget.intent,
         Intent::Forget {
@@ -1499,10 +1485,10 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
         })
     );
     assert_eq!(
-        described(account(None).signed_in().uuid("u").build()).forget,
+        removes(&described(account(None).signed_in().uuid("u").build())),
         None
     );
-    assert_eq!(described(unplaced("codex", false)).forget, None);
+    assert_eq!(removes(&described(unplaced("codex", false))), None);
 }
 
 /// An enrolled account that cannot be switched to is signed in to again from its row, in its

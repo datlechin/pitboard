@@ -36,18 +36,22 @@ cask "pitboard-app" do
   # ~/Library/WebKit/com.usepitboard.Pitboard holds each account window's data, its
   # claude.ai or chatgpt.com sign-in included. The preferences list the stores each Pitboard
   # directory made (webStores) and each window's last page (windowPages), and the saved
-  # application state keeps the windows that were open. The Share extension's container and
-  # scripts folder are made by macOS the first time the extension runs, and hold nothing
-  # Pitboard writes.
+  # application state keeps the windows that were open. The Share and widget extensions'
+  # containers and scripts folders are made by macOS the first time each runs, and hold
+  # nothing Pitboard writes. The App Group, under the team that signs the release, holds the
+  # glance the widgets read.
   zap launchctl: [
         "com.datlechin.pitboard.renew",
         "com.datlechin.pitboard.watch",
       ],
       trash:     [
         "~/Library/Application Scripts/com.usepitboard.Pitboard.share",
+        "~/Library/Application Scripts/com.usepitboard.Pitboard.widgets",
         "~/Library/Application Support/com.usepitboard.Pitboard",
         "~/Library/Caches/com.usepitboard.Pitboard",
         "~/Library/Containers/com.usepitboard.Pitboard.share",
+        "~/Library/Containers/com.usepitboard.Pitboard.widgets",
+        "~/Library/Group Containers/D7HJ5TFYCU.com.usepitboard.Pitboard",
         "~/Library/HTTPStorages/com.usepitboard.Pitboard",
         "~/Library/HTTPStorages/com.usepitboard.Pitboard.binarycookies",
         "~/Library/Logs/Pitboard/watch.log",

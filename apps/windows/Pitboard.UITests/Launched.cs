@@ -101,6 +101,9 @@ internal sealed class Launched : IDisposable
         return Window("Open link");
     }
 
+    // A Jump List task's arguments given to a second launch, as Explorer starts one for a click on the task.
+    public void Jump(params string[] arguments) => HandOver(arguments);
+
     private void HandOver(params string[] arguments)
     {
         Running();

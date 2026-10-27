@@ -4,35 +4,35 @@ namespace Pitboard.Windows;
 public sealed class Handovers
 {
     private readonly Lock _lock = new();
-    private readonly List<string?> _held = [];
-    private Action<string?>? _take;
+    private readonly List<Handover> _held = [];
+    private Action<Handover>? _take;
 
-    // From AppInstance.Activated, on a thread of its own, with the launch's Pitboard link or none.
-    public void Arrived(string? link)
+    // From AppInstance.Activated, on a thread of its own.
+    public void Arrived(Handover handed)
     {
         lock (_lock)
         {
             if (_take is not null)
             {
-                _take(link);
+                _take(handed);
             }
-            // Every launch without a link held while Pitboard starts asks for the same window.
-            else if (link is not null || !_held.Contains(null))
+            // Every launch that asks only for the window, held while Pitboard starts, asks for the same window.
+            else if (handed is not Handover.Window || !_held.Contains(handed))
             {
-                _held.Add(link);
+                _held.Add(handed);
             }
         }
     }
 
     // Under the lock, so the app takes each launch in the order it arrived.
-    public void Ready(Action<string?> take)
+    public void Ready(Action<Handover> take)
     {
         lock (_lock)
         {
             _take = take;
-            foreach (var link in _held)
+            foreach (var handed in _held)
             {
-                take(link);
+                take(handed);
             }
 
             _held.Clear();

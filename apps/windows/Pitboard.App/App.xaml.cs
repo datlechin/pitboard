@@ -29,6 +29,7 @@ public partial class App : Application, IIconTargets
     private MainWindow? _window;
     private WelcomeWindow? _welcome;
     private AccountWindows? _accountWindows;
+    private JumpTasks? _jumpTasks;
     private WindowsNotifications? _notifications;
 
     public App(AppStart start, Handovers handovers)
@@ -79,6 +80,9 @@ public partial class App : Application, IIconTargets
         var accountWindows = new AccountWindows(model, Web(), _hidden.Handle);
         _accountWindows = accountWindows;
         accountWindows.Follow(model.AccountWindows);
+        var jumpTasks = new JumpTasks(
+            model, new SystemJumpList(_start.Identity, Program.Exe), accountWindows.Open, notifications.Post);
+        _jumpTasks = jumpTasks;
         _updates = SparkleUpdates.For(
             _start.Identity.Build, SparkleUpdates.Key(typeof(App).Assembly), _version, _start.DataFolder,
             action => queue.TryEnqueue(Ui.Guarded(action)), accountWindows.MayQuit, () => _lifetime?.End());
@@ -112,21 +116,31 @@ public partial class App : Application, IIconTargets
             model.Send(new Intent.LinkArrived(link));
         }
 
+        if (_start.Asked is { } asked)
+        {
+            jumpTasks.Take(asked);
+        }
+
         // A second launch's handover arrives on a thread of its own.
         _handovers.Ready(handed => queue.TryEnqueue(Ui.Guarded(() => Handed(handed))));
         _updates.Start();
     }
 
-    // Another copy's launch: its link waits for an account, and one without a link brings the window forward.
-    private void Handed(string? link)
+    // Another copy's launch: its link waits for an account, its Jump List task asks what it says, and one with neither
+    // brings the window forward.
+    private void Handed(Handover handed)
     {
-        if (link is null)
+        switch (handed)
         {
-            ShowWindow();
-        }
-        else
-        {
-            _model?.Send(new Intent.LinkArrived(link));
+            case Handover.Link link:
+                _model?.Send(new Intent.LinkArrived(link.Text));
+                break;
+            case Handover.Jump jump:
+                _jumpTasks?.Take(jump.Ask);
+                break;
+            default:
+                ShowWindow();
+                break;
         }
     }
 
@@ -191,6 +205,12 @@ public partial class App : Application, IIconTargets
                 break;
             case nameof(AppModel.AccountWindows):
                 _accountWindows?.Follow(_model.AccountWindows);
+                break;
+            case nameof(AppModel.JumpList):
+                _jumpTasks?.Follow();
+                break;
+            case nameof(AppModel.Answers):
+                _jumpTasks?.Answered();
                 break;
             // What was Pitboard's is gone, and the MSI takes the program once Pitboard.exe has exited.
             case nameof(AppModel.Removal) when _model.Removal is RemovalShown.Done:

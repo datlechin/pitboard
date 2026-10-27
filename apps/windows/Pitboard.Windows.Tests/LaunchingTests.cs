@@ -7,6 +7,7 @@ public sealed class LaunchingTests
 {
     private const string Fixture = @"C:\Temp\pitboard-fixture";
     private const string Shared = "pitboard-debug://open?url=https%3A%2F%2Fclaude.ai%2Fnew";
+    private const string Account = "35c0d1c9-6b25-5cdc-b543-64c0c0d8de46";
 
     private static readonly ReadFailure Elevated = new("elevated", "Pitboard runs elevated.");
     private static readonly Identity Debug = new(Build.Debug);
@@ -150,8 +151,11 @@ public sealed class LaunchingTests
         Assert.AreEqual(Start.Redirect, Launching.Decide(split, Release, null, () => null, () => false));
         Assert.AreEqual(Start.Redirect, Launching.Decide(["pitboard://open?x=", "--updated"], Release, null, () => null, () => false));
         Assert.AreEqual(
-            "pitboard://open?x=", Launching.Handed(@"""C:\Pitboard.exe"" ""pitboard://open?x="" --unregister """"", Release, null));
-        Assert.IsNull(Launching.Handed(@"""C:\Pitboard.exe"" --updated pitboard://open?url=x", Release, null), "a link after a flag");
+            new Handover.Link("pitboard://open?x="),
+            Launching.Handed(@"""C:\Pitboard.exe"" ""pitboard://open?x="" --unregister """"", Release, null));
+        Assert.AreEqual(
+            new Handover.Window(), Launching.Handed(@"""C:\Pitboard.exe"" --updated pitboard://open?url=x", Release, null),
+            "a link after a flag");
     }
 
     // Windows App SDK hands the running copy an unpackaged launch's whole command line, its program first, as
@@ -159,11 +163,78 @@ public sealed class LaunchingTests
     [TestMethod]
     public void TheRunningCopyReadsTheLinkFromTheCommandLineHandedOver()
     {
-        Assert.AreEqual(Shared, Launching.Handed($@"""C:\Program Files\Pitboard\Pitboard.exe"" ""{Shared}""", Debug, Fixture));
-        Assert.AreEqual(Shared, Launching.Handed($@"C:\pb\Pitboard.exe {Shared}", Debug, Fixture));
         Assert.AreEqual(
-            "pitboard://open?url=x", Launching.Handed(@"""C:\Pitboard.exe"" ""pitboard://open?url=x""", Release, null));
-        Assert.IsNull(Launching.Handed(@"""C:\Program Files\Pitboard\Pitboard.exe""", Release, null), "a launch with no link");
-        Assert.IsNull(Launching.Handed($@"""C:\pb\Pitboard.exe"" {Shared}", Debug, null), "outside a fixture");
+            new Handover.Link(Shared), Launching.Handed($@"""C:\Program Files\Pitboard\Pitboard.exe"" ""{Shared}""", Debug, Fixture));
+        Assert.AreEqual(new Handover.Link(Shared), Launching.Handed($@"C:\pb\Pitboard.exe {Shared}", Debug, Fixture));
+        Assert.AreEqual(
+            new Handover.Link("pitboard://open?url=x"),
+            Launching.Handed(@"""C:\Pitboard.exe"" ""pitboard://open?url=x""", Release, null));
+        Assert.AreEqual(
+            new Handover.Window(), Launching.Handed(@"""C:\Program Files\Pitboard\Pitboard.exe""", Release, null),
+            "a launch with no link");
+        Assert.AreEqual(new Handover.Window(), Launching.Handed($@"""C:\pb\Pitboard.exe"" {Shared}", Debug, null), "outside a fixture");
+    }
+
+    // Each task the model gives starts Pitboard.exe with arguments that read back as the same ask.
+    [TestMethod]
+    public void AJumpListTaskReadsBackAsItsAsk()
+    {
+        JumpAsk[] asks = [new JumpAsk.Switch(Account), new JumpAsk.AddAccount(), new JumpAsk.OpenWindow(Account)];
+
+        foreach (var ask in asks)
+        {
+            Assert.AreEqual(ask, Launching.Asked(Launching.Of(ask)));
+        }
+    }
+
+    // Read as strictly as a link: a flag alone, or with the one GUID the model gave it.
+    [TestMethod]
+    public void ATaskIsItsFlagAndAGuidAndNothingElse()
+    {
+        Assert.AreEqual(new JumpAsk.Switch(Account), Launching.Asked(["--SWITCH-TO", Account.ToUpperInvariant()]), "in another case");
+        Assert.IsNull(Launching.Asked(["--switch-to"]), "no account");
+        Assert.IsNull(Launching.Asked(["--switch-to", "claude/work"]), "a label");
+        Assert.IsNull(Launching.Asked(["--switch-to", Account, "--add-account"]), "more after it");
+        Assert.IsNull(Launching.Asked(["--add-account", Account]), "an id it takes none of");
+        Assert.IsNull(Launching.Asked(["pitboard://open?x=", "--switch-to", Account]), "after a link");
+        Assert.IsNull(Launching.Asked([]));
+    }
+
+    // What a task asks for opens, and Pitboard's window only where that is the window.
+    [TestMethod]
+    public void ATaskOpensNoWindowOfItsOwn()
+    {
+        Assert.IsFalse(Launching.OpensWindow(["--switch-to", Account]));
+        Assert.IsFalse(Launching.OpensWindow(["--add-account"]));
+        Assert.IsTrue(Launching.OpensWindow(["--switch-to"]), "no task");
+    }
+
+    // Explorer starts a second Pitboard.exe for a task while one runs, which hands the task over as it hands a link.
+    [TestMethod]
+    public void ASecondCopyHandsItsTaskOverAndTheRunningCopyReadsIt()
+    {
+        Assert.AreEqual(Start.Redirect, Launching.Decide(["--switch-to", Account], Release, null, () => null, () => false));
+        Assert.AreEqual(Start.Run, Launching.Decide(["--switch-to", Account], Release, null, () => null, () => true));
+        Assert.AreEqual(
+            new Handover.Jump(new JumpAsk.Switch(Account)),
+            Launching.Handed($@"""C:\Program Files\Pitboard\Pitboard.exe"" --switch-to {Account}", Release, null));
+        Assert.AreEqual(
+            new Handover.Jump(new JumpAsk.AddAccount()), Launching.Handed(@"""C:\Pitboard.exe"" --add-account", Release, null));
+        Assert.AreEqual(
+            new Handover.Window(), Launching.Handed(@"""C:\Pitboard.exe"" --switch-to claude/work", Release, null), "no task");
+    }
+
+    [TestMethod]
+    public void ADebugBuildOutsideAFixtureTakesNoTask()
+    {
+        const string Launch = @"""C:\pb\Pitboard.exe"" --add-account";
+
+        Assert.AreEqual(new Handover.Window(), Launching.Handed(Launch, Debug, null));
+        Assert.AreEqual(new Handover.Jump(new JumpAsk.AddAccount()), Launching.Handed(Launch, Debug, Fixture));
+        Assert.IsNull(new AppStart(Debug, new(), null, @"C:\Local\Pitboard App Debug") { Arguments = ["--add-account"] }.Asked);
+        Assert.AreEqual(
+            new JumpAsk.AddAccount(), new AppStart(Debug, new(), "oneTool", Fixture) { Arguments = ["--add-account"] }.Asked);
+        Assert.AreEqual(
+            new JumpAsk.AddAccount(), new AppStart(Release, new(), null, @"C:\Local\Pitboard App") { Arguments = ["--add-account"] }.Asked);
     }
 }

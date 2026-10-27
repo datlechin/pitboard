@@ -98,8 +98,14 @@ appex=$app/Contents/PlugIns/PitboardShare.appex
     echo "Xcode did not embed PitboardShare.appex" >&2
     exit 1
 }
+widgets=$app/Contents/PlugIns/PitboardWidgets.appex
+[ -d "$widgets" ] || {
+    echo "Xcode did not embed PitboardWidgets.appex" >&2
+    exit 1
+}
 for arch in arm64 x86_64; do
     lipo "$appex/Contents/MacOS/PitboardShare" -verify_arch "$arch"
+    lipo "$widgets/Contents/MacOS/PitboardWidgets" -verify_arch "$arch"
 done
 for scheme in \
     "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw "$app/Contents/Info.plist")" \
@@ -110,7 +116,14 @@ for scheme in \
         exit 1
     }
 done
-for bundle in "$app" "$appex"; do
+for bundle in "$app" "$appex" "$widgets"; do
+    said=$(plutil -extract CFBundleDisplayName raw "$bundle/Contents/Info.plist")
+    [ "$said" = Pitboard ] || {
+        echo "$bundle is named $said, not Pitboard" >&2
+        exit 1
+    }
+done
+for bundle in "$app" "$appex" "$widgets"; do
     said=$(plutil -extract CFBundleShortVersionString raw "$bundle/Contents/Info.plist")
     [ "$said" = "$short" ] || {
         echo "$bundle says it is $said, not $short" >&2
@@ -134,6 +147,33 @@ for bundle in "$app" "$appex"; do
         exit 1
     }
 done
+# Shortcuts and Spotlight read the app's actions, its entity and its App Shortcuts from what
+# Xcode extracts as it builds, and an app built without them runs all the same, offering none.
+intents=$app/Contents/Resources/Metadata.appintents/extract.actionsdata
+for wanted in actions.SwitchAccountIntent actions.GetUsageIntent actions.OpenPitboardIntent \
+    entities.AccountEntity; do
+    plutil -extract "$wanted" raw "$intents" >/dev/null 2>&1 || {
+        echo "the app's App Intents metadata has no $wanted" >&2
+        exit 1
+    }
+done
+[ "$(plutil -extract autoShortcuts raw "$intents" 2>/dev/null || echo 0)" -gt 0 ] || {
+    echo "the app's App Intents metadata has no App Shortcuts" >&2
+    exit 1
+}
+# The control's button and the widget's account choice, which the system reads from the
+# extension, and the button's intent, which it runs in the app.
+widget_intents=$widgets/Contents/Resources/Metadata.appintents/extract.actionsdata
+for wanted in actions.AccountChoice actions.OpenPlaceIntent entities.AccountEntity; do
+    plutil -extract "$wanted" raw "$widget_intents" >/dev/null 2>&1 || {
+        echo "the widget extension's App Intents metadata has no $wanted" >&2
+        exit 1
+    }
+done
+plutil -extract actions.OpenPlaceIntent raw "$intents" >/dev/null 2>&1 || {
+    echo "the app's App Intents metadata has no actions.OpenPlaceIntent" >&2
+    exit 1
+}
 
 links_the_systems_sqlite "$app/Contents/MacOS/Pitboard" "the app"
 
@@ -194,6 +234,29 @@ fi
 # shellcheck disable=SC2086 # $options is a list of flags.
 codesign --force $options --sign "$identity" -i com.usepitboard.Pitboard.cli \
     "$app/Contents/Helpers/pitboard"
+# The App Group the widget extension reads the glance from, under the signing team: macOS
+# lets a team's own programs into it without asking. An ad hoc signature has no team, and
+# macOS would ask the app and refuse the extension, so an ad hoc build claims no group.
+team=$(codesign -dv "$app/Contents/Helpers/pitboard" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+case $team in
+    "" | "not set") group= ;;
+    *) group=$team.com.usepitboard.Pitboard ;;
+esac
+widget_entitlements=apps/macos/build/PitboardWidgets.entitlements
+cp apps/macos/Widgets/PitboardWidgets.entitlements "$widget_entitlements"
+app_entitlements=
+if [ -n "$group" ]; then
+    app_entitlements=apps/macos/build/Pitboard.entitlements
+    plutil -create xml1 "$app_entitlements"
+    for file in "$app_entitlements" "$widget_entitlements"; do
+        plutil -insert 'com\.apple\.security\.application-groups' -json "[\"$group\"]" "$file"
+    done
+fi
+# What a signed bundle claims, empty for nothing: `entitled <bundle> <key>`, its dots escaped.
+entitled() {
+    codesign -d --entitlements - --xml "$1" 2>/dev/null |
+        plutil -extract "$2" raw - 2>/dev/null || true
+}
 for helper in "$sparkle/Versions/B/Updater.app" "$sparkle/Versions/B/Autoupdate"; do
     # shellcheck disable=SC2086 # $options is a list of flags.
     codesign --force $options --sign "$identity" "$helper"
@@ -207,10 +270,19 @@ codesign --force $options --sign "$identity" "$sparkle"
 # shellcheck disable=SC2086 # $options is a list of flags.
 codesign --force $options --sign "$identity" \
     --entitlements apps/macos/ShareExtension/PitboardShare.entitlements "$appex"
-sandboxed=$(codesign -d --entitlements - --xml "$appex" 2>/dev/null |
-    plutil -extract 'com\.apple\.security\.app-sandbox' raw - 2>/dev/null || true)
-[ "$sandboxed" = true ] || {
+[ "$(entitled "$appex" 'com\.apple\.security\.app-sandbox')" = true ] || {
     echo "the share extension is not sandboxed" >&2
+    exit 1
+}
+# shellcheck disable=SC2086 # $options is a list of flags.
+codesign --force $options --sign "$identity" --entitlements "$widget_entitlements" "$widgets"
+[ "$(entitled "$widgets" 'com\.apple\.security\.app-sandbox')" = true ] || {
+    echo "the widget extension is not sandboxed" >&2
+    exit 1
+}
+claimed=$(entitled "$widgets" 'com\.apple\.security\.application-groups.0')
+[ "$claimed" = "$group" ] || {
+    echo "the widget extension's App Group is ${claimed:-none}, not ${group:-none}" >&2
     exit 1
 }
 # The extension checks a link with pitboard-share-ffi and links nothing of the core, whose
@@ -243,7 +315,28 @@ if holds_a_fixture "$app_binary"; then
     echo "the app holds a fixture" >&2
     exit 1
 fi
+# The widget extension reads a file and links neither library; it holds the glance's Swift.
+widgets_binary=$widgets/Contents/MacOS/PitboardWidgets
+links "$widgets_binary" PitboardGlance || {
+    echo "the widget extension has no symbols to read" >&2
+    exit 1
+}
+for library in uniffi_pitboard_ffi_ uniffi_pitboard_share_ffi_; do
+    if links "$widgets_binary" "$library"; then
+        echo "the widget extension links Rust" >&2
+        exit 1
+    fi
+done
 # shellcheck disable=SC2086
-codesign --force $options --sign "$identity" "$app"
+codesign --force $options --sign "$identity" ${app_entitlements:+--entitlements "$app_entitlements"} "$app"
+claimed=$(entitled "$app" 'com\.apple\.security\.application-groups.0')
+[ "$claimed" = "$group" ] || {
+    echo "the app's App Group is ${claimed:-none}, not ${group:-none}" >&2
+    exit 1
+}
+[ -z "$(entitled "$app" 'com\.apple\.security\.app-sandbox')" ] || {
+    echo "the app is sandboxed" >&2
+    exit 1
+}
 codesign --verify --strict --deep "$app"
 echo "built $app ($version, $(lipo -archs "$app/Contents/MacOS/Pitboard"))"

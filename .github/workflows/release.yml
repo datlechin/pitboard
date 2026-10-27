@@ -1548,12 +1548,35 @@ jobs:
             esac
           done
           # macOS refuses to run an app extension that is not sandboxed, and the Share menu
-          # then has no Pitboard. Read from the installed copy, as notarised and stapled.
-          appex=$app/Contents/PlugIns/PitboardShare.appex
-          sandboxed=$(codesign -d --entitlements - --xml "$appex" 2>/dev/null |
-            plutil -extract 'com\.apple\.security\.app-sandbox' raw - 2>/dev/null || true)
-          if [ "$sandboxed" != true ]; then
-            echo "the installed app's share extension is not sandboxed" >&2
+          # then has no Pitboard, nor the gallery its widgets. Read from the installed copy, as
+          # notarised and stapled.
+          entitled() {
+            codesign -d --entitlements - --xml "$1" 2>/dev/null |
+              plutil -extract "$2" raw - 2>/dev/null || true
+          }
+          for appex in PitboardShare PitboardWidgets; do
+            if [ "$(entitled "$app/Contents/PlugIns/$appex.appex" 'com\.apple\.security\.app-sandbox')" != true ]; then
+              echo "the installed app's $appex.appex is not sandboxed" >&2
+              exit 1
+            fi
+          done
+          # The widgets read the glance from the App Group under the team that signed the
+          # app, which the cask's zap names; an ad hoc build claims none.
+          team=$(codesign -dv "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+          group=
+          if [ -n "$team" ] && [ "$team" != "not set" ]; then
+            group=$team.com.usepitboard.Pitboard
+          fi
+          for bundle in "$app" "$app/Contents/PlugIns/PitboardWidgets.appex"; do
+            claimed=$(entitled "$bundle" 'com\.apple\.security\.application-groups.0')
+            if [ "$claimed" != "$group" ]; then
+              echo "$bundle's App Group is ${claimed:-none}, not ${group:-none}" >&2
+              exit 1
+            fi
+          done
+          if [ -n "$group" ] && ! brew cat --cask datlechin/tap/pitboard-app |
+            grep -qF "/Library/Group Containers/$group\""; then
+            echo "the cask's zap leaves the App Group $group" >&2
             exit 1
           fi
 

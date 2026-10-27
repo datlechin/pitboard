@@ -202,7 +202,8 @@ CI checks the format of the Swift written by hand:
 ```sh
 swift format lint --strict --recursive --configuration apps/macos/.swift-format \
   apps/macos/Sources/PitboardApp apps/macos/Sources/PitboardKit apps/macos/Sources/PitboardLinkTarget \
-  apps/macos/App apps/macos/ShareExtension apps/macos/UITests apps/macos/Tests apps/macos/scripts .github/scripts
+  apps/macos/Sources/PitboardGlance apps/macos/Sources/PitboardWidgetViews \
+  apps/macos/App apps/macos/ShareExtension apps/macos/Widgets apps/macos/UITests apps/macos/Tests apps/macos/scripts .github/scripts
 ```
 
 ### Run the debug build
@@ -221,8 +222,8 @@ env PITBOARD_FIXTURE=twoTools HOME="$scratch" PITBOARD_HOME="$scratch/.pitboard"
 `<build>` is `Products/Debug` in the folder **Product** > **Show Build Folder in Finder**
 opens. To run it from Xcode, add the same variables to the scheme's Run environment in
 **Product** > **Scheme** > **Edit Scheme**. `xcodegen generate` writes the scheme again
-without them, so check them before each Run. [AGENTS.md](AGENTS.md#never) lists the ways it
-must never be started.
+without them, so check them before each Run: started without `PITBOARD_FIXTURE`, the debug
+build quits at once. [AGENTS.md](AGENTS.md#never) lists the ways it must never be started.
 
 `fixture_names()` lists the worlds, and a name that is none of them stops the launch and
 names them all. A fixture's Claude Code sign-in takes a code typed back as `<code>#<state>`,
@@ -263,23 +264,26 @@ the installed copy claims:
 | --- | --- | --- |
 | Bundle identifier | `com.usepitboard.Pitboard.debug` | `com.usepitboard.Pitboard` |
 | Link scheme | `pitboard-debug://` | `pitboard://` |
-| Share menu entry | **Pitboard Debug** | **Pitboard** |
+| Share menu entry, widgets and control | **Pitboard Debug** | **Pitboard** |
 
-Building the app registers its link scheme and its Share extension with macOS, and both stay
-registered. After a build with Xcode, `xcodebuild` or `build-app.sh`, unregister each copy
-it made. `<build>` is the folder that holds the copy, such as `apps/macos/build` for
-`build-app.sh`. The first line lists every copy macOS knows; run it again afterwards to
-check:
+Building the app registers its link scheme, its Share extension and its widget extension
+with macOS, and they stay registered. After a build with Xcode, `xcodebuild` or
+`build-app.sh`, unregister each copy it made, then delete it: `pluginkit -r` says discovery
+may add back an extension still on disk. `<build>` is the folder that holds the copy, such as
+`apps/macos/build` for `build-app.sh`. The first line lists every copy macOS knows; run it
+again afterwards to check:
 
 ```sh
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
-"$lsregister" -dump | grep -E '^path:.*(Pitboard\.app|PitboardShare\.appex)'
+"$lsregister" -dump | grep -E '^path:.*(Pitboard\.app|PitboardShare\.appex|PitboardWidgets\.appex)'
 pluginkit -r <build>/Pitboard.app/Contents/PlugIns/PitboardShare.appex
+pluginkit -r <build>/Pitboard.app/Contents/PlugIns/PitboardWidgets.appex
 "$lsregister" -u <build>/Pitboard.app/Contents/Frameworks/Sparkle.framework/Versions/*/Updater.app
 "$lsregister" -u <build>/Pitboard.app
 ```
 
-`pluginkit -m | grep usepitboard` lists the Share extensions macOS still offers.
+`pluginkit -m | grep usepitboard` lists the Share extensions and widget extensions macOS still
+offers.
 
 ## Windows
 

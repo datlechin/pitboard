@@ -1,14 +1,16 @@
 //! What a widget, a control or an intent reads of the accounts, in view of others and synced.
 
-use super::accounts::{limit_row, limits_said, standing_of};
+use super::accounts::{headline, limit_row, limits_said, standing_of};
+use super::sheets::quit_question;
 use super::{AccountStanding, LimitKind, Seen, words};
 use crate::account_windows::stores::derive;
-use crate::model::state::{Answered, State};
+use crate::model::state::{After, Answered, State};
 use crate::model::{LocalTime, OutsideAnswer};
 use crate::{Account, UsageLevel};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::state::Key;
 use pitboard_core::status::Stale;
+use pitboard_core::words::figure;
 use serde::Serialize;
 
 // A widget reads any schema it knows and leaves another alone.
@@ -19,7 +21,24 @@ struct Glance {
     schema: u32,
     // when the accounts were last read, in epoch seconds
     read_at: Option<i64>,
+    words: GlanceWords,
     accounts: Vec<GlanceAccount>,
+}
+
+// What a widget or a control says beside the accounts, which links no Rust to say it.
+#[derive(Serialize)]
+struct GlanceWords {
+    in_use: String,
+    // before the countdown a widget draws to a reset
+    resets_in: &'static str,
+    resetting_now: &'static str,
+    // "Updated 8:00 AM"
+    updated: Option<String>,
+    no_accounts: String,
+    none_in_use: &'static str,
+    // a widget's Switch, on macOS 27
+    switch_button: &'static str,
+    open_to_switch: &'static str,
 }
 
 #[derive(Serialize)]
@@ -33,6 +52,8 @@ struct GlanceAccount {
     plan: Option<String>,
     // the menu's line: "5-hour 42% used, Weekly 12%"
     said: String,
+    // beside its name in a control: "In Use", its tightest limit's "64%", or why it has none
+    value: String,
     limits: Vec<GlanceLimit>,
 }
 
@@ -42,9 +63,15 @@ struct GlanceLimit {
     // the model a weekly limit of one model's is for
     model: Option<String>,
     name: String,
+    // beside its bar: "5-hour"
+    short: String,
     used: f64,
+    figure: String,
     level: &'static str,
     resets_at: Option<i64>,
+    // as the app's row says it: "Resets 3:45 PM", or empty where nothing says
+    resets: String,
+    spoken: String,
 }
 
 // The "glance" name and the stores' namespace never change: a widget keeps an account by this
@@ -53,20 +80,43 @@ pub(crate) fn id(account: &str) -> String {
     derive("glance", account)
 }
 
-pub(crate) fn glance(state: &State, now: i64, local: &dyn LocalTime) -> String {
+// The file, and what a widget shows of it: everything but when the accounts were read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GlanceText {
+    pub(crate) file: String,
+    pub(crate) shown: String,
+}
+
+pub(crate) fn glance(state: &State, now: i64, local: &dyn LocalTime) -> GlanceText {
     glance_on(OS, state, now, local)
 }
 
-pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) -> String {
+pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) -> GlanceText {
     let seen = Seen::new(state, now, local, os);
+    let accounts: Vec<GlanceAccount> = (seen.accounts().iter())
+        .filter_map(|account| glanced(&seen, account))
+        .collect();
+    let shown = serde_json::to_string(&accounts).unwrap_or_default();
+    let read_at = state.updated_ms.map(|ms| ms.div_euclid(1000));
     let glance = Glance {
         schema: SCHEMA,
-        read_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
-        accounts: (seen.accounts().iter())
-            .filter_map(|account| glanced(&seen, account))
-            .collect(),
+        read_at,
+        words: GlanceWords {
+            in_use: words::in_use(os),
+            resets_in: words::RESETS_IN,
+            resetting_now: words::RESETTING_NOW,
+            updated: read_at.map(|at| words::updated(&seen.clock(at))),
+            no_accounts: words::no_accounts(os).0,
+            none_in_use: words::NONE_IN_USE,
+            switch_button: words::SWITCH,
+            open_to_switch: words::OPEN_TO_SWITCH,
+        },
+        accounts,
     };
-    serde_json::to_string(&glance).unwrap_or_default()
+    GlanceText {
+        file: serde_json::to_string(&glance).unwrap_or_default(),
+        shown,
+    }
 }
 
 // Only an account added under a name, which a switch from outside can name.
@@ -88,6 +138,11 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
         }
         _ => limits_said(seen, account),
     };
+    let value = match headline(windows) {
+        _ if account.signed_in => words::in_use(seen.os),
+        Some(tightest) => figure(tightest.percent),
+        None => said.clone(),
+    };
     Some(GlanceAccount {
         id: id(&account.id),
         tool: account.provider.clone(),
@@ -105,6 +160,7 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
         },
         plan: account.plan.clone(),
         said,
+        value,
         limits: windows
             .iter()
             .map(|limit| {
@@ -119,13 +175,17 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
                     kind,
                     model,
                     name: row.name,
+                    short: row.short,
                     used: row.percent,
+                    figure: row.figure,
                     level: match row.level {
                         UsageLevel::Plenty => "plenty",
                         UsageLevel::Low => "low",
                         UsageLevel::Out => "out",
                     },
                     resets_at: row.resets_at,
+                    resets: row.resets,
+                    spoken: row.spoken,
                 }
             })
             .collect(),
@@ -135,6 +195,12 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
 pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
     (seen.state.answered.iter())
         .map(|(request, answered)| {
+            let question = match answered {
+                Answered::AppOpen { question } => {
+                    Some(quit_question(seen, question, &After::Switch).question)
+                }
+                _ => None,
+            };
             let (done, said) = match answered {
                 Answered::Switched { tool, label } => (
                     true,
@@ -149,7 +215,9 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
                 Answered::NeedsSignIn { label } => (false, words::sign_in_first(label)),
                 Answered::Unusable { label } => (false, words::cannot_switch_to(label)),
                 Answered::Busy => (false, words::SWITCH_UNDER_WAY.into()),
-                Answered::AppOpen { app } => (false, words::open_pitboard_to_switch(app)),
+                Answered::AppOpen { question } => {
+                    (false, words::open_pitboard_to_switch(&question.name))
+                }
                 Answered::Replace { label } => (false, words::open_pitboard_to_replace(label)),
                 Answered::Asking => (false, words::QUESTION_OPEN.into()),
                 Answered::Uninstalling => (false, words::BEING_UNINSTALLED.into()),
@@ -159,6 +227,7 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
                 request: *request,
                 done,
                 said,
+                question,
             }
         })
         .collect()
