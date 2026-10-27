@@ -166,11 +166,7 @@ fn not_now(seen: &Seen, tip: Tip) -> Choice {
     }
 }
 
-/// What the accounts pane shows: a list, or why there is none and what to do about it.
-///
-/// A failed read with nothing to list is the pane's whole content, with why and a way to try
-/// again, and not a spinner that never stops or a list with nothing in it, whether nothing is
-/// known at all or what is known is empty. A machine without Claude Code says that instead.
+// Nothing to list says why and what to do next, never an empty list or a spinner that never stops.
 pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
     let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name.as_str()).collect();
     let names = pitboard_core::words::listed(&names);
@@ -192,17 +188,19 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
                 enabled: seen.state.reads == 0,
             },
         },
-        Footing::NoOneSignedIn => AccountsShown::NoAccounts {
-            title: words::no_accounts(seen.os).0,
-            detail: words::no_accounts(seen.os).1.into(),
-            add: Choice {
-                title: words::add_account(seen.os, true),
-                intent: Intent::PresentSheet {
-                    sheet: Sheet::Add { provider: None },
+        _ if seen.state.status.is_some() && seen.accounts().is_empty() => {
+            AccountsShown::NoAccounts {
+                title: words::no_accounts(seen.os).0,
+                detail: words::no_accounts(seen.os).1.into(),
+                add: Choice {
+                    title: words::add_account(seen.os, true),
+                    intent: Intent::PresentSheet {
+                        sheet: Sheet::Add { provider: None },
+                    },
+                    enabled: true,
                 },
-                enabled: true,
-            },
-        },
+            }
+        }
         _ if seen.state.status.is_none() => AccountsShown::Reading {
             title: words::READING_ACCOUNTS.into(),
         },

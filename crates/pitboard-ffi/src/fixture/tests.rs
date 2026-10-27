@@ -1198,10 +1198,7 @@ fn a_machine_without_claude_code_says_so_first() {
     model.shutdown();
 }
 
-/// A machine nobody is signed in on, with Codex installed, offers to use Pitboard with it, and
-/// once that is declined, an account, as AccountsWindowTests.swift's
-/// testAnEmptyMachineOffersAnAccount reads it. Only the first launch ever opens the window by
-/// itself, as its testTheFirstLaunchOpensTheWindow reads it.
+// As testAnEmptyMachineOffersAnAccount and testTheFirstLaunchOpensTheWindow read it on macOS.
 #[test]
 fn a_machine_nobody_is_signed_in_on_offers_an_account() {
     for world in [World::Empty, World::FirstLaunch] {
@@ -1210,11 +1207,11 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
         let shown = told.last_where("the Codex tip", |snapshot| {
             read_in(snapshot) && snapshot.footing == Footing::CodexUnused
         });
-        assert_eq!(
-            shown.accounts_shown,
-            AccountsShown::List,
-            "{}",
-            world.name()
+        assert!(
+            matches!(&shown.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(OS).0),
+            "{}: {:?}",
+            world.name(),
+            shown.accounts_shown
         );
         model.send(Intent::DeclineTip { tip: Tip::UseCodex });
         let declined = told.last_where("the Codex tip put away", |snapshot| {
