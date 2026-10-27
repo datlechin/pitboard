@@ -30,17 +30,17 @@ Claude's **Reset App Data** did not finish. Open Claude to let it finish, which 
 
 ## Finish or undo an add or a sign-in again
 
-An add or a sign-in again left halfway keeps Claude signed out and the account in use parked, after a restart too. You leave one with Control-C on the command line, or **Later** in the app. The app then shows **Adding a Claude Desktop account isn't finished** or **Signing in to home again isn't finished**.
+An add or a sign-in again left halfway keeps Claude signed out and the account in use parked, after a restart too. You leave one with Control-C on the command line, or **Later** in the app. The app then shows **Adding a Claude Desktop account didn't finish** or **Signing in to home again didn't finish**.
 
-To finish, sign in to the account in Claude and quit Claude. Then click **Finish Adding** or **Finish Signing In** on the notice, then **Add the Account Claude Shows** or **Record as home** in the dialog. On the command line, run `pitboard enroll` with the label you were adding or signing in to, such as `pitboard enroll desktop/travel`.
+To finish, sign in to the account in Claude and quit Claude. Then click **Finish Adding** or **Finish Signing In** on the notice, then **Add the Account Claude Shows** or **Add home** in the dialog. On the command line, run `pitboard enroll` with the label you were adding or signing in to, such as `pitboard enroll desktop/travel`.
 
-To undo it, click **Put work Back** on the notice, or run `pitboard use desktop/work`. Once Claude is signed in to the account you are adding, the undo is refused: finish the add instead.
+To undo it, click **Switch Back to work** on the notice, or run `pitboard use desktop/work`. Once Claude is signed in to the account you are adding, the undo is refused: finish the add instead.
 
 ## Give up an interrupted move
 
 Give up only when an error about an interrupted move says to. [A Claude Desktop move was interrupted](/troubleshooting/recovery#a-claude-desktop-move-was-interrupted) says what comes first.
 
-In the app, click **Give Up** on the notice **An interrupted move is waiting**, then **Give Up** again to confirm. On the command line, run `pitboard abandon`, then do what its output says. [`abandon`](/reference/recovery-commands#abandon) lists what it prints.
+In the app, click **Cancel Switch** on the notice **A switch in Claude didn't finish**, then **Cancel Switch** again to confirm. On the command line, run `pitboard abandon`, then do what its output says. [`abandon`](/reference/recovery-commands#abandon) lists what it prints.
 
 ## A parked Claude Desktop account opens signed out
 

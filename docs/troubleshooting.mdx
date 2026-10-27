@@ -11,7 +11,7 @@ pitboard doctor
 
 Do not switch accounts while any check shows `✗`, broken. [`doctor`](/reference/maintenance-commands#doctor) lists every check and mark.
 
-`pitboard log` lists the last changes and how each ended. In the app, the Pitboard window's **This Mac** pane, or **This PC** on Windows, makes the same checks, and **Activity** shows the log.
+`pitboard log` lists the last changes and how each ended. In the app, **Diagnostics** makes the same checks, and **Activity** shows the log. On macOS, both are in the **Window** menu. On Windows, they are in **Settings** > **Troubleshoot**.
 
 [Error and warning codes](/reference/errors) gives the cause and fix of each code a message names. These pages cover the rest:
 
@@ -31,13 +31,13 @@ A Claude Code session started over SSH can stay on another account than Pitboard
   <Tab title="macOS">
     A `/login` while the keychain is locked, as over SSH, writes the login to `~/.claude/.credentials.json`, which such a session signs in with. [A login file behind the keychain or Credential Manager](/concepts/open-sessions#a-login-file-behind-the-keychain-or-credential-manager) says what else it does.
 
-    1. In a desktop terminal, where the keychain is unlocked, run `pitboard stow`, or click **Put Away** on the app's notice **A login file is left behind the keychain**. A session signed in with the file is signed out.
+    1. In a desktop terminal, where the keychain is unlocked, run `pitboard stow`, or click **Clean Up** on the app's notice **A leftover sign-in file**. A session signed in with the file is signed out.
     2. Before you start Claude Code over SSH, run `security unlock-keychain ~/Library/Keychains/login.keychain-db`, or start it from a desktop terminal. Do not run `/login` while the keychain is locked.
   </Tab>
   <Tab title="Windows">
     Where Claude Code keeps its login in Credential Manager, a sign-in over SSH with a key cannot reach it. A `/login` there writes the login to `.credentials.json` in Claude Code's folder, which such a session signs in with, as read in the Windows builds of Claude Code 2.1.301.
 
-    1. In a desktop session, run `pitboard stow`, or select **Put away** on the app's notice **A login file is left behind Credential Manager**. A session signed in with the file is signed out.
+    1. In a desktop session, run `pitboard stow`, or select **Clean up** on the app's notice **A leftover sign-in file**. A session signed in with the file is signed out.
     2. Start Claude Code from a desktop session, and do not run `/login` over SSH.
   </Tab>
 </Tabs>

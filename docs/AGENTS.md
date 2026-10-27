@@ -131,6 +131,11 @@ pages say so.
 
 Use the first word, never the others.
 
+Steps and pages about the app use the app's words instead, as its controls and notices say them:
+a saved sign-in for a parked login, add for enrol, remove for forget, a name for a label, and a
+leftover sign-in file for a login file behind the keychain or Credential Manager. The command line
+and its pages keep the words in this table.
+
 | Use | Not |
 | --- | --- |
 | account | profile, user, identity |
@@ -154,8 +159,8 @@ Use the first word, never the others.
 | usage, limit, five-hour limit, weekly limit, resets | quota, cap, 5h limit, session limit, refills |
 | keychain; Credential Manager | Keychain, keyring; Windows Credential Manager, credential vault |
 | the app (on either system); the menu bar app (on macOS only); the command line | Pitboard.app, Pitboard.exe, the GUI, the tray app; the CLI, the binary |
-| Pitboard's item in the menu bar; Pitboard's icon in the notification area; the Pitboard window; pane | status item, tray icon, system tray, panel, dashboard, tab |
-| **This Mac**, **This PC** (the pane of checks) | diagnostics, the doctor pane |
+| Pitboard's item in the menu bar; Pitboard's icon in the notification area; **Accounts** (the macOS window, or the Windows page); the Pitboard window (on Windows); the inspector (the selected account's details on macOS); pane (of Settings on macOS) | status item, tray icon, system tray, panel, dashboard, tab, sidebar, Accounts pane |
+| **Diagnostics** (the app's checks), **Activity** (the app's list of changes) | This Mac, This PC, the doctor pane |
 | **Quit Pitboard** on macOS, **Exit** on Windows (the menu item that stops the app) | close, kill, quit (for the Windows app) |
 | shortcut menu; dialog; Settings | context menu; sheet, modal; Preferences |
 | Claude Code; Codex ("OpenAI's Codex CLI" on first mention); Claude Desktop | Claude (for Claude Code, or for Claude Desktop as a tool), Codex CLI |
