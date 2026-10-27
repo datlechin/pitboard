@@ -1,11 +1,18 @@
+import Foundation
+
 // What SwiftUI gives no identifier (docs/facts/macos-app.md), found by the words words.rs pins.
 enum Words {
     // The menu bar item's menu and the app's own menus.
     static let openPitboard = "Open Pitboard"
     static let settings = "Settings…"
     static let quit = "Quit Pitboard"
-    // A debug build's CFBundleDisplayName, which names SwiftUI's app menu and its items.
+    // A debug build's CFBundleDisplayName: the app menu's Hide and Quit, and from macOS 27 the menu.
     static let debugBuild = "Pitboard Debug"
+    // CFBundleName names the app menu on macOS 26.
+    static let appMenu =
+        ProcessInfo.processInfo.isOperatingSystemAtLeast(
+            OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+        ? debugBuild : "Pitboard"
     static let addAccount = "Add Account…"
     static let refresh = "Refresh"
     static let copyEmail = "Copy Email Address"

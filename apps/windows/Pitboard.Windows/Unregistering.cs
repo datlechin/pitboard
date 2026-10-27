@@ -40,7 +40,7 @@ public static class Unregistering
         {
             jumpList.Delete();
         }
-        catch (Exception error) when (error is COMException or UnauthorizedAccessException)
+        catch (Exception error) when (error is COMException or IOException or UnauthorizedAccessException)
         {
         }
 
