@@ -126,11 +126,10 @@ struct SignInSheet: View {
 
     private func progress(_ signingIn: RunningSignIn, _ text: SigningInText) -> some View {
         let page = signingIn.url.flatMap(URL.init(string:))
-        let waiting = WaitingRow(text: text.message, spoken: text.waiting)
         return Form {
             Section {
                 if text.steps.isEmpty {
-                    waiting
+                    WaitingRow(text: text.message, spoken: text.waiting)
                 } else {
                     Steps(steps: text.steps)
                 }
@@ -154,8 +153,12 @@ struct SignInSheet: View {
             } header: {
                 SheetHeader(title: text.title)
             } footer: {
+                // Beside the steps, the message is a caution and not what the spinner waits on.
                 if !text.steps.isEmpty {
-                    waiting.footnote()
+                    VStack(alignment: .leading, spacing: Design.lineSpacing) {
+                        WaitingRow(text: text.waiting)
+                        Text(text.message).footnote()
+                    }
                 }
             }
             if signingIn.wantsCode {

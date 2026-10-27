@@ -34,8 +34,7 @@ struct SettingsView: View {
         }
     }
 
-    // A taller pane scrolls: a 1024 x 768 screen leaves 590 points between the toolbar and the
-    // Dock.
+    // A taller pane scrolls.
     static let tallestPane: CGFloat = 560
 
     @AppStorage(DefaultsKey.settingsTab) private var tab = Tab.general

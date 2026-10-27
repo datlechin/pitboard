@@ -138,14 +138,16 @@ private struct LimitDetail: View {
             }
             .gaugeStyle(.linearCapacity)
             .tint(limit.level.tint)
-            HStack(alignment: .firstTextBaseline) {
-                Text(limit.resets)
-                Spacer()
-                Text(limit.resetsIn)
+            if !limit.resets.isEmpty || !limit.resetsIn.isEmpty {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(limit.resets)
+                    Spacer()
+                    Text(limit.resetsIn)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
             }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
         }
         .padding(.vertical, Design.lineSpacing)
         .accessibilityElement(children: .ignore)

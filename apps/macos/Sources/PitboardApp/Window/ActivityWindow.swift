@@ -14,19 +14,22 @@ struct ActivityWindow: View {
                 Text(line.date).monospacedDigit()
             }
             .width(min: 120, ideal: 160)
+            // Ideal widths that show "Sign-in in use changed" and "Signed in outside" whole at
+            // the window's default size.
             TableColumn(columns.change) { line in
                 Text(line.change)
                     .accessibilityIdentifier("activity.change")
             }
-            .width(min: 70, ideal: 90)
+            .width(min: 70, ideal: 150)
             TableColumn(columns.account) { line in
                 Text(line.account).lineLimit(1).truncationMode(.middle)
             }
+            .width(min: 80, ideal: 120)
             TableColumn(columns.result) { line in
                 Text(line.result)
                     .foregroundStyle(line.done ? .secondary : .primary)
             }
-            .width(min: 60, ideal: 90)
+            .width(min: 60, ideal: 120)
             TableColumn(columns.by) { line in
                 Text(line.askedBy).foregroundStyle(.secondary)
             }

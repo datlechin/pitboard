@@ -135,7 +135,7 @@ private struct SessionView: View {
             }
         }
         .alert(removal.title, isPresented: $removingData) {
-            Button(words.accountWindow.remove, role: .destructive) {
+            Button(words.accountWindow.remove) {
                 Task { await windows.removeWebsiteData(of: session) }
             }
             Button(words.window.cancel, role: .cancel) {}

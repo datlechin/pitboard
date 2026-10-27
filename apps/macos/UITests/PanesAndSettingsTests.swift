@@ -116,6 +116,9 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(share.isEnabled)
         XCTAssertEqual(choice.value as? String, Words.notifyMe, "a fresh install notifies")
         XCTAssertFalse(standing.exists, "nothing said while it does not switch")
+        XCTAssertTrue(
+            app.control("settings.terms").waitForExistence(timeout: 5),
+            "Is this allowed?, beside Warm-Up")
 
         choose(Words.switchAutomatically, in: choice)
         XCTAssertTrue(standing.waitForExistence(timeout: 5), "what the look came to")
@@ -123,9 +126,6 @@ final class PanesAndSettingsTests: FixtureTestCase {
 
         let typed = app.textFields["settings.atLimitShareField"]
         XCTAssertTrue(typed.exists, "a field beside the stepper")
-        XCTAssertTrue(
-            app.control("settings.terms").waitForExistence(timeout: 5),
-            "Is this allowed?, beside Warm-Up")
         let raise = share.incrementArrows.firstMatch
         XCTAssertTrue(raise.exists, "a stepper shows its arrows")
         raise.click()
