@@ -173,42 +173,47 @@
                               AutomationProperties.AutomationId="account.action"
                               Click="OnAction" />
                         </Grid>
+                        <!-- An ItemsControl goes in ItemsHeader: the expander gives each of its Items a SettingsCard's style. -->
+                        <toolkit:SettingsExpander.ItemsHeader>
+                          <StackPanel>
+                            <!-- Each limit with how long until it resets, which the row's line has no room for. -->
+                            <ItemsControl ItemsSource="{x:Bind Item.Limits, Mode=OneWay}" IsTabStop="False">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="core:LimitRow">
+                                  <toolkit:SettingsCard
+                                      Header="{x:Bind Name}"
+                                      Description="{x:Bind Used}"
+                                      Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                                      AutomationProperties.Name="{x:Bind Name}">
+                                    <StackPanel HorizontalAlignment="Right">
+                                      <TextBlock HorizontalAlignment="Right" Text="{x:Bind Resets}" />
+                                      <TextBlock HorizontalAlignment="Right" Text="{x:Bind ResetsIn}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
+                                    </StackPanel>
+                                  </toolkit:SettingsCard>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- The notes past the one the row has room for. -->
+                            <ItemsControl ItemsSource="{x:Bind MoreNotes}" IsTabStop="False">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="shown:ShownNote">
+                                  <toolkit:SettingsCard
+                                      Header="{x:Bind Text}"
+                                      Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                                      AutomationProperties.Name="{x:Bind Text}">
+                                    <HyperlinkButton
+                                        Content="{x:Bind LearnTitle}"
+                                        Visibility="{x:Bind HasLearn}"
+                                        Tag="{x:Bind}"
+                                        AutomationProperties.AutomationId="detail.note.learn"
+                                        Click="OnMoreNoteLearn" />
+                                  </toolkit:SettingsCard>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </toolkit:SettingsExpander.ItemsHeader>
                         <toolkit:SettingsExpander.Items>
-                          <!-- Each limit with how long until it resets, which the row's line has no room for. -->
-                          <ItemsControl ItemsSource="{x:Bind Item.Limits, Mode=OneWay}" IsTabStop="False">
-                            <ItemsControl.ItemTemplate>
-                              <DataTemplate x:DataType="core:LimitRow">
-                                <toolkit:SettingsCard
-                                    Header="{x:Bind Name}"
-                                    Description="{x:Bind Used}"
-                                    Style="{StaticResource DefaultSettingsExpanderItemStyle}"
-                                    AutomationProperties.Name="{x:Bind Name}">
-                                  <StackPanel HorizontalAlignment="Right">
-                                    <TextBlock HorizontalAlignment="Right" Text="{x:Bind Resets}" />
-                                    <TextBlock HorizontalAlignment="Right" Text="{x:Bind ResetsIn}" Style="{StaticResource SecondaryCaptionTextBlockStyle}" />
-                                  </StackPanel>
-                                </toolkit:SettingsCard>
-                              </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                          </ItemsControl>
-                          <!-- The notes past the one the row has room for. -->
-                          <ItemsControl ItemsSource="{x:Bind MoreNotes}" IsTabStop="False">
-                            <ItemsControl.ItemTemplate>
-                              <DataTemplate x:DataType="shown:ShownNote">
-                                <toolkit:SettingsCard
-                                    Header="{x:Bind Text}"
-                                    Style="{StaticResource DefaultSettingsExpanderItemStyle}"
-                                    AutomationProperties.Name="{x:Bind Text}">
-                                  <HyperlinkButton
-                                      Content="{x:Bind LearnTitle}"
-                                      Visibility="{x:Bind HasLearn}"
-                                      Tag="{x:Bind}"
-                                      AutomationProperties.AutomationId="detail.note.learn"
-                                      Click="OnMoreNoteLearn" />
-                                </toolkit:SettingsCard>
-                              </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                          </ItemsControl>
                           <!-- A card that cannot be clicked is a group, which Narrator names only by its own name. -->
                           <toolkit:SettingsCard
                               Header="{x:Bind shown:Words.Window.Email}"
