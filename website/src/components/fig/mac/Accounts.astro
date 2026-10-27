@@ -402,15 +402,18 @@ const insButton =
           <span class="flex-1">{SIGN_IN_LABEL}</span>
           <span class="text-right text-mac-window-sub" data-part="ins-sign-in">{pickedSignIn}</span>
         </div>
+        {/* LabeledContent puts the button under its two lines, as the app's 260 points leave it no room */}
         <div
-          class:list={[insRow, ruled, "[[hidden]+&]:before:hidden", "py-6"]}
+          class:list={[ruled, "[[hidden]+&]:before:hidden", "flex flex-col gap-6 px-10 py-6"]}
           data-part="ins-warm-row"
           hidden={!pickedWarm}
         >
-          <span class="flex flex-1 flex-col">
+          <span class="flex flex-col">
             {WARM_UP_LABEL}<span class={sub} data-part="ins-warm">{pickedWarm}</span>
           </span>
-          <Button data-does="warm-settings">{warmUpSettings("macos")}</Button>
+          <span class="flex justify-end">
+            <Button data-does="warm-settings">{warmUpSettings("macos")}</Button>
+          </span>
         </div>
       </div>
       {/* what its shortcut menu offers, in its order, only what applies now */}
