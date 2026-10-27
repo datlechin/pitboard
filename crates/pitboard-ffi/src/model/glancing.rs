@@ -149,78 +149,50 @@ fn the_glance_holds_no_email_token_uuid_path_or_notice_line() {
     }
 }
 
+// What widgets and intents decode, which changes only with SCHEMA.
 #[test]
-fn a_glance_is_schema_1() {
-    let mut machine = Stub::reading(Ok(two(10.0)));
-    let mut model = glancing(&mut machine);
-    let utc = crate::present::testing::Utc;
-    let text = crate::present::glance_on(
+fn a_glance_is_its_golden_file() {
+    let personal = account(Some("personal"))
+        .uuid("p")
+        .limits(vec![
+            window("session", 75.0).resets(Some(NOW + 3_600)),
+            window("weekly_all", 30.0)
+                .scope("Fable")
+                .resets(Some(NOW + 3 * 86_400)),
+        ])
+        .build();
+    let old = account(Some("old"))
+        .uuid("o")
+        .standing(pitboard_core::status::Standing::LoginExpired)
+        .build();
+    let main = Account {
+        plan: Some("Plus".into()),
+        ..account(Some("main"))
+            .of("codex")
+            .signed_in()
+            .uuid("m")
+            .limits(vec![
+                window("session", 100.0).resets(Some(NOW + 1_800)),
+                window("weekly_all", 50.0).resets(None),
+            ])
+            .build()
+    };
+    let mut machine = Stub::reading(Ok(status(vec![work(), personal, old, main])));
+    machine.found = vec![codex()];
+    let model = glancing(&mut machine);
+    let made = crate::present::glance_on(
         pitboard_core::host::Os::MacOs,
         &model.state,
         model.now.epoch(),
-        &utc,
-    )
-    .file;
-    let read_at = model.state.updated_ms.expect("read").div_euclid(1000);
-    let golden = serde_json::json!({
-        "schema": 1,
-        "read_at": read_at,
-        "accounts": [
-            {
-                "id": "35c0d1c9-6b25-5cdc-b543-64c0c0d8de46",
-                "tool": "claude",
-                "tool_name": "Claude Code",
-                "name": "work",
-                "in_use": true,
-                "standing": "in_use",
-                "plan": "Max 5x",
-                "said": "5-hour 42% used, Weekly 12%",
-                "limits": [
-                    {
-                        "kind": "five_hour",
-                        "model": null,
-                        "name": "5-hour limit",
-                        "used": 42.0,
-                        "level": "plenty",
-                        "resets_at": NOW + 3_600
-                    },
-                    {
-                        "kind": "weekly",
-                        "model": null,
-                        "name": "Weekly limit",
-                        "used": 12.0,
-                        "level": "plenty",
-                        "resets_at": NOW + 3 * 86_400
-                    }
-                ]
-            },
-            {
-                "id": "c17c8cd1-64cc-5e37-bb6c-a31d984738ec",
-                "tool": "claude",
-                "tool_name": "Claude Code",
-                "name": "personal",
-                "in_use": false,
-                "standing": "ready",
-                "plan": null,
-                "said": "5-hour 10% used",
-                "limits": [
-                    {
-                        "kind": "five_hour",
-                        "model": null,
-                        "name": "5-hour limit",
-                        "used": 10.0,
-                        "level": "plenty",
-                        "resets_at": NOW + 3_600
-                    }
-                ]
-            }
-        ]
-    });
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&text).expect("JSON"),
-        golden
+        &crate::present::testing::Utc,
     );
-    model.publish();
+    let json = |text: &str| serde_json::from_str::<serde_json::Value>(text).expect("JSON");
+    assert_eq!(
+        json(&made.file),
+        json(include_str!("../present/glance.json")),
+        "{}",
+        made.file
+    );
 }
 
 // A widget or a shortcut keeps an account by it, so it never changes, and a rename keeps it.

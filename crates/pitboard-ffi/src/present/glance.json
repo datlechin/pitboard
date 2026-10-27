@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "read_at": 1800000000,
+  "accounts": [
+    {
+      "id": "35c0d1c9-6b25-5cdc-b543-64c0c0d8de46",
+      "tool": "claude",
+      "tool_name": "Claude Code",
+      "name": "work",
+      "in_use": true,
+      "standing": "in_use",
+      "plan": "Max 5x",
+      "said": "5-hour 42% used, Weekly 12%",
+      "limits": [
+        {
+          "kind": "five_hour",
+          "model": null,
+          "name": "5-hour limit",
+          "used": 42.0,
+          "level": "plenty",
+          "resets_at": 1800003600
+        },
+        {
+          "kind": "weekly",
+          "model": null,
+          "name": "Weekly limit",
+          "used": 12.0,
+          "level": "plenty",
+          "resets_at": 1800259200
+        }
+      ]
+    },
+    {
+      "id": "c17c8cd1-64cc-5e37-bb6c-a31d984738ec",
+      "tool": "claude",
+      "tool_name": "Claude Code",
+      "name": "personal",
+      "in_use": false,
+      "standing": "ready",
+      "plan": null,
+      "said": "5-hour 75% used, Weekly (Fable) 30%",
+      "limits": [
+        {
+          "kind": "five_hour",
+          "model": null,
+          "name": "5-hour limit",
+          "used": 75.0,
+          "level": "low",
+          "resets_at": 1800003600
+        },
+        {
+          "kind": "weekly_model",
+          "model": "Fable",
+          "name": "Weekly limit (Fable)",
+          "used": 30.0,
+          "level": "plenty",
+          "resets_at": 1800259200
+        }
+      ]
+    },
+    {
+      "id": "16abaa6a-e9ba-5a36-b847-8c0e5d5ee4cf",
+      "tool": "claude",
+      "tool_name": "Claude Code",
+      "name": "old",
+      "in_use": false,
+      "standing": "needs_sign_in",
+      "plan": null,
+      "said": "Sign-in expired",
+      "limits": []
+    },
+    {
+      "id": "0968925e-cecf-512d-8bcd-72d0ed816a3e",
+      "tool": "codex",
+      "tool_name": "Codex",
+      "name": "main",
+      "in_use": true,
+      "standing": "in_use",
+      "plan": "Plus",
+      "said": "5-hour limit reached, resets 08:30",
+      "limits": [
+        {
+          "kind": "five_hour",
+          "model": null,
+          "name": "5-hour limit",
+          "used": 100.0,
+          "level": "out",
+          "resets_at": 1800001800
+        },
+        {
+          "kind": "weekly",
+          "model": null,
+          "name": "Weekly limit",
+          "used": 50.0,
+          "level": "plenty",
+          "resets_at": null
+        }
+      ]
+    }
+  ]
+}
