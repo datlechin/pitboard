@@ -54,7 +54,7 @@ pub use app_words::{
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
-pub(crate) use glance::{glance, id as glance_id};
+pub(crate) use glance::{GlanceText, glance, id as glance_id};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,

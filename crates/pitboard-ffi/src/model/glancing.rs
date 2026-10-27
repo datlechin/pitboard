@@ -100,6 +100,32 @@ fn the_glance_is_written_once_per_change_and_never_by_the_minute() {
     assert_eq!(machine.glances.len(), 2);
 }
 
+// WidgetKit allows a widget far fewer reloads a day than a read every five minutes.
+#[test]
+fn each_read_rewrites_the_glance_and_only_what_a_widget_shows_moves_its_revision() {
+    let read_at = |text: &str| {
+        serde_json::from_str::<serde_json::Value>(text).expect("JSON")["read_at"].as_i64()
+    };
+    let mut machine = Stub::reading(Ok(two(10.0)));
+    let mut model = glancing(&mut machine);
+    assert_eq!(model.publish().glance_revision, 1);
+    model.run(&mut machine);
+
+    model.later(Duration::from_secs(300));
+    model.refresh(&mut machine);
+    assert_eq!(model.publish().glance_revision, 1, "the same numbers");
+    model.run(&mut machine);
+    let read: Vec<Option<i64>> = machine.glances.iter().map(|text| read_at(text)).collect();
+    assert_eq!(read, [Some(NOW), Some(NOW + 300)]);
+
+    machine.answer = Ok(two(30.0));
+    model.later(Duration::from_secs(300));
+    model.refresh(&mut machine);
+    assert_eq!(model.publish().glance_revision, 2);
+    model.run(&mut machine);
+    assert_eq!(machine.glances.len(), 3);
+}
+
 #[test]
 fn the_glance_holds_no_email_token_uuid_path_or_notice_line() {
     let line = "/Users/dana/.claude/.credentials.json is there with no Claude Code login in it.";
@@ -133,7 +159,8 @@ fn a_glance_is_schema_1() {
         &model.state,
         model.now.epoch(),
         &utc,
-    );
+    )
+    .file;
     let read_at = model.state.updated_ms.expect("read").div_euclid(1000);
     let golden = serde_json::json!({
         "schema": 1,

@@ -53,7 +53,7 @@ use crate::present::words::{
     could_not_remove, could_not_rename, could_not_sign_in, could_not_switch, could_not_warm,
     signed_in_now,
 };
-use crate::present::{Clicked, UNUSABLE};
+use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
@@ -669,10 +669,11 @@ pub(crate) enum Answered {
     Failed { title: String },
 }
 
-// The glance's last text written, and how many times it changed.
+// The glance's last file written, what a widget shows of it, and how many times that changed.
 #[derive(Debug, Default)]
 struct Glancing {
     written: Option<String>,
+    shown: Option<String>,
     revision: u64,
 }
 
@@ -1634,19 +1635,22 @@ impl State {
             .map_or(0, |glancing| glancing.revision)
     }
 
-    // Kept where it changed, once the accounts are read, and not once Pitboard is being removed.
-    pub(crate) fn glanced(&mut self, text: String) -> Option<Job> {
+    // Written as each read changes it, from the first read on, until Pitboard is being removed.
+    pub(crate) fn glanced(&mut self, glance: GlanceText) -> Option<Job> {
         let glancing = self.glancing.as_mut()?;
         if self.status.is_none()
             || self.removing.is_some()
-            || glancing.written.as_ref() == Some(&text)
+            || glancing.written.as_ref() == Some(&glance.file)
         {
             return None;
         }
-        glancing.written = Some(text.clone());
-        glancing.revision += 1;
+        if glancing.shown.as_ref() != Some(&glance.shown) {
+            glancing.shown = Some(glance.shown);
+            glancing.revision += 1;
+        }
+        glancing.written = Some(glance.file.clone());
         self.at_work += 1;
-        Some(Job::KeepGlance { text })
+        Some(Job::KeepGlance { text: glance.file })
     }
 
     // As a click in the app would, short of a question only the app can ask.

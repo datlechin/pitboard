@@ -53,20 +53,32 @@ pub(crate) fn id(account: &str) -> String {
     derive("glance", account)
 }
 
-pub(crate) fn glance(state: &State, now: i64, local: &dyn LocalTime) -> String {
+// The file, and what a widget shows of it: everything but when the accounts were read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GlanceText {
+    pub(crate) file: String,
+    pub(crate) shown: String,
+}
+
+pub(crate) fn glance(state: &State, now: i64, local: &dyn LocalTime) -> GlanceText {
     glance_on(OS, state, now, local)
 }
 
-pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) -> String {
+pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) -> GlanceText {
     let seen = Seen::new(state, now, local, os);
+    let accounts: Vec<GlanceAccount> = (seen.accounts().iter())
+        .filter_map(|account| glanced(&seen, account))
+        .collect();
+    let shown = serde_json::to_string(&accounts).unwrap_or_default();
     let glance = Glance {
         schema: SCHEMA,
         read_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
-        accounts: (seen.accounts().iter())
-            .filter_map(|account| glanced(&seen, account))
-            .collect(),
+        accounts,
     };
-    serde_json::to_string(&glance).unwrap_or_default()
+    GlanceText {
+        file: serde_json::to_string(&glance).unwrap_or_default(),
+        shown,
+    }
 }
 
 // Only an account added under a name, which a switch from outside can name.

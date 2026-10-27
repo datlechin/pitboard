@@ -652,7 +652,7 @@ pub struct Snapshot {
     pub uninstall: ItemOffer,
     pub removal: Option<RemovalShown>,
     pub welcome: WelcomeShown,
-    // one higher each time the glance changed, for an app to reload its widgets
+    // one higher each time what a widget shows of the glance changed, which reloads widgets
     pub glance_revision: u64,
     pub answers: Vec<OutsideAnswer>,
 }
