@@ -32,6 +32,7 @@
           "figure": "42%",
           "level": "plenty",
           "resets_at": 1800003600,
+          "resets": "Resets 09:00",
           "spoken": "5-hour limit, 42 percent used, resets 09:00"
         },
         {
@@ -43,6 +44,7 @@
           "figure": "12%",
           "level": "plenty",
           "resets_at": 1800259200,
+          "resets": "Resets Mon 08:00",
           "spoken": "Weekly limit, 12 percent used, resets Mon 08:00"
         }
       ]
@@ -67,6 +69,7 @@
           "figure": "75%",
           "level": "low",
           "resets_at": 1800003600,
+          "resets": "Resets 09:00",
           "spoken": "5-hour limit, 75 percent used, resets 09:00"
         },
         {
@@ -78,6 +81,7 @@
           "figure": "30%",
           "level": "plenty",
           "resets_at": 1800259200,
+          "resets": "Resets Mon 08:00",
           "spoken": "Weekly limit (Fable), 30 percent used, resets Mon 08:00"
         }
       ]
@@ -114,6 +118,7 @@
           "figure": "100%",
           "level": "out",
           "resets_at": 1800001800,
+          "resets": "Resets 08:30",
           "spoken": "5-hour limit, 100 percent used, resets 08:30"
         },
         {
@@ -125,6 +130,7 @@
           "figure": "50%",
           "level": "plenty",
           "resets_at": null,
+          "resets": "",
           "spoken": "Weekly limit, 50 percent used"
         }
       ]

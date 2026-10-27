@@ -42,6 +42,7 @@ private func goldenGlance() throws -> Glance {
     #expect(fiveHour.figure == "42%")
     #expect(fiveHour.level == .plenty)
     #expect(fiveHour.resetsAt == Date(timeIntervalSince1970: 1_800_003_600))
+    #expect(fiveHour.resets == "Resets 09:00")
     #expect(fiveHour.spoken == "5-hour limit, 42 percent used, resets 09:00")
 
     let personal = glance.accounts[1]
@@ -60,6 +61,7 @@ private func goldenGlance() throws -> Glance {
     #expect(main.toolName == "Codex")
     #expect(main.limits.map(\.level) == [.out, .plenty])
     #expect(main.limits.last?.resetsAt == nil)
+    #expect(main.limits.last?.resets == "")
 }
 
 @Test func aGlanceOfAnotherSchemaOrNoneIsNoGlance() throws {

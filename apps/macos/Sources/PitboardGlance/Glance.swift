@@ -87,6 +87,8 @@ public struct GlanceLimit: Decodable, Equatable, Sendable {
     public let figure: String
     public let level: Level
     public let resetsAt: Date?
+    // as the app's row says it: "Resets 3:45 PM", or empty
+    public let resets: String
     // "5-hour limit, 42 percent used, resets 3:45 PM"
     public let spoken: String
 

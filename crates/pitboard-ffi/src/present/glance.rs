@@ -69,6 +69,8 @@ struct GlanceLimit {
     figure: String,
     level: &'static str,
     resets_at: Option<i64>,
+    // as the app's row says it: "Resets 3:45 PM", or empty where nothing says
+    resets: String,
     spoken: String,
 }
 
@@ -182,6 +184,7 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
                         UsageLevel::Out => "out",
                     },
                     resets_at: row.resets_at,
+                    resets: row.resets,
                     spoken: row.spoken,
                 }
             })
