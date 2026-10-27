@@ -1352,10 +1352,20 @@ class CaskZap(unittest.TestCase):
             re.S,
         )[1]
         folders = re.findall(r'"([^"]*)"', listed.replace("\\(domain)", "com.usepitboard.Pitboard"))
-        self.assertEqual(len(folders), 5)
-        trash = directive("trash", self.zaps["pitboard-app"])
-        for folder in folders:
-            self.assertIn(f"~/Library/{folder}", trash)
+        # The app removes its Application Support folder and defaults itself, and the core the log.
+        elsewhere = {
+            "~/Library/Application Support/com.usepitboard.Pitboard",
+            "~/Library/Preferences/com.usepitboard.Pitboard.plist",
+            self.log,
+        }
+        # macOS makes the Share extension's, which hold nothing Pitboard writes.
+        share = {
+            "~/Library/Application Scripts/com.usepitboard.Pitboard.share",
+            "~/Library/Containers/com.usepitboard.Pitboard.share",
+        }
+        trash = set(directive("trash", self.zaps["pitboard-app"]))
+        self.assertLessEqual(elsewhere | share, trash)
+        self.assertEqual(trash - elsewhere - share, {f"~/Library/{folder}" for folder in folders})
 
     def test_the_linux_zap_trashes_every_unit_and_its_link(self):
         trash = directive("trash", self.linux)
