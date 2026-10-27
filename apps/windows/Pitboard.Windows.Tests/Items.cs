@@ -124,7 +124,7 @@ internal static class Items
     public static StowText Stow(string? found = null) =>
         new(
             Title: "Clean up the leftover sign-in file",
-            Message: found ?? "Clean Up deletes the sign-in file Claude Code left behind Credential Manager, and keeps any sign-in an account needs.",
+            Message: found ?? "Clean up deletes the sign-in file Claude Code left behind Credential Manager, and keeps any sign-in an account needs.",
             Looking: found is null ? "Finding out whose sign-in it is…" : null, Confirm: "Clean up",
             CanConfirm: found is not null, Saving: false);
 }

@@ -2163,8 +2163,9 @@ pub(crate) fn clean_up_title(os: Os) -> String {
 // What the Clean Up sheet says until it has looked.
 pub(crate) fn clean_up_message(os: Os) -> String {
     format!(
-        "Clean Up deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
+        "{} deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
          account needs.",
+        clean_up(os, false),
         pitboard_core::words::store_in_front(os)
     )
 }
@@ -2437,7 +2438,8 @@ pub(crate) fn stale_explanation(row: &pitboard_core::status::Row) -> Option<Stri
 // The Clean Up sheet's one sentence once it has looked: what the file holds, and what Clean Up does.
 pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> String {
     use pitboard_core::switch::{Foreseen, Kept};
-    let only = "so Clean Up only deletes";
+    let button = clean_up(os, false);
+    let only = format!("so {button} only deletes");
     match &left.login {
         Foreseen::Kept(Kept::NoLogin) => format!("The file holds no sign-in, {only} it."),
         Foreseen::Kept(Kept::Refused) => {
@@ -2453,24 +2455,25 @@ pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> Stri
             format!("The file holds {label}’s saved sign-in, {only} the file.")
         }
         Foreseen::Kept(Kept::SecondSignIn { label }) => format!(
-            "The file holds a second sign-in of {label}, the account in use, which Clean Up \
+            "The file holds a second sign-in of {label}, the account in use, which {button} \
              deletes with the file."
         ),
         Foreseen::Kept(Kept::ParkedNow { label }) => format!(
-            "The file holds {label}’s sign-in, which Clean Up saves for {label} before it deletes \
+            "The file holds {label}’s sign-in, which {button} saves for {label} before it deletes \
              the file."
         ),
         Foreseen::Kept(Kept::ParkKept { label }) => format!(
-            "The file holds another sign-in of {label}, which Clean Up deletes with the file."
+            "The file holds another sign-in of {label}, which {button} deletes with the file."
         ),
         Foreseen::NotEnrolled(owner) => format!(
             "The file holds {}’s sign-in, an account you haven’t added, so add it before you \
              clean up.",
             owner.email
         ),
-        Foreseen::Untold => "The file’s sign-in has expired, so Clean Up renews it first and goes \
-                             on only for an account you’ve added."
-            .into(),
+        Foreseen::Untold => format!(
+            "The file’s sign-in has expired, so {button} renews it first and goes on only for an \
+             account you’ve added."
+        ),
         _ => clean_up_message(os),
     }
 }
@@ -4428,7 +4431,7 @@ mod tests {
         );
         assert_eq!(
             clean_up_message(Os::Windows),
-            "Clean Up deletes the sign-in file Claude Code left behind Credential Manager, and \
+            "Clean up deletes the sign-in file Claude Code left behind Credential Manager, and \
              keeps any sign-in an account needs."
         );
         assert_eq!(
@@ -6353,7 +6356,15 @@ mod tests {
             ),
         ];
         for (kept, said) in found {
-            assert_eq!(clean_up_found(Os::MacOs, &left(Foreseen::Kept(kept))), said);
+            let windows = said.replace("Clean Up", "Clean up");
+            assert_eq!(
+                clean_up_found(Os::MacOs, &left(Foreseen::Kept(kept.clone()))),
+                said
+            );
+            assert_eq!(
+                clean_up_found(Os::Windows, &left(Foreseen::Kept(kept))),
+                windows
+            );
         }
         assert_eq!(
             clean_up_found(
@@ -6370,6 +6381,11 @@ mod tests {
         assert_eq!(
             clean_up_found(Os::MacOs, &left(Foreseen::Untold)),
             "The file’s sign-in has expired, so Clean Up renews it first and goes on only for \
+             an account you’ve added."
+        );
+        assert_eq!(
+            clean_up_found(Os::Windows, &left(Foreseen::Untold)),
+            "The file’s sign-in has expired, so Clean up renews it first and goes on only for \
              an account you’ve added."
         );
         let did = [
