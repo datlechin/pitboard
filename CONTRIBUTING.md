@@ -241,9 +241,9 @@ macOS asks for a password before a UI test can drive the app, unless the Mac all
 Automation Mode without one. `automationmodetool` says which applies to your Mac.
 
 The pictures of the menu and the window in `docs/images` and `.github/media` come from the
-UI test `ScreenshotTests`, in the `twoTools` fixture, in Light. It runs again in Dark, and
-XCTest leaves your Mac's appearance at the last. This takes them again, writes them at the
-sizes the docs use and unregisters the build:
+UI test `ScreenshotTests`, in the `twoTools` fixture, in Light. Each test runs again in
+Dark, and XCTest leaves your Mac in Dark. This takes them again, writes them at the sizes the
+docs use and unregisters the build:
 
 ```sh
 ./apps/macos/scripts/docs-screenshots.sh

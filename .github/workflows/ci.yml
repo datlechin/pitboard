@@ -368,7 +368,9 @@ jobs:
       # fails alone after two minutes, five times the slowest one's 22 s in CI, and the rest
       # still run. SiteFiguresTests read the app for the site's facts, so a pull request that
       # changes neither the app nor those facts skips them; its checkout is the merge commit,
-      # whose first parent is the base.
+      # whose first parent is the base. ScreenshotTests run last, in a run of their own:
+      # XCTest sets this Mac to Light, then to Dark, for each of them and leaves it in Dark
+      # (docs/facts/macos-app.md).
       - id: ui
         run: |
           mode=$(automationmodetool)
@@ -383,11 +385,19 @@ jobs:
             echo "nothing SiteFiguresTests read changed"
             skip=(-skip-testing:PitboardUITests/SiteFiguresTests)
           fi
-          xcodebuild test -project apps/macos/Pitboard.xcodeproj -scheme Pitboard \
-            -destination 'platform=macOS' -derivedDataPath apps/macos/build/UITestData \
-            -clonedSourcePackagesDirPath apps/macos/build/SourcePackages \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 120 \
-            -resultBundlePath "$RUNNER_TEMP/UITests.xcresult" "${skip[@]}"
+          run=(-project apps/macos/Pitboard.xcodeproj -scheme Pitboard
+            -destination 'platform=macOS' -derivedDataPath apps/macos/build/UITestData
+            -clonedSourcePackagesDirPath apps/macos/build/SourcePackages
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 120)
+          failed=0
+          xcodebuild test "${run[@]}" -resultBundlePath "$RUNNER_TEMP/Tests.xcresult" \
+            -skip-testing:PitboardUITests/ScreenshotTests "${skip[@]}" || failed=1
+          xcodebuild test-without-building "${run[@]}" \
+            -resultBundlePath "$RUNNER_TEMP/Pictures.xcresult" \
+            -only-testing:PitboardUITests/ScreenshotTests || failed=1
+          xcrun xcresulttool merge --output-path "$RUNNER_TEMP/UITests.xcresult" \
+            "$RUNNER_TEMP/Tests.xcresult" "$RUNNER_TEMP/Pictures.xcresult"
+          exit "$failed"
       # The result bundle has what the log cannot: a screenshot and the tree of elements at
       # the moment a test failed. Nobody needs it when they all pass.
       - if: failure() && steps.ui.outcome == 'failure'

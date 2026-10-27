@@ -301,9 +301,6 @@ final class ScreenshotTests: FixtureTestCase {
         let window = app.accountsWindow
         let cancel = app.control("notice.stuck").buttons["notice.action.abandonStuckSwitch"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
-        keep(
-            app.statusItems.firstMatch.screenshot().pngRepresentation,
-            as: "macos-menu-bar-item-badged")
         keep(window, as: "macos-notice-switch-unfinished")
         cancel.click()
         XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
@@ -448,6 +445,16 @@ final class ScreenshotTests: FixtureTestCase {
         add.click()
         XCTAssertTrue(app.textFields["sheet.name"].waitForExistence(timeout: 5))
         keep(window, as: "macos-sheet-name-in-use")
+    }
+
+    // Nothing in oneTool's menu asks to be looked at, so the item has no badge.
+    @MainActor
+    func testTheMenuBarItemWithNothingToLookAt() {
+        let app = launch(.oneTool)
+        let item = app.statusItems.firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 10))
+        XCTAssertTrue(item.wait(until: "title CONTAINS 'work 42%'", timeout: 10))
+        keep(item.screenshot().pngRepresentation, as: "macos-menu-bar-item-calm")
     }
 
     // The window selects the account in use, work, which a Command-click deselects.

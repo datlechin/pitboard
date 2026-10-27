@@ -115,3 +115,19 @@ made the views and read AppKit's objects.
 - A SwiftUI `.alert` is an `_NSAlertPanel` attached to its window as a sheet, whose buttons
   AppKit names by their order, whatever `.accessibilityIdentifier` they are given: the first
   declared, the answer, is `action-button-1`, and Cancel after it is `action-button-2`.
+
+## How the UI tests take a picture in Dark
+
+- `XCTestCase.runsForEachTargetApplicationUIConfiguration` is the only way XCTest offers on
+  macOS: `XCUIDevice` has no `appearance` there. Read with `otool` in XCTest.framework of
+  Xcode 27.1: for an app whose Info.plist names no style and does not require Aqua, the
+  configurations are Light and Dark, and `XCUIDeviceSetupManager testCaseWillStart:` sets the
+  device's appearance from each run's configuration and from nothing else, so nothing sets it
+  back.
+- Measured on macOS 27.0.1 on 27 October 2026, in a program of its own: launched with
+  `-AppleInterfaceStyle Dark`, `UserDefaults` read Dark and `NSApp.effectiveAppearance` stayed
+  Aqua.
+- Measured in CI run 40440661624 (macos-26-arm64, Xcode 26.6): each `ScreenshotTests` test ran
+  in Light, then in Dark. The app's windows, menus and status item went Dark with it, so did
+  the UI test runner's own `NSApp.effectiveAppearance`, and `SiteFiguresTests`, which ran
+  next, drew in Dark. So CI runs `ScreenshotTests` last, in an `xcodebuild` run of their own.

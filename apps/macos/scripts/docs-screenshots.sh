@@ -4,8 +4,8 @@
 # use. With --figures <dir>, it also writes every picture the test kept into <dir>, at full
 # size and under the name the test gave it, the scenes usepitboard.com's figures are checked
 # against among them. Needs what the UI tests need: build-xcframework.sh --fixture, then
-# xcodegen. The test runs in Light, then in Dark, and XCTest leaves this Mac's appearance at the
-# last; the docs take the Light pictures.
+# xcodegen. Each test runs in Light, then in Dark, and XCTest leaves this Mac in Dark; the docs
+# take the Light pictures.
 set -eu
 
 usage() {
