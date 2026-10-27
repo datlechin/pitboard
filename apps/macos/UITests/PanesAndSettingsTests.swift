@@ -190,8 +190,14 @@ final class PanesAndSettingsTests: FixtureTestCase {
         let uninstall = app.buttons["settings.uninstall"]
         XCTAssertTrue(uninstall.waitForExistence(timeout: 5))
         uninstall.click()
-        XCTAssertTrue(app.alertCancel.waitForExistence(timeout: 5))
-        app.alertAnswer.click()
+        let answer = app.alert.buttons[Words.uninstall]
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(answer.waitForNonExistence(timeout: 5), "Escape cancels")
+        XCTAssertTrue(app.buttons["settings.uninstall"].exists, "nothing was removed")
+        uninstall.click()
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
+        answer.click()
         let trash = app.dialog.buttons[Words.moveToTrash]
         XCTAssertTrue(trash.waitForExistence(timeout: 30))
         trash.click()

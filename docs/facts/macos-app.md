@@ -81,8 +81,15 @@ its own date.
   sign-in keeps Escape for that button.
 - Measured the same way: a SwiftUI `.alert` gives Return to its first button that is not
   `.cancel`, whatever `.keyboardShortcut(nil)` says of it. `.keyboardShortcut(.defaultAction)` on
-  Cancel gives Cancel Return, leaves the answer with no key, and leaves Escape to no button. So
-  a question whose answer is not the default, Uninstall's, has Cancel on Return.
+  Cancel gives Cancel Return, leaves the answer with no key, and leaves Escape to no button.
+- Measured on macOS 27.0.1 (26A434) on 27 October 2026, in a program of its own that put an
+  `NSAlert` as a sheet over an offscreen window and read its buttons after `layout()`: the first
+  button takes Return (`keyEquivalent` `\r`, the window's `defaultButtonCell`) unless it is
+  called Cancel, and a button called Cancel takes Escape wherever it is. With Cancel first, no
+  button takes Return and the window has no default button cell, and an Escape sent to the
+  sheet answered `alertFirstButtonReturn`. A key equivalent can be one key, so no alert gives
+  Cancel both. So a question whose answer is not the default, Uninstall's, is an `NSAlert` with
+  Cancel first: Escape cancels and Return answers nothing.
 - Measured on macOS 27.0.1 with Swift 6.4 on 27 October 2026, in a SwiftUI app of its own: a
   `Window` scene's window has the scene's id as its `identifier`, which the UI tests find it
   by, as `windows["welcome"]`.

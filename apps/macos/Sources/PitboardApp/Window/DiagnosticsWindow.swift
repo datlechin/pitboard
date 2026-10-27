@@ -21,11 +21,7 @@ struct DiagnosticsWindow: View {
                     // By its place: doctor gives every account's saved sign-in one code.
                     ForEach(group.lines, id: \.id) { line in
                         CheckRow(line: line) { offer in
-                            if let question = offer.confirm {
-                                asking = Asking(question: question, intent: offer.intent)
-                            } else {
-                                model.send(offer.intent)
-                            }
+                            $asking.ask(offer.intent, first: offer.confirm, of: model)
                         }
                         .accessibilityIdentifier("check.\(line.id)")
                     }

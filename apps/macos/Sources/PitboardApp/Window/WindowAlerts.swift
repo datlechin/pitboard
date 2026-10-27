@@ -1,3 +1,4 @@
+import AppKit
 import PitboardKit
 import SwiftUI
 
@@ -22,17 +23,19 @@ private struct WindowAlerts: ViewModifier {
                     set: { if !$0 { model.send(.dismissFailure) } }),
                 presenting: model.failureAlert
             ) { alert in
-                // First, so Return reads the alert away (docs/facts/macos-app.md).
-                Button(words.window.ok) {}
+                // The first button takes Return (docs/facts/macos-app.md): the step, where the
+                // alert has one to take.
                 switch alert.next {
                 case .act(let choice)?:
                     Button(choice.title) { model.send(choice.intent) }
+                    Button(words.window.cancel, role: .cancel) {}
                 case .learn(let link)?:
+                    Button(words.window.ok) {}
                     Button(link.title) {
                         if let page = URL(string: link.link) { openURL(page) }
                     }
                 case nil:
-                    EmptyView()
+                    Button(words.window.ok) {}
                 }
             } message: { alert in
                 Text(alert.message)
@@ -67,6 +70,18 @@ struct Asking: Equatable {
     let intent: Intent
 }
 
+extension Binding<Asking?> {
+    @MainActor
+    func ask(_ intent: Intent, first question: Question?, of model: AppModel) {
+        guard let question else { return model.send(intent) }
+        if question.confirmIsDefault {
+            wrappedValue = Asking(question: question, intent: intent)
+        } else {
+            askWithNoDefault(question) { model.send(intent) }
+        }
+    }
+}
+
 extension View {
     func asking(_ asking: Binding<Asking?>, of model: AppModel) -> some View {
         alert(
@@ -83,7 +98,6 @@ extension View {
     }
 }
 
-// Return is Cancel's where the answer is not the default (docs/facts/macos-app.md).
 private struct Answers: View {
     let question: Question
     let answer: () -> Void
@@ -91,11 +105,25 @@ private struct Answers: View {
     var body: some View {
         Button(
             question.confirm, role: question.destructive ? .destructive : nil, action: answer)
-        if question.confirmIsDefault {
-            Button(words.window.cancel, role: .cancel) {}
-        } else {
-            Button(words.window.cancel, role: .cancel) {}
-                .keyboardShortcut(.defaultAction)
-        }
+        Button(words.window.cancel, role: .cancel) {}
+    }
+}
+
+// SwiftUI's alert gives Return to the answer, or to Cancel at the cost of Escape. AppKit's gives
+// a first button called Cancel Escape and no button Return (docs/facts/macos-app.md).
+@MainActor
+private func askWithNoDefault(_ question: Question, answer: @escaping @MainActor () -> Void) {
+    let alert = NSAlert()
+    alert.messageText = question.title
+    alert.informativeText = question.message
+    alert.addButton(withTitle: words.window.cancel)
+    alert.addButton(withTitle: question.confirm).hasDestructiveAction = question.destructive
+    let answered = { (response: NSApplication.ModalResponse) in
+        if response == .alertSecondButtonReturn { answer() }
+    }
+    if let window = NSApp.keyWindow {
+        alert.beginSheetModal(for: window, completionHandler: answered)
+    } else {
+        answered(alert.runModal())
     }
 }

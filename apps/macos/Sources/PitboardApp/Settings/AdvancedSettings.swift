@@ -63,11 +63,7 @@ struct AdvancedSettings: View {
             }
 
             UninstallSection(model: model) { offer in
-                if let question = offer.confirm {
-                    asking = Asking(question: question, intent: offer.intent)
-                } else {
-                    model.send(offer.intent)
-                }
+                $asking.ask(offer.intent, first: offer.confirm, of: model)
             }
         }
         .formStyle(.grouped)

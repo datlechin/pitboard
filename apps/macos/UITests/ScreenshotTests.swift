@@ -361,9 +361,10 @@ final class ScreenshotTests: FixtureTestCase {
         let uninstall = app.buttons["settings.uninstall"]
         XCTAssertTrue(uninstall.waitForExistence(timeout: 5))
         uninstall.click()
-        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
+        let answer = app.alert.buttons[Words.uninstall]
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
         keep(settings, as: "macos-alert-uninstall")
-        app.alertAnswer.click()
+        answer.click()
         let trash = app.dialog.buttons[Words.moveToTrash]
         XCTAssertTrue(trash.waitForExistence(timeout: 30))
         keep(XCUIScreen.main.screenshot().pngRepresentation, as: "macos-alert-move-to-trash")
