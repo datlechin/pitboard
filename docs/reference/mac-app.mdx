@@ -34,11 +34,9 @@ Clicking Pitboard's item opens its menu: what needs attention, then the accounts
 
 1. **Claude Code Isn't Installed**, while the app finds none of `claude`, `codex` and Claude's data folder, and no tool has a login or an account. It opens how to install Claude Code.
 2. Each switch a [notice](#notices) offers, with the notice's title under it, such as **Switch to personal** under **work reached its 5-hour limit**. While an add or a sign-in again inside Claude is left halfway, **Finish Adding** or **Finish Signing In** comes before its **Switch Back to work**.
-3. **Sign In to old Again**, for each account that needs a sign-in, with why under it, such as **Sign-in expired**.
+3. **Sign In to old Again**, for each account that needs a sign-in, with why under it: **Sign-in expired**, or **Claude Code: Sign-in expired** once more than one tool is listed.
 4. **1 Issue** or **2 Issues**, which counts the other notices that need attention, with the first one's title under it. It opens **Accounts**.
 5. **Install Pitboard 1.1.0**, once a copy from a release finds an update.
-
-Once more than one tool is listed, the line under items 2 and 3 starts with the tool, as in **Claude Code: Sign-in expired**.
 
 A check mark shows the account in use in each tool. The line under each account gives its limits, such as **5-hour 42% used, Weekly 12%**, or what stands in the way. [Account status](/reference/account-status) lists each line.
 
@@ -51,7 +49,7 @@ A check mark shows the account in use in each tool. The line under each account 
 
 While a switch runs, every account but the one in use is dimmed.
 
-The commands follow: **Add Account**, then **Refresh** with the time of the last read under it, such as **Updated 6:42 AM**. **Refresh** reads every account's usage again, even one read moments ago. Then come **Open claude.ai** and **Open chatgpt.com** for the [account windows](/reference/account-windows#account-windows), **Open Pitboard**, **Settings**, **Check for Updates**, **About Pitboard**, **Pitboard Help** and **Quit Pitboard**.
+The commands follow: **Add Account**, then **Refresh** with the time of the last read under it, such as **Updated 6:42 AM**. **Refresh** reads every account's usage again, even one read moments ago. Then come **Open claude.ai** and **Open chatgpt.com** for the [account windows](/reference/account-windows#account-windows), **Open Pitboard**, **Settings**, **Check for Updates** in a copy that updates itself, **About Pitboard**, **Pitboard Help** and **Quit Pitboard**.
 
 ## Welcome window
 
@@ -204,7 +202,7 @@ Each notification has the tool's name as its subtitle.
 | **Sign-In Expired**, **Sign-In No Longer Works** or **Not Signed In** | When a read finds that an added account's saved sign-in can no longer be used: it expired, its service refused it, or none is saved. Once for each account until it can be used again, even across restarts. | **Sign in to old again to keep switching to it.** | **Sign In Again**, which opens **Sign In to old Again** | Opens **Accounts** |
 | **Sign-In Replaced** | When a read finds that an account's only sign-in ended outside Pitboard: a sign-in such as `/login` in Claude Code replaced it, or the account was signed out in Claude. Once for each account while reads find it, and once more after the app reopens. | What ended the sign-in, as the notice **A sign-in was replaced outside Pitboard** says | **Sign In Again**, which opens **Sign In to old Again** | Opens **Accounts** |
 
-While a login file sits behind the keychain, the second sentence of **Switched to personal** reads **Sessions already running keep their account until they're started again.**
+While a sign-in file is left behind the keychain, the second sentence of **Switched to personal** reads **Sessions already running keep their account until they're started again.**
 
 **Automatic Switch Skipped**, **Automatic Switching Paused** and **Couldn't Switch Automatically** come only while **Switch Automatically** is chosen. They can come again after the app next switches. After **Switch Back**, no **Automatic Switch Skipped** comes for that account's limit until the limit resets.
 
