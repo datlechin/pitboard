@@ -1,8 +1,8 @@
-//! The Windows Jump List: a switch to each account one reaches now, Add account, the windows.
+//! The Windows Jump List: a switch to each account, Add account, the windows.
 
 use super::{Clicked, Seen, glance, in_order, words};
 use crate::RunOutNotice;
-use crate::account_windows::{stores, window_accounts};
+use crate::account_windows::window_accounts;
 use crate::model::OutsideAnswer;
 use pitboard_core::host::{OS, Os};
 
@@ -22,8 +22,9 @@ pub enum JumpAsk {
     OpenWindow { store: String },
 }
 
-// None where the list stays as it was: before the accounts are read, and while Pitboard is
-// being uninstalled, whose MSI deletes it.
+// The same whatever Pitboard is doing, as Microsoft asks of tasks, so it changes only as the
+// accounts do. None where the list stays as it was: before the accounts are read, and while
+// Pitboard is being uninstalled, whose MSI deletes it.
 pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
     let state = seen.state;
     if seen.os != Os::Windows || state.status.is_none() || state.removing.is_some() {
@@ -36,11 +37,7 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
         .collect();
     let switches = in_order(&tools, &seen.tools).into_iter().flat_map(|tool| {
         accounts.iter().filter(move |account| {
-            account.provider == tool
-                && account.qualified.is_some()
-                && !account.unplaced
-                && !account.signed_in
-                && account.standing.switchable()
+            account.provider == tool && account.qualified.is_some() && !account.unplaced
         })
     });
     let mut tasks: Vec<JumpTask> = switches
@@ -55,13 +52,11 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
         title: words::add_account(seen.os, true),
         ask: JumpAsk::AddAccount,
     });
-    let held = state.windows.held();
     let windows = window_accounts(accounts);
     for site in pitboard_sites::ALL {
         tasks.extend(
             (windows.iter())
                 .filter(|window| window.site.host == site.host)
-                .filter(|window| !held.iter().any(|store| stores::same(store, &window.store)))
                 .map(|window| JumpTask {
                     title: words::open_site_as(site.name(), &window.label),
                     ask: JumpAsk::OpenWindow {

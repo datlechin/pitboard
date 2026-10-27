@@ -62,19 +62,22 @@ fn add() -> JumpTask {
 }
 
 // Each tool's in the window's order, then as the icon's menu goes on: Add account, the windows.
+// A switch to an account in use answers that it is, and one to an account that can't be
+// switched to says why in a notification.
 #[test]
-fn the_jump_list_switches_to_each_account_a_switch_reaches_then_adds_then_opens_each_window() {
+fn the_jump_list_switches_to_each_account_then_adds_then_opens_each_window() {
     let model = read(accounts());
     let claude = &pitboard_sites::CLAUDE;
     let chatgpt = &pitboard_sites::CHATGPT;
+    let named = |label: &str, tool: &str| words::named_with_tool(label, tool);
     assert_eq!(
         model.on_windows().jump_list,
         Some(vec![
-            switch(
-                &words::named_with_tool("personal", "Claude Code"),
-                "claude:p"
-            ),
-            switch(&words::named_with_tool("spare", "Codex"), "codex:s"),
+            switch(&named("work", "Claude Code"), "claude:w"),
+            switch(&named("personal", "Claude Code"), "claude:p"),
+            switch(&named("old", "Claude Code"), "claude:o"),
+            switch(&named("main", "Codex"), "codex:m"),
+            switch(&named("spare", "Codex"), "codex:s"),
             add(),
             window(claude, "work", "w"),
             window(claude, "personal", "p"),
@@ -91,7 +94,39 @@ fn with_one_tool_a_switch_names_the_account_alone() {
         .filter(|account| account.provider == "claude")
         .collect();
     let tasks = read(claude_only).on_windows().jump_list.expect("read");
-    assert_eq!(tasks[..2], [switch("personal", "claude:p"), add()]);
+    assert_eq!(
+        tasks[..4],
+        [
+            switch("work", "claude:w"),
+            switch("personal", "claude:p"),
+            switch("old", "claude:o"),
+            add()
+        ]
+    );
+}
+
+// Microsoft's Taskbar Extensions: "It is strongly recommended that the task list be static. It
+// should remain the same regardless of the state or status of the application."
+#[test]
+fn the_jump_list_stays_the_same_across_a_switch() {
+    let switched = vec![
+        account(Some("work"))
+            .uuid("w")
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("personal")).signed_in().uuid("p").build(),
+        account(Some("old")).uuid("o").build(),
+        account(Some("main")).of("codex").uuid("m").build(),
+        account(Some("spare"))
+            .of("codex")
+            .signed_in()
+            .uuid("s")
+            .build(),
+    ];
+    assert_eq!(
+        read(switched).on_windows().jump_list,
+        read(accounts()).on_windows().jump_list
+    );
 }
 
 // The taskbar keeps the last list it was given, which Pitboard's MSI deletes as it uninstalls.
