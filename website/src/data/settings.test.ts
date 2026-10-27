@@ -56,7 +56,7 @@ test("Windows' General says what SettingsPage.xaml binds from app_words(), and t
   }
   // under Start when you sign in to Windows, what the welcome says under its own
   const vm = win("Pitboard.Windows/SettingsViewModel.cs");
-  assert.ok(vm.includes("?? Words.Settings.OpenAtLoginNote;"));
+  assert.ok(vm.includes("_start.Note(Words.Settings.OpenAtLoginNote)"));
   assert.ok(owned(winGeneral.startNote));
   assert.ok(
     win("Pitboard.Windows/SparkleUpdates.cs").includes("Words.Settings.NoReleaseToUpdateTo"),

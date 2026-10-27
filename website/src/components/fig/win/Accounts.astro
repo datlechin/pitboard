@@ -1,6 +1,6 @@
 ---
 // AccountsPage.xaml: the notices NoticeBar.xaml shows after a switch, the setup step's TeachingTip
-// at Add account, and each tool's accounts under its name, each a SettingsExpander
+// beside Add account, and each tool's accounts under its name, each a SettingsExpander
 // (AccountRow.astro). Every node a
 // state shows is drawn: each tool's notice, the step, each row's ends and cards, and templates for
 // a row and a limit; the context menu and the dialogs wait over the desk. live/accounts.ts follows
@@ -100,10 +100,11 @@ const radio =
         </span>
       </InfoBar>
     </div>)}
-    {/* the setup step's TeachingTip (AccountsPage.xaml) at Add account, placed BottomLeft as Auto
-       falls back to where the window has room: its choice the tip's action and Not now its close */}
+    {/* the setup step's TeachingTip (AccountsPage.xaml) left of Add account, placed LeftBottom
+       clear of the rows' buttons, and held back while a notice shows: its choice the tip's action
+       and Not now its close */}
     <div
-      class="absolute top-72 right-70 z-2 w-320 rounded-u-8 bg-win-tip p-12 font-win text-win-text shadow-win-flyout ring-1 ring-win-surface-edge"
+      class="absolute top-20 right-178 z-2 w-320 rounded-u-8 bg-win-tip p-12 font-win text-win-text shadow-win-flyout ring-1 ring-win-surface-edge"
       role="dialog"
       aria-labelledby={`${prefix}-setup-title`}
       aria-describedby={`${prefix}-setup-detail`}
@@ -111,11 +112,11 @@ const radio =
       hidden
     >
       <svg
-        class="absolute -top-10 right-10 h-10 w-20 overflow-visible fill-win-tip stroke-win-surface-edge"
-        viewBox="0 0 20 10"
+        class="absolute top-12 -right-10 h-20 w-10 overflow-visible fill-win-tip stroke-win-surface-edge"
+        viewBox="0 0 10 20"
         aria-hidden="true"
       >
-        <path d="M0 10 10 0l10 10"></path>
+        <path d="M0 0l10 10L0 20"></path>
       </svg>
       <span class="flex gap-12">
         <svg class="mt-2 size-16 shrink-0 text-win-accent" aria-hidden="true">
@@ -185,8 +186,24 @@ const radio =
        view's: each opens anchored over the window it is opened from */}
     {crop && (
       <>
-        {/* an account a visitor adds, a limit its first read finds, and a line */}
+        {/* an account a visitor adds, a limit its first read finds and its opened row's card, and a
+           line */}
         <template data-part="row"><AccountRow prefix={prefix} /></template>
+        <template data-part="limit-card">
+          <div
+            class="flex min-h-52 items-center gap-16 bg-win-card-2 py-8 pr-44 pl-58 inset-shadow-win-layer-edge"
+            data-part="limit-card"
+          >
+            <span class="min-w-0 flex-1">
+              <span class="block" data-part="name"></span>
+              <span class={`block ${caption}`} data-part="used"></span>
+            </span>
+            <span class="text-right tabular-nums">
+              <span class="block" data-part="resets"></span>
+              <span class={`block ${caption}`} data-part="resets-in"></span>
+            </span>
+          </div>
+        </template>
         <template data-part="limit">
           <span class="contents" data-part="limit">
             <span

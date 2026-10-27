@@ -310,12 +310,35 @@ test("an opened row's cards say what AccountsPage.xaml binds from app_words() an
     [row("personal").warm, row("work").warm, row("main").warm],
     ["Warms up again at 22:00", "Off", null],
   );
-  // its windows, then Rename and Remove, which the account in use holds back
+  // its windows, then what its shortcut menu offers past its own button, and Remove, which the
+  // account in use holds back
+  const shown = shell("ShownAccount.cs");
   assert.ok(
-    shell("ShownAccount.cs").includes(
-      ".. item.Actions.Where(action => action.Kind is ActionKind.Rename or ActionKind.Remove)",
+    shown.includes(
+      "action is { Kind: ActionKind.SignInAgain or ActionKind.Rename or ActionKind.WarmUpNow, Enabled: true }",
     ),
   );
+  assert.ok(shown.includes("&& !Equals(action.Intent, item.Action?.Intent))"));
+  assert.ok(shown.includes(".. item.Actions.Where(action => action.Kind is ActionKind.Remove)"));
+  assert.ok(owned("Sign in again…") && owned("Warm up now"));
+  assert.deepEqual(
+    rows.map((r) => r.commands.signInAgain),
+    rows.map((r) => (r.action?.title === "Sign in…" ? null : "Sign in again…")),
+  );
+  // each limit's card, its reset then how long until it
+  for (const bound of [
+    'Header="{x:Bind Name}"',
+    'Description="{x:Bind Used}"',
+    'Text="{x:Bind ResetsIn}"',
+  ])
+    assert.ok(xaml.includes(bound), bound);
+  assert.ok(present("words.rs").includes('format!("in {}", span(seconds))'));
+  const [card, line] = [row("work").cards[0], row("work").limits[0]];
+  assert.deepEqual(
+    [card.name, card.used, card.resets],
+    ["5-hour limit", `${line.figure} used`, line.resets],
+  );
+  assert.match(card.resetsIn, /^in \d/);
   assert.equal(row("work").commands.open, "Open claude.ai");
   assert.equal(row("main").commands.open, "Open chatgpt.com");
   assert.deepEqual(
@@ -467,7 +490,7 @@ test("Activity lists Windows' changes in the app's words, dated as the regional 
   const xaml = views("ActivityPage.xaml");
   assert.ok(
     xaml.includes(
-      '<local:SettingsBreadcrumb VerticalAlignment="Center" Title="{x:Bind shown:Words.Window.Activity}"',
+      '<local:SettingsBreadcrumb VerticalAlignment="Top" Title="{x:Bind shown:Words.Window.Activity}"',
     ),
   );
   assert.ok(xaml.includes('Label="{x:Bind shown:Words.Window.Refresh}"'));

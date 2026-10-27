@@ -1,7 +1,8 @@
 ---
 // A page's title, a caption under it, and its commands as AppBarButtons with labels to the right,
 // each known to a live page by what it does. A page `under` another heads itself as
-// SettingsBreadcrumb.xaml does: the page above as an item that goes back to it, then its own title.
+// SettingsBreadcrumb.xaml does: the page above as an item that goes back to it, then its own title,
+// in BreadcrumbBar's primary text, the item turning secondary under the pointer.
 interface Props {
   prefix: string;
   title: string;
@@ -17,14 +18,14 @@ const { prefix, title, subtitle, under, commands = [] } = Astro.props;
     {under ? (
       <span class="flex items-center gap-12 text-u-28/36 font-semibold">
         <button
-          class="rounded-u-4 text-win-text-2 focus-win live:cursor-default live:hover:text-win-text"
+          class="rounded-u-4 text-win-text focus-win live:cursor-default live:hover:text-win-text-2"
           type="button"
           data-does="show"
           data-page={under[1]}
         >
           {under[0]}
         </button>
-        <svg class="size-16 shrink-0 text-win-text-2" aria-hidden="true">
+        <svg class="size-16 shrink-0 text-win-text" aria-hidden="true">
           <use href="#fl-chevron-right"></use>
         </svg>
         <span id={`${prefix}-title`} aria-current="page">{title}</span>

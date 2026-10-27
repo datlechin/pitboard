@@ -7,6 +7,7 @@ import {
   share,
   warmUp,
   type Account,
+  type Limit,
   type Tool,
   type World,
 } from "./world.ts";
@@ -16,11 +17,15 @@ import {
   accountSpoken,
   activity,
   dayAndMonth,
+  figure,
   fullest,
   headsUp,
   hm,
   isInUse,
   limitRow,
+  limitTitle,
+  resetsIn,
+  resetsSaid,
   listed,
   menuLine,
   rowNote,
@@ -36,6 +41,7 @@ import {
   keysOf,
   openSite,
   removeAccount,
+  signInAgain,
   signInAsking,
   siteOf,
 } from "./window.ts";
@@ -146,6 +152,15 @@ export const detail = {
   savedUntil: (date: string) => `Saved sign-in valid until ${date}`,
 };
 
+// An opened row's card for a limit: its name and use, its reset and how long until it
+// (AccountsPage.xaml, present/accounts.rs `limit_row`).
+export const limitCard = (l: Limit, w: World) => ({
+  name: limitTitle(l),
+  used: `${figure(l.percent)} used`,
+  resets: resetsSaid(l.resetsAt, w.now),
+  resetsIn: resetsIn(l.resetsAt, w.now),
+});
+
 // What an opened row's Sign-in says: in use, expired, or until when its saved sign-in is valid
 // (present/accounts.rs `detail`).
 export function signInSaid(a: Account, w: World): string | null {
@@ -187,12 +202,15 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
           keys: keysOf(a, w, "windows"),
           action: rowAction(a, w),
           limits: a.limits.map((l) => limitRow(l, w)),
+          cards: a.limits.map((l) => limitCard(l, w)),
           note: rowNote(a, w),
           email: a.email || null,
           signIn: signInSaid(a, w),
           warm: a.tool === "claude" ? (warmsAgainNote(a) ?? detail.off) : null,
+          // its windows, what its shortcut menu offers past its own button, then Remove
           commands: {
             open: site ? openSite(site) : null,
+            signInAgain: signInExpired(a, w) ? null : signInAgain("windows"),
             remove: { title: removeAccount("windows"), enabled: !inUse },
           },
         };

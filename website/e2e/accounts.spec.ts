@@ -370,6 +370,11 @@ test.describe("on Windows", () => {
     await expect(cards).toContainText("me@example.com");
     await expect(cards).toContainText("Saved sign-in valid until 9 Nov");
     await expect(cards).toContainText("Warm-up settings");
+    // each limit with how long until it resets, and what the row's shortcut menu offers
+    await expect(cards.locator('[data-part="limit-card"]').first()).toContainText(
+      /5-hour limit.*in \d/s,
+    );
+    await expect(cards.getByRole("button", { name: "Sign in again…" })).toBeVisible();
     await expect(cards.getByRole("button", { name: "Remove account…" })).toBeEnabled();
     await page.keyboard.press("Enter");
     await expect(toggle("personal")).toHaveAccessibleName("personal, Max 20x, in use");
@@ -446,14 +451,22 @@ test.describe("on Windows", () => {
     await expect(bar).toHaveAccessibleName("Pitboard");
     // where WinUI draws no focus visual, the page draws one (WCAG 2.4.7)
     await expect(bar).not.toHaveCSS("outline-style", "none");
-    // work is left alone in its tool, so a TeachingTip under Add account asks for a second
+    // work is left alone in its tool, so a TeachingTip left of Add account asks for a second, once
+    // the switch's notice, whose message it would cover, is closed
     const tip = fig.getByRole("dialog", { name: "Add a second Claude Code account" });
+    await expect(tip).toBeHidden();
+    await fig.locator('[data-notice]:not([hidden]) [data-does="dismiss"]').focus();
+    await page.keyboard.press("Enter");
     await expect(tip).toBeVisible();
     await expect(tip.getByRole("button")).toHaveText(["Add account…", "Not now"]);
     const add = (await fig.locator('[data-does="add"]').first().boundingBox())!;
     const tail = (await tip.locator("svg").first().boundingBox())!;
-    expect(tail.y).toBeGreaterThanOrEqual(add.y + add.height);
-    expect(tail.x + tail.width / 2).toBeCloseTo(add.x + add.width / 2, -1);
+    const body = (await tip.boundingBox())!;
+    expect(tail.x).toBeGreaterThanOrEqual(body.x + body.width - 1);
+    expect(tail.x + tail.width).toBeCloseTo(add.x, -1);
+    expect(tail.y + tail.height / 2).toBeCloseTo(add.y + add.height / 2, -1);
+    for (const action of await fig.locator('[data-part="action"]:visible').all())
+      expect(body.x + body.width).toBeLessThanOrEqual((await action.boundingBox())!.x);
     await tip.getByRole("button", { name: "Not now" }).click();
     await expect(tip).toBeHidden();
   });

@@ -1,14 +1,22 @@
 ---
 // An account in AccountsPage.xaml, a SettingsExpander: its mark, name and plan, a line a limit with
-// its bar, figure and reset, at most one note, and In use or its button; opened, its email with
-// Copy, its sign-in, its warm-up with Warm-up settings, and its commands. The header's toggle is
+// its bar, figure and reset, at most one note, and In use or its button; opened, each limit with
+// how long until it resets, its email with Copy, its sign-in, its warm-up with Warm-up settings,
+// and what its shortcut menu offers past its own button. The header's toggle is
 // named as Narrator hears the row and comes before its button, as the expander's own toggle does,
 // and a press on the header opens it too. Every node a state shows is drawn; without `row` it is the
 // template an account a visitor adds is made from, whose ids live/accounts.ts gives it.
 import Button from "./Button.astro";
 import ProgressRing from "./ProgressRing.astro";
 import { accountsPage, detail } from "../../../data/windows.ts";
-import { RENAME_OFFER, SWITCH, inUse, removeAccount } from "../../../data/window.ts";
+import {
+  RENAME_OFFER,
+  SWITCH,
+  inUse,
+  removeAccount,
+  signInAgain,
+  warmUpNow,
+} from "../../../data/window.ts";
 
 type Row = ReturnType<typeof accountsPage>["sections"][number]["rows"][number];
 
@@ -24,8 +32,9 @@ const caption = "text-u-12/16 text-win-text-2";
 const fillBy =
   "data-[state=g]:fill-win-accent data-[state=y]:fill-win-caution data-[state=r]:fill-win-critical";
 // DefaultSettingsExpanderItemStyle's card, the last one rounded at the foot
-const item =
-  "flex min-h-52 items-center gap-16 bg-win-card-2 py-8 pr-44 pl-58 inset-shadow-win-layer-edge last:rounded-b-u-4";
+const card =
+  "flex min-h-52 items-center gap-16 bg-win-card-2 py-8 pr-44 pl-58 inset-shadow-win-layer-edge";
+const item = `${card} last:rounded-b-u-4`;
 const link =
   "rounded-u-4 px-12 py-6 whitespace-nowrap text-win-accent-text focus-win live:cursor-default live:hover:bg-win-subtle";
 ---
@@ -121,6 +130,18 @@ const link =
     </span>
   </div>
   <div class="flex flex-col" id={details} data-part="details" hidden>
+    <div class="flex flex-col" data-part="limit-cards">
+      {row?.cards.map((c) => <div class={card} data-part="limit-card">
+        <span class="min-w-0 flex-1">
+          <span class="block" data-part="name">{c.name}</span>
+          <span class:list={["block", caption]} data-part="used">{c.used}</span>
+        </span>
+        <span class="text-right tabular-nums">
+          <span class="block" data-part="resets">{c.resets}</span>
+          <span class:list={["block", caption]} data-part="resets-in">{c.resetsIn}</span>
+        </span>
+      </div>)}
+    </div>
     <div class={item} data-part="email-card" hidden={!row?.email}>
       <span class="min-w-0 flex-1">
         <span class="block">{detail.email}</span>
@@ -145,7 +166,13 @@ const link =
       <span data-part="open-command" hidden={!row?.commands.open}>
         <Button data-does="open">{row?.commands.open}</Button>
       </span>
+      <span data-part="sign-in-again-command" hidden={!row?.commands.signInAgain}>
+        <Button data-does="sign-in-again">{signInAgain("windows")}</Button>
+      </span>
       <Button data-does="rename">{RENAME_OFFER}</Button>
+      <span data-part="warm-command" hidden>
+        <Button data-does="warm">{warmUpNow("windows")}</Button>
+      </span>
       <Button data-does="forget" disabled={row ? !row.commands.remove.enabled : undefined}
         >{removeAccount("windows")}</Button
       >

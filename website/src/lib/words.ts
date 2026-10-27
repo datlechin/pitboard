@@ -493,6 +493,10 @@ export function rowLines(a: Account, w: World, warm: string | null): string[] {
 // warm-up, which its details say (present/accounts.rs `notes`).
 export const rowNote = (a: Account, w: World) => rowLines(a, w, null)[0] ?? null;
 
+// present/words.rs `resets_in`, beside a limit's reset in an opened row: "in 2 hr 9 min".
+export const resetsIn = (at: number | null, now: number) =>
+  at !== null && at > now ? `in ${appSpan(at - now)}` : "";
+
 // The world's warm-up note: personal's period runs until its five hours reset.
 export function warmsAgainNote(a: Account): string | null {
   const period = a.limits.find((l) => l.lengthSeconds === 5 * HOUR && !l.scope);

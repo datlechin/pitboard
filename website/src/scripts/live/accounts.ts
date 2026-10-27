@@ -54,7 +54,7 @@ import {
   siteOf,
   type System,
 } from "../../data/window.ts";
-import { detail, rowAction, signInSaid } from "../../data/windows.ts";
+import { detail, limitCard, rowAction, signInSaid } from "../../data/windows.ts";
 import { winAdvanced } from "../../data/settings.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
@@ -319,7 +319,9 @@ export class AccountsWindow extends LiveFigure {
         case "warm-settings":
           return this.#panes.show("settings");
         case "open":
+        case "sign-in-again":
         case "rename":
+        case "warm":
         case "forget":
           if (account) this.#offer(does.dataset.does, account);
           return;
@@ -652,10 +654,13 @@ export class AccountsWindow extends LiveFigure {
     }
   }
 
+  // Windows holds its tip back while a notice shows, whose message it would cover.
   #setup(s: State) {
     const box = part(this, "setup");
     if (!box) return;
-    const step = setupStepOf(s, s.declinedSecond, this.system);
+    const noticed =
+      this.system === "windows" && !!this.querySelector("[data-notice]:not([hidden])");
+    const step = noticed ? null : setupStepOf(s, s.declinedSecond, this.system);
     this.#setupTool = step?.tool ?? null;
     shown(box, !!step);
     if (!step) return;
@@ -756,10 +761,30 @@ export class AccountsWindow extends LiveFigure {
     text(part(row, "sign-in"), signIn ?? "");
     shown(part(row, "warm-card"), a.tool === "claude");
     text(part(row, "warm"), warmNote(s, a) ?? detail.off);
+    this.#cards(s, row, a);
     const site = siteOf(a.tool);
     shown(part(row, "open-command"), !!site);
     text(row.querySelector('[data-does="open"]'), site ? openSite(site) : "");
+    // what the shortcut menu offers past the row's own button
+    const o = offersOf(a, s);
+    shown(part(row, "sign-in-again-command"), o.signInAgain && !signInExpired(a, s));
+    shown(part(row, "warm-command"), !!o.warm?.enabled);
     attr(row.querySelector('[data-does="forget"]'), "disabled", on ? "" : null);
+  }
+
+  // an opened row's card a limit, its countdown to the reset moving with the clock
+  #cards(s: State, row: HTMLElement, a: Account) {
+    const box = part(row, "limit-cards")!;
+    if (box.children.length !== a.limits.length)
+      box.replaceChildren(...a.limits.map(() => cloned(this.#template("limit-card"))));
+    a.limits.forEach((limit, i) => {
+      const card = box.children[i] as HTMLElement;
+      const c = limitCard(limit, s);
+      text(part(card, "name"), c.name);
+      text(part(card, "used"), c.used);
+      text(part(card, "resets"), c.resets);
+      text(part(card, "resets-in"), c.resetsIn);
+    });
   }
 
   #limits(s: State, row: HTMLElement, a: Account) {
