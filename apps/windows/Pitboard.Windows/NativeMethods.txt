@@ -77,3 +77,13 @@ HIGHCONTRASTW
 GetSysColor
 MsiEnumRelatedProducts
 MsiGetProductInfo
+ICustomDestinationList
+DestinationList
+IObjectCollection
+EnumerableObjectCollection
+IShellLinkW
+ShellLink
+IPropertyStore
+PKEY_Title
+PKEY_AppUserModel_IsDestListSeparator
+SLGP_FLAGS

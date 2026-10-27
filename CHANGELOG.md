@@ -90,6 +90,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app opens a welcome at its first launch, in place of its window: what Pitboard
   does, where its icon is with **Taskbar settings**, each tool found with **Add**, **Start when
   you sign in to Windows** and **Get started**.
+- The Windows app's Jump List, on the taskbar and in **Start**, offers **Switch to** each account
+  it can switch to now, **Add account…** and the account windows, and a notification says why
+  a switch from there didn't happen.
 - The Windows app's **Settings** > **Advanced** has **Uninstall Pitboard**, which asks first,
   deletes Pitboard's saved sign-ins and settings, then, in the copy its installer put there,
   uninstalls the app as **Settings** > **Apps** does.

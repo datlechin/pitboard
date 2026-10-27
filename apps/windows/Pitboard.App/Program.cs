@@ -39,7 +39,7 @@ public static class Program
         AppInstance.GetCurrent().Activated += (_, activated) => handovers.Arrived(
             activated.Data is ILaunchActivatedEventArgs launch
                 ? Launching.Handed(launch.Arguments, Running, fixtureFolder)
-                : null);
+                : new Handover.Window());
         var start = Launching.Decide(
             args,
             Running,
