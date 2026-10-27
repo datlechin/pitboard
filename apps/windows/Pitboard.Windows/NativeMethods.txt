@@ -76,3 +76,4 @@ SystemParametersInfo
 HIGHCONTRASTW
 GetSysColor
 MsiEnumRelatedProducts
+MsiGetProductInfo

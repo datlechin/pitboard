@@ -184,6 +184,18 @@ public sealed class PackageTests
         Assert.AreEqual("[LocalAppDataFolder]Pitboard App", folder[0]);
     }
 
+    // Uninstall Pitboard starts the MSI's uninstall only from the copy in this folder.
+    [TestMethod]
+    public void ItRecordsTheFolderItInstallsPitboardIn()
+    {
+        using var database = Open();
+
+        var location = Rows(database, "SELECT `Action`, `Target` FROM `CustomAction` WHERE `Source` = 'ARPINSTALLLOCATION'", 2).Single();
+        Assert.AreEqual("[INSTALLFOLDER]", location[1]);
+        Assert.IsGreaterThan(Sequence(database, "CostFinalize"), Sequence(database, location[0]!));
+        Assert.IsGreaterThan(Sequence(database, location[0]!), Sequence(database, "RegisterProduct"), "set after RegisterProduct wrote it");
+    }
+
     [TestMethod]
     public void AnUpdateStartsPitboardAgainOnlyWhenItsInstallAsks()
     {

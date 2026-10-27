@@ -86,6 +86,8 @@
     </Feature>
 
     <SetProperty Id="PITBOARDAPPDATA" Value="[LocalAppDataFolder]Pitboard App" After="AppSearch" Sequence="execute" />
+    <!-- The product's InstallLocation, by which Uninstall Pitboard tells the copy it installed from any other. -->
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="execute" />
 
     <!-- No RemoveRegistry row: that table acts on an install, never on a removal. -->
     <CustomAction Id="Unregister" FileRef="PitboardExe" ExeCommand="--unregister" Execute="deferred" Return="ignore" />
