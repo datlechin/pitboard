@@ -64,8 +64,11 @@ its own date.
   fixed time before the toggle, and for the minimum after it.
 - Measured the same day, the inspector drawn offscreen with `NSHostingView.cacheDisplay`: at 260
   points the weekly limit's "Resets Mon 9:00 AM" wrapped beside "in 19 hr 24 min", and at 280
-  it kept one line. At both widths the Warm-Up row's `LabeledContent` put **Warm-Up
-  Settings…** under its two lines, with "Off" as with "Warms up again at 10:50 PM".
+  it kept one line.
+- At 280 points the Warm-Up row's `LabeledContent` keeps **Warm-Up Settings…** beside its two
+  lines with "Off", and puts it under them with "Warms up again at 2:21 PM" (recorded, pictures
+  `macos-window-accounts` and `macos-window-warm-up` of run 40475483454, on the `macos-26`
+  image's macOS 26.6.2).
 - Measured the same day: a test window that reaches the window server, such as one made by
   `NSWindow(contentViewController:)`, let `NSAppleScript.executeAndReturnError` run by another
   test on the main thread stop the main run loop, which ended `swift test` with status 0

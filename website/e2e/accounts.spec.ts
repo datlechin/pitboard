@@ -341,6 +341,21 @@ test.describe("on macOS", () => {
     await expect(inspector.getByRole("button", { name: "Switch to spare" })).toBeHidden();
   });
 
+  test("Warm-Up Settings… sits beside Off and under a note too long for it, as LabeledContent puts it", async ({
+    page,
+  }) => {
+    const { fig, row } = await accounts(page, "macos");
+    const inspector = fig.locator('[data-part="inspector"]');
+    const note = inspector.locator('[data-part="ins-warm"]');
+    const button = inspector.getByRole("button", { name: "Warm-Up Settings…" });
+    await expect(note).toHaveText("Warms up again at 22:00");
+    const long = (await note.boundingBox())!;
+    expect((await button.boundingBox())!.y).toBeGreaterThan(long.y + long.height);
+    await row("work").click(at);
+    await expect(note).toHaveText("Off");
+    expect((await button.boundingBox())!.y).toBeLessThan((await note.boundingBox())!.y);
+  });
+
   test("the toolbar's Inspector and ⌃⌘I hide the inspector and show it again", async ({ page }) => {
     const { fig, grid } = await accounts(page, "macos");
     const inspector = fig.locator('[data-part="inspector"]');
@@ -451,7 +466,7 @@ test.describe("on Windows", () => {
     ]);
     const above = (await row("personal").boundingBox())!;
     const box = (await menu.boundingBox())!;
-    // a box's edges in single precision, as Firefox gives them, can miss each other by a hair
+    // Firefox's boxes are single precision (docs/facts/site.md)
     expect(box.y + box.height).toBeLessThanOrEqual(above.y + 1 + 1e-3);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();

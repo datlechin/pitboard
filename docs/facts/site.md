@@ -1,8 +1,9 @@
 # The site's figures
 
 What the figures on usepitboard.com draw for each system: the terminals, the keys a browser
-keeps from a page, and [the apps' own controls](#the-apps-controls). The terminals and the keys
-were read and measured on 25 October 2026, unless a line names another date:
+keeps from a page, a box's edges in Firefox, and [the apps' own controls](#the-apps-controls).
+The terminals and the keys were read and measured on 25 October 2026, unless a line names
+another date:
 
 - zsh 5.9 and bash 3.2.57 on macOS 27.0.1, in a scratch home, driven through a pseudo-terminal
   80 columns wide.
@@ -154,6 +155,13 @@ no `^C`, and zsh left the line as typed. What Terminal and Ptyxis echo is not me
 Not measured: which keys reach a page in Safari, Chrome, Firefox and Edge on macOS and Windows,
 and Chrome and Firefox on Linux, by hand. Of the keys the figures draw or a shell binds, ⌘N and
 ⌘Q are reserved in both by their source, and so is Ctrl+W on Windows and Linux.
+
+## A box's edges in Firefox
+
+Playwright's Firefox 1555 on macOS gives a box's edges in single precision. On 27 October 2026,
+once the macOS window figure above it had widened, the Windows context menu's bottom read
+411.9333496 against its row's top plus 1 at 411.9333191, one single-precision step apart (commit
+28cbdbbc). So a test that holds two edges together allows 1e-3.
 
 ## The apps' controls
 
