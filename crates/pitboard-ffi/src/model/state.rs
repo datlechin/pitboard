@@ -670,12 +670,14 @@ pub(crate) enum Answered {
     Failed { title: String },
 }
 
-// The glance's last file written, what a widget shows of it, and how many times that changed.
+// The glance's last text, what a widget shows of it, how many times that changed, and whether
+// the app named a file to write it to.
 #[derive(Debug, Default)]
 struct Glancing {
-    written: Option<String>,
+    text: Option<String>,
     shown: Option<String>,
     revision: u64,
+    file: bool,
 }
 
 const ANSWERS_KEPT: usize = 10;
@@ -1135,8 +1137,7 @@ pub(crate) struct State {
     pub(crate) removing: Option<Removing>,
     // jobs `Job::writes` counts, until each has answered
     at_work: u32,
-    // where the app named a file for the glance
-    glancing: Option<Glancing>,
+    glancing: Glancing,
     pub(crate) answered: VecDeque<(u64, Answered)>,
     outside_switch: Option<OutsideSwitch>,
     // switches asked from outside before the accounts were first read
@@ -1221,7 +1222,7 @@ impl State {
             windows: Windows::new(cadence.arming),
             removing: None,
             at_work: 0,
-            glancing: None,
+            glancing: Glancing::default(),
             answered: VecDeque::new(),
             outside_switch: None,
             outside_held: Vec::new(),
@@ -1633,25 +1634,24 @@ impl State {
     }
 
     pub(crate) fn glance_to_a_file(&mut self) {
-        self.glancing = Some(Glancing::default());
+        self.glancing.file = true;
     }
 
-    pub(crate) fn glances(&self) -> bool {
-        self.glancing.is_some()
+    pub(crate) fn glance(&self) -> Option<&str> {
+        self.glancing.text.as_deref()
     }
 
     pub(crate) fn glance_revision(&self) -> u64 {
-        self.glancing
-            .as_ref()
-            .map_or(0, |glancing| glancing.revision)
+        self.glancing.revision
     }
 
-    // Written as each read changes it, from the first read on, until Pitboard is being removed.
+    // Made again as each read changes it, from the first read on, until Pitboard is being
+    // removed, and written where the app named a file.
     pub(crate) fn glanced(&mut self, glance: GlanceText) -> Option<Job> {
-        let glancing = self.glancing.as_mut()?;
+        let glancing = &mut self.glancing;
         if self.status.is_none()
             || self.removing.is_some()
-            || glancing.written.as_ref() == Some(&glance.file)
+            || glancing.text.as_ref() == Some(&glance.file)
         {
             return None;
         }
@@ -1659,7 +1659,10 @@ impl State {
             glancing.shown = Some(glance.shown);
             glancing.revision += 1;
         }
-        glancing.written = Some(glance.file.clone());
+        glancing.text = Some(glance.file.clone());
+        if !glancing.file {
+            return None;
+        }
         self.at_work += 1;
         Some(Job::KeepGlance { text: glance.file })
     }

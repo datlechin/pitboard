@@ -116,7 +116,7 @@ pub struct AppLaunch {
     /// runs, and no store is deleted.
     #[uniffi(default)]
     pub windows: Option<WindowsLaunch>,
-    // Where the glance is kept for widgets and intents: written only where the app names a path.
+    // Where the glance is written for widgets: only where the app names a path.
     #[uniffi(default)]
     pub glance: Option<String>,
 }
@@ -770,6 +770,7 @@ pub trait AppControl: Send + Sync {
 pub struct PitboardModel {
     mailbox: Sender<Msg>,
     shown: Arc<Mutex<Snapshot>>,
+    glance: Arc<Mutex<Option<String>>>,
     /// Set once the model is stopped, after which the listener is told nothing more.
     stopped: Arc<AtomicBool>,
     actor: Mutex<Option<JoinHandle<()>>>,
@@ -816,6 +817,11 @@ impl PitboardModel {
     /// copy, on any thread, the listener's own included.
     pub fn snapshot(&self) -> Snapshot {
         lock(&self.shown).clone()
+    }
+
+    // The glance file's text, file or not, for an intent in the app, set before its snapshot.
+    pub fn glance(&self) -> Option<String> {
+        lock(&self.glance).clone()
     }
 
     /// Asks the model for `intent`. Waits for nothing and calls nothing back: what comes of
@@ -900,6 +906,7 @@ impl PitboardModel {
         }
         let first = present(&state, clock.now().epoch(), platform.local_time.as_ref());
         let shown = Arc::new(Mutex::new(first));
+        let glance = Arc::new(Mutex::new(None));
         let stopped = Arc::new(AtomicBool::new(false));
         let (mailbox, mail) = channel();
         let lanes = Lanes::open(
@@ -924,6 +931,7 @@ impl PitboardModel {
             state,
             lanes,
             shown: Arc::clone(&shown),
+            glance: Arc::clone(&glance),
             tell: lanes::notifier(listener, Arc::clone(&stopped)),
             clock,
             local_time: platform.local_time,
@@ -935,6 +943,7 @@ impl PitboardModel {
         Arc::new(PitboardModel {
             mailbox,
             shown,
+            glance,
             stopped,
             actor: Mutex::new(Some(actor)),
             sign_ins,
@@ -957,10 +966,10 @@ impl Drop for PitboardModel {
     }
 }
 
-fn lock(shown: &Mutex<Snapshot>) -> MutexGuard<'_, Snapshot> {
-    // A snapshot is whole whenever the lock is let go, so one held through a panic is still
-    // worth showing.
-    shown
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    // A snapshot or a glance is whole whenever the lock is let go, so one held through a panic
+    // is still worth showing.
+    mutex
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
@@ -996,6 +1005,7 @@ struct Actor {
     state: State,
     lanes: Lanes,
     shown: Arc<Mutex<Snapshot>>,
+    glance: Arc<Mutex<Option<String>>>,
     tell: Sender<Snapshot>,
     clock: Clock,
     local_time: Arc<dyn LocalTime>,
@@ -1023,12 +1033,16 @@ impl Actor {
             for job in self.state.apply(msg, now) {
                 self.lanes.run(job);
             }
-            let glance = self.state.glances().then(|| {
-                crate::present::glance(&self.state, now.epoch(), self.local_time.as_ref())
-            });
-            if let Some(job) = glance.and_then(|text| self.state.glanced(text)) {
+            let glance = crate::present::glance(&self.state, now.epoch(), self.local_time.as_ref());
+            if let Some(job) = self.state.glanced(glance) {
                 self.lanes.run(job);
             }
+            let made = self.state.glance();
+            let mut kept = lock(&self.glance);
+            if kept.as_deref() != made {
+                *kept = made.map(str::to_owned);
+            }
+            drop(kept);
             self.publish(now);
         }
     }

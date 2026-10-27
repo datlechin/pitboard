@@ -232,6 +232,27 @@ fn the_glance_is_written_to_the_file_the_app_names() {
     model.shutdown();
 }
 
+// An intent in the app reads what a widget reads, with no file, by the snapshot that shows it.
+#[test]
+fn the_glance_is_given_to_the_app_with_or_without_a_file() {
+    let world = World::new("glance-given");
+    world.enrolled("work", "here", 42.0);
+    let told = Arc::new(Told::default());
+    let model = PitboardModel::over(
+        world.core(),
+        Arc::clone(&told) as Arc<dyn ModelListener>,
+        platform(StandInApps::new(&[], true)),
+        QUICK,
+    );
+    assert_eq!(model.glance(), None, "nothing before the first read");
+    model.send(Intent::Start);
+    told.until("the account read", shows("work"));
+    let glance = model.glance().expect("made with the read");
+    assert!(glance.contains(r#""name":"work""#), "{glance}");
+    assert!(model.snapshot().glance_revision > 0);
+    model.shutdown();
+}
+
 // A widget would go on showing accounts Pitboard no longer has.
 #[test]
 fn an_uninstall_deletes_the_glance() {

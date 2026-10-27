@@ -58,12 +58,19 @@ fn switch_to(account: &str) -> OutsideAsk {
     }
 }
 
+// An intent in the app reads it all the same.
 #[test]
-fn nothing_is_written_without_a_glance_file() {
+fn without_a_glance_file_the_glance_is_made_and_nothing_written() {
     let mut machine = Stub::reading(Ok(two(10.0)));
     let mut model = Hand::new();
     model.refresh(&mut machine);
-    assert_eq!(model.publish().glance_revision, 0);
+    assert_eq!(model.publish().glance_revision, 1);
+    assert!(
+        model
+            .state
+            .glance()
+            .is_some_and(|text| text.contains(r#""name":"work""#))
+    );
     assert_eq!(model.count(glances), 0);
 }
 

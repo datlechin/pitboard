@@ -819,12 +819,10 @@ impl Hand {
 
     // What the actor does after each message: the glance kept where it changed, then shown.
     pub(crate) fn publish(&mut self) -> Snapshot {
-        if self.state.glances() {
-            let utc = crate::present::testing::Utc;
-            let text = crate::present::glance(&self.state, self.now.epoch(), &utc);
-            if let Some(job) = self.state.glanced(text) {
-                self.took(vec![job]);
-            }
+        let utc = crate::present::testing::Utc;
+        let text = crate::present::glance(&self.state, self.now.epoch(), &utc);
+        if let Some(job) = self.state.glanced(text) {
+            self.took(vec![job]);
         }
         self.shown()
     }

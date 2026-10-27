@@ -36,4 +36,6 @@ internal sealed class StandInModel(Snapshot first) : IPitboardModel
     public void Shutdown() => ShutDown = true;
 
     public Snapshot Snapshot() => first;
+
+    public string? Glance() => null;
 }
