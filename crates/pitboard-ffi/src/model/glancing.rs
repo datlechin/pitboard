@@ -6,7 +6,7 @@ use super::testing::platform::StandInApps;
 use super::testing::records::{CHATGPT, chatgpt_holding, codex, refusal, status, switched};
 use super::{Intent, OutsideAnswer, OutsideAsk};
 use crate::present::testing::{LimitExt, account, unplaced, window};
-use crate::present::{glance_id, words};
+use crate::present::{Question, glance_id, words};
 use crate::{Account, Status};
 use std::time::Duration;
 
@@ -231,6 +231,7 @@ fn a_switch_asked_from_outside_answers_its_request() {
             request: 7,
             done: true,
             said: format!("{}.", words::switched_to(Some("Claude Code"), "personal")),
+            question: None,
         }]
     );
     assert_eq!(model.shown().window_request.serial, 0, "no window");
@@ -257,25 +258,27 @@ fn what_a_switch_from_outside_cannot_do_is_refused_in_words() {
                 request: 1,
                 done: false,
                 said: words::NO_SUCH_ACCOUNT.into(),
+                question: None,
             },
             OutsideAnswer {
                 request: 2,
                 done: true,
                 said: words::already_in_use("work"),
+                question: None,
             },
             OutsideAnswer {
                 request: 3,
                 done: false,
                 said: words::SWITCH_UNDER_WAY.into(),
+                question: None,
             },
         ]
     );
     assert!(machine.switched_to.is_empty());
 }
 
-// A widget cannot ask whether to quit ChatGPT, so Pitboard says to open it instead.
-#[test]
-fn a_switch_from_outside_that_would_quit_an_app_asks_nothing_and_says_so() {
+// Codex's main in use, spare to switch to, and ChatGPT open with Codex's login.
+fn chatgpt_open(quits: bool) -> (Hand, Stub) {
     let mut machine = Stub::reading(Ok(status(vec![
         account(Some("main"))
             .of("codex")
@@ -286,8 +289,21 @@ fn a_switch_from_outside_that_would_quit_an_app_asks_nothing_and_says_so() {
     ])));
     machine.found = vec![codex()];
     machine.held.insert("codex".into(), vec![chatgpt_holding()]);
-    machine.apps = StandInApps::new(&[CHATGPT], true);
-    let mut model = glancing(&mut machine);
+    machine.apps = StandInApps::new(&[CHATGPT], quits);
+    let model = glancing(&mut machine);
+    (model, machine)
+}
+
+fn quit_and_switch_to(account: &str) -> OutsideAsk {
+    OutsideAsk::QuitAndSwitch {
+        account: glance_id(account),
+    }
+}
+
+// A widget cannot ask whether to quit ChatGPT, so it says to open Pitboard; a shortcut asks.
+#[test]
+fn a_switch_from_outside_that_would_quit_an_app_quits_nothing_and_answers_with_the_question() {
+    let (mut model, mut machine) = chatgpt_open(true);
     model.send(Intent::Outside {
         request: 4,
         ask: switch_to("codex:s"),
@@ -302,8 +318,85 @@ fn a_switch_from_outside_that_would_quit_an_app_asks_nothing_and_says_so() {
             request: 4,
             done: false,
             said: words::open_pitboard_to_switch("ChatGPT"),
+            question: Some(Question::asking(
+                words::quit_to_switch("ChatGPT"),
+                words::quit_and_reopen("ChatGPT"),
+                words::quit_and_switch(pitboard_core::host::OS, "ChatGPT"),
+            )),
         }]
     );
+}
+
+#[test]
+fn a_switch_from_outside_let_quit_the_app_quits_it_switches_and_opens_it_again() {
+    let (mut model, mut machine) = chatgpt_open(true);
+    machine.switched = switched("codex", "codex/main", "codex/spare", Vec::new());
+    model.send(Intent::Outside {
+        request: 5,
+        ask: quit_and_switch_to("codex:s"),
+    });
+    model.run(&mut machine);
+    assert_eq!(
+        machine.apps.asked(),
+        [format!("quit {CHATGPT}"), format!("open {CHATGPT}")]
+    );
+    assert_eq!(machine.switched_to, ["codex/spare"]);
+    assert_eq!(
+        model.shown().quit_question,
+        None,
+        "nothing asked at the Mac"
+    );
+    assert_eq!(model.state.presented, None);
+    assert_eq!(
+        answers(&model),
+        [OutsideAnswer {
+            request: 5,
+            done: true,
+            said: format!("{}.", words::switched_to(Some("Codex"), "spare")),
+            question: None,
+        }]
+    );
+}
+
+#[test]
+fn a_switch_from_outside_whose_app_stays_open_answers_that_it_failed_and_shows_no_alert() {
+    let (mut model, mut machine) = chatgpt_open(false);
+    model.send(Intent::Outside {
+        request: 6,
+        ask: quit_and_switch_to("codex:s"),
+    });
+    model.run(&mut machine);
+    assert_eq!(machine.apps.asked(), [format!("quit {CHATGPT}")]);
+    assert!(machine.switched_to.is_empty());
+    assert!(model.state.switch_under_way().is_none());
+    assert_eq!(model.state.presented, None);
+    assert_eq!(model.shown().failure_alert, None);
+    assert_eq!(
+        answers(&model),
+        [OutsideAnswer {
+            request: 6,
+            done: false,
+            said: words::failed_outside(&words::could_not_switch("codex/spare")),
+            question: None,
+        }]
+    );
+}
+
+// Quitting is asked for one switch: an account ChatGPT does not hold switches as any other.
+#[test]
+fn a_switch_from_outside_let_quit_an_app_quits_nothing_that_holds_no_login() {
+    let mut machine = Stub::reading(Ok(two(10.0)));
+    let mut model = glancing(&mut machine);
+    machine.apps = StandInApps::new(&[CHATGPT], true);
+    machine.switched = switched("claude", "work", "personal", Vec::new());
+    model.send(Intent::Outside {
+        request: 7,
+        ask: quit_and_switch_to("claude:p"),
+    });
+    model.run(&mut machine);
+    assert!(machine.apps.asked().is_empty(), "nothing quit");
+    assert_eq!(machine.switched_to, ["claude/personal"]);
+    assert!(answers(&model).iter().all(|answer| answer.done));
 }
 
 // What the core says can name an email or a path, and Shortcuts may speak an answer aloud.
@@ -330,6 +423,7 @@ fn a_switch_from_outside_the_core_refuses_says_only_that_it_failed_and_shows_no_
             request: 5,
             done: false,
             said,
+            question: None,
         }]
     );
 }
@@ -354,6 +448,7 @@ fn a_refresh_from_outside_that_fails_says_only_that_it_failed() {
             request: 6,
             done: false,
             said: words::failed_outside(words::COULD_NOT_READ_USAGE),
+            question: None,
         }]
     );
 }
@@ -386,6 +481,7 @@ fn a_switch_from_outside_waits_behind_a_question_the_person_has_open() {
             request: 2,
             done: false,
             said: words::QUESTION_OPEN.into(),
+            question: None,
         }]
     );
 }
@@ -409,6 +505,7 @@ fn a_refresh_from_outside_is_answered_once_read() {
             request: 6,
             done: true,
             said: words::updated("08:00"),
+            question: None,
         }]
     );
 }
@@ -462,11 +559,13 @@ fn a_switch_from_outside_needing_a_question_only_the_app_asks_says_to_open_it() 
                 request: 8,
                 done: false,
                 said: words::sign_in_first("old"),
+                question: None,
             },
             OutsideAnswer {
                 request: 9,
                 done: false,
                 said: words::open_pitboard_to_replace("personal"),
+                question: None,
             },
         ]
     );

@@ -80,8 +80,8 @@ mod windowing;
 use crate::account_windows::AlertText;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
-    ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, RemovalShown, SetupStep,
-    SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
+    ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, RemovalShown,
+    SetupStep, SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
 };
 use crate::{AppCore, Warning};
 use lanes::Lanes;
@@ -414,6 +414,10 @@ pub enum OutsideAsk {
     Switch {
         account: String,
     },
+    // the person let Pitboard quit the app an earlier Switch's answer asked about
+    QuitAndSwitch {
+        account: String,
+    },
     Refresh,
 }
 
@@ -423,6 +427,8 @@ pub struct OutsideAnswer {
     pub request: u64,
     pub done: bool,
     pub said: String,
+    // what an asker that can ask asks before sending QuitAndSwitch
+    pub question: Option<Question>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]

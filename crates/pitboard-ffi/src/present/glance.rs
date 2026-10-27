@@ -1,9 +1,10 @@
 //! What a widget, a control or an intent reads of the accounts, in view of others and synced.
 
 use super::accounts::{limit_row, limits_said, standing_of};
+use super::sheets::quit_question;
 use super::{AccountStanding, LimitKind, Seen, words};
 use crate::account_windows::stores::derive;
-use crate::model::state::{Answered, State};
+use crate::model::state::{After, Answered, State};
 use crate::model::{LocalTime, OutsideAnswer};
 use crate::{Account, UsageLevel};
 use pitboard_core::host::{OS, Os};
@@ -147,6 +148,12 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
 pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
     (seen.state.answered.iter())
         .map(|(request, answered)| {
+            let question = match answered {
+                Answered::AppOpen { question } => {
+                    Some(quit_question(seen, question, &After::Switch).question)
+                }
+                _ => None,
+            };
             let (done, said) = match answered {
                 Answered::Switched { tool, label } => (
                     true,
@@ -161,7 +168,9 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
                 Answered::NeedsSignIn { label } => (false, words::sign_in_first(label)),
                 Answered::Unusable { label } => (false, words::cannot_switch_to(label)),
                 Answered::Busy => (false, words::SWITCH_UNDER_WAY.into()),
-                Answered::AppOpen { app } => (false, words::open_pitboard_to_switch(app)),
+                Answered::AppOpen { question } => {
+                    (false, words::open_pitboard_to_switch(&question.name))
+                }
                 Answered::Replace { label } => (false, words::open_pitboard_to_replace(label)),
                 Answered::Asking => (false, words::QUESTION_OPEN.into()),
                 Answered::Uninstalling => (false, words::BEING_UNINSTALLED.into()),
@@ -171,6 +180,7 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
                 request: *request,
                 done,
                 said,
+                question,
             }
         })
         .collect()

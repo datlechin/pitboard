@@ -659,7 +659,8 @@ pub(crate) enum Answered {
     NeedsSignIn { label: String },
     Unusable { label: String },
     Busy,
-    AppOpen { app: String },
+    // the app holding its login is open, which the asker may let Pitboard quit
+    AppOpen { question: QuitQuestion },
     // its login in use is refused for good, which only the app asks to replace
     Replace { label: String },
     // a question the person has open at the Mac would go
@@ -1137,8 +1138,14 @@ pub(crate) struct State {
     // where the app named a file for the glance
     glancing: Option<Glancing>,
     pub(crate) answered: VecDeque<(u64, Answered)>,
-    // the request from outside the switch under way answers
-    outside_switch: Option<u64>,
+    outside_switch: Option<OutsideSwitch>,
+}
+
+// The request from outside the switch under way answers, and whether it let Pitboard quit an app.
+#[derive(Debug, Clone, Copy)]
+struct OutsideSwitch {
+    request: u64,
+    quit: bool,
 }
 
 impl State {
@@ -1655,13 +1662,17 @@ impl State {
 
     // As a click in the app would, short of a question only the app can ask.
     fn outside(&mut self, request: u64, ask: OutsideAsk, now: Now, jobs: &mut Vec<Job>) {
-        let OutsideAsk::Switch { account } = ask else {
-            let asked = Asked {
-                fresh: true,
-                request: Some(request),
-                ..Asked::default()
-            };
-            return self.refresh(asked, now, jobs);
+        let (account, quit) = match ask {
+            OutsideAsk::Switch { account } => (account, false),
+            OutsideAsk::QuitAndSwitch { account } => (account, true),
+            OutsideAsk::Refresh => {
+                let asked = Asked {
+                    fresh: true,
+                    request: Some(request),
+                    ..Asked::default()
+                };
+                return self.refresh(asked, now, jobs);
+            }
         };
         let found = self.status.as_ref().and_then(|read| {
             read.accounts
@@ -1691,7 +1702,7 @@ impl State {
             Some(answered) => self.answer_outside(request, answered),
             None => {
                 self.switch_asked(qualified, jobs);
-                self.outside_switch = Some(request);
+                self.outside_switch = Some(OutsideSwitch { request, quit });
             }
         }
     }
@@ -3707,12 +3718,19 @@ impl State {
         match question {
             Some(question) => {
                 if then == After::Switch {
-                    self.switching = None;
                     // The app runs again, so a quit gives the copy to open again, if any.
                     self.reopen_after_switch = None;
-                    if let Some(request) = self.outside_switch.take() {
-                        let app = question.name;
-                        return self.answer_outside(request, Answered::AppOpen { app });
+                    match self.outside_switch {
+                        Some(OutsideSwitch { quit: true, .. }) => {
+                            jobs.push(Job::Quit { question, then });
+                            return;
+                        }
+                        Some(OutsideSwitch { request, .. }) => {
+                            self.switching = None;
+                            self.outside_switch = None;
+                            return self.answer_outside(request, Answered::AppOpen { question });
+                        }
+                        None => self.switching = None,
                     }
                 }
                 self.drop_question();
@@ -3813,7 +3831,13 @@ impl State {
             After::Switch => {
                 self.switching = None;
                 self.reopen_after_switch = None;
-                self.present(failed(could_not_switch(&qualified), switching));
+                let title = could_not_switch(&qualified);
+                match self.outside_switch.take() {
+                    Some(OutsideSwitch { request, .. }) => {
+                        self.answer_outside(request, Answered::Failed { title });
+                    }
+                    None => self.present(failed(title, switching)),
+                }
             }
             After::SignIn { again, from, .. } => {
                 self.saved(from.as_ref());
@@ -3876,7 +3900,7 @@ impl State {
                 front: false,
             });
         }
-        let outside = self.outside_switch.take();
+        let outside = self.outside_switch.take().map(|outside| outside.request);
         let label = Key::parse(qualified).label;
         match done {
             Ok(done) => {

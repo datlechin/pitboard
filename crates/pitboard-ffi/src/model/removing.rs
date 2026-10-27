@@ -320,6 +320,7 @@ fn a_request_from_outside_while_uninstalling_is_answered() {
         request,
         done: false,
         said: words::BEING_UNINSTALLED.into(),
+        question: None,
     };
     assert_eq!(model.shown().answers, [answered(1), answered(2)]);
     model.run(&mut machine);
