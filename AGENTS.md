@@ -30,6 +30,10 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   [The session machine](#the-session-machine) is the exception.
 - Never start a built app with `open`, Finder, a link, the Share menu or `launchctl setenv`.
   Launch Services passes on none of the variables, so the app starts on the real home.
+- Never place a branch build's widget or control on a macOS account that holds logins. Either
+  starts the app through Launch Services, on the real home.
+- Never run a branch build's Shortcuts or Spotlight action on a macOS account that holds
+  logins. It starts the app through Launch Services, on the real home.
 - From a test or a script, never write to `~/.claude`, `~/.claude.json`, `~/.codex` or
   `~/.pitboard`. A test that writes gives every home a scratch directory, `CODEX_HOME`
   included.
@@ -131,8 +135,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   build. A fixture serves its own pages.
 - Never let a test, a fixture or a Debug build register with Windows: no
   `AppNotificationManager.Register`, no HKCU `Run`, `Environment` or `Software\Classes` value,
-  no package and no certificate in a store. Only a Release build installed by an MSI
-  registers, and `Pitboard.Probe` on [the session machine](#the-session-machine). The
+  no Jump List, no package and no certificate in a store. Only a Release build installed by an
+  MSI registers, and `Pitboard.Probe` on [the session machine](#the-session-machine). The
   exception is the Release build `TheReleasedBuildTakesBackWhatItRegisteredOnUnregister`
   starts at 1.x as a runner's fresh standard user, whose `--unregister` takes back what it
   registered before the leak check.
