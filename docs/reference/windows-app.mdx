@@ -1,7 +1,7 @@
 ---
 title: "The app on Windows"
 sidebarTitle: "App on Windows"
-description: "Look up what the app on Windows shows in its icon, menu and window, how it differs from the menu bar app, and its keyboard shortcuts."
+description: "Look up the Windows app's icon, menu, Jump List, window and keyboard shortcuts, and how it differs from the menu bar app."
 ---
 
 The app on Windows runs from its icon in the notification area, on Windows 11 24H2 or later. It does what [the menu bar app](/reference/mac-app) does, in sentence case, and has no Claude Desktop accounts. This page gives where it differs.
@@ -40,6 +40,20 @@ Pitboard's menu holds, in this order:
 Choosing an account does what its button in **Accounts** does. Choosing the account in use does nothing, and any other account without a button is dimmed.
 
 The menu leaves out what does not apply: **Check for updates** in a beta or a copy that cannot update itself, and an account window that cannot open yet. It lists no notices and has no **Refresh**, which the Pitboard window has.
+
+## Jump List
+
+Right-clicking Pitboard on the taskbar, or where it is pinned in Start, opens its Jump List. Pitboard is on the taskbar while its window is open, or once you pin it there. It lists under **Tasks**, in the order of [the menu](#menu):
+
+| Task | Listed for | Selecting it |
+| --- | --- | --- |
+| **Switch to work**, or **Switch to work (Claude Code)** with several tools | Each account you can switch to | Switches to it, and opens no window |
+| **Add account** | Always | Opens **Add account** in the Pitboard window |
+| **Open claude.ai as work**, **Open chatgpt.com as main** | Each account window that can open | Opens that account's window |
+
+A task starts Pitboard when it is not running. Windows keeps the list after **Exit**, as Pitboard last wrote it.
+
+A switch from the Jump List asks nothing. One that cannot happen posts **Couldn't switch** with why, such as **Open Pitboard to switch while ChatGPT is open.** or **Pitboard is busy switching or signing in. Try again in a moment.** Selecting the notification opens **Accounts**.
 
 ## Welcome window
 
@@ -83,7 +97,7 @@ A question's accent button is its default: its verb, such as **Remove**, or **Ca
 
 ## Notifications
 
-The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, as Windows notifications, with the same bodies, and titles and buttons in sentence case, such as **Sign-in expired** and **Sign in again**. The button of **5-hour limit almost reached** names the account, such as **Switch to personal**. Selecting a notification opens what it opens on macOS, with **Settings** scrolled to **Limits** in place of its **Limits** pane.
+The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, as Windows notifications, with the same bodies, and titles and buttons in sentence case, such as **Sign-in expired** and **Sign in again**. The button of **5-hour limit almost reached** names the account, such as **Switch to personal**. It also posts **Couldn't switch** for a [Jump List](#jump-list) switch that did not happen. Selecting a notification opens what it opens on macOS, with **Settings** scrolled to **Limits** in place of its **Limits** pane.
 
 Windows can turn them off in **Settings** > **System** > **Notifications**. Where Windows shows none of Pitboard's notifications, Pitboard's **Settings** says why under **General**, as [Notifications in Settings](/reference/settings#notifications) lists.
 
