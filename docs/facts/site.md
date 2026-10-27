@@ -181,14 +181,15 @@ names runs was read in those alone.
 
 - The item draws highlighted while its menu is open. Its accessibility title is "Pitboard, work
   42%, Claude Code, needs attention" in `twoTools`, whose old needs a sign-in (run 40404550549).
-- In `twoTools` the menu reads, top to bottom: Sign In to old (Claude Code) Again…; the heading
+- In `twoTools` the menu reads, top to bottom: Sign In to old Again…; the heading
   Claude Code, work, old, personal; the heading Codex, main, spare; Add Account… ⌘N, Refresh ⌘R;
   Open claude.ai ›, Open chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help,
   Quit Pitboard ⌘Q. A separator divides each group. The headings are dimmed; each tool's account in
   use is checked. Its items carry no symbols and no tooltips. The redone menu's order and names are
-  asserted by `testTheStatusMenuListsItsItemsInOrder`, and were read in run 40404550549.
+  asserted by `testTheStatusMenuListsItsItemsInOrder`, and were read in run 40404550549, and
+  without "(Claude Code)" in the first item's title in run 40429818225.
 - Opened with a click, the menu highlights nothing. The first Down highlights the first enabled
-  item, Sign In to old (Claude Code) Again… in run 40404550549; Down and Up pass over headings and
+  item, Sign In to old Again… in run 40429818225; Down and Up pass over headings and
   separators. Down stops at Quit Pitboard: the menu does not wrap. With nothing highlighted, the
   first Up goes to Quit Pitboard. Home and Page Up go to the first enabled item, End and Page
   Down to Quit Pitboard.
@@ -219,9 +220,10 @@ names runs was read in those alone.
   All; Quit Pitboard ⌘Q. Show All is dimmed. Every item but About has a symbol before it.
 - File: Add Account… ⌘N; Open claude.ai ›; Remove Website Data…; Close ⌘W, with Close All in its
   place under ⌥. Remove Website Data… is dimmed.
-- Edit is macOS's own: Undo ⌘Z, Redo ⇧⌘Z; Cut ⌘X, Copy ⌘C, Paste ⌘V, Delete, Select All ⌘A;
-  Find ›, Spelling and Grammar ›, Substitutions ›, Transformations ›, Speech ›; AutoFill ›,
-  Start Dictation… fn D, Emoji & Symbols fn E. Undo, Redo, Cut, Paste and Select All are dimmed.
+- Edit is macOS's own, and Copy Report: Undo ⌘Z, Redo ⇧⌘Z; Cut ⌘X, Copy ⌘C, Paste ⌘V, Delete,
+  Select All ⌘A, Copy Report (run 40429818225); Find ›, Spelling and Grammar ›, Substitutions ›,
+  Transformations ›, Speech ›; AutoFill ›, Start Dictation… fn D, Emoji & Symbols fn E. Undo,
+  Redo, Cut, Paste, Select All and Copy Report are dimmed.
   Copy and Delete are dimmed with no account selected, and enabled with one. Delete shows no key.
 - View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Hide Inspector ⌃⌘I, Enter Full
   Screen fn F. Actual Size, Zoom In, Zoom Out and Enter Full Screen are dimmed. Hide Inspector is

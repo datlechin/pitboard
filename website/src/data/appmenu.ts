@@ -82,6 +82,7 @@ export const appMenus = (updates: boolean): AppMenu[] => [
       { title: "Paste", keys: ["⌘", "V"], icon: "mi-paste", dimmed: true },
       { title: "Delete", icon: "mi-trash", does: "delete" },
       { title: "Select All", keys: ["⌘", "A"], icon: "mi-select-all", dimmed: true },
+      { title: "Copy Report", dimmed: true },
       null,
       { title: "Find", more: true },
       { title: "Spelling and Grammar", more: true },

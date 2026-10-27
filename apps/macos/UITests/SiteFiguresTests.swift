@@ -6,7 +6,7 @@ import XCTest
 // before it asserts what it read.
 final class SiteFiguresTests: FixtureTestCase {
     private static let statusMenu = [
-        "Sign In to old (Claude Code) Again…", "Claude Code", "work", "old", "personal",
+        "Sign In to old Again…", "Claude Code", "work", "old", "personal",
         "Codex", "main", "spare", "Add Account…", "Refresh", "Open claude.ai",
         "Open chatgpt.com", "Open Pitboard", "Settings…", "About Pitboard", "Pitboard Help",
         "Quit Pitboard",
@@ -307,9 +307,10 @@ final class SiteFiguresTests: FixtureTestCase {
             dimmed("Account work"), ["Switch to work", "Warm Up Now", "Remove Account…"])
         XCTAssertEqual(titles("Account first"), titles("Account work"))
         XCTAssertEqual(dimmed("Account first"), dimmed("Account work"))
-        XCTAssertEqual(
-            dimmed("Edit first"), ["Undo", "Redo", "Cut", "Paste", "Select All"])
-        XCTAssertEqual(dimmed("Edit personal"), ["Undo", "Redo", "Cut", "Paste", "Select All"])
+        // Copy Report is Diagnostics', dimmed while another window is in front.
+        let edit = ["Undo", "Redo", "Cut", "Paste", "Select All", "Copy Report"]
+        XCTAssertEqual(dimmed("Edit first"), edit)
+        XCTAssertEqual(dimmed("Edit personal"), edit)
         XCTAssertEqual(dimmed("Window first"), ["Full Screen Tile", "Remove Window from Set"])
         XCTAssertEqual(dimmed("Help first"), [])
         XCTAssertFalse(asked)

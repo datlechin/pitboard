@@ -157,7 +157,8 @@ test("the Account menu offers the account selected, dimmed where it does not app
 test("Edit's Copy and Delete act on the selection, and View's Refresh reads", async ({ page }) => {
   const { fig, title, menu, row } = await window(page);
   await title("edit").click();
-  const copy = menu("edit").getByRole("menuitem", { name: "Copy" });
+  // exact, beside Copy Report
+  const copy = menu("edit").getByRole("menuitem", { name: "Copy", exact: true });
   const remove = menu("edit").getByRole("menuitem", { name: "Delete" });
   // the account in use, selected as the window opens
   await expect(copy).not.toHaveAttribute("aria-disabled", "true");
