@@ -123,9 +123,10 @@ Read and measured on 27 October 2026, with Xcode 27.1 unless a fact names anothe
 - Read from a debug build: an `AppShortcutsProvider` in a static Swift package reached none of
   the app's `Metadata.appintents`, while the package's actions, `AccountEntity` and
   `AccountQuery` reached both. So the App Shortcuts and the actions that run in the app are in the
-  app target, `apps/macos/App/Intents.swift`, and `build-app.sh` fails a release whose
+  app target, `apps/macos/App/Intents.swift`, and `build-app.sh` fails any build whose app's
   `Metadata.appintents/extract.actionsdata` lacks the three actions, `AccountEntity` or the App
-  Shortcuts.
+  Shortcuts, or whose widget extension's lacks `AccountChoice`, `OpenPlaceIntent` or
+  `AccountEntity`.
 - Read from a release build: the widget extension's `Metadata.appintents` holds `AccountChoice`,
   `AccountControlChoice`, `OpenPlaceIntent` and `AccountEntity`, and the app's holds
   `OpenPlaceIntent` with `openAppWhenRun`. The macOS 27 `SwitchButtonIntent` has

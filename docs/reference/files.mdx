@@ -274,7 +274,7 @@ The environment holds the proxy variables as they were set at install, and on ma
     | `~/Library/Group Containers/D7HJ5TFYCU.com.usepitboard.Pitboard/glance.json` | What the widgets and the control show: each added account's name, tool, plan and usage, and when Pitboard read them, written again after each read. It holds no email address and no sign-in. Only a copy from a release writes it. |
     | `~/Library/Containers/com.usepitboard.Pitboard.widgets` and `~/Library/Application Scripts/com.usepitboard.Pitboard.widgets` | Folders macOS makes for the sandboxed widget extension. Pitboard writes nothing there. |
 
-    **Uninstall Pitboard** deletes these keys, the login item, the folder in `~/Library/Application Support` and `glance.json`. It moves the app's folders in `~/Library/Caches`, `~/Library/HTTPStorages`, `~/Library/Saved Application State` and `~/Library/WebKit` to the Trash, every account window's website data with them. The folder `glance.json` was in stays, and so do the folders macOS makes for the Share and widget extensions.
+    **Uninstall Pitboard** deletes the keys in `com.usepitboard.Pitboard.plist`, the login item, the folder in `~/Library/Application Support` and `glance.json`. It moves the app's folders in `~/Library/Caches`, `~/Library/HTTPStorages`, `~/Library/Saved Application State` and `~/Library/WebKit` to the Trash, every account window's website data with them. The folder `glance.json` was in stays, and so do the folders macOS makes for the Share and widget extensions.
   </Tab>
   <Tab title="Windows">
     The installer puts the app in `%LOCALAPPDATA%\Programs\Pitboard`, for your account alone.

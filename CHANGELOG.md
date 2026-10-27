@@ -104,8 +104,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The macOS app has widgets for the desktop and Notification Center: one account's limits or the
   accounts in use, with a countdown to each reset, or every account it has room for, as the
   window lists them.
-- On macOS 26, a control in Control Center or the menu bar shows how much of its limits an
-  account has used, and opens Pitboard.
+- On macOS 26, a control in Control Center or the menu bar shows an account, and how much of its
+  fullest limit it has used or that it is in use, and opens Pitboard.
 
 ### Changed
 

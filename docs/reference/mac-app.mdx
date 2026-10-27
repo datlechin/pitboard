@@ -210,7 +210,7 @@ A button brings Pitboard forward only where it opens a dialog or asks something.
 
 ## Shortcuts and Spotlight
 
-Shortcuts lists three actions under Pitboard. Each runs in Pitboard, which macOS starts if it is not running, and only **Open Pitboard** brings it forward. On macOS 26 and later, Spotlight runs them too.
+Shortcuts lists three actions under Pitboard, beside the Find action it makes to filter the accounts by their details. Each of the three runs in Pitboard, which macOS starts if it is not running, and only **Open Pitboard** brings it forward. On macOS 26 and later, Spotlight runs them too.
 
 | Action | Asks for | Does |
 | --- | --- | --- |
@@ -238,7 +238,7 @@ Each action is also an App Shortcut, and **Switch Account** is one for each acco
 | **Get Usage** | "Get Pitboard usage", "How much have I used in Pitboard" |
 | **Open Pitboard** | "Open Pitboard accounts", "Show my Pitboard accounts" |
 
-Where Claude or the ChatGPT app has to quit first, **Switch Account** asks as Pitboard does, such as **Quit ChatGPT to switch?**, with **Quit ChatGPT and Switch** and **Cancel**. **Cancel** changes nothing.
+Where Claude or the ChatGPT app has to quit first, **Switch Account** asks as [Quitting Claude or the ChatGPT app](#quitting-claude-or-the-chatgpt-app) says, with **Quit ChatGPT and Switch** and **Cancel**.
 
 An action that cannot do what it was asked stops the shortcut with why:
 
@@ -263,15 +263,15 @@ Pitboard has two widgets for the desktop and Notification Center. They show the 
 
 | Widget | Size | Shows |
 | --- | --- | --- |
-| **Account** | Small | One account, the one in use until you choose another, with its first two limits: how much of each is used, a bar and a countdown to its reset. |
+| **Account** | Small | One account: the one you chose, or else the first in use, or else the first in [**Accounts**](#accounts-window), with its first two limits: how much of each is used, a bar and a countdown to its reset. |
 | **Accounts** | Medium | The accounts in use, two at most, as **Account** shows one, each with its tool. One with no usage, such as a Claude Desktop account, is left out while another has some. |
-| **Accounts** | Large | Every account it has room for, under each tool's name once there are two, with each limit as a row in [**Accounts**](#accounts-window) shows it, such as **Resets 3:45 PM**. Then **Updated 6:42 AM**, the time of the read that last changed what it shows. |
+| **Accounts** | Large | Every account it has room for, each with its plan, under each tool's name once it shows accounts of two tools, with each limit as a row in [**Accounts**](#accounts-window) shows it, such as **Resets 3:45 PM**. Then **Updated 6:42 AM**: when Pitboard read what the widget shows. While the numbers stay the same, it can be older than Pitboard's last read. |
 
 A check mark shows each account in use. From a reset until Pitboard's next read, the limit reads **Resetting now**. An account with no reading shows why, such as **Sign-in expired**. With no account added, a widget reads **No Accounts**, and the medium one reads **No account is in use.** while nothing is in use. Until Pitboard first reads the accounts, a widget shows only the Pitboard mark. VoiceOver reads each limit as one line, such as **5-hour limit, 42 percent used, resets 3:45 PM**.
 
-On macOS 26 and later, Pitboard also has a control, **Account**, for Control Center and the menu bar. Adding one asks which account it shows. It shows the account's name and **In Use**, how much of its fullest limit it has used, such as **64%**, or why it has no reading. Clicking it opens **Accounts**.
+On macOS 26 and later, Pitboard also has a control, **Account**, for Control Center and the menu bar. Adding one asks which account it shows. It shows the account's name and how much of its fullest limit it has used, such as **64%**, or why it has no reading. For the account in use, it shows **In Use** instead. Clicking it opens **Accounts**.
 
-Whether an update keeps the widgets and controls you placed has not been measured. If one is gone after an update, add it again.
+Whether an update keeps the widgets and controls you placed has not been measured. [Update Pitboard](/install#update-pitboard) says what to do if one is gone.
 
 ## Keyboard shortcuts
 
