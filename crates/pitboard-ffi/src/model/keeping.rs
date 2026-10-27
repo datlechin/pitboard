@@ -228,10 +228,7 @@ fn the_earlier_store_is_taken_once() {
     );
 }
 
-/// A launch from Windows' Start menu, or by the MSI's first install, asks for the window before
-/// the preferences are in. At the first launch the welcome stands in for it, so the window does
-/// not open under the welcome; at any other it opens once they are in, or once they came to
-/// nothing. A window asked for with a place opens at once.
+// At the first launch the welcome stands in for the window asked for while the preferences are read.
 #[test]
 fn a_window_asked_for_while_the_preferences_are_read_waits_for_them() {
     let launch = |machine: &mut Stub, place| {
