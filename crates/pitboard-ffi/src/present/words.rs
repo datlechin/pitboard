@@ -1553,8 +1553,6 @@ pub(crate) fn added_as(label: &str) -> String {
 // Over the welcome's tools on Windows, whose mockup heads them.
 pub(crate) const FOUND_ON_THIS_PC: &str = "Found on this PC";
 
-pub(crate) const ADD: &str = "Add";
-
 pub(crate) const ADD_ASKING: &str = "Add…";
 
 pub(crate) fn sign_in_asking(os: Os) -> String {
@@ -4848,7 +4846,7 @@ mod tests {
         assert_eq!(both(&welcome_done), pair("Continue", "Get started"));
         assert_eq!(added_as("work"), "Added as work");
         assert_eq!(FOUND_ON_THIS_PC, "Found on this PC");
-        assert_eq!((ADD, ADD_ASKING), ("Add", "Add…"));
+        assert_eq!(ADD_ASKING, "Add…");
         assert_eq!(both(&sign_in_asking), pair("Sign In…", "Sign in…"));
         assert_eq!(TASKBAR_SETTINGS, "Taskbar settings");
         assert_eq!(SWITCH_BEFORE_RUNNING_OUT, "Switch before a limit runs out");

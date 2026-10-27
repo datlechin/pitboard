@@ -45,7 +45,7 @@ fn the_welcome_lists_each_tool_found_and_reads_no_codex_login_before_its_click()
                 name: "Claude Code".into(),
                 account: Some("dana@example.com".into()),
                 step: adds(
-                    words::ADD,
+                    words::ADD_ASKING,
                     Intent::Enrol {
                         provider: "claude".into()
                     }
@@ -56,7 +56,7 @@ fn the_welcome_lists_each_tool_found_and_reads_no_codex_login_before_its_click()
                 name: "Codex".into(),
                 account: None,
                 step: adds(
-                    words::ADD,
+                    words::ADD_ASKING,
                     Intent::Enrol {
                         provider: "codex".into()
                     }
