@@ -11,9 +11,8 @@
 //! minute tick, and a countdown is the app's native one, from [`PanelNotice::until`].
 //!
 //! The words both apps say and the command line does not are in `words.rs`, each a function
-//! of typed values. What the command line says too, a limit's names, a reset, a parked
-//! login's life, a renewal's note and doctor's summary, is `pitboard_core::words`',
-//! called from here.
+//! of typed values. What the command line says too, a limit's names, a reset, a renewal's
+//! note and doctor's summary, is `pitboard_core::words`', called from here.
 //!
 //! A button the snapshot offers comes with its words and what it sends, and with whether it
 //! can be pressed now where it can be held back, a `Choice`, an `ItemAction`, an `ItemOffer`,
