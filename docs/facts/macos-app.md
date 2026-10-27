@@ -53,13 +53,19 @@ its own date.
   minimum width there, 560 beside a 260-point inspector, the window's `contentMinSize` was 820
   while the inspector showed and 560 once `toggleInspector(_:)` hid it. With the minimum on a
   frame outside `.inspector`, the window kept that minimum alone, and at that width the
-  inspector kept its width and clipped the list.
+  inspector kept its width and clipped the list. Measured the same way on the same day with the
+  column's ideal width 280 and its minimum 240: 840 while it showed and 560 once hidden, in 3 of
+  3 runs, so the window adds the column's ideal width.
   `theInspectorWidensTheWindowRatherThanNarrowingTheList` holds it.
-- Measured the same way on the same day: `toggleInspector(_:)` sent as soon as the window's
-  `contentMinSize` first read 820 collapsed the inspector and left the minimum at 820 for 5
-  seconds in 13 of 26 runs. Sent once the window had been handed over 300 ms earlier, the
-  minimum read 560 within milliseconds in 18 of 18. So the test waits a fixed time before the
-  toggle, and for the minimum after it.
+- Measured the same way on the same day, with a 260-point inspector: `toggleInspector(_:)` sent
+  as soon as the window's `contentMinSize` first read 820 collapsed the inspector and left the
+  minimum at 820 for 5 seconds in 13 of 26 runs. Sent once the window had been handed over
+  300 ms earlier, the minimum read 560 within milliseconds in 18 of 18. So the test waits a
+  fixed time before the toggle, and for the minimum after it.
+- Measured the same day, the inspector drawn offscreen with `NSHostingView.cacheDisplay`: at 260
+  points the weekly limit's "Resets Mon 9:00 AM" wrapped beside "in 19 hr 24 min", and at 280
+  it kept one line. At both widths the Warm-Up row's `LabeledContent` put **Warm-Up
+  Settings…** under its two lines, with "Off" as with "Warms up again at 10:50 PM".
 - Measured the same day: a test window that reaches the window server, such as one made by
   `NSWindow(contentViewController:)`, let `NSAppleScript.executeAndReturnError` run by another
   test on the main thread stop the main run loop, which ended `swift test` with status 0

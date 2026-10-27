@@ -6,14 +6,14 @@ import Testing
 
 @testable import PitboardApp
 
-// Plan 4.3's sizes: the inspector widens the window rather than narrowing the list.
+// The owner's sizes: a 280 point inspector widens the window rather than narrowing the list.
 @MainActor
 @Test func theInspectorWidensTheWindowRatherThanNarrowingTheList() async throws {
     let shown = try await accountsWindow()
-    #expect(shown.contentMinSize == NSSize(width: 820, height: 400))
+    #expect(shown.contentMinSize == NSSize(width: 840, height: 400))
     shown.setContentSize(NSSize(width: 560, height: 400))
     shown.layoutIfNeeded()
-    #expect(shown.contentLayoutRect.width == 820, "the window is no narrower than both")
+    #expect(shown.contentLayoutRect.width == 840, "the window is no narrower than both")
 
     let inspector = try #require(splitView(in: shown.contentView))
     inspector.toggleInspector(nil)
@@ -36,7 +36,7 @@ func accountsWindow(_ items: [AccountItem] = sample, notices: [PanelNotice] = []
     // Deferred: one that reaches the window server lets another test's AppleScript end the run
     // (docs/facts/macos-app.md).
     let window = NSWindow(
-        contentRect: NSRect(x: 0, y: 0, width: 820, height: 560),
+        contentRect: NSRect(x: 0, y: 0, width: 840, height: 560),
         styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered,
         defer: true)
     window.contentViewController = controller
