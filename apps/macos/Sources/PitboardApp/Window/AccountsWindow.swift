@@ -21,7 +21,7 @@ struct AccountsWindow: View {
                 isPresented: Binding(get: { inspector && listed }, set: { inspector = $0 })
             ) {
                 AccountInspector(item: selected, act: act) { model.send($0) }
-                    .inspectorColumnWidth(min: 240, ideal: 260, max: 360)
+                    .inspectorColumnWidth(min: 240, ideal: 280, max: 360)
             }
             .toolbar {
                 ToolbarItemGroup {

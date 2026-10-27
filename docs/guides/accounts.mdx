@@ -11,14 +11,14 @@ Claude Desktop accounts are added inside Claude, on macOS, as [Use Pitboard with
 
 <Tabs>
   <Tab title="macOS">
-    In the **Accounts** pane of the Pitboard window, click **Name** in the tip **Give this account a name**. Keep the name the dialog suggests, or enter another such as `personal`, then click **Save**.
+    Click **Add** beside the tool in the welcome window, or on the row marked **Not added yet** in **Accounts**. Pitboard adds the account under a name from its email address. Keep that name in **Name This Account**, or enter another such as `personal`, then click **Done**.
   </Tab>
   <Tab title="Windows">
-    In the **Accounts** pane of the Pitboard window, select **Name** in the tip **Give this account a name**. Keep the name the dialog suggests, or enter another such as `personal`, then select **Save**.
+    Select **Add** beside the tool in the welcome window, or on the row marked **Not added yet** in **Accounts**. Pitboard adds the account under a name from its email address. Keep that name in **Name this account**, or enter another such as `personal`, then select **Done**.
   </Tab>
 </Tabs>
 
-Until a Codex account is enrolled, the tip **Use Pitboard with Codex** adds Codex's login instead: see [Add Codex accounts](/guides/codex#add-codex-accounts). On the command line:
+Codex has no such row: Pitboard reads its login only once you add it, as [Add Codex accounts](/guides/codex#add-codex-accounts) says. On the command line:
 
 ```sh
 pitboard enroll personal          # Claude Code
@@ -38,26 +38,26 @@ Pitboard runs the tool's own sign-in in a private directory, so the account in u
   <Tab title="macOS">
     <Steps>
       <Step title="Open the dialog">
-        Click Pitboard's item in the menu bar, then choose **Add Account**. Choose **Claude Code** or **Codex** in the **Tool** pop-up menu.
-      </Step>
-      <Step title="Name the account">
-        Enter a name such as `work`, then click **Sign In**.
+        Click Pitboard's item in the menu bar, then choose **Add Account**. Where Pitboard finds more than one tool, choose **Claude Code** or **Codex** in the **Tool** pop-up menu.
       </Step>
       <Step title="Sign in">
-        Sign in as the account you are adding, in the browser that opens. If a **Code** field appears, paste the code the page gives you, then click **Submit Code**. To sign in from another browser, click **Copy Link** and paste the address there. If no browser opens, click **Open**.
+        Click **Sign In**, then sign in as the account you are adding, in the browser that opens. If a **Code** field appears, paste the code the page gives you, then click **Submit Code**. To sign in from another browser, click **Copy Link** and paste the address there. If no browser opens, click **Open**.
+      </Step>
+      <Step title="Name the account">
+        Pitboard adds the account under a name from its email address. Keep that name in **Name This Account**, or enter another such as `work`, then click **Done**.
       </Step>
     </Steps>
   </Tab>
   <Tab title="Windows">
     <Steps>
       <Step title="Open the dialog">
-        Right-click Pitboard's icon in the notification area, then select **Add account**, or press Ctrl+N in the Pitboard window. Under **Tool**, select **Claude Code** or **Codex**.
-      </Step>
-      <Step title="Name the account">
-        Enter a name such as `work`, then select **Sign in**.
+        Right-click Pitboard's icon in the notification area, then select **Add account**, or press Ctrl+N in the Pitboard window. Where Pitboard finds more than one tool, select **Claude Code** or **Codex** under **Tool**.
       </Step>
       <Step title="Sign in">
-        Sign in as the account you are adding, in the browser that opens. If a **Code** field appears, paste the code the page gives you, then select **Submit code**. To sign in from another browser, select **Copy link** and paste the address there. If no browser opens, select **Open**.
+        Select **Sign in**, then sign in as the account you are adding, in the browser that opens. If a **Code** field appears, paste the code the page gives you, then select **Submit code**. To sign in from another browser, select **Copy link** and paste the address there. If no browser opens, select **Open**.
+      </Step>
+      <Step title="Name the account">
+        Pitboard adds the account under a name from its email address. Keep that name in **Name this account**, or enter another such as `work`, then select **Done**.
       </Step>
     </Steps>
   </Tab>
@@ -84,7 +84,7 @@ Each organisation your Anthropic account belongs to is a separate account, as ar
 
 ## Choose a label
 
-On the command line, a label names its tool: `work` for Claude Code, `codex/work` for Codex and, on macOS, `desktop/work` for Claude Desktop. In the app, choose the tool and enter the name alone. [Labels](/reference/commands#labels) gives the rules.
+On the command line, a label names its tool: `work` for Claude Code, `codex/work` for Codex and, on macOS, `desktop/work` for Claude Desktop. In the app, a name is the label alone, and the tool is the one you signed in to. [Labels](/reference/commands#labels) gives the rules.
 
 ## Rename an account
 
@@ -92,10 +92,10 @@ Renaming changes only the label. The account keeps its parked login, and its [ac
 
 <Tabs>
   <Tab title="macOS">
-    In the **Accounts** pane, Control-click the account, then choose **Rename**, or select it and choose **Account** > **Rename**. Enter the new name, then click **Rename**.
+    In **Accounts**, select the account and click **Rename** in the inspector, or Control-click it and choose **Rename**. Enter the new name, then click **Rename**.
   </Tab>
   <Tab title="Windows">
-    In the **Accounts** pane, right-click the account and select **Rename**, or select it and press F2. Enter the new name, then select **Rename**.
+    In **Accounts**, right-click the account and select **Rename**, or press F2 on its row. Enter the new name, then select **Rename**.
   </Tab>
 </Tabs>
 
@@ -113,10 +113,10 @@ Forgetting an account deletes its parked login on this computer, with everything
 
 <Tabs>
   <Tab title="macOS">
-    In the **Accounts** pane, select the account and press Delete or Command-Delete, or Control-click it and choose **Forget**. Click **Forget** to confirm.
+    In **Accounts**, select the account and press Delete, or Control-click it and choose **Remove Account**. Click **Remove** to confirm.
   </Tab>
   <Tab title="Windows">
-    In the **Accounts** pane, select the account and press Delete, or right-click it and select **Forget**. Select **Forget** to confirm.
+    In **Accounts**, right-click the account and select **Remove account**, or press Delete on its row. Select **Remove** to confirm.
   </Tab>
 </Tabs>
 

@@ -81,7 +81,7 @@ menu=$(picture macos-menu-accounts)
 window=$(picture macos-window-accounts)
 sips --resampleWidth 600 "$menu" --out docs/images/menu.png >/dev/null
 cp docs/images/menu.png .github/media/menu.png
-sips --resampleWidth 1640 "$window" --out docs/images/window.png >/dev/null
+sips --resampleWidth 1680 "$window" --out docs/images/window.png >/dev/null
 
 if [ -n "$figures" ]; then
     while read -r name file; do

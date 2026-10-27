@@ -803,10 +803,10 @@ fn switch_notifies_of_codex_alone() {
     );
 }
 
-/// The settings offer the three choices in the system's own case, and the sentence on the
-/// terms once: beside switching while it is chosen, and beside warm-up otherwise.
+/// The settings offer the three choices in the system's own case, and the link to the terms
+/// beside them, whichever is chosen.
 #[test]
-fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
+fn the_settings_offer_three_choices_and_the_terms_beside_them() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![work(10.0, 7_200), personal()])));
     chose(&mut model, &mut machine, AtLimit::Notify);
@@ -840,9 +840,14 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         shown.at_limit.share_range,
         words::share_range(shown.at_limit.lowest, shown.at_limit.highest)
     );
-    assert_eq!(shown.at_limit.terms, None);
+    let terms = shown.at_limit.terms;
     assert_eq!(
-        shown.warm.terms.expect("beside warm-up").link,
+        terms.sentence,
+        words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS)
+    );
+    assert_eq!(terms.link_title, words::IS_THIS_ALLOWED);
+    assert_eq!(
+        terms.link,
         "https://docs.usepitboard.com/concepts/limits#is-this-allowed"
     );
 
@@ -850,22 +855,13 @@ fn the_settings_offer_three_choices_and_the_terms_beside_switching() {
         choice: AtLimit::Switch,
         at: 95,
     });
-    let switching = model.shown().machine;
-    assert_eq!(switching.warm.terms, None, "said once");
-    let terms = switching.at_limit.terms.expect("beside switching");
-    assert_eq!(
-        terms.sentence,
-        words::sentence(pitboard_core::words::TERMS_MAY_COVER_THIS)
-    );
-    assert_eq!(terms.link_title, words::IS_THIS_ALLOWED);
+    assert_eq!(model.shown().machine.at_limit.terms, terms);
 
     model.send(Intent::SetAtLimit {
         choice: AtLimit::Nothing,
         at: 95,
     });
-    let machine = model.shown().machine;
-    let shown = machine.at_limit;
+    let shown = model.shown().machine.at_limit;
     assert!(!shown.share_enabled, "nothing happens at the share");
-    assert_eq!((shown.note, shown.terms), (None, None));
-    assert!(machine.warm.terms.is_some());
+    assert_eq!((shown.note, shown.terms), (None, terms));
 }

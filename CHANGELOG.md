@@ -36,8 +36,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with **Sign In Again**.
 - The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
   at first, before it runs out, with **Switch** where another account has room.
-- The app's **Settings** link **Is this allowed?** beside switching automatically while it is
-  chosen and beside warm-up otherwise, and the Windows app's beside warm-up always.
+- The app's **Settings** link **Is this allowed?** under **When a limit reaches**, whatever it is
+  set to.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
 - The macOS menu bar mark carries a badge while the menu opens on something that needs
@@ -69,7 +69,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   name over the welcome, and keeps **Open Pitboard at Login** off until you turn it on.
 - The macOS app's **Settings** > **Advanced** offers **Uninstall Pitboard…**, which deletes
   Pitboard's saved sign-ins and settings, then the app's own settings, login item and command line
-  link, and moves the app to the Trash, or says how Homebrew removes a copy it installed.
+  link, moves its caches, saved window state and account windows' website data to the Trash, as
+  `brew uninstall --zap` does, and moves the app there too, or says how Homebrew removes a copy it
+  installed.
 - The macOS app's **Diagnostics** offers **Copy Report**, in its toolbar and the **Edit** menu,
   which copies the checks with email addresses and account identifiers hidden, and each check
   that did not pass offers what puts it right, such as **Sign In Again…**, or **Learn More**.
@@ -234,8 +236,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Close**.
 - A question or failure that comes while the Windows app's dialog is up takes the dialog over
   until it is answered, and the dialog then goes back to its step, where it was a bar inside it.
-- The Windows installer starts Pitboard once a first install is done, which opens its welcome,
-  where it started Pitboard only after an update.
+- The Windows installer starts Pitboard once a first install is done, other than a quiet one,
+  which opens its welcome, where it started Pitboard only after an update.
 - The Windows app's **Settings** shows each setting with its icon, as Windows Settings does, says
   what **Start when you sign in to Windows** is for, and names the version under **Version**
   beside **Check now**.

@@ -1,4 +1,7 @@
+import PitboardShareBindings
 import SwiftUI
+
+let words = shareWords()
 
 @MainActor
 @Observable
@@ -22,17 +25,17 @@ struct ShareView: View {
             case .opening:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Opening in Pitboard…")
+                    Text(words.opening)
                 }
             case .refused(let reason):
-                said("Can’t Open This Link", reason)
+                said(words.refused, reason)
             case .failed(let reason):
-                said("Couldn’t Open Pitboard", reason)
+                said(words.failed, reason)
             }
             if state.phase != .opening {
                 HStack {
                     Spacer()
-                    Button("OK", action: done)
+                    Button(words.ok, action: done)
                         .keyboardShortcut(.defaultAction)
                 }
             }

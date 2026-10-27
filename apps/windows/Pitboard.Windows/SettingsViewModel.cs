@@ -93,14 +93,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasAtLimitNote => AtLimit.Note is not null;
 
-    public bool HasAtLimitTerms => AtLimit.Terms is not null;
+    public string TermsLinkTitle => AtLimit.Terms.LinkTitle;
 
-    // One page, said beside switching while it is chosen and beside warm-up otherwise.
-    public string TermsLinkTitle => (AtLimit.Terms ?? Warm.Terms)?.LinkTitle ?? "";
-
-    public bool HasWarmTerms => Warm.Terms is not null;
-
-    public string TermsLink => (AtLimit.Terms ?? Warm.Terms)?.Link ?? "";
+    public string TermsLink => AtLimit.Terms.Link;
 
     public double Share => AtLimit.At;
 

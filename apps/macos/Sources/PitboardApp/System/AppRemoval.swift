@@ -21,6 +21,7 @@ final class AppRemoval {
     private let defaults: UserDefaults
     private let domain: String
     private let support: URL
+    private let library: URL
     private let commandLine: CommandLineTool
     private let app: URL
     private let homebrew: [URL]
@@ -31,7 +32,7 @@ final class AppRemoval {
 
     init(
         loginItem: any LoginItem, defaults: UserDefaults, domain: String, support: URL,
-        commandLine: CommandLineTool, app: URL, homebrew: [URL],
+        library: URL, commandLine: CommandLineTool, app: URL, homebrew: [URL],
         trash: @escaping @MainActor (URL) throws -> Void,
         ask: @escaping @MainActor (Asked) -> Answer = AppRemoval.alert,
         quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) }
@@ -40,6 +41,7 @@ final class AppRemoval {
         self.defaults = defaults
         self.domain = domain
         self.support = support
+        self.library = library
         self.commandLine = commandLine
         self.app = app
         self.homebrew = homebrew
@@ -56,7 +58,7 @@ final class AppRemoval {
         AppRemoval(
             loginItem: loginItem, defaults: defaults,
             domain: Bundle.main.bundleIdentifier ?? "com.usepitboard.Pitboard",
-            support: support, commandLine: commandLine, app: app,
+            support: support, library: .libraryDirectory, commandLine: commandLine, app: app,
             homebrew: ["/opt/homebrew", "/usr/local"].map { URL(fileURLWithPath: $0) },
             trash: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) })
     }
@@ -67,6 +69,9 @@ final class AppRemoval {
         // Nowhere is left to say a failure in.
         try? loginItem.unregister()
         try? FileManager.default.removeItem(at: support)
+        for folder in Self.leftInLibrary(by: domain) {
+            try? trash(library.appendingPathComponent(folder))
+        }
         if Self.installedByHomebrew(app, prefixes: homebrew) {
             let help = words.settings.homebrewHelp.flatMap { URL(string: $0.link) }
             _ = ask(.homebrew(help: help))
@@ -80,6 +85,15 @@ final class AppRemoval {
         // Last, as AppKit writes to them until the app stops.
         defaults.removePersistentDomain(forName: domain)
         quit()
+    }
+
+    // What macOS and WebKit keep for the app, as the pitboard-app cask's zap trashes them.
+    nonisolated static func leftInLibrary(by domain: String) -> [String] {
+        [
+            "Caches/\(domain)", "HTTPStorages/\(domain)",
+            "HTTPStorages/\(domain).binarycookies",
+            "Saved Application State/\(domain).savedState", "WebKit/\(domain)",
+        ]
     }
 
     // A link under any version in the cask's Caskroom, which Sparkle leaves (docs/facts/macos.md).

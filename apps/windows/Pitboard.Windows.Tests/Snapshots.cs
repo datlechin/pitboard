@@ -58,12 +58,12 @@ internal static class Snapshots
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
             AtLabel: "When a limit reaches 95%",
-            ShareLabel: "At", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: null),
+            ShareLabel: "At", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms),
         Warm: new WarmShown(
             Title: "Warm-up", From: 360, To: 1320, RangeLabel: "6:00 AM to 10:00 PM", Accounts: [],
             NoneEnrolled: "Add a Claude Code account to warm it up.", Standing: null,
             Note: "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, while it’s open.",
-            Enabled: false, Terms: Terms));
+            Enabled: false));
 
     // One array, so two snapshots made here are equal.
     private static readonly AtLimitChoice[] AtLimitChoices =

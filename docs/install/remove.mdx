@@ -1,17 +1,36 @@
 ---
 title: "Remove Pitboard"
-description: "Delete parked logins with `pitboard uninstall`, then remove Pitboard the way you installed it."
+description: "Uninstall Pitboard from the app, or delete parked logins with `pitboard uninstall` and remove Pitboard the way you installed it."
 ---
 
-Removing the program alone leaves every parked login on the machine.
+Removing the program alone leaves every parked login on the machine. The app's **Uninstall Pitboard** removes both. On the command line, delete the parked logins first, then remove Pitboard the way you installed it.
+
+<Warning>
+  Uninstalling cannot be undone. Each tool stays signed in to the account in use. Every other account needs a sign-in again before you can use it.
+</Warning>
+
+## Uninstall from the app
+
+The app deletes every saved sign-in, its settings and its account windows, as `pitboard uninstall` does, then removes itself.
+
+<Tabs>
+  <Tab title="macOS">
+    In **Settings** > **Advanced**, click **Uninstall Pitboard**, then **Uninstall**. If Claude holds a saved sign-in, Pitboard asks to quit Claude first. Then click **Move to Trash**, and enter an administrator's password if macOS asks for one to remove the command line's link in `/usr/local/bin`. Pitboard quits.
+
+    A copy from the `pitboard-app` cask shows **Remove Pitboard with Homebrew** instead: run `brew uninstall --cask pitboard-app`, as [Remove Pitboard itself](#remove-pitboard-itself) says. Either way, some of the app's folders stay in `~/Library`, as [The app](/reference/files#the-app) lists.
+
+    If Pitboard cannot remove everything, **Advanced** says why, with **Try Again**.
+  </Tab>
+  <Tab title="Windows">
+    In **Settings** > **Advanced**, select **Uninstall** on the **Uninstall Pitboard** card, then **Uninstall**. Pitboard exits, and Windows Installer removes the app with a progress bar, as [Remove Pitboard itself](#remove-pitboard-itself) lists.
+
+    If Pitboard cannot remove everything, the card says why, with **Try again**.
+  </Tab>
+</Tabs>
 
 ## Delete parked logins first
 
 `pitboard uninstall` stops the watch service, turns off daily renewal, deletes every parked login this Pitboard wrote, then deletes the Pitboard directory, `~/.pitboard`. On Windows, the directory is `%USERPROFILE%\AppData\Local\Pitboard`.
-
-<Warning>
-  `pitboard uninstall` cannot be undone. Each tool stays signed in to the account in use. Every other account needs a sign-in again before you can use it.
-</Warning>
 
 <Steps>
   <Step title="Quit the app">
@@ -71,8 +90,8 @@ If you set `PITBOARD_HOME`, or `pitboard uninstall` refuses, keeps the directory
 | `pitboard-app` cask | `brew uninstall --cask pitboard-app` |
 | `cargo binstall` or `cargo install` | `cargo uninstall pitboard` |
 | A release tarball or zip | Delete `pitboard` or `pitboard.exe`, and the man page and completion files if you copied them. |
-| The app on macOS, from a release download | Move `Pitboard.app` to the Trash. |
-| The app on Windows | In **Settings** > **Apps** > **Installed apps**, select **Uninstall** in the menu beside **Pitboard**. |
+| The app on macOS, from a release download | Move `Pitboard.app` to the Trash, or [uninstall it from the app](#uninstall-from-the-app). |
+| The app on Windows | In **Settings** > **Apps** > **Installed apps**, select **Uninstall** in the menu beside **Pitboard**, or [uninstall it from the app](#uninstall-from-the-app). |
 
 For the install script:
 
@@ -93,13 +112,13 @@ If the app came from the `pitboard` cask of 0.3.0 or earlier, leave out `--zap`:
 
 Otherwise the app's files in `~/Library` stay, each account window's sign-in included, since `pitboard uninstall` does not delete them. To remove them, move each `com.usepitboard.Pitboard` item that [The app](/reference/files#the-app) and [Account windows](/reference/files#account-windows) list to the Trash.
 
-If you clicked **Install Command Line Tool** in **Settings** > **Advanced**, delete the link it made. Nothing else removes it.
+If you clicked **Install Command Line Tool** in **Settings** > **Advanced**, delete the link it made. Only the app's **Uninstall Pitboard** removes it for you.
 
 ```sh
 sudo rm /usr/local/bin/pitboard
 ```
 
-On Windows, uninstalling the app removes `%LOCALAPPDATA%\Programs\Pitboard`, its Start shortcut, its `PATH` entry, its `pitboard://` links, its start at sign-in and `%LOCALAPPDATA%\Pitboard App`, where the account windows keep their sign-ins. It turns off daily renewal and the watch service, each where its task runs the app's own `pitboard.exe`. It leaves the parked logins and the Pitboard directory, so run `pitboard uninstall` first.
+On Windows, uninstalling the app removes `%LOCALAPPDATA%\Programs\Pitboard`, its Start shortcut, its `PATH` entry, its `pitboard://` links, its start at sign-in and `%LOCALAPPDATA%\Pitboard App`, where the account windows keep their sign-ins. It turns off daily renewal and the watch service, each where its task runs the app's own `pitboard.exe`. From **Settings** > **Apps**, it leaves the parked logins and the Pitboard directory, so run `pitboard uninstall` first. The app's **Uninstall Pitboard** deletes them too.
 
 If you added the app's completions to your PowerShell profile, delete that line from the file `$PROFILE` names.
 

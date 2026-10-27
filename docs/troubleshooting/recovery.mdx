@@ -22,7 +22,7 @@ If the error comes back, for example while you are offline, give up on the switc
 pitboard abandon
 ```
 
-In the app, click **Give Up** in the notice, then **Give Up** again to confirm. On Windows, both buttons read **Give up**. Giving up keeps every login. Run `pitboard` to check which account each tool shows as `signed in`. [`abandon`](/reference/recovery-commands#abandon) shows what it prints.
+In the app, click **Cancel Switch** on the notice **A switch didn't finish**, then **Cancel Switch** again to confirm. On Windows, both buttons read **Cancel switch**. Giving up keeps every login. Run `pitboard` to check which account each tool shows as `signed in`. [`abandon`](/reference/recovery-commands#abandon) shows what it prints.
 
 If the error says `this run reads it from somewhere else` (`recovery_elsewhere`), the switch ran with a different `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Run the command again with that variable set as it was, or run `pitboard abandon`.
 
@@ -30,7 +30,7 @@ If the error says the record of the switch `is damaged` (`recovery_record_corrup
 
 ## A Claude Desktop move was interrupted
 
-On macOS, every read warns `move_waiting`, and the app shows the notice **An interrupted move is waiting**. A crash, a power cut or Claude opened midway stopped a Claude Desktop move.
+On macOS, every read warns `move_waiting`, and the app shows the notice **A switch in Claude didn't finish**. A crash, a power cut or Claude opened midway stopped a Claude Desktop move.
 
 Keep Claude closed, then make any change to a Claude Desktop account, such as `pitboard use desktop/work`. Pitboard settles the move first, and a warning says how.
 
@@ -71,7 +71,7 @@ Run each of those, or sign in from the app as [Sign in to an account again](/gui
 
 ## The Pitboard directory came from another computer
 
-A backup, or on macOS Migration Assistant, can bring Pitboard's directory from another computer. Pitboard refuses to use it. Commands stop with an error (`state_wrong_machine`) saying the account list `was written on another computer`. In the app, the **Accounts** pane shows **Couldn't Read Accounts**, or **Couldn't read accounts** on Windows, with the same message.
+A backup, or on macOS Migration Assistant, can bring Pitboard's directory from another computer. Pitboard refuses to use it. Commands stop with an error (`state_wrong_machine`) saying the account list `was written on another computer`. In the app, **Accounts** shows **Couldn't Read Accounts**, or **Couldn't read accounts** on Windows, with the same message.
 
 Run `pitboard adopt`. It keeps your accounts and drops the Claude Code and Codex parked logins they came with. On macOS, it sets aside each Claude Desktop parked login made on another Mac.
 

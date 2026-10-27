@@ -8,7 +8,7 @@ description: "Fix an expired parked login, a renewal schedule that stopped or us
 
 ## A parked login has expired
 
-`pitboard status` shows `login expired` beside the account, and Pitboard's menu shows **Needs signing in again**. [Sign in to the account again](/guides/sign-in-again), then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) to keep it from happening.
+`pitboard status` shows `login expired` beside the account, and the app reads **Sign-in expired** under it. [Sign in to the account again](/guides/sign-in-again), then [turn on daily renewal](/guides/renewal#turn-on-daily-renewal) to keep it from happening.
 
 ## Daily renewal stopped working
 
@@ -22,7 +22,7 @@ description: "Fix an expired parked login, a renewal schedule that stopped or us
 | `but in Task Scheduler it`, then what changed, such as `is disabled` | Windows | Someone changed the task in Task Scheduler. |
 | `and its last run`, then how it ended | Windows | The last run failed. |
 
-As it starts, the app points a schedule whose `pitboard` is gone at its own command line. Otherwise, turn daily renewal off and on again: with **Renew parked logins daily** in the app's **Settings** > **Advanced**, or on the command line:
+As it starts, the app points a schedule whose `pitboard` is gone at its own command line. Otherwise, turn daily renewal off and on again: with **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, or on the command line:
 
 ```sh
 pitboard schedule uninstall
@@ -39,7 +39,7 @@ Where the last run failed, run `pitboard renew` to see what it says. [Renewal sc
 
 `pitboard doctor` warns on its `renewal schedule's proxy` line when the schedule's proxy differs from your shell's. Run `pitboard schedule install` from a shell where the proxy variables are right.
 
-The app starts with the system's environment, not a terminal's. Turning **Renew parked logins daily** off and on gives the schedule the app's proxy variables:
+The app starts with the system's environment, not a terminal's. Turning **Keep Saved Sign-Ins Fresh** off and on gives the schedule the app's proxy variables:
 
 | System | The app's proxy variables |
 | --- | --- |
@@ -50,7 +50,7 @@ The app starts with the system's environment, not a terminal's. Turning **Renew 
 
 <Tabs>
   <Tab title="macOS">
-    Turn on **Open Pitboard at login** in **Settings** > **General**. If macOS is waiting for you to allow it, click **Open Login Items Settings** and allow Pitboard there.
+    Turn on **Open Pitboard at Login** in **Settings** > **General**, or in the welcome window. If macOS is waiting for you to allow it, click **Open Login Items Settings** and allow Pitboard there.
   </Tab>
   <Tab title="Windows">
     Turn on **Start when you sign in to Windows** in Pitboard's **Settings**, under **General**. Started this way, Pitboard opens no window, and its icon appears in the notification area.

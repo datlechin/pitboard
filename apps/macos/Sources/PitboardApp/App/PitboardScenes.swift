@@ -41,7 +41,7 @@ public struct PitboardScenes: Scene {
         Window(words.window.accounts, id: PlaceWindow.accounts.id) {
             AccountsWindow(model: model, windows: windows)
         }
-        .defaultSize(width: 820, height: 560)
+        .defaultSize(width: 840, height: 560)
         .commands {
             // The standard item shows a beta's CFBundleShortVersionString, its X.Y.Z alone.
             CommandGroup(replacing: .appInfo) {

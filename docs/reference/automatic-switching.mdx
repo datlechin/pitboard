@@ -3,7 +3,7 @@ title: "Automatic switching"
 description: "Which account the automatic switch picks, and each reason it stays or decides nothing, with its text, its code and what ends it."
 ---
 
-The app and `pitboard watch` pick an account by the same rules, and give each reason in the same words. The app shows it in a notification, as the [menu bar app](/reference/mac-app#notifications) and [the app on Windows](/reference/windows-app#notifications) list, and under the share in [Settings](/reference/settings#when-a-limit-reaches). `pitboard watch` prints it in [its lines](/reference/account-commands#watch), and with `--json` gives the code in [`reason`](/reference/json-output#watch-events).
+The app and `pitboard watch` pick an account by the same rules. The app shows each reason in a notification, as the [menu bar app](/reference/mac-app#notifications) and [the app on Windows](/reference/windows-app#notifications) list, and under the share in [Settings](/reference/settings#when-a-limit-reaches). `pitboard watch` prints it in [its lines](/reference/account-commands#watch), and with `--json` gives the code in [`reason`](/reference/json-output#watch-events).
 
 ## Which account it switches to
 
@@ -42,6 +42,8 @@ Once a limit of the account in use reaches the share, Pitboard stays on the acco
 | `settling` | `the account was put in use less than 5 minutes ago` | 5 minutes pass. |
 | `auth_overridden` | `Claude Code signs in another way, set by ANTHROPIC_API_KEY in the environment, so a switch would change nothing its sessions use` | You remove that setting, which `pitboard doctor` also names. |
 
+The app starts each text with a capital letter and ends it with a full stop.
+
 Where Anthropic has given no reading of an account that could qualify, `no_room` ends `, and there is no reading of personal from Anthropic yet`.
 
 `settling` counts from the switch, sign-in or enrolment that put the account in use.
@@ -52,14 +54,14 @@ In JSON, `no_room` is an event of its own. The other codes are the `reason` of a
 
 While one of these holds, Pitboard does not decide whether to switch.
 
-| Code | Text | Ends when |
-| --- | --- | --- |
-| `switch_interrupted` | `a switch was interrupted, and the next change you make finishes it` | Your next change finishes it, or [`pitboard abandon`](/reference/recovery-commands#abandon) gives up on it. |
-| `custom_oauth_endpoint` | `Claude Code uses a custom OAuth endpoint, and Pitboard does not act on Claude Code then` | You unset [`CLAUDE_CODE_CUSTOM_OAUTH_URL`](/reference/environment-variables#custom-oauth-endpoint). |
-| `nothing_signed_in` | `Claude Code has no login stored` | You sign in. |
-| `not_enrolled` | `Claude Code has me@example.com's login stored, and that account is not enrolled` | You enrol it. |
-| `not_identified` | `whose login Claude Code has stored could not be told (could not reach Anthropic)` | A later try identifies it. |
-| `no_reading` | `there is no reading of work from Anthropic yet` | Pitboard's next read gets one. |
+| Code | Text | App | Ends when |
+| --- | --- | --- | --- |
+| `switch_interrupted` | `a switch was interrupted, and the next change you make finishes it` | **A switch didn't finish, and the next change you make finishes it.** | Your next change finishes it, or [`pitboard abandon`](/reference/recovery-commands#abandon) gives up on it. |
+| `custom_oauth_endpoint` | `Claude Code uses a custom OAuth endpoint, and Pitboard does not act on Claude Code then` | The same | You unset [`CLAUDE_CODE_CUSTOM_OAUTH_URL`](/reference/environment-variables#custom-oauth-endpoint). |
+| `nothing_signed_in` | `Claude Code has no login stored` | **Claude Code isn't signed in.** | You sign in. |
+| `not_enrolled` | `Claude Code has me@example.com's login stored, and that account is not enrolled` | **Claude Code is signed in to me@example.com, an account you haven't added.** | You enrol it. |
+| `not_identified` | `whose login Claude Code has stored could not be told (could not reach Anthropic)` | **Pitboard couldn't tell which account Claude Code is signed in to (could not reach Anthropic).** | A later try identifies it. |
+| `no_reading` | `there is no reading of work from Anthropic yet` | The same | Pitboard's next read gets one. |
 
 ## When a try fails
 

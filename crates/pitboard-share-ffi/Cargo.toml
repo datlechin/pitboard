@@ -1,6 +1,6 @@
 [package]
 name = "pitboard-share-ffi"
-description = "The check a Share extension makes of a link, as generated bindings, with nothing of Pitboard's core."
+description = "The check a Share extension makes of a link and what it says, as generated bindings, with nothing of Pitboard's core."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

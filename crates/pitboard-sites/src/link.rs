@@ -35,6 +35,11 @@ pub enum LinkRefusal {
     Unreadable,
 }
 
+impl LinkRefusal {
+    /// What the Share extension and the account picker title a refusal with, in title case.
+    pub const TITLE: &str = "Can’t Open This Link";
+}
+
 impl SiteLink {
     /// The longest link read, in characters. The sites' own links to a page are under 200
     /// characters, and anything longer would only fill the picker.
@@ -404,6 +409,7 @@ mod tests {
     /// The Share extension and the picker say a refusal the same way, from its reason.
     #[test]
     fn each_refusal_says_why() {
+        assert_eq!(LinkRefusal::TITLE, "Can’t Open This Link");
         let said = |refusal: LinkRefusal| refusal.to_string();
         assert_eq!(
             said(LinkRefusal::NotASite {

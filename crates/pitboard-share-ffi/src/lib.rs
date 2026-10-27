@@ -1,5 +1,6 @@
-//! What the macOS Share extension asks of Rust, as UniFFI bindings: whether a shared page is
-//! one Pitboard opens, and the Pitboard link that hands it to the app.
+//! What the macOS Share extension and the Windows share target ask of Rust, as UniFFI bindings:
+//! whether a shared page is one Pitboard opens, the Pitboard link that hands it to the app, and
+//! what each says.
 //!
 //! The extension is sandboxed and links this alone, never `pitboard-ffi`: the core's bindings
 //! check every export's checksum when they load, so linking them would bring the whole core
@@ -26,6 +27,37 @@ impl std::fmt::Display for ShareRefusal {
 }
 
 impl std::error::Error for ShareRefusal {}
+
+/// Every sentence the Share extension and the share target show beside a refusal's own.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ShareWords {
+    // the extension's, while the app opens the page
+    pub opening: String,
+    // the extension's title over a refusal
+    pub refused: String,
+    // the extension's title over why the app did not open
+    pub failed: String,
+    pub ok: String,
+    // the extension's, outside a Pitboard app
+    pub no_app: String,
+    // the share target's, for a share whose link could not be read
+    pub not_read: String,
+    // the share target's, where Pitboard.exe did not start
+    pub not_started: String,
+}
+
+#[uniffi::export]
+pub fn share_words() -> ShareWords {
+    ShareWords {
+        opening: "Opening in Pitboard…".into(),
+        refused: pitboard_sites::LinkRefusal::TITLE.into(),
+        failed: "Couldn’t Open Pitboard".into(),
+        ok: "OK".into(),
+        no_app: "Pitboard couldn’t find the app this extension came with.".into(),
+        not_read: "Pitboard couldn’t read the link that was shared. Share the page again.".into(),
+        not_started: "Pitboard couldn’t start the app that opens the page.".into(),
+    }
+}
 
 /// The Pitboard link of `scheme` that hands the page `text` to the app, once `text` is
 /// checked as a link from outside: one of the sites' own pages, never its sign-in.
@@ -57,6 +89,23 @@ mod tests {
         assert_eq!(read.url(), "https://chatgpt.com/c/x?y=1#z");
     }
 
+    #[test]
+    fn the_share_extension_and_the_share_target_say_these() {
+        assert_eq!(
+            share_words(),
+            ShareWords {
+                opening: "Opening in Pitboard…".into(),
+                refused: pitboard_sites::LinkRefusal::TITLE.into(),
+                failed: "Couldn’t Open Pitboard".into(),
+                ok: "OK".into(),
+                no_app: "Pitboard couldn’t find the app this extension came with.".into(),
+                not_read: "Pitboard couldn’t read the link that was shared. Share the page again."
+                    .into(),
+                not_started: "Pitboard couldn’t start the app that opens the page.".into(),
+            }
+        );
+    }
+
     /// A page that is not one says why in the words the app's picker uses.
     #[test]
     fn a_refusal_is_said_as_the_app_says_it() {
@@ -85,9 +134,7 @@ mod tests {
             share_link("https://claude.ai/magic-link#a:b".into(), "pitboard".into())
                 .expect_err("a sign-in link")
                 .to_string(),
-            "Pitboard doesn’t open claude.ai sign-in links from outside: one would sign the \
-             window in as whoever the link belongs to. Sign in inside the account’s claude.ai \
-             window."
+            pitboard_sites::LinkRefusal::SignInLink(&pitboard_sites::CLAUDE).to_string()
         );
     }
 }

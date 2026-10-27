@@ -4,13 +4,14 @@ import Testing
 
 @testable import PitboardApp
 
-// A scratch copy of the app, its own Application Support folder, defaults and login item:
-// nothing here reaches the Mac's own.
+// A scratch copy of the app, its own Application Support and Library folders, defaults and
+// login item: nothing here reaches the Mac's own.
 @MainActor
 private final class Removing {
     let app: StandInApp
     let defaults = TestDefaults()
     let support: URL
+    let library: URL
     let homebrew: URL
     let loginItem = StandInLoginItem()
     let scripts = Scripts()
@@ -22,6 +23,7 @@ private final class Removing {
     init() throws {
         app = try StandInApp()
         support = URL(fileURLWithPath: try app.directory("Application Support/app"))
+        library = URL(fileURLWithPath: try app.directory("Library"))
         homebrew = app.root.appendingPathComponent("homebrew", isDirectory: true)
         try Data("{}".utf8).write(to: support.appendingPathComponent("windows.json"))
         defaults.set("limits", forKey: DefaultsKey.settingsTab)
@@ -30,12 +32,25 @@ private final class Removing {
     var removal: AppRemoval {
         AppRemoval(
             loginItem: loginItem, defaults: defaults, domain: "com.usepitboard.Pitboard.test",
-            support: support, commandLine: app.tool(scripts.run), app: app.bundle,
+            support: support, library: library, commandLine: app.tool(scripts.run),
+            app: app.bundle,
             homebrew: [homebrew], trash: { self.trashed.append($0) },
             ask: {
                 self.asked.append($0)
                 return self.answer
             }, quit: { self.quit += 1 })
+    }
+
+    // What the pitboard-app cask's zap trashes of the app's own, beside its defaults and its
+    // Application Support folder.
+    var leftInLibrary: [URL] {
+        [
+            "Caches/com.usepitboard.Pitboard.test",
+            "HTTPStorages/com.usepitboard.Pitboard.test",
+            "HTTPStorages/com.usepitboard.Pitboard.test.binarycookies",
+            "Saved Application State/com.usepitboard.Pitboard.test.savedState",
+            "WebKit/com.usepitboard.Pitboard.test",
+        ].map { library.appendingPathComponent($0) }
     }
 
     // As Homebrew 7.0.9 left pitboard-app 0.4.0 (docs/facts/macos.md).
@@ -69,7 +84,7 @@ final class StandInLoginItem: LoginItem {
     #expect(!FileManager.default.fileExists(atPath: removing.support.path))
     #expect(removing.asked == [.trash(link: nil)])
     #expect(removing.scripts.ran.isEmpty, "no link of its own to remove")
-    #expect(removing.trashed == [removing.app.bundle])
+    #expect(removing.trashed == removing.leftInLibrary + [removing.app.bundle])
     #expect(removing.defaults.removedDomains == ["com.usepitboard.Pitboard.test"])
     #expect(removing.defaults.string(forKey: DefaultsKey.settingsTab) == nil)
     #expect(removing.quit == 1)
@@ -86,14 +101,16 @@ final class StandInLoginItem: LoginItem {
         removing.scripts.ran == [
             CommandLineTool.script(removing: removing.app.link, to: removing.app.helper.path)
         ])
-    #expect(removing.trashed == [removing.app.bundle])
+    #expect(removing.trashed == removing.leftInLibrary + [removing.app.bundle])
 
     let refused = try Removing()
     defer { refused.app.remove() }
     refused.app.makeLink()
     refused.scripts.raise(-128, "User canceled.")
     await refused.removal.finish()
-    #expect(refused.trashed.isEmpty, "a link left reaching nothing is worse than the app")
+    #expect(
+        refused.trashed == refused.leftInLibrary,
+        "a link left reaching nothing is worse than the app")
     #expect(refused.defaults.removedDomains.count == 1)
     #expect(refused.quit == 1)
 }
@@ -105,7 +122,7 @@ final class StandInLoginItem: LoginItem {
     removing.app.makeLink()
     removing.answer = .declined
     await removing.removal.finish()
-    #expect(removing.trashed.isEmpty)
+    #expect(removing.trashed == removing.leftInLibrary)
     #expect(removing.scripts.ran.isEmpty)
     #expect(removing.loginItem.state == .disabled)
     #expect(removing.defaults.removedDomains.count == 1)
@@ -121,7 +138,7 @@ final class StandInLoginItem: LoginItem {
     await removing.removal.finish()
     let help = try #require(words.settings.homebrewHelp.flatMap { URL(string: $0.link) })
     #expect(removing.asked == [.homebrew(help: help)], "its Help button says the cask command")
-    #expect(removing.trashed.isEmpty)
+    #expect(removing.trashed == removing.leftInLibrary, "the app's own, whoever installed it")
     #expect(removing.scripts.ran.isEmpty, "Homebrew removes its own links")
     #expect(!FileManager.default.fileExists(atPath: removing.support.path))
     #expect(removing.quit == 1)

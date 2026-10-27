@@ -80,6 +80,7 @@
                 loginItem: loginItem, defaults: defaults, domain: suite,
                 support: folder.appendingPathComponent(
                     "Application Support", isDirectory: true),
+                library: folder.appendingPathComponent("Library", isDirectory: true),
                 commandLine: commandLine,
                 app: folder.appendingPathComponent("Pitboard.app", isDirectory: true),
                 homebrew: [folder.appendingPathComponent("homebrew", isDirectory: true)],

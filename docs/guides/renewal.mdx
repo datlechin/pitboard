@@ -7,17 +7,17 @@ description: "Renew parked logins daily or by hand, before they expire and need 
 
 How long a [parked login](/concepts/switching#parked-logins) lasts depends on its tool:
 
-| Tool | How long it lasts | `pitboard` shows | The app shows |
+| Tool | How long it lasts | `pitboard` shows | The app's **Sign-In** shows |
 | --- | --- | --- | --- |
-| Claude Code | 30 days after its last renewal | `ready · good for 26d 4h` | **Parked login good for 26 more days** |
-| Codex | Pitboard knows no expiry for it | `ready`, with no time | No time |
-| Claude Desktop | Until claude.ai ends the sign-in | `ready · sign-in may lapse in 25d 3h` | **Its sign-in may lapse in 25 days** |
+| Claude Code | 30 days after its last renewal | `ready · good for 26d 4h` | **Saved sign-in valid until Nov 20** |
+| Codex | Pitboard knows no expiry for it | `ready`, with no time | No date |
+| Claude Desktop | Until claude.ai ends the sign-in | `ready · sign-in may lapse in 25d 3h` | **Saved sign-in may expire after Nov 20** |
 
 Pitboard never renews a Claude Desktop parked login. [What Pitboard does not do for Claude Desktop](/concepts/claude-desktop#what-pitboard-does-not-do-for-claude-desktop) says how far to trust its date.
 
 Pitboard renews parked logins only when it runs: `pitboard` in a terminal, `pitboard watch` or its service, the app while it is open, or daily renewal. After 30 days with none of them, every Claude Code parked login has expired. [`renew`](/reference/maintenance-commands#renew) says when each one is due.
 
-A renewal moves the end of a Claude Code login only when Anthropic's answer gives a new one. Within 3 days of the end, `pitboard` and the app say to sign in to the account again, as Claude Code does for its own login (read in 2.1.309).
+A renewal moves the end of a Claude Code login only when Anthropic's answer gives a new one. Within 3 days of the end, `pitboard` and the app say to sign in to the account again, as Claude Code does for its own login (read in 2.1.309). The app's row then reads **Sign-in expires in 2 days**.
 
 An expired parked login needs a browser sign-in: see [Sign in to an account again](/guides/sign-in-again).
 
@@ -29,12 +29,12 @@ Daily renewal runs `pitboard renew` once a day, from the system's own scheduler.
 
 <Tabs>
   <Tab title="macOS">
-    Click Pitboard's item in the menu bar, choose **Settings**, then click **Advanced**. Turn on **Renew parked logins daily**.
+    Click Pitboard's item in the menu bar, choose **Settings**, then click **Advanced**. Turn on **Keep Saved Sign-Ins Fresh**.
 
     The app must be in your Applications folder: until you move it there, macOS runs a temporary copy, and the setting cannot be turned on.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Advanced**, turn on **Renew parked logins daily**.
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Advanced**, turn on **Keep saved sign-ins fresh**.
   </Tab>
 </Tabs>
 
@@ -59,7 +59,7 @@ It renews only the parked logins in Pitboard's own directory: `~/.pitboard`, or 
 
 ## Check or turn off daily renewal
 
-In the app, **Renew parked logins daily** in **Settings** > **Advanced** shows whether it is on. Turn it off to stop daily renewal.
+In the app, **Keep Saved Sign-Ins Fresh** in **Settings** > **Advanced** shows whether it is on. Turn it off to stop daily renewal.
 
 On the command line:
 
@@ -96,6 +96,6 @@ For every line it can print, see [`renew`](/reference/maintenance-commands#renew
 
 ## Accounts you no longer use
 
-Pitboard keeps renewing a Claude Code or Codex parked login for as long as its account stays enrolled. `pitboard doctor` warns about such an account unused for 30 days or more.
+Pitboard keeps renewing a Claude Code or Codex parked login for as long as its account stays enrolled. `pitboard doctor` and the app's **Diagnostics** warn about such an account unused for 30 days or more.
 
 If you are not coming back to an account, forget it: see [Forget an account](/guides/accounts#forget-an-account).
