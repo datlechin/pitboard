@@ -4,8 +4,15 @@ enum Words {
     static let openPitboard = "Open Pitboard"
     static let settings = "Settings…"
     static let quit = "Quit Pitboard"
-    // A debug build's CFBundleDisplayName, which names SwiftUI's app menu and its items.
     static let debugBuild = "Pitboard Debug"
+    // SwiftUI names the app menu and its Hide and Quit items by CFBundleName up to macOS 26 (CI's
+    // runner, 2026-10-27), and by a debug build's CFBundleDisplayName from macOS 27 (a scratch app).
+    static var appMenu: String {
+        if #available(macOS 27, *) {
+            return debugBuild
+        }
+        return "Pitboard"
+    }
     static let addAccount = "Add Account…"
     static let refresh = "Refresh"
     static let copyEmail = "Copy Email Address"

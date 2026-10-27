@@ -267,16 +267,16 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(
             bar,
             [
-                "Apple", Words.debugBuild, "File", "Edit", "View", "Go", "Account", "Window",
+                "Apple", Words.appMenu, "File", "Edit", "View", "Go", "Account", "Window",
                 "Help",
             ])
         XCTAssertEqual(
-            titles("\(Words.debugBuild) first"),
+            titles("\(Words.appMenu) first"),
             [
-                "About Pitboard", "Settings…", "Services", "Hide \(Words.debugBuild)",
-                "Hide Others", "Show All", "Quit \(Words.debugBuild)",
+                "About Pitboard", "Settings…", "Services", "Hide \(Words.appMenu)",
+                "Hide Others", "Show All", "Quit \(Words.appMenu)",
             ])
-        XCTAssertEqual(dimmed("\(Words.debugBuild) first"), ["Show All"])
+        XCTAssertEqual(dimmed("\(Words.appMenu) first"), ["Show All"])
         XCTAssertEqual(
             titles("File first"),
             ["Add Account…", "Open claude.ai", "Remove Website Data…", "Close", "Close All"])
@@ -323,7 +323,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testTheAboutPanel() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.menuBars.menuBarItems[Words.debugBuild].click()
+        app.menuBars.menuBarItems[Words.appMenu].click()
         app.menuBars.menuItems["About Pitboard"].firstMatch.click()
         // The standard About panel is a dialog, not one of the app's windows.
         let panel = app.dialogs.firstMatch
