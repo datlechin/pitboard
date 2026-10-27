@@ -10,6 +10,8 @@ internal static class Words
 
     public const string NotNow = "Not now";
 
+    public const string AddedAs = "Added as ";
+
     public const string UseWithCodex = "Use Pitboard with Codex";
 
     public const string SwitchBeforeRunningOut = "Switch before a limit runs out";

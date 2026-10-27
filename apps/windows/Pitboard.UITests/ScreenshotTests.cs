@@ -57,6 +57,21 @@ public sealed partial class ScreenshotTests
     }
 
     [TestMethod]
+    public void TheDetailsOfASavedAndAnExpiredAccount()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
+        var window = InFront(launched.OpenWindow());
+        launched.DeclineTip(Words.SwitchBeforeRunningOut);
+        var personal = launched.Row("claude/personal");
+        Opened(personal);
+        KeepWindow(window, "windows-window-account-detail-saved");
+
+        Launched.Expander(personal).Patterns.ExpandCollapse.Pattern.Collapse();
+        Opened(launched.Row("claude/old"));
+        KeepWindow(window, "windows-window-account-detail-expired");
+    }
+
+    [TestMethod]
     public void AnAccountsMenuAndItsNameDialog()
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "oneTool");
@@ -217,6 +232,27 @@ public sealed partial class ScreenshotTests
         KeepWindow(window, "windows-window-first-launch");
     }
 
+    // Claude Code's sign-in from the welcome goes through the window's dialog, and the welcome then says what it added.
+    [TestMethod]
+    public void TheWelcomeOnceAnAccountIsAdded()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "firstLaunch");
+        var welcome = launched.Window(Words.Welcome);
+        var claude = Launched.Within(welcome, found => found.ByAutomationId("welcome.tool.claude"), "Claude Code");
+        Launched.Within(claude, found => found.ByAutomationId("welcome.add"), "Claude Code's sign-in").AsButton().Invoke();
+        launched.Answer("sheet", "PrimaryButton");
+        var code = launched.Field("sheet.code");
+        Assert.IsTrue(Launched.Enables(launched.Element("sheet.openLink")), "Open stayed dimmed");
+        Launched.Type(code, "fixture-code#state");
+        launched.Answer("sheet", "PrimaryButton");
+        launched.Field("sheet.name");
+        launched.Answer("sheet", "PrimaryButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("sheet.name")), "the dialog stayed up");
+
+        Launched.Shows(welcome, Words.AddedAs, exact: false);
+        KeepWindow(InFront(welcome), "windows-welcome-added");
+    }
+
     [TestMethod]
     public void NoAccounts()
     {
@@ -319,6 +355,30 @@ public sealed partial class ScreenshotTests
         KeepWindow(window, "windows-settings-warm-up");
     }
 
+    // Neither question is answered: the fixture's page saves nothing, and its window keeps its data.
+    [TestMethod]
+    public void AnAccountsWindowAsksFirst()
+    {
+        using var launched = Launched.Start(Builds.Debug, fixture: "twoTools");
+        launched.OpenWindow();
+        AccountWindowTests.OpenFromItsRow(launched, "codex/main");
+        var window = launched.AccountWindow("main");
+        Launched.Loads(window, "chatgpt.com stand-in");
+        InFront(window);
+
+        Launched.Press(window, "Download notes");
+        launched.Element("question");
+        KeepWindow(window, "windows-question-download");
+        launched.Answer("question", "CloseButton");
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("question")), "the question stayed");
+
+        Launched.Within(window, found => found.ByAutomationId("MoreButton"), "the command bar's More").Patterns.Invoke.Pattern.Invoke();
+        launched.Invoke("window.removeData");
+        launched.Element("question");
+        KeepWindow(window, "windows-question-remove-website-data");
+        launched.Answer("question", "CloseButton");
+    }
+
     // A picture is of the screen, so it shows whatever is in front.
     private static Window InFront(Window window)
     {
@@ -333,6 +393,13 @@ public sealed partial class ScreenshotTests
 
     private static bool Dims(AutomationElement button, bool dimmed) =>
         Retry.WhileFalse(() => button.IsEnabled != dimmed, Patience, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
+
+    // Its last command takes the focus, which scrolls the opened row into view.
+    private static void Opened(AutomationElement row)
+    {
+        Launched.Expand(row);
+        Launched.Within(row, found => found.ByAutomationId("detail.remove"), $"{row.AutomationId}'s Remove account").Focus();
+    }
 
     private static void Switch(Launched launched, string qualified) =>
         Launched.Within(launched.Row(qualified), found => found.ByAutomationId("account.action"), $"{qualified}'s button")
