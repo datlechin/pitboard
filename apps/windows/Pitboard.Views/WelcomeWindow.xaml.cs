@@ -70,15 +70,14 @@ public sealed partial class WelcomeWindow : Window
         ShowLogin();
     }
 
-    // What Windows has, and why it cannot change here where it cannot, as the settings say it.
     private void ShowLogin()
     {
         var login = Welcome.OpenAtLogin;
         LoginCard.Header = login.Title;
-        LoginCard.Description = _start.Refusal ?? (_start.TurnedOff ? Words.Settings.StartupTurnedOff : null) ?? login.Note;
+        LoginCard.Description = _start.Note(login.Note);
         AutomationProperties.SetName(StartsAtSignIn, login.Title);
         StartsAtSignIn.IsOn = _start.On;
-        StartsAtSignIn.IsEnabled = _start.Refusal is null && !_start.TurnedOff;
+        StartsAtSignIn.IsEnabled = _start.CanTurnOn;
     }
 
     public static string ToolId(string code) => $"welcome.tool.{code}";
@@ -142,7 +141,8 @@ public sealed partial class WelcomeWindow : Window
         Close();
     }
 
-    // As tall as what it shows, within its screen, centred on it.
+    // As tall as what it shows, within its screen, centred on it. A window has no default button, so the focus starts
+    // on Get started, the accent one, for Enter to press.
     private void OnLoaded(object sender, RoutedEventArgs args)
     {
         Root.Measure(new global::Windows.Foundation.Size(ContentWidth, double.PositiveInfinity));
@@ -152,5 +152,6 @@ public sealed partial class WelcomeWindow : Window
         AppWindow.Move(new PointInt32(
             area.X + ((area.Width - AppWindow.Size.Width) / 2), area.Y + ((area.Height - AppWindow.Size.Height) / 2)));
         WindowChrome.Fit(this);
+        Done.Focus(FocusState.Programmatic);
     }
 }

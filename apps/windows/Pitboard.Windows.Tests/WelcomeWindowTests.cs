@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Pitboard.Core;
 using Pitboard.Views;
@@ -133,6 +134,8 @@ public sealed class WelcomeWindowTests
             Assert.AreEqual("Get started", done.Content);
             Assert.AreEqual(Application.Current.Resources["AccentButtonStyle"], done.Style);
             Assert.AreEqual("G", done.AccessKey);
+            // A window has no default button: Enter presses Get started where the focus starts on it.
+            await Views.Until(() => FocusManager.GetFocusedElement(done.XamlRoot) == done, "the welcome opened with the focus elsewhere");
 
             Views.Press(done);
 

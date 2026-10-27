@@ -59,11 +59,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool StartsAtSignIn => _start.On;
 
-    public bool CanStartAtSignIn => _start.Refusal is null && !_start.TurnedOff;
+    public bool CanStartAtSignIn => _start.CanTurnOn;
 
-    // Why it cannot be turned on, as the welcome says it, or what it is for.
-    public string StartupNote =>
-        _start.Refusal ?? (_start.TurnedOff ? Words.Settings.StartupTurnedOff : null) ?? Words.Settings.OpenAtLoginNote;
+    public string StartupNote => _start.Note(Words.Settings.OpenAtLoginNote);
 
     public string? StartupFailed => _start.Failed;
 
