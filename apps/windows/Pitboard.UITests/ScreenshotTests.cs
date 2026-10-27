@@ -293,6 +293,7 @@ public sealed partial class ScreenshotTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "unnamed");
         var window = InFront(launched.OpenWindow());
+        launched.DeclineTip(Words.UseWithCodex);
         launched.Element("account.action");
         KeepWindow(window, "windows-window-unnamed");
         launched.Invoke("account.action");
