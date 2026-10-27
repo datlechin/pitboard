@@ -155,10 +155,10 @@ public sealed class ModelTests
             Choices: AtLimitChoices,
             At: 95, Lowest: 50, Highest: 99, Enabled: true, ShareEnabled: true, Heading: "When a limit reaches",
             AtLabel: "When a limit reaches 95%",
-            ShareLabel: "Share of a limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: null),
+            ShareLabel: "Share of a limit", ShareRange: "From 50% to 99%", Note: null, Standing: null, Terms: Terms),
         Warm: new WarmShown(
             Title: "Warm up limits", From: 360, To: 1320, RangeLabel: "06:00 to 22:00", Accounts: [],
-            NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false, Terms: Terms));
+            NoneEnrolled: "No Claude Code account is enrolled yet.", Standing: null, Note: "", Enabled: false));
 
     // One array, so two snapshots made here are equal.
     private static readonly AtLimitChoice[] AtLimitChoices =

@@ -9,7 +9,6 @@ public sealed class SettingsViewModelTests
     {
         Choice = AtLimit.Switch,
         Note = "Pitboard switches Claude Code.",
-        Terms = Snapshots.Terms,
     };
 
     private static readonly string[] AtLimitChoices = ["Do nothing", "Notify me", "Switch automatically"];
@@ -22,7 +21,7 @@ public sealed class SettingsViewModelTests
             new WarmAccountShown("claude/work", "work", On: false, Standing: null),
         ],
         NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
-        Enabled: true, Terms: Snapshots.Terms);
+        Enabled: true);
 
     private static Snapshot With(ulong revision, Func<MachineShown, MachineShown> change)
     {
@@ -252,37 +251,25 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("From 50% to 99%", shown.ShareRange);
         Assert.IsTrue(shown.CanSetShare);
         Assert.IsTrue(shown.ShowsShare);
-        Assert.IsTrue(shown.HasAtLimitTerms);
 
         app.Apply(With(2, machine => machine with
         {
-            AtLimit = Switching with { Choice = AtLimit.Nothing, ShareEnabled = false, Note = null, Terms = null },
+            AtLimit = Switching with { Choice = AtLimit.Nothing, ShareEnabled = false, Note = null },
         }));
 
         Assert.AreEqual(0, shown.AtLimitIndex);
         Assert.IsFalse(shown.CanSetShare, "no share while nothing happens at it");
         Assert.IsFalse(shown.ShowsShare);
         Assert.IsFalse(shown.HasAtLimitNote);
-        Assert.IsFalse(shown.HasAtLimitTerms);
     }
 
-    // The model says Is this allowed? once: beside switching while it is chosen, beside warm-up otherwise.
     [TestMethod]
-    public void TheTermsAreLinkedWhereTheModelSaysThem()
+    public void TheTermsAreTheModelsLink()
     {
-        var (shown, _, app) = Over(With(1, machine => machine with
-        {
-            AtLimit = Switching,
-            Warm = TwoWarmed with { Terms = null },
-        }));
+        var (shown, _, _) = Over(With(1, machine => machine with { AtLimit = Switching }));
 
-        Assert.IsTrue(shown.HasAtLimitTerms);
-        Assert.IsFalse(shown.HasWarmTerms);
         Assert.AreEqual(Snapshots.Terms.LinkTitle, shown.TermsLinkTitle);
-
-        app.Apply(With(2, machine => machine with { Warm = TwoWarmed }));
-
-        Assert.IsTrue(shown.HasWarmTerms);
+        Assert.AreEqual(Snapshots.Terms.Link, shown.TermsLink);
     }
 
     [TestMethod]

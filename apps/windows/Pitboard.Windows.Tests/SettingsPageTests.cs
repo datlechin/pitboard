@@ -28,7 +28,7 @@ public sealed class SettingsPageTests
             new WarmAccountShown("claude/work", "work", On: false, Standing: null),
         ],
         NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
-        Enabled: true, Terms: Snapshots.Terms);
+        Enabled: true);
 
     private const string NewTerminals = "Pitboard’s installer puts pitboard on your PATH, which terminals opened after it ran see.";
 
@@ -308,13 +308,14 @@ public sealed class SettingsPageTests
         Assert.AreEqual("When a limit reaches", Views.Element<SettingsExpander>(page, "settings.atLimitGroup").Header);
         Assert.IsTrue(share.IsEnabled);
         Assert.IsFalse(Shows(page, "settings.autoSwitchStanding"), "nothing said while it does not switch");
+        Assert.IsTrue(Views.Visible<HyperlinkButton>(page).Any(link => AutomationProperties.GetAutomationId(link) == "settings.atLimitTerms"));
 
         choice.SelectedIndex = 2;
         Assert.Contains(new Intent.SetAtLimit(AtLimit.Switch, 95), model.Sent);
 
         app.Apply(With(2, machine => machine with
         {
-            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, Standing = Watching, Terms = Snapshots.Terms },
+            AtLimit = machine.AtLimit with { Choice = AtLimit.Switch, Standing = Watching },
         }));
         Assert.IsTrue(Shows(page, "settings.autoSwitchStanding"));
         Assert.Contains(Watching, Views.Texts(page));
@@ -341,11 +342,10 @@ public sealed class SettingsPageTests
     public async Task TheTermsLinkOpensWhetherThisIsAllowed()
     {
         var opened = new List<Uri>();
-        var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))), open: opened.Add);
-        await Expand(page, "settings.warm", Snapshots.Terms.LinkTitle);
+        var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), open: opened.Add);
 
         Assert.DoesNotContain(Snapshots.Terms.Sentence, Views.Texts(page));
-        new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(page, "settings.warmTerms")).Invoke();
+        new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(page, "settings.atLimitTerms")).Invoke();
 
         Assert.AreEqual(new Uri(Snapshots.Terms.Link), opened.Single());
     }
@@ -432,7 +432,7 @@ public sealed class SettingsPageTests
 
     // The toolkit's own sample gives a card in ItemsHeader or ItemsFooter the style of the expander's items.
     [UITestMethod]
-    public async Task TheWarmUpsHoursAndLinkAreCardsAsItsAccountsAre()
+    public async Task TheWarmUpsHoursAreCardsAsItsAccountsAre()
     {
         var page = await Shown(new AppModel(new StandInModel(With(1, machine => machine with { Warm = TwoWarmed }))));
         await Expand(page, "settings.warm", "personal · Max");
@@ -442,7 +442,6 @@ public sealed class SettingsPageTests
         {
             ("From", Card(Views.Element<TimePicker>(page, "settings.warmFrom"))),
             ("To", Card(Views.Element<TimePicker>(page, "settings.warmTo"))),
-            ("Is this allowed?", Card(Views.Element<HyperlinkButton>(page, "settings.warmTerms"))),
         })
         {
             Assert.AreEqual(account.Padding, card.Padding, name);

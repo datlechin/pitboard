@@ -40,7 +40,7 @@ test.describe("macOS", () => {
     await expect(box).toHaveAccessibleName("When a limit reaches");
     await expect(fig.locator('[data-note="notify"]')).toHaveText(notify);
     await expect(fig.locator("[data-standing]")).toBeHidden();
-    await expect(fig.getByRole("link", { name: "Is this allowed?" })).toBeHidden();
+    await expect(fig.getByRole("link", { name: "Is this allowed?" })).toBeVisible();
     const tall = await height(fig);
 
     const at = (await box.boundingBox())!;

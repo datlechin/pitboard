@@ -89,16 +89,16 @@ package func snapshot(
                 ], at: 95, lowest: 50, highest: 99, enabled: true, shareEnabled: true,
                 heading: "When a limit reaches", atLabel: "When a limit reaches 95%",
                 shareLabel: "Share of a limit", shareRange: "From 50% to 99%", note: nil,
-                standing: nil, terms: nil),
+                standing: nil,
+                terms: TermsShown(
+                    sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
+                    linkTitle: "Is this allowed?",
+                    link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed")),
             warm: WarmShown(
                 title: "Warm up limits", from: 360, to: 1320, rangeLabel: "06:00 to 22:00",
                 accounts: warming,
                 noneEnrolled: warming.isEmpty ? "No Claude Code account is enrolled yet." : nil,
-                standing: nil, note: "", enabled: false,
-                terms: TermsShown(
-                    sentence: "Anthropic’s terms may cover automatic switching and warm-ups.",
-                    linkTitle: "Is this allowed?",
-                    link: "https://docs.usepitboard.com/concepts/limits#is-this-allowed"))),
+                standing: nil, note: "", enabled: false)),
         accountWindows: windows,
         uninstall: ItemOffer(
             title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),

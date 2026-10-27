@@ -36,8 +36,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with **Sign In Again**.
 - The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
   at first, before it runs out, with **Switch** where another account has room.
-- The app's **Settings** link **Is this allowed?** beside switching automatically while it is
-  chosen and beside warm-up otherwise, and the Windows app's beside warm-up always.
+- The app's **Settings** link **Is this allowed?** under **When a limit reaches**, whatever it is
+  set to.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
 - The macOS menu bar mark carries a badge while the menu opens on something that needs

@@ -4,7 +4,7 @@
 // and its hours beside it, each a section live/limits.ts works, each with its icon. Each control is
 // named as the XAML names it; each expander's button shows and hides its items, and their ids start
 // `prefix`. Every choice's words are drawn, those of the choice not shown hidden. Is this allowed?
-// is the link alone, beside switching and under the warm-up's accounts. The time pickers' flyouts
+// is the link alone, under When a limit reaches whatever is chosen. The time pickers' flyouts
 // open over the window, from the desk, where `flyouts` draws them alone.
 import ComboBox from "./ComboBox.astro";
 import NumberBox from "./NumberBox.astro";
@@ -53,7 +53,7 @@ const warmAccounts = toolAccounts(moments.after, "claude").map((a, i) => ({
   id: a.id,
   ...page.warm.accounts[i],
 }));
-const card = "min-h-48";
+const card = "min-h-48 last:rounded-b-u-4";
 const link =
   "text-win-accent-text focus-win live:text-win-accent-text live:hover:text-win-accent-text";
 const icon = "size-20 shrink-0";
@@ -89,7 +89,6 @@ const icon = "size-20 shrink-0";
             href={`${DOCS}/concepts/limits#is-this-allowed`}
             target="_blank"
             rel="noopener"
-            data-terms
             >{page.atLimit.link}</a
           >
         </span>
@@ -175,15 +174,6 @@ const icon = "size-20 shrink-0";
             <Toggle />
           </div>
         </template>
-        <div class:list={[item, "min-h-48 rounded-b-u-4"]}>
-          <a
-            class:list={["no-underline", link]}
-            href={`${DOCS}/concepts/limits#is-this-allowed`}
-            target="_blank"
-            rel="noopener"
-            >{page.atLimit.link}</a
-          >
-        </div>
       </div>
     </div>}
   </>
