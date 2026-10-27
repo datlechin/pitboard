@@ -1,6 +1,6 @@
 //! What a download is called, where it comes from, and what asking before one says.
 
-use super::AlertText;
+use crate::present::{Question, words};
 use pitboard_core::host::{OS, Os};
 use pitboard_sites::WebAddress;
 use std::path::{Path, PathBuf};
@@ -145,20 +145,19 @@ pub fn download_host(url: Option<String>) -> Option<String> {
     address.host().map(str::to_owned)
 }
 
-/// What asking before a download of `name` from `host` says, when a page inside the site
-/// rather than the site's own page started it.
+// Asked where a page inside the site, rather than the site's own page, started the download.
 #[uniffi::export]
-pub fn download_question(name: String, host: Option<String>) -> AlertText {
-    AlertText {
-        next: None,
-        title: match host.filter(|host| !host.is_empty()) {
+pub fn download_question(name: String, host: Option<String>) -> Question {
+    Question::asking(
+        match host.filter(|host| !host.is_empty()) {
             Some(host) => format!("Download “{name}” from {host}?"),
             None => format!("Download “{name}”?"),
         },
-        message: "A page inside the site, such as an artifact, asked to save this file in your \
-                  Downloads folder."
+        "A page inside the site, such as an artifact, asked to save this file in your Downloads \
+         folder."
             .into(),
-    }
+        words::DOWNLOAD.into(),
+    )
 }
 
 #[cfg(test)]
@@ -449,11 +448,19 @@ mod tests {
         );
     }
 
-    /// As PageDialogs.swift asked it.
+    // As PageDialogs.swift asked it.
     #[test]
     fn asking_before_a_download_names_the_file_and_its_host() {
         let asked = download_question("report.pdf".into(), Some("claude.ai".into()));
         assert_eq!(asked.title, "Download “report.pdf” from claude.ai?");
+        assert_eq!(
+            (
+                asked.confirm.as_str(),
+                asked.destructive,
+                asked.confirm_is_default
+            ),
+            ("Download", false, true)
+        );
         assert_eq!(
             asked.message,
             "A page inside the site, such as an artifact, asked to save this file in your \

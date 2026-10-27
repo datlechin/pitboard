@@ -715,6 +715,8 @@ pub(crate) fn remove_account(os: Os) -> String {
 
 pub(crate) const REMOVE: &str = "Remove";
 
+pub(crate) const DOWNLOAD: &str = "Download";
+
 pub(crate) fn remove_title(name: &str) -> String {
     format!("Remove “{name}”?")
 }

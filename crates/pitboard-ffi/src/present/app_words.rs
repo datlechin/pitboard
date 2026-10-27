@@ -451,7 +451,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             zoom_in: titled(os, "Zoom In", "Zoom in"),
             zoom_out: titled(os, "Zoom Out", "Zoom out"),
             go: "Go".into(),
-            download: "Download".into(),
+            download: words::DOWNLOAD.into(),
             stop_download_help: "Stop this download".into(),
             show_file: match os {
                 Os::Windows => "Show in folder",

@@ -2,7 +2,8 @@
 //! keeps.
 
 use super::accounts::WindowAccount;
-use super::{AlertText, this_machine};
+use super::this_machine;
+use crate::present::{Question, words};
 use pitboard_core::host::{OS, Os};
 
 // Said in the bar above a window's page until dismissed or replaced, or for `StoreHeld` by
@@ -62,25 +63,24 @@ pub fn opening_note(store_made_before: bool) -> Option<WindowNoteKind> {
     (!store_made_before).then_some(WindowNoteKind::SignIn)
 }
 
-/// What the alert asking to remove what `account`'s window keeps says. The site is not told,
-/// so the account stays signed in everywhere else.
+// The site is not told, so the account stays signed in everywhere else.
 #[uniffi::export]
-pub fn remove_data_alert(account: WindowAccount) -> AlertText {
+pub fn remove_data_alert(account: WindowAccount) -> Question {
     remove_data_alert_on(OS, &account)
 }
 
-fn remove_data_alert_on(os: Os, account: &WindowAccount) -> AlertText {
+fn remove_data_alert_on(os: Os, account: &WindowAccount) -> Question {
     let name = &account.site.name;
-    AlertText {
-        next: None,
-        title: format!("Remove {name} data for “{}”?", account.label),
-        message: format!(
+    Question::asking(
+        format!("Remove {name} data for “{}”?", account.label),
+        format!(
             "Pitboard removes the cookies and everything else {name} keeps in this window on \
              {}, which signs this window out. {name} isn’t told: the account stays signed in \
              on your other devices and browsers.",
             this_machine(os)
         ),
-    }
+        words::REMOVE.into(),
+    )
 }
 
 #[cfg(test)]
@@ -157,6 +157,14 @@ mod tests {
         let work = window("work", "claude");
         let mac = remove_data_alert_on(Os::MacOs, &work);
         assert_eq!(mac.title, "Remove claude.ai data for “work”?");
+        assert_eq!(
+            (
+                mac.confirm.as_str(),
+                mac.destructive,
+                mac.confirm_is_default
+            ),
+            ("Remove", false, true)
+        );
         assert_eq!(
             mac.message,
             "Pitboard removes the cookies and everything else claude.ai keeps in this window on \

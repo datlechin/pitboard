@@ -129,8 +129,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
     public void CloseSignIn() => _signIn?.Close();
 
     // As the macOS app asks, over the window.
-    public Task<bool> AllowDownload(AlertText question) =>
-        Confirm(new Question(question.Title, question.Message, Words.AccountWindow.Download, Destructive: false, ConfirmIsDefault: true));
+    public Task<bool> AllowDownload(Question question) => Confirm(question);
 
     public void Shown(string address) => _send(new Intent.PageShown(Store, address));
 
@@ -439,8 +438,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
             return;
         }
 
-        var alert = PitboardFfiMethods.RemoveDataAlert(session.Account);
-        if (!await Confirm(new Question(alert.Title, alert.Message, Words.AccountWindow.Remove, Destructive: false, ConfirmIsDefault: true)))
+        if (!await Confirm(PitboardFfiMethods.RemoveDataAlert(session.Account)))
         {
             return;
         }

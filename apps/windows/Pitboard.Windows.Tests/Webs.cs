@@ -212,13 +212,13 @@ internal sealed class StandInWindow(Webs webs, WindowAccount account, bool answe
 
     public List<string> Pages { get; } = [];
 
-    public List<AlertText> Questions { get; } = [];
+    public List<Question> Questions { get; } = [];
 
     // An answer still to come, in place of the one given.
     public Task<bool>? Pending { get; init; }
 
     // Done as each question is asked, before it is answered.
-    public Action<AlertText>? Asking { get; init; }
+    public Action<Question>? Asking { get; init; }
 
     // Whether a sign-in window fails as one closed while its page was made does.
     public bool SignInFails { get; init; }
@@ -237,7 +237,7 @@ internal sealed class StandInWindow(Webs webs, WindowAccount account, bool answe
 
     public void CloseSignIn() => Closed++;
 
-    public Task<bool> AllowDownload(AlertText question)
+    public Task<bool> AllowDownload(Question question)
     {
         Questions.Add(question);
         Asking?.Invoke(question);
