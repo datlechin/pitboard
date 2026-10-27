@@ -190,17 +190,22 @@ public sealed class MainWindowTests
         {
             var frame = Pages(window);
             var titles = new List<Rect>();
+            var headings = new List<Rect>();
             var bars = new List<Rect>();
             foreach (var place in Places)
             {
                 var page = await Showing(window, place);
                 titles.Add(Bounds(Title(page), frame));
+                headings.Add(Bounds(Heading(page), frame));
                 bars.AddRange(Views.Visible<CommandBar>(page).Take(1).Select(bar => Bounds(bar, frame)));
             }
 
-            var said = string.Join(" | ", titles.Select(at => $"{at.Left},{at.Top}"));
-            Assert.IsLessThanOrEqualTo(1.0, titles.Max(at => at.Top) - titles.Min(at => at.Top), $"titles at {said}");
-            Assert.IsLessThanOrEqualTo(1.0, titles.Max(at => at.Left) - titles.Min(at => at.Left), $"titles at {said}");
+            Assert.IsLessThanOrEqualTo(
+                1.0, titles.Max(at => at.Top) - titles.Min(at => at.Top), $"titles at {string.Join(" | ", titles.Select(at => at.Top))}");
+            // A breadcrumb's title follows the way back to Settings, which starts where every other page's title does.
+            Assert.IsLessThanOrEqualTo(
+                1.0, headings.Max(at => at.Left) - headings.Min(at => at.Left),
+                $"headings at {string.Join(" | ", headings.Select(at => at.Left))}");
             Assert.HasCount(3, bars);
             Assert.IsLessThanOrEqualTo(1.0, bars.Max(at => at.Top) - bars.Min(at => at.Top), string.Join(" | ", bars.Select(at => at.Top)));
         }
