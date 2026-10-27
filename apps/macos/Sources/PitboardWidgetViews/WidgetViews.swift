@@ -105,7 +105,7 @@ struct Said: View {
     }
 }
 
-// Its name, what is said beside it where there is room, and whether it is in use.
+// Its name, what is said beside it where there is room, and In Use or the Switch button.
 struct AccountHeading: View {
     let account: GlanceAccount
     let aside: String?
@@ -129,6 +129,8 @@ struct AccountHeading: View {
                     .foregroundStyle(.tint)
                     .widgetAccentable()
                     .accessibilityLabel(words.inUse)
+            } else {
+                SwitchButton(account: account, words: words)
             }
         }
     }
@@ -269,6 +271,25 @@ struct Resets: View {
             }
             .lineLimit(1)
         }
+    }
+}
+
+// macOS 27 runs it in the app; before that a click on the widget opens Pitboard.
+struct SwitchButton: View {
+    let account: GlanceAccount
+    let words: GlanceWords
+
+    var body: some View {
+        #if compiler(>=6.4)
+            if #available(macOS 27.0, *),
+                account.standing == .ready || account.standing == .expiring
+            {
+                Button(intent: SwitchButtonIntent(account: AccountEntity(account))) {
+                    Text(words.switchButton)
+                }
+                .controlSize(.small)
+            }
+        #endif
     }
 }
 

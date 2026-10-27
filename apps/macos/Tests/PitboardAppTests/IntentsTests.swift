@@ -9,7 +9,7 @@ import Testing
 private let glanceWords = """
     {"in_use": "In Use", "resets_in": "Resets in", "resetting_now": "Resetting now",
      "updated": null, "no_accounts": "No Accounts", "none_in_use": "No account is in use.",
-     "open_to_switch": "Open Pitboard to switch accounts."}
+     "switch_button": "Switch", "open_to_switch": "Open Pitboard to switch accounts."}
     """
 
 private let twoTools = """

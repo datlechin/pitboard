@@ -64,11 +64,3 @@ public enum Actions {
 
 // Asks the quit question the model answered with, and throws where the person said no.
 public typealias Confirming = @Sendable (Question) async throws -> Void
-
-// What an action that did not do what it was asked says, in the model's words: Shortcuts stops
-// the shortcut there, so nothing after it runs on a switch that did not happen.
-public struct Refused: Error, Equatable, CustomLocalizedStringResourceConvertible {
-    public let said: String
-
-    public var localizedStringResource: LocalizedStringResource { "\(said)" }
-}

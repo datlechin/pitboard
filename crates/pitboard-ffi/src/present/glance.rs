@@ -36,6 +36,8 @@ struct GlanceWords {
     updated: Option<String>,
     no_accounts: String,
     none_in_use: &'static str,
+    // a widget's Switch, on macOS 27
+    switch_button: &'static str,
     open_to_switch: &'static str,
 }
 
@@ -104,6 +106,7 @@ pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) 
             updated: read_at.map(|at| words::updated(&seen.clock(at))),
             no_accounts: words::no_accounts(os).0,
             none_in_use: words::NONE_IN_USE,
+            switch_button: words::SWITCH,
             open_to_switch: words::OPEN_TO_SWITCH,
         },
         accounts,

@@ -21,7 +21,7 @@ private func goldenGlance() throws -> Glance {
             == GlanceWords(
                 inUse: "In Use", resetsIn: "Resets in", resettingNow: "Resetting now",
                 updated: "Updated 08:00", noAccounts: "No Accounts",
-                noneInUse: "No account is in use.",
+                noneInUse: "No account is in use.", switchButton: "Switch",
                 openToSwitch: "Open Pitboard to switch accounts."))
 
     let work = glance.accounts[0]
@@ -106,4 +106,14 @@ private func goldenGlance() throws -> Glance {
     #expect(AccountQuery.entities(ids, in: glance).map(\.name) == ["main"])
     #expect(AccountQuery.entities(ids, in: nil).isEmpty)
     #expect(AccountQuery.entities(in: nil).isEmpty)
+}
+
+// The system runs a widget's Switch in the app alone; asked in the extension, it says so.
+@Test func aSwitchTheWidgetExtensionIsAskedForSwitchesNothingAndSaysWhere() async throws {
+    let glance = try goldenGlance()
+    let actions = GlanceActions.refusing(GlanceSource { glance })
+    let personal = AccountQuery.entities(in: glance)[1]
+    await #expect(throws: Refused(said: "Open Pitboard to switch accounts.")) {
+        try await actions.switchTo(personal)
+    }
 }

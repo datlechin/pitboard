@@ -10,7 +10,7 @@ import WidgetKit
 struct PitboardWidgets: WidgetBundle {
     init() {
         AppDependencyManager.shared.add(dependency: GlanceSource.group)
-        AppDependencyManager.shared.add(dependency: GlanceActions(open: {}))
+        AppDependencyManager.shared.add(dependency: GlanceActions.refusing(.group))
     }
 
     var body: some Widget {

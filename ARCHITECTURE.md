@@ -146,7 +146,7 @@ The apps:
   - `Sources/PitboardKit`: `AppModel`, the model and its newest snapshot on the main actor.
   - `Sources/PitboardLinkTarget`: where a Pitboard link goes, for the app and the extension.
   - `Sources/PitboardGlance`: the glance and the account Shortcuts and widgets know, the App
-    Group it is kept in and the control's button, no Rust.
+    Group it is kept in and the widgets' and control's buttons, no Rust.
   - `Sources/PitboardWidgetViews`: what the widgets draw and their timeline, no Rust.
   - `Sources/PitboardApp`: the views (`MenuBar`, `Window`, `Sheets`, `Settings`, `Design`),
     the account windows (`AccountWindows`), the launch (`App`), what the model asks of macOS
@@ -507,7 +507,9 @@ on.
   so an ad hoc build touches no group container and macOS never asks about one
   (`aBuildWithNoTeamKeepsOutOfEveryGroup`, `scripts/build-app.sh`). The widgets and the
   control reload only with `glance_revision`
-  (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`).
+  (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`). A widget's Switch, on macOS 27
+  and from Xcode 27, runs in the app alone, and asked of the extension it switches nothing
+  (`aSwitchTheWidgetExtensionIsAskedForSwitchesNothingAndSaysWhere`).
 - `pitboard-sites` stays a leaf: no I/O, nothing of the core and no UniFFI (its `Cargo.toml`
   depends on `url` alone). Each binding crate declares its own types over it, since the C#
   generator cannot use another crate's.

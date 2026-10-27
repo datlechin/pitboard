@@ -31,11 +31,12 @@ public struct GlanceWords: Decodable, Equatable, Sendable {
     public let updated: String?
     public let noAccounts: String
     public let noneInUse: String
+    public let switchButton: String
     public let openToSwitch: String
 
     public init(
         inUse: String, resetsIn: String, resettingNow: String, updated: String?,
-        noAccounts: String, noneInUse: String, openToSwitch: String
+        noAccounts: String, noneInUse: String, switchButton: String, openToSwitch: String
     ) {
         self.inUse = inUse
         self.resetsIn = resetsIn
@@ -43,6 +44,7 @@ public struct GlanceWords: Decodable, Equatable, Sendable {
         self.updated = updated
         self.noAccounts = noAccounts
         self.noneInUse = noneInUse
+        self.switchButton = switchButton
         self.openToSwitch = openToSwitch
     }
 }

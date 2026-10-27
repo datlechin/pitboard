@@ -33,7 +33,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 await model.glance(within: Actions.patience).flatMap { Glance(Data($0.utf8)) }
             })
         AppDependencyManager.shared.add(
-            dependency: GlanceActions(open: { await Actions.opening(model) }))
+            dependency: GlanceActions(
+                open: { await Actions.opening(model) },
+                switchTo: { _ = try await Actions.switching(to: $0, with: model, asking: nil) }
+            ))
         GlanceWatch.live(shortcuts: AppDelegate.shortcuts).watch(model)
         self.model = model
         defaults = dependencies.defaults
