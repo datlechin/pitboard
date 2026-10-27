@@ -5,173 +5,223 @@ description: "Look up what the menu bar app shows and when, what it does by itse
 
 The menu bar app runs on macOS 14 or later. [The app on Windows](/reference/windows-app) has its own page.
 
-The app calls the same core as the command line, not `pitboard`, so both see the same accounts, [parked logins](/concepts/switching#parked-logins) and log.
+The app calls the same core as the command line, not `pitboard`, so both see the same accounts and log. A saved sign-in in the app is what the command line calls a [parked login](/concepts/switching#parked-logins).
 
-While any of its windows is open, Pitboard also has a Dock icon, a place in the Command-Tab switcher and its own menus. Its windows are the Pitboard window, Settings, each [account's window](/reference/account-windows#account-windows) and the [**Open Link** window](/reference/account-windows#open-link-window). Its **Pitboard** menu has **Check for Updates** in a copy that can update itself, as [Updates](/reference/settings#updates) says.
+While any of its windows is open, Pitboard also has a Dock icon, a place in the Command-Tab switcher and its own menus. Its windows are **Accounts**, Settings, **Diagnostics**, **Activity**, the welcome window, each [account's window](/reference/account-windows#account-windows) and the [**Open Link** window](/reference/account-windows#open-link-window). Its **Pitboard** menu has **Check for Updates** in a copy that can update itself, as [Updates](/reference/settings#updates) says.
 
-The first time the app runs, it opens the Pitboard window. Opening Pitboard from Finder or Spotlight with no window open does the same. The Dock icon's menu lists the items that open account windows, then **Open Pitboard**.
+The first time the app runs, it opens the [welcome window](#welcome-window). Opening Pitboard from Finder or Spotlight with no window open opens **Accounts**. The Dock icon's menu lists the items that open account windows, then **Open Pitboard**.
 
-Once more than one tool has accounts, the menu and the **Accounts** pane head each tool's accounts with its name, in the order Claude Code, Codex, Claude Desktop. Notices, notifications, the second-account tip and the question before **Forget** then name the tool, as in **Switched Codex to work** and **Add a second Codex account**.
+Once more than one tool has accounts, the menu and **Accounts** head each tool's accounts with its name, in the order Claude Code, Codex, Claude Desktop. Notices and the second-account tip then name the tool, as in **Switched Codex to work** and **Add a second Codex account**.
 
 ## Menu bar item
 
-Pitboard's item in the menu bar shows the Pitboard mark, the account in use and how much of one limit it has used, such as **work 42%**. [Menu bar shows](/reference/settings#menu-bar-shows) can leave out the label, or the label and the percentage.
+Pitboard's item in the menu bar shows the Pitboard mark, the account in use and how much of one limit it has used, such as **work 42%**. [Menu Bar Shows](/reference/settings#menu-bar-shows) can leave out the name, or the name and the percentage.
 
 | Part | Rule |
 | --- | --- |
-| Label | The label of the account in use, or **unnamed** when it is not enrolled. Past 12 characters, it is cut to 11 and an ellipsis. |
+| Name | The name of the account in use, or **unnamed** when it is not added. Past 12 characters, it is cut to 11 and an ellipsis. |
 | Percentage | The fullest limit, as a whole percentage. A limit for one model counts only when there is no other. When Anthropic marks some limits active, only those count. |
-| Which account, with several tools | The enrolled account in use closest to running out. An account with no reading counts as the least used, and a Claude Desktop account never has one. |
+| Which account, with several tools | The added account in use closest to running out. An account with no reading counts as the least used, and a Claude Desktop account never has one. |
 | A tie between tools | Goes to the tool listed first: Claude Code, then Codex, then Claude Desktop. |
 
-Before the first read, and while no tool is signed in, the item shows the symbol alone. Until the account has a reading, it shows the label alone.
+Before the first read, and while no tool is signed in, the item shows the mark alone. Until the account has a reading, it shows the name alone.
 
-While [the menu](#menu) opens on something that needs attention, the mark has a dot at its bottom right, and VoiceOver ends the item with **needs attention**.
+While [the menu](#menu) has something that needs attention, the mark carries a badge, and VoiceOver ends the item with **needs attention**.
 
 ## Menu
 
 Clicking Pitboard's item opens its menu: what needs attention, then the accounts, then the commands. What needs attention comes in this order:
 
-1. **Claude Code isn't installed**, while the app finds none of `claude`, `codex` and Claude's data folder, and no tool has a login or an account.
-2. **Switch to personal**, once the account in use runs out of a limit and `personal` has room.
-3. **Finish Adding**, **Finish Signing In** and **Put work Back**, while an add or a sign-in again to Claude Desktop is left halfway.
-4. The title of a notice in the [Accounts pane](#accounts-pane) with an orange or red symbol and no switch button, or a count such as **2 things to look at**.
-5. **Install Pitboard 0.10.1**, once a copy from a release finds an update.
+1. **Claude Code Isn't Installed**, while the app finds none of `claude`, `codex` and Claude's data folder, and no tool has a login or an account. It opens how to install Claude Code.
+2. Each switch a [notice](#notices) offers, with the notice's title under it, such as **Switch to personal** under **work reached its 5-hour limit**. While an add or a sign-in again inside Claude is left halfway, **Finish Adding** or **Finish Signing In** comes before its **Switch Back to work**.
+3. **Sign In to old Again**, for each account that needs a sign-in, with why under it, such as **Sign-in expired**.
+4. **1 Issue** or **2 Issues**, which counts the other notices that need attention, with the first one's title under it. It opens **Accounts**.
+5. **Install Pitboard 1.1.0**, once a copy from a release finds an update.
 
-A check mark shows the account in use in each tool. [Account status](/reference/account-status) explains the line under each account.
+Once more than one tool is listed, the line under items 2 and 3 starts with the tool, as in **Claude Code: Sign-in expired**.
+
+A check mark shows the account in use in each tool. The line under each account gives its limits, such as **5-hour 42% used, Weekly 12%**, or what stands in the way. [Account status](/reference/account-status) lists each line.
 
 | Choosing | Does |
 | --- | --- |
 | An account you can switch to | Switches to it. |
-| An account marked **Needs signing in again** | Opens **Sign In to work Again**. |
-| The account in use, marked **Not named yet** | Opens **Name This Account**. |
-| The account in use, when enrolled | Nothing. |
+| An account that needs a sign-in, such as one marked **Sign-in expired** | Opens **Sign In to old Again**. |
+| A sign-in marked **Not added yet** | Adds the account the tool is signed in to, then opens **Name This Account**. |
+| The account in use | Nothing. |
 
-While a switch runs, every item that would switch is dimmed. **Refresh** reads every account's usage again, even one read moments ago.
+While a switch runs, every account but the one in use is dimmed.
 
-## Window
+The commands follow: **Add Account**, then **Refresh** with the time of the last read under it, such as **Updated 6:42 AM**. **Refresh** reads every account's usage again, even one read moments ago. Then come **Open claude.ai** and **Open chatgpt.com** for the [account windows](/reference/account-windows#account-windows), **Open Pitboard**, **Settings**, **Check for Updates**, **About Pitboard**, **Pitboard Help** and **Quit Pitboard**.
 
-The Pitboard window's sidebar holds three panes: **Accounts**, **Activity** and **This Mac**. It opens on the pane you last showed.
+## Welcome window
 
-### Accounts pane
+The welcome window opens at the first launch, before **Accounts**. It says what Pitboard does and where its item is in the menu bar, and lists each tool Pitboard finds:
 
-The **Accounts** pane lists notices, then at most one setup tip, then the accounts by tool.
+| The tool shows | When | Clicking it |
+| --- | --- | --- |
+| The email address and **Add** | Claude Code is signed in to an account Pitboard has not added. | Adds that account, then opens **Name This Account**. |
+| **Sign In** | Claude Code is signed in to no account. | Opens **Add Account** for Claude Code. |
+| **Add**, beside Codex | No Codex account is added. | Reads which account Codex is signed in to, adds it, then opens **Name This Account**. |
+| **Add**, beside Claude Desktop | No Claude Desktop account is added. | Opens **Add Account** for Claude Desktop. |
+| **Added as work** | An account of the tool is added. | Nothing. |
+| **How to Install Claude Code**, beside Claude Code | Pitboard finds no tool. | Opens Anthropic's install page. |
 
-Under each account, notes say, in this order: why it cannot be used, why its numbers are old or when Pitboard last read it, which limit runs out first, how long its parked login lasts, and where its [warm-up](/guides/warm-up) stands while it is on. Only the account in use shows which limit runs out first. A bar's tooltip says what an even pace would have used so far.
+**Open Pitboard at Login** starts off. **Continue** closes the window and opens **Accounts**, as closing the window does. The **Window** menu does not list it, and it does not open again.
 
-The setup tip is the first of these that applies. **Not Now** stops it, for that tool alone where the tip names one.
+## Accounts window
 
-| Setup tip | Shown when |
-| --- | --- |
-| **Give this account a name** | A tool is signed in to an account Pitboard has not enrolled. |
-| **Add a second account** | Claude Code's or Codex's only enrolled account is the one in use. |
-| **Add a second Claude Desktop account** | Claude Desktop's only enrolled account is the one in use. |
-| **Use Pitboard with Codex** | Codex is installed and no Codex account is enrolled. It reads which account Codex is signed in to only once you click **Add Codex Account**. |
-| **Open Pitboard at login** | macOS does not open Pitboard at login. |
-| **Switch before a limit runs out** | Claude Code has two enrolled accounts, and nothing was chosen in [When a limit reaches](/reference/settings#when-a-limit-reaches). |
+**Accounts** lists the accounts by tool, with when Pitboard last read them under its title, such as **Updated 6:42 AM**. Its toolbar holds **Refresh**, **Add Account** and the inspector's button. It opens at 820 by 560 points, with the account in use selected.
 
-Notices, most pressing first:
+Each row shows the account's name and plan, then **In Use** or its button: **Switch**, **Sign In** or **Add**. Under them comes a line for each limit: its name, a bar, the percentage used and when it resets, such as **Resets 3:45 PM** or **Resets Mon 9:00 AM**. At most one note follows, only when there is something to do. [Account status](/reference/account-status) lists each note.
+
+The inspector beside the list shows the selected account: each limit with how much of it is used, when it resets and how long until then, such as **in 2 hr 9 min**, then **Email**, **Sign-In**, such as **Saved sign-in valid until Nov 20**, and **Warm-Up** with **Warm-Up Settings**. Notes its row has no room for follow, then the account's [commands](#account-commands-and-dialogs).
+
+Control-Command-I or the toolbar's button shows and hides the inspector. With no account selected, it reads **No Account Selected**.
+
+In place of the list, **Accounts** shows one of these:
+
+| Shown | When | Button |
+| --- | --- | --- |
+| **No Accounts** | Pitboard found no account. | **Add Account** |
+| **Claude Code Isn't Installed** | The app finds no tool, as in [the menu](#menu). | **How to Install Claude Code** |
+| **Couldn't Read Accounts**, and why | A read failed with no account to list. | **Try Again** |
+| **Reading accounts** | Pitboard has not read yet. | None |
+
+### Notices
+
+Notices sit above the list, most pressing first, with their buttons. Some have a close button, **Dismiss**.
 
 | Notice | Shown when |
 | --- | --- |
-| **An interrupted switch is waiting** | A switch stopped partway, and Pitboard cannot yet tell whether it finished. Where a Claude Desktop move waits too, it says so and stands in for **An interrupted move is waiting**. |
-| **Couldn't read usage** | The last read failed. |
-| **work has no 5-hour limit left** | The account in use ran out of a limit, and another account of its tool has room. |
-| **Switched to work** | The app finished a switch, or a sign-in inside Claude put another account in use. One with nothing under its title goes once its countdown ends. |
-| **work has a new login** | A sign-in in the app gave the account in use a new login. |
-| **Adding a Claude Desktop account isn't finished**, **Signing in to home again isn't finished** | An add or a sign-in again inside Claude was left halfway with `work` parked for it. It stays across relaunches. |
-| **Claude Code's config names another account** | The config names another account than the stored login's. **Update Claude Code's Config** writes the account in use into the config and moves no login. |
-| **A login file is left behind the keychain** | `~/.claude/.credentials.json` sits behind the keychain. **Put Away** does what [`pitboard stow`](/reference/recovery-commands#stow) does. |
-| **An interrupted move is waiting** | A Claude Desktop move was interrupted, and its record waits. **Give Up** shows once a Claude Desktop change from the app could not settle the move. |
-| **The account in use isn't confirmed**, on a Claude Desktop account | Claude's settings have named another account, or nobody, since Pitboard last read Claude. |
-| Another warning's title | A read or a change warned. [Warning codes](/reference/errors#warning-codes) lists each title. |
-| **Gave up on the interrupted switch**, **Gave up on the interrupted move**, **Put away the login left in a file** | You gave up, or **Put Away** finished. Its lines say what became of each login. |
+| **A switch didn't finish** | A switch stopped partway, and Pitboard cannot yet tell whether it finished. **Cancel Switch** cancels it after asking, and keeps every sign-in. Where a switch in Claude waits too, it says so. |
+| **Couldn't read usage** | The last read failed. **Try Again** reads again. |
+| **work reached its 5-hour limit** | The account in use reached a limit, and another account of its tool has room. Its button switches to that one. |
+| **Switched to work** | The app finished a switch. A countdown says when open sessions follow, and a notice with nothing more to say goes once it ends. After a switch the app made by itself, **Switch Back** switches to the account it left, while `work` is still in use. |
+| **Signed in to work** | A sign-in in the app, or inside Claude, put the account in use. |
+| **Adding a Claude Desktop account didn't finish**, **Signing in to home again didn't finish** | An add or a sign-in again inside Claude was left halfway, with Claude signed out of `work` for it. **Finish Adding** or **Finish Signing In** goes on, and **Switch Back to work** undoes it. It stays across relaunches. |
+| **Claude Code's config names another account** | The config names another account than the stored sign-in's. **Update Claude Code's Config** writes the account in use into the config and moves no sign-in. |
+| **A leftover sign-in file** | `~/.claude/.credentials.json` sits behind the keychain. **Clean Up** shows what the file holds, then does what [`pitboard stow`](/reference/recovery-commands#stow) does. |
+| **A switch in Claude didn't finish** | A Claude Desktop switch was interrupted, and its record waits. **Cancel Switch** shows once a change from the app could not finish it. |
+| **The account in use isn't confirmed**, on a Claude Desktop account | Claude's settings have named another account, or nobody, since Pitboard last read Claude. **Add the Account Claude Shows** adds the account Claude is signed in to. |
+| **A sign-in was replaced outside Pitboard** | A sign-in outside Pitboard, such as `/login` in Claude Code, replaced an account's only sign-in. **Sign In Again** signs in to it again. |
+| **Pitboard moved a folder out of the way** | Pitboard set a folder aside in `~/.pitboard/parks`. **Show Diagnostics** opens the checks that list it. |
+| Another warning's title | A read or a change warned. [Warning codes](/reference/errors#warning-codes) lists each title, and **Learn More** opens it. |
+| **Switch cancelled**, **Switch in Claude cancelled**, **Cleaned up the leftover sign-in file** | You cancelled a switch, or **Clean Up** finished. Its line says what became of each sign-in. |
 
-### Activity pane
+### Setup tips
 
-The **Activity** pane lists the last 500 changes in Pitboard's log, newest first, from the app and the command line. Its **Change** column names the verb [`pitboard log`](/reference/maintenance-commands#log) records:
+Under the notices, at most one tip shows: the first of these that applies. **Not Now** stops it, for that tool alone where the tip names one.
+
+| Tip | Shown when | Button |
+| --- | --- | --- |
+| **Add a second account** | Claude Code's or Codex's only added account is the one in use. | **Add Account** |
+| **Add a second Claude Desktop account** | Claude Desktop's only added account is the one in use. | **Add Account** |
+| **Use Pitboard with Codex** | Codex is installed and no Codex account is added. Pitboard reads which account Codex is signed in to only once you click the button. | **Add Codex Account** |
+| **Switch before a limit runs out** | Claude Code has two added accounts, and nothing was chosen in [When a limit reaches](/reference/settings#when-a-limit-reaches). | **Open Settings** |
+
+## Diagnostics window
+
+**Diagnostics**, in the **Window** menu, runs the checks of [`pitboard doctor`](/reference/maintenance-commands#doctor) each time it opens, with the time under its title, such as **Checked at 6:42 AM**. A notice's **Show Diagnostics** opens it too.
+
+Its first line counts the checks that warn or fail, such as **2 Issues**, or reads **No Issues**. Under it, one sentence:
+
+| Sentence | When |
+| --- | --- |
+| **Everything Pitboard checks is in order.** | Every check holds. |
+| **Everything else Pitboard checks is in order.** | At least one check warns, and none fails. |
+| **Don't switch accounts until the failed check is fixed.** | One check fails. With more, it reads **the failed checks are fixed**. |
+
+The checks follow under **Pitboard** and each tool's name, in the app's words. A check that holds shows only where it names an account, or for the keychain, Pitboard's folder, the network, each tool's signed-in account and **Keep Saved Sign-Ins Fresh**.
+
+A check that warns or fails ends with its fix, such as **Sign In Again**, **Clean Up**, **Cancel Switch**, **Add Account**, **Refresh** or **Open Settings**. Where nothing in the app fixes it, **Learn More** opens what `doctor` checks.
+
+**Copy Report**, in the toolbar and the **Edit** menu, copies the report of `pitboard doctor --json`, with email addresses and account identifiers hidden, for a bug report. **Check Again** runs every check again.
+
+## Activity window
+
+**Activity**, in the **Window** menu, lists the last 500 changes in Pitboard's log, newest first, from the app and the command line. It reads the log each time it opens. Its **Change** column names the verb [`pitboard log`](/reference/maintenance-commands#log) records:
 
 | Change | Verb |
 | --- | --- |
 | **Switch** | `use` |
 | **Automatic switch** | `auto-switch` |
 | **Automatic switch not made** | `auto-stay` |
-| **Enrol** | `enroll` |
-| **Login in use changed** | `in-use` |
-| **Put away a login left in a file** | `stow` |
-| **Give up on a switch** | `abandon` |
-| **Park for a sign-in** | `park` |
+| **Add** | `enroll` |
+| **Remove** | `forget` |
+| **Sign-in kept fresh** | `renew` |
+| **Sign-in in use changed** | `in-use` |
+| **Clean up a leftover sign-in file** | `stow` |
+| **Cancel a switch** | `abandon` |
+| **Sign out for a sign-in** | `park` |
 | **Warm-up** | `warm-up` |
 | **Warm-up turned on**, **Warm-up turned off** | `warm-on`, `warm-off` |
 | **Warm-up hours changed** | `warm-range` |
 
-Any other verb starts with a capital letter, as `rename` reads **Rename**. **Result** gives an outcome's code in words, such as **Parked login expired** for `parked_login_expired`. **Asked By** reads **Unknown** for a change logged before Pitboard recorded who asked.
+Any other verb starts with a capital letter, as `rename` reads **Rename**. **Result** reads **Done**, or an outcome's code in words, such as **Sign-in expired** for `parked_login_expired`. **By** reads **Pitboard app**, **Command line**, or **Unknown** for a change logged before Pitboard recorded who asked.
 
-### This Mac pane
+## Account commands and dialogs
 
-The **This Mac** pane runs the checks of [`pitboard doctor`](/reference/maintenance-commands#doctor) each time you show it, with doctor's summary line over them.
+Control-clicking an account in **Accounts** opens its shortcut menu: **Add** on a sign-in not added yet, **Switch to work**, **Sign In Again**, **Rename**, **Warm Up Now**, **Open claude.ai** or **Open chatgpt.com**, **Copy Email Address** and **Remove Account**. The inspector's buttons offer the same but **Copy Email Address**, and the **Account** menu in the menu bar offers them for the account selected. The shortcut menu and the inspector leave out a command that cannot be chosen, and the **Account** menu dims it.
 
-## Accounts and dialogs
+**Remove Account** asks first, and cannot be chosen for the account in use. **Warm Up Now** cannot be chosen while the account's 5-hour limit runs, while it is held back, while a warm-up runs or while nothing can be warmed up here.
 
-Control-clicking an account in the **Accounts** pane opens its shortcut menu. The **Account** menu in the menu bar offers the same items for the account selected there. The shortcut menu leaves out an item that cannot be chosen, and the **Account** menu dims it.
+Dialogs open over **Accounts**, or over the welcome window when it opened them. A dialog whose action fails stays open with what you entered, and says why with a next step, such as **Sign In Again** or **Learn More**.
 
-**Warm Up Now** cannot be chosen while the account's five-hour period runs, while it is held back, while a warm-up runs or while nothing can be warmed up here.
-
-Dialogs open over the **Accounts** pane. A dialog whose action fails stays open with what you entered, and says why until you change the name or the tool.
-
-- **Add Account** offers every tool Pitboard handles on this Mac and starts on the first it finds, by `claude`, `codex` or Claude's data folder. For a tool it cannot find, it links how to install it.
-- **Name This Account** starts with a name from the email address that no other account of the tool has: the domain's first word for a work address, such as `acme` for `dana@acme.io`, or the part before the `@` for one at a mail service such as Gmail.
-- In a Claude Code or Codex sign-in, **Copy Link** copies the sign-in page's address for another browser or browser profile.
+- **Add Account** offers the tools Pitboard finds, by `claude`, `codex` or Claude's data folder, and asks which only when it finds more than one. For a tool it cannot find, it links how to install it.
+- In a Claude Code or Codex sign-in, **Copy Link** copies the sign-in page's address for another browser or browser profile. **Code** takes the code the tool shows once you sign in.
+- **Name This Account** follows each add. The account is already added under the name it shows: the domain's first word for a work address, such as `acme` for `dana@acme.io`, or the part before the `@` for one at a mail service such as Gmail. A name another account of the tool has gets `-2`, then `-3`. A Claude Desktop account starts as `desktop`. **Done** keeps the name you enter, and **Cancel** keeps the one it was added under.
 
 A Claude Desktop add or sign-in again offers the button that fits what Pitboard last read:
 
 | Button | Shown when | What it does |
 | --- | --- | --- |
-| **Add Account** | No Claude Desktop account is enrolled. | Records the account Claude is signed in to under the name. |
-| **Park work** | `work` is in use. | Parks `work`, which leaves Claude signed out, then waits for a sign-in inside Claude. |
-| **Start Sign-In** | Claude is signed out. | Waits for a sign-in inside Claude. |
-| **Add the Account Claude Shows**, or **Record as home** in a sign-in again | An add waits, or Pitboard cannot identify the login Claude holds. | Records the account Claude is signed in to. |
-| **Put work Back** | `work` is parked for the sign-in. | Stops waiting and switches back to `work`. |
-| **Later** | `work` is parked for the sign-in. | Stops waiting and leaves `work` parked, with a notice that says so. |
+| **Continue** | Claude is signed in to an added account, such as `work`, or signed out. | Saves `work`, which leaves Claude signed out, then waits for a sign-in inside Claude, with three steps to follow. |
+| **Add Account** | No Claude Desktop account is added, and Claude is signed in. | Adds the account Claude is signed in to. |
+| **Add the Account Claude Shows**, or **Add home** in a sign-in again | An add waits, or Pitboard cannot identify the sign-in Claude holds. | Adds the account Claude is signed in to, or saves its sign-in for `home`. |
+| **Switch Back to work** | Claude is signed out of `work` for the sign-in. | Stops waiting and switches back to `work`. |
+| **Later** | Claude is signed out of `work` for the sign-in. | Stops waiting and leaves Claude signed out, with a notice that says so. |
 
-Once Claude quits signed in, Pitboard records the account, closes the dialog and says what it did in a notice. It does not open Claude again.
+Once Claude quits signed in, Pitboard adds the account and opens **Name This Account**. It does not open Claude again.
 
 ### Quitting Claude or the ChatGPT app
 
-Pitboard asks before it quits Claude for a Claude Desktop change, or the ChatGPT app for a Codex switch. **Cancel** changes nothing. It then asks the app to quit as Command-Q does, and waits up to 30 seconds.
+Pitboard asks before it quits Claude for a Claude Desktop change, or the ChatGPT app for a Codex switch, as in **Quit ChatGPT to switch?**. **Cancel** changes nothing. Otherwise it asks the app to quit as Command-Q does, and waits up to 30 seconds.
 
 If the app has not quit, Pitboard changes nothing. If part of it still runs after it quit, Pitboard changes nothing and opens it again. Otherwise it makes the change and opens the app again.
 
 ## Notifications
 
+Each notification has the tool's name as its subtitle.
+
 | Title | Posted | Body | Button | Clicking the notification |
 | --- | --- | --- | --- | --- |
-| **work has used 96% of its 5-hour limit**, or **work has no 5-hour limit left** from 100% | With **Notify Me** chosen, when a limit of the account in use reaches the share in [When a limit reaches](/reference/settings#when-a-limit-reaches). With **Switch Automatically**, for Codex only. Once for each limit and reset, even across restarts. | **personal has 58% of its own left.**, or **seat has no such limit.** for an account without that limit. With no account to switch to, **Resets in 1h 05m.** | **Switch**, which switches to `personal`, where another account of its tool is under the share in every limit | Opens **Accounts** |
-| **Switched Claude Code to personal** | After each switch the app makes by itself. | **work has used 96% of its 5-hour limit. Sessions already running follow within 33 seconds.** | None | Opens **Accounts** |
-| **Claude Code wasn't switched** | When a limit of the account in use reaches the share in **When a limit reaches**, and Pitboard holds back. Once for each limit, reset and reason. | **work has used 96% of its 5-hour limit.**, then a reason from [When it stays on the account](/reference/automatic-switching#when-it-stays-on-the-account) | None | Opens **Settings** on **Limits** |
-| **Pitboard isn't switching Claude Code** | When Pitboard cannot decide whether to switch. Once for each reason and what it names. | A reason from [When it decides nothing](/reference/automatic-switching#when-it-decides-nothing) | None | Opens **Settings** on **Limits** |
-| **Pitboard couldn't switch Claude Code** | When an automatic switch fails. Once for each kind of error. | The error | None | Opens **Settings** on **Limits** |
-| **Pitboard couldn't warm up an account** | When a warm-up the app made by itself came to nothing. Once for each account and error until that account warms up. | The error | None | Opens **Settings** on **Limits** |
-| **work needs signing in again** | When a read finds that an enrolled account's parked login can no longer be used: it expired, its service refused it, or none is parked. Once for each account until it can be used again, even across restarts. | **Its parked login can no longer be used, so Pitboard can't switch to it.** | **Sign In Again**, which opens **Sign In to work Again** | Opens **Accounts** |
-| **A login was replaced outside Pitboard** | When a read finds that an account's only login ended outside Pitboard. A sign-in such as `/login` in Claude Code replaced it, or the account was signed out in Claude. Once for each account while reads find it, and once more after the app reopens. | The warning's message, which says what ended the login, as [Warning codes](/reference/errors#warning-codes) gives it | **Sign In Again**, which opens **Sign In to work Again** | Opens **Accounts** |
+| **5-Hour Limit Almost Reached**, or **5-Hour Limit Reached** from 100% | With **Notify Me** chosen, when a limit of the account in use reaches the share in [When a limit reaches](/reference/settings#when-a-limit-reaches). With **Switch Automatically**, for Codex only. Once for each limit and reset, even across restarts. | **work has used 96%.**, then **personal has used 42%.**, or **seat has no such limit.** for an account without that limit. With no account to switch to, when the limit resets, such as **Resets in 1h 05m.** | **Switch**, which switches to `personal`, where another account of its tool is under the share in every limit | Opens **Accounts** |
+| **Switched to personal** | After each switch the app makes by itself. | **work has used 96% of its 5-hour limit. Sessions already running follow within 33 seconds.** | **Switch Back**, which switches back to `work` while `personal` is still in use | Opens **Accounts** |
+| **Automatic Switch Skipped** | When a limit of the account in use reaches the share, and Pitboard holds back. Once for each limit, reset and reason. | **work has used 96% of its 5-hour limit.**, then a reason from [When it stays on the account](/reference/automatic-switching#when-it-stays-on-the-account) | None | Opens Settings on **Limits** |
+| **Automatic Switching Paused** | When Pitboard cannot decide whether to switch. Once for each reason and what it names. | A reason from [When it decides nothing](/reference/automatic-switching#when-it-decides-nothing) | None | Opens Settings on **Limits** |
+| **Couldn't Switch Automatically** | When an automatic switch fails. Once for each kind of error. | The error | None | Opens Settings on **Limits** |
+| **Warm-Up Didn't Start** | When a warm-up the app made by itself came to nothing. Once for each account and error until that account warms up. | The error | None | Opens Settings on **Limits** |
+| **Sign-In Expired**, **Sign-In No Longer Works** or **Not Signed In** | When a read finds that an added account's saved sign-in can no longer be used: it expired, its service refused it, or none is saved. Once for each account until it can be used again, even across restarts. | **Sign in to old again to keep switching to it.** | **Sign In Again**, which opens **Sign In to old Again** | Opens **Accounts** |
+| **Sign-In Replaced** | When a read finds that an account's only sign-in ended outside Pitboard: a sign-in such as `/login` in Claude Code replaced it, or the account was signed out in Claude. Once for each account while reads find it, and once more after the app reopens. | What ended the sign-in, as the notice **A sign-in was replaced outside Pitboard** says | **Sign In Again**, which opens **Sign In to old Again** | Opens **Accounts** |
 
-While a login file sits behind the keychain, the second sentence of **Switched Claude Code to personal** reads **Sessions already running keep the account they are on until their login is next renewed, or until they are started again:** and names the file.
+While a login file sits behind the keychain, the second sentence of **Switched to personal** reads **Sessions already running keep their account until they're started again.**
 
-The three that hold back or fail come only while **Switch Automatically** is chosen. They can come again after the app next switches. A notification starts its reason with a capital letter and ends it with a full stop.
+**Automatic Switch Skipped**, **Automatic Switching Paused** and **Couldn't Switch Automatically** come only while **Switch Automatically** is chosen. They can come again after the app next switches. After **Switch Back**, no **Automatic Switch Skipped** comes for that account's limit until the limit resets.
 
-Only **work has used 96% of its 5-hour limit** and **work needs signing in again** can have a subtitle, the tool's name once more than one tool has accounts. A button does not bring Pitboard forward unless it needs to ask something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
+A button brings Pitboard forward only where it opens a dialog or asks something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
 
 ## Keyboard shortcuts
 
 | Keys | Where | What it does |
 | --- | --- | --- |
 | Command-N | The menu, or any window | **Add Account** |
-| Command-R | The menu, or any window | **Refresh**, **Check Again** in **This Mac**, or **Reload Page** in an account's window |
+| Command-R | The menu, or any window | **Refresh**, **Check Again** in **Diagnostics**, or **Reload Page** in an account's window |
 | Command-Comma | The menu, or any window | Opens Settings |
 | Command-Q | The menu, or any window | **Quit Pitboard** |
-| Command-C | The **Accounts** pane | Copies the email address of the account selected |
-| Command-Delete | The **Accounts** pane | **Forget** the account selected, after asking |
-| Return, or double-click | A row in the **Accounts** pane | What the row's button does. On the account in use when it is not enrolled, opens **Name This Account**. |
-| Delete | A row in the **Accounts** pane | **Forget**, after asking |
-| Return | A dialog | Its default button |
-| Escape | A dialog | **Cancel**. Nothing in a Claude Desktop sign-in that has not started its wait, or has an account parked for it. |
+| Control-Command-I | **Accounts** | Shows or hides the inspector |
+| Command-C | **Accounts** | Copies the email address of the account selected |
+| Command-Delete | **Accounts** | **Remove Account** for the account selected, after asking |
+| Return, or double-click | A row in **Accounts** | What the row's button does |
+| Delete | A row in **Accounts** | **Remove Account**, after asking |
+| Return | A dialog | Its default button. **Uninstall Pitboard?** has none. |
+| Escape | A dialog | **Cancel**. Nothing in a Claude Desktop sign-in that waits with Claude signed out of an account for it. |

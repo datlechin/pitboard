@@ -139,7 +139,7 @@ The log is `audit.log` in Pitboard's directory, and holds no email address. Past
 | `park` | A Claude Desktop sign-in, from `pitboard enroll desktop/<label> --sign-in` or the app, starts to wait. It parks the account in use first, where there is one. | The label signed in to | `ok`, or the error code |
 | `forget` | An account is forgotten. | The label | `ok` |
 | `rename` | A label changes. | Before and after: `wrong -> right` | `ok` |
-| `stow` | `pitboard stow`, or **Put Away** in the app. | The account the file's login was of, or none | What became of the login, as [`stow`](/reference/recovery-commands#stow) lists |
+| `stow` | `pitboard stow`, or **Clean Up** in the app. | The account the file's login was of, or none | What became of the login, as [`stow`](/reference/recovery-commands#stow) lists |
 | `abandon`, `repair` | That command runs. | None | `ok` |
 | `adopt` | `pitboard adopt` takes over a directory. | None | `ok` |
 | `uninstall` | `pitboard uninstall` ran and Pitboard's directory is still there. | None | `ok`, or `parks_pending_removal` when a parked login could not be deleted |
@@ -240,7 +240,7 @@ Usage: pitboard doctor [OPTIONS]
 | `!` | `warn` | Worth a look. Nothing is broken. |
 | `✗` | `fail` | Something Pitboard relies on does not hold. |
 
-The last line sums up, in the words that head the app's [This Mac](/reference/mac-app#this-mac-pane) or [This PC](/reference/windows-app#this-pc) pane.
+The last line sums up:
 
 | Last line | When |
 | --- | --- |
