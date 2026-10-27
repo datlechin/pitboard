@@ -1,11 +1,12 @@
 import AppKit
 import XCTest
 
-/// A picture of each surface, named platform-surface-state, for the docs, which
-/// `scripts/docs-screenshots.sh` takes from the result bundle, and for pull requests, which CI
-/// keeps as macos-app-pictures. Some are the scenes usepitboard.com's figures are checked
-/// against, which its `--figures` keeps.
+// Each surface as platform-surface-state, and again with "-dark" after it, for the docs
+// (scripts/docs-screenshots.sh), pull requests (macos-app-pictures) and the site's figures.
 final class ScreenshotTests: FixtureTestCase {
+    // Each test runs in Light, then in Dark, which XCTest sets for the whole Mac.
+    override class var runsForEachTargetApplicationUIConfiguration: Bool { true }
+
     @MainActor
     func testTheMenuAndTheWindowForTheDocs() {
         let app = launch(.twoTools)
@@ -59,6 +60,17 @@ final class ScreenshotTests: FixtureTestCase {
             app.control("inspector").descendants(matching: .any)["inspector.action.switch"]
                 .waitForExistence(timeout: 5))
         keep(window, as: "macos-window-inspector")
+        for (title, name) in [
+            (Words.editMenu, "macos-menu-edit"), (Words.viewMenu, "macos-menu-view"),
+            (Words.windowMenu, "macos-menu-window"),
+        ] {
+            let entry = app.menuBars.menuBarItems[title]
+            entry.click()
+            let bar = entry.menus.firstMatch
+            XCTAssertTrue(bar.waitForExistence(timeout: 5))
+            keep(bar, as: name)
+            app.typeKey(.escape, modifierFlags: [])
+        }
 
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
@@ -66,6 +78,7 @@ final class ScreenshotTests: FixtureTestCase {
         let atLimit = app.popUpButtons["settings.atLimit"]
         XCTAssertTrue(atLimit.waitForExistence(timeout: 5))
         XCTAssertTrue(atLimit.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        raise(settings)
         choose(Words.switchAutomatically, in: atLimit)
         XCTAssertTrue(app.control("settings.autoSwitchStanding").waitForExistence(timeout: 5))
         keep(settings, as: "macos-settings-limits-switch")
@@ -104,6 +117,7 @@ final class ScreenshotTests: FixtureTestCase {
         app.openSettings()
         app.toolbars.buttons[Words.limits].click()
         XCTAssertTrue(app.control("settings.warmStanding").waitForExistence(timeout: 5))
+        raise(app.windows[Words.limits])
         keep(app.windows[Words.limits], as: "macos-settings-limits-warm-up")
     }
 
@@ -287,6 +301,9 @@ final class ScreenshotTests: FixtureTestCase {
         let window = app.accountsWindow
         let cancel = app.control("notice.stuck").buttons["notice.action.abandonStuckSwitch"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        keep(
+            app.statusItems.firstMatch.screenshot().pngRepresentation,
+            as: "macos-menu-bar-item-badged")
         keep(window, as: "macos-notice-switch-unfinished")
         cancel.click()
         XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5))
@@ -433,6 +450,27 @@ final class ScreenshotTests: FixtureTestCase {
         keep(window, as: "macos-sheet-name-in-use")
     }
 
+    // The window selects the account in use, work, which a Command-click deselects.
+    @MainActor
+    func testTheInspectorWithNothingSelectedAndHidden() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let window = app.accountsWindow
+        let work = app.accountRow("claude/work")
+        XCTAssertTrue(work.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.control("inspector").descendants(matching: .any)["inspector.action.rename"]
+                .waitForExistence(timeout: 5))
+        XCUIElement.perform(withKeyModifiers: .command) { work.click() }
+        XCTAssertTrue(app.text(Words.noAccountSelected).waitForExistence(timeout: 5))
+        keep(window, as: "macos-window-no-selection")
+        app.typeKey("i", modifierFlags: [.command, .control])
+        XCTAssertTrue(app.control("inspector").waitForNonExistence(timeout: 5))
+        keep(window, as: "macos-window-inspector-hidden")
+        app.typeKey("i", modifierFlags: [.command, .control])
+        XCTAssertTrue(app.control("inspector").waitForExistence(timeout: 5))
+    }
+
     @MainActor
     func testOneAccount() {
         let app = launch(.onlyOne)
@@ -446,12 +484,16 @@ final class ScreenshotTests: FixtureTestCase {
         let app = launch(.oneTool)
         app.openSettings()
         XCTAssertTrue(app.staticTexts["settings.noUpdateKey"].waitForExistence(timeout: 5))
+        raise(app.windows[Words.general])
         keep(app.windows[Words.general], as: "macos-settings-general")
         app.toolbars.buttons[Words.limits].click()
         let atLimit = app.popUpButtons["settings.atLimit"]
         XCTAssertTrue(atLimit.waitForExistence(timeout: 5))
         XCTAssertTrue(atLimit.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         keep(app.windows[Words.limits], as: "macos-settings-limits-notify")
+        choose(Words.doNothing, in: atLimit)
+        XCTAssertTrue(app.control("settings.atLimitShare").waitForNonExistence(timeout: 5))
+        keep(app.windows[Words.limits], as: "macos-settings-limits-do-nothing")
         app.toolbars.buttons[Words.advanced].click()
         XCTAssertTrue(app.control("settings.renewDaily").waitForExistence(timeout: 5))
         keep(app.windows[Words.advanced], as: "macos-settings-advanced")
@@ -471,6 +513,12 @@ final class ScreenshotTests: FixtureTestCase {
         XCTAssertTrue(popUp.wait(until: "value == '\(title)'", timeout: 5))
     }
 
+    // Settings opens centred, and a tall pane reaches under the Dock of CI's 768-point screen.
+    @MainActor
+    private func raise(_ settings: XCUIElement) {
+        move(settings, to: CGPoint(x: settings.frame.minX, y: 40))
+    }
+
     @MainActor
     private func move(_ window: XCUIElement, to origin: CGPoint) {
         let frame = window.frame
@@ -488,9 +536,11 @@ final class ScreenshotTests: FixtureTestCase {
         keep(cutOut(element, cornerRadius: element.elementType == .menu ? 11 : 16), as: name)
     }
 
+    @MainActor
     private func keep(_ png: Data, as name: String) {
         let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
-        attachment.name = name
+        let dark = NSApplication.shared.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+        attachment.name = dark == .darkAqua ? "\(name)-dark" : name
         attachment.lifetime = .keepAlways
         add(attachment)
     }

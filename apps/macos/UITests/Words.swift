@@ -10,6 +10,7 @@ enum Words {
     static let accountMenu = "Account"
     static let fileMenu = "File"
     static let editMenu = "Edit"
+    static let viewMenu = "View"
     static let copyReport = "Copy Report"
     static let removeWebsiteData = "Remove Website Data…"
     static let windowMenu = "Window"
@@ -43,6 +44,9 @@ enum Words {
     // is gone.
     static let uninstall = "Uninstall"
     static let moveToTrash = "Move to Trash"
+
+    // The inspector with nothing selected.
+    static let noAccountSelected = "No Account Selected"
 
     // What Name and Rename say under an empty field.
     static let typeAName = "Type a name for this account."
