@@ -73,12 +73,13 @@ The app records each window's website data and last page in `windows.json`, a fi
 | Deleted | When |
 | --- | --- |
 | A window's data | You remove its website data. That signs the window out on this computer only, and the window starts again at 100% zoom. |
-| A window's data | You forget its account. The app deletes it at its next successful read of the accounts. |
+| A window's data | You remove its account, in the app or with `pitboard forget`. The app deletes it at its next successful read of the accounts. |
+| Every window's data | You choose **Uninstall Pitboard** in the app's Settings. |
 | Every window's data | On Windows, you remove Pitboard in **Settings** > **Apps** > **Installed apps**. |
 
 The app deletes a window's data only where its own Pitboard directory recorded it and no other existing one did. A copy run with another Pitboard directory therefore signs no other copy's windows out. While the app cannot read `windows.json`, it deletes nothing.
 
-On Windows, WebView2 lets go of a window's data only once every account window has closed. Until then, that window does not open, and its menu item says why.
+On Windows, WebView2 lets go of a window's data only once every account window has closed. Until then, that window does not open: the icon's menu leaves it out, and an account's shortcut menu and opened row dim it and say why.
 
 ## Open Link window
 
@@ -86,7 +87,7 @@ The **Open Link** window asks which account opens a [Pitboard link](#pitboard-li
 
 It selects the account you last chose for the site since Pitboard started, else the account in use, else the first. For 750 ms after the accounts appear, **Open** is dimmed and a double-click on an account does nothing, which stops a Return meant for another app.
 
-A link brings the window to the front. A second link replaces the first, and the selection and the 750 ms wait start again. With no account on the link's site, **Add Account** opens the Pitboard window's **Add Account** dialog for the site's tool, and the link waits.
+A link brings the window to the front. A second link replaces the first, and the selection and the 750 ms wait start again. With no account on the link's site, **Add Account** opens the **Add Account** dialog for the site's tool, and the link waits.
 
 If the account's window is open, it loads the link, and **Back** returns to the page before. Otherwise the window opens on the link.
 

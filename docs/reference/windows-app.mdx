@@ -1,18 +1,18 @@
 ---
 title: "The app on Windows"
 sidebarTitle: "App on Windows"
-description: "Look up what the app on Windows shows in its icon and window and when, how it differs from the menu bar app, and its keyboard shortcuts."
+description: "Look up what the app on Windows shows in its icon, menu and window, how it differs from the menu bar app, and its keyboard shortcuts."
 ---
 
 The app on Windows runs from its icon in the notification area, on Windows 11 24H2 or later. It does what [the menu bar app](/reference/mac-app) does, in sentence case, and has no Claude Desktop accounts. This page gives where it differs.
 
-Its windows are the Pitboard window, each [account's window](/reference/account-windows#account-windows) and the [**Open link** window](/reference/account-windows#open-link-window). Closing the Pitboard window leaves Pitboard running, and **Exit** in its menu stops it. While a download runs, **Exit** asks first.
+Its windows are the Pitboard window, the [welcome window](#welcome-window), each [account's window](/reference/account-windows#account-windows) and the [**Open link** window](/reference/account-windows#open-link-window). Closing the Pitboard window leaves Pitboard running, and **Exit** in its menu stops it. While a download runs, **Exit** asks first.
 
-Opened from the Start menu, Pitboard opens its window. Started when you sign in to Windows, it opens none. Opened while it runs, it brings its window to the front.
+Opened from the Start menu, Pitboard opens its window. Started when you sign in to Windows, it opens none. Opened while it runs, it brings its window to the front. The first time it runs, it opens the welcome window in place of its window.
 
 ## Icon in the notification area
 
-Windows puts a new icon in the overflow, behind the arrow at the end of the taskbar. Drag it onto the taskbar to keep it in sight.
+Windows puts a new icon in the overflow, behind the arrow at the end of the taskbar. Drag it onto the taskbar to keep it in sight. The icon is dark on a light taskbar and white on a dark one, or in the text colour of a contrast theme.
 
 | The icon shows | When |
 | --- | --- |
@@ -20,47 +20,70 @@ Windows puts a new icon in the overflow, behind the arrow at the end of the task
 | Its lit row half lit | That limit is from 70% used. |
 | A sliver of its lit row | That limit is from 90% used. |
 | Its row unlit | Nobody is signed in, or that limit has no reading. |
-| Windows' warning symbol at its bottom right | [The menu](#menu) opens on something that needs attention. |
+| Windows' warning symbol at its bottom right | A notice in **Accounts** warns, an account needs a sign-in, or Pitboard finds no tool. |
 
 A click, or Enter on the icon, opens the Pitboard window. A right-click, or Shift+F10 on the icon, opens Pitboard's menu. To reach the icon from the keyboard, press Win+B, then the arrow keys. While the icon is in the overflow, first press Enter on the arrow to open the overflow.
 
-Its tooltip reads **Pitboard**, then **Needs attention** while the menu opens on something to look at, then a line for each account in use: its label and the line [the menu](#menu) shows under it, such as **work: 5-hour 42%, weekly 12%**. With several tools, each label names its tool: **work (Claude Code): 5-hour 42%**. Windows shows the first 127 characters.
+Its tooltip reads **Pitboard**, then **Needs attention** while the warning symbol shows, then a line for each account in use: its name and how much of each limit it has used, such as **work: 5-hour 42% used, weekly 12%**. With several tools, each name adds its tool: **work (Claude Code): 5-hour 42% used**. Windows shows the first 127 characters.
 
 ## Menu
 
-Pitboard's menu lists what the [menu bar app's menu](/reference/mac-app#menu) lists, without Claude Desktop, and choosing an item does the same. Where the menu bar app shows a line under an item, this menu shows it as the item's tooltip.
+Pitboard's menu holds, in this order:
 
-A dot marks the account in use in each tool. The percentage the [menu bar item](/reference/mac-app#menu-bar-item) would show of an account comes after it: **work · Max 20x · 42%**. An account whose tooltip says what stands in its way, such as **Needs signing in again**, shows none.
+1. **Open Pitboard**, in bold: a click on the icon does the same.
+2. The accounts, under each tool's name once more than one tool has accounts. A dot marks the account in use in each tool. After each name comes the percentage the [menu bar item](/reference/mac-app#menu-bar-item) would show for it, such as **work (42%)**, or why you cannot switch to it, such as **old (sign-in expired)**. An account's tooltip is its line in the menu bar app's menu, such as **5-hour 42% used, weekly 12%**.
+3. **Add account**.
+4. **Open claude.ai** and **Open chatgpt.com**, for the account windows.
+5. **Settings**, **Check for updates** and **Pitboard help**. Once a check finds an update, **Install Pitboard 1.0.1** takes the place of **Check for updates**.
+6. **Exit**.
 
-**Open Pitboard** is bold: a click on the icon does the same.
+Choosing an account does what its button in **Accounts** does. Choosing the account in use does nothing, and any other account without a button is dimmed.
+
+The menu leaves out what does not apply: **Check for updates** in a beta or a copy that cannot update itself, and an account window that cannot open yet. It lists no notices and has no **Refresh**, which the Pitboard window has.
+
+## Welcome window
+
+The welcome window opens the first time Pitboard runs. It lists what the menu bar app's [welcome window](/reference/mac-app#welcome-window) lists, without Claude Desktop, with the tools under **Found on this PC**.
+
+Its line about the icon has **Taskbar settings**, which opens Windows' taskbar settings, where **Other system tray icons** keeps the icon in view. A dialog that **Add** or **Sign in** opens comes up in the Pitboard window.
+
+**Start when you sign in to Windows** starts off. **Get started** closes the welcome window and opens **Accounts**. Escape or the close button closes it and opens nothing. It does not open again.
 
 ## Window
 
-The Pitboard window's navigation pane holds **Accounts**, **Activity** and **This PC**, with **Settings** at its foot. The window opens on **Accounts**, at the place and size it had when you last closed it. In a narrow window, the pane folds behind a button in the title bar.
+The Pitboard window's navigation pane holds **Accounts**, with **Settings** at its foot. The window opens on **Accounts**, at the place and size it had when you last closed it, or at 960 by 680 effective pixels the first time.
+
+[Settings](/reference/settings) is a page of the window. Under **Troubleshoot**, the **Diagnostics** and **Activity** cards each open a page of Settings, headed **Settings** > **Diagnostics** or **Settings** > **Activity**. **Settings** in that heading and the title bar's back button go back to Settings.
 
 ### Accounts
 
-**Accounts** lists what the menu bar app's [Accounts pane](/reference/mac-app#accounts-pane) lists, without Claude Desktop.
+**Accounts** lists what the menu bar app's [Accounts window](/reference/mac-app#accounts-window) lists, without Claude Desktop. **Refresh** and **Add account** sit beside its title, and when Pitboard last read the accounts under it, such as **Updated 7:08 AM**.
 
-The setup tip **Start when you sign in to Windows** stands in for **Open Pitboard at login**. It shows while Windows does not start Pitboard when you sign in, and **Settings** > **Apps** > **Startup** has not turned it off. It says where Windows puts the icon, and its **Taskbar settings** opens Windows' taskbar settings, where **Other system tray icons** can keep the icon in view.
+Each account is a row you open, in place of the inspector. A row shows the account's name and plan, a line for each limit and at most one note, then **In use** or its button: **Switch**, **Sign in** or **Add**. A note that nothing in the app acts on ends with **Learn more**.
+
+An opened row adds each limit with how much of it is used, when it resets and how long until then, the notes the row has no room for, **Email** with **Copy**, **Sign-in**, and **Warm-up** with **Warm-up settings**. Its commands follow: **Open claude.ai** or **Open chatgpt.com**, then **Sign in again**, **Rename** and **Warm up now** where they apply, then **Remove account**, dimmed for the account in use.
+
+Notices come before the accounts, as in the menu bar app's [notices](/reference/mac-app#notices). A setup tip opens beside **Add account**, or at the foot of the window for **Switch before a limit runs out**, once no notice or dialog is up. The tips are the menu bar app's [setup tips](/reference/mac-app#setup-tips), and the button of **Use Pitboard with Codex** is **Add account**.
+
+### Diagnostics
+
+**Diagnostics** shows what the menu bar app's [Diagnostics window](/reference/mac-app#diagnostics-window) shows, with **Check again** and **Copy report** beside its title. What a check found can be selected, and its shortcut menu offers **Copy** and **Select all**.
+
+When Windows refused the last notification Pitboard posted, a **Notifications** warning ends the checks under **Pitboard**. It names the notification, the time and the error Windows gave, as its exception's type and HRESULT, and goes once a notification is posted.
 
 ### Activity
 
-**Activity** lists what the menu bar app's [Activity pane](/reference/mac-app#activity-pane) lists, with dates in your PC's format.
+**Activity** lists what the menu bar app's [Activity window](/reference/mac-app#activity-window) lists, with dates in your PC's format and **Refresh** beside its title.
 
-### This PC
+## Account commands and dialogs
 
-**This PC** runs the checks of [`pitboard doctor`](/reference/maintenance-commands#doctor) each time you show it, with doctor's summary line under its title.
+An account's shortcut menu offers what the menu bar app's does, and leaves out an item that cannot be chosen. An account window that cannot open yet is dimmed, with why in its tooltip. Dialogs say what the menu bar app's say, with **on this PC** for **on this Mac**.
 
-When Windows refused the last notification Pitboard posted, **Notifications** follows the checks with its title, the time and the error Windows gave, as its exception's type and HRESULT. It goes once a notification is posted, and the summary line counts it.
-
-## Accounts and dialogs
-
-An account's shortcut menu offers what the menu bar app's does, and leaves out an item that cannot be chosen. Its dialogs and alerts say what the menu bar app's say, with **on this PC** for **on this Mac**.
+A question's accent button is its default: its verb, such as **Remove**, or **Cancel** in **Uninstall Pitboard?**. A failure ends with its next step: an action as its accent button beside **Close**, such as **Sign in again**, or a **Learn more** link with **OK**.
 
 ## Notifications
 
-The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, as Windows notifications, with the same titles, bodies and buttons. Selecting a notification opens what it opens on macOS, with **Settings** scrolled to **Limits** in place of its **Limits** pane.
+The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, as Windows notifications, with the same bodies, and titles and buttons in sentence case, such as **Sign-in expired** and **Sign in again**. The button of **5-hour limit almost reached** names the account, such as **Switch to personal**. Selecting a notification opens what it opens on macOS, with **Settings** scrolled to **Limits** in place of its **Limits** pane.
 
 Windows can turn them off in **Settings** > **System** > **Notifications**. Where Windows shows none of Pitboard's notifications, Pitboard's **Settings** says why under **General**, as [Notifications in Settings](/reference/settings#notifications) lists.
 
@@ -71,17 +94,21 @@ Windows can turn them off in **Settings** > **System** > **Notifications**. Wher
 | Ctrl+N | The Pitboard window | Opens **Add account** |
 | Ctrl+Comma | The Pitboard window | Shows **Settings** |
 | F1 | The Pitboard window | Opens this site, as **Pitboard help** does |
-| F5 or Ctrl+R | **Accounts**, **Activity** and **This PC** | **Refresh**, or **Check again** in **This PC** |
+| F5 or Ctrl+R | **Accounts**, **Diagnostics** and **Activity** | **Refresh**, or **Check again** in **Diagnostics** |
 | F6, Shift+F6 | The Pitboard window | Moves between the navigation pane and the page |
+| Alt+Left, or the mouse's back button | **Diagnostics** and **Activity** | Goes back to **Settings** |
+| Alt | The Pitboard window and the welcome window | Shows the access keys of their commands |
 | Ctrl+W | The Pitboard window | Closes it. Pitboard keeps running. |
+| Escape | The welcome window | Closes it |
 | Ctrl+W | An account window, outside its page | Closes it |
 | Alt+Left, Alt+Right | An account window | **Back**, **Forward** |
 | F5 or Ctrl+R | An account window | **Reload** |
-| Enter, or double-click | A row in **Accounts** | What the row's button does. On the account in use when it is not enrolled, opens **Name this account**. |
+| Enter | A row in **Accounts** | What the row's button does |
+| Space | A row in **Accounts** | Opens or closes it |
 | Shift+F10, or the menu key | A row in **Accounts** | Opens its shortcut menu |
-| Delete | A row in **Accounts** | **Forget**, after asking |
+| Delete | A row in **Accounts** | **Remove account**, after asking |
 | F2 | A row in **Accounts** | **Rename** |
 | Ctrl+C | A row in **Accounts** | **Copy email address** |
-| Ctrl+C, Ctrl+A | What a check found, in **This PC** | **Copy**, **Select all** |
-| Enter | A dialog | Its default button |
-| Escape | A dialog | **Cancel**, where it is not dimmed |
+| Ctrl+C, Ctrl+A | What a check found, in **Diagnostics** | **Copy**, **Select all** |
+| Enter | A dialog | Its accent button |
+| Escape | A dialog | **Cancel**, where it shows and is not dimmed |

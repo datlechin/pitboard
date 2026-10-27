@@ -12,14 +12,14 @@ It switches early because open Claude Code sessions take up to about 33 seconds 
 
 <Tabs>
   <Tab title="macOS">
-    In **Settings** > **Limits**, under **Before an account runs out**, choose **Switch Automatically** in **When a limit reaches**. Set the share in the field or with the stepper beside it, 95% at first.
+    In **Settings** > **Limits**, choose **Switch Automatically** in **When a limit reaches**. Set the share in **At**, in its field or with its stepper, 95% at first.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Switch automatically** in **When a limit reaches**, then expand it and set the share in **Share of a limit**.
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Switch automatically** in **When a limit reaches**, then expand it and set the share in **At**.
   </Tab>
 </Tabs>
 
-The app switches only while it is open, and posts a notification for each switch.
+The app switches only while it is open, and posts a notification for each switch. Its **Switch Back** switches back to the account it left, as the notice in **Accounts** does.
 
 On the command line, run `pitboard watch` and leave the terminal open. It switches at its own share, `--at`, 95 by default, and never reads the app's **When a limit reaches**.
 

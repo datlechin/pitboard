@@ -21,7 +21,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `pending` | Names of parked logins about to be written, one per line, which the next change resolves. A line for a folder in `parks/` starts with `folder `. Absent when empty. | Anything that parks a login |
 | `autoswitch.json` | What the automatic switch tried and said at each limit, until a minute after it resets, or 7 days with no reset known. When it last failed to identify Claude Code's login. | The automatic switch |
 | `signin.lock` | The lock that allows one sign-in at a time | A sign-in |
-| `warm.json` | The accounts turned on for warm-ups, by id, and the hours they are made in | `pitboard warm on`, `off` and `range`, and the app's **Warm up limits** |
+| `warm.json` | The accounts turned on for warm-ups, by id, and the hours they are made in | `pitboard warm on`, `off` and `range`, and the app's **Warm-Up** |
 | `warmed.json` | The warm-ups of each account tried today, and when one last started its period | A warm-up |
 | `warm.lock` | The lock that allows one warm-up at a time | A warm-up |
 | `warm/` | Where Claude Code runs a warm-up, in `warm/claude/`, with a home and config of its own made for the run and removed after it. | A warm-up |
@@ -214,7 +214,7 @@ Pitboard reads the list of processes to tell whether Claude is open:
 
 ## Renewal schedule
 
-`pitboard schedule install`, or turning on **Renew parked logins daily** in the app's **Settings** > **Advanced**, writes these. `pitboard schedule uninstall`, or turning it off, removes them. So does `pitboard uninstall` while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
+`pitboard schedule install`, or turning on **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, writes these. `pitboard schedule uninstall`, or turning it off, removes them. So do `pitboard uninstall` and the app's **Uninstall Pitboard** while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
@@ -229,7 +229,7 @@ The environment holds the proxy variables as they were set at install, and on ma
 
 ## Watch service
 
-`pitboard watch install` writes these, and `pitboard watch uninstall` removes them. So does `pitboard uninstall` while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
+`pitboard watch install` writes these, and `pitboard watch uninstall` removes them. So do `pitboard uninstall` and the app's **Uninstall Pitboard** while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
@@ -259,12 +259,14 @@ The environment holds the proxy variables as they were set at install, and on ma
     | Key | Holds |
     | --- | --- |
     | `menuBarShows` | [Menu bar shows](/reference/settings#menu-bar-shows): `nameAndUsage`, `usage` or `icon` |
-    | `settingsTab` | The Settings pane shown last: `general`, `limits`, `renewal`, `commandLine` or `updates` |
+    | `settingsTab` | The Settings pane shown last: `general`, `limits` or `advanced`. An earlier version's `updates` opens **General**, and its `renewal` and `commandLine` open **Advanced**. |
     | Keys of Sparkle, the app's updater | Its update settings and when it last checked |
 
-    macOS keeps **Open Pitboard at login** as a login item.
+    macOS keeps **Open Pitboard at Login** as a login item.
 
     The app's other files are in `~/Library/Application Support`, `~/Library/Caches`, `~/Library/HTTPStorages` and `~/Library/Saved Application State`, each named after `com.usepitboard.Pitboard`.
+
+    **Uninstall Pitboard** deletes these keys, the login item, the folder in `~/Library/Application Support` and every account window's website data. The other folders stay.
   </Tab>
   <Tab title="Windows">
     The installer puts the app in `%LOCALAPPDATA%\Programs\Pitboard`, for your account alone.
@@ -286,7 +288,7 @@ The environment holds the proxy variables as they were set at install, and on ma
     | `updates.json` | The settings of WinSparkle, the app's updater, and when it last checked |
     | `windows.json` and `WebView2` | The account windows' records and data, as [Account windows](/reference/files#account-windows) lists |
 
-    Removing Pitboard in **Settings** > **Apps** > **Installed apps** deletes the install folder, the shortcut, the link scheme, the `PATH` entry, the `Run` value and `%LOCALAPPDATA%\Pitboard App`.
+    Removing Pitboard in **Settings** > **Apps** > **Installed apps** deletes the install folder, the shortcut, the link scheme, the `PATH` entry, the `Run` value and `%LOCALAPPDATA%\Pitboard App`. The app's **Uninstall Pitboard** deletes Pitboard's directory, then removes Pitboard the same way.
   </Tab>
 </Tabs>
 
@@ -295,8 +297,8 @@ Both apps keep these in `app.json` in Pitboard's directory, so they follow `PITB
 | Key | Holds |
 | --- | --- |
 | `second_account_declined` | The tools, `claude`, `codex` or `desktop`, whose second-account tip you dismissed with **Not Now** |
-| `tips_declined` | The other setup tips you dismissed with **Not Now**: `open_at_login`, `at_limit` or `use_codex` |
-| `has_been_seen` | Whether the app has opened its window at first launch |
+| `tips_declined` | The other setup tips you dismissed with **Not Now**: `at_limit` or `use_codex` |
+| `has_been_seen` | Whether the app has shown its welcome window |
 | `at_limit` | The choice in **When a limit reaches**: `nothing`, `notify` or `switch`. While left out, `auto_switch` decides. |
 | `auto_switch` | `true` while **Switch Automatically** is chosen. Left out otherwise. Without `at_limit`, `true` reads as **Switch Automatically** and anything else as **Notify Me**. |
 | `auto_switch_at` | The share it notifies or switches at, a whole percentage. 95 while left out. A value outside 50 to 99 reads as the nearer end. |
