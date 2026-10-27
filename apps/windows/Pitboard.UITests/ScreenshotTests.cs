@@ -399,11 +399,11 @@ public sealed partial class ScreenshotTests
     private static bool Dims(AutomationElement button, bool dimmed) =>
         Retry.WhileFalse(() => button.IsEnabled != dimmed, Patience, TimeSpan.FromMilliseconds(250), ignoreException: true).Result;
 
-    // Its last command takes the focus, which scrolls the opened row into view.
+    // Open once its last command is there.
     private static void Opened(AutomationElement row)
     {
         Launched.Expand(row);
-        Launched.Within(row, found => found.ByAutomationId("detail.remove"), $"{row.AutomationId}'s Remove account").Focus();
+        Launched.Within(row, found => found.ByAutomationId("detail.remove"), $"{row.AutomationId}'s Remove account");
     }
 
     private static void Switch(Launched launched, string qualified) =>
