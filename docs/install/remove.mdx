@@ -11,20 +11,20 @@ Removing the program alone leaves every parked login on the machine. The app's *
 
 ## Uninstall from the app
 
-The app deletes every saved sign-in, its settings and its account windows, as `pitboard uninstall` does, then removes itself.
+The app deletes every saved sign-in, as `pitboard uninstall` does, and its own settings and account windows, then removes itself.
 
 <Tabs>
   <Tab title="macOS">
-    In **Settings** > **Advanced**, click **Uninstall Pitboard**, then **Uninstall**. If Claude holds a saved sign-in, Pitboard asks to quit Claude first. Then click **Move to Trash**, and enter an administrator's password if macOS asks for one to remove the command line's link in `/usr/local/bin`. Pitboard quits.
+    In **Settings** > **Advanced**, click **Uninstall Pitboard**, then **Uninstall**. If Pitboard holds a saved Claude Desktop sign-in and Claude is open, click **Quit Claude and Uninstall** when it asks. Then click **Move to Trash**, and enter an administrator's password if macOS asks for one to remove the command line's link in `/usr/local/bin`. Pitboard quits.
 
-    A copy from the `pitboard-app` cask shows **Remove Pitboard with Homebrew** instead: run `brew uninstall --cask pitboard-app`, as [Remove Pitboard itself](#remove-pitboard-itself) says. Either way, some of the app's folders stay in `~/Library`, as [The app](/reference/files#the-app) lists.
+    A copy from the `pitboard-app` cask shows **Remove Pitboard with Homebrew** instead: run `brew uninstall --cask pitboard-app`, as [Remove Pitboard itself](#remove-pitboard-itself) says. Either way, Pitboard moves its caches, saved window state and account windows' website data in `~/Library` to the Trash, as [The app](/reference/files#the-app) lists.
 
-    If Pitboard cannot remove everything, **Advanced** says why, with **Try Again**.
+    If Pitboard cannot remove everything, do what **Advanced** says, then click **Try Again**.
   </Tab>
   <Tab title="Windows">
     In **Settings** > **Advanced**, select **Uninstall** on the **Uninstall Pitboard** card, then **Uninstall**. Pitboard exits, and Windows Installer removes the app with a progress bar, as [Remove Pitboard itself](#remove-pitboard-itself) lists.
 
-    If Pitboard cannot remove everything, the card says why, with **Try again**.
+    If Pitboard cannot remove everything, do what the card says, then select **Try again**.
   </Tab>
 </Tabs>
 

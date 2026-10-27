@@ -68,11 +68,11 @@ The welcome window opens at the first launch, before **Accounts**. It says what 
 
 ## Accounts window
 
-**Accounts** lists the accounts by tool, with when Pitboard last read them under its title, such as **Updated 6:42 AM**. Its toolbar holds **Refresh**, **Add Account** and the inspector's button. It opens at 820 by 560 points, with the account in use selected.
+**Accounts** lists the accounts by tool, with when Pitboard last read them under its title, such as **Updated 6:42 AM**. Its toolbar holds **Refresh**, **Add Account** and the inspector's button. It opens at 840 by 560 points, with the account in use selected.
 
 Each row shows the account's name and plan, then **In Use** or its button: **Switch**, **Sign In** or **Add**. Under them comes a line for each limit: its name, a bar, the percentage used and when it resets, such as **Resets 3:45 PM** or **Resets Mon 9:00 AM**. At most one note follows, only when there is something to do. [Account status](/reference/account-status) lists each note.
 
-The inspector beside the list shows the selected account: each limit with how much of it is used, when it resets and how long until then, such as **in 2 hr 9 min**, then **Email**, **Sign-In**, such as **Saved sign-in valid until Nov 20**, and **Warm-Up** with **Warm-Up Settings**. Notes its row has no room for follow, then the account's [commands](#account-commands-and-dialogs).
+The inspector beside the list shows the selected account: each limit with how much of it is used, when it resets and how long until then, such as **in 2 hr 9 min**, and its notes. Then come **Email**, **Sign-In**, such as **Saved sign-in valid until Nov 20**, and **Warm-Up** with **Warm-Up Settings**, then the account's [commands](#account-commands-and-dialogs).
 
 Control-Command-I or the toolbar's button shows and hides the inspector. With no account selected, it reads **No Account Selected**.
 
@@ -87,7 +87,7 @@ In place of the list, **Accounts** shows one of these:
 
 ### Notices
 
-Notices sit above the list, most pressing first, with their buttons. Some have a close button, **Dismiss**.
+Notices come before the list, most pressing first, with their buttons. Some have a close button, **Dismiss**.
 
 | Notice | Shown when |
 | --- | --- |
@@ -137,7 +137,7 @@ A check that warns or fails ends with its fix, such as **Sign In Again**, **Clea
 
 ## Activity window
 
-**Activity**, in the **Window** menu, lists the last 500 changes in Pitboard's log, newest first, from the app and the command line. It reads the log each time it opens. Its **Change** column names the verb [`pitboard log`](/reference/maintenance-commands#log) records:
+**Activity**, in the **Window** menu, lists the last 500 changes in Pitboard's log, newest first, from the app and the command line. It reads the log each time it opens, and again when you click **Refresh** in its toolbar. Its **Change** column names the verb [`pitboard log`](/reference/maintenance-commands#log) records:
 
 | Change | Verb |
 | --- | --- |
@@ -202,7 +202,7 @@ Each notification has the tool's name as its subtitle.
 | **Sign-In Expired**, **Sign-In No Longer Works** or **Not Signed In** | When a read finds that an added account's saved sign-in can no longer be used: it expired, its service refused it, or none is saved. Once for each account until it can be used again, even across restarts. | **Sign in to old again to keep switching to it.** | **Sign In Again**, which opens **Sign In to old Again** | Opens **Accounts** |
 | **Sign-In Replaced** | When a read finds that an account's only sign-in ended outside Pitboard: a sign-in such as `/login` in Claude Code replaced it, or the account was signed out in Claude. Once for each account while reads find it, and once more after the app reopens. | What ended the sign-in, as the notice **A sign-in was replaced outside Pitboard** says | **Sign In Again**, which opens **Sign In to old Again** | Opens **Accounts** |
 
-While a sign-in file is left behind the keychain, the second sentence of **Switched to personal** reads **Sessions already running keep their account until they're started again.**
+While a leftover sign-in file sits behind the keychain, the second sentence of **Switched to personal** reads **Sessions already running keep their account until they're started again.**
 
 **Automatic Switch Skipped**, **Automatic Switching Paused** and **Couldn't Switch Automatically** come only while **Switch Automatically** is chosen. They can come again after the app next switches. After **Switch Back**, no **Automatic Switch Skipped** comes for that account's limit until the limit resets.
 
@@ -222,4 +222,4 @@ A button brings Pitboard forward only where it opens a dialog or asks something.
 | Return, or double-click | A row in **Accounts** | What the row's button does |
 | Delete | A row in **Accounts** | **Remove Account**, after asking |
 | Return | A dialog | Its default button. **Uninstall Pitboard?** has none. |
-| Escape | A dialog | **Cancel**. Nothing in a Claude Desktop sign-in that waits with Claude signed out of an account for it. |
+| Escape | A dialog | **Cancel**. Nothing in a Claude Desktop sign-in before its wait starts, or while it waits with Claude signed out of an account for it. |
