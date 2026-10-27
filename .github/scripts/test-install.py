@@ -1343,6 +1343,20 @@ class CaskZap(unittest.TestCase):
                 self.assertIn(self.log, directive("trash", zap))
                 self.assertEqual(directive("rmdir", zap), [self.logs])
 
+    # Uninstall Pitboard… in the app trashes the same folders of its own, for its own bundle id.
+    def test_the_app_trashes_what_the_app_casks_zap_does_of_its_library(self):
+        removal = REPO / "apps" / "macos" / "Sources" / "PitboardApp" / "System" / "AppRemoval.swift"
+        listed = re.search(
+            r"func leftInLibrary\(by domain: String\) -> \[String\] \{\s*\[(.*?)\]",
+            removal.read_text(),
+            re.S,
+        )[1]
+        folders = re.findall(r'"([^"]*)"', listed.replace("\\(domain)", "com.usepitboard.Pitboard"))
+        self.assertEqual(len(folders), 5)
+        trash = directive("trash", self.zaps["pitboard-app"])
+        for folder in folders:
+            self.assertIn(f"~/Library/{folder}", trash)
+
     def test_the_linux_zap_trashes_every_unit_and_its_link(self):
         trash = directive("trash", self.linux)
         for unit in self.units:

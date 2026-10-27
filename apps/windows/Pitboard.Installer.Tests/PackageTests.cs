@@ -1,5 +1,6 @@
 using System.Globalization;
 using WixToolset.Dtf.WindowsInstaller;
+using WindowsInstaller = WixToolset.Dtf.WindowsInstaller.Installer;
 
 namespace Pitboard.Installer.Tests;
 
@@ -211,8 +212,8 @@ public sealed class PackageTests
         Assert.IsGreaterThan(Sequence(database, "InstallFinalize"), Sequence(database, "LaunchAfterInstall"));
     }
 
-    // Plan 4.12: once a first install is done, Pitboard starts as from Start, which shows its welcome. An upgrade, whose
-    // MajorUpgrade finds the product it replaces, starts it only where WinSparkle asks.
+    // Plan 4.12: once a first install is done, Pitboard starts as from Start, which shows its welcome, unless the install is
+    // quiet. An upgrade, whose MajorUpgrade finds the product it replaces, starts it only where WinSparkle asks.
     [TestMethod]
     public void AFirstInstallStartsPitboardAsStartDoes()
     {
@@ -226,8 +227,40 @@ public sealed class PackageTests
         Assert.AreEqual("PitboardExe", start[1]);
         Assert.IsNull(start[2], "an argument a launch from Start has none of");
         var upgrading = Rows(database, "SELECT `ActionProperty` FROM `Upgrade` WHERE `VersionMax` IS NOT NULL", 1).Single()[0];
-        Assert.AreEqual($"NOT Installed AND NOT {upgrading}", Condition(database, "StartAfterFirstInstall"));
+        Assert.AreEqual($"NOT Installed AND NOT {upgrading} AND UILevel <> 2", Condition(database, "StartAfterFirstInstall"));
         Assert.IsGreaterThan(Sequence(database, "InstallFinalize"), Sequence(database, "StartAfterFirstInstall"));
+    }
+
+    // The condition as Windows Installer reads it, in a session that ignores this machine and can change nothing on it, whose
+    // UILevel is the UI level the session was opened with.
+    [TestMethod]
+    [DataRow(InstallUIOptions.Silent, false, DisplayName = "/quiet")]
+    [DataRow(InstallUIOptions.Basic, true, DisplayName = "/passive")]
+    [DataRow(InstallUIOptions.Full, true, DisplayName = "with its window")]
+    public void AQuietFirstInstallStartsNothing(InstallUIOptions ui, bool starts)
+    {
+        string condition;
+        string upgrading;
+        using (var database = Open())
+        {
+            condition = Condition(database, "StartAfterFirstInstall")!;
+            upgrading = Rows(database, "SELECT `ActionProperty` FROM `Upgrade` WHERE `VersionMax` IS NOT NULL", 1).Single()[0]!;
+        }
+
+        var before = WindowsInstaller.SetInternalUI(ui);
+        try
+        {
+            using var session = WindowsInstaller.OpenPackage(Built.Msi, ignoreMachineState: true);
+            Assert.AreEqual(((int)ui).ToString(CultureInfo.InvariantCulture), session["UILevel"]);
+            Assert.AreEqual(starts, session.EvaluateCondition(condition));
+
+            session[upgrading] = UpgradeCode;
+            Assert.IsFalse(session.EvaluateCondition(condition), "an upgrade");
+        }
+        finally
+        {
+            WindowsInstaller.SetInternalUI(before);
+        }
     }
 
     // Each ignored on failure: the install goes on without the share target. Pitboard.exe removes the package, since

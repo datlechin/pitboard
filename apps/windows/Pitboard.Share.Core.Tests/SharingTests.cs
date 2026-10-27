@@ -5,11 +5,7 @@ namespace Pitboard.Share.Core.Tests;
 [TestClass]
 public sealed class SharingTests
 {
-    private const string SignIn =
-        "Pitboard doesn’t open claude.ai sign-in links from outside: one would sign the window in as "
-        + "whoever the link belongs to. Sign in inside the account’s claude.ai window.";
-
-    private const string NoLink = "There is no claude.ai or chatgpt.com link in what was shared.";
+    private static readonly ShareWords Words = PitboardShareFfiMethods.ShareWords();
 
     [TestMethod]
     public async Task ASitesPageStartsPitboardWithItsPitboardLinkAndCompletes()
@@ -22,17 +18,19 @@ public sealed class SharingTests
         CollectionAssert.AreEqual(said, share.Said);
     }
 
+    // The refusal's own sentence, as pitboard-sites says it.
     [TestMethod]
-    [DataRow("https://claude.ai/magic-link#a:b", SignIn, DisplayName = "a sign-in page")]
-    [DataRow("https://example.com/", "Pitboard opens claude.ai and chatgpt.com links only. This link is on example.com.", DisplayName = "another site")]
-    [DataRow(null, NoLink, DisplayName = "no web link")]
-    public async Task APageItRefusesReportsTheRefusalAndStartsNothing(string? webLink, string sentence)
+    [DataRow("https://claude.ai/magic-link#a:b", DisplayName = "a sign-in page")]
+    [DataRow("https://example.com/", DisplayName = "another site")]
+    [DataRow(null, DisplayName = "no web link")]
+    public async Task APageItRefusesReportsTheRefusalAndStartsNothing(string? webLink)
     {
         var share = new RecordedShare(webLink);
+        var refused = Assert.ThrowsExactly<ShareRefusal.Refused>(() => PitboardShareFfiMethods.ShareLink(webLink ?? "", "pitboard"));
 
         await Sharing.HandOverAsync(share, "pitboard");
 
-        string[] said = ["started", "error: " + sentence];
+        string[] said = ["started", "error: " + refused.reason];
         CollectionAssert.AreEqual(said, share.Said);
     }
 
@@ -44,7 +42,7 @@ public sealed class SharingTests
 
         await Sharing.HandOverAsync(share, "pitboard");
 
-        string[] said = ["started", "error: " + Sharing.NotRead];
+        string[] said = ["started", "error: " + Words.NotRead];
         CollectionAssert.AreEqual(said, share.Said);
     }
 
@@ -55,7 +53,7 @@ public sealed class SharingTests
 
         await Sharing.HandOverAsync(share, "pitboard");
 
-        string[] said = ["started", "Pitboard.exe pitboard://open?url=https%3A%2F%2Fchatgpt.com%2F", "error: " + Sharing.NotStarted];
+        string[] said = ["started", "Pitboard.exe pitboard://open?url=https%3A%2F%2Fchatgpt.com%2F", "error: " + Words.NotStarted];
         CollectionAssert.AreEqual(said, share.Said);
     }
 

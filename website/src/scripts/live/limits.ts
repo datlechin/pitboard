@@ -92,8 +92,6 @@ export class AtLimitControls {
       el.hidden = el.dataset.note !== p.atLimit;
       if (!el.hidden) said(el, atLimitNote(p)!);
     }
-    for (const el of this.root.querySelectorAll<HTMLElement>("[data-terms]"))
-      el.hidden = p.atLimit !== "switch";
     // Windows shows At only where something happens at the share
     const card = this.root.querySelector<HTMLElement>("[data-share-card]");
     if (card) card.hidden = p.atLimit === "nothing";

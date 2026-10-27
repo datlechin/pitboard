@@ -17,10 +17,6 @@ public interface IShareOperation
 // Pitboard.exe checks the link it is handed again, as it does any link.
 public static class Sharing
 {
-    public const string NotStarted = "Pitboard couldn’t start the app that opens the page.";
-
-    public const string NotRead = "Pitboard couldn’t read the link that was shared. Share the page again.";
-
     // An exception that left the program would end it without a word to the share sheet.
     public static async Task HandOverAsync(IShareOperation share, string scheme)
     {
@@ -33,7 +29,7 @@ public static class Sharing
         }
         catch (Exception)
         {
-            share.ReportError(NotRead);
+            share.ReportError(PitboardShareFfiMethods.ShareWords().NotRead);
             return;
         }
 
@@ -54,7 +50,7 @@ public static class Sharing
         }
         catch (Exception)
         {
-            share.ReportError(NotStarted);
+            share.ReportError(PitboardShareFfiMethods.ShareWords().NotStarted);
             return;
         }
 

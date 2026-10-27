@@ -1,6 +1,6 @@
 ---
-// The Accounts window as AccountsWindow.swift lays it out at its default 820 by 560, the list
-// beside the inspector, as macOS 27 draws it, under the menu bar Pitboard puts up while the window
+// The Accounts window as AccountsWindow.swift lays it out at its default 840 by 560, the list
+// beside the 280 point inspector, as macOS 27 draws it, under the menu bar Pitboard puts up while the window
 // is in front; a `crop` desk shows the window's top, a `fit` one all of it. Its toolbar's buttons
 // are named as their Labels name them, and ids start `prefix`. The `list` and `inspector` slots
 // hold the window's two columns, and the `desk` slot what the window opens over the desk: its
@@ -33,7 +33,7 @@ const tool = "flex w-34.5 justify-center live:cursor-default live:disabled:opaci
 <pb-accounts
   id={prefix}
   class:list={[
-    "desk [anchor-name:var(--desk)] [--units:860]",
+    "desk [anchor-name:var(--desk)] [--units:880]",
     crop ? "block h-348" : "flex items-center justify-center pt-44 pb-20",
     { "min-h-600": !crop && !fit },
   ]}
@@ -43,7 +43,7 @@ const tool = "flex w-34.5 justify-center live:cursor-default live:disabled:opaci
   <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} templates={templates} />
   <div
     class:list={[
-      "group/window grid min-h-220 w-820 grid-cols-[1fr_calc(var(--spacing)*260)] overflow-hidden rounded-u-16 [anchor-name:var(--window)] bg-mac-window-bg text-mac-window-text shadow-mac-window data-[state=collapsed]:grid-cols-[1fr_0]",
+      "group/window grid min-h-220 w-840 grid-cols-[1fr_calc(var(--spacing)*280)] overflow-hidden rounded-u-16 [anchor-name:var(--window)] bg-mac-window-bg text-mac-window-text shadow-mac-window data-[state=collapsed]:grid-cols-[1fr_0]",
       crop ? "absolute top-24 left-1/2 -translate-x-1/2" : "relative",
       { "min-h-540": !crop && !fit },
     ]}

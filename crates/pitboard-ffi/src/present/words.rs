@@ -1755,7 +1755,11 @@ pub(crate) fn quit_with_downloads(os: Os, running: u32) -> (String, &'static str
 }
 
 pub(crate) fn cannot_open_link(os: Os) -> String {
-    titled(os, "Can’t Open This Link", "Can’t open this link")
+    titled(
+        os,
+        pitboard_sites::LinkRefusal::TITLE,
+        "Can’t open this link",
+    )
 }
 
 pub(crate) fn no_link(os: Os) -> (String, String) {
@@ -4529,7 +4533,10 @@ mod tests {
         );
         assert_eq!(
             (cannot_open_link(Os::MacOs), cannot_open_link(Os::Windows)),
-            ("Can’t Open This Link".into(), "Can’t open this link".into())
+            (
+                pitboard_sites::LinkRefusal::TITLE.into(),
+                "Can’t open this link".into()
+            )
         );
         assert_eq!(
             (

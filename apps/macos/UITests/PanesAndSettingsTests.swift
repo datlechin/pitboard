@@ -118,7 +118,7 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertFalse(standing.exists, "nothing said while it does not switch")
         XCTAssertTrue(
             app.control("settings.terms").waitForExistence(timeout: 5),
-            "Is this allowed?, beside Warm-Up")
+            "Is this allowed?, beside what happens at a limit")
 
         choose(Words.switchAutomatically, in: choice)
         XCTAssertTrue(standing.waitForExistence(timeout: 5), "what the look came to")

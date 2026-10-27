@@ -46,8 +46,6 @@ pub struct WarmShown {
     pub note: String,
     // once the core has said what it is
     pub enabled: bool,
-    // where `AtLimitShown::terms` is not: the settings say it once
-    pub terms: Option<TermsShown>,
 }
 
 /// One Claude Code account, as the settings' warm-up lists it.
@@ -88,8 +86,8 @@ pub struct AtLimitShown {
     pub note: Option<String>,
     // under Switch, what switching came to last
     pub standing: Option<String>,
-    // under Switch
-    pub terms: Option<TermsShown>,
+    // whatever is chosen, as the terms may cover warm-ups too
+    pub terms: TermsShown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -251,7 +249,6 @@ fn warm(seen: &Seen) -> WarmShown {
         standing,
         note: words::WARM_UP_NOTE.into(),
         enabled: overview.is_some(),
-        terms: (state.preferences.at_limit() != AtLimit::Switch).then(terms),
     }
 }
 
@@ -303,7 +300,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
             .as_ref()
             .filter(|_| switching)
             .map(|standing| auto_standing(seen, standing)),
-        terms: switching.then(terms),
+        terms: terms(),
     }
 }
 

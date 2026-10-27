@@ -198,11 +198,6 @@ Microsoft's documentation.
   element its page names: it goes to warn and finds no resources for the warning
   (`BindPathListener.ResolveNameOnRoot` in microsoft-ui-xaml's main, read on 16 October 2026).
   So no page names an element after a member its templates bind.
-- A Selector's `IsSynchronizedWithCurrentItem` is null by default, which keeps its selection on
-  a collection view's current item ([Selector.IsSynchronizedWithCurrentItem](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.primitives.selector.issynchronizedwithcurrentitem)).
-  The Accounts page groups its rows through a CollectionViewSource, so twoTools opened with a
-  row selected that nobody chose. Its list sets it false
-  (`AccountsPageTests.NoRowIsSelectedUntilOneIsChosen`).
 - Read in microsoft-ui-xaml at `winui3/release/2.5.1`, the WinUI of Windows App SDK 2.5.1.
   `ContentDialog_Partial.cpp`: Esc clicks the close button where it is enabled and
   otherwise hides the dialog through a `Closing` it may cancel; Enter clicks the default
