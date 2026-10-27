@@ -115,7 +115,7 @@ While the app is open, it acts once a limit of the account in use reaches the sh
 
 **At** shows under **Notify Me** and **Switch Automatically**: a field and a stepper on macOS, a number box from 50 to 99 on Windows. On Windows, the choices are **Do nothing**, **Notify me** and **Switch automatically**. [`pitboard watch`](/reference/account-commands#watch) never reads this setting.
 
-A note under the choice says what it does. Under **Switch Automatically**, it says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains, and **Is this allowed?** opens [Is this allowed](/concepts/limits#is-this-allowed).
+A note under the choice says what it does. Under **Switch Automatically**, it says when running sessions follow, as [Open sessions](/concepts/open-sessions) explains. Whatever is chosen, **Is this allowed?** under the choice opens [Is this allowed](/concepts/limits#is-this-allowed).
 
 Under **Switch Automatically**, the app decides whether to switch:
 
@@ -144,8 +144,6 @@ A line says what the app last decided:
 While the app is open, it warms up each Claude Code account turned on here, between **From** and **To** each day, as [Warm up accounts](/guides/warm-up) describes. `pitboard warm` changes the same setting, and `pitboard watch` reads it.
 
 **To** at 00:00 is the end of the day. A **From** later than **To** runs past midnight. On Windows, the hours show beside **Warm-up**, such as **6:00 AM to 10:00 PM**, or **All day**.
-
-While **When a limit reaches** is not on **Switch Automatically**, **Is this allowed?** follows the accounts and opens [Is this allowed](/concepts/limits#is-this-allowed).
 
 Each account's switch shows where its warm-up stands while it is on, such as **Warms up again at 11:45 AM**. A line under the list says what comes next:
 
@@ -208,9 +206,9 @@ You can always turn it off. You cannot turn it on in these cases:
 
 ### Uninstall
 
-**Uninstall Pitboard** asks **Uninstall Pitboard?**, then deletes Pitboard's saved sign-ins, settings and account windows, and removes the app. Each tool stays signed in to the account in use. [Remove Pitboard](/install/remove) says what goes and what stays. On Windows, the card is **Uninstall Pitboard**, with **Uninstall**.
+**Uninstall Pitboard** asks **Uninstall Pitboard?**, then does what [Uninstall from the app](/install/remove#uninstall-from-the-app) says. On Windows, the card is **Uninstall Pitboard**, with **Uninstall**.
 
-While it runs, the pane reads **Uninstalling Pitboard**. Where it stopped, it reads **Pitboard couldn't remove everything**, with why and **Try Again**.
+While it runs, the pane reads **Uninstalling Pitboard**. Where it stopped, it reads **Pitboard couldn't remove everything** and why. Where it cannot tell how uninstalling went, it reads **Couldn't uninstall Pitboard**. Both offer **Try Again**.
 
 ## Troubleshoot
 
