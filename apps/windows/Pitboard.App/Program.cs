@@ -68,6 +68,7 @@ public static class Program
                     Exe,
                     new RegistryRunKey(),
                     new CoreScheduledTasks(environment),
+                    new SystemJumpList(Running, Exe),
                     new SystemAppNotifications(),
                     new RegistryNotificationRegistration(Running.Aumid));
                 return 0;

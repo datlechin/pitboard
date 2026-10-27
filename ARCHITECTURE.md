@@ -461,7 +461,7 @@ keeps it is in the header of the module named.
 - The Windows Jump List is Win32's, kept under the AppUserModelId with no package identity.
   Each task starts `Pitboard.exe` with a flag and the GUID the model gave it, read only where a
   link would be, and its switch is a request from outside (`LaunchingTests`, `model/jumping.rs`).
-  Only a Release build writes the list.
+  Only a Release build writes the list, and `--unregister` deletes it.
 
 ### Account windows
 
