@@ -321,10 +321,16 @@ public sealed partial class ScreenshotTests
         var choice = launched.Element("settings.atLimit").AsComboBox();
         Launched.Expand(launched.Element("settings.atLimitGroup"));
         Assert.IsTrue(Launched.Enables(choice), "the choice stayed dimmed");
+        // A fresh install notifies, at the share it shows.
+        launched.Element("settings.atLimitShare");
+        KeepWindow(window, "windows-settings-limits-notify");
         // The model's choices, in its order: Do nothing, Notify me, Switch automatically.
         choice.Select(2);
         launched.Element("settings.autoSwitchStanding");
         KeepWindow(window, "windows-settings-limits-switch");
+        choice.Select(0);
+        Assert.IsTrue(launched.Gone(found => found.ByAutomationId("settings.atLimitShare")), "the share stayed");
+        KeepWindow(window, "windows-settings-limits-do-nothing");
 
         var scroller = Scroller(launched.Element("settings.renewDaily"));
         scroller.Patterns.Scroll.Pattern.SetScrollPercent(NoScroll, 100);
