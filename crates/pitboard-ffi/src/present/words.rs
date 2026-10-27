@@ -1506,8 +1506,12 @@ pub(crate) const USE_WITH_CODEX: &str = "Use Pitboard with Codex";
 pub(crate) const CODEX_UNUSED: &str =
     "Codex is installed. Pitboard reads nothing of it until you add the account it’s signed in to.";
 
+// The Windows tip's title names Codex, and its half-width button has room for one line.
 pub(crate) fn add_codex_account(os: Os) -> String {
-    titled(os, "Add Codex Account…", "Add Codex account…")
+    match os {
+        Os::Windows => add_account(os, true),
+        Os::MacOs | Os::Linux => "Add Codex Account…".into(),
+    }
 }
 
 // The welcome's switch to open at login: its title, and what it says.
@@ -4867,7 +4871,7 @@ mod tests {
         );
         assert_eq!(
             both(&add_codex_account),
-            pair("Add Codex Account…", "Add Codex account…")
+            pair("Add Codex Account…", "Add account…")
         );
         assert_eq!(
             open_at_login(Os::MacOs),

@@ -171,7 +171,7 @@ export function accountsPage(w: World, notice: typeof switchNotice | null) {
   return {
     title: "Accounts",
     updated: `Updated ${hm(w.readAt)}`,
-    commands: ["Refresh", "Add account"],
+    commands: ["Refresh", "Add account…"],
     notice,
     sections: toolsOn("windows").map(([tool, name]) => ({
       name,

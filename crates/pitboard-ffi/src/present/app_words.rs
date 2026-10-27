@@ -281,7 +281,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             diagnostics: "Diagnostics".into(),
             refresh: words::REFRESH.into(),
             refresh_help: "Read every account’s usage again".into(),
-            add_account: words::add_account(os, false),
+            add_account: words::add_account(os, os == Os::Windows),
             add_account_help: "Sign in to another account".into(),
             check_again: titled(os, "Check Again", "Check again"),
             check_again_help: "Make every check again".into(),
@@ -507,8 +507,10 @@ mod tests {
             if mac.is_empty() || windows.is_empty() {
                 continue;
             }
-            let alike = mac.to_lowercase() == windows.to_lowercase()
-                || mac.to_lowercase().strip_suffix('…') == Some(&windows.to_lowercase());
+            let (one, other) = (mac.to_lowercase(), windows.to_lowercase());
+            let alike = one == other
+                || one.strip_suffix('…') == Some(&other)
+                || other.strip_suffix('…') == Some(&one);
             let apart = named_apart.contains(&(mac.as_str(), windows.as_str()));
             assert!(alike || apart, "{mac:?} and {windows:?}");
         }
@@ -646,6 +648,19 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+    }
+
+    // Plan 3: a command that asks for more says so on Windows; the macOS toolbar's has no ellipsis.
+    #[test]
+    fn the_windows_command_bar_says_add_account_asks_for_more() {
+        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        assert_eq!(
+            (
+                mac.window.add_account.as_str(),
+                windows.window.add_account.as_str()
+            ),
+            ("Add Account", "Add account…")
+        );
     }
 
     // Plan 4.3 and 4.9: what the inspector and an expanded row label an account's values.
