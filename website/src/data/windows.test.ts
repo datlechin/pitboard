@@ -441,11 +441,12 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
   assert.ok(
     !xaml.includes("Terms.Sentence") && !shell("SettingsViewModel.cs").includes("Terms.Sentence"),
   );
-  // At, only where something happens at the share
-  assert.ok(xaml.includes('Visibility="{x:Bind ViewModel.ShowsShare, Mode=OneWay}"'));
+  // At, dimmed while nothing happens at the share
+  assert.ok(!xaml.includes("ShowsShare") && !shell("SettingsViewModel.cs").includes("ShowsShare"));
+  assert.ok(xaml.includes('IsEnabled="{x:Bind ViewModel.CanSetShare, Mode=OneWay}"'));
   assert.ok(
-    shell("SettingsViewModel.cs").includes(
-      "public bool ShowsShare => AtLimit.Choice != Core.AtLimit.Nothing;",
+    machine.includes(
+      "share_enabled: state.preferences_have_been_read() && choice != AtLimit::Nothing,",
     ),
   );
 });

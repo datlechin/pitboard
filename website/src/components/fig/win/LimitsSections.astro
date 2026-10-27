@@ -1,6 +1,6 @@
 ---
-// SettingsPage.xaml's Limits: When a limit reaches, open on its share, which shows only while
-// something happens at it, and Warm-up, open on its hours and accounts, what it does under its name
+// SettingsPage.xaml's Limits: When a limit reaches, open on its share, dimmed while nothing
+// happens at it, and Warm-up, open on its hours and accounts, what it does under its name
 // and its hours beside it, each a section live/limits.ts works, each with its icon. Each control is
 // named as the XAML names it; each expander's button shows and hides its items, and their ids start
 // `prefix`. Every choice's words are drawn, those of the choice not shown hidden. Is this allowed?
@@ -69,7 +69,7 @@ const icon = "size-20 shrink-0";
       <div
         class:list={[
           header,
-          "group-has-[[data-share-card][hidden]]/section:rounded-b-u-4 has-[[data-expander][aria-expanded=false]]:rounded-b-u-4 live:hover:bg-win-control-2",
+          "has-[[data-expander][aria-expanded=false]]:rounded-b-u-4 live:hover:bg-win-control-2",
         ]}
         data-header
       >
@@ -112,10 +112,16 @@ const icon = "size-20 shrink-0";
         </button>
       </div>
       <div id={items}>
-        <div class:list={[item, "rounded-b-u-4"]} data-share-card>
+        {/* a SettingsCard's header and description dim with it */}
+        <div
+          class:list={[item, "group/share rounded-b-u-4 has-[:disabled]:text-win-text-off"]}
+          data-share-card
+        >
           <span class="min-w-0 flex-1">
             <span class="block">{page.share.header}</span>
-            <span class:list={["block", caption]}>{page.share.range}</span>
+            <span class:list={["block", caption, "group-has-[:disabled]/share:text-win-text-off"]}
+              >{page.share.range}</span
+            >
           </span>
           <NumberBox prefix={prefix} value={page.share.value} label={page.share.header} />
         </div>

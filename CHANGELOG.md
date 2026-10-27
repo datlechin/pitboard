@@ -249,9 +249,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app's **Settings** shows each setting with its icon, as Windows Settings does, says
   what **Start when you sign in to Windows** is for, and names the version under **Version**
   beside **Check now**.
-- The Windows app's **Settings** shows **At** only while something happens when a limit reaches
-  it, says what a warm-up does under **Warm-up** with its hours beside it, and links **Is this
-  allowed?** without a sentence on the terms before it.
+- The Windows app's **Settings** dims **At** while nothing happens when a limit reaches it, says
+  what a warm-up does under **Warm-up** with its hours beside it, and links **Is this allowed?**
+  without a sentence on the terms before it.
 - The Windows app's **Settings** calls the card that says where `pitboard` is **Command line**,
   where it said **In your terminal**.
 
