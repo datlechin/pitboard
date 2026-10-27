@@ -26,7 +26,8 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
         [nameof(AppModel.UpdatedWindow)] = [nameof(Updated)],
         [nameof(AppModel.Reading)] = [nameof(CanRefresh)],
         [nameof(AppModel.Notices)] = [nameof(Notices)],
-        [nameof(AppModel.Setup)] = [nameof(Setup), nameof(HasSetup), nameof(SetupTitle), nameof(SetupDetail)],
+        [nameof(AppModel.Setup)] =
+            [nameof(Setup), nameof(HasSetup), nameof(SetupTitle), nameof(SetupDetail), nameof(Listed), nameof(ShowsEmpty)],
         [nameof(AppModel.Footing)] = [nameof(SetupFooting)],
         [nameof(AppModel.Sections)] = [nameof(Sections)],
     };
@@ -44,7 +45,9 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
 
     public bool CanRefresh => !model.Reading;
 
-    public bool Listed => model.AccountsShown is AccountsShown.List;
+    // The setup tip sits in the list's header, so No Accounts under a tip keeps the list it is in.
+    public bool Listed =>
+        model.AccountsShown is AccountsShown.List || (model.AccountsShown is AccountsShown.NoAccounts && HasSetup);
 
     public bool ShowsEmpty => !Listed;
 

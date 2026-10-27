@@ -19,6 +19,21 @@ public sealed class AccountsViewModelTests
         return (shown, model, app, told);
     }
 
+    // The model says No Accounts under the Codex tip, which this page draws in its list's header.
+    [TestMethod]
+    public void NoAccountsUnderATipKeepsTheListTheTipSitsIn()
+    {
+        var (shown, _, _, _) = Over(Snapshots.Read(1) with
+        {
+            AccountsShown = new AccountsShown.NoAccounts("No accounts", "Sign in to add one.", Add),
+            Setup = new SetupStep("Use Pitboard with Codex", "Codex is installed.", [Add]),
+        });
+
+        Assert.IsTrue(shown.Listed);
+        Assert.IsFalse(shown.ShowsEmpty);
+        Assert.IsTrue(shown.HasSetup);
+    }
+
     [TestMethod]
     public void AnEmptyMachineIsOfferedAnAccount()
     {
