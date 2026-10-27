@@ -50,6 +50,16 @@ pitboard
 
 With accounts of more than one tool, each tool has its own heading and its own account in use. [Account status](/reference/account-status) says what each mark, colour and line means, and what to do about each.
 
+## See usage in a widget or from Shortcuts
+
+On macOS, Pitboard's widgets and the Shortcuts action **Get Usage** show usage without opening Pitboard. On Windows, Pitboard has neither.
+
+To add a widget, Control-click the wallpaper, choose **Edit Widgets**, search for `Pitboard`, then click **Account** or **Accounts**. For Notification Center, click **Edit Widgets** at its foot instead. **Account** shows the account in use: to show another, Control-click the widget, choose to edit it, then choose the account. On macOS 26 and later, the control **Account** shows how much of its fullest limit an account has used, in Control Center or the menu bar: click Control Center in the menu bar, click **Edit Controls**, then add it.
+
+A widget shows what Pitboard last read, so its numbers move only while Pitboard runs. [Widgets and controls](/reference/mac-app#widgets-and-controls) says what each one shows.
+
+In Shortcuts, or in Spotlight on macOS 26 and later, run **Get Usage**. With no account chosen, it gives the accounts in use, a line each, such as **work: 5-hour 42% used, Weekly 12%**, and hands a shortcut [each account's details](/reference/mac-app#shortcuts-and-spotlight).
+
 ## Read without asking, or ask again
 
 To see the last numbers measured, without asking Anthropic or OpenAI, run `pitboard status --offline`. It renews no parked login, and each Claude Code or Codex account ends with a line such as `measured 14:02, 3m ago · read without asking Anthropic`.
