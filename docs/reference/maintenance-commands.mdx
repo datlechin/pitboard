@@ -73,7 +73,7 @@ The job runs `pitboard renew` once a day, from the `pitboard` that installed it,
 
 The job renews the parked logins in Pitboard's own directory, `~/.pitboard` or, on Windows, `%USERPROFILE%\AppData\Local\Pitboard`, whatever `PITBOARD_HOME` it is given. While `PITBOARD_HOME` names another directory, `install` refuses with `schedule_not_default_home`, and `status` says which directory the schedule renews. A link to the default directory counts as another directory. `uninstall` works whatever `PITBOARD_HOME` says.
 
-The system starts the job without your shell's environment. `install` gives it each proxy variable it was started with: `ALL_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in either case. Run `install` again after your proxy changes. Until then, `pitboard doctor` warns with `schedule_proxy`. The app's **Renew parked logins daily** setting gives the job the app's variables, not your shell's: see [The schedule uses another proxy](/troubleshooting/renewal#the-schedule-uses-another-proxy).
+The system starts the job without your shell's environment. `install` gives it each proxy variable it was started with: `ALL_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in either case. Run `install` again after your proxy changes. Until then, `pitboard doctor` warns with `schedule_proxy`. The app's **Keep Saved Sign-Ins Fresh** setting gives the job the app's variables, not your shell's: see [The schedule uses another proxy](/troubleshooting/renewal#the-schedule-uses-another-proxy).
 
 <Tabs>
   <Tab title="macOS">
