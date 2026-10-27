@@ -176,6 +176,59 @@ private final class NoOtherApps: AppControl {
     func reopen(location: String, front: Bool) throws {}
 }
 
+// Each until the stand-in has been sent what it waits on.
+@MainActor
+private func sent(_ model: StandInModel, _ count: Int) async {
+    while model.sent.count < count { await Task.yield() }
+}
+
+private func answer(_ request: UInt64, _ said: String) -> OutsideAnswer {
+    OutsideAnswer(request: request, done: true, said: said, question: nil)
+}
+
+// A shortcut waits on its own request, whatever else the ten newest answers hold.
+@MainActor
+@Test func anAskIsAnsweredByItsOwnRequestsAnswer() async {
+    let model = StandInModel(snapshot(0))
+    let app = AppModel(model: model)
+    let first = Task { await app.ask(.refresh, within: .seconds(60)) }
+    await sent(model, 1)
+    let second = Task { await app.ask(.switch(account: "p"), within: .seconds(60)) }
+    await sent(model, 2)
+    #expect(
+        model.sent == [
+            .outside(request: 1, ask: .refresh),
+            .outside(request: 2, ask: .switch(account: "p")),
+        ])
+    app.apply(snapshot(1, answers: [answer(2, "Switched to personal.")]))
+    #expect(await second.value == answer(2, "Switched to personal."))
+    let both = [answer(2, "Switched to personal."), answer(1, "Updated")]
+    app.apply(snapshot(2, answers: both))
+    #expect(await first.value == answer(1, "Updated"))
+}
+
+// Shortcuts gives an action 30 seconds, so one asked of a model that never answers says so.
+@MainActor
+@Test func anAskNobodyAnswersInTimeIsNilAndALateAnswerIsDropped() async {
+    let app = AppModel(model: StandInModel(snapshot(0)))
+    #expect(await app.ask(.refresh, within: .milliseconds(10)) == nil)
+    app.apply(snapshot(1, answers: [answer(1, "Updated")]))
+}
+
+@MainActor
+@Test func theGlanceWaitsForTheLaunchsFirstReadAndNoLonger() async {
+    let model = StandInModel(snapshot(0))
+    let app = AppModel(model: model)
+    #expect(await app.glance(within: .milliseconds(10)) == nil)
+
+    let glanced = Task { await app.glance(within: .seconds(60)) }
+    await Task.yield()
+    model.glanceText = #"{"schema":1}"#
+    app.apply(snapshot(1, glanceRevision: 1))
+    #expect(await glanced.value == #"{"schema":1}"#)
+    #expect(await app.glance(within: .zero) == #"{"schema":1}"#)
+}
+
 private final class Unposted: Notifications {
     func post(notice: RunOutNotice) throws {}
 }
