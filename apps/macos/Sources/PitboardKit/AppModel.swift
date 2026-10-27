@@ -84,6 +84,10 @@ public final class AppModel {
     @ObservationIgnored private var answering: [UInt64: Answering] = [:]
     @ObservationIgnored private var lastGlance = 0
     @ObservationIgnored private var glancing: [Int: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored private var glanceRevision: UInt64
+
+    // Told each time what a widget shows of the glance changes, once its snapshot is shown.
+    @ObservationIgnored public var glanceChanged: (@MainActor () -> Void)?
 
     /// The app's model over `model`, showing its last snapshot until a newer one comes.
     public init(model: any PitboardModelProtocol) {
@@ -117,6 +121,7 @@ public final class AppModel {
         uninstall = first.uninstall
         removal = first.removal
         welcome = first.welcome
+        glanceRevision = first.glanceRevision
     }
 
     /// The model `make` makes, told of its snapshots through a listener that hands each to
@@ -222,9 +227,11 @@ public final class AppModel {
             answering.removeValue(forKey: answer.request)?.resume(returning: answer)
         }
         // The model makes its glance before it tells the snapshot that moved its revision.
-        if snapshot.glanceRevision > 0 {
+        if snapshot.glanceRevision != glanceRevision {
+            glanceRevision = snapshot.glanceRevision
             for waiting in glancing.values { waiting.resume() }
             glancing = [:]
+            glanceChanged?()
         }
         return assigned
     }

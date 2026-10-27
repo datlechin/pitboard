@@ -160,22 +160,6 @@ private final class Told: @unchecked Sendable {
     #expect(onMain)
 }
 
-/// What is said of time in a fixture's snapshot, in UTC, as `pitboard-ffi`'s own tests say
-/// it.
-private final class Utc: LocalTime {
-    func clock(epoch: Int64, withWeekday: Bool) throws -> String { "\(epoch)" }
-    func sameDay(first: Int64, second: Int64) throws -> Bool { true }
-    func dateAndTime(epoch: Int64) throws -> String { "\(epoch)" }
-    func timeOfDay(minutes: UInt16) throws -> String { "\(minutes)" }
-    func date(epoch: Int64) throws -> String { "\(epoch)" }
-}
-
-private final class NoOtherApps: AppControl {
-    func running(app: String) throws -> String? { nil }
-    func requestQuit(app: String) throws {}
-    func reopen(location: String, front: Bool) throws {}
-}
-
 // Each until the stand-in has been sent what it waits on.
 @MainActor
 private func sent(_ model: StandInModel, _ count: Int) async {
@@ -229,8 +213,19 @@ private func answer(_ request: UInt64, _ said: String) -> OutsideAnswer {
     #expect(await app.glance(within: .zero) == #"{"schema":1}"#)
 }
 
-private final class Unposted: Notifications {
-    func post(notice: RunOutNotice) throws {}
+// Shortcuts reads the accounts again as they change, and a widget would reload.
+@MainActor
+@Test func aGlanceThatMovedIsToldOnceItsSnapshotIsShown() {
+    let app = AppModel(model: StandInModel(snapshot(0)))
+    var told = 0
+    app.glanceChanged = { told += 1 }
+    app.apply(snapshot(1))
+    app.apply(snapshot(2, glanceRevision: 1))
+    app.apply(snapshot(3, glanceRevision: 1))
+    app.apply(snapshot(2, glanceRevision: 2))
+    #expect(told == 1, "not for a revision that stayed, nor in a snapshot dropped")
+    app.apply(snapshot(4, glanceRevision: 2))
+    #expect(told == 2)
 }
 
 /// The bindings carry the model end to end: a fixture's model, the real core over a machine
@@ -248,11 +243,7 @@ func aFixturesModelPublishesItsAccounts() async throws {
     let own = FileManager.default.temporaryDirectory
         .appendingPathComponent("pitboard-bindings-\(UUID().uuidString)", isDirectory: true)
     defer { try? FileManager.default.removeItem(at: own) }
-    let model = try AppModel.listening { listener in
-        try PitboardModel.fixtureIn(
-            name: "twoTools", temporaryDirectory: own.path, listener: listener,
-            apps: NoOtherApps(), notifications: Unposted(), localTime: Utc())
-    }
+    let model = try fixtureModel("twoTools", in: own)
     #expect(model.sections.isEmpty, "nothing is read before it is started")
     model.send(.start)
     let deadline = Date().addingTimeInterval(30)
