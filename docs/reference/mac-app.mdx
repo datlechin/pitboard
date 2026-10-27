@@ -1,6 +1,6 @@
 ---
 title: "Menu bar app"
-description: "Look up what the menu bar app shows and when, what it does by itself, its notifications and its keyboard shortcuts."
+description: "Look up what the menu bar app shows and does, its notifications, Shortcuts actions, widgets and keyboard shortcuts."
 ---
 
 The menu bar app runs on macOS 14 or later. [The app on Windows](/reference/windows-app) has its own page.
@@ -207,6 +207,71 @@ While a leftover sign-in file sits behind the keychain, the second sentence of *
 **Automatic Switch Skipped**, **Automatic Switching Paused** and **Couldn't Switch Automatically** come only while **Switch Automatically** is chosen. They can come again after the app next switches. After **Switch Back**, no **Automatic Switch Skipped** comes for that account's limit until the limit resets.
 
 A button brings Pitboard forward only where it opens a dialog or asks something. Notifications play no sound and set no badge. macOS asks whether to allow them the first time the app posts one.
+
+## Shortcuts and Spotlight
+
+Shortcuts lists three actions under Pitboard, beside the Find action it makes to filter the accounts by their details. Each of the three runs in Pitboard, which macOS starts if it is not running, and only **Open Pitboard** brings it forward. On macOS 26 and later, Spotlight runs them too.
+
+| Action | Asks for | Does |
+| --- | --- | --- |
+| **Switch Account** | An account | Switches its tool to it, as **Switch** does in **Accounts**, then gives back the account and **Switched Claude Code to work.**, or **work is already in use.** |
+| **Get Usage** | An account, or none | Gives back that account, or else the accounts in use, and a line for each, such as **work: 5-hour 42% used, Weekly 12%**. With no account chosen and none in use, it says **No account is in use.** |
+| **Open Pitboard** | Nothing | Opens **Accounts**. |
+
+The accounts are the ones Pitboard has added. Each gives a shortcut these details, and none holds an email address:
+
+| Detail | Holds |
+| --- | --- |
+| **Name** | The account's name, such as `work` |
+| **Tool** | **Claude Code**, **Codex** or **Claude Desktop** |
+| **Plan** | Its plan, such as **Max 5x**, where Pitboard knows it |
+| **In Use** | Whether its tool is signed in to it |
+| **Usage** | Its line in [the menu](#menu), or why it has none, such as **Sign-in expired** |
+| **5-Hour Limit Used**, **Weekly Limit Used** | How much of the limit it has used, as a percentage |
+| **5-Hour Limit Resets**, **Weekly Limit Resets** | When the limit resets |
+
+Each action is also an App Shortcut, and **Switch Account** is one for each account. Their phrases name Pitboard:
+
+| App Shortcut | Phrases |
+| --- | --- |
+| **Switch Account** | "Switch Pitboard to work", "Switch to work in Pitboard", "Switch Pitboard account" |
+| **Get Usage** | "Get Pitboard usage", "How much have I used in Pitboard" |
+| **Open Pitboard** | "Open Pitboard accounts", "Show my Pitboard accounts" |
+
+Where Claude or the ChatGPT app has to quit first, **Switch Account** asks as [Quitting Claude or the ChatGPT app](#quitting-claude-or-the-chatgpt-app) says, with **Quit ChatGPT and Switch** and **Cancel**.
+
+An action that cannot do what it was asked stops the shortcut with why:
+
+| It stops with | When |
+| --- | --- |
+| **That account isn't in Pitboard anymore.** | The account was removed. |
+| **Sign in to work again in Pitboard to switch to it.** | Its saved sign-in can no longer be used. |
+| **Pitboard can't switch to work.** | Pitboard cannot read or switch the account. |
+| **Pitboard is busy switching or signing in. Try again in a moment.** | A switch or a sign-in is under way. |
+| **Answer Pitboard's question first, then try again.** | Pitboard is asking whether to quit Claude or the ChatGPT app. |
+| **Open Pitboard to switch while ChatGPT is open.** | On macOS 14, the switch needs the ChatGPT app, or Claude, to quit first. |
+| **Open Pitboard to switch to work.** | The switch would [replace a login Anthropic refuses](/guides/switch#replace-a-login-anthropic-refuses), which only Pitboard asks about. |
+| **Couldn't switch to work. Open Pitboard to try again.** | The switch failed. |
+| **Couldn't read usage. Open Pitboard to try again.** | Pitboard's first read since it started failed. |
+| **Still switching to work.** | The switch has not finished within 25 seconds. It goes on. |
+| **Pitboard hasn't read its accounts yet. Try again in a moment.** | Pitboard's first read had not finished 25 seconds after **Get Usage** ran. |
+| **Pitboard is being uninstalled.** | **Uninstall Pitboard** is under way. |
+
+## Widgets and controls
+
+Pitboard has two widgets for the desktop and Notification Center. They show the accounts Pitboard has added, as Pitboard last read them, and clicking one opens Pitboard.
+
+| Widget | Size | Shows |
+| --- | --- | --- |
+| **Account** | Small | One account: the one you chose, or else the first in use, or else the first in [**Accounts**](#accounts-window), with its first two limits: how much of each is used, a bar and a countdown to its reset. |
+| **Accounts** | Medium | The accounts in use, two at most, as **Account** shows one, each with its tool, or with its plan while only one tool has accounts. One with no usage, such as a Claude Desktop account, is left out while another has some. |
+| **Accounts** | Large | Every account it has room for, each with its plan, under each tool's name once it shows accounts of two tools, with each limit as a row in [**Accounts**](#accounts-window) shows it, such as **Resets 3:45 PM**. Then **Updated 6:42 AM**: when Pitboard read what the widget shows. While the numbers stay the same, it can be older than Pitboard's last read. |
+
+A check mark shows each account in use. From a reset until Pitboard's next read, the limit reads **Resetting now**. An account with no reading shows why, such as **Sign-in expired**. With no account added, a widget reads **No Accounts**, and the medium one reads **No account is in use.** while nothing is in use. Until Pitboard first reads the accounts, a widget shows only the Pitboard mark. VoiceOver reads each limit as one line, such as **5-hour limit, 42 percent used, resets 3:45 PM**.
+
+On macOS 26 and later, Pitboard also has a control, **Account**, for Control Center and the menu bar. Adding one asks which account it shows. It shows the account's name and how much of its fullest limit it has used, such as **64%**, or why it has no reading. For the account in use, it shows **In Use** instead. Clicking it opens **Accounts**.
+
+Whether an update keeps the widgets and controls you placed has not been measured. [Update Pitboard](/install#update-pitboard) says what to do if one is gone.
 
 ## Keyboard shortcuts
 

@@ -1,9 +1,7 @@
 import Foundation
 import Security
 
-// Where the app keeps the glance for its widget extension: the App Group the running program
-// is signed into under its own team, which macOS lets it into without asking. An ad hoc
-// build has no team, and macOS would ask the app and silently refuse the extension.
+// An ad hoc build has no team: macOS would ask the app and refuse the extension.
 public enum AppGroup {
     public static let own: String? = {
         var running: SecCode?

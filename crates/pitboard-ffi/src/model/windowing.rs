@@ -1094,8 +1094,8 @@ fn a_window_waits_while_its_old_store_is_held() {
     };
     let jumps = |model: &Hand| model.on_windows().jump_list.expect("read");
     assert!(
-        !jumps(&model).iter().any(|task| task.ask == opens),
-        "the Jump List leaves it out"
+        jumps(&model).iter().any(|task| task.ask == opens),
+        "the Jump List stays as it was"
     );
 
     model.refresh(&mut machine);

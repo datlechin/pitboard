@@ -322,8 +322,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
       # The newest Xcode on macos-26, which the release's macos-latest builds with too.
-      # Development uses 27.1, which GitHub has only on its preview xcode-27 image, and what
-      # only macOS 27's SDK knows sits behind compiler(>=6.4).
+      # Development uses 27.1, and what only macOS 27's SDK knows sits behind
+      # compiler(>=6.4), which the xcode-27 job builds.
       - run: |
           sudo xcode-select --switch /Applications/Xcode_26.6.app
           xcodebuild -version
@@ -361,7 +361,21 @@ jobs:
       # release is built and checked above, since this empties apps/macos/build, and
       # build-app.sh never passes it.
       - run: ./apps/macos/scripts/build-xcframework.sh --fixture
-      - run: swift test --package-path apps/macos
+      # The widgets' entries are drawn offscreen here, as no UI test can place a widget, and kept
+      # for pull requests beside macos-app-pictures.
+      - id: package
+        env:
+          PITBOARD_WIDGET_RENDERS: ${{ runner.temp }}/macos-widget-pictures
+        run: |
+          mkdir -p "$PITBOARD_WIDGET_RENDERS"
+          swift test --package-path apps/macos
+      - if: success() || steps.package.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-widget-pictures
+          path: ${{ runner.temp }}/macos-widget-pictures
+          if-no-files-found: error
+          retention-days: 7
       # The app driven the way a person drives it: the debug build, started by each test in
       # a fixture rather than on this runner's own accounts. A UI test needs Automation Mode,
       # which asks for a password unless the machine allows it without one. GitHub's macOS
@@ -420,6 +434,33 @@ jobs:
           path: ${{ runner.temp }}/macos-app-pictures
           if-no-files-found: error
           retention-days: 7
+
+  # The app, its widget extension and PitboardGlance built with Xcode 27, unsigned, so the code
+  # behind compiler(>=6.4) compiles somewhere; nothing here runs, and nothing is kept. Run
+  # 40506912858 read the image as xcode-27-arm64 on macOS 27.0.1, with Xcode 27.1 selected, the
+  # one development uses, so it is named, as the apple job names its own.
+  xcode-27:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          sudo xcode-select --switch /Applications/Xcode_27.1.app
+          xcodebuild -version
+      - uses: ./.github/actions/rust
+        with:
+          targets: aarch64-apple-darwin x86_64-apple-darwin
+      - uses: ./.github/actions/xcodegen
+      - run: ./apps/macos/scripts/build-xcframework.sh
+      - run: xcodegen generate --spec apps/macos/project.yml --quiet
+      - run: >
+          xcodebuild -project apps/macos/Pitboard.xcodeproj -scheme Pitboard -configuration Release
+          -destination 'generic/platform=macOS' -derivedDataPath apps/macos/build/DerivedData
+          -clonedSourcePackagesDirPath apps/macos/build/SourcePackages
+          -onlyUsePackageVersionsFromResolvedFile -quiet
+          ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
 
   csharp:
     # The Windows app reaches the core through these bindings, and PitboardShare.exe reaches
@@ -1149,6 +1190,7 @@ jobs:
       - windows-release
       - windows-msrv
       - apple
+      - xcode-27
       - csharp
       - csharp-windows
       - windows-app

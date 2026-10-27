@@ -84,12 +84,40 @@ fn nothing_is_written_before_the_accounts_are_read() {
     assert_eq!(model.count(glances), 0);
 }
 
+// The app reloads the widgets as the revision moves, and a widget reads the file: an intent in
+// the app reads the glance at once.
+#[test]
+fn with_a_file_the_revision_moves_once_the_glance_is_written() {
+    let mut machine = Stub::reading(Ok(two(10.0)));
+    let mut model = glancing(&mut machine);
+    assert_eq!(
+        model.publish().glance_revision,
+        0,
+        "the file still to write"
+    );
+    assert!(model.state.glance().is_some());
+    model.run(&mut machine);
+    assert_eq!(machine.glances.len(), 1);
+    assert_eq!(model.publish().glance_revision, 1);
+
+    machine.answer = Ok(two(30.0));
+    model.refresh(&mut machine);
+    assert_eq!(
+        model.publish().glance_revision,
+        1,
+        "the file still to write"
+    );
+    model.run(&mut machine);
+    assert_eq!(model.publish().glance_revision, 2);
+}
+
 #[test]
 fn the_glance_is_written_once_per_change_and_never_by_the_minute() {
     let mut machine = Stub::reading(Ok(two(10.0)));
     let mut model = glancing(&mut machine);
-    assert_eq!(model.publish().glance_revision, 1);
     model.publish();
+    model.run(&mut machine);
+    assert_eq!(model.publish().glance_revision, 1);
     model.later(Duration::from_secs(60));
     model.tick();
     model.run(&mut machine);
@@ -102,8 +130,9 @@ fn the_glance_is_written_once_per_change_and_never_by_the_minute() {
 
     machine.answer = Ok(two(30.0));
     model.refresh(&mut machine);
-    assert_eq!(model.publish().glance_revision, 2);
+    model.publish();
     model.run(&mut machine);
+    assert_eq!(model.publish().glance_revision, 2);
     assert_eq!(machine.glances.len(), 2);
 }
 
@@ -115,21 +144,24 @@ fn each_read_rewrites_the_glance_and_only_what_a_widget_shows_moves_its_revision
     };
     let mut machine = Stub::reading(Ok(two(10.0)));
     let mut model = glancing(&mut machine);
-    assert_eq!(model.publish().glance_revision, 1);
+    model.publish();
     model.run(&mut machine);
+    assert_eq!(model.publish().glance_revision, 1);
 
     model.later(Duration::from_secs(300));
     model.refresh(&mut machine);
-    assert_eq!(model.publish().glance_revision, 1, "the same numbers");
+    model.publish();
     model.run(&mut machine);
+    assert_eq!(model.publish().glance_revision, 1, "the same numbers");
     let read: Vec<Option<i64>> = machine.glances.iter().map(|text| read_at(text)).collect();
     assert_eq!(read, [Some(NOW), Some(NOW + 300)]);
 
     machine.answer = Ok(two(30.0));
     model.later(Duration::from_secs(300));
     model.refresh(&mut machine);
-    assert_eq!(model.publish().glance_revision, 2);
+    model.publish();
     model.run(&mut machine);
+    assert_eq!(model.publish().glance_revision, 2);
     assert_eq!(machine.glances.len(), 3);
 }
 

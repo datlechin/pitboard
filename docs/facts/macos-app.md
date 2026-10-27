@@ -108,6 +108,39 @@ its own date.
   `Window` scene's window has the scene's id as its `identifier`, which the UI tests find it
   by, as `windows["welcome"]`.
 
+## Shortcuts, the widgets and the app's name
+
+Read and measured on 27 October 2026, with Xcode 27.1 unless a fact names another build.
+
+- Measured on macOS 27.0 with a scratch SwiftUI app: the app menu and its Hide and Quit items
+  take `CFBundleDisplayName`, and the standard About panel takes `CFBundleName`. So a debug
+  build, whose display name is Pitboard Debug, shows Pitboard Debug in its app menu and Pitboard
+  in About.
+- Read on CI's macOS 26 image, `macos-26-arm64` 20261013.0424, in run 40494932963: the debug
+  build's app menu takes `CFBundleName`, Pitboard, while its Hide and Quit items read Hide
+  Pitboard Debug and Quit Pitboard Debug. `SiteFiguresTests` expect what each system draws
+  ([The site's figures](site.md)).
+- Read from a debug build: an `AppShortcutsProvider` in a static Swift package reached none of
+  the app's `Metadata.appintents`, while the package's actions, `AccountEntity` and
+  `AccountQuery` reached both. So the App Shortcuts and the actions that run in the app are in the
+  app target, `apps/macos/App/Intents.swift`, and `build-app.sh` fails any build whose app's
+  `Metadata.appintents/extract.actionsdata` lacks the three actions, `AccountEntity` or the App
+  Shortcuts, or whose widget extension's lacks `AccountChoice`, `OpenPlaceIntent` or
+  `AccountEntity`.
+- Read from a release build: the widget extension's `Metadata.appintents` holds `AccountChoice`,
+  `AccountControlChoice`, `OpenPlaceIntent` and `AccountEntity`, and the app's holds
+  `OpenPlaceIntent` with `openAppWhenRun`. The macOS 27 `SwitchButtonIntent` has
+  `allowedTargets` main, `supportedModes` background and `openAppWhenRun` false in both.
+- Measured with an ad hoc binary signed with an `application-groups` entitlement:
+  `SecCodeCopySigningInformation` gives back the entitlements and no team. So `AppGroup.own`
+  names no group in an ad hoc build, as every test, CI and clone build is, and such a build
+  writes no glance and claims no App Group.
+- Measured with `NSHostingController.sizeThatFits` at the family's size: four accounts with
+  three limits each overflowed the large widget by 25 points, so it shows as many accounts as fit.
+  The sizes the render tests draw, 158 by 158, 338 by 158 and 338 by 354 points inside the
+  guidelines' tight 11-point margins, are a bound of Pitboard's own: Apple's guidelines give no
+  widget sizes for the Mac.
+
 ## What the UI tests find a control by
 
 Measured on macOS 27.0.1 with Swift 6.4 on 25 October 2026, in a program of its own that

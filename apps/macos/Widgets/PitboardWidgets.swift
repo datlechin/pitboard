@@ -85,7 +85,9 @@ struct AccountsWidget: Widget {
             AccountsFamily(entry: entry)
         }
         .configurationDisplayName("Accounts")
-        .description("How much the accounts in use, or all of them, have used.")
+        .description(
+            "How much each account in use has used, or every account in the large size."
+        )
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
@@ -122,9 +124,7 @@ struct AccountControlValue: AppIntentControlValueProvider {
     }
 }
 
-// A button per account chosen, with how much it has used. It opens Pitboard: a control's
-// intent runs in the app on macOS 26 only as an OpenIntent, and its template takes one intent
-// for every system.
+// On macOS 26 a control's intent runs in the app only as an OpenIntent.
 @available(macOS 26.0, *)
 struct AccountControl: ControlWidget {
     var body: some ControlWidgetConfiguration {

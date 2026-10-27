@@ -10,7 +10,8 @@ public enum Actions {
     // long.
     public static let patience: Duration = .seconds(25)
 
-    // What the model answered, asking its question where `asking` can, which macOS 14 can't.
+    // What the model answered, asking its question where `asking` can, which macOS 14 can't. An
+    // entity's properties are boxes of their own, so `account` reads In Use once it is.
     public static func switching(
         to account: AccountEntity, with model: AppModel, asking: Confirming?,
         within patience: Duration = patience
@@ -18,7 +19,10 @@ public enum Actions {
         let late = Refused(said: stillSwitching(label: account.name))
         guard let answer = await model.ask(.switch(account: account.id), within: patience)
         else { throw late }
-        if answer.done { return answer.said }
+        if answer.done {
+            account.inUse = true
+            return answer.said
+        }
         guard let question = answer.question, let asking else {
             throw Refused(said: answer.said)
         }
@@ -26,6 +30,7 @@ public enum Actions {
         let quit = OutsideAsk.quitAndSwitch(account: account.id)
         guard let quitting = await model.ask(quit, within: patience) else { throw late }
         guard quitting.done else { throw Refused(said: quitting.said) }
+        account.inUse = true
         return quitting.said
     }
 

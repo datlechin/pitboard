@@ -282,7 +282,7 @@ pub(crate) enum Job {
     /// Remove Pitboard from this machine, with the app's own hold on its directory.
     Uninstall,
     /// Keep the glance in the file the app named for it.
-    KeepGlance { text: String },
+    KeepGlance { text: String, reload: bool },
 }
 
 impl Job {
@@ -578,6 +578,10 @@ pub(crate) enum Answer {
     /// anything, or one a stop before had stopped.
     Stopped,
     Uninstalled(Result<Uninstalled, PitboardError>),
+    /// The glance was written, or could not be, and the widgets reload where `reload`.
+    GlanceKept {
+        reload: bool,
+    },
     /// The job stopped with a panic, or a sign-in's thread could not be started, and it came
     /// to nothing. The lane goes on, and the model goes on as though the job had answered
     /// with nothing new.
@@ -612,6 +616,7 @@ impl Answer {
             | Answer::Saved
             | Answer::WindowsKept { .. }
             | Answer::SharedChecked { .. }
+            | Answer::GlanceKept { .. }
             | Answer::Uninstalled(_) => true,
             Answer::Lost(job) => job.writes(),
             Answer::Installed { .. }
@@ -1646,7 +1651,8 @@ impl State {
     }
 
     // Made again as each read changes it, from the first read on, until Pitboard is being
-    // removed, and written where the app named a file.
+    // removed, and written where the app named a file. A widget reads that file, so the
+    // revision the app reloads widgets on moves once it is written.
     pub(crate) fn glanced(&mut self, glance: GlanceText) -> Option<Job> {
         let glancing = &mut self.glancing;
         if self.status.is_none()
@@ -1655,16 +1661,22 @@ impl State {
         {
             return None;
         }
-        if glancing.shown.as_ref() != Some(&glance.shown) {
+        let reload = glancing.shown.as_ref() != Some(&glance.shown);
+        if reload {
             glancing.shown = Some(glance.shown);
-            glancing.revision += 1;
         }
         glancing.text = Some(glance.file.clone());
         if !glancing.file {
+            if reload {
+                glancing.revision += 1;
+            }
             return None;
         }
         self.at_work += 1;
-        Some(Job::KeepGlance { text: glance.file })
+        Some(Job::KeepGlance {
+            text: glance.file,
+            reload,
+        })
     }
 
     // As a click in the app would, short of a question only the app can ask.
@@ -1835,6 +1847,10 @@ impl State {
             Ok(stayed) => {
                 self.removing = Some(Removing::Clearing(stayed));
                 self.windows.remove_all(jobs);
+                // The glance file is gone, and the widgets reload to find no accounts.
+                self.glancing.text = None;
+                self.glancing.shown = None;
+                self.glancing.revision += 1;
             }
             Err(Some(error)) => {
                 self.resume(now);
@@ -2994,7 +3010,9 @@ impl State {
             Answer::Opened { front: false, .. }
             | Answer::Pasted
             | Answer::Stopped
-            | Answer::Saved => {}
+            | Answer::Saved
+            | Answer::GlanceKept { reload: false } => {}
+            Answer::GlanceKept { reload: true } => self.glancing.revision += 1,
             Answer::Posted { title, refused } => self.machine.posted(title, refused, now.epoch()),
             Answer::Kept {
                 told,

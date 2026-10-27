@@ -253,6 +253,7 @@ The environment holds the proxy variables as they were set at install, and on ma
     | `Contents/Resources/man/pitboard.1` | The man page |
     | `Contents/Resources/completions/pitboard.bash`, `pitboard.zsh` and `pitboard.fish` | Shell completions |
     | `Contents/PlugIns/PitboardShare.appex` | The [Share extension](/reference/account-windows#share-extension) |
+    | `Contents/PlugIns/PitboardWidgets.appex` | The [widgets and the control](/reference/mac-app#widgets-and-controls) |
 
     The app keeps these keys in `~/Library/Preferences/com.usepitboard.Pitboard.plist`:
 
@@ -266,7 +267,14 @@ The environment holds the proxy variables as they were set at install, and on ma
 
     The app's other files are in `~/Library/Application Support`, `~/Library/Caches`, `~/Library/HTTPStorages` and `~/Library/Saved Application State`, each named after `com.usepitboard.Pitboard`.
 
-    **Uninstall Pitboard** deletes these keys, the login item and the folder in `~/Library/Application Support`. It moves the app's folders in `~/Library/Caches`, `~/Library/HTTPStorages`, `~/Library/Saved Application State` and `~/Library/WebKit` to the Trash, every account window's website data with them. The Share extension's folders stay.
+    For the widgets and the control, the app and macOS keep these:
+
+    | Path | What it is |
+    | --- | --- |
+    | `~/Library/Group Containers/D7HJ5TFYCU.com.usepitboard.Pitboard/glance.json` | What the widgets and the control show: each added account's name, tool, plan and usage, and when Pitboard read them, written again after each read. It holds no email address and no sign-in. Only a copy from a release writes it. |
+    | `~/Library/Containers/com.usepitboard.Pitboard.widgets` and `~/Library/Application Scripts/com.usepitboard.Pitboard.widgets` | Folders macOS makes for the sandboxed widget extension. Pitboard writes nothing there. |
+
+    **Uninstall Pitboard** deletes the keys in `com.usepitboard.Pitboard.plist`, the login item, the folder in `~/Library/Application Support` and `glance.json`. It moves the app's folders in `~/Library/Caches`, `~/Library/HTTPStorages`, `~/Library/Saved Application State` and `~/Library/WebKit` to the Trash, every account window's website data with them. The folder `glance.json` was in stays, and so do the folders macOS makes for the Share and widget extensions.
   </Tab>
   <Tab title="Windows">
     The installer puts the app in `%LOCALAPPDATA%\Programs\Pitboard`, for your account alone.
@@ -279,6 +287,7 @@ The environment holds the proxy variables as they were set at install, and on ma
     | **Pitboard** in the Start menu | A shortcut to the app |
     | `HKEY_CURRENT_USER\Software\Classes\pitboard` | The [Pitboard link](/reference/account-windows#pitboard-links) scheme |
     | The value `Pitboard` in `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` | **Start when you sign in to Windows**, while it is on: the app's path and `--sign-in` |
+    | Pitboard's Jump List, which Windows keeps for the app | The tasks of the [Jump List](/reference/windows-app#jump-list), each a shortcut to `Pitboard.exe` |
 
     The app keeps these in `Pitboard App` in the folder Windows names for your account's local app data, whatever `LOCALAPPDATA` or `PITBOARD_HOME` says:
 
@@ -288,7 +297,7 @@ The environment holds the proxy variables as they were set at install, and on ma
     | `updates.json` | The settings of WinSparkle, the app's updater, and when it last checked |
     | `windows.json` and `WebView2` | The account windows' records and data, as [Account windows](/reference/files#account-windows) lists |
 
-    Removing Pitboard in **Settings** > **Apps** > **Installed apps** deletes the install folder, the shortcut, the link scheme, the `PATH` entry, the `Run` value and `%LOCALAPPDATA%\Pitboard App`. The app's **Uninstall Pitboard** deletes Pitboard's directory, then removes Pitboard the same way.
+    Removing Pitboard in **Settings** > **Apps** > **Installed apps** deletes the install folder, the shortcut, the link scheme, the `PATH` entry, the `Run` value, the Jump List and `%LOCALAPPDATA%\Pitboard App`. The app's **Uninstall Pitboard** deletes Pitboard's directory, then removes Pitboard the same way.
   </Tab>
 </Tabs>
 

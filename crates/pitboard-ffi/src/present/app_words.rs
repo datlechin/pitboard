@@ -219,7 +219,7 @@ pub struct AccountWindowWords {
 // A switch Pitboard hasn't answered in the time Shortcuts gives an action.
 #[uniffi::export]
 pub fn still_switching(label: String) -> String {
-    format!("Pitboard is still switching to {label}.")
+    format!("Still switching to {label}.")
 }
 
 // One account in what Get Usage says: "work: 5-hour 42% used, Weekly 12%".
@@ -620,7 +620,7 @@ mod tests {
     fn a_sentence_with_a_value_is_made_here_not_in_a_view() {
         assert_eq!(
             still_switching("personal".into()),
-            "Pitboard is still switching to personal."
+            "Still switching to personal."
         );
         assert_eq!(
             usage_of("work".into(), "5-hour 42% used, Weekly 12%".into()),

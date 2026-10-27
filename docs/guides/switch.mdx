@@ -1,6 +1,6 @@
 ---
 title: "Switch accounts"
-description: "Switch a tool to another enrolled account from the app's menu, its window or the command line."
+description: "Switch a tool to another enrolled account from the app, Shortcuts, Spotlight, the taskbar or the command line."
 ---
 
 A switch puts another account's [parked login](/concepts/switching#parked-logins) in use for Claude Code, OpenAI's Codex CLI or Claude Desktop, and parks the login the tool had. Where nothing is signed in to the tool, as on a new computer, it puts the account's login in use and parks nothing.
@@ -32,6 +32,23 @@ Claude Code sessions already running follow within 33 seconds.
 ```
 
 Where nothing was signed in, the first line names the tool instead: `Switched Claude Code to work.`
+
+## Switch from Shortcuts, Spotlight or the taskbar
+
+<Tabs>
+  <Tab title="macOS">
+    In Shortcuts, add **Switch Account** from Pitboard's actions to a shortcut, then click its account and choose one.
+
+    On macOS 26 and later, Spotlight runs **Switch Account** too: press Command-Space, enter `switch account`, then choose the account.
+
+    Pitboard says what it did, such as **Switched Claude Code to work.** If the ChatGPT app or Claude has to quit first, it asks, as in **Quit ChatGPT to switch?**: click **Quit ChatGPT and Switch**. On macOS 14, it says to open Pitboard instead: switch there. If Pitboard cannot switch, the shortcut stops with why, as [Shortcuts and Spotlight](/reference/mac-app#shortcuts-and-spotlight) lists.
+  </Tab>
+  <Tab title="Windows">
+    Pin Pitboard to the taskbar or Start, right-click it there, then select **Switch to work**.
+
+    If the switch cannot happen, Pitboard posts **Couldn't switch** with why, as [Jump List](/reference/windows-app#jump-list) says. Select it to open **Accounts**.
+  </Tab>
+</Tabs>
 
 ## What Pitboard checks first
 

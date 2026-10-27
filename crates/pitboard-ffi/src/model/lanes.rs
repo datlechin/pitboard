@@ -767,13 +767,13 @@ impl Worker {
                 }
                 Answer::WindowsKept { write }
             }
-            Job::KeepGlance { text } => {
+            Job::KeepGlance { text, reload } => {
                 if let Some(path) = &self.glance
                     && let Ok(permit) = core.permit()
                 {
                     let _ = pitboard_core::app::write_file(permit, path, &text);
                 }
-                Answer::Saved
+                Answer::GlanceKept { reload }
             }
             Job::CheckShared { stores } => Answer::SharedChecked {
                 shared: self.windows.as_ref().and_then(|file| {

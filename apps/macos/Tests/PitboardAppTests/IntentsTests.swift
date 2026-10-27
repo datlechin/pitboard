@@ -68,6 +68,9 @@ private final class Asked: @unchecked Sendable {
     app.apply(
         snapshot(1, answers: [answer(1, done: true, "Switched Claude Code to personal.")]))
     #expect(try await switching.value == "Switched Claude Code to personal.")
+    // The account the action gives back, which a shortcut's next action reads.
+    #expect(personal.inUse)
+    #expect(personal.usage == "5-hour 75% used")
 }
 
 // Shortcuts stops the shortcut and shows why, so what comes after it never runs on a switch
@@ -84,6 +87,7 @@ private final class Asked: @unchecked Sendable {
     let refused = "Sign in to personal again in Pitboard to switch to it."
     app.apply(snapshot(1, answers: [answer(1, done: false, refused)]))
     await #expect(throws: Refused(said: refused)) { try await switching.value }
+    #expect(!old.inUse)
 }
 
 @MainActor

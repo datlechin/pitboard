@@ -38,6 +38,28 @@ private func goldenGlance() throws -> Glance {
     #expect(glance.inUse.map(\.name) == ["work", "main"])
 }
 
+// A Claude Desktop account has no usage to show beside the others in use.
+@Test func aMediumWidgetShowsTwoAccountsInUseThoseWithUsageFirst() throws {
+    let three = try glance(at: readAt, withDesktop)
+    #expect(three.inUse.map(\.name) == ["work", "main", "desktop"])
+    #expect(three.medium.map(\.name) == ["work", "main"])
+    let noCodex = try glance(at: readAt) {
+        withDesktop($0).filter { $0["tool"] as? String != "codex" }
+    }
+    #expect(noCodex.medium.map(\.name) == ["work"])
+    let desktopAlone = try glance(at: readAt) {
+        withDesktop($0).filter { $0["tool"] as? String == "desktop" }
+    }
+    #expect(desktopAlone.medium.map(\.name) == ["desktop"])
+}
+
+@Test func aMediumWidgetNamesTheToolOnlyWhileTwoToolsHaveAccounts() throws {
+    let two = try goldenGlance()
+    #expect(two.medium.map(two.besideInMedium) == ["Claude Code", "Codex"])
+    let one = try glance(at: readAt) { $0.filter { $0["tool"] as? String == "claude" } }
+    #expect(one.medium.map(one.besideInMedium) == ["Max 5x"])
+}
+
 @Test func aControlNamesItsAccountWithItsTightestLimitOrInUse() throws {
     let glance = try goldenGlance()
     #expect(
@@ -75,15 +97,15 @@ private enum Family: CaseIterable {
 
 private let margin: CGFloat = 11
 
-// Drawn as AppKit draws a window, which draws Gauge as it is, where ImageRenderer does not.
-// PITBOARD_WIDGET_RENDERS names a folder to keep each picture in.
+// Drawn as AppKit draws a window, which draws Gauge as it is, where ImageRenderer does not, at
+// a Retina display's two pixels a point. PITBOARD_WIDGET_RENDERS names a folder to keep each
+// picture in.
 @MainActor
-private func draw(
-    _ family: Family, _ entry: GlanceEntry, mode: WidgetRenderingMode, dark: Bool, named: String
-) throws -> NSBitmapImageRep {
+private func draw(_ family: Family, _ entry: GlanceEntry, dark: Bool, named: String) throws
+    -> NSBitmapImageRep
+{
     let size = family.size
     let content = family.view(entry)
-        .environment(\.widgetRenderingMode, mode)
         .padding(margin)
         .frame(width: size.width, height: size.height)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -91,7 +113,13 @@ private func draw(
     host.frame = NSRect(origin: .zero, size: size)
     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     host.layout()
-    let picture = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    let picture = try #require(
+        NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width) * 2,
+            pixelsHigh: Int(size.height) * 2, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+            bitsPerPixel: 0))
+    picture.size = size
     host.cacheDisplay(in: host.bounds, to: picture)
     if let folder = ProcessInfo.processInfo.environment["PITBOARD_WIDGET_RENDERS"] {
         let file = URL(fileURLWithPath: folder).appending(path: "\(named).png")
@@ -135,6 +163,20 @@ private func moved(_ value: Any, by shift: TimeInterval) -> Any {
     }
 }
 
+// The golden's accounts and a Claude Desktop account in use, which has no usage.
+private func withDesktop(_ accounts: [[String: Any]]) -> [[String: Any]] {
+    var desktop = accounts[0]
+    desktop["id"] = "desktop"
+    desktop["tool"] = "desktop"
+    desktop["tool_name"] = "Claude Desktop"
+    desktop["name"] = "desktop"
+    desktop["plan"] = nil
+    desktop["said"] = "No usage read"
+    desktop["value"] = "In Use"
+    desktop["limits"] = [Any]()
+    return accounts + [desktop]
+}
+
 // Six Claude Code accounts with three limits each, more than a large widget has room for.
 private func crowded(_ accounts: [[String: Any]]) -> [[String: Any]] {
     let limits =
@@ -151,31 +193,48 @@ private func crowded(_ accounts: [[String: Any]]) -> [[String: Any]] {
     }
 }
 
+// Each picture is named as the UI tests' are, "macos-widget-small-data", then "-dark" where it
+// is dark, for pull requests (macos-widget-pictures). Only the system draws the tinted and clear
+// looks, over the desktop.
 @MainActor
 @Test(arguments: Family.allCases)
 private func eachWidgetDrawsItsAccountsInEveryLookWithinItsSize(_ family: Family) throws {
     let now = Date.now
-    let entries = [
-        "now": GlanceEntry(date: now, glance: try glance(at: now)),
-        "reset": GlanceEntry(
-            date: now.addingTimeInterval(2 * 3_600), glance: try glance(at: now)),
-        "empty": GlanceEntry(date: now, glance: nil),
+    let data = try glance(at: now)
+    var entries = [
+        "data": GlanceEntry(date: now, glance: data),
+        "reset": GlanceEntry(date: now.addingTimeInterval(2 * 3_600), glance: data),
+        "no-glance": GlanceEntry(date: now, glance: nil),
+        "no-accounts": GlanceEntry(date: now, glance: try glance(at: now) { _ in [] }),
+        "none-in-use": GlanceEntry(
+            date: now,
+            glance: try glance(at: now) {
+                $0.map { account in
+                    var account = account
+                    account["in_use"] = false
+                    account["standing"] = "ready"
+                    return account
+                }
+            }),
         "one-tool": GlanceEntry(
             date: now,
             glance: try glance(at: now) { $0.filter { $0["tool"] as? String == "claude" } }),
+        "three-tools": GlanceEntry(date: now, glance: try glance(at: now, withDesktop)),
         "crowded": GlanceEntry(date: now, glance: try glance(at: now, crowded)),
     ]
+    // main, whose five-hour limit is used up
+    if family == .small, let main = data.accounts.first(where: { $0.name == "main" }) {
+        entries["at-limit"] = GlanceEntry(date: now, glance: data, chosen: main.id)
+    }
     for (state, entry) in entries {
         #expect(
             taken(family, entry).height <= family.size.height - 2 * margin, "\(family) \(state)"
         )
-        for (look, mode) in [("full", WidgetRenderingMode.fullColor), ("tinted", .accented)] {
-            for dark in [false, true] {
-                let picture = try draw(
-                    family, entry, mode: mode, dark: dark,
-                    named: "\(family)-\(state)-\(look)-\(dark ? "dark" : "light")")
-                #expect(picture.pixelsWide > 0)
-            }
+        for dark in [false, true] {
+            let picture = try draw(
+                family, entry, dark: dark,
+                named: "macos-widget-\(family)-\(state)\(dark ? "-dark" : "")")
+            #expect(picture.pixelsWide > 0)
         }
     }
 }

@@ -226,6 +226,11 @@ names runs was read in those alone.
 - The bar: the Apple menu, Pitboard, File, Edit, View, Go, Account, Window, Help.
 - Pitboard: About Pitboard; Settings… ⌘,; Services ›; Hide Pitboard ⌘H, Hide Others ⌥⌘H, Show
   All; Quit Pitboard ⌘Q. Show All is dimmed. Every item but About has a symbol before it.
+- That is a release's app menu, which the site draws. The debug build the test reads is named
+  Pitboard Debug. Its Hide and Quit items read Hide Pitboard Debug and Quit Pitboard Debug, and
+  About reads About Pitboard. Its app menu is Pitboard on macOS 26, as run 40494932963 read it,
+  and Pitboard Debug on macOS 27 ([The macOS app](macos-app.md)). So on CI the menu's pictures
+  are `site-menu-bar-pitboard-first` and `site-menu-bar-pitboard-personal`.
 - File: Add Account… ⌘N; Open claude.ai ›; Remove Website Data…; Close ⌘W, with Close All in its
   place under ⌥. Remove Website Data… is dimmed.
 - Edit is macOS's own, and Copy Report: Undo ⌘Z, Redo ⇧⌘Z; Cut ⌘X, Copy ⌘C, Paste ⌘V, Delete,

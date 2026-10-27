@@ -9,7 +9,7 @@ import PitboardKit
 struct SwitchAccountIntent: AppIntent {
     static let title: LocalizedStringResource = "Switch Account"
     static let description = IntentDescription(
-        "Switches the account’s tool to it, as Switch does in Pitboard.")
+        "Switches to the account, as Switch does in Pitboard.")
 
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes { .background }
@@ -38,7 +38,7 @@ struct SwitchAccountIntent: AppIntent {
 struct GetUsageIntent: AppIntent {
     static let title: LocalizedStringResource = "Get Usage"
     static let description = IntentDescription(
-        "Gives how much of each limit an account has used, or the accounts in use.")
+        "Tells how much of each limit an account, or each account in use, has used.")
 
     @available(macOS 26.0, *)
     static var supportedModes: IntentModes { .background }
