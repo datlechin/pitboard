@@ -615,7 +615,7 @@ public sealed class SettingsPageTests
         var about = Views.Element<SettingsExpander>(page, "settings.about");
         about.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
         about.IsExpanded = true;
-        await Views.Until(() => Views.Visible<HyperlinkButton>(page).Any(), "About did not open");
+        await Views.Until(() => Views.Visible<HyperlinkButton>(about).Any(), "About did not open");
 
         Assert.Contains("1.2.3", Views.Texts(page));
         Assert.Contains(Words.Settings.Copyright, Views.Texts(page));
@@ -623,13 +623,13 @@ public sealed class SettingsPageTests
         Assert.AreEqual(Words.Menu.About, AutomationProperties.GetName(about));
         CollectionAssert.AreEqual(
             new[] { "usepitboard.com", Words.Settings.Help, Words.Settings.SourceCode, Words.Settings.ReportAProblem, Words.Settings.License },
-            Views.Visible<HyperlinkButton>(page).Select(link => link.Content as string).ToArray());
-        var report = Views.Visible<HyperlinkButton>(page).Single(link => link.Content as string == Words.Settings.ReportAProblem);
+            Views.Visible<HyperlinkButton>(about).Select(link => link.Content as string).ToArray());
+        var report = Views.Visible<HyperlinkButton>(about).Single(link => link.Content as string == Words.Settings.ReportAProblem);
         new HyperlinkButtonAutomationPeer(report).Invoke();
         Assert.AreEqual(new Uri("https://github.com/datlechin/pitboard/issues"), opened.Single());
 
         // The window had no way to the help but the icon's menu.
-        var help = Views.Visible<HyperlinkButton>(page).Single(link => link.Content as string == Words.Settings.Help);
+        var help = Views.Visible<HyperlinkButton>(about).Single(link => link.Content as string == Words.Settings.Help);
         new HyperlinkButtonAutomationPeer(help).Invoke();
         Assert.AreEqual(new Uri("https://docs.usepitboard.com"), opened.Last());
     }
