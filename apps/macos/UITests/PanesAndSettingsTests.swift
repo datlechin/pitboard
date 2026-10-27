@@ -116,6 +116,9 @@ final class PanesAndSettingsTests: FixtureTestCase {
 
         let typed = app.textFields["settings.atLimitShareField"]
         XCTAssertTrue(typed.exists, "a field beside the stepper")
+        XCTAssertTrue(
+            app.control("settings.terms").waitForExistence(timeout: 5),
+            "Is this allowed?, beside Warm-Up")
         let raise = share.incrementArrows.firstMatch
         XCTAssertTrue(raise.exists, "a stepper shows its arrows")
         raise.click()

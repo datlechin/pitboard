@@ -102,12 +102,12 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 
     public bool HasAtLimitTerms => AtLimit.Terms is not null;
 
-    public string WarmTerms => Warm.Terms.Sentence;
+    public string WarmTerms => Warm.Terms?.Sentence ?? "";
 
-    // The same page beside switching and beside warm-up.
-    public string TermsLinkTitle => Warm.Terms.LinkTitle;
+    // One page, said beside switching while it is chosen and beside warm-up otherwise.
+    public string TermsLinkTitle => (AtLimit.Terms ?? Warm.Terms)?.LinkTitle ?? "";
 
-    public string TermsLink => Warm.Terms.Link;
+    public string TermsLink => (AtLimit.Terms ?? Warm.Terms)?.Link ?? "";
 
     public double Share => AtLimit.At;
 

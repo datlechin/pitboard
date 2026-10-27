@@ -52,10 +52,7 @@ struct LimitsSettings: View {
                         .explanatory()
                         .accessibilityIdentifier("settings.autoSwitchStanding")
                 }
-                if let terms = atLimit.terms, let page = URL(string: terms.link) {
-                    Link(terms.linkTitle, destination: page)
-                        .accessibilityIdentifier("settings.terms")
-                }
+                TermsLink(terms: atLimit.terms)
             } footer: {
                 if let note = atLimit.note { Text(note).footnote() }
             }
@@ -99,6 +96,7 @@ struct LimitsSettings: View {
                         .explanatory()
                         .accessibilityIdentifier("settings.warmStanding")
                 }
+                TermsLink(terms: warm.terms)
             } header: {
                 Text(warm.title)
             } footer: {
@@ -107,6 +105,18 @@ struct LimitsSettings: View {
             .disabled(!warm.enabled)
         }
         .formStyle(.grouped)
+    }
+}
+
+// The model gives it to one section at a time.
+private struct TermsLink: View {
+    let terms: TermsShown?
+
+    var body: some View {
+        if let terms, let page = URL(string: terms.link) {
+            Link(terms.linkTitle, destination: page)
+                .accessibilityIdentifier("settings.terms")
+        }
     }
 }
 

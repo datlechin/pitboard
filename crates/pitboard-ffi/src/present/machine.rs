@@ -53,7 +53,8 @@ pub struct WarmShown {
     pub note: String,
     // once the core has said what it is
     pub enabled: bool,
-    pub terms: TermsShown,
+    // where `AtLimitShown::terms` is not: the settings say it once
+    pub terms: Option<TermsShown>,
 }
 
 /// One Claude Code account, as the settings' warm-up lists it.
@@ -257,7 +258,7 @@ fn warm(seen: &Seen) -> WarmShown {
         standing,
         note: words::WARM_UP_NOTE.into(),
         enabled: overview.is_some(),
-        terms: terms(),
+        terms: (state.preferences.at_limit() != AtLimit::Switch).then(terms),
     }
 }
 
