@@ -526,7 +526,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
         },
         shortcuts: ShortcutsWords {
             not_read_yet: mac("Pitboard hasn’t read its accounts yet. Try again in a moment."),
-            none_in_use: mac("No account is in use."),
+            none_in_use: mac(words::NONE_IN_USE),
         },
     }
 }

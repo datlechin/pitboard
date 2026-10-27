@@ -597,6 +597,11 @@ pub(crate) const QUESTION_OPEN: &str = "Answer Pitboard’s question first, then
 
 pub(crate) const BEING_UNINSTALLED: &str = "Pitboard is being uninstalled.";
 
+pub(crate) const NONE_IN_USE: &str = "No account is in use.";
+
+// A widget's or a control's switch where only the app can switch.
+pub(crate) const OPEN_TO_SWITCH: &str = "Open Pitboard to switch accounts.";
+
 // `title` names what failed; the app says why, since the core's words can name an email or a path.
 pub(crate) fn failed_outside(title: &str) -> String {
     format!("{title}. Open Pitboard to try again.")
@@ -771,6 +776,9 @@ pub(crate) fn resets(clock: &str) -> String {
 }
 
 pub(crate) const RESETTING_NOW: &str = "Resetting now";
+
+// Before the countdown to a reset that a widget draws itself.
+pub(crate) const RESETS_IN: &str = "Resets in";
 
 // How long until a reset, to the minute it has not yet reached.
 pub(crate) fn resets_in(seconds: i64) -> String {
@@ -4780,6 +4788,9 @@ mod tests {
         assert_eq!(resets("3:45 PM"), "Resets 3:45 PM");
         assert_eq!(resets("Mon 9:00 AM"), "Resets Mon 9:00 AM");
         assert_eq!(RESETTING_NOW, "Resetting now");
+        assert_eq!(RESETS_IN, "Resets in");
+        assert_eq!(NONE_IN_USE, "No account is in use.");
+        assert_eq!(OPEN_TO_SWITCH, "Open Pitboard to switch accounts.");
         assert_eq!(WARM_UP_OFF, "Off");
         assert_eq!(
             limit_reached("5-hour limit", Some("6:46 PM")),

@@ -6,16 +6,23 @@ import Testing
 
 @testable import PitboardApp
 
+private let glanceWords = """
+    {"in_use": "In Use", "resets_in": "Resets in", "resetting_now": "Resetting now",
+     "updated": null, "no_accounts": "No Accounts", "none_in_use": "No account is in use.",
+     "open_to_switch": "Open Pitboard to switch accounts."}
+    """
+
 private let twoTools = """
-    {"schema": 1, "read_at": 1800000000, "accounts": [
+    {"schema": 1, "read_at": 1800000000, "words": \(glanceWords), "accounts": [
       {"id": "w", "tool": "claude", "tool_name": "Claude Code", "name": "work", "in_use": true,
        "standing": "in_use", "plan": "Max 5x", "said": "5-hour 42% used, Weekly 12%",
-       "limits": []},
+       "value": "In Use", "limits": []},
       {"id": "p", "tool": "claude", "tool_name": "Claude Code", "name": "personal",
        "in_use": false, "standing": "ready", "plan": null, "said": "5-hour 75% used",
-       "limits": []},
+       "value": "75%", "limits": []},
       {"id": "m", "tool": "codex", "tool_name": "Codex", "name": "main", "in_use": true,
-       "standing": "in_use", "plan": "Plus", "said": "5-hour 10% used", "limits": []}
+       "standing": "in_use", "plan": "Plus", "said": "5-hour 10% used", "value": "In Use",
+       "limits": []}
     ]}
     """
 
@@ -159,7 +166,9 @@ private final class Asked: @unchecked Sendable {
 @MainActor
 @Test func usageWithNoAccountInUseSaysSo() async throws {
     let model = StandInModel(snapshot(0))
-    model.glanceText = #"{"schema": 1, "read_at": null, "accounts": []}"#
+    model.glanceText = """
+        {"schema": 1, "read_at": null, "words": \(glanceWords), "accounts": []}
+        """
     let app = AppModel(model: model)
     let (accounts, said) = try await Actions.usage(of: nil, with: app)
     #expect(accounts.isEmpty)

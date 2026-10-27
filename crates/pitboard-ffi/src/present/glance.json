@@ -1,6 +1,15 @@
 {
   "schema": 1,
   "read_at": 1800000000,
+  "words": {
+    "in_use": "In Use",
+    "resets_in": "Resets in",
+    "resetting_now": "Resetting now",
+    "updated": "Updated 08:00",
+    "no_accounts": "No Accounts",
+    "none_in_use": "No account is in use.",
+    "open_to_switch": "Open Pitboard to switch accounts."
+  },
   "accounts": [
     {
       "id": "35c0d1c9-6b25-5cdc-b543-64c0c0d8de46",
@@ -11,22 +20,29 @@
       "standing": "in_use",
       "plan": "Max 5x",
       "said": "5-hour 42% used, Weekly 12%",
+      "value": "In Use",
       "limits": [
         {
           "kind": "five_hour",
           "model": null,
           "name": "5-hour limit",
+          "short": "5-hour",
           "used": 42.0,
+          "figure": "42%",
           "level": "plenty",
-          "resets_at": 1800003600
+          "resets_at": 1800003600,
+          "spoken": "5-hour limit, 42 percent used, resets 09:00"
         },
         {
           "kind": "weekly",
           "model": null,
           "name": "Weekly limit",
+          "short": "Weekly",
           "used": 12.0,
+          "figure": "12%",
           "level": "plenty",
-          "resets_at": 1800259200
+          "resets_at": 1800259200,
+          "spoken": "Weekly limit, 12 percent used, resets Mon 08:00"
         }
       ]
     },
@@ -39,22 +55,29 @@
       "standing": "ready",
       "plan": null,
       "said": "5-hour 75% used, Weekly (Fable) 30%",
+      "value": "75%",
       "limits": [
         {
           "kind": "five_hour",
           "model": null,
           "name": "5-hour limit",
+          "short": "5-hour",
           "used": 75.0,
+          "figure": "75%",
           "level": "low",
-          "resets_at": 1800003600
+          "resets_at": 1800003600,
+          "spoken": "5-hour limit, 75 percent used, resets 09:00"
         },
         {
           "kind": "weekly_model",
           "model": "Fable",
           "name": "Weekly limit (Fable)",
+          "short": "Weekly (Fable)",
           "used": 30.0,
+          "figure": "30%",
           "level": "plenty",
-          "resets_at": 1800259200
+          "resets_at": 1800259200,
+          "spoken": "Weekly limit (Fable), 30 percent used, resets Mon 08:00"
         }
       ]
     },
@@ -67,6 +90,7 @@
       "standing": "needs_sign_in",
       "plan": null,
       "said": "Sign-in expired",
+      "value": "Sign-in expired",
       "limits": []
     },
     {
@@ -78,22 +102,29 @@
       "standing": "in_use",
       "plan": "Plus",
       "said": "5-hour limit reached, resets 08:30",
+      "value": "In Use",
       "limits": [
         {
           "kind": "five_hour",
           "model": null,
           "name": "5-hour limit",
+          "short": "5-hour",
           "used": 100.0,
+          "figure": "100%",
           "level": "out",
-          "resets_at": 1800001800
+          "resets_at": 1800001800,
+          "spoken": "5-hour limit, 100 percent used, resets 08:30"
         },
         {
           "kind": "weekly",
           "model": null,
           "name": "Weekly limit",
+          "short": "Weekly",
           "used": 50.0,
+          "figure": "50%",
           "level": "plenty",
-          "resets_at": null
+          "resets_at": null,
+          "spoken": "Weekly limit, 50 percent used"
         }
       ]
     }

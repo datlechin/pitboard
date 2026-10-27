@@ -1,6 +1,6 @@
 //! What a widget, a control or an intent reads of the accounts, in view of others and synced.
 
-use super::accounts::{limit_row, limits_said, standing_of};
+use super::accounts::{headline, limit_row, limits_said, standing_of};
 use super::sheets::quit_question;
 use super::{AccountStanding, LimitKind, Seen, words};
 use crate::account_windows::stores::derive;
@@ -10,6 +10,7 @@ use crate::{Account, UsageLevel};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::state::Key;
 use pitboard_core::status::Stale;
+use pitboard_core::words::figure;
 use serde::Serialize;
 
 // A widget reads any schema it knows and leaves another alone.
@@ -20,7 +21,22 @@ struct Glance {
     schema: u32,
     // when the accounts were last read, in epoch seconds
     read_at: Option<i64>,
+    words: GlanceWords,
     accounts: Vec<GlanceAccount>,
+}
+
+// What a widget or a control says beside the accounts, which links no Rust to say it.
+#[derive(Serialize)]
+struct GlanceWords {
+    in_use: String,
+    // before the countdown a widget draws to a reset
+    resets_in: &'static str,
+    resetting_now: &'static str,
+    // "Updated 8:00 AM"
+    updated: Option<String>,
+    no_accounts: String,
+    none_in_use: &'static str,
+    open_to_switch: &'static str,
 }
 
 #[derive(Serialize)]
@@ -34,6 +50,8 @@ struct GlanceAccount {
     plan: Option<String>,
     // the menu's line: "5-hour 42% used, Weekly 12%"
     said: String,
+    // beside its name in a control: "In Use", its tightest limit's "64%", or why it has none
+    value: String,
     limits: Vec<GlanceLimit>,
 }
 
@@ -43,9 +61,13 @@ struct GlanceLimit {
     // the model a weekly limit of one model's is for
     model: Option<String>,
     name: String,
+    // beside its bar: "5-hour"
+    short: String,
     used: f64,
+    figure: String,
     level: &'static str,
     resets_at: Option<i64>,
+    spoken: String,
 }
 
 // The "glance" name and the stores' namespace never change: a widget keeps an account by this
@@ -71,9 +93,19 @@ pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) 
         .filter_map(|account| glanced(&seen, account))
         .collect();
     let shown = serde_json::to_string(&accounts).unwrap_or_default();
+    let read_at = state.updated_ms.map(|ms| ms.div_euclid(1000));
     let glance = Glance {
         schema: SCHEMA,
-        read_at: state.updated_ms.map(|ms| ms.div_euclid(1000)),
+        read_at,
+        words: GlanceWords {
+            in_use: words::in_use(os),
+            resets_in: words::RESETS_IN,
+            resetting_now: words::RESETTING_NOW,
+            updated: read_at.map(|at| words::updated(&seen.clock(at))),
+            no_accounts: words::no_accounts(os).0,
+            none_in_use: words::NONE_IN_USE,
+            open_to_switch: words::OPEN_TO_SWITCH,
+        },
         accounts,
     };
     GlanceText {
@@ -101,6 +133,11 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
         }
         _ => limits_said(seen, account),
     };
+    let value = match headline(windows) {
+        _ if account.signed_in => words::in_use(seen.os),
+        Some(tightest) => figure(tightest.percent),
+        None => said.clone(),
+    };
     Some(GlanceAccount {
         id: id(&account.id),
         tool: account.provider.clone(),
@@ -118,6 +155,7 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
         },
         plan: account.plan.clone(),
         said,
+        value,
         limits: windows
             .iter()
             .map(|limit| {
@@ -132,13 +170,16 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
                     kind,
                     model,
                     name: row.name,
+                    short: row.short,
                     used: row.percent,
+                    figure: row.figure,
                     level: match row.level {
                         UsageLevel::Plenty => "plenty",
                         UsageLevel::Low => "low",
                         UsageLevel::Out => "out",
                     },
                     resets_at: row.resets_at,
+                    spoken: row.spoken,
                 }
             })
             .collect(),

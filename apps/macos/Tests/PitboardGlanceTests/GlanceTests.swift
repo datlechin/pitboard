@@ -16,6 +16,13 @@ private func goldenGlance() throws -> Glance {
     let glance = try goldenGlance()
     #expect(glance.readAt == Date(timeIntervalSince1970: 1_800_000_000))
     #expect(glance.accounts.map(\.name) == ["work", "personal", "old", "main"])
+    #expect(
+        glance.words
+            == GlanceWords(
+                inUse: "In Use", resetsIn: "Resets in", resettingNow: "Resetting now",
+                updated: "Updated 08:00", noAccounts: "No Accounts",
+                noneInUse: "No account is in use.",
+                openToSwitch: "Open Pitboard to switch accounts."))
 
     let work = glance.accounts[0]
     #expect(work.id == "35c0d1c9-6b25-5cdc-b543-64c0c0d8de46")
@@ -25,16 +32,21 @@ private func goldenGlance() throws -> Glance {
     #expect(work.standing == .inUse)
     #expect(work.plan == "Max 5x")
     #expect(work.said == "5-hour 42% used, Weekly 12%")
+    #expect(work.value == "In Use")
     let fiveHour = try #require(work.limits.first)
     #expect(fiveHour.kind == .fiveHour)
     #expect(fiveHour.model == nil)
     #expect(fiveHour.name == "5-hour limit")
+    #expect(fiveHour.short == "5-hour")
     #expect(fiveHour.used == 42)
+    #expect(fiveHour.figure == "42%")
     #expect(fiveHour.level == .plenty)
     #expect(fiveHour.resetsAt == Date(timeIntervalSince1970: 1_800_003_600))
+    #expect(fiveHour.spoken == "5-hour limit, 42 percent used, resets 09:00")
 
     let personal = glance.accounts[1]
     #expect(personal.plan == nil)
+    #expect(personal.value == "75%")
     #expect(personal.limits.map(\.kind) == [.fiveHour, .weeklyModel])
     #expect(personal.limits.map(\.level) == [.low, .plenty])
     #expect(personal.limits.last?.model == "Fable")
@@ -42,6 +54,7 @@ private func goldenGlance() throws -> Glance {
     let old = glance.accounts[2]
     #expect(old.standing == .needsSignIn)
     #expect(old.limits.isEmpty)
+    #expect(old.value == "Sign-in expired")
 
     let main = glance.accounts[3]
     #expect(main.toolName == "Codex")
