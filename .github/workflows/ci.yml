@@ -322,8 +322,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
       # The newest Xcode on macos-26, which the release's macos-latest builds with too.
-      # Development uses 27.1, which GitHub has only on its preview xcode-27 image, and what
-      # only macOS 27's SDK knows sits behind compiler(>=6.4).
+      # Development uses 27.1, and what only macOS 27's SDK knows sits behind
+      # compiler(>=6.4), which the xcode-27 job builds.
       - run: |
           sudo xcode-select --switch /Applications/Xcode_26.6.app
           xcodebuild -version
@@ -434,6 +434,34 @@ jobs:
           path: ${{ runner.temp }}/macos-app-pictures
           if-no-files-found: error
           retention-days: 7
+
+  # The app, its widget extension and PitboardGlance built with Xcode 27, unsigned, so the code
+  # behind compiler(>=6.4) compiles somewhere; nothing here runs, and nothing is kept. The image
+  # and its Xcode are printed first, and the job's first run on a pull request reads both.
+  xcode-27:
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          sw_vers
+          xcode-select --print-path
+          xcodebuild -version
+          ls -d /Applications/Xcode*.app
+      - uses: ./.github/actions/rust
+        with:
+          targets: aarch64-apple-darwin x86_64-apple-darwin
+      - uses: ./.github/actions/xcodegen
+      - run: ./apps/macos/scripts/build-xcframework.sh
+      - run: xcodegen generate --spec apps/macos/project.yml --quiet
+      - run: >
+          xcodebuild -project apps/macos/Pitboard.xcodeproj -scheme Pitboard -configuration Release
+          -destination 'generic/platform=macOS' -derivedDataPath apps/macos/build/DerivedData
+          -clonedSourcePackagesDirPath apps/macos/build/SourcePackages
+          -onlyUsePackageVersionsFromResolvedFile -quiet
+          ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
 
   csharp:
     # The Windows app reaches the core through these bindings, and PitboardShare.exe reaches
@@ -1163,6 +1191,7 @@ jobs:
       - windows-release
       - windows-msrv
       - apple
+      - xcode-27
       - csharp
       - csharp-windows
       - windows-app
