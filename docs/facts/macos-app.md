@@ -55,6 +55,11 @@ its own date.
   frame outside `.inspector`, the window kept that minimum alone, and at that width the
   inspector kept its width and clipped the list.
   `theInspectorWidensTheWindowRatherThanNarrowingTheList` holds it.
+- Measured the same way on the same day: `toggleInspector(_:)` sent as soon as the window's
+  `contentMinSize` first read 820 collapsed the inspector and left the minimum at 820 for 5
+  seconds in 13 of 26 runs. Sent once the window had been handed over 300 ms earlier, the
+  minimum read 560 within milliseconds in 18 of 18. So the test waits a fixed time before the
+  toggle, and for the minimum after it.
 - Measured the same day: a test window that reaches the window server, such as one made by
   `NSWindow(contentViewController:)`, let `NSAppleScript.executeAndReturnError` run by another
   test on the main thread stop the main run loop, which ended `swift test` with status 0

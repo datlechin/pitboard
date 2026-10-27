@@ -17,8 +17,7 @@ import Testing
 
     let inspector = try #require(splitView(in: shown.contentView))
     inspector.toggleInspector(nil)
-    await settle()
-    #expect(shown.contentMinSize == NSSize(width: 560, height: 400))
+    #expect(await eventually { shown.contentMinSize == NSSize(width: 560, height: 400) })
 }
 
 @MainActor
@@ -45,12 +44,24 @@ func accountsWindow(_ items: [AccountItem] = sample, notices: [PanelNotice] = []
     return window
 }
 
-// SwiftUI lays out a window it has just been handed over a few turns of the main run loop.
+// SwiftUI lays out a window it has just been handed over a few turns of the main run loop. The
+// minimum it reaches first says nothing of when it follows a toggle (docs/facts/macos-app.md).
 @MainActor
 private func settle() async {
     for _ in 0..<10 {
         try? await Task.sleep(for: .milliseconds(30))
     }
+}
+
+// The bound is only a bound: a minimum that follows reaches it in milliseconds.
+@MainActor
+private func eventually(_ met: () -> Bool) async -> Bool {
+    let bound = ContinuousClock.now + .seconds(5)
+    while !met() {
+        guard ContinuousClock.now < bound else { return false }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return true
 }
 
 // What the inspector's own command, Control-Command-I, sends.

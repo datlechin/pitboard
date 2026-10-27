@@ -36,7 +36,7 @@ pub struct CheckGroup {
     pub lines: Vec<CheckLine>,
 }
 
-// Not called `CheckRow`, which MachinePane.swift has a view of.
+// Not called `CheckRow`, which DiagnosticsWindow.swift has a view of.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CheckLine {
     // its place in doctor's order: one code names a check of each account

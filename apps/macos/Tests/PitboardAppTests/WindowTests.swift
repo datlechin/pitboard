@@ -18,10 +18,8 @@ import Testing
         PlaceWindow.allCases.map(\.id) == ["accounts", "activity", "diagnostics", "welcome"])
 }
 
-/// The window opens once for each request, whether the menu bar item first sees it as it
-/// appears, which is how the first launch's request can reach it, or as the serial moves,
-/// and the first snapshot's serial asks for nothing. MenuBarLabel asks this both ways, and
-/// the UI tests' testTheFirstLaunchWelcomesThenOpensTheAccounts sees the window it opens.
+// MenuBarLabel asks both as it appears, which the first launch's request can reach first, and
+// as the serial moves.
 @MainActor
 @Test func theWindowOpensOnceForEachRequest() {
     let requests = WindowRequests()
