@@ -361,7 +361,21 @@ jobs:
       # release is built and checked above, since this empties apps/macos/build, and
       # build-app.sh never passes it.
       - run: ./apps/macos/scripts/build-xcframework.sh --fixture
-      - run: swift test --package-path apps/macos
+      # The widgets' entries are drawn offscreen here, as no UI test can place a widget, and kept
+      # for pull requests beside macos-app-pictures.
+      - id: package
+        env:
+          PITBOARD_WIDGET_RENDERS: ${{ runner.temp }}/macos-widget-pictures
+        run: |
+          mkdir -p "$PITBOARD_WIDGET_RENDERS"
+          swift test --package-path apps/macos
+      - if: success() || steps.package.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-widget-pictures
+          path: ${{ runner.temp }}/macos-widget-pictures
+          if-no-files-found: error
+          retention-days: 7
       # The app driven the way a person drives it: the debug build, started by each test in
       # a fixture rather than on this runner's own accounts. A UI test needs Automation Mode,
       # which asks for a password unless the machine allows it without one. GitHub's macOS

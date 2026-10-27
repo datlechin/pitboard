@@ -33,8 +33,14 @@ extension Glance {
         accounts.first { $0.id == chosen } ?? accounts.first(where: \.inUse) ?? accounts.first
     }
 
-    // What a medium widget shows: one account in use per tool.
     public var inUse: [GlanceAccount] { accounts.filter(\.inUse) }
+
+    // What a medium widget has room for: two accounts in use, one per tool, leaving out those
+    // with no usage, as Claude Desktop's, while another has some.
+    public var medium: [GlanceAccount] {
+        let read = inUse.filter { !$0.limits.isEmpty }
+        return Array((read.isEmpty ? inUse : read).prefix(2))
+    }
 }
 
 // A control's title and value.

@@ -255,6 +255,14 @@ and under the name the test gave it: one of each surface, `macos-<surface>-<stat
 Dark `macos-<surface>-<state>-dark`, the scenes usepitboard.com's macOS figures are checked
 against among them. CI keeps them as the artifact `macos-app-pictures`.
 
+No UI test can place a widget, so `PitboardWidgetViewsTests` draws each widget's entries
+offscreen, `macos-widget-<size>-<state>`, then `-tinted` and `-dark`, into the folder
+`PITBOARD_WIDGET_RENDERS` names. CI keeps them as the artifact `macos-widget-pictures`:
+
+```sh
+PITBOARD_WIDGET_RENDERS=<dir> swift test --package-path apps/macos --filter PitboardWidgetViewsTests
+```
+
 ### Unregister a build
 
 A debug build keeps apart from a copy you installed. A release build you made claims what

@@ -45,7 +45,7 @@ public struct AccountsView: View {
                 Said(glance.words.noneInUse)
             } else {
                 HStack(alignment: .top, spacing: 16) {
-                    ForEach(glance.inUse.prefix(2)) { account in
+                    ForEach(glance.medium) { account in
                         VStack(alignment: .leading, spacing: 6) {
                             AccountHeading(
                                 account: account, aside: account.toolName, words: glance.words)
