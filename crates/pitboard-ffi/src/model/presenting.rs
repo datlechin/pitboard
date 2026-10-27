@@ -3202,8 +3202,7 @@ fn reading_with_codex(accounts: Vec<Account>) -> (Hand, Stub) {
 
 /// Codex found with nothing of it enrolled is a tool Pitboard reads nothing of, so it cannot
 /// say whether Codex is signed in. It offers to use Pitboard with it after Claude Code's own
-/// steps, and in place of No Accounts where Claude Code is signed in to nothing, which said
-/// nobody was signed in while Codex was.
+/// steps, and over No Accounts where Claude Code is signed in to nothing.
 #[test]
 fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     let (model, _) = reading_with_codex(vec![
@@ -3241,11 +3240,17 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
         model.refresh(&mut machine);
         (model, machine)
     };
+    let no_accounts = |model: &Hand| {
+        matches!(
+            model.shown().accounts_shown,
+            AccountsShown::NoAccounts { .. }
+        )
+    };
     assert_eq!(alone.shown().footing, Footing::CodexUnused);
-    assert_eq!(alone.shown().accounts_shown, AccountsShown::List);
+    assert!(no_accounts(&alone), "a list with no rows would be blank");
     let (both, _) = reading_with_codex(Vec::new());
     assert_eq!(both.shown().footing, Footing::CodexUnused);
-    assert_eq!(both.shown().accounts_shown, AccountsShown::List);
+    assert!(no_accounts(&both));
 
     let (enrolled, _) = reading_with_codex(vec![
         account(Some("work")).signed_in().build(),

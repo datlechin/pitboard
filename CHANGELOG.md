@@ -48,8 +48,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app's setup tips go on past a second account to what happens when a limit reaches 95%,
   with **Not Now**.
 - The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
-  enrolled, and adds the account Codex is signed in to once you choose it, where a machine with
-  Claude Code signed in to nothing said **No Accounts**.
+  enrolled, and adds the account Codex is signed in to once you choose it.
 - The macOS app's **Settings** take the share a limit is reached at in a field beside its
   stepper, once you press Return or leave the field.
 - The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
