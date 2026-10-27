@@ -92,12 +92,13 @@
     <!-- No RemoveRegistry row: that table acts on an install, never on a removal. -->
     <CustomAction Id="Unregister" FileRef="PitboardExe" ExeCommand="--unregister" Execute="deferred" Return="ignore" />
     <CustomAction Id="LaunchAfterInstall" FileRef="PitboardExe" ExeCommand="--updated" Return="asyncNoWait" />
-    <!-- As Start launches it, so the first launch shows its welcome, and a launch after an earlier install its window. -->
+    <!-- As Start launches it, so the first launch shows its welcome, and a launch after an earlier install its window.
+         UILevel 2 is a quiet install, /quiet or /qn, which starts nothing. -->
     <CustomAction Id="StartAfterFirstInstall" FileRef="PitboardExe" ExeCommand="" Return="asyncNoWait" />
     <InstallExecuteSequence>
       <Custom Action="Unregister" Before="RemoveFiles" Condition="REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
       <Custom Action="LaunchAfterInstall" After="InstallFinalize" Condition="LAUNCHAFTERINSTALL = &quot;1&quot; AND NOT REMOVE" />
-      <Custom Action="StartAfterFirstInstall" After="LaunchAfterInstall" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
+      <Custom Action="StartAfterFirstInstall" After="LaunchAfterInstall" Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED AND UILevel &lt;&gt; 2" />
     </InstallExecuteSequence>
 
     <?if $(ShareSigned) = "true" ?>
