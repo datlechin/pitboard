@@ -65,9 +65,10 @@ pub use present::{
     WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 pub use present::{
-    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
-    already_there, app_words, install_update, links_to, named_version, path_too_long,
-    ready_to_install, trash_says, webview_runtime_too_old,
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords,
+    ShortcutsWords, WindowWords, already_there, app_words, install_update, links_to, named_version,
+    path_too_long, ready_to_install, still_switching, trash_says, usage_of,
+    webview_runtime_too_old,
 };
 
 mod account_windows;

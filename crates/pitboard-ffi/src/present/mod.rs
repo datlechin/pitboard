@@ -46,9 +46,10 @@ pub(crate) mod words;
 pub(crate) mod testing;
 
 pub use app_words::{
-    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords, WindowWords,
-    already_there, app_words, install_update, links_to, named_version, path_too_long,
-    ready_to_install, trash_says, webview_runtime_too_old,
+    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords,
+    ShortcutsWords, WindowWords, already_there, app_words, install_update, links_to, named_version,
+    path_too_long, ready_to_install, still_switching, trash_says, usage_of,
+    webview_runtime_too_old,
 };
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
