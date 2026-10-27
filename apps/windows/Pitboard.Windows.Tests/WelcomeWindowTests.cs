@@ -135,7 +135,7 @@ public sealed class WelcomeWindowTests
             Assert.AreEqual(Application.Current.Resources["AccentButtonStyle"], done.Style);
             Assert.AreEqual("G", done.AccessKey);
             // A window has no default button: Enter presses Get started where the focus starts on it.
-            await Views.Until(() => FocusManager.GetFocusedElement(done.XamlRoot) == done, "the welcome opened with the focus elsewhere");
+            await Views.Until(() => ReferenceEquals(FocusManager.GetFocusedElement(done.XamlRoot), done), "the welcome opened with the focus elsewhere");
 
             Views.Press(done);
 
