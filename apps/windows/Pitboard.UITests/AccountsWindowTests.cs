@@ -173,8 +173,9 @@ public sealed class AccountsWindowTests
     {
         using var launched = Launched.Start(Builds.Debug, fixture: "onlyOne");
         var window = launched.OpenWindow();
-        // The tip to add a second account lies over the row's middle, where the click goes.
+        // The setup tips lie over the row's middle, where the click goes: Add a second account, then Codex's.
         launched.DeclineTip(Words.AddASecondAccount);
+        launched.DeclineTip(Words.UseWithCodex);
         var row = launched.Row("claude/work");
         Foreground.Require(window);
 
