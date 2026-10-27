@@ -61,6 +61,7 @@ public struct PitboardScenes: Scene {
             AccountCommands(model: model)
             InspectorCommands()
             RefreshCommands()
+            CopyReportCommands()
             // Pitboard's help is its documentation site; the app has no help book.
             CommandGroup(replacing: .help) {
                 Link(words.menu.help, destination: Links.documentation)

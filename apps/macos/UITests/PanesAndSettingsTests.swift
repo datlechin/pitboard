@@ -35,6 +35,13 @@ final class PanesAndSettingsTests: FixtureTestCase {
         let report = NSPasteboard.general.string(forType: .string) ?? ""
         XCTAssertTrue(report.hasPrefix("{"), "doctor's JSON report")
         XCTAssertFalse(report.contains("dana@"), "with email addresses hidden")
+
+        // Every toolbar item is a command in the menu bar too.
+        NSPasteboard.general.clearContents()
+        let edit = app.menuBars.menuBarItems[Words.editMenu]
+        edit.click()
+        edit.menuItems[Words.copyReport].click()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), report)
     }
 
     @MainActor

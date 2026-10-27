@@ -39,10 +39,7 @@ struct DiagnosticsWindow: View {
         .toolbar {
             ToolbarItemGroup {
                 Button {
-                    if let report = checks.report {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(report, forType: .string)
-                    }
+                    checks.report.map(copy(report:))
                 } label: {
                     Label(words.window.copyReport, systemImage: "doc.on.doc")
                 }
@@ -65,6 +62,7 @@ struct DiagnosticsWindow: View {
                 model.send(.paneShown(pane: .checks))
             }
         )
+        .focusedSceneValue(\.report, checks.report)
         // On each open or request: a check fixed in a terminal since would still read failed.
         .task { model.send(.paneShown(pane: .checks)) }
         .onChange(of: model.windowRequest) { _, request in
@@ -76,6 +74,29 @@ struct DiagnosticsWindow: View {
         .frame(minWidth: 420, minHeight: 320)
         .appWindow(presence)
     }
+}
+
+extension FocusedValues {
+    // Diagnostics' report, while its window is key and has one.
+    @Entry var report: String?
+}
+
+// The toolbar's Copy Report, in the menu bar as well.
+struct CopyReportCommands: Commands {
+    @FocusedValue(\.report) private var report
+
+    var body: some Commands {
+        CommandGroup(after: .pasteboard) {
+            Button(words.window.copyReport) { report.map(copy(report:)) }
+                .disabled(report == nil)
+        }
+    }
+}
+
+@MainActor
+private func copy(report: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(report, forType: .string)
 }
 
 private struct Summary: View {

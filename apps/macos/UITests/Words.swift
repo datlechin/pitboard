@@ -9,6 +9,8 @@ enum Words {
     static let copyEmail = "Copy Email Address"
     static let accountMenu = "Account"
     static let fileMenu = "File"
+    static let editMenu = "Edit"
+    static let copyReport = "Copy Report"
     static let removeWebsiteData = "Remove Website Data…"
     static let windowMenu = "Window"
     static let diagnostics = "Diagnostics"
