@@ -418,8 +418,7 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             move_to_trash: mac("Move to Trash"),
             remove_with_homebrew: mac("Remove Pitboard with Homebrew"),
             homebrew_removes_it: mac(&format!(
-                "{DELETED} Homebrew installed the app, and removes it with brew uninstall --cask \
-                 pitboard-app."
+                "{DELETED} Homebrew installed the app, so Homebrew removes it."
             )),
             homebrew_help: (os != Os::Windows).then(|| SetupLink {
                 title: words::learn_more(os),
@@ -682,8 +681,8 @@ mod tests {
             (
                 Some("Remove Pitboard with Homebrew"),
                 Some(
-                    "Its saved sign-ins and settings are deleted. Homebrew installed the app, and \
-                     removes it with brew uninstall --cask pitboard-app."
+                    "Its saved sign-ins and settings are deleted. Homebrew installed the app, so \
+                     Homebrew removes it."
                 )
             )
         );
@@ -699,7 +698,10 @@ mod tests {
             page.contains("\n## Remove Pitboard itself\n"),
             "the anchor is a heading"
         );
-        assert!(page.contains("`brew uninstall --cask pitboard-app`"));
+        assert!(
+            page.contains("`brew uninstall --cask pitboard-app`"),
+            "the command is the page's, which Learn More opens"
+        );
         assert_eq!(
             (
                 windows.move_to_trash,

@@ -156,14 +156,14 @@ import Testing
 }
 
 // Run without administrator rights, in a scratch directory whose name a shell would otherwise
-// read commands in: it removes a link, and keeps a file put there in its place.
+// read commands in: it removes this copy's link, and keeps another copy's or a file put there.
 @MainActor
-@Test func theCommandRemovesOnlyALink() throws {
+@Test func theCommandRemovesOnlyThisCopysLink() throws {
     let app = try StandInApp()
     defer { app.remove() }
     let hostile = try app.directory(#"a "b" \ $(echo injected)"#)
     let link = "\(hostile)/pitboard"
-    let command = CommandLineTool.command(removing: link)
+    let command = CommandLineTool.command(removing: link, to: app.helper.path)
     func run() -> NSDictionary? {
         var error: NSDictionary?
         NSAppleScript(source: "do shell script \(command)")?.executeAndReturnError(&error)
@@ -171,17 +171,22 @@ import Testing
     }
     try app.symlink(link, to: app.helper.path)
     #expect(run() == nil)
-    #expect(!FileManager.default.fileExists(atPath: link))
     #expect(
         (try? FileManager.default.destinationOfSymbolicLink(atPath: link)) == nil,
         "the link itself is gone")
+
+    let other = "\(hostile)/Other.app/Contents/Helpers/pitboard"
+    try app.symlink(link, to: other)
+    #expect(run() != nil, "another copy's link")
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link) == other)
+    try FileManager.default.removeItem(atPath: link)
 
     try Data("mine".utf8).write(to: URL(fileURLWithPath: link))
     #expect(run() != nil, "not a link")
     #expect(try String(contentsOfFile: link, encoding: .utf8) == "mine")
 
     #expect(
-        CommandLineTool.script(removing: link)
+        CommandLineTool.script(removing: link, to: app.helper.path)
             == "do shell script \(command) with administrator privileges")
 }
 
@@ -193,6 +198,21 @@ import Testing
     #expect(await tool.unlink() == .linked)
     scripts.raise(-128, "User canceled.")
     #expect(await tool.unlink() == .cancelled)
-    let script = CommandLineTool.script(removing: app.link)
+    let script = CommandLineTool.script(removing: app.link, to: app.helper.path)
     #expect(scripts.ran == [script, script])
 }
+
+#if DEBUG
+    // Dependencies promises a fixture reaches no administrator prompt.
+    @MainActor
+    @Test func aFixturesScriptsAskForNoPassword() async throws {
+        let app = try StandInApp()
+        defer { app.remove() }
+        let scripts = Scripts()
+        let tool = Fixture.commandLineTool(in: app.root, execute: scripts.run)
+        #expect(await tool.install() == .linked)
+        #expect(await tool.unlink() == .linked)
+        #expect(scripts.ran.count == 2)
+        #expect(scripts.ran.allSatisfy { !$0.contains("administrator") }, "\(scripts.ran)")
+    }
+#endif

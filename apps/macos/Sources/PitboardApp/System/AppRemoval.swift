@@ -8,12 +8,12 @@ final class AppRemoval {
     enum Asked: Equatable {
         // `link` the command line link Move to Trash removes too
         case trash(link: String?)
-        case homebrew
+        // `help` the page the alert's Help button opens, which says the cask command
+        case homebrew(help: URL?)
     }
 
     enum Answer: Equatable {
         case confirmed
-        case learnMore
         case declined
     }
 
@@ -26,7 +26,6 @@ final class AppRemoval {
     private let homebrew: [URL]
     private let trash: @MainActor (URL) throws -> Void
     private let ask: @MainActor (Asked) -> Answer
-    private let open: @MainActor (URL) -> Void
     private let quit: @MainActor () -> Void
     private var finishing = false
 
@@ -35,7 +34,6 @@ final class AppRemoval {
         commandLine: CommandLineTool, app: URL, homebrew: [URL],
         trash: @escaping @MainActor (URL) throws -> Void,
         ask: @escaping @MainActor (Asked) -> Answer = AppRemoval.alert,
-        open: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
         quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) }
     ) {
         self.loginItem = loginItem
@@ -47,19 +45,18 @@ final class AppRemoval {
         self.homebrew = homebrew
         self.trash = trash
         self.ask = ask
-        self.open = open
         self.quit = quit
     }
 
+    // `app` the copy whose command line `commandLine` links, `support` its records' folder
     static func live(
-        loginItem: any LoginItem, defaults: UserDefaults, commandLine: CommandLineTool,
-        bundle: Bundle = .main
+        loginItem: any LoginItem, defaults: UserDefaults, support: URL,
+        commandLine: CommandLineTool, app: URL
     ) -> AppRemoval {
         AppRemoval(
             loginItem: loginItem, defaults: defaults,
-            domain: bundle.bundleIdentifier ?? "com.usepitboard.Pitboard",
-            support: WebEnvironment.recordsDirectory(bundle: bundle), commandLine: commandLine,
-            app: bundle.bundleURL,
+            domain: Bundle.main.bundleIdentifier ?? "com.usepitboard.Pitboard",
+            support: support, commandLine: commandLine, app: app,
             homebrew: ["/opt/homebrew", "/usr/local"].map { URL(fileURLWithPath: $0) },
             trash: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) })
     }
@@ -71,11 +68,8 @@ final class AppRemoval {
         try? loginItem.unregister()
         try? FileManager.default.removeItem(at: support)
         if Self.installedByHomebrew(app, prefixes: homebrew) {
-            if ask(.homebrew) == .learnMore, let help = words.settings.homebrewHelp,
-                let page = URL(string: help.link)
-            {
-                open(page)
-            }
+            let help = words.settings.homebrewHelp.flatMap { URL(string: $0.link) }
+            _ = ask(.homebrew(help: help))
         } else {
             let link = commandLine.linksHere ? commandLine.link : nil
             if ask(.trash(link: link)) == .confirmed {
@@ -120,7 +114,7 @@ final class AppRemoval {
         case .homebrew:
             return (
                 settings.removeWithHomebrew ?? "", settings.homebrewRemovesIt ?? "",
-                [words.window.ok] + [settings.homebrewHelp?.title].compactMap { $0 }
+                [words.window.ok]
             )
         }
     }
@@ -132,11 +126,27 @@ final class AppRemoval {
         alert.messageText = text.title
         alert.informativeText = text.message
         for button in text.buttons { alert.addButton(withTitle: button) }
-        NSApp.activate()
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .confirmed
-        case .alertSecondButtonReturn: return asked == .homebrew ? .learnMore : .declined
-        default: return .declined
+        var help: HelpPage?
+        if case .homebrew(let page?) = asked {
+            help = HelpPage(page)
+            alert.showsHelp = true
+            alert.delegate = help
         }
+        NSApp.activate()
+        // The delegate is weak: kept until the alert is answered.
+        let response = withExtendedLifetime(help) { alert.runModal() }
+        return response == .alertFirstButtonReturn ? .confirmed : .declined
+    }
+}
+
+private final class HelpPage: NSObject, NSAlertDelegate {
+    let page: URL
+
+    init(_ page: URL) {
+        self.page = page
+    }
+
+    func alertShowHelp(_ alert: NSAlert) -> Bool {
+        NSWorkspace.shared.open(page)
     }
 }

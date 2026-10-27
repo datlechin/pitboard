@@ -53,7 +53,8 @@ struct Dependencies {
             notificationStatus: { await notifications.authorization() },
             commandLineTool: commandLineTool,
             removal: .live(
-                loginItem: loginItem, defaults: defaults, commandLine: commandLineTool),
+                loginItem: loginItem, defaults: defaults, support: records,
+                commandLine: commandLineTool, app: bundle),
             web: .live(),
             quitting: {
                 earlier.forgetOnceKept()

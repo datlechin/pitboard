@@ -17,7 +17,6 @@ private final class Removing {
     var answer: AppRemoval.Answer = .confirmed
     private(set) var asked: [AppRemoval.Asked] = []
     private(set) var trashed: [URL] = []
-    private(set) var opened: [URL] = []
     private(set) var quit = 0
 
     init() throws {
@@ -36,7 +35,7 @@ private final class Removing {
             ask: {
                 self.asked.append($0)
                 return self.answer
-            }, open: { self.opened.append($0) }, quit: { self.quit += 1 })
+            }, quit: { self.quit += 1 })
     }
 
     // As Homebrew 7.0.9 left pitboard-app 0.4.0 (docs/facts/macos.md).
@@ -83,7 +82,10 @@ final class StandInLoginItem: LoginItem {
     removing.app.makeLink()
     await removing.removal.finish()
     #expect(removing.asked == [.trash(link: removing.app.link)])
-    #expect(removing.scripts.ran == [CommandLineTool.script(removing: removing.app.link)])
+    #expect(
+        removing.scripts.ran == [
+            CommandLineTool.script(removing: removing.app.link, to: removing.app.helper.path)
+        ])
     #expect(removing.trashed == [removing.app.bundle])
 
     let refused = try Removing()
@@ -116,12 +118,11 @@ final class StandInLoginItem: LoginItem {
     defer { removing.app.remove() }
     try removing.installWithHomebrew()
     removing.app.makeLink()
-    removing.answer = .learnMore
     await removing.removal.finish()
-    #expect(removing.asked == [.homebrew])
+    let help = try #require(words.settings.homebrewHelp.flatMap { URL(string: $0.link) })
+    #expect(removing.asked == [.homebrew(help: help)], "its Help button says the cask command")
     #expect(removing.trashed.isEmpty)
     #expect(removing.scripts.ran.isEmpty, "Homebrew removes its own links")
-    #expect(removing.opened.map(\.absoluteString) == [words.settings.homebrewHelp?.link])
     #expect(!FileManager.default.fileExists(atPath: removing.support.path))
     #expect(removing.quit == 1)
 }
@@ -132,7 +133,7 @@ final class StandInLoginItem: LoginItem {
     defer { removing.app.remove() }
     #expect(!AppRemoval.installedByHomebrew(removing.app.bundle, prefixes: [removing.homebrew]))
     try removing.installWithHomebrew(
-        linkingTo: URL(fileURLWithPath: "/Applications/Pitboard.app"))
+        linkingTo: removing.app.root.appendingPathComponent("Other.app"))
     #expect(
         !AppRemoval.installedByHomebrew(removing.app.bundle, prefixes: [removing.homebrew]),
         "another copy")
@@ -159,8 +160,8 @@ final class StandInLoginItem: LoginItem {
     #expect(trash.title == words.settings.moveToTrashQuestion)
     #expect(trash.message == trashSays(link: "/usr/local/bin/pitboard"))
     #expect(trash.buttons == [words.settings.moveToTrash, words.window.cancel])
-    let homebrew = AppRemoval.said(.homebrew)
+    let homebrew = AppRemoval.said(.homebrew(help: nil))
     #expect(homebrew.title == words.settings.removeWithHomebrew)
     #expect(homebrew.message == words.settings.homebrewRemovesIt)
-    #expect(homebrew.buttons == [words.window.ok, words.settings.homebrewHelp?.title])
+    #expect(homebrew.buttons == [words.window.ok], "Help is the alert's own button")
 }
