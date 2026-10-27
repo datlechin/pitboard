@@ -41,6 +41,11 @@ extension Glance {
         let read = inUse.filter { !$0.limits.isEmpty }
         return Array((read.isEmpty ? inUse : read).prefix(2))
     }
+
+    // As the app, which says an account's tool only while accounts of two tools are shown.
+    public func besideInMedium(_ account: GlanceAccount) -> String? {
+        Set(accounts.map(\.tool)).count > 1 ? account.toolName : account.plan
+    }
 }
 
 // A control's title and value.

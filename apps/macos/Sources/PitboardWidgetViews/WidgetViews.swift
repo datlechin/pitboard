@@ -48,7 +48,8 @@ public struct AccountsView: View {
                     ForEach(glance.medium) { account in
                         VStack(alignment: .leading, spacing: 6) {
                             AccountHeading(
-                                account: account, aside: account.toolName, words: glance.words)
+                                account: account, aside: glance.besideInMedium(account),
+                                words: glance.words)
                             Limits(account: account, at: entry.date, words: glance.words)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)

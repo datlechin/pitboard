@@ -53,6 +53,13 @@ private func goldenGlance() throws -> Glance {
     #expect(desktopAlone.medium.map(\.name) == ["desktop"])
 }
 
+@Test func aMediumWidgetNamesTheToolOnlyWhileTwoToolsHaveAccounts() throws {
+    let two = try goldenGlance()
+    #expect(two.medium.map(two.besideInMedium) == ["Claude Code", "Codex"])
+    let one = try glance(at: readAt) { $0.filter { $0["tool"] as? String == "claude" } }
+    #expect(one.medium.map(one.besideInMedium) == ["Max 5x"])
+}
+
 @Test func aControlNamesItsAccountWithItsTightestLimitOrInUse() throws {
     let glance = try goldenGlance()
     #expect(
