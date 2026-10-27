@@ -69,7 +69,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   name over the welcome, and keeps **Open Pitboard at Login** off until you turn it on.
 - The macOS app's **Settings** > **Advanced** offers **Uninstall Pitboard…**, which deletes
   Pitboard's saved sign-ins and settings, then the app's own settings, login item and command line
-  link, and moves the app to the Trash, or says how Homebrew removes a copy it installed.
+  link, moves its caches, saved window state and account windows' website data to the Trash, as
+  `brew uninstall --zap` does, and moves the app there too, or says how Homebrew removes a copy it
+  installed.
 - The macOS app's **Diagnostics** offers **Copy Report**, in its toolbar and the **Edit** menu,
   which copies the checks with email addresses and account identifiers hidden, and each check
   that did not pass offers what puts it right, such as **Sign In Again…**, or **Learn More**.
