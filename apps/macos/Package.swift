@@ -42,6 +42,8 @@ let package = Package(
         ),
         // Foundation only, so the app, its extension and a test target can each link it.
         .target(name: "PitboardLinkTarget", swiftSettings: handWritten),
+        // No Rust, so a sandboxed extension that reads the glance can link it.
+        .target(name: "PitboardGlance", swiftSettings: handWritten),
         .target(
             name: "PitboardApp",
             dependencies: ["PitboardKit", "PitboardLinkTarget"],
@@ -62,6 +64,11 @@ let package = Package(
         .testTarget(
             name: "PitboardLinkTargetTests",
             dependencies: ["PitboardLinkTarget"],
+            swiftSettings: handWritten
+        ),
+        .testTarget(
+            name: "PitboardGlanceTests",
+            dependencies: ["PitboardGlance"],
             swiftSettings: handWritten
         ),
         .testTarget(

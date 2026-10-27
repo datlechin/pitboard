@@ -145,6 +145,7 @@ The apps:
   - `Sources/PitboardBindings`, `PitboardShareBindings`: the two libraries' bindings.
   - `Sources/PitboardKit`: `AppModel`, the model and its newest snapshot on the main actor.
   - `Sources/PitboardLinkTarget`: where a Pitboard link goes, for the app and the extension.
+  - `Sources/PitboardGlance`: the glance and the account Shortcuts and widgets know, no Rust.
   - `Sources/PitboardApp`: the views (`MenuBar`, `Window`, `Sheets`, `Settings`, `Design`),
     the account windows (`AccountWindows`), the launch (`App`), what the model asks of macOS
     (`System`) and the fixtures' stand-ins (`Fixture`).
