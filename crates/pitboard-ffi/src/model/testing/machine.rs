@@ -692,9 +692,9 @@ impl Stub {
                     own: self.own,
                 }
             }
-            Job::KeepGlance { text } => {
+            Job::KeepGlance { text, reload } => {
                 self.glances.push(text);
-                Answer::Saved
+                Answer::GlanceKept { reload }
             }
             Job::Uninstall => {
                 self.removals += 1;

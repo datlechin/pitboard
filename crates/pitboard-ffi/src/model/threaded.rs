@@ -224,11 +224,13 @@ fn the_glance_is_written_to_the_file_the_app_names() {
         QUICK,
     );
     model.send(Intent::Start);
-    told.until("the account read", shows("work"));
-    eventually("the glance written", || {
-        std::fs::read_to_string(&glance).is_ok_and(|text| text.contains(r#""name":"work""#))
+    told.until("the widgets told", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| last.glance_revision > 0)
     });
-    assert!(model.snapshot().glance_revision > 0);
+    let text = std::fs::read_to_string(&glance).expect("written before the widgets are told");
+    assert!(text.contains(r#""name":"work""#), "{text}");
     model.shutdown();
 }
 
