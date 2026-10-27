@@ -12,6 +12,7 @@ enum Main {
             environment: ProcessInfo.processInfo.environment)
         switch action {
         case .app:
+            AppDelegate.shortcuts = PitboardShortcuts.self
             Pitboard.main()
         case .renew(let helper):
             Launch.renew(with: helper)

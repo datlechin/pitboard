@@ -93,6 +93,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app's **Settings** > **Advanced** has **Uninstall Pitboard**, which asks first,
   deletes Pitboard's saved sign-ins and settings, then, in the copy its installer put there,
   uninstalls the app as **Settings** > **Apps** does.
+- The macOS app offers Shortcuts the actions **Switch Account**, which asks before it quits
+  ChatGPT, **Get Usage** and **Open Pitboard**, each with an App Shortcut, and on macOS 26 runs
+  them from Spotlight.
 
 ### Changed
 

@@ -46,7 +46,7 @@ let package = Package(
         .target(name: "PitboardGlance", swiftSettings: handWritten),
         .target(
             name: "PitboardApp",
-            dependencies: ["PitboardKit", "PitboardLinkTarget"],
+            dependencies: ["PitboardKit", "PitboardLinkTarget", "PitboardGlance"],
             swiftSettings: handWritten
         ),
         // Only test targets depend on it.

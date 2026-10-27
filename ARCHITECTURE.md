@@ -148,9 +148,10 @@ The apps:
   - `Sources/PitboardGlance`: the glance and the account Shortcuts and widgets know, no Rust.
   - `Sources/PitboardApp`: the views (`MenuBar`, `Window`, `Sheets`, `Settings`, `Design`),
     the account windows (`AccountWindows`), the launch (`App`), what the model asks of macOS
-    (`System`) and the fixtures' stand-ins (`Fixture`).
-  - `App`, `ShareExtension`, `UITests`: the app's target, the Share extension and the UI
-    tests.
+    (`System`), what the Shortcuts actions do (`Intents`) and the fixtures' stand-ins
+    (`Fixture`).
+  - `App`, `ShareExtension`, `UITests`: the app's target with its Shortcuts actions and App
+    Shortcuts, the Share extension and the UI tests.
   - `scripts/`: the libraries' build, the app's build, which fails a bundle that breaks a
     rule below, its build number and the docs' pictures.
 - `apps/windows/`: the Windows app.
@@ -428,12 +429,15 @@ keeps it is in the header of the module named.
   went starts the model again (`model/removing.rs`,
   `after_uninstall_nothing_writes_pitboards_directory_again`).
 - The glance for widgets and intents names each account by an id derived from its own, never
-  by an email, a token, a uuid, a path or a notice's lines. It is written only where the app
-  names a file, again with each read, and deleted once the app uninstalls Pitboard
-  (`an_uninstall_deletes_the_glance`). `glance_revision` moves only with what a widget shows,
-  since WidgetKit budgets reloads. A request from outside does no more than a click in the
-  app, and one that needs a question only the app asks is refused in words
-  (`model/glancing.rs`).
+  by an email, a token, a uuid, a path or a notice's lines. The model hands it to the app before
+  the snapshot it changed with, writes it only where the app names a file, again with each
+  read, and deletes that file once the app uninstalls Pitboard
+  (`the_glance_is_given_to_the_app_with_or_without_a_file`, `an_uninstall_deletes_the_glance`).
+  `glance_revision` moves only with what a widget shows, since WidgetKit budgets reloads. A
+  request from outside does no more than a click in the app and waits for the launch's first
+  read. One that would quit an app answers with the quit question and quits it only when asked
+  again with `QuitAndSwitch`, and one that needs another question only the app asks is
+  refused in words (`model/glancing.rs`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).
