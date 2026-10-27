@@ -104,7 +104,7 @@ public static class Program
     {
         Console.WriteLine(
             notifications.Off is { } off ? $"Not registered: {off}"
-            : notifications.Unoffered ? "Not registered: Windows offers this process no app notifications."
+            : notifications.Unoffered ? "Not registered: AppNotificationManager.IsSupported() is false."
             : "Registered.");
         return notifications.Off is null && !notifications.Unoffered;
     }
