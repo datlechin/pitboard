@@ -317,7 +317,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
             .clone()
             .map(|why| note(NoteKind::Problem, why, None))
     };
-    let notes = [
+    let notes: Vec<AccountNote> = [
         problem_note,
         unnamed.then(|| {
             let add = acting(ActionKind::Add);
@@ -347,7 +347,15 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         },
         warm: warm_choice(seen, account).map(|choice| warm_detail(seen.os, choice, warm_note)),
         read_at,
-        read: read_ago.or_else(|| read_at.map(|at| words::updated(&seen.clock(at)))),
+        read: read_ago,
+        notes: (notes.iter())
+            .filter(|note| match note.kind {
+                NoteKind::Stale => true,
+                NoteKind::Problem => !needs_sign_in,
+                NoteKind::Expiring | NoteKind::Unfinished => false,
+            })
+            .cloned()
+            .collect(),
     };
     AccountItem {
         id: account.id.clone(),

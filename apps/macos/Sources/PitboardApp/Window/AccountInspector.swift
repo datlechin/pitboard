@@ -32,11 +32,8 @@ struct AccountInspector: View {
         }
     }
 
-    // Only what the values below do not say: old numbers, or a login Pitboard cannot use.
     @ViewBuilder private func footnotes(of item: AccountItem) -> some View {
-        let notes = item.notes.filter {
-            $0.kind == .stale || ($0.kind == .problem && !item.needsSignIn)
-        }
+        let notes = item.detail.notes
         if !notes.isEmpty || item.detail.read != nil {
             VStack(alignment: .leading, spacing: Design.lineSpacing) {
                 ForEach(notes, id: \.text) { note in

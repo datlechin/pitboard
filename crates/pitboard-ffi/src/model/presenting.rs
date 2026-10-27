@@ -437,8 +437,48 @@ fn a_row_notes_only_what_needs_doing_each_with_its_kind_and_action() {
     );
 }
 
+// The detail's notes are those its values don't say: a sign-in it needs is its Sign-In value.
 #[test]
-fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
+fn the_detail_notes_old_numbers_and_a_login_pitboard_cannot_use() {
+    let kinds = |account: Account| -> Vec<NoteKind> {
+        described(account)
+            .detail
+            .notes
+            .into_iter()
+            .map(|note| note.kind)
+            .collect()
+    };
+    let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
+    assert_eq!(
+        kinds(account(Some("spare")).explained(old_numbers).build()),
+        [NoteKind::Stale]
+    );
+    assert_eq!(kinds(unplaced("codex", false)), [NoteKind::Problem]);
+    assert!(
+        kinds(
+            account(Some("old"))
+                .standing(Standing::LoginExpired)
+                .build()
+        )
+        .is_empty(),
+        "said as its sign-in"
+    );
+    assert!(
+        kinds(
+            account(Some("spare"))
+                .parked_until(NOON + 2 * DAY)
+                .standing(Standing::Expiring)
+                .build()
+        )
+        .is_empty(),
+        "said as its sign-in"
+    );
+    assert!(kinds(account(None).signed_in().uuid("u").build()).is_empty());
+}
+
+// Read with the rest, it says nothing the window's "Updated" doesn't.
+#[test]
+fn the_detail_carries_email_plan_and_sign_in_life() {
     let lasting = NOON + 20 * DAY;
     let mut spare = account(Some("spare"))
         .parked_until(lasting)
@@ -454,7 +494,8 @@ fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
             sign_in: Some(words::saved_until("Feb 3", false)),
             warm: None,
             read_at: Some(NOON - 300),
-            read: Some(words::updated("11:55")),
+            read: None,
+            notes: Vec::new(),
         }
     );
     let work = described(

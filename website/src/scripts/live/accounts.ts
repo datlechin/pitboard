@@ -37,12 +37,12 @@ import {
   limitRow,
   limitTitle,
   listed,
-  readSaid,
   resetsIn,
   rowLines,
   rowNote,
   signInExpired,
   signInSaid,
+  staleNote,
   switchSpoken,
   updated,
 } from "../../lib/words.ts";
@@ -719,7 +719,8 @@ export class AccountsWindow extends LiveFigure {
       text(part(r, "resets"), l.resets);
       text(part(r, "in"), resetsIn(limit.resetsAt, s.now));
     });
-    const read = readSaid(a, s);
+    // only a Claude Desktop login in use is read at a time of its own (present/accounts.rs `read`)
+    const read = staleNote(a, s);
     shown(part(panel, "ins-read"), !!read);
     text(part(panel, "ins-read"), read ?? "");
     shown(part(panel, "ins-email-row"), !!a.email);

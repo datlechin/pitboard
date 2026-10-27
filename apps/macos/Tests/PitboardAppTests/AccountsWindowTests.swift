@@ -116,7 +116,7 @@ func account(
                 settings: Choice(
                     title: "Warm-Up Settings…",
                     intent: .show(place: .settings(section: .limits)), enabled: true)),
-            readAt: nil, read: nil),
+            readAt: nil, read: nil, notes: []),
         help: nil, limits: limits, offers: [], windows: [], forget: nil, actions: actions)
 }
 

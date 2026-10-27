@@ -239,8 +239,10 @@ pub struct AccountDetail {
     // for a Claude Code account Pitboard can warm up
     pub warm: Option<WarmDetail>,
     pub read_at: Option<i64>,
-    // "Updated 14:05", and for Claude Desktop "Read 2h 05m ago, with Claude closed"
+    // for Claude Desktop, "Read 2h 05m ago, with Claude closed"; the rest are read together
     pub read: Option<String>,
+    // the account's notes its values don't say: old numbers, or a login Pitboard can't use
+    pub notes: Vec<AccountNote>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

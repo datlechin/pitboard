@@ -15,7 +15,7 @@ internal static class Items
                 End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Lines: [],
                 Detail: new AccountDetail(
                     Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
-                    ReadAt: null, Read: null),
+                    ReadAt: null, Read: null, Notes: []),
                 Help: null, Limits: [], Offers: [], Windows: [], Forget: null, Actions: []),
             inUse ? null : new ItemAction("Use", $"Use {label}", new Intent.SwitchTo($"{provider}/{label}")));
 

@@ -514,11 +514,6 @@ export function signInSaid(a: Account, w: World): string | null {
     : null;
 }
 
-// Under the inspector's limits: when Claude Desktop's login in use was read, or the usage
-// (present/accounts.rs `item`'s `read`).
-export const readSaid = (a: Account, w: World) =>
-  staleNote(a, w) ?? (a.limits.length > 0 ? updated(w.readAt) : null);
-
 // present/words.rs `resets_in`, beside the inspector's reset: "in 2 hr 9 min".
 export const resetsIn = (at: number | null, now: number) =>
   at !== null && at > now ? `in ${appSpan(at - now)}` : "";

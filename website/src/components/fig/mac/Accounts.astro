@@ -57,10 +57,10 @@ import {
   limitRow,
   limitTitle,
   listed,
-  readSaid,
   resetsIn,
   rowNote,
   signInSaid,
+  staleNote,
   switchSpoken,
   warmsAgainNote,
 } from "../../../lib/words.ts";
@@ -117,7 +117,7 @@ const pickedLimits = picked.limits.map((limit) => ({
 }));
 const site = siteOf(picked.tool);
 const pickedSignIn = signInSaid(picked, world);
-const pickedRead = readSaid(picked, world);
+const pickedRead = staleNote(picked, world);
 const pickedWarm = picked.tool === "claude" ? (warmsAgainNote(picked) ?? WARM_UP_OFF) : null;
 const insGroup = "mx-12 rounded-u-10 bg-mac-window-card";
 const insRow = "relative flex min-h-34 items-center gap-8 px-10";
