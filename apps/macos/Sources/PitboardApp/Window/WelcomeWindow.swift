@@ -65,7 +65,6 @@ struct WelcomeWindow: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 20)
             Button {
-                model.send(welcome.done.intent)
                 dismissWindow(id: PlaceWindow.welcome.id)
             } label: {
                 Text(welcome.done.title).frame(minWidth: 160)
@@ -79,6 +78,9 @@ struct WelcomeWindow: View {
         .padding(.top, 30)
         .frame(width: 480)
         .appWindow(presence)
+        .accountSheets(model, shown: model.overWelcome)
+        // However it closes, it goes on to the accounts, and the model's sheets with it.
+        .onDisappear { model.send(welcome.done.intent) }
     }
 }
 

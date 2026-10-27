@@ -11,14 +11,10 @@ struct AccountsWindow: View {
 
     var body: some View {
         content
+            .safeAreaInset(edge: .top, spacing: 0) { banners }
             // On the list, so the inspector widens the window (docs/facts/macos-app.md).
             .frame(minWidth: 560, minHeight: 400)
-            .inspector(isPresented: $inspector) {
-                AccountInspector(item: selected, act: act) { model.send($0) }
-                    .inspectorColumnWidth(min: 240, ideal: 260, max: 360)
-            }
-            .navigationTitle(words.window.accounts)
-            .navigationSubtitle(model.updatedWindow)
+            // Before the inspector, so they stay over the list.
             .toolbar {
                 ToolbarItemGroup {
                     Button {
@@ -37,15 +33,27 @@ struct AccountsWindow: View {
                     }
                     .help(words.window.addAccountHelp)
                     .accessibilityIdentifier("toolbar.addAccount")
-                    Button {
-                        inspector.toggle()
-                    } label: {
-                        Label(words.window.inspector ?? "", systemImage: Symbol.inspector)
-                    }
-                    .help(words.window.inspectorHelp ?? "")
-                    .accessibilityIdentifier("toolbar.inspector")
                 }
             }
+            // Only beside rows: the empty states are the window's whole content.
+            .inspector(
+                isPresented: Binding(get: { inspector && listed }, set: { inspector = $0 })
+            ) {
+                AccountInspector(item: selected, act: act) { model.send($0) }
+                    .inspectorColumnWidth(min: 240, ideal: 260, max: 360)
+            }
+            .toolbar {
+                Button {
+                    inspector.toggle()
+                } label: {
+                    Label(words.window.inspector ?? "", systemImage: Symbol.inspector)
+                }
+                .help(words.window.inspectorHelp ?? "")
+                .disabled(!listed)
+                .accessibilityIdentifier("toolbar.inspector")
+            }
+            .navigationTitle(words.window.accounts)
+            .navigationSubtitle(model.updatedWindow)
             .focusedSceneValue(
                 \.refresh,
                 RefreshCommand(title: words.window.refresh, disabled: model.reading) {
@@ -60,15 +68,12 @@ struct AccountsWindow: View {
             .task { model.send(.paneShown(pane: .accounts)) }
             .asking($asking, of: model)
             .appWindow(windows.presence)
-            // The model keeps the sheet; this one goes however it goes, and the model is told.
-            .sheet(
-                item: Binding(
-                    get: { model.sheet },
-                    set: { if $0 == nil { model.send(.closeSheet) } })
-            ) { sheet in
-                AccountSheetView(model: model, sheet: sheet)
-            }
-            .windowAlerts(model, shown: model.sheet == nil)
+            .accountSheets(model, shown: !model.overWelcome)
+    }
+
+    private var listed: Bool {
+        guard case .list = model.accountsShown else { return false }
+        return !model.sections.isEmpty
     }
 
     private var selected: AccountItem? {
@@ -141,7 +146,6 @@ struct AccountsWindow: View {
             }
         }
         .listStyle(.inset)
-        .safeAreaInset(edge: .top, spacing: 0) { banners }
         .contextMenu(forSelectionType: String.self) { ids in
             if let item = ids.first.flatMap(model.item) {
                 AccountMenuItems(
@@ -201,11 +205,26 @@ struct AccountsWindow: View {
     }
 
     private func send(_ intent: Intent, askingFirst question: Question?) {
-        if let question {
-            asking = Asking(question: question, intent: intent)
-        } else {
-            model.send(intent)
+        $asking.ask(intent, first: question, of: model)
+    }
+}
+
+extension AppModel {
+    // The welcome's Add starts its sheet there (plan 7), until the welcome goes on.
+    var overWelcome: Bool { windowRequest.place == .welcome }
+}
+
+extension View {
+    // The model keeps the sheet; this one goes however it goes, and the model is told.
+    func accountSheets(_ model: AppModel, shown: Bool) -> some View {
+        sheet(
+            item: Binding(
+                get: { shown ? model.sheet : nil },
+                set: { if $0 == nil { model.send(.closeSheet) } })
+        ) { sheet in
+            AccountSheetView(model: model, sheet: sheet)
         }
+        .windowAlerts(model, shown: shown && model.sheet == nil)
     }
 }
 

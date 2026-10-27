@@ -353,6 +353,17 @@ final class ScreenshotTests: FixtureTestCase {
     }
 
     @MainActor
+    func testAddingFromTheWelcome() {
+        let app = launch(.firstLaunch)
+        let welcome = app.windows["welcome"]
+        let add = welcome.buttons["welcome.add.codex"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.click()
+        XCTAssertTrue(welcome.sheets.firstMatch.waitForExistence(timeout: 10))
+        keep(welcome, as: "macos-welcome-add")
+    }
+
+    @MainActor
     func testUninstallingPitboard() {
         let app = launch(.oneTool)
         app.openSettings()

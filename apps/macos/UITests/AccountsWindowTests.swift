@@ -442,7 +442,10 @@ final class AccountsWindowTests: FixtureTestCase {
         let add = welcome.buttons["welcome.add.codex"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.click()
-        XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 10))
+        // Plan 7: over the welcome, whose Continue is still to come.
+        XCTAssertTrue(welcome.sheets.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(welcome.descendants(matching: .any)["sheet.add"].exists)
+        XCTAssertFalse(app.accountsWindow.exists, "no window opens behind it")
     }
 
     // Escape is the sheet's Cancel, which stops the tool's sign-in with the sheet.
