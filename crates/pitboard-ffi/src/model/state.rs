@@ -1847,6 +1847,10 @@ impl State {
             Ok(stayed) => {
                 self.removing = Some(Removing::Clearing(stayed));
                 self.windows.remove_all(jobs);
+                // The glance file is gone, and the widgets reload to find no accounts.
+                self.glancing.text = None;
+                self.glancing.shown = None;
+                self.glancing.revision += 1;
             }
             Err(Some(error)) => {
                 self.resume(now);

@@ -255,9 +255,9 @@ fn the_glance_is_given_to_the_app_with_or_without_a_file() {
     model.shutdown();
 }
 
-// A widget would go on showing accounts Pitboard no longer has.
+// A widget, or an intent in the app, would go on showing accounts Pitboard no longer has.
 #[test]
-fn an_uninstall_deletes_the_glance() {
+fn an_uninstall_deletes_the_glance_and_tells_the_widgets() {
     let world = World::new("glance-uninstalled");
     world.enrolled("work", "here", 42.0);
     let glance = world
@@ -275,14 +275,21 @@ fn an_uninstall_deletes_the_glance() {
         QUICK,
     );
     model.send(Intent::Start);
-    eventually("the glance written", || glance.exists());
+    let read = told.until("the widgets told", |snapshots| {
+        snapshots
+            .last()
+            .is_some_and(|last| last.glance_revision > 0)
+    });
+    let before = read.last().expect("told").glance_revision;
     model.send(Intent::Uninstall);
-    told.until("Pitboard removed", |snapshots| {
+    let removed = told.until("Pitboard removed", |snapshots| {
         snapshots
             .last()
             .is_some_and(|last| last.removal == Some(crate::RemovalShown::Done))
     });
     assert!(!glance.exists());
+    assert!(removed.last().expect("told").glance_revision > before);
+    assert_eq!(model.glance(), None);
     assert!(
         glance.parent().is_some_and(std::path::Path::exists),
         "the app's folder stays"
