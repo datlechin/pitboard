@@ -256,8 +256,9 @@ Dark `macos-<surface>-<state>-dark`, the scenes usepitboard.com's macOS figures 
 against among them. CI keeps them as the artifact `macos-app-pictures`.
 
 No UI test can place a widget, so `PitboardWidgetViewsTests` draws each widget's entries
-offscreen, `macos-widget-<size>-<state>`, then `-tinted` and `-dark`, into the folder
-`PITBOARD_WIDGET_RENDERS` names. CI keeps them as the artifact `macos-widget-pictures`:
+offscreen at two pixels a point, `macos-widget-<size>-<state>` and in Dark
+`macos-widget-<size>-<state>-dark`, into the folder `PITBOARD_WIDGET_RENDERS` names. CI keeps them
+as the artifact `macos-widget-pictures`:
 
 ```sh
 PITBOARD_WIDGET_RENDERS=<dir> swift test --package-path apps/macos --filter PitboardWidgetViewsTests

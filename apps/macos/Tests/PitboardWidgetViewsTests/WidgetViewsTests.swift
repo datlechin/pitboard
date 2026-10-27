@@ -97,15 +97,15 @@ private enum Family: CaseIterable {
 
 private let margin: CGFloat = 11
 
-// Drawn as AppKit draws a window, which draws Gauge as it is, where ImageRenderer does not.
-// PITBOARD_WIDGET_RENDERS names a folder to keep each picture in.
+// Drawn as AppKit draws a window, which draws Gauge as it is, where ImageRenderer does not, at
+// a Retina display's two pixels a point. PITBOARD_WIDGET_RENDERS names a folder to keep each
+// picture in.
 @MainActor
-private func draw(
-    _ family: Family, _ entry: GlanceEntry, mode: WidgetRenderingMode, dark: Bool, named: String
-) throws -> NSBitmapImageRep {
+private func draw(_ family: Family, _ entry: GlanceEntry, dark: Bool, named: String) throws
+    -> NSBitmapImageRep
+{
     let size = family.size
     let content = family.view(entry)
-        .environment(\.widgetRenderingMode, mode)
         .padding(margin)
         .frame(width: size.width, height: size.height)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -113,7 +113,13 @@ private func draw(
     host.frame = NSRect(origin: .zero, size: size)
     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     host.layout()
-    let picture = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    let picture = try #require(
+        NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width) * 2,
+            pixelsHigh: Int(size.height) * 2, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+            bitsPerPixel: 0))
+    picture.size = size
     host.cacheDisplay(in: host.bounds, to: picture)
     if let folder = ProcessInfo.processInfo.environment["PITBOARD_WIDGET_RENDERS"] {
         let file = URL(fileURLWithPath: folder).appending(path: "\(named).png")
@@ -187,8 +193,9 @@ private func crowded(_ accounts: [[String: Any]]) -> [[String: Any]] {
     }
 }
 
-// Each picture is named as the UI tests' are, "macos-widget-small-data", then "-tinted" and
-// "-dark" where it is in that look, for pull requests (macos-widget-pictures).
+// Each picture is named as the UI tests' are, "macos-widget-small-data", then "-dark" where it
+// is dark, for pull requests (macos-widget-pictures). Only the system draws the tinted and clear
+// looks, over the desktop.
 @MainActor
 @Test(arguments: Family.allCases)
 private func eachWidgetDrawsItsAccountsInEveryLookWithinItsSize(_ family: Family) throws {
@@ -223,13 +230,11 @@ private func eachWidgetDrawsItsAccountsInEveryLookWithinItsSize(_ family: Family
         #expect(
             taken(family, entry).height <= family.size.height - 2 * margin, "\(family) \(state)"
         )
-        for (look, mode) in [("", WidgetRenderingMode.fullColor), ("-tinted", .accented)] {
-            for dark in [false, true] {
-                let picture = try draw(
-                    family, entry, mode: mode, dark: dark,
-                    named: "macos-widget-\(family)-\(state)\(look)\(dark ? "-dark" : "")")
-                #expect(picture.pixelsWide > 0)
-            }
+        for dark in [false, true] {
+            let picture = try draw(
+                family, entry, dark: dark,
+                named: "macos-widget-\(family)-\(state)\(dark ? "-dark" : "")")
+            #expect(picture.pixelsWide > 0)
         }
     }
 }
