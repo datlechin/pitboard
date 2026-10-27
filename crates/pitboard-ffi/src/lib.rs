@@ -70,6 +70,7 @@ pub use present::{
     path_too_long, ready_to_install, still_switching, trash_says, usage_of,
     webview_runtime_too_old,
 };
+pub use present::{JumpAsk, JumpTask, jump_refused};
 
 mod account_windows;
 pub use account_windows::{

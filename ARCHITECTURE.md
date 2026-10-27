@@ -160,8 +160,8 @@ The apps:
 - `apps/windows/`: the Windows app.
   - `Pitboard.Core`, `Pitboard.Share.Core`: the two libraries' C# bindings, generated into
     `Generated/`, the second with what `PitboardShare.exe` does with a share, and their tests.
-  - `Pitboard.Windows`: the glue, no XAML: `AppModel`, the icon, notifications, the other
-    apps, updates, start at sign-in and the account windows' WebView2 code.
+  - `Pitboard.Windows`: the glue, no XAML: `AppModel`, the icon, notifications, the Jump List,
+    the other apps, updates, start at sign-in and the account windows' WebView2 code.
   - `Pitboard.Views`: every window and page, in WinUI.
   - `Pitboard.App`: `Pitboard.exe`, its composition root, and `--unregister`.
   - `Pitboard.Share`: `PitboardShare.exe`, the share target.
@@ -468,6 +468,10 @@ keeps it is in the header of the module named.
 - Only `PitboardShare.exe` has a package identity, which `check-windows-app.ps1` holds. It
   loads none of the core and hands a page to `Pitboard.exe` only as a Pitboard link
   ([Documented, not measured](docs/facts/windows-documented.md) has what is still to be seen).
+- The Windows Jump List is Win32's, kept under the AppUserModelId with no package identity.
+  Each task starts `Pitboard.exe` with a flag and the GUID the model gave it, read only where a
+  link would be, and its switch is a request from outside (`LaunchingTests`, `model/jumping.rs`).
+  Only a Release build writes the list, and `--unregister` deletes it.
 
 ### Account windows
 

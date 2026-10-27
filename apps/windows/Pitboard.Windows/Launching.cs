@@ -15,6 +15,21 @@ public enum Start
     UnregisterShare,
 }
 
+// What a second launch hands the running copy: its Pitboard link, its Jump List task, or neither, which brings the
+// window forward.
+public abstract record Handover
+{
+    private Handover()
+    {
+    }
+
+    public sealed record Window : Handover;
+
+    public sealed record Link(string Text) : Handover;
+
+    public sealed record Jump(JumpAsk Ask) : Handover;
+}
+
 public static class Launching
 {
     public const string Unregister = "--unregister";
@@ -28,6 +43,13 @@ public static class Launching
 
     // What COM starts Pitboard.exe with for a click on its notification, as Register writes it.
     public const string Notified = "----AppNotificationActivated:";
+
+    // What a Jump List task starts Pitboard.exe with, each id after its flag.
+    public const string SwitchTo = "--switch-to";
+
+    public const string AddAccount = "--add-account";
+
+    public const string OpenWindow = "--open-window";
 
     // A link launch reads no flag: Microsoft's guide to URI schemes warns that a link's unencoded quotes or spaces split
     // it into more arguments, which another app can make look like Pitboard's own.
@@ -66,8 +88,9 @@ public static class Launching
         return Unasked(given) ? Start.Dropped : Start.Redirect;
     }
 
-    public static bool OpensWindow(IEnumerable<string> arguments) =>
-        !Unasked(arguments.ToHashSet(StringComparer.OrdinalIgnoreCase));
+    // A Jump List task opens what it asks for, and no window of its own.
+    public static bool OpensWindow(IReadOnlyList<string> arguments) =>
+        !Unasked(arguments.ToHashSet(StringComparer.OrdinalIgnoreCase)) && Asked(arguments) is null;
 
     // The MSI's command passes a Pitboard link as its first argument, which the model reads as strictly as any link.
     public static string? Link(IEnumerable<string> arguments, string scheme) =>
@@ -75,9 +98,44 @@ public static class Launching
             ? first
             : null;
 
-    // Windows App SDK hands the running copy an unpackaged launch's whole command line, its program first.
-    public static string? Handed(string commandLine, Identity running, string? fixtureFolder) =>
-        running.OpensLinks(fixtureFolder) ? Link(Arguments(commandLine).Skip(1), running.LinkScheme) : null;
+    public static string[] Of(JumpAsk ask) => ask switch
+    {
+        JumpAsk.Switch switching => [SwitchTo, switching.Account],
+        JumpAsk.AddAccount => [AddAccount],
+        JumpAsk.OpenWindow window => [OpenWindow, window.Store],
+        _ => throw new ArgumentOutOfRangeException(nameof(ask)),
+    };
+
+    // A task's flag alone, and its id a GUID, as the model gives every one: anything else is no task.
+    public static JumpAsk? Asked(IReadOnlyList<string> arguments) => arguments switch
+    {
+        [var flag] when Named(flag, AddAccount) => new JumpAsk.AddAccount(),
+        [var flag, var id] when Named(flag, SwitchTo) && Guid.TryParse(id, out var account) =>
+            new JumpAsk.Switch(account.ToString()),
+        [var flag, var id] when Named(flag, OpenWindow) && Guid.TryParse(id, out var store) =>
+            new JumpAsk.OpenWindow(store.ToString()),
+        _ => null,
+    };
+
+    // Windows App SDK hands the running copy an unpackaged launch's whole command line, its program first. A Debug build
+    // outside a fixture runs on whatever homes its launch has, so it takes neither a link nor a task.
+    public static Handover Handed(string commandLine, Identity running, string? fixtureFolder)
+    {
+        var arguments = Arguments(commandLine).Skip(1).ToArray();
+        if (!running.OpensLinks(fixtureFolder))
+        {
+            return new Handover.Window();
+        }
+
+        if (Link(arguments, running.LinkScheme) is { } link)
+        {
+            return new Handover.Link(link);
+        }
+
+        return Asked(arguments) is { } ask ? new Handover.Jump(ask) : new Handover.Window();
+    }
+
+    private static bool Named(string given, string flag) => string.Equals(given, flag, StringComparison.OrdinalIgnoreCase);
 
     private static bool Unasked(HashSet<string> given) =>
         given.Contains(SignIn) || given.Contains(Updated) || given.Contains(Notified);

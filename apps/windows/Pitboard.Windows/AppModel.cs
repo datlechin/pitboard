@@ -132,6 +132,8 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public OutsideAnswer[] Answers => Part<OutsideAnswer[]>();
 
+    public JumpTask[]? JumpList => Part<JumpTask[]?>();
+
     private T Part<T>([CallerMemberName] string name = "") => (T)_parts[name]!;
 }
 

@@ -1,39 +1,43 @@
+using Pitboard.Core;
+
 namespace Pitboard.Windows.Tests;
 
 [TestClass]
 public sealed class HandoversTests
 {
+    private static readonly Handover Window = new Handover.Window();
+
     [TestMethod]
     public void ALaunchHandedOverWhilePitboardStartsOpensTheWindowOnceItCan()
     {
         var handovers = new Handovers();
-        var taken = new List<string?>();
+        var taken = new List<Handover>();
 
-        handovers.Arrived(null);
-        handovers.Arrived(null);
+        handovers.Arrived(Window);
+        handovers.Arrived(new Handover.Window());
         handovers.Ready(taken.Add);
 
-        CollectionAssert.AreEqual(new string?[] { null }, taken);
+        CollectionAssert.AreEqual(new[] { Window }, taken);
     }
 
     [TestMethod]
     public void EachLaunchHandedOverLaterOpensTheWindow()
     {
         var handovers = new Handovers();
-        var taken = new List<string?>();
+        var taken = new List<Handover>();
         handovers.Ready(taken.Add);
 
-        handovers.Arrived(null);
-        handovers.Arrived(null);
+        handovers.Arrived(Window);
+        handovers.Arrived(Window);
 
-        CollectionAssert.AreEqual(new string?[] { null, null }, taken);
+        CollectionAssert.AreEqual(new[] { Window, Window }, taken);
     }
 
     [TestMethod]
     public void NoLaunchHandedOverOpensNothing()
     {
         var handovers = new Handovers();
-        var taken = new List<string?>();
+        var taken = new List<Handover>();
 
         handovers.Ready(taken.Add);
 
@@ -45,28 +49,45 @@ public sealed class HandoversTests
     public void ALaunchHandedOverBeforeTheAppCanTakeItWaitsForIt()
     {
         var handovers = new Handovers();
-        var taken = new List<string?>();
+        var taken = new List<Handover>();
 
-        handovers.Arrived(null);
-        handovers.Arrived("pitboard://open?url=a");
+        handovers.Arrived(Window);
+        handovers.Arrived(new Handover.Link("pitboard://open?url=a"));
         handovers.Ready(taken.Add);
-        handovers.Arrived("pitboard://open?url=b");
+        handovers.Arrived(new Handover.Link("pitboard://open?url=b"));
 
-        CollectionAssert.AreEqual(new[] { null, "pitboard://open?url=a", "pitboard://open?url=b" }, taken);
+        CollectionAssert.AreEqual(
+            new[] { Window, new Handover.Link("pitboard://open?url=a"), new Handover.Link("pitboard://open?url=b") }, taken);
     }
 
     [TestMethod]
     public void EachLinkHandedOverWhilePitboardStartsIsKept()
     {
         var handovers = new Handovers();
-        var taken = new List<string?>();
-        var link = "pitboard://open?url=a";
+        var taken = new List<Handover>();
+        var link = new Handover.Link("pitboard://open?url=a");
 
         handovers.Arrived(link);
         handovers.Arrived(link);
         handovers.Ready(taken.Add);
 
         CollectionAssert.AreEqual(new[] { link, link }, taken);
+    }
+
+    // Each is a request of its own, which the model answers on its own.
+    [TestMethod]
+    public void EachTaskHandedOverWhilePitboardStartsIsKept()
+    {
+        var handovers = new Handovers();
+        var taken = new List<Handover>();
+        var task = new Handover.Jump(new JumpAsk.Switch("35c0d1c9-6b25-5cdc-b543-64c0c0d8de46"));
+
+        handovers.Arrived(task);
+        handovers.Arrived(Window);
+        handovers.Arrived(task);
+        handovers.Ready(taken.Add);
+
+        CollectionAssert.AreEqual(new[] { task, Window, task }, taken);
     }
 
     [TestMethod]
@@ -80,7 +101,7 @@ public sealed class HandoversTests
             var arriving = Task.Run(() =>
             {
                 go.SignalAndWait();
-                handovers.Arrived(null);
+                handovers.Arrived(Window);
             });
 
             go.SignalAndWait();

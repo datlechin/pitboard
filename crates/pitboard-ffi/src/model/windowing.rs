@@ -15,8 +15,8 @@ use crate::account_windows::{WindowNoteKind, stores::derive};
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{
-    Account, Choice, DownloadState, LinkPicker, OpenWindow, PickerShown, Question, SiteMenu,
-    WaitingShown, WindowWaiting, downloads_quit_question,
+    Account, Choice, DownloadState, JumpAsk, LinkPicker, OpenWindow, PickerShown, Question,
+    SiteMenu, WaitingShown, WindowWaiting, downloads_quit_question,
 };
 use pitboard_core::host::{OS, Os};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1089,6 +1089,14 @@ fn a_window_waits_while_its_old_store_is_held() {
         SiteMenu::One { window, .. } => window.store == personal,
         SiteMenu::Several { windows, .. } => windows.iter().any(|w| w.store == personal),
     }));
+    let opens = JumpAsk::OpenWindow {
+        store: personal.clone(),
+    };
+    let jumps = |model: &Hand| model.on_windows().jump_list.expect("read");
+    assert!(
+        !jumps(&model).iter().any(|task| task.ask == opens),
+        "the Jump List leaves it out"
+    );
 
     model.refresh(&mut machine);
     assert_eq!(open_window(&model, &personal), None);
@@ -1099,6 +1107,7 @@ fn a_window_waits_while_its_old_store_is_held() {
     assert!(model.shown().account_windows.held.is_empty());
     let window = open_window(&model, &personal).expect("open once deleted");
     assert_eq!(window.note, Some(WindowNoteKind::SignIn));
+    assert!(jumps(&model).iter().any(|task| task.ask == opens));
 }
 
 #[test]

@@ -17,13 +17,15 @@ public sealed class UnregisteringTests
         var key = new StandInRunKey();
         key.Values["Pitboard"] = $"\"{Installed.ToUpperInvariant()}\" --sign-in";
         var tasks = new StandInScheduledTasks();
+        var jumpList = new JumpTasksTests.StandInJumpList();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, key, tasks, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, key, tasks, jumpList, notifications, registration);
 
         Assert.IsFalse(key.Values.ContainsKey("Pitboard"));
         Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
+        Assert.AreEqual(1, jumpList.Deleted);
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
     }
@@ -34,7 +36,9 @@ public sealed class UnregisteringTests
         var key = new StandInRunKey();
         key.Values["Pitboard"] = @"""C:\Users\Dana Lee\AppData\Local\Programs\Other\Pitboard.exe"" --sign-in";
 
-        Unregistering.Run(Build.Release, Installed, key, new StandInScheduledTasks(), new StandInNotifications(), new StandInRegistration(null));
+        Unregistering.Run(
+            Build.Release, Installed, key, new StandInScheduledTasks(), new JumpTasksTests.StandInJumpList(), new StandInNotifications(),
+            new StandInRegistration(null));
 
         Assert.AreEqual(@"""C:\Users\Dana Lee\AppData\Local\Programs\Other\Pitboard.exe"" --sign-in", key.Values["Pitboard"]);
         CollectionAssert.DoesNotContain(key.Asked, "remove Pitboard");
@@ -48,7 +52,7 @@ public sealed class UnregisteringTests
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(null);
 
-        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), tasks, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), tasks, new JumpTasksTests.StandInJumpList(), notifications, registration);
 
         Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
         Assert.IsEmpty(notifications.Asked);
@@ -62,7 +66,7 @@ public sealed class UnregisteringTests
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), tasks, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), tasks, new JumpTasksTests.StandInJumpList(), notifications, registration);
 
         Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
@@ -77,7 +81,9 @@ public sealed class UnregisteringTests
         var notifications = new StandInNotifications { Fails = Marshal.GetExceptionForHR(unchecked((int)0x80004005)) };
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, new StandInRunKey(), new StandInScheduledTasks(), notifications, registration);
+        Unregistering.Run(
+            Build.Release, Installed, new StandInRunKey(), new StandInScheduledTasks(), new JumpTasksTests.StandInJumpList(), notifications,
+            registration);
 
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
@@ -88,12 +94,28 @@ public sealed class UnregisteringTests
     {
         var key = new StandInRunKey { ReadRefuses = new UnauthorizedAccessException("Access is denied.") };
         var tasks = new StandInScheduledTasks();
+        var jumpList = new JumpTasksTests.StandInJumpList();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Release, Installed, key, tasks, notifications, registration);
+        Unregistering.Run(Build.Release, Installed, key, tasks, jumpList, notifications, registration);
 
         Assert.AreEqual($"remove for {Installed}", string.Join(", ", tasks.Asked));
+        Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
+        Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
+    }
+
+    [TestMethod]
+    public void AJumpListWindowsCannotDeleteStillLetsTheNotificationsGo()
+    {
+        var jumpList = new JumpTasksTests.StandInJumpList { Refuses = Marshal.GetExceptionForHR(unchecked((int)0x80004005)) };
+        var notifications = new StandInNotifications();
+        var registration = new StandInRegistration(Activator);
+
+        Unregistering.Run(
+            Build.Release, Installed, new StandInRunKey(), new StandInScheduledTasks(), jumpList, notifications, registration);
+
+        Assert.AreEqual(1, jumpList.Deleted);
         Assert.AreEqual("unregister all", string.Join(", ", notifications.Asked));
         Assert.AreEqual($"delete {Activator}", string.Join(", ", registration.Asked));
     }
@@ -104,13 +126,15 @@ public sealed class UnregisteringTests
         var key = new StandInRunKey();
         key.Values["Pitboard"] = $"\"{Installed}\" --sign-in";
         var tasks = new StandInScheduledTasks();
+        var jumpList = new JumpTasksTests.StandInJumpList();
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 
-        Unregistering.Run(Build.Debug, Installed, key, tasks, notifications, registration);
+        Unregistering.Run(Build.Debug, Installed, key, tasks, jumpList, notifications, registration);
 
         Assert.IsEmpty(key.Asked);
         Assert.IsEmpty(tasks.Asked);
+        Assert.AreEqual(0, jumpList.Deleted);
         Assert.IsEmpty(notifications.Asked);
         Assert.IsEmpty(registration.Asked);
     }
