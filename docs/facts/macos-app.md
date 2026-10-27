@@ -115,7 +115,11 @@ Read and measured on 27 October 2026, with Xcode 27.1 unless a fact names anothe
 - Measured on macOS 27.0 with a scratch SwiftUI app: the app menu and its Hide and Quit items
   take `CFBundleDisplayName`, and the standard About panel takes `CFBundleName`. So a debug
   build, whose display name is Pitboard Debug, shows Pitboard Debug in its app menu and Pitboard
-  in About, as `SiteFiguresTests` expect ([The site's figures](site.md)).
+  in About.
+- Read on CI's macOS 26 image, `macos-26-arm64` 20261013.0424, in run 40494932963: the debug
+  build's app menu takes `CFBundleName`, Pitboard, while its Hide and Quit items read Hide
+  Pitboard Debug and Quit Pitboard Debug. `SiteFiguresTests` expect what each system draws
+  ([The site's figures](site.md)).
 - Read from a debug build: an `AppShortcutsProvider` in a static Swift package reached none of
   the app's `Metadata.appintents`, while the package's actions, `AccountEntity` and
   `AccountQuery` reached both. So the App Shortcuts and the actions that run in the app are in the
