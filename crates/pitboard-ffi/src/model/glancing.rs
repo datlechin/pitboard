@@ -486,6 +486,64 @@ fn a_switch_from_outside_waits_behind_a_question_the_person_has_open() {
     );
 }
 
+// A shortcut or a widget can start Pitboard to ask, before it has read anything.
+#[test]
+fn a_switch_from_outside_before_the_first_read_waits_for_it() {
+    let mut machine = Stub::reading(Ok(two(10.0)));
+    machine.switched = switched("claude", "work", "personal", Vec::new());
+    let mut model = Hand::new();
+    model.state.glance_to_a_file();
+    model.send(Intent::Outside {
+        request: 3,
+        ask: switch_to("claude:p"),
+    });
+    model.send(Intent::Start);
+    assert!(answers(&model).is_empty(), "not before the read");
+    model.run(&mut machine);
+    assert_eq!(machine.switched_to, ["claude/personal"]);
+    assert_eq!(
+        answers(&model),
+        [OutsideAnswer {
+            request: 3,
+            done: true,
+            said: format!("{}.", words::switched_to(Some("Claude Code"), "personal")),
+            question: None,
+        }]
+    );
+}
+
+#[test]
+fn a_switch_from_outside_before_a_first_read_that_fails_says_it_failed() {
+    let mut machine = Stub::reading(Err(refusal(
+        "state_unreadable",
+        "/Users/dana/.pitboard/state.json could not be read.",
+        Vec::new(),
+    )));
+    machine.offline = Err(refusal(
+        "state_unreadable",
+        "/Users/dana/.pitboard/state.json could not be read.",
+        Vec::new(),
+    ));
+    let mut model = Hand::new();
+    model.state.glance_to_a_file();
+    model.send(Intent::Start);
+    model.send(Intent::Outside {
+        request: 4,
+        ask: switch_to("claude:p"),
+    });
+    model.run(&mut machine);
+    assert!(machine.switched_to.is_empty());
+    assert_eq!(
+        answers(&model),
+        [OutsideAnswer {
+            request: 4,
+            done: false,
+            said: words::failed_outside(words::COULD_NOT_READ_USAGE),
+            question: None,
+        }]
+    );
+}
+
 #[test]
 fn a_refresh_from_outside_is_answered_once_read() {
     let mut machine = Stub::reading(Ok(two(10.0)));

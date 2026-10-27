@@ -1139,6 +1139,8 @@ pub(crate) struct State {
     glancing: Option<Glancing>,
     pub(crate) answered: VecDeque<(u64, Answered)>,
     outside_switch: Option<OutsideSwitch>,
+    // switches asked from outside before the accounts were first read
+    outside_held: Vec<(u64, OutsideAsk)>,
 }
 
 // The request from outside the switch under way answers, and whether it let Pitboard quit an app.
@@ -1222,6 +1224,7 @@ impl State {
             glancing: None,
             answered: VecDeque::new(),
             outside_switch: None,
+            outside_held: Vec::new(),
         }
     }
 
@@ -1247,6 +1250,7 @@ impl State {
         }
         self.go_off(now, &mut jobs);
         self.follow_windows(now, &mut jobs);
+        self.take_held(now, &mut jobs);
         if self.removing.is_some() {
             jobs.retain(|job| {
                 !matches!(
@@ -1674,11 +1678,17 @@ impl State {
                 return self.refresh(asked, now, jobs);
             }
         };
-        let found = self.status.as_ref().and_then(|read| {
-            read.accounts
-                .iter()
-                .find(|known| !known.unplaced && crate::present::glance_id(&known.id) == account)
-        });
+        let Some(read) = &self.status else {
+            let ask = if quit {
+                OutsideAsk::QuitAndSwitch { account }
+            } else {
+                OutsideAsk::Switch { account }
+            };
+            self.outside_held.push((request, ask));
+            return;
+        };
+        let found = (read.accounts.iter())
+            .find(|known| !known.unplaced && crate::present::glance_id(&known.id) == account);
         let Some((found, qualified)) =
             found.and_then(|found| Some((found, found.qualified.clone()?)))
         else {
@@ -1703,6 +1713,24 @@ impl State {
             None => {
                 self.switch_asked(qualified, jobs);
                 self.outside_switch = Some(OutsideSwitch { request, quit });
+            }
+        }
+    }
+
+    // Once the accounts are first read, or could not be, the switches asked before it.
+    fn take_held(&mut self, now: Now, jobs: &mut Vec<Job>) {
+        if self.removing.is_some() {
+            for (request, _) in std::mem::take(&mut self.outside_held) {
+                self.answer_outside(request, Answered::Uninstalling);
+            }
+        } else if self.status.is_some() {
+            for (request, ask) in std::mem::take(&mut self.outside_held) {
+                self.outside(request, ask, now, jobs);
+            }
+        } else if self.failure.is_some() && self.reads == 0 {
+            for (request, _) in std::mem::take(&mut self.outside_held) {
+                let title = COULD_NOT_READ_USAGE.into();
+                self.answer_outside(request, Answered::Failed { title });
             }
         }
     }
