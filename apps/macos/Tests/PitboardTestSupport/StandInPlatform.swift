@@ -1,9 +1,7 @@
 import Foundation
 import PitboardKit
 
-// A fixture's model, the real core over a machine of its own in `folder`, for a test that
-// runs the Rust end to end. Only a library built with `build-xcframework.sh --fixture` has
-// fixtures.
+// The real core over a fixture's machine in `folder`.
 @MainActor
 package func fixtureModel(_ name: String, in folder: URL) throws -> AppModel {
     try AppModel.listening { listener in

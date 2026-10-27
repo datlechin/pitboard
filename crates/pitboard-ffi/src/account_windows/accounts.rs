@@ -81,8 +81,8 @@ pub(crate) fn window_accounts(accounts: &[Account]) -> Vec<WindowAccount> {
 }
 
 /// The windows `account` has among those of `accounts`, one for each site of its tool: what
-/// its row's own menu offers to open, which the snapshot carries as `AccountItem::windows`.
-/// The site is checked as well as the store: two tools' accounts can share an account id.
+/// its row's own menu offers to open. The site is checked as well as the store: two tools'
+/// accounts can share an account id.
 pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec<WindowAccount> {
     window_accounts(accounts)
         .into_iter()

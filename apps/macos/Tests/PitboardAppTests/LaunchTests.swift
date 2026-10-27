@@ -36,10 +36,10 @@ private let inAFixture = ["PITBOARD_FIXTURE": "twoTools"]
 #endif
 
 // Shortcuts, Spotlight and the widget gallery list a debug build and a release by this name.
-@Test func aDebugBuildAndItsShareExtensionAreNamedPitboardDebug() throws {
+@Test func aDebugBuildAndItsExtensionsAreNamedPitboardDebug() throws {
     let macos = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    for plist in ["App/Info.plist", "ShareExtension/Info.plist"] {
+    for plist in ["App/Info.plist", "ShareExtension/Info.plist", "Widgets/Info.plist"] {
         let data = try Data(contentsOf: macos.appending(path: plist))
         let info = try PropertyListSerialization.propertyList(from: data, format: nil)
         #expect(
