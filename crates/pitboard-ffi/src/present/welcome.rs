@@ -110,14 +110,15 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
                         said: words::added_as(added.label.as_deref().unwrap_or_default()),
                     },
                 ),
-                (None, Some(login)) if code == claude => {
-                    (Some(login.email.clone()), add(words::ADD.into(), code))
-                }
+                (None, Some(login)) if code == claude => (
+                    Some(login.email.clone()),
+                    add(words::ADD_ASKING.into(), code),
+                ),
                 (None, _) if code == claude => {
                     (None, add_from_sheet(words::sign_in_asking(seen.os), code))
                 }
                 (None, _) if code == ProviderId::Codex.code() => {
-                    (None, add(words::ADD.into(), code))
+                    (None, add(words::ADD_ASKING.into(), code))
                 }
                 (None, _) => (None, add_from_sheet(words::ADD_ASKING.into(), code)),
             };

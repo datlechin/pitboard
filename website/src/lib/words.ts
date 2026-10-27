@@ -198,7 +198,8 @@ export const calendarDate = (epoch: number) => {
   return `${weekdaysLong[d.getUTCDay()]} ${d.getUTCDate()} ${monthsLong[d.getUTCMonth()]}`;
 };
 
-// WindowsLocalTime.cs `Date` in en-GB, the culture's day before its month abbreviated: "9 Nov"
+// MacLocalTime `date` and WindowsLocalTime.cs `Date` in en-GB, the culture's day before its month
+// abbreviated: "9 Nov"
 export const dayAndMonth = (epoch: number) => {
   const d = local(epoch);
   return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
@@ -237,8 +238,6 @@ export const updated = (readAt: number) => `Updated ${hm(readAt)}`;
 // account_windows/accounts.rs: one item opens a site's one account in place of a submenu
 export const openSiteAs = (site: string, label: string) => `Open ${site} as ${label}`;
 
-export const menuTitle = (a: Account) => (a.plan ? `${a.label} · ${a.plan}` : a.label);
-
 // status.rs `Row::lasts`: which limit of the account in use runs out first at its pace, and in
 // how many seconds, which `pitboard` says under its bars.
 export function runsOutFirst(a: Account, w: World): { limit: Limit; inSeconds: number } | null {
@@ -258,7 +257,7 @@ export type System = Extract<Platform, "macos" | "windows">;
 export const titled = (system: System, mac: string, win: string) =>
   system === "windows" ? win : mac;
 
-const uncapitalised = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+export const uncapitalised = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 // present/words.rs `span`: "2 hr 9 min", "1 day 3 hr", "under a minute".
 export function appSpan(seconds: number): string {
@@ -489,11 +488,39 @@ export function rowLines(a: Account, w: World, warm: string | null): string[] {
   return [staleNote(a, w), ended, warm].filter((n): n is string => n !== null);
 }
 
+// present/accounts.rs `item`'s notes, as the macOS window's row draws the most pressing alone: a
+// saved sign-in that has expired, or one that soon does, or a Claude Desktop one that may have
+// lapsed.
+export function rowNote(a: Account, w: World): string | null {
+  if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
+  if (isInUse(a, w)) return null;
+  if (a.refreshExpiresAt !== undefined)
+    return renewalDue(a.refreshExpiresAt, w.now)
+      ? signInExpires(a.refreshExpiresAt - w.now, false)
+      : null;
+  return a.sessionExpiresAt !== undefined && a.sessionExpiresAt <= w.now
+    ? signInExpires(a.sessionExpiresAt - w.now, true)
+    : null;
+}
+
 // An account's one note in the Windows window, its most pressing: what rowLines says but its
 // warm-up, which its details say (present/accounts.rs `notes`).
-export const rowNote = (a: Account, w: World) => rowLines(a, w, null)[0] ?? null;
+export const windowsRowNote = (a: Account, w: World) => rowLines(a, w, null)[0] ?? null;
 
-// present/words.rs `resets_in`, beside a limit's reset in an opened row: "in 2 hr 9 min".
+// The inspector's Sign-In: in use, how long a saved sign-in is valid for, or that it expired
+// (present/accounts.rs `item`'s `sign_in`, present/words.rs `saved_until`).
+export function signInSaid(a: Account, w: World): string | null {
+  if (isInUse(a, w)) return "In use";
+  if (signInExpired(a, w)) return SIGN_IN_EXPIRED;
+  if (a.refreshExpiresAt !== undefined)
+    return `Saved sign-in valid until ${dayAndMonth(a.refreshExpiresAt)}`;
+  return a.sessionExpiresAt !== undefined
+    ? `Saved sign-in may expire after ${dayAndMonth(a.sessionExpiresAt)}`
+    : null;
+}
+
+// present/words.rs `resets_in`, beside a limit's reset in the inspector and in an opened row:
+// "in 2 hr 9 min".
 export const resetsIn = (at: number | null, now: number) =>
   at !== null && at > now ? `in ${appSpan(at - now)}` : "";
 

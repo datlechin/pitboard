@@ -2218,7 +2218,8 @@ impl State {
         });
     }
 
-    /// Puts `sheet` over the main window, opening it on the accounts the sheet is about.
+    /// Puts `sheet` over the main window, opening it on the accounts the sheet is about, or
+    /// over the macOS welcome while it is shown.
     fn present_sheet(&mut self, sheet: Sheet, jobs: &mut Vec<Job>) {
         // A sign-in under way keeps its sheet, and so does a change of an app's login from
         // the moment Pitboard asks whether the app runs: replacing it would leave the change
@@ -2240,7 +2241,7 @@ impl State {
             }
             self.sheet = Some(sheet);
         }
-        self.show(Some(Place::Accounts));
+        self.show_over(Some(Place::Accounts));
     }
 
     // A save that changes no app's login lets its sheet be replaced and answers in the window.
@@ -3659,7 +3660,7 @@ impl State {
         // be answered comes back to the front rather than being left behind unseen.
         if self.switch_under_way().is_some() {
             if self.asking().is_some() || self.replace_asked().is_some() {
-                self.show(Some(Place::Accounts));
+                self.show_over(Some(Place::Accounts));
             }
             return;
         }
@@ -3716,7 +3717,7 @@ impl State {
                     asked: true,
                     then,
                 });
-                self.show(Some(Place::Accounts));
+                self.show_over(Some(Place::Accounts));
             }
             None => self.go_on(qualified, then, None, false, jobs),
         }
@@ -3922,7 +3923,7 @@ impl State {
                     message,
                     asked: true,
                 });
-                self.show(Some(Place::Accounts));
+                self.show_over(Some(Place::Accounts));
             }
             Err(error) => {
                 self.switching = None;
@@ -4456,7 +4457,7 @@ impl State {
     /// Says a failure in the window.
     fn present(&mut self, refused: Refused) {
         self.presented = Some(self.number(refused));
-        self.show(None);
+        self.show_over(None);
     }
 
     /// A failure, numbered one higher than the last, wherever it is said.
@@ -4490,6 +4491,14 @@ impl State {
             serial: self.window.serial + 1,
             place,
         };
+    }
+
+    // Where a sheet, a question or a failure comes up: over the macOS welcome while it is shown,
+    // whose Add starts them, so its Continue is still in front. Windows' window hosts them.
+    fn show_over(&mut self, place: Option<Place>) {
+        let welcome = self.window.place == Some(Place::Welcome)
+            && pitboard_core::host::OS != pitboard_core::host::Os::Windows;
+        self.show(if welcome { Some(Place::Welcome) } else { place });
     }
 
     fn put_away(&mut self, tip: Tip, jobs: &mut Vec<Job>) {

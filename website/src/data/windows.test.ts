@@ -362,7 +362,7 @@ test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put t
 
 test("an account's note is its most pressing, a saved sign-in's only once it expires within days", () => {
   const accounts = present("accounts.rs");
-  assert.ok(accounts.includes("let notes = ["));
+  assert.ok(accounts.includes("let notes: Vec<AccountNote> = ["));
   assert.ok(accounts.includes(".filter(|_| account.standing == status::Standing::Expiring)"));
   assert.ok(
     views("AccountsPage.xaml.cs").includes(

@@ -2,11 +2,7 @@ import AppKit
 import PitboardKit
 import SwiftUI
 
-/// A menu and not a popover, as the platform asks of a menu bar item: it opens at once,
-/// closes predictably, reads well to VoiceOver, and works from the keyboard. It is the
-/// glance and the switch: which account is in use in each tool, what each has left, and
-/// anything that needs attention. Everything that needs typing or room happens in the
-/// window, which every item here that needs one opens.
+// A label's second Text is its menu item's native subtitle (docs/facts/macos-app.md).
 struct MenuBarContent: View {
     let model: AppModel
     let windows: AccountWindows
@@ -18,12 +14,14 @@ struct MenuBarContent: View {
         attention
         accounts
         Section {
-            Button("Add Account…") { model.send(.presentSheet(sheet: .add(provider: nil))) }
-                .keyboardShortcut("n")
+            Button(words.menu.addAccount) {
+                model.send(.presentSheet(sheet: .add(provider: nil)))
+            }
+            .keyboardShortcut("n")
             Button {
                 model.send(.refresh(asked: true))
             } label: {
-                Text("Refresh")
+                Text(words.menu.refresh)
                 Text(model.updatedMenu)
             }
             .keyboardShortcut("r")
@@ -35,8 +33,8 @@ struct MenuBarContent: View {
             }
         }
         Section {
-            Button("Open Pitboard") { model.send(.show(place: nil)) }
-            Button("Settings…") {
+            Button(words.menu.openPitboard) { model.send(.show(place: nil)) }
+            Button(words.menu.settings) {
                 // Choosing an item of a menu bar item's menu does not make the app active,
                 // and settings already open would come forward behind the app in front.
                 windows.presence.activate()
@@ -44,13 +42,13 @@ struct MenuBarContent: View {
             }
             .keyboardShortcut(",")
             if updates.available {
-                Button("Check for Updates…") { updates.check() }
+                Button(words.menu.checkForUpdates) { updates.check() }
             }
         }
         Section {
-            Button("About Pitboard") { AppVersion.showAboutPanel() }
-            Link("Pitboard Help", destination: Links.documentation)
-            Button("Quit Pitboard") { NSApp.terminate(nil) }
+            Button(words.menu.about) { AppVersion.showAboutPanel() }
+            Link(words.menu.help, destination: Links.documentation)
+            Button(words.menu.quit) { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
     }
@@ -60,43 +58,34 @@ struct MenuBarContent: View {
     @ViewBuilder private var attention: some View {
         let notices = model.menuNotices
         let waiting = updates.available ? updates.waiting : nil
-        if notices.install != nil || !notices.switches.isEmpty || notices.others != nil
-            || waiting != nil
+        let acting = notices.switches + notices.signIns
+        if notices.install != nil || !acting.isEmpty || notices.others != nil || waiting != nil
         {
             Section {
                 if let install = notices.install {
                     Button {
                         if let link = install.link.flatMap(URL.init(string:)) { openURL(link) }
                     } label: {
-                        Image(systemName: "questionmark.circle")
                         entry(install)
                     }
                 }
-                ForEach(Array(notices.switches.enumerated()), id: \.offset) { _, advice in
+                ForEach(Array(acting.enumerated()), id: \.offset) { _, item in
                     Button {
-                        if let intent = advice.intent { model.send(intent) }
+                        if let intent = item.intent { model.send(intent) }
                     } label: {
-                        Image(systemName: advice.severity?.symbol ?? Symbol.switchAccount)
-                        entry(advice)
+                        entry(item)
                     }
-                    .disabled(!advice.enabled)
+                    .disabled(!item.enabled)
                 }
                 if let others = notices.others {
                     Button {
                         if let intent = others.intent { model.send(intent) }
                     } label: {
-                        Image(systemName: (others.severity ?? .warning).symbol)
                         entry(others)
                     }
-                    .help(others.help ?? "")
                 }
                 if let waiting {
-                    Button {
-                        updates.check()
-                    } label: {
-                        Image(systemName: Symbol.update)
-                        Text("Install Pitboard \(waiting)…")
-                    }
+                    Button(installUpdate(version: waiting)) { updates.check() }
                 }
             }
         }
@@ -140,9 +129,8 @@ private struct AccountMenuItem: View {
         Toggle(
             isOn: Binding(
                 get: { item.inUse },
-                // Choosing it does what pressing it means, whichever way the check mark
-                // would go: the one in use stays in use until another is chosen, and a
-                // login in use with no name yet is named from its own checked item.
+                // Choosing it does what pressing it means, whichever way the checkmark would
+                // go: the one in use stays in use, and a sign-in not added yet is added.
                 set: { _ in
                     if let action = item.action { perform(action.intent) }
                 })
@@ -151,7 +139,6 @@ private struct AccountMenuItem: View {
             Text(item.summary)
         }
         .disabled(!item.inUse && item.action == nil)
-        .help(item.help ?? "")
     }
 }
 

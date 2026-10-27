@@ -21,7 +21,8 @@ import {
   addAccount,
   couldNotRename,
   finishInBrowser,
-  inAppWaiting,
+  inAppNote,
+  inAppSteps,
   nameTaken,
   nameThisAccount,
   naming,
@@ -33,9 +34,8 @@ import {
   signInAsking,
   signInMessage,
   signInToAgain,
-  signOutToAdd,
-  signOutToSignInAgain,
   signingInTo,
+  signsOutFirst,
   signingOut,
   switchBackTo,
   unusableName,
@@ -122,7 +122,7 @@ class Sheets {
   }
 
   // Rename, or Name This Account for one just added under the name the core picked, which Done
-  // keeps where it is not changed (present/sheets.rs `check_name`)
+  // and Cancel keep where it is not changed (present/sheets.rs `check_name`)
   rename(from: SheetOwner, a: Account, added = false) {
     const d = this.renameDialog;
     this.#renaming = { a, added };
@@ -224,13 +224,9 @@ class Sheets {
     const work = s.inUse.desktop;
     const [message, confirm] =
       tool === "desktop"
-        ? [
-            again
-              ? signOutToSignInAgain(program(tool), again.label, work)
-              : signOutToAdd(program(tool), work),
-            CONTINUE,
-          ]
+        ? [signsOutFirst(program(tool), work, again?.label ?? null), CONTINUE]
         : [signInMessage(toolName(tool), again?.label ?? null), signInAsking(this.system)];
+    this.#steps(tool === "desktop" ? inAppSteps(program(tool), again?.label ?? null) : []);
     text(
       part(d, "title"),
       again ? signInToAgain(this.system, again.label) : addAccount(this.system),
@@ -289,12 +285,11 @@ class Sheets {
     const tool = run.tool;
     shown(part(d, "form"), false);
     shown(part<HTMLButtonElement>(d, "confirm"), false);
-    shown(part(d, "waiting"), true);
     this.#problem(d, null);
     const cancel = d.querySelector<HTMLElement>('[data-does="cancel"]');
     const back = d.querySelector<HTMLElement>('[data-does="put-back"]');
-    const spinner =
-      part(d, "waiting")?.querySelector("svg") ?? part(d, "page")?.querySelector("svg");
+    // macOS's sheet says the wait in a row of its form, or under Claude's steps, under its title
+    const line = part(d, "wait-line");
     if (tool === "desktop") {
       const work = s.inUse.desktop;
       const app = program(tool);
@@ -303,11 +298,15 @@ class Sheets {
         part(d, "title"),
         run.label !== null ? signInToAgain(this.system, run.label) : addAccount(this.system),
       );
-      text(
-        part(d, "message"),
-        waiting ? inAppWaiting(app, run.label ?? "", run.again) : signingOut(work)[0],
+      text(part(d, "message"), "");
+      this.#steps(inAppSteps(app, run.again ? run.label : null));
+      shown(part(d, "waiting"), true);
+      text(part(d, "wait-note"), waiting ? inAppNote(app) : signingOut(work)[0]);
+      attr(
+        part(d, "waiting")?.querySelector("svg") ?? null,
+        "aria-label",
+        waiting ? waitingToQuit(app) : signingOut(work)[1],
       );
-      attr(spinner, "aria-label", waiting ? waitingToQuit(app) : signingOut(work)[1]);
       shown(part(d, "page"), false);
       text(cancel, waiting ? LATER : CANCEL);
       shown(back, waiting);
@@ -315,11 +314,33 @@ class Sheets {
       return;
     }
     text(part(d, "title"), signingInTo(this.system, toolName(tool)));
-    text(part(d, "message"), finishInBrowser(run.label, toolName(tool)));
     shown(part(d, "page"), true);
-    attr(spinner, "aria-label", WAITING_FOR_BROWSER);
+    if (line) {
+      text(part(d, "message"), "");
+      text(line, finishInBrowser(run.label));
+      shown(part(d, "waiting"), false);
+    } else {
+      text(part(d, "message"), finishInBrowser(run.label));
+      shown(part(d, "waiting"), true);
+      attr(
+        part(d, "waiting")?.querySelector("svg") ?? part(d, "page")?.querySelector("svg") ?? null,
+        "aria-label",
+        WAITING_FOR_BROWSER,
+      );
+    }
     text(cancel, CANCEL);
     shown(back, false);
+  }
+
+  // Claude's numbered steps, where the sheet draws them
+  #steps(said: string[]) {
+    const box = part(this.signInDialog, "steps");
+    if (!box) return;
+    shown(box, said.length > 0);
+    box.querySelectorAll('[data-part="step"]').forEach((step, i) => {
+      shown(step as HTMLElement, i < said.length);
+      text(part(step, "said"), said[i] ?? "");
+    });
   }
 }
 

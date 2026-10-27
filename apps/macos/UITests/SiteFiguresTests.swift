@@ -6,9 +6,10 @@ import XCTest
 // before it asserts what it read.
 final class SiteFiguresTests: FixtureTestCase {
     private static let statusMenu = [
-        "Claude Code", "work", "old", "personal", "Codex", "main", "spare",
-        "Add Account…", "Refresh", "Open claude.ai", "Open chatgpt.com", "Open Pitboard",
-        "Settings…", "About Pitboard", "Pitboard Help", "Quit Pitboard",
+        "Sign In to old Again…", "Claude Code", "work", "old", "personal",
+        "Codex", "main", "spare", "Add Account…", "Refresh", "Open claude.ai",
+        "Open chatgpt.com", "Open Pitboard", "Settings…", "About Pitboard", "Pitboard Help",
+        "Quit Pitboard",
     ]
     private static let headings = ["Claude Code", "Codex"]
 
@@ -41,8 +42,9 @@ final class SiteFiguresTests: FixtureTestCase {
         app.openMenu()
         XCTAssertTrue(app.menuItem("Quit Pitboard").waitForExistence(timeout: 5))
         let opened = highlighted(in: menu)
+        let enabled = Self.statusMenu.filter { !Self.headings.contains($0) }
         var down: [String] = []
-        for press in 1...16 {
+        for press in 1...enabled.count + 2 {
             app.typeKey(.downArrow, modifierFlags: [])
             down.append(highlighted(in: menu) ?? "-")
             if press == 1 { keep(menu, as: "site-status-menu-first-down") }
@@ -68,11 +70,10 @@ final class SiteFiguresTests: FixtureTestCase {
                 + "Home, End, Page Up, Page Down: \(keys.joined(separator: " | "))",
             as: "site-status-menu-arrows")
 
-        let enabled = Self.statusMenu.filter { !Self.headings.contains($0) }
         XCTAssertNil(opened)
         XCTAssertEqual(down, enabled + ["Quit Pitboard", "Quit Pitboard"])
         XCTAssertEqual(up, ["Quit Pitboard", "Pitboard Help", "About Pitboard", "Settings…"])
-        XCTAssertEqual(keys, ["work", "Quit Pitboard", "work", "Quit Pitboard"])
+        XCTAssertEqual(keys, [enabled[0], "Quit Pitboard", enabled[0], "Quit Pitboard"])
     }
 
     @MainActor
@@ -127,7 +128,7 @@ final class SiteFiguresTests: FixtureTestCase {
         for _ in 1...4 { app.typeKey(.upArrow, modifierFlags: []) }
         let before = highlighted(in: menu)
         app.typeKey(.space, modifierFlags: [])
-        let opened = app.windows["main"].waitForExistence(timeout: 3)
+        let opened = app.accountsWindow.waitForExistence(timeout: 3)
         let open = isOpen(menu)
         record(
             "highlighted: \(before ?? "-")\nwindow opened: \(opened)\nmenu still open: \(open)",
@@ -247,7 +248,8 @@ final class SiteFiguresTests: FixtureTestCase {
             }
         }
         let everyMenu = bar.filter { $0 != "Apple" }
-        look(everyMenu, "none")
+        // At first the window selects the account in use, work.
+        look(everyMenu, "first")
         personal.click()
         look(everyMenu, "personal")
         app.accountRow("claude/work").click()
@@ -266,27 +268,27 @@ final class SiteFiguresTests: FixtureTestCase {
             bar,
             ["Apple", "Pitboard", "File", "Edit", "View", "Go", "Account", "Window", "Help"])
         XCTAssertEqual(
-            titles("Pitboard none"),
+            titles("Pitboard first"),
             [
                 "About Pitboard", "Settings…", "Services", "Hide Pitboard", "Hide Others",
                 "Show All", "Quit Pitboard",
             ])
-        XCTAssertEqual(dimmed("Pitboard none"), ["Show All"])
+        XCTAssertEqual(dimmed("Pitboard first"), ["Show All"])
         XCTAssertEqual(
-            titles("File none"),
+            titles("File first"),
             ["Add Account…", "Open claude.ai", "Remove Website Data…", "Close", "Close All"])
-        XCTAssertEqual(dimmed("File none"), ["Remove Website Data…"])
+        XCTAssertEqual(dimmed("File first"), ["Remove Website Data…"])
         XCTAssertEqual(
-            titles("View none"),
-            ["Refresh", "Actual Size", "Zoom In", "Zoom Out", "Enter Full Screen"])
+            titles("View first"),
+            [
+                "Refresh", "Actual Size", "Zoom In", "Zoom Out", "Hide Inspector",
+                "Enter Full Screen",
+            ])
         XCTAssertEqual(
-            dimmed("View none"), ["Actual Size", "Zoom In", "Zoom Out", "Enter Full Screen"])
-        XCTAssertEqual(titles("Go none"), ["Back", "Forward"])
-        XCTAssertEqual(dimmed("Go none"), ["Back", "Forward"])
-        XCTAssertEqual(titles("Help none"), ["Pitboard Help"])
-        XCTAssertEqual(
-            titles("Account none"), ["Switch", "Sign In Again…", "Rename…", "Remove Account…"])
-        XCTAssertEqual(dimmed("Account none"), titles("Account none"))
+            dimmed("View first"), ["Actual Size", "Zoom In", "Zoom Out", "Enter Full Screen"])
+        XCTAssertEqual(titles("Go first"), ["Back", "Forward"])
+        XCTAssertEqual(dimmed("Go first"), ["Back", "Forward"])
+        XCTAssertEqual(titles("Help first"), ["Pitboard Help"])
         XCTAssertEqual(
             titles("Account personal"),
             [
@@ -303,12 +305,14 @@ final class SiteFiguresTests: FixtureTestCase {
         )
         XCTAssertEqual(
             dimmed("Account work"), ["Switch to work", "Warm Up Now", "Remove Account…"])
-        XCTAssertEqual(
-            dimmed("Edit none"),
-            ["Undo", "Redo", "Cut", "Copy", "Paste", "Delete", "Select All"])
-        XCTAssertEqual(dimmed("Edit personal"), ["Undo", "Redo", "Cut", "Paste", "Select All"])
-        XCTAssertEqual(dimmed("Window none"), ["Full Screen Tile", "Remove Window from Set"])
-        XCTAssertEqual(dimmed("Help none"), [])
+        XCTAssertEqual(titles("Account first"), titles("Account work"))
+        XCTAssertEqual(dimmed("Account first"), dimmed("Account work"))
+        // Copy Report is Diagnostics', dimmed while another window is in front.
+        let edit = ["Undo", "Redo", "Cut", "Paste", "Select All", "Copy Report"]
+        XCTAssertEqual(dimmed("Edit first"), edit)
+        XCTAssertEqual(dimmed("Edit personal"), edit)
+        XCTAssertEqual(dimmed("Window first"), ["Full Screen Tile", "Remove Window from Set"])
+        XCTAssertEqual(dimmed("Help first"), [])
         XCTAssertFalse(asked)
     }
 
@@ -349,7 +353,7 @@ final class SiteFiguresTests: FixtureTestCase {
         let dialogs = app.dialogs.count
         let order = cancel.frame.maxX < forget.frame.minX ? "Cancel, Remove" : "Remove, Cancel"
         keep(app.alert, as: "site-forget-alert")
-        keep(app.windows["main"], as: "site-forget-alert-window")
+        keep(app.accountsWindow, as: "site-forget-alert-window")
         let tree = tree(of: app.alert)
         app.typeKey(.return, modifierFlags: [])
         let closed = app.alert.waitForNonExistence(timeout: 3)
@@ -397,7 +401,7 @@ final class SiteFiguresTests: FixtureTestCase {
         app.alertAnswer.click()
         XCTAssertTrue(personal.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let after = selectedAccounts(in: window)
         keep(window, as: "site-focus-after-forget")
         // macOS gives a UI test no focus to read: Down moves a selection only in the list.
@@ -414,7 +418,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testSelectingAndTypingInTheAccountList() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         var seen: [(String, [String])] = [("at first", selectedAccounts(in: window))]
@@ -431,16 +435,13 @@ final class SiteFiguresTests: FixtureTestCase {
         sleep(2)
         type("p", in: app)
         seen.append(("typed p", selectedAccounts(in: window)))
-        app.descendants(matching: .any)["sidebar.accounts"].click()
-        seen.append(("sidebar clicked", selectedAccounts(in: window)))
-        keep(window, as: "site-list-selected-unfocused")
         record(
             seen.map { "\($0.0): \($0.1)" }.joined(separator: "\n"), as: "site-list-selection")
         XCTAssertEqual(
             seen.map { $0.1 },
             [
-                [], ["claude/personal"], ["claude/work"], ["claude/personal"], ["claude/work"],
-                ["claude/personal"], ["claude/personal"],
+                ["claude/work"], ["claude/personal"], ["claude/work"], ["claude/personal"],
+                ["claude/work"], ["claude/personal"],
             ])
     }
 
@@ -448,7 +449,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testAShortcutMenuOnARowNotSelected() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let personal = app.accountRow("claude/personal")
         let work = app.accountRow("claude/work")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
@@ -486,7 +487,7 @@ final class SiteFiguresTests: FixtureTestCase {
     func testHowLongASwitchAndAReadTake() {
         let app = launch(.oneTool)
         app.openWindow()
-        let window = app.windows["main"]
+        let window = app.accountsWindow
         let personal = app.accountRow("claude/personal")
         XCTAssertTrue(personal.waitForExistence(timeout: 5))
         let use = personal.buttons["account.action"]
@@ -525,7 +526,7 @@ final class SiteFiguresTests: FixtureTestCase {
                 + "dimmed seen: \(dimmed)\nwindow title: '\(window.title)'",
             as: "site-switch-and-read")
         XCTAssertTrue(inUse)
-        XCTAssertEqual(selected, [], "Use selected the row")
+        XCTAssertEqual(selected, ["claude/work"], "Switch left the selection where it was")
     }
 
     @MainActor
@@ -562,11 +563,11 @@ final class SiteFiguresTests: FixtureTestCase {
         var shares: [String: Int] = [:]
         // Waits for the share the step should leave, where there is one, then reads it.
         func read(_ what: String, expecting expected: Int? = nil) {
-            let said = share(app, expecting: expected)
+            let said = share(in: field, expecting: expected)
             shares[what] = Int(said.filter(\.isNumber))
-            seen.append("\(what): field \(field.value ?? "-"), says \(said)")
+            seen.append("\(what): \(said)")
         }
-        func typed(_ text: String, _ what: String, expecting expected: Int) {
+        func typed(_ text: String, _ what: String, expecting expected: Int?) {
             field.click()
             field.typeKey("a", modifierFlags: .command)
             field.typeText(text)
@@ -586,20 +587,19 @@ final class SiteFiguresTests: FixtureTestCase {
             up.press(forDuration: held)
             read("up held \(name)")
             down.press(forDuration: 4)
-            _ = share(app, expecting: 50)
+            _ = share(in: field, expecting: 50)
         }
         up.press(forDuration: 4)
         read("up held 4 s", expecting: 99)
         up.click()
         read("up at the highest", expecting: 99)
         down.press(forDuration: 4)
-        _ = share(app, expecting: 50)
-        // Typed from the lowest, so the first digit, clamped, changes nothing.
+        _ = share(in: field, expecting: 50)
         typed("120\r", "typed 120", expecting: 99)
         typed("10\r", "typed 10", expecting: 50)
         typed("90\r", "typed 90", expecting: 90)
         typed("abc\r", "typed abc", expecting: 90)
-        typed("7", "typed 7, no Return", expecting: 50)
+        typed("7", "typed 7, no Return", expecting: nil)
         keep(app.windows["Limits"], as: "site-limits-share")
         field.typeKey(.return, modifierFlags: [])
         read("then Return", expecting: 50)
@@ -620,8 +620,7 @@ final class SiteFiguresTests: FixtureTestCase {
         XCTAssertEqual(shares["typed 10"], 50)
         XCTAssertEqual(shares["typed 90"], 90)
         XCTAssertEqual(shares["typed abc"], 90)
-        // "typed 7, no Return" is kept, not asserted: the field's binding clamps each key as it
-        // is typed, which the site does not copy (docs/facts/site.md).
+        XCTAssertEqual(shares["typed 7, no Return"], 7)
         XCTAssertEqual(shares["then Return"], 50)
         XCTAssertEqual(shares["Up arrow in the field"], 50)
     }
@@ -630,8 +629,12 @@ final class SiteFiguresTests: FixtureTestCase {
     func testTheWarmUpControls() {
         let app = launch(.warmUp)
         app.openWindow()
+        let warmed = app.accountRow("claude/personal")
+        XCTAssertTrue(warmed.waitForExistence(timeout: 5))
+        warmed.click()
         XCTAssertTrue(
-            app.text("BEGINSWITH", "Warms up again at ").waitForExistence(timeout: 30))
+            app.control("inspector").text("BEGINSWITH", "Warms up again at ").waitForExistence(
+                timeout: 30))
         app.openSettings()
         app.toolbars.buttons["Limits"].click()
         let personal = app.control("settings.warm.claude/personal")
@@ -785,16 +788,13 @@ final class SiteFiguresTests: FixtureTestCase {
         return choice
     }
 
-    // The share as the pop-up's spoken name says it, once it says `expected` or two seconds on.
+    // The share as the field shows it, once it says `expected` or two seconds on.
     @MainActor
-    private func share(_ app: XCUIApplication, expecting expected: Int? = nil) -> String {
-        let named = NSPredicate(format: "label BEGINSWITH %@", "When a limit reaches ")
-        let element = app.descendants(matching: .any).matching(named).firstMatch
+    private func share(in field: XCUIElement, expecting expected: Int? = nil) -> String {
         if let expected {
-            _ = element.wait(
-                for: \.label, toEqual: "When a limit reaches \(expected)%", timeout: 2)
+            _ = field.wait(until: "value == '\(expected)%'", timeout: 2)
         }
-        return element.label
+        return field.value as? String ?? "-"
     }
 
     // One key at a time, as typeText asks for a focused element and a menu has none.

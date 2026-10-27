@@ -107,6 +107,22 @@ private final class Told: @unchecked Sendable {
     #expect(model.accountWindows == windowsShown())
 }
 
+// The app's own removal starts from the model's removal, wherever Settings is.
+@MainActor
+@Test func theWelcomeAndTheRemovalAreShown() {
+    let model = AppModel(model: StandInModel(snapshot(0)))
+    let codex = WelcomeTool(
+        code: "codex", name: "Codex", account: nil,
+        step: .add(
+            choice: Choice(title: "Add", intent: .enrol(provider: "codex"), enabled: true)))
+    #expect(
+        model.apply(snapshot(1, removal: .removing(title: "Uninstalling Pitboard…")))
+            == [\.revision, \.removal])
+    #expect(model.apply(snapshot(2, removal: .done, welcomeTools: [codex])).count == 3)
+    #expect(model.removal == .done)
+    #expect(model.welcome.tools == [codex])
+}
+
 /// What a view asks for reaches the model as it was asked, at once, and the app quitting
 /// stops it.
 @MainActor

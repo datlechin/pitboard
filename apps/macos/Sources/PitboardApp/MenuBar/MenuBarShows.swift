@@ -1,10 +1,6 @@
 import PitboardKit
 
-/// The app's own setting, not the model's.
-///
-/// macOS hides menu bar items to make room, the widest first, and a notched display has
-/// little room to begin with. The name is what gets dropped first, and the mark alone is
-/// for somebody who only ever opens the menu.
+// macOS hides the widest menu bar items first, so a crowded bar can drop the name, then the figure.
 enum MenuBarShows: String, CaseIterable, Identifiable {
     case nameAndUsage
     case usage
@@ -14,9 +10,9 @@ enum MenuBarShows: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .nameAndUsage: "Account and usage"
-        case .usage: "Usage only"
-        case .icon: "Icon only"
+        case .nameAndUsage: words.settings.accountAndUsage ?? ""
+        case .usage: words.settings.usageOnly ?? ""
+        case .icon: words.settings.iconOnly ?? ""
         }
     }
 

@@ -266,6 +266,25 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(shown.HasAtLimitTerms);
     }
 
+    // The model says Is this allowed? once: beside switching while it is chosen, beside warm-up otherwise.
+    [TestMethod]
+    public void TheTermsAreLinkedWhereTheModelSaysThem()
+    {
+        var (shown, _, app) = Over(With(1, machine => machine with
+        {
+            AtLimit = Switching,
+            Warm = TwoWarmed with { Terms = null },
+        }));
+
+        Assert.IsTrue(shown.HasAtLimitTerms);
+        Assert.IsFalse(shown.HasWarmTerms);
+        Assert.AreEqual(Snapshots.Terms.LinkTitle, shown.TermsLinkTitle);
+
+        app.Apply(With(2, machine => machine with { Warm = TwoWarmed }));
+
+        Assert.IsTrue(shown.HasWarmTerms);
+    }
+
     [TestMethod]
     public void WarmUpListsEachAccountAndKeepsItsRow()
     {

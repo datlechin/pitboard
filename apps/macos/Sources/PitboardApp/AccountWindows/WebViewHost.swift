@@ -8,11 +8,11 @@ struct PageContent: View {
     var body: some View {
         if let failure = page.failure {
             ContentUnavailableView {
-                Label("Couldn’t Load the Page", systemImage: Symbol.warning)
+                Label(words.accountWindow.couldNotLoad, systemImage: Symbol.warning)
             } description: {
                 Text(failure)
             } actions: {
-                Button("Try Again") { page.reload() }
+                Button(words.accountWindow.tryAgain) { page.reload() }
                     .keyboardShortcut(.defaultAction)
             }
         } else {

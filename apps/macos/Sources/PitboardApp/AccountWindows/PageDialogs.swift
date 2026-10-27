@@ -11,7 +11,7 @@ enum PageDialogs {
     static func alert(_ message: String, from frame: WKFrameInfo, in window: NSWindow?) async {
         guard let window else { return }
         let alert = dialog(message, from: frame)
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: words.window.ok)
         _ = await alert.beginSheetModal(for: window)
     }
 
@@ -20,8 +20,8 @@ enum PageDialogs {
     {
         guard let window else { return false }
         let alert = dialog(message, from: frame)
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: words.window.ok)
+        alert.addButton(withTitle: words.window.cancel)
         return await alert.beginSheetModal(for: window) == .alertFirstButtonReturn
     }
 
@@ -33,8 +33,8 @@ enum PageDialogs {
         let field = NSTextField(string: answer ?? "")
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
         alert.accessoryView = field
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: words.window.ok)
+        alert.addButton(withTitle: words.window.cancel)
         alert.window.initialFirstResponder = field
         let answered = await alert.beginSheetModal(for: window) == .alertFirstButtonReturn
         return answered ? field.stringValue : nil
@@ -59,8 +59,8 @@ enum PageDialogs {
         let alert = NSAlert()
         alert.messageText = question.title
         alert.informativeText = question.message
-        alert.addButton(withTitle: "Download")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: words.accountWindow.download)
+        alert.addButton(withTitle: words.window.cancel)
         return await alert.beginSheetModal(for: window) == .alertFirstButtonReturn
     }
 

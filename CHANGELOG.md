@@ -11,11 +11,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `pitboard status`, its `--json` and the app show a Codex account's limits for one model under
   the model's name, as they show Claude Code's.
-- `pitboard doctor`, **This Mac** and **This PC** name each Codex setting that limits which logins
+- `pitboard doctor` and the app's **Diagnostics** name each Codex setting that limits which logins
   Codex keeps, such as `forced_chatgpt_workspace_id`, and the accounts it rules out.
-- `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginOrgUUID` of Claude
+- `pitboard doctor` and the app's **Diagnostics** name a managed `forceLoginOrgUUID` of Claude
   Code's, and the accounts whose organisation it leaves out.
-- `pitboard doctor`, **This Mac** and **This PC** name a managed `forceLoginMethod` of Claude
+- `pitboard doctor` and the app's **Diagnostics** name a managed `forceLoginMethod` of Claude
   Code's set to `console`, under which Pitboard refuses a Claude Code sign-in.
 - On macOS, Pitboard's refusals and `pitboard doctor` follow Claude Code's managed settings from
   a configuration profile too, as Claude Code does.
@@ -36,20 +36,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with **Sign In Again**.
 - The app notifies you once a limit of the account in use reaches the share in **Settings**, 95%
   at first, before it runs out, with **Switch** where another account has room.
-- The app's **Settings** link **Is this allowed?** beside switching automatically and warm-up.
+- The app's **Settings** link **Is this allowed?** beside switching automatically while it is
+  chosen and beside warm-up otherwise, and the Windows app's beside warm-up always.
 - The macOS app's **Settings** says when Pitboard's notifications are turned off, with **Open
   Notification Settings**.
-- The macOS menu bar mark has a dot while the menu opens on something that needs attention.
+- The macOS menu bar mark carries a badge while the menu opens on something that needs
+  attention.
 - The Windows app's icon shows how much of its limit the account in use has left, none before it
   has a reading, and Windows' warning symbol while its menu opens on something that needs
   attention.
 - The app's setup tips go on past a second account to what happens when a limit reaches 95%,
   with **Not Now**.
 - The app offers **Use Pitboard with Codex** while Codex is installed and no Codex account is
-  enrolled, and adds the account Codex is signed in to once you choose it, where a machine with
-  Claude Code signed in to nothing said **No Accounts**.
+  enrolled, and adds the account Codex is signed in to once you choose it.
 - The macOS app's **Settings** take the share a limit is reached at in a field beside its
-  stepper.
+  stepper, once you press Return or leave the field.
 - The macOS app's **Pitboard** menu offers **Check for Updates** while a window is open.
 - The macOS app has an **Account** menu with what an account's shortcut menu offers, for the
   account selected, dimming what cannot be chosen now, and **Remove Account** on Command-Delete.
@@ -59,6 +60,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - After switching Claude Code by itself, the app's notification and its notice in the window
   offer **Switch Back** to the account it left, and no notification then says Claude Code wasn't
   switched until that limit resets.
+- The macOS app's window has an inspector of the selected account, shown at first and hidden or
+  shown with Control-Command-I: its email, each limit's reset and the time left to it, its
+  sign-in, its warm-up with **Warm-Up Settings**, and what its shortcut menu offers.
+- The macOS menu offers to sign in again to each account that needs it, above the accounts.
+- The macOS app opens a welcome at its first launch, before the accounts, which says Pitboard
+  lives in the menu bar, adds the account each tool has once you choose **Add…** and asks its
+  name over the welcome, and keeps **Open Pitboard at Login** off until you turn it on.
+- The macOS app's **Settings** > **Advanced** offers **Uninstall Pitboard…**, which deletes
+  Pitboard's saved sign-ins and settings, then the app's own settings, login item and command line
+  link, and moves the app to the Trash, or says how Homebrew removes a copy it installed.
+- The macOS app's **Diagnostics** offers **Copy Report**, in its toolbar and the **Edit** menu,
+  which copies the checks with email addresses and account identifiers hidden, and each check
+  that did not pass offers what puts it right, such as **Sign In Again…**, or **Learn More**.
 - The Windows app's **Diagnostics** offers each check's fix, or **Learn more**, beside it, and
   **Copy report** copies the checks for a bug report.
 - An account's row in the Windows app opens on each limit with how long until it resets, the notes
@@ -167,6 +181,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are about, and show a check that passed only where it says something to look for.
 - The Windows icon's tooltip goes on in lower case after an account's name, as **work: weekly
   18% used**.
+- The macOS app's window shows only the accounts, and **Diagnostics**, where **This Mac** was,
+  and **Activity** open as windows of their own from the **Window** menu.
+- The macOS app draws only **Remove Account**'s answer in red, where every question's answer was.
+- The macOS app's window lists each account as its name, its plan, a line for each limit and
+  at most one line about what needs doing, under the notices and the tip, which no longer sit
+  among the accounts.
+- The macOS menu's items carry no symbols or tooltips, and the checkmark is its only mark.
+- The app's **Add Account** offers only the tools Pitboard found, and where it found none, says
+  how to install Claude Code.
+- The app's sheet says one sentence while you finish signing in in your browser.
+- Adding or signing in again to a Claude Desktop account lists what to do in three steps, with
+  **Continue**, where the app said it in a paragraph.
+- The macOS app's sheets put their title and one sentence over their fields, and Cancel and the
+  button that does what they are for in a bar of their own, and fit what they show.
+- The macOS app's **Name This Account** says **Done**, and its **Cancel** keeps the name the
+  account was added under.
+- The macOS app no longer draws **Clean Up** as destructive.
+- The macOS app's alerts and sheets that say something went wrong offer what to do next, such
+  as **Sign In Again…** or **Learn More**.
+- An account's row in the macOS app offers what to do about its note, such as **Sign In Again…**
+  for a saved sign-in about to expire, or **Learn More**.
+- The macOS app's **Settings** open in the middle of the screen, where they opened at its top.
+- The macOS app's **Settings** name each setting in title case, such as **Open Pitboard at Login**
+  and **Menu Bar Shows**, and show the version under **Updates**.
+- The macOS app's **Settings** > **Limits** lists **At** under **When a limit reaches**, and leaves
+  it out for **Do Nothing**.
+- The macOS app's **Settings** > **Advanced** shows the command line under **Command Line** as its
+  **Path**, where it said **In your terminal**.
 - The Windows app's window has a title bar of the standard height and a compact pane with
   **Accounts** and **Settings**, and opens at 960 by 680.
 - The Windows app's **Activity** and **This PC**, now **Diagnostics**, open from **Settings** >
@@ -202,6 +244,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- The macOS app's **Settings** no longer say that Anthropic's terms may cover automatic switching
+  and warm-ups before **Is this allowed?**.
 - The app no longer shows a tip to name the account a tool is signed in to: its row offers
   **Add**.
 - The app no longer marks a limit's pace or says when a limit runs out at it: `pitboard status`

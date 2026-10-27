@@ -1222,7 +1222,7 @@ export function cancelSignIn() {
   }, false);
 }
 
-// A switch notice's countdown, as NoticeRow.swift's timer and Countdown.Left draw it.
+// A switch notice's countdown, as Banner.swift's timer and Countdown.Left draw it.
 export function countdown(until: number, now: number): string {
   const left = Math.max(until - now, 0);
   const h = Math.floor(left / HOUR);

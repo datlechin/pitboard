@@ -37,9 +37,10 @@ test.describe("macOS", () => {
     const box = page.locator("#auto-mac-at");
     const list = page.locator("#auto-mac-choices");
     await expect(chosen(box)).toHaveText("Notify Me");
-    await expect(box).toHaveAttribute("aria-label", "When a limit reaches 95%");
+    await expect(box).toHaveAccessibleName("When a limit reaches");
     await expect(fig.locator('[data-note="notify"]')).toHaveText(notify);
     await expect(fig.locator("[data-standing]")).toBeHidden();
+    await expect(fig.getByRole("link", { name: "Is this allowed?" })).toBeHidden();
     const tall = await height(fig);
 
     const at = (await box.boundingBox())!;
@@ -114,9 +115,9 @@ test.describe("macOS", () => {
     await page.keyboard.press("Enter");
     await expect(chosen(box)).toHaveText("Do Nothing");
     await expect(box).toBeFocused();
-    // Do Nothing turns the share off
-    await expect(page.locator("#auto-mac-share")).toBeDisabled();
-    await expect(page.locator("#auto-mac-stepper")).toHaveAttribute("aria-disabled", "true");
+    // Do Nothing leaves the share out
+    await expect(page.locator("#auto-mac-share")).toBeHidden();
+    await expect(page.locator("#auto-mac-stepper")).toBeHidden();
     // type-select
     await page.keyboard.press("Space");
     await page.keyboard.type("sw");
@@ -136,10 +137,6 @@ test.describe("macOS", () => {
     await field.press("Enter");
     await expect(field).toHaveValue("50%");
     await expect(stepper).toHaveAttribute("aria-valuenow", "50");
-    await expect(page.locator("#auto-mac-at")).toHaveAttribute(
-      "aria-label",
-      "When a limit reaches 50%",
-    );
     await expect(fig.locator('[data-note="notify"]')).toContainText("reaches 50%,");
     await field.fill("ninety");
     await field.press("Tab");

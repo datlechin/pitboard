@@ -860,7 +860,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
         snapshot
             .signing_in_text
             .as_ref()
-            .is_some_and(|text| text.message == words::in_app_waiting("Claude", None, None, true))
+            .is_some_and(|text| text.steps == words::in_app_steps("Claude", None, true))
     });
     let text = waiting.signing_in_text.expect("the page");
     assert_eq!(text.waiting, words::waiting_to_quit("Claude"));
@@ -905,10 +905,8 @@ fn an_add_left_halfway_is_put_back_by_use() {
             .is_some_and(|text| text.undo.is_some())
     });
     let text = waiting.signing_in_text.expect("the page");
-    assert_eq!(
-        text.message,
-        words::in_app_waiting("Claude", None, None, false)
-    );
+    assert_eq!(text.message, words::in_app_note("Claude", None));
+    assert_eq!(text.steps, words::in_app_steps("Claude", None, false));
     assert_eq!(text.cancel.title, words::LATER);
     assert!(!text.escape_cancels);
     model.send(Intent::CancelSignIn);
@@ -1612,15 +1610,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     model.shutdown();
 }
 
-/// A read that fails is said in the menu, as one item that opens the window on the
-/// accounts, and in the window, as MenuBarTests.swift's
-/// testAFailedReadIsSaidInTheMenuAndInTheWindow reads it in readFailure: the item and the
-/// notice are both "Couldn’t read usage". On the real core a read fails where the account
-/// index cannot be read, and then so does the read of what is known, so two things that test
-/// reads are not there: the notice says the core's own words, that it could not read
-/// Pitboard's account list, where the Swift fixture said "Anthropic could not be reached",
-/// and no account is listed, where the Swift fixture listed claude/work. The window says it
-/// could not read the accounts instead, with Try Again.
+// As MenuBarTests.swift's testAFailedReadIsSaidInTheMenuAndInTheWindow reads it in readFailure.
 #[test]
 fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     let launched = made(World::ReadFailure);
@@ -1655,15 +1645,8 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
             place: Some(Place::Accounts)
         })
     );
-    assert_eq!(
-        shown
-            .notices
-            .iter()
-            .map(|notice| (notice.id.as_str(), notice.title.as_str()))
-            .collect::<Vec<_>>(),
-        [("read", words::COULD_NOT_READ_USAGE)]
-    );
-    assert_eq!(shown.notices[0].lines, std::slice::from_ref(&failure));
+    assert_eq!(item.help.as_ref(), Some(&failure));
+    assert!(shown.notices.is_empty(), "the window says it once, below");
 
     assert!(shown.sections.is_empty(), "nothing is known");
     assert_eq!(

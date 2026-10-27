@@ -8,10 +8,6 @@ public enum AppVersion {
         return version?.isEmpty == false ? version : nil
     }
 
-    static func named(in bundle: Bundle = .main) -> String {
-        whole(in: bundle).map { "Pitboard \($0)" } ?? "Pitboard"
-    }
-
     @MainActor
     static func showAboutPanel() {
         NSApp.activate()

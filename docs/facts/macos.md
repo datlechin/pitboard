@@ -34,3 +34,8 @@ a scratch item.
   lists as `codex`, and one started by its path lists the path (1 October 2026). So Pitboard
   tells the kinds of Codex apart by the folders in that path, and takes a bare name for a
   `codex` session.
+- Read on 27 October 2026, with Homebrew 7.0.9: `brew install --cask pitboard-app` at 0.4.0
+  left `Caskroom/pitboard-app/0.4.0/Pitboard.app` under Homebrew's prefix, a symbolic link to
+  `/Applications/Pitboard.app`. Sparkle has since updated that app to 0.15.0 in place, and the
+  link, still under `0.4.0`, still reaches it. So the app knows a copy Homebrew installed by a
+  link under any version there that reaches its own bundle.

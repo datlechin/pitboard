@@ -14,6 +14,7 @@ struct Dependencies {
     let loginItem: any LoginItem
     let notificationStatus: @MainActor () async -> UNAuthorizationStatus?
     let commandLineTool: CommandLineTool
+    let removal: AppRemoval
     let web: WebEnvironment
     /// What is done as the app quits, once the model has stopped.
     let quitting: @MainActor () -> Void
@@ -43,12 +44,17 @@ struct Dependencies {
         notifications.onClick = { [weak model] argument in
             model?.send(.notificationClicked(argument: argument))
         }
+        let loginItem = MainAppLoginItem()
+        let commandLineTool = CommandLineTool(bundle: bundle)
         return Dependencies(
             model: model,
             defaults: defaults,
-            loginItem: MainAppLoginItem(),
+            loginItem: loginItem,
             notificationStatus: { await notifications.authorization() },
-            commandLineTool: CommandLineTool(bundle: bundle),
+            commandLineTool: commandLineTool,
+            removal: .live(
+                loginItem: loginItem, defaults: defaults, support: records,
+                commandLine: commandLineTool, app: bundle),
             web: .live(),
             quitting: {
                 earlier.forgetOnceKept()

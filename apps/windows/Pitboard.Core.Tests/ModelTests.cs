@@ -552,7 +552,8 @@ public sealed class ModelTests
             Lines: ["Parked login good for 3 more days: sign in again to keep it"],
             Detail: new AccountDetail(
                 Email: "spare@example.com", Plan: null, SignedInUntil: 1_800_259_200,
-                SignIn: "Parked login good for 3 more days", Warm: null, ReadAt: 1_800_000_000, Read: "Updated 08:00"),
+                SignIn: "Parked login good for 3 more days", Warm: null, ReadAt: 1_800_000_000, Read: "Updated 08:00",
+                Notes: []),
             Help: null, Limits: [limit],
             Offers:
             [

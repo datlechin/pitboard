@@ -59,18 +59,15 @@ final class AccountsWindowTests: FixtureTestCase {
     /// A tool Pitboard did not find says what to install, and cannot be signed in to.
     @MainActor
     func testAToolPitboardDidNotFindSaysWhatToInstall() {
-        // Claude Code and Claude Desktop, and no Codex CLI.
-        let app = launch(.claudeDesktop)
+        // No tool at all, so the sheet starts on Claude Code, with no picker of one tool.
+        let app = launch(.noClaudeCode)
         app.openWindow()
         app.toolbars.buttons["toolbar.addAccount"].click()
-        let tool = app.popUpButtons["sheet.tool"]
-        XCTAssertTrue(tool.waitForExistence(timeout: 5))
-        tool.click()
-        tool.menuItems["Codex"].click()
         let sheet = app.sheets.firstMatch
         XCTAssertTrue(
             sheet.descendants(matching: .any)["sheet.missing"].waitForExistence(timeout: 5))
         XCTAssertTrue(sheet.descendants(matching: .any)["sheet.missing.link"].exists)
+        XCTAssertFalse(app.popUpButtons["sheet.tool"].exists)
         XCTAssertFalse(app.buttons["sheet.confirm"].isEnabled)
     }
 
@@ -233,9 +230,12 @@ final class AccountsWindowTests: FixtureTestCase {
     func testWarmUpNowIsLeftOutOfTheShortcutMenuAndDimmedInTheAccountMenu() {
         let app = launch(.warmUp)
         app.openWindow()
-        XCTAssertTrue(
-            app.text("BEGINSWITH", Words.warmsUpAgain).waitForExistence(timeout: 30))
         let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        XCTAssertTrue(
+            app.control("inspector").text("BEGINSWITH", Words.warmsUpAgain).waitForExistence(
+                timeout: 30))
         row.rightClick()
         XCTAssertTrue(app.shortcutMenu.menuItems[Words.rename].waitForExistence(timeout: 5))
         XCTAssertFalse(app.shortcutMenu.menuItems[Words.warmUpNow].exists)
@@ -338,25 +338,133 @@ final class AccountsWindowTests: FixtureTestCase {
         XCTAssertTrue(app.accountRow("claude/work").exists)
     }
 
-    /// The window goes to the accounts, where the new one is listed.
+    // The account in use until another is selected.
     @MainActor
-    func testCommandNAddsAnAccountFromAnyPane() {
+    func testTheInspectorShowsTheSelectedAccount() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.activity"].click()
-        let activity = app.staticTexts["activity.change"].firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: 5))
-        app.typeKey("n", modifierFlags: .command)
-        XCTAssertTrue(app.control("sheet.add").waitForExistence(timeout: 5))
-        app.sheets.firstMatch.buttons["sheet.cancel"].click()
-        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.accountRow("claude/work").waitForExistence(timeout: 5))
-        XCTAssertTrue(activity.waitForNonExistence(timeout: 5))
+        let inspector = app.control("inspector")
+        let email = inspector.descendants(matching: .any)["inspector.email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            email.wait(
+                until: "value == 'dana@work.example' OR label == 'dana@work.example'",
+                timeout: 5))
+        XCTAssertFalse(inspector.buttons["inspector.action.switch"].exists)
+
+        let personal = app.accountRow("claude/personal")
+        personal.click()
+        XCTAssertTrue(
+            email.wait(
+                until: "value == 'dana@home.example' OR label == 'dana@home.example'",
+                timeout: 5))
+        let switchTo = inspector.buttons["inspector.action.switch"]
+        XCTAssertTrue(switchTo.waitForExistence(timeout: 5))
+        switchTo.click()
+        XCTAssertTrue(
+            personal.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 10))
+        XCTAssertTrue(switchTo.waitForNonExistence(timeout: 5), "not to the account in use")
     }
 
+    // The list keeps the keyboard beside the inspector, which Control-Command-I hides.
     @MainActor
-    func testTheFirstLaunchOpensTheWindow() {
+    func testTheInspectorHidesAndTheListKeepsTheKeyboard() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        let inspector = app.control("inspector")
+        XCTAssertTrue(inspector.waitForExistence(timeout: 5))
+        let personal = app.accountRow("claude/personal")
+        personal.click()
+        app.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(app.alertAnswer.waitForExistence(timeout: 5), "Delete asks first")
+        app.alertCancel.click()
+        XCTAssertTrue(app.alert.waitForNonExistence(timeout: 5))
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@home.example")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(
+            personal.descendants(matching: .any)["account.inUse"].waitForExistence(timeout: 10),
+            "Return switches")
+
+        app.typeKey("i", modifierFlags: [.command, .control])
+        XCTAssertTrue(inspector.waitForNonExistence(timeout: 5))
+        let toggle = app.accountsWindow.toolbars.buttons["toolbar.inspector"]
+        XCTAssertTrue(toggle.exists)
+        // The account in use is listed first, so personal now is and work is under it.
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "dana@work.example")
+        toggle.click()
+        XCTAssertTrue(inspector.waitForExistence(timeout: 5))
+    }
+
+    // The accounts come forward with the sheet over them.
+    @MainActor
+    func testCommandNAddsAnAccountFromAnyWindow() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        app.openFromWindowMenu(Words.activity)
+        let activity = app.windows["activity"]
+        XCTAssertTrue(
+            activity.staticTexts["activity.change"].firstMatch
+                .waitForExistence(timeout: 5))
+        app.typeKey("n", modifierFlags: .command)
+        let sheet = app.accountsWindow.sheets.firstMatch
+        XCTAssertTrue(
+            sheet.descendants(matching: .any)["sheet.add"].waitForExistence(timeout: 5))
+        sheet.buttons["sheet.cancel"].click()
+        XCTAssertTrue(sheet.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.accountRow("claude/work").exists)
+        XCTAssertTrue(activity.exists, "a window of its own")
+    }
+
+    // Plan 4.7: once, before the accounts, with the login item off until turned on.
+    @MainActor
+    func testTheFirstLaunchWelcomesThenOpensTheAccounts() {
         let app = launch(.firstLaunch)
+        let welcome = app.windows["welcome"]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.accountsWindow.exists, "the welcome comes first")
+        let login = welcome.descendants(matching: .any)["welcome.openAtLogin"]
+        XCTAssertTrue(login.waitForExistence(timeout: 5))
+        XCTAssertEqual(login.value as? Int, 0)
+        welcome.buttons["welcome.done"].click()
         XCTAssertTrue(app.control("setup.codexUnused").waitForExistence(timeout: 10))
+        XCTAssertTrue(welcome.waitForNonExistence(timeout: 5))
+    }
+
+    // Nobody is signed in to Codex there, so Add reads that and offers its sign-in.
+    @MainActor
+    func testAddingFromTheWelcomeReadsTheToolOnTheClick() {
+        let app = launch(.firstLaunch)
+        let welcome = app.windows["welcome"]
+        XCTAssertTrue(welcome.waitForExistence(timeout: 10))
+        let add = welcome.buttons["welcome.add.codex"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.click()
+        // Plan 7: over the welcome, whose Continue is still to come.
+        XCTAssertTrue(welcome.sheets.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(welcome.descendants(matching: .any)["sheet.add"].exists)
+        XCTAssertFalse(app.accountsWindow.exists, "no window opens behind it")
+    }
+
+    // Escape is the sheet's Cancel, which stops the tool's sign-in with the sheet.
+    @MainActor
+    func testEscapeStopsASignIn() {
+        let app = launch(.oneTool)
+        app.openWindow()
+        app.toolbars.buttons["toolbar.addAccount"].click()
+        let signIn = app.buttons["sheet.confirm"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        signIn.click()
+        XCTAssertTrue(app.textFields["sheet.code"].waitForExistence(timeout: 10))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+
+        app.toolbars.buttons["toolbar.addAccount"].click()
+        XCTAssertTrue(signIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            signIn.wait(for: \.isEnabled, toEqual: true, timeout: 5),
+            "no sign-in is left running")
     }
 }

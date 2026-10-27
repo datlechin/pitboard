@@ -2,26 +2,17 @@
     import Foundation
     import PitboardKit
 
-    /// A machine in a known state, for the UI tests and for looking at the app without
-    /// touching the one it runs on. The worlds are Rust's, `pitboard-ffi`'s fixtures, by the
-    /// names `fixtureNames()` gives: the real core and the real model over a machine of their
-    /// own. Only a debug build reads `PITBOARD_FIXTURE`, so nothing outside can put a release
-    /// in a world that is not real, and only a library built with `--fixture` has them.
+    // pitboard-ffi's worlds, the real core and model over a machine of their own. Only a debug
+    // build reads PITBOARD_FIXTURE, so nothing outside can put a release in one.
     enum Fixture {
         static let variable = "PITBOARD_FIXTURE"
         // Set, macOS refuses the fixture's login item, as it can refuse an app's own.
         static let loginItemRefuses = "PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES"
 
-        /// The defaults a fixture keeps the app's view preferences in, emptied at every launch
-        /// so each test starts from the same place and nothing reaches the real app's. The
-        /// model's own preferences are in the fixture's Pitboard directory.
+        // Emptied at every launch, so each test starts from the same place.
         static let suite = "com.usepitboard.Pitboard.fixture"
 
-        /// The fixture's folder, `pitboard-fixture` in the temporary directory as Rust's
-        /// `std::env::temp_dir` finds it: `TMPDIR` where it is set, which Foundation's
-        /// temporary directory does not read, and the user's own temporary directory where
-        /// it is not. The model makes the world there, and the native stand-ins keep what
-        /// they make beside it.
+        // Where Rust's std::env::temp_dir looks: TMPDIR, which Foundation's does not read.
         static func folder(environment: [String: String]) -> URL {
             let temporary =
                 environment["TMPDIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -29,8 +20,7 @@
             return temporary.appendingPathComponent("pitboard-fixture", isDirectory: true)
         }
 
-        /// The world reads, notices changes and reads when a menu opens, as the app does on a
-        /// real machine, since that is what the UI tests test. It posts no notification.
+        // It posts no notification.
         @MainActor
         static func dependencies(named name: String, environment: [String: String])
             -> Dependencies
@@ -53,31 +43,47 @@
             let folder = folder(environment: environment)
             let defaults = UserDefaults(suiteName: suite) ?? .standard
             defaults.removePersistentDomain(forName: suite)
+            let loginItem = FixtureLoginItem(refuses: environment[loginItemRefuses] != nil)
+            let tool = commandLineTool(in: folder)
             return Dependencies(
                 model: model,
                 defaults: defaults,
-                loginItem: FixtureLoginItem(refuses: environment[loginItemRefuses] != nil),
+                loginItem: loginItem,
                 notificationStatus: { nil },
-                commandLineTool: commandLineTool(in: folder),
+                commandLineTool: tool,
+                removal: removal(
+                    in: folder, loginItem: loginItem, defaults: defaults, commandLine: tool),
                 web: .fixture(folder: folder),
                 quitting: {})
         }
 
-        /// Links into the fixture's `bin`, where the model looks for the `pitboard` a terminal
-        /// runs, so linking can be tried with no password and no write to `/usr/local/bin`.
-        static func commandLineTool(in folder: URL) -> CommandLineTool {
+        // The app's own shell commands, in the fixture's folder, with no password.
+        static func commandLineTool(
+            in folder: URL,
+            execute: @escaping CommandLineTool.Runner = CommandLineTool.execute(script:)
+        ) -> CommandLineTool {
             let helper = folder.appendingPathComponent("Pitboard.app/Contents/Helpers/pitboard")
-            let bin = folder.appendingPathComponent("bin")
-            let link = bin.appendingPathComponent("pitboard")
+            let link = folder.appendingPathComponent("bin/pitboard")
             return CommandLineTool(
-                helper: helper.path, link: link.path,
-                execute: { _ in
-                    try? FileManager.default.createDirectory(
-                        at: bin, withIntermediateDirectories: true)
-                    try? FileManager.default.createSymbolicLink(
-                        at: link, withDestinationURL: helper)
-                    return nil
-                })
+                helper: helper.path, link: link.path, administrator: false, execute: execute)
+        }
+    }
+
+    extension Fixture {
+        // Removes the fixture's own app and folders, and nothing of the app under test.
+        @MainActor
+        static func removal(
+            in folder: URL, loginItem: any LoginItem, defaults: UserDefaults,
+            commandLine: CommandLineTool
+        ) -> AppRemoval {
+            AppRemoval(
+                loginItem: loginItem, defaults: defaults, domain: suite,
+                support: folder.appendingPathComponent(
+                    "Application Support", isDirectory: true),
+                commandLine: commandLine,
+                app: folder.appendingPathComponent("Pitboard.app", isDirectory: true),
+                homebrew: [folder.appendingPathComponent("homebrew", isDirectory: true)],
+                trash: { try FileManager.default.removeItem(at: $0) })
         }
     }
 

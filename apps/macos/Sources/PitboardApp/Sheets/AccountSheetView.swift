@@ -24,54 +24,72 @@ struct AccountSheetView: View {
     }
 }
 
-struct SheetLayout<Content: View, Status: View, Buttons: View>: View {
+struct SheetHeader: View {
     let title: String
-    let message: String
-    @ViewBuilder let content: Content
-    /// At the leading end of the buttons, where a Mac sheet shows its spinner while it waits.
-    @ViewBuilder let status: Status
-    @ViewBuilder let buttons: Buttons
+    var message = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: Design.rowSpacing) {
-                Text(title)
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("sheet.title")
-                Text(message).explanatory()
+        VStack(alignment: .leading, spacing: Design.rowSpacing) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("sheet.title")
+            if !message.isEmpty {
+                Text(message)
+                    .font(.body)
+                    .fontWeight(.regular)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("sheet.message")
             }
-            .padding([.horizontal, .top], 20)
-            Form { content }
-                .formStyle(.grouped)
-                .scrollDisabled(true)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                status
-                Spacer()
-                buttons
-            }
-            .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 440)
+        .padding(.bottom, Design.lineSpacing)
     }
 }
 
-extension SheetLayout where Status == EmptyView {
-    init(
-        title: String,
-        message: String,
-        @ViewBuilder content: () -> Content,
-        @ViewBuilder buttons: () -> Buttons
-    ) {
-        self.init(
-            title: title, message: message, content: content, status: { EmptyView() },
-            buttons: buttons)
+extension View {
+    // A sheet draws its toolbar's cancellation and confirmation items in a bar of its own.
+    func sheetForm() -> some View {
+        formStyle(.grouped)
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: 400)
     }
 }
 
-/// A tool Pitboard did not find, where it is picked: what to install, and a link to how.
+struct WaitingRow: View {
+    let text: String
+    // what VoiceOver calls the spinner, where the words beside it do not say it
+    var spoken: String?
+
+    var body: some View {
+        Label {
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel(spoken ?? "")
+                .accessibilityHidden(spoken == nil)
+        }
+    }
+}
+
+struct Steps: View {
+    let steps: [String]
+
+    var body: some View {
+        ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+            Label {
+                Text(step).fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "\(index + 1).circle")
+            }
+            .accessibilityIdentifier("sheet.step")
+        }
+    }
+}
+
 struct ToolMissing: View {
     let missing: Missing
 
@@ -103,7 +121,6 @@ struct ToolMissing: View {
     }
 }
 
-/// Why what is typed in a name field cannot be a name, under the field.
 struct NameProblem: View {
     let problem: String
 
@@ -117,10 +134,10 @@ struct NameProblem: View {
     }
 }
 
-/// A failure said inside the sheet that met it, where the name typed is still there to
-/// correct.
+// Said inside the sheet that met it, where the name typed is still there to correct.
 struct SheetFailure: View {
     let failure: FailureText
+    let send: (Intent) -> Void
 
     var body: some View {
         Section {
@@ -131,6 +148,8 @@ struct SheetFailure: View {
                     ForEach(failure.warnings, id: \.self) { warning in
                         Text(warning).explanatory()
                     }
+                    NextStepControl(step: failure.next, send: send)
+                        .padding(.top, Design.lineSpacing)
                 }
             } icon: {
                 Image(systemName: Severity.error.symbol)
@@ -147,5 +166,24 @@ struct SheetFailure: View {
 
     private func announce() {
         AccessibilityNotification.Announcement("\(failure.title). \(failure.message)").post()
+    }
+}
+
+struct NextStepControl: View {
+    let step: NextStep
+    let send: (Intent) -> Void
+
+    var body: some View {
+        switch step {
+        case .act(let choice):
+            Button(choice.title) { send(choice.intent) }
+                .disabled(!choice.enabled)
+                .accessibilityIdentifier("next.\(caseName(choice.intent))")
+        case .learn(let link):
+            if let page = URL(string: link.link) {
+                Link(link.title, destination: page)
+                    .accessibilityIdentifier("next.learn")
+            }
+        }
     }
 }

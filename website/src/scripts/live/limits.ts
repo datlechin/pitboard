@@ -73,8 +73,15 @@ export class AtLimitControls {
     const p = s.preferences;
     this.#choice.set(p.atLimit);
     this.#share.set(p.share, p.atLimit !== "nothing");
-    if (this.#box.getAttribute("aria-label") !== atLabel(p.share))
+    // Windows' ComboBox says the share in its name; macOS's pop-up is named by its row
+    if (
+      this.#box.hasAttribute("aria-label") &&
+      this.#box.getAttribute("aria-label") !== atLabel(p.share)
+    )
       this.#box.setAttribute("aria-label", atLabel(p.share));
+    // macOS leaves the share's row out under Do Nothing
+    for (const el of this.root.querySelectorAll<HTMLElement>("[data-share-row]"))
+      el.hidden = p.atLimit === "nothing";
     // under Switch Automatically, what switching by itself last came to
     const standing = p.atLimit === "switch" ? s.autoStanding : null;
     for (const el of this.root.querySelectorAll<HTMLElement>("[data-standing]")) {

@@ -7,6 +7,7 @@ struct MenuBarLabel: View {
     let model: AppModel
     let windows: AccountWindows
     let requests: WindowRequests
+    let removal: AppRemoval
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @AppStorage(DefaultsKey.menuBarShows) private var shows = MenuBarShows.nameAndUsage
@@ -18,7 +19,9 @@ struct MenuBarLabel: View {
         // first, and an item that is only text is the widest thing up there. A Label would
         // render as the icon alone, so both are placed by hand.
         HStack(spacing: 4) {
-            Image(nsImage: model.menuBar.attention ? MenuBarMark.attention : MenuBarMark.image)
+            // Hierarchical draws the board's second row dimmed, as the app icon has it.
+            Image(model.menuBar.symbol)
+                .symbolRenderingMode(.hierarchical)
             if !title.isEmpty {
                 Text(title).monospacedDigit()
             }
@@ -31,12 +34,16 @@ struct MenuBarLabel: View {
             // An app with no Dock icon has nothing to bring forward but itself, and the
             // window opens behind whatever is in front otherwise.
             windows.presence.activate()
-            if case .settings(let section) = model.windowRequest.place {
+            if let window = PlaceWindow(model.windowRequest.place) {
+                openWindow(id: window.id)
+            } else if case .settings(let section) = model.windowRequest.place {
                 settingsTab = SettingsView.Tab(section)
                 openSettings()
-            } else {
-                openWindow(id: MainWindow.id)
             }
+        }
+        // Whichever window asked for it may have closed meanwhile.
+        .onChange(of: model.removal) { _, removed in
+            if removed == .done { Task { await removal.finish() } }
         }
         .onChange(of: windows.requested) {
             for store in windows.takeRequests() {
@@ -45,4 +52,9 @@ struct MenuBarLabel: View {
             }
         }
     }
+}
+
+// Symbols in the app's asset catalog; the badge says the menu has something to look at.
+extension MenuBarText {
+    var symbol: String { attention ? "pitboard.badge.exclamationmark" : "pitboard" }
 }

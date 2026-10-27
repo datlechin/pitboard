@@ -1,11 +1,10 @@
 // The hero's macOS desk: Pitboard's menu bar item and its menu, as MenuBarExtra's menu style runs
 // them (plan 3.1).
-import { attr, cloned, html, keyed, shown, text } from "./draw.ts";
+import { attr, html, keyed, shown, text } from "./draw.ts";
 import { handOver } from "./demo.ts";
 import { LiveFigure } from "./figure.ts";
 import { bringForward, help } from "./forward.ts";
 import { Menu, drawSites } from "./menu.ts";
-import { Tooltips } from "./tooltip.ts";
 import { showAbout, showAccountWindow } from "./windows.ts";
 import {
   model,
@@ -24,20 +23,14 @@ import {
   menuBarShown,
   menuBarSpoken,
   menuLine,
-  menuTitle,
-  staleNote,
   statusLine,
   updated,
 } from "../../lib/words.ts";
 import type { Tool } from "../../data/world.ts";
 
-// an NSMenuItem's tooltip, until measured on macOS 27 (plan section 10)
-const TIP_MS = 1000;
-
 class MenuBarDesk extends LiveFigure {
   #item!: HTMLButtonElement;
   #menu!: Menu;
-  #tips!: Tooltips;
   #down = "mouse";
 
   connectedCallback() {
@@ -52,11 +45,6 @@ class MenuBarDesk extends LiveFigure {
         if (refocus) item.focus({ preventScroll: true });
       },
     });
-    this.#tips = new Tooltips({
-      desk: this,
-      owners: '[data-moment="after"] [data-account]',
-      delay: { pointer: TIP_MS, keyboard: null },
-    });
     this.#listen();
     super.connectedCallback();
     handOver((frame) => {
@@ -68,7 +56,6 @@ class MenuBarDesk extends LiveFigure {
   }
 
   protected restart() {
-    this.#tips.hide();
     if (model.get().running) this.#menu.show("pointer", "keep");
   }
 
@@ -174,7 +161,6 @@ class MenuBarDesk extends LiveFigure {
       s.reading !== null ? READING : updated(s.readAt),
     );
     drawSites(this.#menu, s);
-    this.#tooltips(s);
   }
 
   // a tool's accounts, the one in use first; while a switch runs, every one not in use is dimmed
@@ -189,37 +175,17 @@ class MenuBarDesk extends LiveFigure {
       want.map((a) => a.id),
       1,
       template,
-      (row, id) => row.setAttribute("aria-describedby", this.#tipId(id)),
     );
     want.forEach((a, i) => {
       const on = isInUse(a, s);
       attr(rows[i], "aria-checked", String(on));
       attr(rows[i], "aria-disabled", s.switching && !on ? "true" : null);
-      text(rows[i].querySelector('[data-part="title"]'), menuTitle(a));
+      text(rows[i].querySelector('[data-part="title"]'), a.label);
       text(
         rows[i].querySelector('[data-part="line"]'),
         s.switching?.id === a.id ? SWITCHING : menuLine(a, s),
       );
     });
-  }
-
-  #tipId(id: string) {
-    return `${this.id}-tip-${id}`;
-  }
-
-  // home's note while it is in use, its item's tooltip
-  #tooltips(s: State) {
-    const tips = this.querySelector('[data-part="tips"]')!;
-    for (const a of s.accounts) {
-      let tip = document.getElementById(this.#tipId(a.id));
-      if (!tip) {
-        tip = cloned(tips.querySelector<HTMLTemplateElement>('template[data-part="tip"]'));
-        tip.id = this.#tipId(a.id);
-        tips.append(tip);
-      }
-      text(tip, staleNote(a, s) ?? "");
-    }
-    this.#tips.refresh();
   }
 }
 

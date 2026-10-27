@@ -1,12 +1,7 @@
 import PitboardKit
 import SwiftUI
 
-/// Names the account just added, already saved under the name it starts on; or gives an
-/// enrolled account a new name, which keeps its parked login and its place, inside its tool.
-///
-/// What it says, its default button's words, whether that can be pressed and what it sends
-/// are the model's: the button sends what `checkName` returns, and the model saves by the
-/// same rule.
+// The account Name names is added already under the name shown: Cancel keeps that name.
 struct NameSheet: View {
     let model: AppModel
     let sheet: Sheet
@@ -22,32 +17,40 @@ struct NameSheet: View {
 
     var body: some View {
         let text = model.sheetText
-        // A name being saved cannot be withdrawn, so there is nothing to cancel.
+        // A name being saved cannot be withdrawn.
         let busy = text?.saving ?? false
         let check = checkName(sheet: sheet, tool: text?.tool ?? "", typed: name)
-        SheetLayout(title: text?.title ?? "", message: text?.message ?? "") {
+        Form {
             Section {
-                TextField("Name", text: $name, prompt: Text(text?.prompt ?? ""))
+                TextField(words.sheet.name, text: $name, prompt: Text(text?.prompt ?? ""))
                     .accessibilityIdentifier("sheet.name")
                     .focused($focused)
                     .onSubmit(save)
+            } header: {
+                SheetHeader(title: text?.title ?? "", message: text?.message ?? "")
             } footer: {
                 if let problem = check.problem {
                     NameProblem(problem: problem)
                 }
             }
             if let failure = model.sheetFailure {
-                SheetFailure(failure: failure)
+                SheetFailure(failure: failure) { model.send($0) }
             }
-        } buttons: {
-            Button("Cancel", role: .cancel) { dismiss() }
-                .keyboardShortcut(.cancelAction)
-                .disabled(busy)
-                .accessibilityIdentifier("sheet.cancel")
-            Button(text?.confirm ?? "", action: save)
-                .keyboardShortcut(.defaultAction)
-                .disabled(check.intent == nil || busy)
-                .accessibilityIdentifier("sheet.confirm")
+        }
+        .sheetForm()
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(words.window.cancel, role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(busy)
+                    .accessibilityIdentifier("sheet.cancel")
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(text?.confirm ?? "", action: save)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(check.intent == nil || busy)
+                    .accessibilityIdentifier("sheet.confirm")
+            }
         }
         .onAppear { focused = true }
         .onChange(of: name) {

@@ -1,6 +1,7 @@
 // The windows' panes, Settings' tabs and the windows the menus open (answers 3 a and 4 a): the
-// macOS sidebar and the Windows navigation show each pane drawn from source, Settings' toolbar shows
-// General and Advanced, and About and an account's window open over the desk they are asked from.
+// Windows navigation shows each pane drawn from source, macOS draws the accounts and the log in
+// windows of their own, Settings' toolbar shows General and Advanced, and About and an account's
+// window open over the desk they are asked from.
 import type { Page } from "@playwright/test";
 import { axe, choose, expect, handedOver, test, type Platform } from "./fixtures.ts";
 
@@ -24,57 +25,25 @@ test.use({ reducedMotion: "reduce" });
 test.skip(({ isMobile }) => isMobile, "a pointer and a keyboard");
 
 test.describe("macOS", () => {
-  test("the sidebar shows each pane, the window keeping its size, and Up and Down select", async ({
+  test("the Accounts window shows only the accounts, and the Activity window the log", async ({
     page,
   }) => {
-    const { fig, tab, panel } = await open(page, "macos", "usage-mac");
-    const window = fig.locator('[data-part="window"]');
-    const tall = (await window.boundingBox())!.height;
-    await tab("activity").click();
-    await expect(panel("activity")).toBeVisible();
-    await expect(panel("accounts")).toBeHidden();
-    await expect(fig.locator('[data-head="activity"]')).toHaveText(/Activity/);
-    expect(Math.round((await window.boundingBox())!.height)).toBe(Math.round(tall));
-    await expect(panel("activity").locator('[data-part="log"] > *').first()).toContainText(
-      "Switch",
-    );
-    await page.keyboard.press("ArrowDown");
-    await expect(tab("machine")).toBeFocused();
-    await expect(tab("machine")).toHaveAttribute("aria-selected", "true");
-    await expect(panel("machine")).toContainText("Everything Pitboard checks is in order.");
-    await expect(panel("machine")).toContainText(/Checked at 20:5\d/);
-    await expect(panel("machine").getByRole("img", { name: "Passed" }).first()).toBeVisible();
-    // the list stops at its ends
-    await page.keyboard.press("ArrowDown");
-    await expect(tab("machine")).toHaveAttribute("aria-selected", "true");
-    await page.keyboard.press("ArrowUp");
-    await page.keyboard.press("ArrowUp");
-    await expect(tab("accounts")).toHaveAttribute("aria-selected", "true");
-    await expect(panel("accounts")).toBeVisible();
-    expect(await axe(page, ["#usage-mac"])).toEqual([]);
-  });
-
-  test("the sidebar button hides the sidebar and shows it again", async ({ page }) => {
     const { fig } = await open(page, "macos", "usage-mac");
-    const button = fig.getByRole("button", { name: "Hide Sidebar" });
-    await button.click();
-    await expect(fig.getByRole("tablist", { name: "Sidebar" })).toBeHidden();
-    await fig.getByRole("button", { name: "Show Sidebar" }).click();
-    await expect(fig.getByRole("tablist", { name: "Sidebar" })).toBeVisible();
+    await expect(fig.getByRole("tablist")).toHaveCount(0);
+    await expect(fig.getByRole("grid", { name: "Accounts" })).toBeVisible();
+    const activity = page.locator("#security-mac");
+    await activity.scrollIntoViewIfNeeded();
+    await expect(activity.locator('[data-part="log"] > *').first()).toContainText("Switch");
+    expect(await axe(page, ["#usage-mac", "#security-mac"])).toEqual([]);
   });
 
-  test("the Activity window's Accounts pane lists the accounts, and Add Account comes back to it", async ({
+  test("the Activity window's File menu adds an account in the Accounts window", async ({
     page,
   }) => {
-    const { fig, tab, panel } = await open(page, "macos", "security-mac");
-    await expect(panel("activity")).toBeVisible();
-    await tab("accounts").click();
-    await expect(panel("accounts").getByRole("row", { name: /^work\b/ })).toBeVisible();
-    await tab("activity").click();
+    const { fig } = await open(page, "macos", "security-mac");
     await fig.locator("#security-mac-am-file").click();
     await fig.locator('[id="security-mac-am-file-menu"] [data-does="add"]').click();
     await expect(page.locator("#mac-accounts-sign-in")).toBeVisible();
-    await expect(panel("accounts")).toBeVisible();
   });
 
   test("Settings' tabs show General and Advanced, whose settings act on the page", async ({
@@ -83,14 +52,12 @@ test.describe("macOS", () => {
     const { fig } = await open(page, "macos", "auto-mac");
     await fig.getByRole("tab", { name: "General" }).click();
     await expect(fig.locator('[data-part="title"]')).toHaveText("General");
-    await expect(fig.getByRole("switch", { name: "Open Pitboard at login" })).toHaveAttribute(
+    await expect(fig.getByRole("switch", { name: "Open Pitboard at Login" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
-    const installs = fig.getByRole("switch", {
-      name: "Download and install updates automatically",
-    });
-    await fig.getByRole("switch", { name: "Check for updates automatically" }).click();
+    const installs = fig.getByRole("switch", { name: "Download and Install Automatically" });
+    await fig.getByRole("switch", { name: "Check for Updates Automatically" }).click();
     await expect(installs).toHaveAttribute("aria-disabled", "true");
     await fig.locator("#auto-mac-shows").click();
     await page.locator("#auto-mac-shows-usage").click();

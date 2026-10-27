@@ -180,18 +180,21 @@ names runs was read in those alone.
 ### macOS: the menu bar item
 
 - The item draws highlighted while its menu is open. Its accessibility title is "Pitboard, work
-  42%, Claude Code".
-- In `twoTools` the menu reads, top to bottom: the heading Claude Code, work, old, personal; the
-  heading Codex, main · Pro, spare · Pro; Add Account… ⌘N, Refresh ⌘R; Open claude.ai ›, Open
-  chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help, Quit Pitboard ⌘Q.
-  A separator divides each group. The headings are dimmed; each tool's account in use is
-  checked.
-- Opened with a click, the menu highlights nothing. The first Down highlights work, the first
-  enabled item; Down and Up pass over headings and separators. Down stops at Quit Pitboard: the
-  menu does not wrap. With nothing highlighted, the first Up goes to Quit Pitboard. Home and
-  Page Up go to work, End and Page Down to Quit Pitboard.
+  42%, Claude Code, needs attention" in `twoTools`, whose old needs a sign-in (run 40404550549).
+- In `twoTools` the menu reads, top to bottom: Sign In to old Again…; the heading
+  Claude Code, work, old, personal; the heading Codex, main, spare; Add Account… ⌘N, Refresh ⌘R;
+  Open claude.ai ›, Open chatgpt.com ›; Open Pitboard, Settings… ⌘,; About Pitboard, Pitboard Help,
+  Quit Pitboard ⌘Q. A separator divides each group. The headings are dimmed; each tool's account in
+  use is checked. Its items carry no symbols and no tooltips. The redone menu's order and names are
+  asserted by `testTheStatusMenuListsItsItemsInOrder`, and were read in run 40404550549, and
+  without "(Claude Code)" in the first item's title in run 40429818225.
+- Opened with a click, the menu highlights nothing. The first Down highlights the first enabled
+  item, Sign In to old Again… in run 40429818225; Down and Up pass over headings and
+  separators. Down stops at Quit Pitboard: the menu does not wrap. With nothing highlighted, the
+  first Up goes to Quit Pitboard. Home and Page Up go to the first enabled item, End and Page
+  Down to Quit Pitboard.
 - Typing goes to the first item whose title or subtitle starts with what is typed, in any case:
-  "spa" goes to spare · Pro, "Open P" to Open Pitboard and "o" to old. "Needs" went to old while
+  "spa" goes to spare, "Open P" to Open Pitboard and "o" to old. "Needs" went to old while
   its subtitle was "Needs signing in again", and still did in run 40292624691, where the subtitle
   reads "Sign-in expired". With a pause of 0.5 s between keys they make one name,
   and with 1 s a new one starts: "o" then "p" goes to Open claude.ai after 0.5 s and to personal
@@ -217,22 +220,24 @@ names runs was read in those alone.
   All; Quit Pitboard ⌘Q. Show All is dimmed. Every item but About has a symbol before it.
 - File: Add Account… ⌘N; Open claude.ai ›; Remove Website Data…; Close ⌘W, with Close All in its
   place under ⌥. Remove Website Data… is dimmed.
-- Edit is macOS's own: Undo ⌘Z, Redo ⇧⌘Z; Cut ⌘X, Copy ⌘C, Paste ⌘V, Delete, Select All ⌘A;
-  Find ›, Spelling and Grammar ›, Substitutions ›, Transformations ›, Speech ›; AutoFill ›,
-  Start Dictation… fn D, Emoji & Symbols fn E. Undo, Redo, Cut, Paste and Select All are dimmed.
+- Edit is macOS's own, and Copy Report: Undo ⌘Z, Redo ⇧⌘Z; Cut ⌘X, Copy ⌘C, Paste ⌘V, Delete,
+  Select All ⌘A, Copy Report (run 40429818225); Find ›, Spelling and Grammar ›, Substitutions ›,
+  Transformations ›, Speech ›; AutoFill ›, Start Dictation… fn D, Emoji & Symbols fn E. Undo,
+  Redo, Cut, Paste, Select All and Copy Report are dimmed.
   Copy and Delete are dimmed with no account selected, and enabled with one. Delete shows no key.
-- View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Enter Full Screen fn F. Actual
-  Size, Zoom In, Zoom Out and Enter Full Screen are dimmed.
+- View: Refresh ⌘R; Actual Size ⌘0, Zoom In ⌘+, Zoom Out ⌘−; Hide Inspector ⌃⌘I, Enter Full
+  Screen fn F. Actual Size, Zoom In, Zoom Out and Enter Full Screen are dimmed. Hide Inspector is
+  `InspectorCommands`' own, with a symbol before it (run 40404550549).
 - Go: Back ⌘[, Forward ⌘]. Back and Forward are dimmed.
 - Account, with no account selected: Switch, Sign In Again…, Rename…, Remove Account… ⌘⌫, all
-  dimmed. With personal selected: Switch to personal, Sign In Again…, Rename…, Warm Up Now,
-  dimmed; Open claude.ai; Remove Account… ⌘⌫. With work, the account in use, selected: the same
-  with Switch to work, Warm Up Now and Remove Account… dimmed, and ⌘⌫ asks nothing. No item is
-  red.
-- Window is macOS's own: Minimize ⌘M, Zoom, Fill ⌃fn F, Center ⌃fn C; Move & Resize ›; Full
-  Screen Tile; Remove Window from Set; Pitboard; Bring All to Front. Full Screen Tile and Remove
-  Window from Set are dimmed. Under ⌥, Minimize All, Zoom All and Arrange in Front take their
-  places.
+  dimmed. The window selects work, the account in use, as it opens, so at first the menu is work's
+  (run 40404550549). With personal selected: Switch to personal, Sign In Again…, Rename…, Warm Up
+  Now, dimmed; Open claude.ai; Remove Account… ⌘⌫. With work, the account in use, selected: the same
+  with Switch to work, Warm Up Now and Remove Account… dimmed, and ⌘⌫ asks nothing. No item is red.
+- Window: Minimize ⌘M, Zoom, Fill ⌃fn F, Center ⌃fn C; Move & Resize ›; Full Screen Tile; Remove
+  Window from Set; Accounts, Diagnostics, Activity, the app's windows, with no symbol (run
+  40404550549); Bring All to Front. Full Screen Tile and Remove Window from Set are dimmed. Under ⌥,
+  Minimize All, Zoom All and Arrange in Front take their places.
 - Help: macOS's search field, then Pitboard Help.
 - About Pitboard opens the standard About panel, a dialog of 284 by 170 points whose close
   button alone is enabled: the app's icon, "Pitboard" in bold, and the version and build,
@@ -254,9 +259,15 @@ names runs was read in those alone.
 
 ### macOS: the account list
 
-- At first no row is selected. A click selects a row, in the accent colour with white text; a
-  click on the sidebar leaves it selected in grey. Up and Down move the selection. Typing an
-  account's name selects it: "w" selects work.
+- At first the account in use of the first tool is selected, work in `oneTool`, and the inspector
+  beside the list shows it (`AccountsWindow.swift`'s `onAppear`, asserted by
+  `testSelectingAndTypingInTheAccountList` and read from source before a run of it). A click
+  selects a row, in the accent colour with white text, and the inspector shows that account. Up
+  and Down move the selection. Typing an account's name selects it: "w" selects work.
+- The window has no sidebar: Diagnostics and Activity are windows of their own in the Window menu.
+  Control-Command-I, the View menu's Hide Inspector in run 40404550549, and the toolbar's Inspector
+  hide the inspector and show it again, and the list keeps the keyboard
+  (`testTheInspectorHidesAndTheListKeepsTheKeyboard`).
 - **Switch** switches without selecting its row.
 - A right click on a row not selected leaves the selection where it was and draws an accent
   outline round the row clicked. The shortcut menu acts on that row: Switch to personal, Sign In
@@ -274,11 +285,12 @@ names runs was read in those alone.
   stops at 50 and 99, and a click past a bound changes nothing.
 - On Return the field clamps a typed share to 50 to 99, puts back the last share for text that
   does not parse, and takes "90" without "%". The Up arrow in the field changes nothing.
-- The field also takes each key as it is typed: "7" with no Return set the share to 50 within a
-  second (recorded, runs 40204121073 to 40247375339), and a share clamped while typing can
-  rewrite the text under the caret: "80%" typed with no Return left "50%0%" in the field (run
-  40196222517). Its `share` binding in `LimitsSettings.swift` clamps and sends every value the
-  field hands it.
+- The field took each key as it was typed until run 40404550549: "7" with no Return set the share
+  to 50 within a second (recorded, runs 40204121073 to 40247375339), a share clamped while typing
+  could rewrite the text under the caret, "80%" typed with no Return leaving "50%0%" in the field
+  (run 40196222517), and "120" then Return left "120" in the field over a share of 99 (run
+  40404550549). Since, `ShareField` in `LimitsSettings.swift` sends a typed share on Return or as
+  the field loses focus, as the site does.
 - The warm-up toggles are switches, and From and To are time fields with a stepper beside each.
   How fast their steppers repeat was not read: the site repeats them as the share's.
 
@@ -366,10 +378,9 @@ says so in a comment naming its line here, which `website/src/scripts/departures
   window: HTML's modal dialog does.
 - A simulated sign-in keeps Copy Link and Open dimmed, shows no Code field, and draws no Claude
   window while Claude Desktop's waits: the page loads no sign-in page.
-- Open Pitboard, Settings on Windows and the tray icon bring the page's figure into view, where
-  the app brings a window forward.
-- The macOS share field takes a typed share on Return or as focus leaves. The app's binding
-  clamps each key as it is typed, which can rewrite the text under the caret.
+- Open Pitboard, Settings on Windows, Warm-Up Settings and the tray icon bring the page's figure
+  into view, where the app brings a window forward.
+- Check Now and Uninstall Pitboard do nothing: the page updates and removes no app.
 - After Remove Account on Windows the page draws a focus ring on the title bar, where WinUI draws
   none (WCAG 2.4.7).
 - The Mac's clock opens nothing: macOS's Notification Center was not read.
@@ -377,6 +388,7 @@ says so in a comment naming its line here, which `website/src/scripts/departures
   nothing and starts no installer.
 - Diagnostics stays on its spinner, and Check again and Copy report are held back: the page draws
   no PC's checks yet.
+  The macOS figures draw no Diagnostics window, which the page has no figure for.
 - `--json` of `pitboard`, status, doctor and watch prints nothing: those reports are not drawn
   from the page's state yet.
 - On a phone each figure fits the page's width, so a macOS menu row on a 390 pixel phone is 13

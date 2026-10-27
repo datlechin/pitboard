@@ -16,7 +16,7 @@ internal static class Items
                 End: inUse ? new RowEnd.InUse("In use") : null, Action: null, Summary: "", Notes: [], Lines: [],
                 Detail: new AccountDetail(
                     Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
-                    ReadAt: null, Read: null),
+                    ReadAt: null, Read: null, Notes: []),
                 Help: null, Limits: [], Offers: [], Windows: [], Forget: null, Actions: []),
             inUse ? null : new ItemAction("Switch", $"Switch to {label}", new Intent.SwitchTo($"{provider}/{label}")));
 
@@ -89,7 +89,7 @@ internal static class Items
         new(
             Code: code, Name: name,
             Message: $"Pitboard opens {name}’s sign-in in your browser, where you sign in to the account you’re adding.",
-            Confirm: "Sign in…", Missing: missing);
+            Confirm: "Sign in…", Missing: missing, Steps: []);
 
     public static Missing CodexCliMissing() =>
         new(
@@ -114,11 +114,11 @@ internal static class Items
     public static SigningInText SigningIn(string tool) =>
         new(
             Title: $"Signing in to {tool}",
-            Message: $"Finish signing in in your browser. This closes once {tool} says you’re in.",
+            Message: "Finish signing in in your browser.",
             CodeNote: $"{tool} takes the code shown after you sign in, whether or not your browser came back to it.",
             Refused: null, Waiting: "Waiting for your browser", OffersLink: true,
             Cancel: new Choice("Cancel", new Intent.CancelSignIn(), Enabled: true), EscapeCancels: true, Undo: null,
-            Announce: null);
+            Announce: null, Steps: []);
 
     // `found`: what the look said the file holds, none while it looks.
     public static StowText Stow(string? found = null) =>

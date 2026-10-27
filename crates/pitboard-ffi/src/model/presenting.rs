@@ -437,8 +437,48 @@ fn a_row_notes_only_what_needs_doing_each_with_its_kind_and_action() {
     );
 }
 
+// The detail's notes are those its values don't say: a sign-in it needs is its Sign-In value.
 #[test]
-fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
+fn the_detail_notes_old_numbers_and_a_login_pitboard_cannot_use() {
+    let kinds = |account: Account| -> Vec<NoteKind> {
+        described(account)
+            .detail
+            .notes
+            .into_iter()
+            .map(|note| note.kind)
+            .collect()
+    };
+    let old_numbers = "Anthropic did not answer, so these are the last numbers measured.";
+    assert_eq!(
+        kinds(account(Some("spare")).explained(old_numbers).build()),
+        [NoteKind::Stale]
+    );
+    assert_eq!(kinds(unplaced("codex", false)), [NoteKind::Problem]);
+    assert!(
+        kinds(
+            account(Some("old"))
+                .standing(Standing::LoginExpired)
+                .build()
+        )
+        .is_empty(),
+        "said as its sign-in"
+    );
+    assert!(
+        kinds(
+            account(Some("spare"))
+                .parked_until(NOON + 2 * DAY)
+                .standing(Standing::Expiring)
+                .build()
+        )
+        .is_empty(),
+        "said as its sign-in"
+    );
+    assert!(kinds(account(None).signed_in().uuid("u").build()).is_empty());
+}
+
+// Read with the rest, it says nothing the window's "Updated" doesn't.
+#[test]
+fn the_detail_carries_email_plan_and_sign_in_life() {
     let lasting = NOON + 20 * DAY;
     let mut spare = account(Some("spare"))
         .parked_until(lasting)
@@ -454,7 +494,8 @@ fn the_detail_carries_email_plan_sign_in_life_and_last_read() {
             sign_in: Some(words::saved_until("Feb 3", false)),
             warm: None,
             read_at: Some(NOON - 300),
-            read: Some(words::updated("11:55")),
+            read: None,
+            notes: Vec::new(),
         }
     );
     let work = described(
@@ -1782,9 +1823,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     assert_eq!(notices[1].lines, [overridden().message]);
 }
 
-/// The line saying the numbers shown are the last ones measured is said only where there are
-/// numbers shown. With nothing measured, or nothing known at all, it pointed at numbers that
-/// were not there.
+// The numbers are said to be the last measured only where some are shown.
 #[test]
 fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
     let reason = "Anthropic could not be reached";
@@ -1803,14 +1842,12 @@ fn a_failed_read_says_the_numbers_are_old_only_where_there_are_some() {
         let mut machine = Stub::reading(Err(refusal("unreachable", reason, Vec::new())));
         machine.offline = known;
         model.refresh(&mut machine);
-        assert_eq!(model.shown().notices[0].lines, [reason]);
+        let item = model.shown().menu_notices.others.expect("an item");
+        assert_eq!(item.help.as_deref(), Some(reason));
     }
 }
 
-/// A failed read with nothing to list is the window's whole content, with why and a way to
-/// try again, and not a spinner that never stops or a list with nothing in it, whether
-/// nothing is known at all or what is known is empty. A machine without Claude Code says that
-/// instead. With accounts to show, the list stays, with the failure above it as a notice.
+// Nothing to list: the failure is the window's whole content, said once. Accounts: a notice.
 #[test]
 fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let reason = "/Users/dana/.pitboard/state.json was written on another Mac.";
@@ -1837,6 +1874,11 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
         "not a machine without Claude Code"
     );
     assert_eq!(shown.accounts_shown, read_failed);
+    assert_eq!(ids(&shown), Vec::<String>::new(), "said once in the window");
+    assert_eq!(
+        shown.menu_notices.others.and_then(|item| item.subtitle),
+        Some(words::COULD_NOT_READ_USAGE.into())
+    );
 
     let mut empty = at_noon();
     empty.refresh(&mut Stub::reading(failed()));
@@ -1851,6 +1893,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
         "the read's problem is said ahead of it"
     );
     assert_eq!(shown.accounts_shown, read_failed);
+    assert_eq!(ids(&shown), Vec::<String>::new(), "said once in the window");
 
     let mut some = at_noon();
     let mut listed = Stub::reading(failed());
@@ -2820,6 +2863,31 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
     let (calm, _) = reading(vec![account(Some("work")).signed_in().build()]);
     assert!(calm.shown().menu_notices.sign_ins.is_empty());
     assert!(!calm.shown().menu_bar.attention);
+
+    // Its tool goes in the subtitle, as advice's does, and not inside the title.
+    let (both, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("job")).of("codex").signed_in().build(),
+    ]);
+    let [old] = &both.shown().menu_notices.sign_ins[..] else {
+        panic!("one sign-in");
+    };
+    assert_eq!(
+        (old.title.as_str(), old.subtitle.as_deref()),
+        (
+            words::sign_in_to_again(OS, "old", true).as_str(),
+            Some(
+                words::of_tool(
+                    Some("Claude Code"),
+                    words::sign_in_standing(Standing::LoginExpired)
+                )
+                .as_str()
+            )
+        )
+    );
 }
 
 /// When the numbers were read is said as a time rather than an age, since a menu can stay
@@ -3172,17 +3240,17 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
         model.refresh(&mut machine);
         (model, machine)
     };
+    let no_accounts = |model: &Hand| {
+        matches!(
+            model.shown().accounts_shown,
+            AccountsShown::NoAccounts { .. }
+        )
+    };
     assert_eq!(alone.shown().footing, Footing::CodexUnused);
-    assert!(matches!(
-        alone.shown().accounts_shown,
-        AccountsShown::NoAccounts { .. }
-    ));
+    assert!(no_accounts(&alone), "a list with no rows would be blank");
     let (both, _) = reading_with_codex(Vec::new());
     assert_eq!(both.shown().footing, Footing::CodexUnused);
-    assert!(matches!(
-        both.shown().accounts_shown,
-        AccountsShown::NoAccounts { .. }
-    ));
+    assert!(no_accounts(&both));
 
     let (enrolled, _) = reading_with_codex(vec![
         account(Some("work")).signed_in().build(),
@@ -3352,34 +3420,25 @@ fn tools_and_missing(sheet: &crate::present::SheetText) -> (Vec<&str>, Vec<&str>
     (codes, missing)
 }
 
-// Offered and refused once Sign In was pressed, a tool Pitboard could not find failed late.
+// Plan 4.4: the tools found, so a picker shows only with two; a Codex account added before
+// gives no Codex CLI to sign in with.
 #[test]
-fn every_tool_is_offered_and_one_not_found_says_how_to_get_it() {
+fn only_the_tools_found_are_offered() {
     let codex_known = adding(
         vec![claude_code()],
         vec![account(Some("work")).of("codex").signed_in().build()],
     )
     .sheet_text
     .expect("the sheet");
-    assert_eq!(
-        tools_and_missing(&codex_known),
-        (vec!["claude", "codex", "desktop"], vec!["codex", "desktop"])
-    );
+    assert_eq!(tools_and_missing(&codex_known), (vec!["claude"], vec![]));
     assert_eq!(codex_known.tool, "claude");
-    assert_eq!(
-        codex_known.tools[1].missing,
-        words::missing(Os::MacOs, "codex")
-    );
-    assert_eq!(
-        codex_known.tools[1].message,
-        words::sign_in_message("Codex", None)
-    );
 
     let codex_only = adding(vec![codex()], Vec::new())
         .sheet_text
         .expect("the sheet");
     assert_eq!(codex_only.tool, "codex", "the first tool found");
-    assert_eq!(codex_only.message, codex_only.tools[1].message);
+    assert_eq!(tools_and_missing(&codex_only), (vec!["codex"], vec![]));
+    assert_eq!(codex_only.message, words::sign_in_message("Codex", None));
 }
 
 // Nothing found leaves nothing to sign in with, which each tool says.
@@ -3389,13 +3448,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
         .sheet_text
         .expect("the sheet");
     assert_eq!(sheet.tool, "claude");
-    assert_eq!(
-        tools_and_missing(&sheet),
-        (
-            vec!["claude", "codex", "desktop"],
-            vec!["claude", "codex", "desktop"]
-        )
-    );
+    assert_eq!(tools_and_missing(&sheet), (vec!["claude"], vec!["claude"]));
     assert_eq!(
         sheet.tools[0].missing.as_ref().map(|m| m.link.as_str()),
         Some("https://docs.claude.com/en/docs/claude-code/setup")
@@ -3421,7 +3474,7 @@ fn what_is_installed_is_asked_once() {
     model.send(present_sheet(Sheet::Add { provider: None }));
     model.run(&mut machine);
     let sheet = model.on_a_mac().sheet_text.expect("the sheet");
-    assert_eq!(tools_and_missing(&sheet).1, ["desktop"]);
+    assert_eq!(tools_and_missing(&sheet).0, ["claude", "codex"]);
 }
 
 /// The sheet offers what the answer found once it is in. The asking is signing.rs's.
@@ -3433,14 +3486,14 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     machine.found = vec![claude_code(), codex()];
     model.send(present_sheet(Sheet::Add { provider: None }));
     assert_eq!(
-        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).1,
-        ["codex", "desktop"],
+        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).0,
+        ["claude"],
         "what was found before"
     );
     model.run(&mut machine);
     assert_eq!(
-        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).1,
-        ["desktop"]
+        tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).0,
+        ["claude", "codex"]
     );
 }
 
@@ -3597,7 +3650,7 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     let text = model.shown().signing_in_text.expect("what it says");
     assert_eq!(text.title, words::signing_in_to(OS, "Claude Code"));
     assert!(text.offers_link, "a browser sign-in offers its page");
-    assert_eq!(text.message, words::finish_in_browser(None, "Claude Code"));
+    assert_eq!(text.message, words::finish_in_browser(None));
     assert_eq!(text.code_note, words::code_note("Claude Code"));
     assert_eq!(text.refused, None);
 

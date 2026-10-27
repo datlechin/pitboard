@@ -1,25 +1,47 @@
+import AppKit
 import XCTest
 
 final class PanesAndSettingsTests: FixtureTestCase {
-    /// The fixture's switches and enrolments, in the order the model gives them.
+    // The fixture's switches and enrolments, in a window of their own.
     @MainActor
     func testActivityListsChanges() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.activity"].click()
-        let changes = app.staticTexts.matching(identifier: "activity.change")
+        app.openFromWindowMenu(Words.activity)
+        let activity = app.windows["activity"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        let changes = activity.staticTexts.matching(identifier: "activity.change")
         XCTAssertTrue(changes.firstMatch.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(changes.count, 1)
+        XCTAssertTrue(app.accountsWindow.exists)
     }
 
-    /// The checks the fixture's doctor makes, under the line that sums them up.
+    // The fixture's checks under their summary, and doctor's report, redacted.
     @MainActor
-    func testThisMacShowsTheChecks() {
+    func testDiagnosticsShowsTheChecks() {
         let app = launch(.oneTool)
         app.openWindow()
-        app.descendants(matching: .any)["sidebar.machine"].click()
-        XCTAssertTrue(app.control("checks.summary").waitForExistence(timeout: 5))
-        XCTAssertTrue(app.control("check.0").exists)
+        app.openFromWindowMenu(Words.diagnostics)
+        let diagnostics = app.windows["diagnostics"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            diagnostics.descendants(matching: .any)["checks.summary"]
+                .waitForExistence(timeout: 10))
+        XCTAssertTrue(diagnostics.descendants(matching: .any)["check.0"].exists)
+        let copy = diagnostics.toolbars.buttons["toolbar.copyReport"]
+        XCTAssertTrue(copy.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        NSPasteboard.general.clearContents()
+        copy.click()
+        let report = NSPasteboard.general.string(forType: .string) ?? ""
+        XCTAssertTrue(report.hasPrefix("{"), "doctor's JSON report")
+        XCTAssertFalse(report.contains("dana@"), "with email addresses hidden")
+
+        // Every toolbar item is a command in the menu bar too.
+        NSPasteboard.general.clearContents()
+        let edit = app.menuBars.menuBarItems[Words.editMenu]
+        edit.click()
+        edit.menuItems[Words.copyReport].click()
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), report)
     }
 
     @MainActor
@@ -59,15 +81,23 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertEqual(toggle.value as? Int, 0)
     }
 
+    // Plan 4.5: titled by the pane it shows, in the middle of the screen, not against its top.
     @MainActor
-    func testSettingsHaveThreePanes() {
+    func testSettingsHaveThreePanesAndOpenCentred() throws {
         let app = launch(.oneTool)
         app.openSettings()
-        let panes = app.windows[Words.general].toolbars.buttons
+        let settings = app.windows[Words.general]
+        let panes = settings.toolbars.buttons
         XCTAssertEqual(panes.count, 3)
         for pane in [Words.general, Words.limits, Words.advanced] {
             XCTAssertTrue(panes[pane].exists, pane)
         }
+        // The first screen's frame, whose top left is where a window's frame is measured from.
+        let screen = try XCTUnwrap(NSScreen.screens.first).frame
+        XCTAssertEqual(settings.frame.midX, screen.midX, accuracy: 2)
+        XCTAssertEqual(settings.frame.midY, screen.midY, accuracy: screen.height / 8)
+        panes[Words.limits].click()
+        XCTAssertTrue(app.windows[Words.limits].waitForExistence(timeout: 5))
     }
 
     /// The model answers a change after the click, so each read after one waits.
@@ -86,9 +116,13 @@ final class PanesAndSettingsTests: FixtureTestCase {
         XCTAssertTrue(share.isEnabled)
         XCTAssertEqual(choice.value as? String, Words.notifyMe, "a fresh install notifies")
         XCTAssertFalse(standing.exists, "nothing said while it does not switch")
+        XCTAssertTrue(
+            app.control("settings.terms").waitForExistence(timeout: 5),
+            "Is this allowed?, beside Warm-Up")
 
         choose(Words.switchAutomatically, in: choice)
         XCTAssertTrue(standing.waitForExistence(timeout: 5), "what the look came to")
+        XCTAssertTrue(app.control("settings.terms").exists, "Is this allowed?")
 
         let typed = app.textFields["settings.atLimitShareField"]
         XCTAssertTrue(typed.exists, "a field beside the stepper")
@@ -103,6 +137,8 @@ final class PanesAndSettingsTests: FixtureTestCase {
 
         choose(Words.doNothing, in: choice)
         XCTAssertTrue(standing.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(share.waitForNonExistence(timeout: 5), "no share to reach")
+        XCTAssertFalse(typed.exists)
     }
 
     @MainActor
@@ -118,7 +154,10 @@ final class PanesAndSettingsTests: FixtureTestCase {
     func testWarmingUpAccounts() {
         let app = launch(.warmUp)
         app.openWindow()
-        let warmed = app.text("BEGINSWITH", Words.warmsUpAgain)
+        let row = app.accountRow("claude/personal")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.click()
+        let warmed = app.control("inspector").text("BEGINSWITH", Words.warmsUpAgain)
         XCTAssertTrue(warmed.waitForExistence(timeout: 30), "personal is warmed up")
 
         app.openSettings()
@@ -147,6 +186,29 @@ final class PanesAndSettingsTests: FixtureTestCase {
         install.click()
         XCTAssertTrue(install.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.text("ENDSWITH", "/bin/pitboard").waitForExistence(timeout: 5))
+    }
+
+    // The fixture's own app and folders are removed, nothing of the app under test.
+    @MainActor
+    func testUninstallingPitboardMovesItsCopyToTheTrashAndQuits() {
+        let app = launch(.oneTool)
+        app.openSettings()
+        app.toolbars.buttons[Words.advanced].click()
+        let uninstall = app.buttons["settings.uninstall"]
+        XCTAssertTrue(uninstall.waitForExistence(timeout: 5))
+        uninstall.click()
+        let answer = app.alert.buttons[Words.uninstall]
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(answer.waitForNonExistence(timeout: 5), "Escape cancels")
+        XCTAssertTrue(app.buttons["settings.uninstall"].exists, "nothing was removed")
+        uninstall.click()
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
+        answer.click()
+        let trash = app.dialog.buttons[Words.moveToTrash]
+        XCTAssertTrue(trash.waitForExistence(timeout: 30))
+        trash.click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))
     }
 
     // A debug build carries no update key.

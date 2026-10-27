@@ -1,5 +1,5 @@
 // The page stands for one Mac or PC (plan question 3).
-// departs from the apps: Open Pitboard, Settings on Windows and the tray icon bring the page's figure into view
+// departs from the apps: Open Pitboard, Settings on Windows, Warm-Up Settings and the tray icon bring the page's figure into view
 import { DOCS } from "../../data/site.ts";
 
 export type Shown = "accounts" | "settings";

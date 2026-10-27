@@ -1,7 +1,12 @@
 ---
-// The Pitboard window on its Activity pane: the Accounts window's own figure, its sidebar on
-// Activity, which reads the page's log as the pane does.
-import Accounts from "./Accounts.astro";
+// ActivityWindow.swift: the log in a window of its own, which the Window menu opens, with Refresh in
+// its toolbar, under the menu bar Pitboard puts up while the window is in front. live/activity.ts
+// reads the page's log as the window does: when it shows, and on Refresh. Ids start `prefix`.
+import ActivityTable from "./ActivityTable.astro";
+import AppMenuBar from "./AppMenuBar.astro";
+import Lights from "./Lights.astro";
+import { clock } from "../../../data/world.ts";
+import { menuBarClock } from "../../../lib/words.ts";
 
 interface Props {
   prefix: string;
@@ -9,4 +14,43 @@ interface Props {
 const { prefix } = Astro.props;
 ---
 
-<Accounts prefix={prefix} moment="after" pane="activity" />
+<pb-activity
+  id={prefix}
+  class="desk flex min-h-250 items-center justify-center pt-44 pb-20 [--units:760]"
+  inert
+  data-output
+>
+  <AppMenuBar prefix={prefix} clock={menuBarClock(clock.menuBar)} />
+  <div
+    class="relative w-720 overflow-hidden rounded-u-16 bg-mac-window-bg text-mac-window-text shadow-mac-window"
+    data-part="window"
+  >
+    <Lights window class="top-19 left-19" />
+    <div class="flex h-52 items-center pr-8 pl-92">
+      <b
+        class="flex-1 pb-2.5 text-u-15/18 font-semibold text-mac-window-title"
+        id={`${prefix}-title`}
+        >Activity</b
+      >
+      <span
+        class="flex h-36 w-36 items-center justify-center rounded-pill bg-mac-window-glass shadow-mac-glass"
+      >
+        <button
+          class="flex w-34.5 justify-center live:cursor-default"
+          type="button"
+          aria-label="Refresh"
+          data-does="read"
+        >
+          <svg class="size-22 shrink-0"><use href="#sf-refresh"></use></svg>
+        </button>
+      </span>
+    </div>
+    <div aria-labelledby={`${prefix}-title`} role="region">
+      <ActivityTable />
+    </div>
+  </div>
+</pb-activity>
+
+<script>
+  import "../../../scripts/live/activity.ts";
+</script>

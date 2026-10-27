@@ -1,7 +1,7 @@
 ---
-// The Activity pane, with the entries sessions.ts's `pitboard log` prints, in the app's words; the
-// table stripes the rows the window has room for past them, as a macOS 27 table does. With
-// live/activity.ts it reads the page's log as the pane does: when it shows, and on Refresh.
+// The Activity window's table, with the entries sessions.ts's `pitboard log` prints, in the app's
+// words and ActivityWindow.swift's columns; the table stripes the rows the window has room for past
+// them, as a macOS 27 table does.
 import { logged } from "../../../data/world.ts";
 import { activity } from "../../../lib/words.ts";
 
@@ -17,7 +17,7 @@ const rows = [...activity(logged, "macos"), null, null];
       <th>Change</th>
       <th>Account</th>
       <th>Result</th>
-      <th>Asked By</th>
+      <th>By</th>
     </tr>
   </thead>
   {/* a stripe stops 10 points short of each side, where its outer cells' borders are clear */}

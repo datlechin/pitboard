@@ -86,39 +86,47 @@ private struct SessionView: View {
         .navigationSubtitle(page.title.isEmpty ? account.site.name : page.title)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
-                Button("Back", systemImage: Symbol.back) { page.goBack() }
-                    .help("Show the previous page")
+                Button(words.accountWindow.back, systemImage: Symbol.back) { page.goBack() }
+                    .help(words.accountWindow.backHelp)
                     .disabled(!page.canGoBack)
-                Button("Forward", systemImage: Symbol.forward) { page.goForward() }
-                    .help("Show the next page")
-                    .disabled(!page.canGoForward)
+                Button(words.accountWindow.forward, systemImage: Symbol.forward) {
+                    page.goForward()
+                }
+                .help(words.accountWindow.forwardHelp)
+                .disabled(!page.canGoForward)
             }
             ToolbarItemGroup(placement: .primaryAction) {
                 if windows.model.accountWindows.downloads.contains(where: {
                     $0.store == account.store
                 }) {
-                    Button("Downloads", systemImage: Symbol.downloads) {
+                    Button(words.accountWindow.downloads, systemImage: Symbol.downloads) {
                         showingDownloads.toggle()
                     }
-                    .help("Show this window’s downloads")
+                    .help(words.accountWindow.downloadsHelp)
                     .accessibilityIdentifier("window.downloads")
                     .popover(isPresented: $showingDownloads, arrowEdge: .bottom) {
                         DownloadsList(windows: windows, store: account.store)
                     }
                 }
                 if page.isLoading {
-                    Button("Stop", systemImage: Symbol.stop) { page.stopLoading() }
-                        .help("Stop loading this page")
+                    Button(words.accountWindow.stop, systemImage: Symbol.stop) {
+                        page.stopLoading()
+                    }
+                    .help(words.accountWindow.stopHelp)
                 } else {
-                    Button("Reload", systemImage: Symbol.refresh) { page.reload() }
-                        .help("Load this page again")
+                    Button(words.accountWindow.reload, systemImage: Symbol.refresh) {
+                        page.reload()
+                    }
+                    .help(words.accountWindow.reloadHelp)
                 }
             }
         }
         .focusedSceneValue(session)
         .focusedSceneValue(
             \.refresh,
-            RefreshCommand(title: "Reload Page", disabled: false) { page.reload() }
+            RefreshCommand(title: words.accountWindow.reloadPage, disabled: false) {
+                page.reload()
+            }
         )
         .onChange(of: session.removalAsked) { _, asked in
             if asked {
@@ -127,10 +135,10 @@ private struct SessionView: View {
             }
         }
         .alert(removal.title, isPresented: $removingData) {
-            Button("Remove", role: .destructive) {
+            Button(words.accountWindow.remove) {
                 Task { await windows.removeWebsiteData(of: session) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(words.window.cancel, role: .cancel) {}
         } message: {
             Text(removal.message)
         }
@@ -151,11 +159,11 @@ private struct NoteBar: View {
                 .textSelection(.enabled)
                 .accessibilityIdentifier("window.note.\(caseName(note.kind))")
             Spacer(minLength: 0)
-            Button("Dismiss", systemImage: "xmark", action: dismiss)
+            Button(words.window.dismiss, systemImage: "xmark", action: dismiss)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
-                .help("Dismiss")
+                .help(words.window.dismiss)
                 .accessibilityIdentifier("window.note.dismiss")
         }
         .padding(.horizontal, 12)
@@ -237,17 +245,19 @@ private struct TransferRow: View {
             }
             Spacer(minLength: 0)
             if transfer.running {
-                Button("Cancel", systemImage: "xmark.circle.fill", action: cancel)
+                Button(words.window.cancel, systemImage: "xmark.circle.fill", action: cancel)
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
-                    .help("Stop this download")
+                    .help(words.accountWindow.stopDownloadHelp)
             } else if case .finished(let file) = transfer.state {
-                Button("Show in Finder", systemImage: "magnifyingglass.circle.fill") {
+                Button(
+                    words.accountWindow.showFile, systemImage: "magnifyingglass.circle.fill"
+                ) {
                     reveal(file)
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .help("Show the file in Finder")
+                .help(words.accountWindow.showFileHelp)
             }
         }
         .padding(.vertical, 4)

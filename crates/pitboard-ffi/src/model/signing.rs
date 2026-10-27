@@ -1704,10 +1704,8 @@ fn the_app_is_opened_in_front_once_the_account_in_use_is_parked() {
     let page = page(&model);
     assert_eq!(page.waiting, words::waiting_to_quit("Claude"));
     assert!(!page.offers_link, "Claude has no page to offer");
-    assert_eq!(
-        page.message,
-        words::in_app_waiting("Claude", None, None, true)
-    );
+    assert_eq!(page.message, words::in_app_note("Claude", None));
+    assert_eq!(page.steps, words::in_app_steps("Claude", None, true));
 }
 
 #[test]
@@ -2004,10 +2002,7 @@ fn a_first_account_refused_as_signed_out_offers_the_sign_in_next() {
         shown.sheet_failure.expect("said in the sheet").title,
         words::could_not_sign_in(None)
     );
-    assert_eq!(
-        shown.sheet_text.expect("the form").confirm,
-        words::start_sign_in(Os::MacOs)
-    );
+    assert_eq!(shown.sheet_text.expect("the form").confirm, words::CONTINUE);
     let jobs = model.send(sign_in("desktop", None));
     assert!(
         matches!(
@@ -2060,7 +2055,7 @@ fn the_wait_says_each_step_it_meets() {
         });
         page(model)
     };
-    let said = |step| words::in_app_waiting("Claude", None, Some(step), false);
+    let said = |step| words::in_app_note("Claude", Some(step));
     let open = step(&mut model, "Claude is open.\n", WaitStep::Open);
     assert_eq!(
         open.message,
@@ -2336,7 +2331,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::start_sign_in(Os::MacOs)
+        words::CONTINUE
     );
     model.send(sign_in_to_claude());
     model.run(&mut machine);
@@ -2372,7 +2367,7 @@ fn nothing_parked_from_a_logged_out_claude_offers_no_put_back() {
     put_up(&mut model, &mut machine, add(Some("desktop")));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::start_sign_in(Os::MacOs)
+        words::CONTINUE
     );
     model.send(sign_in_to_claude());
     model.run(&mut machine);
@@ -2406,8 +2401,8 @@ fn the_page_says_pitboard_opened_claude_only_where_it_did() {
         machine.moving = moving;
         quit_for_it(&mut model, &mut machine);
         assert_eq!(
-            page(&model).message,
-            words::in_app_waiting("Claude", None, None, !moving),
+            page(&model).steps,
+            words::in_app_steps("Claude", None, !moving),
             "{moving}"
         );
     }

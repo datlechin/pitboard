@@ -1,11 +1,14 @@
 ---
 // AdvancedSettings.swift: daily renewal, the page's renewal schedule, with what it does under it,
-// then the command line a terminal finds and how it updates. Drawn once as a template every
-// Settings window clones; its ids start `tpl-`, which the clone makes its own.
+// then under Command Line the path a terminal finds and how it updates, then Uninstall Pitboard…
+// with what it deletes. Drawn once as a template every Settings window clones; its ids start
+// `tpl-`, which the clone makes its own.
+import Button from "./Button.astro";
 import Switch from "./Switch.astro";
 import {
   commandLine,
-  inTerminal,
+  macCommandLine,
+  macUninstall,
   renew,
   renewalAbout,
   updateNote,
@@ -13,6 +16,7 @@ import {
 
 const group = "mx-20 rounded-u-12 bg-mac-window-group";
 const row = "relative flex min-h-40 items-center gap-10 px-10";
+const head = "pt-28 pb-11.5 pl-30 font-bold";
 const footer = "px-30 pt-9 text-u-12/17 text-mac-window-sub";
 ---
 
@@ -24,11 +28,20 @@ const footer = "px-30 pt-9 text-u-12/17 text-mac-window-sub";
     </div>
   </div>
   <p class={footer}>{renewalAbout("macos")}</p>
-  <div class:list={[group, "mt-20"]}>
+  <p class={head}>{macCommandLine.heading}</p>
+  <div class={group}>
     <div class={row}>
-      <span class="flex-1">{inTerminal}</span>
+      <span class="flex-1">{macCommandLine.path}</span>
       <span class="text-mac-window-sub select-text">{commandLine.macos}</span>
     </div>
   </div>
   <p class={footer}>{updateNote}</p>
+  {/* departs from the apps: Check Now and Uninstall Pitboard do nothing */}
+  <div class:list={[group, "mt-20"]}>
+    <div class={row}>
+      <span class="flex-1">{macUninstall.title}</span>
+      <Button data-setting="uninstall">{macUninstall.button}</Button>
+    </div>
+  </div>
+  <p class={footer}>{macUninstall.note}</p>
 </div>

@@ -241,17 +241,18 @@ macOS asks for a password before a UI test can drive the app, unless the Mac all
 Automation Mode without one. `automationmodetool` says which applies to your Mac.
 
 The pictures of the menu and the window in `docs/images` and `.github/media` come from the
-UI test `ScreenshotTests`, in the `twoTools` fixture and your Mac's appearance. This takes
-them again, writes them at the sizes the docs use and unregisters the build:
+UI test `ScreenshotTests`, in the `twoTools` fixture, in Light. Each test runs again in
+Dark, and XCTest leaves your Mac in Dark. This takes them again, writes them at the sizes the
+docs use and unregisters the build:
 
 ```sh
 ./apps/macos/scripts/docs-screenshots.sh
 ```
 
 With `--figures <dir>`, it also writes every picture the test kept into `<dir>`, at full size
-and under the name the test gave it: one of each surface, `macos-<surface>-<state>`, the scenes
-usepitboard.com's macOS figures are checked against among them. CI keeps them as the artifact
-`macos-app-pictures`.
+and under the name the test gave it: one of each surface, `macos-<surface>-<state>`, and in
+Dark `macos-<surface>-<state>-dark`, the scenes usepitboard.com's macOS figures are checked
+against among them. CI keeps them as the artifact `macos-app-pictures`.
 
 ### Unregister a build
 

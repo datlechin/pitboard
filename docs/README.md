@@ -51,9 +51,11 @@ link from a page here to an id usepitboard.com does not have. Run them as
 - `.mintignore` lists the files Mintlify must not publish, such as `AGENTS.md` and `facts/`,
   the measured facts the code rests on.
 
-Pitboard's mark is the board the apps' icons and `MenuBarMark.swift` draw. Nothing regenerates
-its copies, so change them together:
+Pitboard's mark is the board the apps' icons draw. Nothing regenerates its copies, so change them
+together:
 
+- `apps/macos/App/Assets.xcassets`: the macOS menu bar symbol, and its variant with a badge in the
+  same margins.
 - `favicon.svg`, `favicon-dark.svg` and `logo/` in this folder: the site icons and header logos.
 - `apps/windows/Icon/`: the drawings `make-ico.py` turns into the Windows app's `Pitboard.ico`
   and the share package's logos.

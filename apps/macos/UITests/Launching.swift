@@ -51,7 +51,18 @@ extension XCUIApplication {
     func openWindow() {
         openMenu()
         menuItem(Words.openPitboard).click()
-        XCTAssertTrue(windows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(accountsWindow.waitForExistence(timeout: 5))
+    }
+
+    var accountsWindow: XCUIElement {
+        windows["accounts"]
+    }
+
+    // Opens it, or brings it forward.
+    func openFromWindowMenu(_ title: String) {
+        let menu = menuBars.menuBarItems[Words.windowMenu]
+        menu.click()
+        menu.menuItems[title].click()
     }
 
     // The tip past a second account: what happens at a limit.
@@ -91,6 +102,11 @@ extension XCUIApplication {
 
     var alertCancel: XCUIElement {
         alert.buttons["action-button-2"]
+    }
+
+    // An alert of the app's own, over no window, as before Pitboard moves itself to the Trash.
+    var dialog: XCUIElement {
+        dialogs["alert"]
     }
 
     /// A text anywhere in the app whose words are `words`. A table keeps a cell's words in

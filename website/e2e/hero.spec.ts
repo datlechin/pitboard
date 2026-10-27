@@ -273,26 +273,10 @@ test.describe("on macOS", () => {
     expect(box.x + box.width).toBeLessThanOrEqual(desk.x + desk.width);
   });
 
-  test("home's item has its note as a tooltip, which Escape takes away", async ({ page }) => {
+  // the app's menu carries no tooltips, which the keyboard never showed
+  test("open, with a submenu, the menu keeps WAI-ARIA's rules", async ({ page }) => {
     await page.locator(mac.item).click();
-    await hold(page);
-    const home = page.locator(mac.account("home"));
-    await expect(home).toHaveAccessibleDescription("Read 2 hr 6 min ago, with Claude closed");
-    await home.hover();
-    const tip = page.locator("#hero-mac-tip-home");
-    await page.clock.runFor(900);
-    await expect(tip).toBeHidden();
-    await page.clock.runFor(200);
-    await expect(tip).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(tip).toBeHidden();
-    await expect(page.locator(mac.menu)).toBeVisible();
-  });
-
-  test("open, with a submenu and a tooltip, the menu keeps WAI-ARIA's rules", async ({ page }) => {
-    await page.locator(mac.item).click();
-    await page.locator(mac.account("home")).hover();
-    await expect(page.locator("#hero-mac-tip-home")).toBeVisible();
+    await expect(page.locator(mac.account("home"))).not.toHaveAttribute("aria-describedby");
     await page.locator('#hero-mac-menu [data-does="claude.ai"]:not([data-one])').click();
     await expect(page.locator('[id="hero-mac-claude.ai-menu"]')).toBeVisible();
     expect(await axe(page, ["#hero-mac"])).toEqual([]);

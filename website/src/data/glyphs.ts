@@ -71,6 +71,7 @@ export const menuSymbol: Record<string, string> = {
   "mi-mic": `<rect x="7.25" y="2.5" width="5.5" height="9.25" rx="2.75" ${stroke}/><path d="M4.5 9.25a5.5 5.5 0 0 0 11 0M10 14.75v2.75" ${stroke}/>`,
   "mi-emoji": `<circle cx="10" cy="10" r="7.5" ${stroke}/><path d="M7.5 8.25v.5M12.5 8.25v.5" ${stroke} stroke-width="1.8"/><path d="M6.6 11.75a3.9 3.9 0 0 0 6.8 0" ${stroke}/>`,
   "mi-full-screen": `<rect ${rect} ${stroke}/><path d="M6 10.5V7.75h2.75M14 9.5v2.75h-2.75" ${stroke}/>`,
+  "mi-inspector": `<rect ${rect} ${stroke}/><path d="M12.5 4.5v11M14.4 7.6h.9M14.4 9.6h.9" ${stroke}/>`,
   "mi-minimize": `<rect ${rect} ${stroke}/><path d="M7 12.75h6" ${stroke}/>`,
   "mi-zoom": `<path d="M2.75 7.5V6.5a2.25 2.25 0 0 1 2.25-2.25h1.5M13.5 4.25H15a2.25 2.25 0 0 1 2.25 2.25v1M17.25 12.5v1a2.25 2.25 0 0 1-2.25 2.25h-1.5M6.5 15.75H5a2.25 2.25 0 0 1-2.25-2.25v-1" ${stroke}/><rect x="6.5" y="7.5" width="7" height="5" rx="1" ${stroke}/>`,
   "mi-fill": `<rect ${rect} ${stroke}/><rect x="5" y="6.5" width="10" height="7" rx="1" fill="currentColor"/>`,

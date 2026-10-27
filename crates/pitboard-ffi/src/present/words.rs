@@ -1565,8 +1565,6 @@ pub(crate) fn added_as(label: &str) -> String {
 // Over the welcome's tools on Windows, whose mockup heads them.
 pub(crate) const FOUND_ON_THIS_PC: &str = "Found on this PC";
 
-pub(crate) const ADD: &str = "Add";
-
 pub(crate) const ADD_ASKING: &str = "Add…";
 
 pub(crate) fn sign_in_asking(os: Os) -> String {
@@ -1983,46 +1981,51 @@ pub(crate) fn awaiting_lines(app: &str, label: &str, put_back: &str, again: bool
     ]
 }
 
-// What the sheet says while Pitboard waits for `app` to quit signed in, as the wait last said.
-pub(crate) fn in_app_waiting(
-    app: &str,
-    again: Option<&str>,
-    step: Option<pitboard_core::switch::WaitStep>,
-    opened_for_it: bool,
-) -> String {
+// What the sheet says under the steps while Pitboard waits for `app` to quit signed in, as the
+// wait last said.
+pub(crate) fn in_app_note(app: &str, step: Option<pitboard_core::switch::WaitStep>) -> String {
     use pitboard_core::switch::WaitStep;
-    let (sign_in, adds) = match again {
+    match step {
+        Some(WaitStep::QuitSignedOut) => {
+            format!("{app} quit with nobody signed in. Open it, sign in, then quit it again.")
+        }
+        Some(WaitStep::QuitUnfinished) => format!(
+            "{app} quit before it finished signing in. Open it, wait for your chats, then quit it \
+             again."
+        ),
+        Some(WaitStep::Waiting | WaitStep::Open) | None => format!(
+            "Don’t choose Log out in {app}: it ends the sign-in at claude.ai, and Pitboard can’t \
+             bring it back."
+        ),
+    }
+}
+
+// What a sign-in inside `app` asks of a person, `again` for an account added already; `opened`
+// where Pitboard opened `app` for it.
+pub(crate) fn in_app_steps(app: &str, again: Option<&str>, opened: bool) -> Vec<String> {
+    let (who, adds) = match again {
         Some(label) => (
-            format!("sign in to {label} again"),
+            format!("{label} again"),
             format!("Pitboard saves it for {label}"),
         ),
         None => (
-            "sign in to the account you’re adding".to_owned(),
+            "the account you’re adding".to_owned(),
             "Pitboard adds it".to_owned(),
         ),
     };
-    let first = match step {
-        Some(WaitStep::QuitSignedOut) => format!(
-            "{app} quit with nobody signed in. Open {app}, {sign_in}, then quit it with \
-             Command-Q."
-        ),
-        Some(WaitStep::QuitUnfinished) => format!(
-            "{app} quit before it finished signing in. Open {app}, wait until it shows your \
-             chats, then quit it with Command-Q."
-        ),
-        Some(WaitStep::Waiting | WaitStep::Open) | None if opened_for_it => format!(
-            "In {app}, {sign_in}. When it shows your chats, quit {app} with Command-Q, and \
-             {adds}."
-        ),
-        Some(WaitStep::Waiting | WaitStep::Open) | None => format!(
-            "Open {app} and {sign_in}. When it shows your chats, quit {app} with Command-Q, and \
-             {adds}."
-        ),
+    let sign_in = if opened {
+        format!("In {app}, sign in to {who}.")
+    } else {
+        format!("Sign in to {who}.")
     };
-    format!(
-        "{first}\n\nDon’t choose Log out in {app}: it ends the sign-in at claude.ai, and \
-         Pitboard can’t bring it back."
-    )
+    (!opened)
+        .then(|| format!("Open {app}."))
+        .into_iter()
+        .chain([
+            sign_in,
+            format!("Once it shows your chats, quit {app} with Command-Q, and {adds}."),
+        ])
+        .collect()
 }
 
 pub(crate) fn sign_in_message(tool: &str, again: Option<&str>) -> String {
@@ -2054,10 +2057,6 @@ pub(crate) fn sign_in_to_again(os: Os, label: &str, asks: bool) -> String {
     )
 }
 
-pub(crate) fn start_sign_in(os: Os) -> String {
-    titled(os, "Start Sign-In", "Start sign-in")
-}
-
 pub(crate) fn add_as(label: &str) -> String {
     format!("Add {label}")
 }
@@ -2069,24 +2068,15 @@ pub(crate) fn add_shown(app: &str, label: &str) -> String {
     )
 }
 
-// `work`, signed out for it, is `label` itself where it is the one in use.
-pub(crate) fn sign_out_to_sign_in_again(app: &str, label: &str, work: &str) -> String {
-    let saves = if work == label {
-        format!("keeps {label}’s sign-in as it is")
+// What Pitboard does before a sign-in inside `app`, `work` signed in to it: it keeps the sign-in
+// of `again` as it is.
+pub(crate) fn signs_out_first(app: &str, work: &str, again: Option<&str>) -> String {
+    let saves = if again == Some(work) {
+        format!("keeps {work}’s sign-in as it is")
     } else {
         format!("saves {work}")
     };
-    format!(
-        "Pitboard {saves} and signs {app} out, without signing out at claude.ai. Then sign in \
-         to {label} again in {app} and quit it."
-    )
-}
-
-pub(crate) fn wait_to_sign_in_again(app: &str, label: &str) -> String {
-    format!(
-        "{app} is signed out. Sign in to {label} in {app}, then quit it, and Pitboard saves the \
-         sign-in."
-    )
+    format!("Pitboard {saves} and signs {app} out first, without signing out at claude.ai.")
 }
 
 pub(crate) fn add_shown_first(app: &str) -> String {
@@ -2107,20 +2097,6 @@ pub(crate) fn add_unidentified(app: &str) -> String {
     format!(
         "Pitboard can’t tell which account {app} is signed in to. Open {app}, check which \
          account it shows, and quit it. Pitboard then adds it, or saves it for the account it is."
-    )
-}
-
-pub(crate) fn sign_out_to_add(app: &str, work: &str) -> String {
-    format!(
-        "Pitboard saves {work} and signs {app} out, without signing out at claude.ai. Then sign \
-         in to the other account in {app} and quit it."
-    )
-}
-
-pub(crate) fn wait_to_add(app: &str) -> String {
-    format!(
-        "{app} is signed out. Sign in to the account you’re adding in {app}, then quit it, and \
-         Pitboard adds it."
     )
 }
 
@@ -2191,12 +2167,11 @@ pub(crate) fn signing_in_to(os: Os, tool: &str) -> String {
     )
 }
 
-pub(crate) fn finish_in_browser(again: Option<&str>, tool: &str) -> String {
-    let finish = match again {
+pub(crate) fn finish_in_browser(again: Option<&str>) -> String {
+    match again {
         Some(label) => format!("Finish signing in as {label} in your browser."),
         None => "Finish signing in in your browser.".to_owned(),
-    };
-    format!("{finish} This closes once {tool} says you’re in.")
+    }
 }
 
 pub(crate) fn code_note(tool: &str) -> String {
@@ -4378,19 +4353,34 @@ mod tests {
              sign-in for home."
         );
         assert_eq!(
-            sign_out_to_sign_in_again("Claude", "home", "work"),
-            "Pitboard saves work and signs Claude out, without signing out at claude.ai. Then \
-             sign in to home again in Claude and quit it."
+            signs_out_first("Claude", "work", Some("home")),
+            "Pitboard saves work and signs Claude out first, without signing out at claude.ai."
         );
         assert_eq!(
-            sign_out_to_sign_in_again("Claude", "work", "work"),
-            "Pitboard keeps work’s sign-in as it is and signs Claude out, without signing out at \
-             claude.ai. Then sign in to work again in Claude and quit it."
+            signs_out_first("Claude", "work", Some("work")),
+            "Pitboard keeps work’s sign-in as it is and signs Claude out first, without signing \
+             out at claude.ai."
         );
         assert_eq!(
-            wait_to_sign_in_again("Claude", "home"),
-            "Claude is signed out. Sign in to home in Claude, then quit it, and Pitboard saves \
-             the sign-in."
+            signs_out_first("Claude", "work", None),
+            signs_out_first("Claude", "work", Some("home"))
+        );
+        assert_eq!(
+            in_app_steps("Claude", None, false),
+            [
+                "Open Claude.",
+                "Sign in to the account you’re adding.",
+                "Once it shows your chats, quit Claude with Command-Q, and Pitboard adds it.",
+            ]
+        );
+        assert_eq!(
+            in_app_steps("Claude", Some("home"), true),
+            [
+                "In Claude, sign in to home again.",
+                "Once it shows your chats, quit Claude with Command-Q, and Pitboard saves it for \
+                 home.",
+            ],
+            "Pitboard opened Claude for it"
         );
         assert_eq!(
             add_shown_first("Claude"),
@@ -4407,16 +4397,6 @@ mod tests {
             "Pitboard can’t tell which account Claude is signed in to. Open Claude, check which \
              account it shows, and quit it. Pitboard then adds it, or saves it for the account \
              it is."
-        );
-        assert_eq!(
-            sign_out_to_add("Claude", "work"),
-            "Pitboard saves work and signs Claude out, without signing out at claude.ai. Then \
-             sign in to the other account in Claude and quit it."
-        );
-        assert_eq!(
-            wait_to_add("Claude"),
-            "Claude is signed out. Sign in to the account you’re adding in Claude, then quit it, \
-             and Pitboard adds it."
         );
         assert_eq!(CONTINUE, "Continue");
         assert_eq!(add_as("home"), "Add home");
@@ -4441,12 +4421,12 @@ mod tests {
              keeps any sign-in an account needs."
         );
         assert_eq!(
-            finish_in_browser(Some("work"), "Codex"),
-            "Finish signing in as work in your browser. This closes once Codex says you’re in."
+            finish_in_browser(Some("work")),
+            "Finish signing in as work in your browser."
         );
         assert_eq!(
-            finish_in_browser(None, "Codex"),
-            "Finish signing in in your browser. This closes once Codex says you’re in."
+            finish_in_browser(None),
+            "Finish signing in in your browser."
         );
         assert_eq!(
             code_note("Claude Code"),
@@ -4523,7 +4503,6 @@ mod tests {
             both(&|os| sign_in_to_again(os, "work", true)),
             pair("Sign In to work Again…", "Sign in to work again…")
         );
-        assert_eq!(both(&start_sign_in), pair("Start Sign-In", "Start sign-in"));
         assert_eq!(
             both(&name_this_account),
             pair("Name This Account", "Name this account")
@@ -4905,7 +4884,7 @@ mod tests {
         assert_eq!(both(&welcome_done), pair("Continue", "Get started"));
         assert_eq!(added_as("work"), "Added as work");
         assert_eq!(FOUND_ON_THIS_PC, "Found on this PC");
-        assert_eq!((ADD, ADD_ASKING), ("Add", "Add…"));
+        assert_eq!(ADD_ASKING, "Add…");
         assert_eq!(both(&sign_in_asking), pair("Sign In…", "Sign in…"));
         assert_eq!(TASKBAR_SETTINGS, "Taskbar settings");
         assert_eq!(SWITCH_BEFORE_RUNNING_OUT, "Switch before a limit runs out");
@@ -5115,48 +5094,20 @@ mod tests {
     #[test]
     fn the_wait_is_said_step_by_step() {
         use pitboard_core::switch::WaitStep;
-        let both = |message: &str| {
-            format!(
-                "{message}\n\nDon’t choose Log out in Claude: it ends the sign-in at claude.ai, and \
-                 Pitboard can’t bring it back."
-            )
-        };
-        let said =
-            |again: Option<&str>, step, opened| in_app_waiting("Claude", again, step, opened);
+        let said = |step| in_app_note("Claude", step);
+        let log_out = "Don’t choose Log out in Claude: it ends the sign-in at claude.ai, and \
+                       Pitboard can’t bring it back.";
+        for step in [None, Some(WaitStep::Waiting), Some(WaitStep::Open)] {
+            assert_eq!(said(step), log_out, "{step:?}");
+        }
         assert_eq!(
-            said(None, Some(WaitStep::Waiting), true),
-            both(
-                "In Claude, sign in to the account you’re adding. When it shows your chats, quit \
-                 Claude with Command-Q, and Pitboard adds it."
-            )
+            said(Some(WaitStep::QuitSignedOut)),
+            "Claude quit with nobody signed in. Open it, sign in, then quit it again."
         );
         assert_eq!(
-            said(None, Some(WaitStep::Open), false),
-            both(
-                "Open Claude and sign in to the account you’re adding. When it shows your chats, \
-                 quit Claude with Command-Q, and Pitboard adds it."
-            )
-        );
-        assert_eq!(
-            said(None, Some(WaitStep::QuitSignedOut), true),
-            both(
-                "Claude quit with nobody signed in. Open Claude, sign in to the account you’re \
-                 adding, then quit it with Command-Q."
-            )
-        );
-        assert_eq!(
-            said(None, Some(WaitStep::QuitUnfinished), true),
-            both(
-                "Claude quit before it finished signing in. Open Claude, wait until it shows \
-                 your chats, then quit it with Command-Q."
-            )
-        );
-        assert_eq!(
-            said(Some("travel"), None, true),
-            both(
-                "In Claude, sign in to travel again. When it shows your chats, quit Claude with \
-                 Command-Q, and Pitboard saves it for travel."
-            )
+            said(Some(WaitStep::QuitUnfinished)),
+            "Claude quit before it finished signing in. Open it, wait for your chats, then quit \
+             it again."
         );
     }
 

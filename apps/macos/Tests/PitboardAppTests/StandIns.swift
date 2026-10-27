@@ -1,4 +1,5 @@
 import Foundation
+import PitboardKit
 import WebKit
 
 @testable import PitboardApp
@@ -28,6 +29,17 @@ final class TestDefaults: UserDefaults, @unchecked Sendable {
         object(forKey: key) as? [String]
     }
     override func bool(forKey key: String) -> Bool { object(forKey: key) as? Bool ?? false }
+
+    private var domains: [String] = []
+    var removedDomains: [String] { lock.withLock { domains } }
+
+    // Never the system's, which would remove the real domain the test names.
+    override func removePersistentDomain(forName domainName: String) {
+        lock.withLock {
+            domains.append(domainName)
+            values = [:]
+        }
+    }
 }
 
 // Keeps each script in place of running it, so no test runs one that asks for an
@@ -83,6 +95,20 @@ final class StandInStores: WebsiteDataStores {
         stores[id] = nil
         removed.append(id)
     }
+}
+
+// The account windows of `model`, with nothing reaching WebKit's own stores.
+@MainActor
+func standInWindows(_ model: AppModel, stores: StandInStores = StandInStores())
+    -> AccountWindows
+{
+    let environment = WebEnvironment(
+        scheme: WebEnvironment.fixtureScheme, stores: stores,
+        downloads: FileManager.default.temporaryDirectory, openElsewhere: { _ in },
+        configure: { _ in }, pause: { _ in })
+    return AccountWindows(
+        model: model, environment: environment,
+        presence: AppPresence(apply: { _ in }, bringForward: {}, settle: {}))
 }
 
 // A copy of the app with its command line inside, in a folder whose name has a space and a

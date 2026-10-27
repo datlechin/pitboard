@@ -525,6 +525,12 @@ fn a_codex_switchs_warning_reaches_the_snapshot() {
 #[test]
 fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     let world = two_codex_accounts("codex-quit");
+    // Seen before: at a first launch the question comes up over the welcome.
+    std::fs::write(
+        world.pitboard_dir().join("app.json"),
+        r#"{"has_been_seen":true}"#,
+    )
+    .expect("the app's preferences");
     world.host.runs_at("codex", &[CHATGPT_CODEX]);
     let apps = StandInApps::new(&[CHATGPT], true);
     let host = Arc::clone(&world.host);

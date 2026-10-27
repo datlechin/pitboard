@@ -10,6 +10,7 @@ public struct PitboardScenes: Scene {
     let openAtLogin: OpenAtLogin
     let notificationsAllowed: NotificationsAllowed
     let commandLineLink: CommandLineLink
+    let removal: AppRemoval
     let defaults: UserDefaults
     let updates: any Updates
 
@@ -20,6 +21,7 @@ public struct PitboardScenes: Scene {
         openAtLogin = delegate.openAtLogin
         notificationsAllowed = delegate.notificationsAllowed
         commandLineLink = delegate.commandLineLink
+        removal = delegate.removal
         defaults = delegate.defaults
         self.updates = updates
     }
@@ -32,41 +34,65 @@ public struct PitboardScenes: Scene {
         MenuBarExtra {
             MenuBarContent(model: model, windows: windows, updates: updates)
         } label: {
-            MenuBarLabel(model: model, windows: windows, requests: requests)
+            MenuBarLabel(model: model, windows: windows, requests: requests, removal: removal)
         }
         .menuBarExtraStyle(.menu)
 
-        Window("Pitboard", id: MainWindow.id) {
-            MainWindow(model: model, windows: windows, requests: requests)
+        Window(words.window.accounts, id: PlaceWindow.accounts.id) {
+            AccountsWindow(model: model, windows: windows)
         }
-        .defaultSize(width: 760, height: 560)
+        .defaultSize(width: 820, height: 560)
         .commands {
             // The standard item shows a beta's CFBundleShortVersionString, its X.Y.Z alone.
             CommandGroup(replacing: .appInfo) {
-                Button("About Pitboard") { AppVersion.showAboutPanel() }
+                Button(words.menu.about) { AppVersion.showAboutPanel() }
                 if updates.available {
-                    Button("Check for Updates…") { updates.check() }
+                    Button(words.menu.checkForUpdates) { updates.check() }
                 }
             }
-            // Nothing here makes a document: what is new here is an account, from any pane.
+            // Nothing here makes a document: what is new here is an account, from any window.
             CommandGroup(replacing: .newItem) {
-                Button("Add Account…") { model.send(.presentSheet(sheet: .add(provider: nil))) }
-                    .keyboardShortcut("n")
+                Button(words.menu.addAccount) {
+                    model.send(.presentSheet(sheet: .add(provider: nil)))
+                }
+                .keyboardShortcut("n")
             }
             AccountWindowCommands(windows: windows)
             AccountCommands(model: model)
+            InspectorCommands()
             RefreshCommands()
+            CopyReportCommands()
             // Pitboard's help is its documentation site; the app has no help book.
             CommandGroup(replacing: .help) {
-                Link("Pitboard Help", destination: Links.documentation)
+                Link(words.menu.help, destination: Links.documentation)
             }
         }
+
+        Window(model.welcome.title, id: PlaceWindow.welcome.id) {
+            WelcomeWindow(model: model, openAtLogin: openAtLogin, presence: windows.presence)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        // Shown once, so not listed in the Window menu.
+        .commandsRemoved()
+
+        // Each is listed in the Window menu, as Mail lists its Connection Doctor.
+        Window(words.window.diagnostics, id: PlaceWindow.diagnostics.id) {
+            DiagnosticsWindow(model: model, presence: windows.presence)
+        }
+        .defaultSize(width: 560, height: 620)
+
+        Window(words.window.activity, id: PlaceWindow.activity.id) {
+            ActivityWindow(model: model, presence: windows.presence)
+        }
+        .defaultSize(width: 720, height: 440)
 
         AccountWindowScene(windows: windows)
 
         // A link the Share extension hands over, as a Pitboard link, comes here whatever
         // else is open, and only here: no other scene makes a window for one.
-        Window("Open Link", id: AccountPicker.id) {
+        Window(words.window.openLink, id: AccountPicker.id) {
             AccountPicker(windows: windows)
                 .onOpenURL { windows.receive($0) }
         }
@@ -82,8 +108,6 @@ public struct PitboardScenes: Scene {
                 presence: windows.presence, updates: updates
             )
         }
-        // A taller pane grows the window downward, so it opens at the top of the screen,
-        // where the tallest pane still clears the Dock.
-        .defaultPosition(.top)
+        .defaultPosition(.center)
     }
 }

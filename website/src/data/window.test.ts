@@ -10,6 +10,7 @@ const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
 const words = joined(present("words.rs"));
+const appWords = joined(present("app_words.rs"));
 // the words a test of present/words.rs pins, as a string literal of it
 const pinned = (said: string) => words.includes(`"${said}"`);
 const after = moments.after;
@@ -23,17 +24,16 @@ test("a name says its tool once two tools have accounts, on each system's list",
 });
 
 test("the window's toolbar, rows and offers say what the apps say", () => {
-  const pane = repo("apps/macos/Sources/PitboardApp/Window/AccountsPane.swift");
+  const pane = repo("apps/macos/Sources/PitboardApp/Window/AccountsWindow.swift");
   const page = repo("apps/windows/Pitboard.Views/AccountsPage.xaml");
-  const appWords = present("app_words.rs");
-  for (const [field, help] of [
-    ["RefreshHelp", w.REFRESH_HELP],
-    ["AddAccountHelp", w.ADD_HELP],
+  for (const [word, made, field, help] of [
+    ["refreshHelp", "refresh_help", "RefreshHelp", w.REFRESH_HELP],
+    ["addAccountHelp", "add_account_help", "AddAccountHelp", w.ADD_HELP],
   ]) {
-    assert.ok(pane.includes(`.help("${help}")`), help);
+    assert.ok(pane.includes(`.help(words.window.${word})`), help);
+    assert.ok(appWords.includes(`${made}: "${help}".into(),`), help);
     // the Windows page binds the model's own words
     assert.ok(page.includes(`ToolTipService.ToolTip="{x:Bind shown:Words.Window.${field}}"`), help);
-    assert.ok(appWords.includes(`"${help}"`), help);
   }
   assert.ok(words.includes('titled(os, "In Use", IN_USE)'));
   assert.equal(w.inUse("windows"), "In use");
@@ -46,9 +46,10 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
   assert.ok(words.includes('titled(os, "Warm Up Now", "Warm up now")'));
   assert.ok(
     repo("apps/macos/Sources/PitboardApp/Window/AccountCommands.swift").includes(
-      `Button("${w.copyEmail("macos")}")`,
+      "Button(words.menu.copyEmail)",
     ),
   );
+  assert.ok(appWords.includes(`copy_email: titled(os, "${w.copyEmail("macos")}", `));
   assert.ok(
     repo("apps/windows/Pitboard.Views/AccountMenu.cs").includes(
       'Text = Words.Menu.CopyEmail, AccessKey = "C", KeyboardAcceleratorTextOverride = "Ctrl+C"',
@@ -58,8 +59,13 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
 });
 
 test("Remove Account asks with the account's name and says what goes, on this Mac or this PC", () => {
-  assert.ok(present("accounts.rs").includes("title: words::remove_title(spoken_name),"));
-  assert.ok(present("accounts.rs").includes("confirm: words::REMOVE.into(),"));
+  const accounts = present("accounts.rs");
+  assert.ok(accounts.includes("title: words::remove_title(spoken_name),"));
+  assert.ok(
+    accounts.includes(
+      "confirm: words::REMOVE.into(),\n            destructive: true,\n            confirm_is_default: true,",
+    ),
+  );
   assert.ok(words.includes('format!("Remove “{name}”?")'));
   assert.ok(words.includes(`pub(crate) const REMOVE: &str = "${w.REMOVE}";`));
   assert.equal(w.removeTitle(account("work"), after, "macos"), "Remove “work (Claude Code)”?");
@@ -110,11 +116,12 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
   for (const said of [
     w.signInMessage("Codex", null),
     w.signInMessage("Codex", "work"),
-    w.finishInBrowser("work", "Codex"),
-    w.finishInBrowser(null, "Codex"),
-    w.signOutToAdd("Claude", "work"),
-    w.signOutToSignInAgain("Claude", "home", "work"),
-    w.signOutToSignInAgain("Claude", "work", "work"),
+    w.finishInBrowser("work"),
+    w.finishInBrowser(null),
+    w.signsOutFirst("Claude", "work", null),
+    w.signsOutFirst("Claude", "work", "work"),
+    w.inAppNote("Claude"),
+    ...w.inAppSteps("Claude", null),
     w.waitingToQuit("Claude"),
     w.WAITING_FOR_BROWSER,
     w.LATER,
@@ -129,24 +136,35 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
     '&format!("Sign In to {label} Again{more}"),',
     '&format!("Signing In to {tool}"),',
     '&format!("Switch Back to {label}"),',
-    '"Open {app} and {sign_in}. When it shows your chats, quit {app} with Command-Q, and {adds}."',
-    "{first}\\n\\nDon’t choose Log out in {app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.",
-    '"sign in to the account you’re adding".to_owned(),',
+    '.then(|| format!("Open {app}."))',
+    'format!("Sign in to {who}.")',
+    'format!("Once it shows your chats, quit {app} with Command-Q, and {adds}."),',
+    '"the account you’re adding".to_owned(),',
     '"Pitboard adds it".to_owned(),',
     'format!("Pitboard saves it for {label}"),',
+    '"Don’t choose Log out in {app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back."',
+    'format!("Pitboard {saves} and signs {app} out first, without signing out at claude.ai.")',
   ])
     assert.ok(words.includes(said), said);
-  assert.equal(
-    w.inAppWaiting("Claude", "", false),
-    "Open Claude and sign in to the account you’re adding. When it shows your chats, quit Claude with Command-Q, and Pitboard adds it.\n\nDon’t choose Log out in Claude: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.",
-  );
+  assert.deepEqual(w.inAppSteps("Claude", "home"), [
+    "Open Claude.",
+    "Sign in to home again.",
+    "Once it shows your chats, quit Claude with Command-Q, and Pitboard saves it for home.",
+  ]);
   const sheet = repo("apps/macos/Sources/PitboardApp/Sheets/SignInSheet.swift");
-  assert.ok(sheet.includes('LabeledContent("Sign-In Page")'));
-  assert.ok(sheet.includes('Button("Copy Link")') && sheet.includes('Button("Open")'));
-  assert.ok(sheet.includes('Picker("Tool", selection: $provider)'));
-  assert.ok(sheet.includes('LabeledContent("Account", value: account)'));
+  assert.ok(sheet.includes("LabeledContent(words.sheet.signInPage)"));
+  assert.ok(appWords.includes(`sign_in_page: titled(os, "${w.signInPage("macos")}", `));
+  assert.ok(
+    sheet.includes("Button(words.sheet.copyLink)") && sheet.includes("Button(words.sheet.open)"),
+  );
+  assert.ok(appWords.includes(`copy_link: titled(os, "${w.copyLink("macos")}", `));
+  assert.ok(appWords.includes("open: words::OPEN.into(),"));
+  assert.ok(words.includes(`pub(crate) const OPEN: &str = "${w.OPEN}";`));
+  assert.ok(sheet.includes("Picker(words.sheet.tool, selection: $provider)"));
+  assert.ok(appWords.includes(`tool: "${w.TOOL}".into(),`));
+  assert.ok(sheet.includes("LabeledContent(words.sheet.account, value: account)"));
   // the sheet that adds an account asks for no name: one is picked once the sign-in adds it
-  assert.ok(!sheet.includes('TextField("Name"'));
+  assert.ok(!sheet.includes("TextField(words.sheet.name"));
   assert.ok(present("sheets.rs").includes("Sheet::Add { .. } => sends(Some(Intent::SignIn {"));
 });
 

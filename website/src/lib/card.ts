@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { bar, heavy } from "../data/glyphs.ts";
 import { TAGLINE } from "../data/site.ts";
 import { clock, moments, tools, type Tool } from "../data/world.ts";
-import { hm, isInUse, listed, menuBarTitle, menuLine, menuTitle } from "./words.ts";
+import { hm, isInUse, listed, menuBarTitle, menuLine } from "./words.ts";
 
 export interface Size {
   width: number;
@@ -195,7 +195,7 @@ function menu(c: Colors): El {
           padding: `${pt(3)}px ${pt(13)}px ${pt(4)}px ${pt(25)}px`,
         },
         ...(isInUse(a, moments.after) ? [check] : []),
-        h("div", {}, menuTitle(a)),
+        h("div", {}, a.label),
         h(
           "div",
           { fontSize: pt(11), lineHeight: `${pt(15)}px`, color: c["mac-menu-sub"] },

@@ -4,7 +4,8 @@
 # use. With --figures <dir>, it also writes every picture the test kept into <dir>, at full
 # size and under the name the test gave it, the scenes usepitboard.com's figures are checked
 # against among them. Needs what the UI tests need: build-xcframework.sh --fixture, then
-# xcodegen. The pictures take this Mac's appearance.
+# xcodegen. Each test runs in Light, then in Dark, and XCTest leaves this Mac in Dark; the docs
+# take the Light pictures.
 set -eu
 
 usage() {
@@ -80,7 +81,7 @@ menu=$(picture macos-menu-accounts)
 window=$(picture macos-window-accounts)
 sips --resampleWidth 600 "$menu" --out docs/images/menu.png >/dev/null
 cp docs/images/menu.png .github/media/menu.png
-sips --resampleWidth 1520 "$window" --out docs/images/window.png >/dev/null
+sips --resampleWidth 1640 "$window" --out docs/images/window.png >/dev/null
 
 if [ -n "$figures" ]; then
     while read -r name file; do

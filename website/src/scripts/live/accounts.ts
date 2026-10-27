@@ -1,6 +1,7 @@
-// The Accounts window on both systems (plan 3.3 to 3.5); every view of it, the cut ones too,
-// follows the one state. macOS's list is a grid with a selection; Windows' accounts are
-// SettingsExpanders, which hold none, their keys acting on the account whose toggle has focus.
+// The Accounts window on both systems (plan 3.3 to 3.5, app redo 4.3 on macOS); every view of it,
+// the cut ones too, follows the one state. macOS's list is a grid with a selection; Windows'
+// accounts are SettingsExpanders, which hold none, their keys acting on the account whose toggle
+// has focus.
 import { attr, cloned, keyed, shown, text } from "./draw.ts";
 import { LiveFigure } from "./figure.ts";
 import { Grid } from "./grid.ts";
@@ -13,6 +14,7 @@ import { MachinePane } from "./machine.ts";
 import { Panes } from "./panes.ts";
 import { disclosure } from "./disclosure.ts";
 import { AtLimitControls, WarmControls } from "./limits.ts";
+import { bringForward } from "./forward.ts";
 import { showAccountWindow } from "./windows.ts";
 import { closeDialog, openDialog } from "./dialog.ts";
 import { say } from "./say.ts";
@@ -37,24 +39,31 @@ import {
   accountSpoken,
   isInUse,
   limitRow,
+  limitTitle,
   listed,
-  rowLines,
+  resetsIn,
   rowNote,
   signInExpired,
+  signInSaid,
+  staleNote,
+  windowsRowNote,
   switchSpoken,
   updated,
 } from "../../lib/words.ts";
 import {
   SWITCH,
+  WARM_UP_OFF,
   keysOf,
   noticeOf,
   openSite,
   setupStepOf,
-  signInAgain,
+  signInAsking,
+  signInToAgain,
   siteOf,
+  used,
   type System,
 } from "../../data/window.ts";
-import { detail, limitCard, rowAction, signInSaid } from "../../data/windows.ts";
+import { detail, limitCard, rowAction, signInSaid as windowsSignIn } from "../../data/windows.ts";
 import { winAdvanced } from "../../data/settings.ts";
 import type { Account, Tool } from "../../data/world.ts";
 
@@ -81,10 +90,13 @@ export class AccountsWindow extends LiveFigure {
   // a Control-click's click, which selects nothing
   #swallow = false;
   #saying: Tool | null = null;
-  #panes!: Panes;
+  // the window's panes, which the macOS window has none of
+  #panes: Panes | null = null;
   // a window first shown on another pane draws its list's rows once the list shows
   #listed = false;
-  #machine!: MachinePane;
+  #machine: MachinePane | null = null;
+  // the row macOS selects as the window opens: the account in use of the first tool shown
+  #first: string | null = null;
   #seen?: IntersectionObserver;
   // the listeners this window puts on the document, taken off as it leaves the page
   #off = new AbortController();
@@ -94,12 +106,13 @@ export class AccountsWindow extends LiveFigure {
     const drawing = this.closest<HTMLElement>("[data-drawing]")?.dataset.drawing ?? "";
     this.system = drawing.endsWith("windows") ? "windows" : "macos";
     this.window = this.querySelector<HTMLElement>(':scope > [data-part="window"]')!;
-    this.#panes = new Panes({
-      system: this.system,
-      window: this.window,
-      shown: (pane) => this.#paneShown(pane),
-    });
-    this.#listed = this.#panes.current === "accounts";
+    if (this.window.querySelector('[role="tablist"]'))
+      this.#panes = new Panes({
+        system: this.system,
+        window: this.window,
+        shown: (pane) => this.#paneShown(pane),
+      });
+    this.#listed = this.#pane === "accounts";
     // a Settings page the figure draws works from the start
     if (this.#panel("settings")?.firstElementChild) this.#settingsPage();
     if (this.system === "windows") {
@@ -118,20 +131,20 @@ export class AccountsWindow extends LiveFigure {
         { capture: true, signal: this.#off.signal },
       );
     }
-    this.#machine = new MachinePane(
-      this.#panel("machine")!,
-      this.system,
-      this.querySelector<HTMLButtonElement>('[data-does="check"]'),
-    );
+    const machine = this.#panel("machine");
+    if (machine) this.#machine = new MachinePane(machine);
     // the Activity pane reads the log as it comes into view
     this.#seen = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting) && this.#panes.current === "activity")
+      if (entries.some((e) => e.isIntersecting) && this.#pane === "activity")
         readLog(this.#panel("activity")!, this.system, model.get());
     });
     this.#seen.observe(this);
     if (this.system === "windows") this.#rowSelector = "[data-row]";
-    const grid = this.querySelector<HTMLElement>('[role="grid"], [data-part="list"]')!;
-    if (this.system === "macos")
+    // macOS's grid sits inside its window's list
+    const grid = this.querySelector<HTMLElement>(
+      this.system === "macos" ? '[role="grid"]' : '[data-part="list"]',
+    )!;
+    if (this.system === "macos") {
       this.#grid = new Grid({
         system: this.system,
         grid,
@@ -141,7 +154,13 @@ export class AccountsWindow extends LiveFigure {
         forget: (row) => this.#ask("forget", row),
         rename: (row) => this.#ask("rename", row),
         name: (row) => accountOf(model.get(), row.dataset.account)?.label ?? "",
+        selected: () => this.#inspector(model.get()),
       });
+      this.#first =
+        grid.querySelector<HTMLElement>('[role="row"][aria-selected="true"]')?.dataset.account ??
+        null;
+      if (this.#first) this.#grid.select(this.#rowFor(this.#first), false);
+    }
     this.#menu = new Menu(this.querySelector<HTMLElement>(`#${this.id}-menu`)!, {
       system: this.system,
       desk: this,
@@ -169,12 +188,17 @@ export class AccountsWindow extends LiveFigure {
   protected restart() {
     this.#menu.closeAll(false);
     sheets(this.system)?.close();
-    this.#grid?.select(null, false);
+    this.#grid?.select(this.#rowFor(this.#first), false);
+    this.#showInspector(true);
     for (const row of this.querySelectorAll<HTMLElement>("[data-row]")) this.#expand(row, false);
     this.#settings?.atLimit?.restart();
     this.#settings?.warm?.restart();
     this.#navigation(false);
-    this.#panes.restart();
+    this.#panes?.restart();
+  }
+
+  get #pane() {
+    return this.#panes?.current ?? "accounts";
   }
 
   #panel(pane: string) {
@@ -190,7 +214,7 @@ export class AccountsWindow extends LiveFigure {
       this.render(s);
     }
     if (pane === "activity") readLog(this.#panel("activity")!, this.system, s);
-    if (pane === "machine") this.#machine.show(s);
+    if (pane === "machine") this.#machine?.show();
     if (pane === "settings" && !this.#settings) this.#settingsPage();
     this.render(s);
   }
@@ -271,11 +295,11 @@ export class AccountsWindow extends LiveFigure {
   }
 
   // the window's Add Account sheet, asked for from elsewhere: the menu bar's Add Account…, which
-  // brings the window to its Accounts pane, as a sheet is about accounts (WindowPane.swift)
+  // brings the window to its Accounts pane, as a sheet is about accounts
   present(sheet: string) {
-    if (sheet === "settings") return this.#panes.show("settings");
+    if (sheet === "settings") return this.#panes?.show("settings");
     if (sheet !== "add") return;
-    this.#panes.show("accounts");
+    this.#panes?.show("accounts");
     sheets(this.system)?.signIn(this, null, null);
   }
 
@@ -316,8 +340,6 @@ export class AccountsWindow extends LiveFigure {
         case "copy-email":
           if (account?.email) void navigator.clipboard?.writeText(account.email).catch(() => {});
           return;
-        case "warm-settings":
-          return this.#panes.show("settings");
         case "open":
         case "sign-in-again":
         case "rename":
@@ -329,14 +351,17 @@ export class AccountsWindow extends LiveFigure {
           return refreshFromApp(this.system);
         case "read":
           return readLog(this.#panel("activity")!, this.system, model.get());
-        case "check":
-          return this.#machine.check(model.get().now);
+        case "inspector":
+          return this.#showInspector(this.window.dataset.state === "collapsed");
+        // Windows' Settings is a page of the window, macOS's a window of its own
+        case "warm-settings":
+          return this.#panes ? this.#panes.show("settings") : bringForward("settings", this.system);
         case "navigation":
           return this.#navigation(this.window.dataset.state !== "open");
         case "back":
-          return this.#panes.back();
+          return this.#panes?.back();
         case "show":
-          return this.#panes.show(does.dataset.page!);
+          return this.#panes?.show(does.dataset.page!);
         case "add":
           return sheets(this.system)?.signIn(
             this,
@@ -428,9 +453,29 @@ export class AccountsWindow extends LiveFigure {
       if (this.system !== "macos" || e.defaultPrevented || !e.metaKey || e.key !== "Backspace")
         return;
       const selected = this.#grid?.selected;
-      if (at.closest("dialog, input") || !selected || this.#panes.current !== "accounts") return;
+      if (at.closest("dialog, input") || !selected || this.#pane !== "accounts") return;
       e.preventDefault();
       this.#ask("forget", selected);
+    });
+    // ⌃⌘I, InspectorCommands' Show and Hide Inspector
+    this.addEventListener("keydown", (e) => {
+      if (this.system !== "macos" || e.defaultPrevented || !this.#inspectorPanel()) return;
+      if (!e.metaKey || !e.ctrlKey || e.code !== "KeyI") return;
+      e.preventDefault();
+      this.#showInspector(this.window.dataset.state === "collapsed");
+    });
+    // the list draws its selection in the accent while it, or nothing else in the window, has focus
+    this.window.addEventListener("focusin", (e) =>
+      attr(grid, "data-key", grid.contains(e.target as Node) ? "" : null),
+    );
+    // the inspector's own commands, on the account selected
+    this.#inspectorPanel()?.addEventListener("click", (e) => {
+      const button = (e.target as Element).closest<HTMLElement>("[data-offer]");
+      if (button)
+        this.#offer(
+          button.dataset.offer!,
+          accountOf(model.get(), this.#grid?.selected?.dataset.account),
+        );
     });
     // ⌘C and Ctrl+C copy the account's email, with nothing on screen saying so
     grid.addEventListener("copy", (e) => {
@@ -544,19 +589,19 @@ export class AccountsWindow extends LiveFigure {
   // selection.
   protected windowMenus(): WindowMenus {
     const s = model.get();
-    const pane = this.#panes.current;
-    // only the Accounts pane puts its account up for the menu bar (AccountsPane.swift)
+    const pane = this.#pane;
+    // only the Accounts pane puts its account up for the menu bar (AccountsWindow.swift)
     const account =
       pane === "accounts" ? (accountOf(s, this.#grid?.selected?.dataset.account) ?? null) : null;
     const refresh =
       pane === "machine"
-        ? { title: "Check Again", enabled: !this.#machine.checking }
+        ? { title: "Check Again", enabled: !this.#machine?.checking }
         : { title: "Refresh", enabled: pane === "activity" || s.reading === null };
     return { account, refresh, resizes: true };
   }
 
   protected fromMenuBar(does: string): boolean {
-    const row = this.#panes.current === "accounts" ? (this.#grid?.selected ?? null) : null;
+    const row = this.#pane === "accounts" ? (this.#grid?.selected ?? null) : null;
     const a = accountOf(model.get(), row?.dataset.account);
     if (does.startsWith("offer:")) {
       this.#offer(does.slice("offer:".length), a);
@@ -567,9 +612,7 @@ export class AccountsWindow extends LiveFigure {
         this.present("add");
         return true;
       case "refresh":
-        if (this.#panes.current === "activity")
-          readLog(this.#panel("activity")!, this.system, model.get());
-        else if (this.#panes.current === "machine") this.#machine.check(model.get().now);
+        if (this.#pane === "activity") readLog(this.#panel("activity")!, this.system, model.get());
         else refreshFromApp(this.system);
         return true;
       case "copy":
@@ -625,6 +668,7 @@ export class AccountsWindow extends LiveFigure {
     ))
       this.#rows(s, group, group.dataset.tool as Tool);
     this.#grid?.refresh();
+    this.#inspector(s);
   }
 
   #notices(s: State) {
@@ -712,21 +756,91 @@ export class AccountsWindow extends LiveFigure {
     const button = row.querySelector<HTMLButtonElement>('[data-does="use"]')!;
     const again = signInExpired(a, s);
     shown(button, !on && !switching);
-    text(button, again ? signInAgain(this.system) : SWITCH);
-    attr(button, "aria-label", on || again ? null : switchSpoken(a));
+    // present/accounts.rs `action_of`: Sign In… where the row's sign-in has to be made again
+    text(button, again ? signInAsking(this.system) : SWITCH);
+    attr(
+      button,
+      "aria-label",
+      on ? null : again ? `${signInToAgain(this.system, a.label)}…` : switchSpoken(a),
+    );
     attr(button, "disabled", s.switching && !switching ? "" : null);
     this.#limits(s, row, a);
-    const said = rowLines(a, s, warmNote(s, a));
-    const box = part(row, "notes")!;
-    if ([...box.children].map((n) => n.textContent?.trim()).join("\n") !== said.join("\n")) {
-      box.replaceChildren(
-        ...said.map((n) => {
-          const p = cloned(this.#template("note"));
-          p.textContent = n;
-          return p;
-        }),
-      );
+    // macOS's row says its most pressing note alone
+    const said = rowNote(a, s);
+    shown(part(row, "note"), !!said);
+    text(part(row, "note"), said ?? "");
+  }
+
+  #inspectorPanel() {
+    return this.querySelector<HTMLElement>('[data-part="inspector"]');
+  }
+
+  // ⌃⌘I and the toolbar's Inspector
+  #showInspector(on: boolean) {
+    if (!this.#inspectorPanel()) return;
+    if (on) delete this.window.dataset.state;
+    else this.window.dataset.state = "collapsed";
+    attr(this.querySelector('[data-does="inspector"]'), "aria-expanded", String(on));
+    this.#inspectorPanel()!.inert = !on;
+  }
+
+  // AccountInspector.swift: the account selected, its limits, values and commands, or that none is
+  #inspector(s: State) {
+    const panel = this.#inspectorPanel();
+    if (!panel) return;
+    const a = accountOf(s, this.#grid?.selected?.dataset.account);
+    shown(part(panel, "inspector-account"), !!a);
+    shown(part(panel, "inspector-none"), !a);
+    if (!a) return;
+    const on = isInUse(a, s);
+    shown(part(panel, "ins-in-use-symbol"), on);
+    shown(part(panel, "ins-parked-symbol"), !on);
+    text(part(panel, "ins-label"), a.label);
+    shown(part(panel, "ins-plan"), !!a.plan);
+    text(part(panel, "ins-plan"), a.plan ?? "");
+    const limits = part(panel, "ins-limits")!;
+    shown(limits, a.limits.length > 0);
+    let rows = [...limits.querySelectorAll<HTMLElement>('[data-part="ins-limit"]')];
+    if (rows.length !== a.limits.length) {
+      limits.replaceChildren(...a.limits.map(() => cloned(this.#template("ins-limit"))));
+      rows = [...limits.children] as HTMLElement[];
     }
+    a.limits.forEach((limit, i) => {
+      const r = rows[i];
+      const l = limitRow(limit, s);
+      attr(r, "aria-label", l.spoken);
+      text(part(r, "title"), limitTitle(limit));
+      text(part(r, "used"), used(l.figure));
+      attr(part(r, "fill"), "width", String(l.percent));
+      attr(part(r, "fill"), "data-state", l.level);
+      text(part(r, "resets"), l.resets);
+      text(part(r, "in"), resetsIn(limit.resetsAt, s.now));
+    });
+    // only a Claude Desktop login in use is read at a time of its own (present/accounts.rs `read`)
+    const read = staleNote(a, s);
+    shown(part(panel, "ins-read"), !!read);
+    text(part(panel, "ins-read"), read ?? "");
+    shown(part(panel, "ins-email-row"), !!a.email);
+    text(part(panel, "ins-email"), a.email);
+    const signIn = signInSaid(a, s);
+    shown(part(panel, "ins-sign-in-row"), !!signIn);
+    text(part(panel, "ins-sign-in"), signIn ?? "");
+    const claude = a.tool === "claude";
+    shown(part(panel, "ins-warm-row"), claude);
+    if (claude) text(part(panel, "ins-warm"), warmNote(s, a) ?? WARM_UP_OFF);
+    // what its shortcut menu offers, only what applies now
+    const o = offersOf(a, s);
+    const offer = (name: string, applies: boolean, words?: string) => {
+      const button = panel.querySelector<HTMLElement>(`[data-offer="${name}"]`);
+      shown(button, applies);
+      if (words !== undefined) text(button, words);
+    };
+    offer("use", o.use.enabled, o.use.title);
+    offer("sign-in-again", o.signInAgain);
+    offer("rename", o.rename);
+    offer("warm", !!o.warm?.enabled);
+    offer("open", o.open !== null, o.open ?? "");
+    offer("forget", o.forget);
   }
 
   // Windows' row: its header's toggle named as Narrator hears the account, its one note, its end, and
@@ -743,7 +857,7 @@ export class AccountsWindow extends LiveFigure {
     shown(part(row, "plan"), !!a.plan);
     text(part(row, "plan"), a.plan ?? "");
     this.#limits(s, row, a);
-    const note = rowNote(a, s);
+    const note = windowsRowNote(a, s);
     shown(part(row, "note"), !!note);
     text(part(row, "note"), note ?? "");
     const action = rowAction(a, s);
@@ -756,7 +870,7 @@ export class AccountsWindow extends LiveFigure {
     attr(button, "disabled", s.switching && !switching ? "" : null);
     shown(part(row, "email-card"), !!a.email);
     text(part(row, "email"), a.email);
-    const signIn = signInSaid(a, s);
+    const signIn = windowsSignIn(a, s);
     shown(part(row, "sign-in-card"), !!signIn);
     text(part(row, "sign-in"), signIn ?? "");
     shown(part(row, "warm-card"), a.tool === "claude");

@@ -43,7 +43,6 @@ export const STEPPER_EVERY = 50;
 
 // LimitsSettings.swift: a percent typed in the field, its "%" left out or not; text that is no
 // whole figure goes back to the last value, and a figure out of range to the nearest bound.
-// departs from the apps: The macOS share field takes a typed share on Return or as focus leaves
 export function macShare(
   field: HTMLInputElement,
   stepper: SVGElement,

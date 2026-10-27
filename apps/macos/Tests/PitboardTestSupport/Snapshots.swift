@@ -46,7 +46,11 @@ package func windowsShown(
 // What a model that has read nothing yet would make, apart from what a test says.
 package func snapshot(
     _ revision: UInt64, updated: String = "", reading: Bool = false,
-    windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = []
+    windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = [],
+    sections: [AccountSection] = [], notices: [PanelNotice] = [],
+    menuNotices: MenuNotices = MenuNotices(
+        install: nil, switches: [], signIns: [], others: nil),
+    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = []
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
@@ -55,13 +59,14 @@ package func snapshot(
         menuBar: MenuBarText(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
             tip: "Pitboard"),
-        sections: [],
+        sections: sections,
         accountMenu: AccountMenuShown(
             offers: ["Use", "Sign In Again…", "Rename…"], forget: "Forget…"),
-        notices: [],
-        menuNotices: MenuNotices(install: nil, switches: [], signIns: [], others: nil),
+        notices: notices,
+        menuNotices: menuNotices,
         footing: .ready,
-        setup: nil, accountsShown: .reading(title: "Reading accounts…"),
+        setup: nil,
+        accountsShown: sections.isEmpty ? .reading(title: "Reading accounts…") : .list,
         menuAccountsNote: nil, updatedAt: nil, updatedMenu: updated, updatedWindow: updated,
         sheetText: nil,
         signingInText: nil, stowText: nil, failureAlert: nil,
@@ -97,10 +102,10 @@ package func snapshot(
         accountWindows: windows,
         uninstall: ItemOffer(
             title: "Uninstall Pitboard…", intent: .uninstall, enabled: true, confirm: nil),
-        removal: nil,
+        removal: removal,
         welcome: WelcomeShown(
             title: "Welcome to Pitboard", lines: [], iconLink: nil, toolsHeading: nil,
-            tools: [],
+            tools: welcomeTools,
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),

@@ -26,9 +26,26 @@ export const program = (tool: Tool) => (tool === "desktop" ? "Claude" : toolName
 export const siteOf = (tool: Tool) =>
   tool === "claude" ? "claude.ai" : tool === "codex" ? "chatgpt.com" : null;
 
-// AccountsPane.swift's and AccountsPage.xaml's toolbar help
+// the Accounts window's and AccountsPage.xaml's toolbar help, and the macOS inspector's button
+// (present/app_words.rs)
 export const REFRESH_HELP = "Read every account’s usage again";
 export const ADD_HELP = "Sign in to another account";
+export const INSPECTOR = "Inspector";
+export const INSPECTOR_HELP = "Show or hide the selected account’s details";
+
+// What the macOS inspector says of the account selected (present/accounts.rs `item`'s detail and
+// `limit_row`, present/app_words.rs), and in place of one.
+export const NO_SELECTION = "No Account Selected";
+export const EMAIL = "Email";
+export const SIGN_IN_LABEL = "Sign-In";
+export const WARM_UP_LABEL = "Warm-Up";
+export const warmUpSettings = (system: System) =>
+  titled(system, "Warm-Up Settings…", "Warm-up settings");
+export const WARM_UP_OFF = "Off";
+export const IN_USE_SAID = "In use";
+export const savedUntil = (until: string, lapses: boolean) =>
+  lapses ? `Saved sign-in may expire after ${until}` : `Saved sign-in valid until ${until}`;
+export const used = (figure: string) => `${figure} used`;
 export const inUse = (system: System) => titled(system, "In Use", "In use");
 export const SWITCH = "Switch";
 export const SWITCHING_SPOKEN = "Switching";
@@ -102,8 +119,10 @@ export const signInMessage = (tool: string, again: string | null) =>
     : `Pitboard opens ${tool}’s sign-in in your browser, where you sign in to ${again} again.`;
 export const signingInTo = (system: System, tool: string) =>
   titled(system, `Signing In to ${tool}`, `Signing in to ${tool}`);
-export const finishInBrowser = (again: string | null, tool: string) =>
-  `${again === null ? "Finish signing in in your browser." : `Finish signing in as ${again} in your browser.`} This closes once ${tool} says you’re in.`;
+export const finishInBrowser = (again: string | null) =>
+  again === null
+    ? "Finish signing in in your browser."
+    : `Finish signing in as ${again} in your browser.`;
 export const signInPage = (system: System) => titled(system, "Sign-In Page", "Sign-in page");
 export const copyLink = (system: System) => titled(system, "Copy Link", "Copy link");
 export const OPEN = "Open";
@@ -113,16 +132,23 @@ export const LATER = "Later";
 // A sign-in inside Claude, which saves the account in use and signs Claude out first
 // (present/sheets.rs `in_app_form`, `in_app_signing_in_text`).
 export const CONTINUE = "Continue";
-export const signOutToAdd = (app: string, work: string) =>
-  `Pitboard saves ${work} and signs ${app} out, without signing out at claude.ai. Then sign in to the other account in ${app} and quit it.`;
-export const signOutToSignInAgain = (app: string, label: string, work: string) =>
-  `Pitboard ${work === label ? `keeps ${label}’s sign-in as it is` : `saves ${work}`} and signs ${app} out, without signing out at claude.ai. Then sign in to ${label} again in ${app} and quit it.`;
-export const signingOut = (label: string) => [`Saving ${label}.`, `Saving ${label}`] as const;
-export function inAppWaiting(app: string, name: string, again: boolean): string {
-  const signIn = again ? `sign in to ${name} again` : "sign in to the account you’re adding";
-  const adds = again ? `Pitboard saves it for ${name}` : "Pitboard adds it";
-  return `Open ${app} and ${signIn}. When it shows your chats, quit ${app} with Command-Q, and ${adds}.\n\nDon’t choose Log out in ${app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.`;
+// present/words.rs `signs_out_first`: what Pitboard does first, keeping `again`'s sign-in as it is
+export const signsOutFirst = (app: string, work: string, again: string | null) =>
+  `Pitboard ${again === work ? `keeps ${work}’s sign-in as it is` : `saves ${work}`} and signs ${app} out first, without signing out at claude.ai.`;
+// present/words.rs `in_app_steps`, for a Claude Pitboard did not open for it
+export function inAppSteps(app: string, again: string | null): string[] {
+  const who = again === null ? "the account you’re adding" : `${again} again`;
+  const adds = again === null ? "Pitboard adds it" : `Pitboard saves it for ${again}`;
+  return [
+    `Open ${app}.`,
+    `Sign in to ${who}.`,
+    `Once it shows your chats, quit ${app} with Command-Q, and ${adds}.`,
+  ];
 }
+export const signingOut = (label: string) => [`Saving ${label}.`, `Saving ${label}`] as const;
+// present/words.rs `in_app_note`, under the steps while Pitboard waits for the app to quit
+export const inAppNote = (app: string) =>
+  `Don’t choose Log out in ${app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.`;
 export const waitingToQuit = (app: string) => `Waiting for ${app} to quit`;
 export const switchBackTo = (system: System, label: string) =>
   titled(system, `Switch Back to ${label}`, `Switch back to ${label}`);
@@ -167,7 +193,7 @@ export const notNow = (system: System) => titled(system, "Not Now", "Not now");
 
 // What the window's notice of a tool's last switch or new login says, at `now`, or null where it
 // says nothing: a Claude Code switch's notice is its countdown, and goes with it (present/notices.rs
-// `of_last_switch`; NoticeRow.swift), unless it offers Switch Back, as a switch Pitboard made by
+// `of_last_switch`; Banner.swift), unless it offers Switch Back, as a switch Pitboard made by
 // itself does. Codex's warns that running sessions keep the old account.
 export interface Notice {
   title: string;
@@ -229,7 +255,7 @@ export function setupStepOf(
 }
 
 // The keys a row answers, as aria-keyshortcuts names them: Delete forgets an account not in use,
-// on macOS Forward Delete too and ⌘C, on Windows F2 and Ctrl+C (AccountsPane.swift
+// on macOS Forward Delete too and ⌘C, on Windows F2 and Ctrl+C (AccountsWindow.swift
 // `onDeleteCommand` and `copyable`, AccountKeys.cs). None is a key a browser keeps from a page
 // (docs/facts/site.md).
 export function keysOf(a: Account, w: World, system: System): string {

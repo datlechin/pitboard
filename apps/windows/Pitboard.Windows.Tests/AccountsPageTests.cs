@@ -54,7 +54,7 @@ public sealed class AccountsPageTests
                 Warm: new WarmDetail(
                     On: true, Said: "Warms up again at 3:45 PM", NextAt: null, RunningUntil: null,
                     Settings: new Choice("Warm-up settings", new Intent.Show(new Place.Settings(SettingsSection.WarmUp)), Enabled: true)),
-                ReadAt: null, Read: null),
+                ReadAt: null, Read: null, Notes: []),
             Actions =
             [
                 Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare")), Items.RenameAction("claude", "spare"),

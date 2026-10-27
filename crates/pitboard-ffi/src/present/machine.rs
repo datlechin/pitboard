@@ -1,11 +1,4 @@
-//! What the settings and the window's other panes show of this machine rather than its
-//! accounts, as SettingsView.swift, MachinePane.swift and ActivityPane.swift said it from
-//! MachineModel.swift: daily renewal and why it cannot be turned on, doctor's checks, every
-//! change Pitboard made, and the `pitboard` a terminal runs and how it is kept up to date.
-//!
-//! What only labels a control, such as "Renew parked logins daily", "Check Again" or "In your
-//! terminal", and what is about the app's own system, such as opening at login or linking the
-//! command line with an administrator's password, is each app's own.
+//! What Settings, Diagnostics and Activity show of this machine rather than its accounts.
 
 use super::checks::{ChecksShown, checks};
 use super::{Seen, words};
@@ -53,7 +46,8 @@ pub struct WarmShown {
     pub note: String,
     // once the core has said what it is
     pub enabled: bool,
-    pub terms: TermsShown,
+    // where `AtLimitShown::terms` is not: the settings say it once
+    pub terms: Option<TermsShown>,
 }
 
 /// One Claude Code account, as the settings' warm-up lists it.
@@ -257,7 +251,7 @@ fn warm(seen: &Seen) -> WarmShown {
         standing,
         note: words::WARM_UP_NOTE.into(),
         enabled: overview.is_some(),
-        terms: terms(),
+        terms: (state.preferences.at_limit() != AtLimit::Switch).then(terms),
     }
 }
 

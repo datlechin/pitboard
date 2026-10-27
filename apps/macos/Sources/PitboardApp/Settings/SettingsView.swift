@@ -34,8 +34,7 @@ struct SettingsView: View {
         }
     }
 
-    // A taller pane scrolls. With the window at the top of a 1024 x 768 screen, 590 points
-    // are left between the toolbar and the Dock.
+    // A taller pane scrolls.
     static let tallestPane: CGFloat = 560
 
     @AppStorage(DefaultsKey.settingsTab) private var tab = Tab.general
@@ -45,13 +44,13 @@ struct SettingsView: View {
             GeneralSettings(
                 openAtLogin: openAtLogin, notifications: notifications, updates: updates
             )
-            .tabItem { Label("General", systemImage: Symbol.general) }
+            .tabItem { Label(words.settings.general, systemImage: Symbol.general) }
             .tag(Tab.general)
             LimitsSettings(model: model)
-                .tabItem { Label("Limits", systemImage: Symbol.limits) }
+                .tabItem { Label(words.settings.limits, systemImage: Symbol.limits) }
                 .tag(Tab.limits)
             AdvancedSettings(model: model, link: commandLineLink)
-                .tabItem { Label("Advanced", systemImage: Symbol.advanced) }
+                .tabItem { Label(words.settings.advanced, systemImage: Symbol.advanced) }
                 .tag(Tab.advanced)
         }
         .frame(width: 500)

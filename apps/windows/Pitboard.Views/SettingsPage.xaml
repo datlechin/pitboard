@@ -236,7 +236,10 @@
                   Header="{x:Bind ViewModel.NoWarmAccount, Mode=OneWay}"
                   Style="{StaticResource DefaultSettingsExpanderItemStyle}"
                   Visibility="{x:Bind ViewModel.NoWarmAccounts, Mode=OneWay}" />
-              <toolkit:SettingsCard ContentAlignment="Left" Style="{StaticResource DefaultSettingsExpanderItemStyle}">
+              <toolkit:SettingsCard
+                  ContentAlignment="Left"
+                  Style="{StaticResource DefaultSettingsExpanderItemStyle}"
+                  Visibility="{x:Bind ViewModel.HasWarmTerms, Mode=OneWay}">
                 <HyperlinkButton
                     Content="{x:Bind ViewModel.TermsLinkTitle, Mode=OneWay}"
                     AutomationProperties.AutomationId="settings.warmTerms"

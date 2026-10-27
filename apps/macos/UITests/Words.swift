@@ -9,7 +9,13 @@ enum Words {
     static let copyEmail = "Copy Email Address"
     static let accountMenu = "Account"
     static let fileMenu = "File"
+    static let editMenu = "Edit"
+    static let viewMenu = "View"
+    static let copyReport = "Copy Report"
     static let removeWebsiteData = "Remove Website Data…"
+    static let windowMenu = "Window"
+    static let diagnostics = "Diagnostics"
+    static let activity = "Activity"
     static let claudeCodeMissing = "Claude Code Isn’t Installed"
     // The menu's item for a notice, with the notice's heading under it.
     static let oneIssue = "1 Issue"
@@ -34,10 +40,18 @@ enum Words {
     static let switchAutomatically = "Switch Automatically"
     static let doNothing = "Do Nothing"
 
+    // The app's own questions, AppKit alerts: Uninstall's, then the one once Pitboard's folder
+    // is gone.
+    static let uninstall = "Uninstall"
+    static let moveToTrash = "Move to Trash"
+
+    // The inspector with nothing selected.
+    static let noAccountSelected = "No Account Selected"
+
     // What Name and Rename say under an empty field.
     static let typeAName = "Type a name for this account."
 
-    // What a row and a download say once something is over, which nothing else shows.
+    // What the inspector and a download say once something is over, which nothing else shows.
     static let warmsUpAgain = "Warms up again at "
     static let downloaded = "Downloaded"
 }

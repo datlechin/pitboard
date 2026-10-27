@@ -99,16 +99,26 @@ test("the Account menu offers the account selected, dimmed where it does not app
   page,
 }) => {
   const { title, menu, items, row } = await window(page);
+  // the account in use is selected as the window opens, and asks nothing on ⌘⌫
   await title("account").click();
   await said(items("account")).toEqual([
-    "Switch",
+    "Switch to work",
     "Sign In Again…",
     "Rename…",
+    "Warm Up Now",
+    "Open claude.ai",
     "Remove Account… ⌘⌫",
   ]);
-  for (const item of await items("account").all())
-    await expect(item).toHaveAttribute("aria-disabled", "true");
+  for (const name of ["Switch to work", "Warm Up Now", "Remove Account…"])
+    await expect(menu("account").getByRole("menuitem", { name })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   await page.keyboard.press("Escape");
+  const alert = page.locator("#mac-accounts-forget");
+  await row("work").click(at);
+  await page.keyboard.press("Meta+Backspace");
+  await expect(alert).toBeHidden();
 
   await row("personal").click(at);
   await title("account").click();
@@ -120,45 +130,42 @@ test("the Account menu offers the account selected, dimmed where it does not app
     "Open claude.ai",
     "Remove Account… ⌘⌫",
   ]);
-  await expect(menu("account").getByRole("menuitem", { name: "Warm Up Now" })).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
   const forget = menu("account").getByRole("menuitem", { name: "Remove Account…" });
   await expect(forget).not.toHaveAttribute("aria-disabled", "true");
   await expect(forget).toHaveAttribute("aria-keyshortcuts", "Meta+Backspace");
   await forget.click();
-  const alert = page.locator("#mac-accounts-forget");
   await expect(alert).toHaveAccessibleName("Remove “personal (Claude Code)”?");
   await page.keyboard.press("Escape");
 
-  // ⌘⌫ wherever focus is in the window, and nothing on the account in use
+  // ⌘⌫ wherever focus is in the window
   await page.locator('#switch-mac [data-part="window"] [data-does="refresh"]').focus();
   await page.keyboard.press("Meta+Backspace");
   await expect(alert).toBeVisible();
-  await page.keyboard.press("Escape");
-  await row("work").click(at);
-  await page.keyboard.press("Meta+Backspace");
-  await expect(alert).toBeHidden();
+  // once it is removed, nothing is selected, and the menu offers what it would, each dimmed
+  await alert.locator('[data-does="forget"]').click();
   await title("account").click();
-  await expect(menu("account").getByRole("menuitem", { name: "Switch to work" })).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
-  await expect(forget).toHaveAttribute("aria-disabled", "true");
+  await said(items("account")).toEqual([
+    "Switch",
+    "Sign In Again…",
+    "Rename…",
+    "Remove Account… ⌘⌫",
+  ]);
+  for (const item of await items("account").all())
+    await expect(item).toHaveAttribute("aria-disabled", "true");
 });
 
 test("Edit's Copy and Delete act on the selection, and View's Refresh reads", async ({ page }) => {
   const { fig, title, menu, row } = await window(page);
   await title("edit").click();
-  const copy = menu("edit").getByRole("menuitem", { name: "Copy" });
+  // exact, beside Copy Report
+  const copy = menu("edit").getByRole("menuitem", { name: "Copy", exact: true });
   const remove = menu("edit").getByRole("menuitem", { name: "Delete" });
-  await expect(copy).toHaveAttribute("aria-disabled", "true");
-  await expect(remove).toHaveAttribute("aria-disabled", "true");
+  // the account in use, selected as the window opens
+  await expect(copy).not.toHaveAttribute("aria-disabled", "true");
+  await expect(remove).not.toHaveAttribute("aria-disabled", "true");
   await page.keyboard.press("Escape");
   await row("personal").click(at);
   await title("edit").click();
-  await expect(copy).not.toHaveAttribute("aria-disabled", "true");
   await remove.click();
   await expect(page.locator("#mac-accounts-forget")).toBeVisible();
   await page.keyboard.press("Escape");
