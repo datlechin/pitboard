@@ -7,9 +7,9 @@ Switch AI coding tools between your accounts.
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](https://github.com/datlechin/pitboard/blob/main/LICENSE)
 
 <img src="https://raw.githubusercontent.com/datlechin/pitboard/main/.github/media/menu.png"
-  alt="The Pitboard menu, listing Claude Code and Codex accounts, with a check mark on each
-  one in use, the plan after each Codex account's name and, under each account's name, its
-  usage or that it needs signing in again"
+  alt="The Pitboard menu, offering first to sign in to an account again, then listing Claude
+  Code and Codex accounts with a check mark on each one in use and, under each account's name,
+  how much of its limits it has used or that its sign-in has expired"
   width="300">
 
 Pitboard switches Claude Code, OpenAI's Codex CLI and, on macOS, Claude Desktop between your
