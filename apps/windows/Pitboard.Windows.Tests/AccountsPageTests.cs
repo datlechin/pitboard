@@ -37,7 +37,15 @@ public sealed class AccountsPageTests
         Items.Account("claude", "spare") with
         {
             Plan = "Max 5x",
-            Limits = [Items.Limit(100), Items.Limit(61) with { Kind = new LimitKind.Weekly(), Short = "Weekly", Resets = "Resets Thu 2:00 PM" }],
+            Limits =
+            [
+                Items.Limit(100),
+                Items.Limit(61) with
+                {
+                    Kind = new LimitKind.Weekly(), Name = "Weekly limit", Short = "Weekly", Resets = "Resets Thu 2:00 PM",
+                    ResetsIn = "in 6 days 23 hr",
+                },
+            ],
             Notes = [new AccountNote(NoteKind.Expiring, "Sign-in expires in 2 days", Action: null, Learn: null)],
             Detail = new AccountDetail(
                 Email: "spare@example.com", Plan: "Max 5x", SignedInUntil: 1_800_172_800, SignIn: "Saved sign-in valid until Nov 20",
@@ -72,6 +80,20 @@ public sealed class AccountsPageTests
             () => (found = Popped(page).OfType<Button>().SingleOrDefault(button => button.Name == name)) is not null, $"the tip showed no {name}");
         return found!;
     }
+
+    private static readonly Choice NotNow = new("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+
+    private static readonly SetupStep SecondAccount = new("Add a second account", "Pitboard switches once there are two.", [Add, NotNow]);
+
+    private static Snapshot Tipped(params AccountItem[] accounts) =>
+        Listing(accounts) with { Setup = SecondAccount, Footing = new Footing.OnlyOne(Provider: "claude", Label: "work") };
+
+    // The buttons an opened row's last card holds, in their order.
+    private static string Commands(SettingsExpander row) =>
+        string.Join(
+            ", ",
+            Views.Visible<Button>(row).Select(AutomationProperties.GetAutomationId)
+                .Where(id => id.StartsWith("detail.", StringComparison.Ordinal) && id != "detail.copyEmail"));
 
     private static async Task Open(SettingsExpander row, string inside)
     {
@@ -299,6 +321,87 @@ public sealed class AccountsPageTests
             string.Join(", ", Views.Visible<Button>(spare).Select(AutomationProperties.GetAutomationId).Where(id => id.StartsWith("detail.window", StringComparison.Ordinal) || id is "detail.rename" or "detail.remove")));
     }
 
+    // Plan 7: an opened row offers what the row's shortcut menu does past the row's own button, such as Sign in again…
+    // for a saved sign-in about to expire, whose note names no button of its own.
+    [UITestMethod]
+    public async Task AnOpenedRowOffersWhatItsShortcutMenuDoes()
+    {
+        var signInAgain = Items.Action(ActionKind.SignInAgain, "Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")));
+        var warm = Items.Action(ActionKind.WarmUpNow, "Warm up now", new Intent.WarmNow("claude/spare"));
+        var actions = Spare().Actions;
+        var expiring = Spare() with { Actions = [actions[0], signInAgain, actions[1], warm, actions[2], actions[3]] };
+        var (page, model, app) = await Over(Listing(expiring));
+        var spare = Row(page, "claude/spare");
+        await Open(spare, "Email");
+
+        Assert.AreEqual("detail.window.claude.ai, detail.signInAgain, detail.rename, detail.warmUpNow, detail.remove", Commands(spare));
+        Views.Press(Views.Element<Button>(spare, "detail.signInAgain"));
+        Assert.Contains(signInAgain.Intent!, model.Sent);
+
+        // Where the row's own button signs in again, and a warm-up cannot start now, neither is said twice or offered.
+        var expired = Items.Acting(expiring, new ItemAction("Sign in…", "Sign in to spare again", signInAgain.Intent!)) with
+        {
+            Actions = [actions[0] with { Enabled = false }, signInAgain, actions[1], warm with { Enabled = false }, actions[2], actions[3]],
+        };
+        app.Apply(Listing(expired) with { Revision = 2 });
+        await Views.Until(() => Commands(spare) == "detail.window.claude.ai, detail.rename, detail.remove", () => Commands(spare));
+    }
+
+    // Plan 7: the row has room for one note; the rest are in the opened row, with the docs where nothing in the app acts.
+    [UITestMethod]
+    public async Task AnOpenedRowSaysTheNotesItsRowHasNoRoomFor()
+    {
+        var learn = new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors#stale-codes");
+        var opened = new List<Uri>();
+        var twice = Spare() with
+        {
+            Notes =
+            [
+                new AccountNote(NoteKind.Expiring, "Sign-in expires in 2 days", Action: null, Learn: null),
+                new AccountNote(NoteKind.Stale, "Usage from 2 hours ago", Action: null, Learn: learn),
+            ],
+        };
+        var (page, _, _) = await Over(Listing(twice), open: opened.Add);
+        var spare = Row(page, "claude/spare");
+        Assert.DoesNotContain("Usage from 2 hours ago", Views.Texts(spare), "a second note on the row");
+
+        await Open(spare, "Usage from 2 hours ago");
+
+        Assert.AreEqual(1, Views.Texts(spare).Count(said => said == "Sign-in expires in 2 days"), "the row's note said again");
+        new HyperlinkButtonAutomationPeer(Views.Element<HyperlinkButton>(spare, "detail.note.learn")).Invoke();
+        CollectionAssert.AreEqual(new[] { new Uri(learn.Link) }, opened);
+    }
+
+    // The brief: the detail says each limit's reset as a time, then how long that is from now.
+    [UITestMethod]
+    public async Task AnOpenedRowSaysWhenEachLimitResetsAndHowLongThatIs()
+    {
+        var (page, _, _) = await Over(Listing(Spare()));
+        var spare = Row(page, "claude/spare");
+        await Open(spare, "in 2 hr 9 min");
+
+        var limit = Views.Visible<SettingsCard>(spare).Single(card => card.Header as string == "5-hour limit");
+        CollectionAssert.IsSubsetOf(new[] { "5-hour limit", "100% used", "Resets 3:45 PM", "in 2 hr 9 min" }, Views.Texts(limit));
+        Assert.AreEqual("5-hour limit", AutomationProperties.GetName(limit));
+    }
+
+    // A window whose store is still held opens nothing yet, so its button is dimmed and says why, as its menu item does.
+    [UITestMethod]
+    public async Task AnOpenedRowDimsAWindowWhoseStoreIsHeld()
+    {
+        var window = Items.Window("claude", "spare");
+        var listing = Listing(Spare());
+        var (page, _, app) = await Over(listing);
+        var spare = Row(page, "claude/spare");
+        await Open(spare, "Email");
+        Assert.IsTrue(Views.Element<Button>(spare, "detail.window.claude.ai").IsEnabled);
+
+        app.Apply(listing with { Revision = 2, AccountWindows = listing.AccountWindows with { Held = [window.Store] } });
+
+        await Views.Until(() => !Views.Element<Button>(spare, "detail.window.claude.ai").IsEnabled, "the window's button stayed enabled");
+        Assert.AreEqual(HeldStores.Note(window, [window.Store]), AutomationProperties.GetHelpText(Views.Element<Button>(spare, "detail.window.claude.ai")));
+    }
+
     // Remove account is dimmed for the account in use, whose record is the only one of who is signed in.
     [UITestMethod]
     public async Task TheAccountInUseHasRemoveDimmed()
@@ -427,6 +530,7 @@ public sealed class AccountsPageTests
             "Add a second account | Pitboard switches once there are two. | Add account… | Not now",
             string.Join(" | ", tip.Title, tip.Subtitle, tip.ActionButtonContent, tip.CloseButtonContent));
         Assert.AreSame(Views.Element<AppBarButton>(page, "accounts.add"), tip.Target);
+        Assert.AreEqual(TeachingTipPlacementMode.LeftBottom, tip.PreferredPlacement);
         Assert.AreEqual("setup.onlyOne", AutomationProperties.GetAutomationId(tip));
         Assert.IsFalse(Views.Descendants(page).OfType<InfoBar>().Any(bar => bar.IsOpen), "the step in an InfoBar");
 
@@ -454,6 +558,60 @@ public sealed class AccountsPageTests
 
         Assert.Contains(settings.Intent, model.Sent);
         Assert.IsFalse(tip.IsOpen, "the tip stayed up over Settings");
+    }
+
+    // Below Add account it hid the first rows' Switch and Add… (windows-window-warm-up.png and windows-window-unnamed.png,
+    // run 40417694263), and Not now is the one way to put it down.
+    [UITestMethod]
+    public async Task TheTipLeavesEachRowsButtonClear()
+    {
+        foreach (var width in new[] { 912.0, 592.0 })
+        {
+            var (page, _, _) = await Over(Tipped(Work(), Spare()), width);
+            await TipButton(page, "ActionButton");
+            var body = Popped(page).OfType<Grid>().First(grid => grid.Name == "ContentRootGrid");
+            var tip = Bounds(body, page);
+
+            var button = Bounds(Views.Element<Button>(Row(page, "claude/spare"), "account.action"), page);
+            Assert.IsLessThanOrEqualTo(button.Left, tip.Right, $"at {width} epx the tip ends at {tip.Right}, past the button at {button.Left}");
+            Assert.IsGreaterThanOrEqualTo(0.0, tip.Left, $"at {width} epx the tip starts off the page");
+        }
+    }
+
+    // A lasting notice outranks a setup tip, which would cover its message (windows-notice-left-in-file.png).
+    [UITestMethod]
+    public async Task TheTipWaitsWhileANoticeIsShown()
+    {
+        var noticed = Tipped(Work()) with { Notices = [Items.Notice("switch/codex", Items.Dismiss("codex"))] };
+        var (page, _, app) = await Over(noticed);
+        var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
+        await Views.Drained();
+        Assert.IsFalse(tip.IsOpen, "the tip over the notice");
+
+        app.Apply(noticed with { Revision = 2, Notices = [] });
+
+        await Views.Until(() => tip.IsOpen, "the tip did not show once the notice went");
+    }
+
+    // A tip's popup drew over a dialog's smoke, where Not now could turn a step down behind a question still asked
+    // (windows-question-remove.png).
+    [UITestMethod]
+    public async Task TheTipGoesWhileADialogIsUp()
+    {
+        var app = new AppModel(new StandInModel(Tipped(Work())));
+        var frame = await Views.Shown(new Frame { IsNavigationStackEnabled = false });
+        var context = Views.Context(app);
+        var page = await Views.Navigate<AccountsPage>(frame, context);
+        var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
+        await Views.Until(() => tip.IsOpen, "the tip did not open");
+
+        var asked = context.Dialogs.Show(new ContentDialog { Title = "Remove “work”?", CloseButtonText = "Cancel" });
+        await Views.Until(() => context.Dialogs.Open is { IsLoaded: true }, "the dialog did not show");
+        Assert.IsFalse(tip.IsOpen, "the tip stayed over the dialog");
+        context.Dialogs.Open!.Hide();
+        await asked;
+
+        await Views.Until(() => tip.IsOpen, "the tip did not come back once the dialog went");
     }
 
     // A tip's popup stays over the window, so it goes with the page and comes back with it.

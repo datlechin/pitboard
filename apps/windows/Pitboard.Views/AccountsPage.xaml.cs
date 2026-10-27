@@ -18,6 +18,7 @@ public sealed partial class AccountsPage : Page
 {
     private PaneContext? _context;
     private SetupStep? _setup;
+    private bool _putDown;
 
     public AccountsPage()
     {
@@ -26,17 +27,29 @@ public sealed partial class AccountsPage : Page
         Loaded += (_, _) =>
         {
             ViewModel?.Listen();
-            Tip.IsOpen = _setup is not null;
+            if (_context is { } context)
+            {
+                context.Dialogs.OpenChanged -= OnDialogChanged;
+                context.Dialogs.OpenChanged += OnDialogChanged;
+            }
+
+            _putDown = false;
+            ShowTip();
         };
         Unloaded += (_, _) =>
         {
             ViewModel?.Stop();
+            if (_context is { } context)
+            {
+                context.Dialogs.OpenChanged -= OnDialogChanged;
+            }
+
             Tip.IsOpen = false;
         };
-        // WinUI's TeachingTip undoes an IsOpen change made while it animates, so a tip whose step is gone is closed again.
+        // WinUI's TeachingTip undoes an IsOpen change made while it animates, so a tip that should be down is closed again.
         Tip.RegisterPropertyChangedCallback(TeachingTip.IsOpenProperty, (_, _) =>
         {
-            if (Tip.IsOpen && _setup is null)
+            if (Tip.IsOpen && !TipWanted)
             {
                 Tip.IsOpen = false;
             }
@@ -47,6 +60,11 @@ public sealed partial class AccountsPage : Page
 
     private PaneContext Context =>
         _context ?? throw new InvalidOperationException("The page was shown before its frame navigated to it.");
+
+    // Its popup draws over a dialog's smoke and a notice's message, so it waits for both to go, and it stays down for the
+    // visit once its choice is made.
+    private bool TipWanted =>
+        _setup is not null && IsLoaded && !_putDown && Notices.Children.Count == 0 && _context?.Dialogs.Open is null;
 
     public static string EmptyGlyph(EmptyKind kind) => kind switch
     {
@@ -161,10 +179,11 @@ public sealed partial class AccountsPage : Page
             notice => new NoticeBar(notice, action => Ask(action.Confirm, action.Intent), Context.Open, Context.Time),
             (shown, notice) => ((NoticeBar)shown).Show(notice));
         Notices.Visibility = Look.Shown(Notices.Children.Count > 0);
+        ShowTip();
     }
 
-    // The first choice is the one the step is for, and the second turns it down. Pointed at Add account where the step is
-    // to add one; about the settings, it points at nothing on this page.
+    // The first choice is the one the step is for, and the second turns it down. Left of Add account where the step is to
+    // add one, clear of each row's button below it; about the settings, it points at nothing on this page.
     private void ShowSetup()
     {
         var step = ViewModel!.Setup;
@@ -181,16 +200,22 @@ public sealed partial class AccountsPage : Page
             Tip.ActionButtonContent = step.Actions.ElementAtOrDefault(0)?.Title;
             Tip.CloseButtonContent = step.Actions.ElementAtOrDefault(1)?.Title;
             Tip.Target = ViewModel.SetupFooting is Footing.AtLimitUnchosen ? null : AddAccount;
+            Tip.PreferredPlacement = Tip.Target is null ? TeachingTipPlacementMode.Auto : TeachingTipPlacementMode.LeftBottom;
         }
 
-        Tip.IsOpen = step is not null && IsLoaded;
+        _putDown = false;
+        ShowTip();
     }
 
-    // It stays down once its choice is made, until the page comes back while the step is still to do.
+    private void ShowTip() => Tip.IsOpen = TipWanted;
+
+    private void OnDialogChanged(object? sender, EventArgs args) => ShowTip();
+
     private void OnTipChosen(TeachingTip sender, object args)
     {
         if (_setup?.Actions.ElementAtOrDefault(0) is { } choice)
         {
+            _putDown = true;
             sender.IsOpen = false;
             ViewModel!.Send(choice.Intent);
         }
@@ -276,6 +301,14 @@ public sealed partial class AccountsPage : Page
     private void OnNoteLearn(object sender, RoutedEventArgs args)
     {
         if ((sender as FrameworkElement)?.Tag is ShownAccount { Item.Notes: [{ Learn: { } learn }, ..] })
+        {
+            Context.Open(new Uri(learn.Link));
+        }
+    }
+
+    private void OnMoreNoteLearn(object sender, RoutedEventArgs args)
+    {
+        if ((sender as FrameworkElement)?.Tag is ShownNote { Learn: { } learn })
         {
             Context.Open(new Uri(learn.Link));
         }

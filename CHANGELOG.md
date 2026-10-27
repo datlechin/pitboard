@@ -61,9 +61,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switched until that limit resets.
 - The Windows app's **Diagnostics** offers each check's fix, or **Learn more**, beside it, and
   **Copy report** copies the checks for a bug report.
-- An account's row in the Windows app opens on its email with **Copy**, until when its saved
-  sign-in is valid, its warm-up with **Warm-up settings**, and **Open claude.ai**, **Rename** and
-  **Remove account**.
+- An account's row in the Windows app opens on each limit with how long until it resets, the notes
+  its row has no room for, its email with **Copy**, until when its saved sign-in is valid, its
+  warm-up with **Warm-up settings**, and what its shortcut menu offers, such as **Open
+  claude.ai**, **Sign in again…**, **Rename** and **Remove account**.
 - The Windows app's commands, the buttons of its **Settings** and its welcome's **Get started**,
   and an account's shortcut menu have access keys.
 - Narrator names each card of an opened account in the Windows app, says that **Copy** copies
@@ -173,8 +174,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows app shows each account as a row with its name, its plan, a line for each limit and
   at most one note, and **In use** or its button at its end, its bars in the accent color until a
   limit runs low.
-- The Windows app shows its setup tips as a teaching tip, pointed at **Add account** where they
-  are about adding one, where they were a bar above the accounts.
+- The Windows app shows its setup tips as a teaching tip beside **Add account** where they are
+  about adding one, and holds them back while a notice or a dialog is up, where they were a bar
+  above the accounts.
 - A Windows notification's **Sign in again…** ends with an ellipsis, as a command that opens a
   dialog does.
 - The Windows app's icon is drawn dark on a light taskbar and white on a dark one, as Windows' own

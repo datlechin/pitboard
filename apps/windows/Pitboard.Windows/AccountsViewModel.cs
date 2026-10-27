@@ -29,6 +29,7 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
         [nameof(AppModel.Setup)] = [nameof(Setup)],
         [nameof(AppModel.Footing)] = [nameof(SetupFooting)],
         [nameof(AppModel.Sections)] = [nameof(Sections)],
+        [nameof(AppModel.AccountWindows)] = [nameof(HeldWindows)],
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -105,7 +106,8 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
             return;
         }
 
-        if (part == nameof(AppModel.Sections))
+        // An opened row dims a window whose store is still held.
+        if (part is nameof(AppModel.Sections) or nameof(AppModel.AccountWindows))
         {
             ShowSections();
         }
@@ -121,7 +123,7 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
             Sections, model.Sections, section => section.Id, shown => shown.Key,
             section =>
             {
-                var shown = new ShownSection(section.Id, section.Heading, model.Send);
+                var shown = new ShownSection(section.Id, section.Heading, model.Send, () => model.AccountWindows.Held);
                 shown.Show(section);
                 return shown;
             },

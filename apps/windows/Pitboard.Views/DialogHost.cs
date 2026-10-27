@@ -14,8 +14,20 @@ public sealed class DialogHost(Func<XamlRoot?> root)
     private static Task? _turn;
 
     private bool _withdrawn;
+    private ContentDialog? _open;
 
-    public ContentDialog? Open { get; private set; }
+    // As a dialog shows and as it goes.
+    public event EventHandler? OpenChanged;
+
+    public ContentDialog? Open
+    {
+        get => _open;
+        private set
+        {
+            _open = value;
+            OpenChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     // As its window closes: the dialog it shows goes, and none waiting shows.
     public void Withdraw()
