@@ -436,8 +436,9 @@ keeps it is in the header of the module named.
   by an email, a token, a uuid, a path or a notice's lines. The model hands it to the app before
   the snapshot it changed with, writes it only where the app names a file, again with each
   read, and deletes that file once the app uninstalls Pitboard
-  (`the_glance_is_given_to_the_app_with_or_without_a_file`, `an_uninstall_deletes_the_glance`).
-  `glance_revision` moves only with what a widget shows, since WidgetKit budgets reloads. A
+  (`the_glance_is_given_to_the_app_with_or_without_a_file`,
+  `an_uninstall_deletes_the_glance_and_tells_the_widgets`). `glance_revision` moves only with
+  what a widget shows, since WidgetKit budgets reloads, and once the file holds it. A
   request from outside does no more than a click in the app and waits for the launch's first
   read. One that would quit an app answers with the quit question and quits it only when asked
   again with `QuitAndSwitch`, and one that needs another question only the app asks is

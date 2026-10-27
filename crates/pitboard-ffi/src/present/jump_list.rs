@@ -22,9 +22,8 @@ pub enum JumpAsk {
     OpenWindow { store: String },
 }
 
-// The same whatever Pitboard is doing, as Microsoft asks of tasks, so it changes only as the
-// accounts do. None where the list stays as it was: before the accounts are read, and while
-// Pitboard is being uninstalled, whose MSI deletes it.
+// The same whatever Pitboard is doing, as Microsoft asks of tasks. None where Windows keeps the
+// last one: before the accounts are read, and while uninstalling, whose MSI deletes it.
 pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
     let state = seen.state;
     if seen.os != Os::Windows || state.status.is_none() || state.removing.is_some() {
