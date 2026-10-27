@@ -40,7 +40,7 @@ public sealed class UninstallerTests
         var package = XDocument.Load(Repository.Path("apps", "windows", "Pitboard.Installer", "Package.wxs"))
             .Descendants().Single(element => element.Name.LocalName == "Package");
 
-        Assert.AreEqual($"{{{package.Attribute("UpgradeCode")?.Value}}}", Uninstaller.UpgradeCode);
+        Assert.AreEqual(Uninstaller.UpgradeCode, $"{{{package.Attribute("UpgradeCode")?.Value}}}");
     }
 
     // InstallLocation ends with a backslash, and a folder's name is the same in any case.

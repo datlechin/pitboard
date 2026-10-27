@@ -18,6 +18,8 @@ public sealed class AccountsPageTests
 {
     private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: null)), Enabled: true);
 
+    private static readonly string[] FiveHourDetail = ["5-hour limit", "100% used", "Resets 3:45 PM", "in 2 hr 9 min"];
+
     private static async Task<(AccountsPage Page, StandInModel Model, AppModel App)> Over(
         Snapshot snapshot, double width = double.NaN, Action<string>? copy = null, Action<WindowAccount>? openWindow = null,
         Action<Uri>? open = null)
@@ -381,7 +383,7 @@ public sealed class AccountsPageTests
         await Open(spare, "in 2 hr 9 min");
 
         var limit = Views.Visible<SettingsCard>(spare).Single(card => card.Header as string == "5-hour limit");
-        CollectionAssert.IsSubsetOf(new[] { "5-hour limit", "100% used", "Resets 3:45 PM", "in 2 hr 9 min" }, Views.Texts(limit));
+        CollectionAssert.IsSubsetOf(FiveHourDetail, Views.Texts(limit));
         Assert.AreEqual("5-hour limit", AutomationProperties.GetName(limit));
     }
 
