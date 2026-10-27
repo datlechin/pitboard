@@ -63,21 +63,30 @@ public sealed class DialogHost(Func<XamlRoot?> root)
 
     public static ContentDialog Asking(Question question)
     {
-        var dialog = new ContentDialog
-        {
-            Title = question.Title,
-            Content = question.Message,
-            PrimaryButtonText = question.Confirm,
-            CloseButtonText = Words.Window.Cancel,
-            DefaultButton = DefaultOf(question),
-        };
+        var dialog = new ContentDialog { Title = question.Title, Content = question.Message };
+        Buttons(dialog, question);
         AutomationProperties.SetAutomationId(dialog, "question");
         return dialog;
     }
 
-    // The default button is the accent one, which Enter presses. WinUI has no destructive style.
-    public static ContentDialogButton DefaultOf(Question question) =>
-        question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.None;
+    // The default button is the accent one, which Enter presses and the focus opens on: Cancel where the model says its
+    // verb is not the default, as Uninstall's is. WinUI has no destructive style.
+    public static void Buttons(ContentDialog dialog, Question question)
+    {
+        dialog.PrimaryButtonText = question.Confirm;
+        dialog.IsPrimaryButtonEnabled = true;
+        dialog.CloseButtonText = Words.Window.Cancel;
+        dialog.DefaultButton = question.ConfirmIsDefault ? ContentDialogButton.Primary : ContentDialogButton.Close;
+    }
+
+    // A failure's next step is its default button, beside which OK would read as taking it.
+    public static void Buttons(ContentDialog dialog, WindowAlert.Failed failed)
+    {
+        dialog.PrimaryButtonText = failed.Act?.Title ?? "";
+        dialog.IsPrimaryButtonEnabled = failed.Act?.Enabled ?? false;
+        dialog.CloseButtonText = failed.Act is null ? Words.Window.Ok : Words.Window.Close;
+        dialog.DefaultButton = failed.Act is null ? ContentDialogButton.None : ContentDialogButton.Primary;
+    }
 
     // A dialog draws in a popup, which takes no theme from its window's content, so it is given the content's, as the WinUI
     // Gallery gives one its page's, and follows it while it is up.

@@ -94,15 +94,8 @@ public sealed partial class WindowAlerts : IDisposable
             said.Children.Add(Learning(learn, _open));
         }
 
-        var dialog = new ContentDialog
-        {
-            Title = failed.Text.Title,
-            Content = said,
-            PrimaryButtonText = failed.Act?.Title ?? "",
-            IsPrimaryButtonEnabled = failed.Act?.Enabled ?? false,
-            CloseButtonText = Words.Window.Ok,
-            DefaultButton = failed.Act is null ? ContentDialogButton.None : ContentDialogButton.Primary,
-        };
+        var dialog = new ContentDialog { Title = failed.Text.Title, Content = said };
+        DialogHost.Buttons(dialog, failed);
         AutomationProperties.SetAutomationId(dialog, "failure");
         return dialog;
     }

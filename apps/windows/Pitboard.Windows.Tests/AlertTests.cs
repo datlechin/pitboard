@@ -49,7 +49,7 @@ public sealed class AlertTests
 
         Assert.AreEqual("Sign in again…", dialogs.Open!.PrimaryButtonText);
         Assert.AreEqual(ContentDialogButton.Primary, dialogs.Open.DefaultButton);
-        Assert.AreEqual("OK", dialogs.Open.CloseButtonText);
+        Assert.AreEqual("Close", dialogs.Open.CloseButtonText, "OK beside the next step reads as taking it");
         Views.Press(Views.Descendants(dialogs.Open).OfType<Button>().Single(button => button.Name == "PrimaryButton"));
 
         await Views.Until(() => model.Sent.Count == 2, "the next step was not taken");

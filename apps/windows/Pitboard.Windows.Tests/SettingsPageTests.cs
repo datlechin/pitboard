@@ -108,8 +108,8 @@ public sealed class SettingsPageTests
         await Views.Until(() => Views.Texts(page).Contains("personal · Max"), "its accounts' toggles did not show");
     }
 
-    // Plan 4.11: Uninstall Pitboard in Advanced asks the model's question, whose Uninstall Enter does not press, and only
-    // then asks the model to uninstall.
+    // Plan 4.11: Uninstall Pitboard in Advanced asks the model's question, which opens on Cancel, the button Enter presses,
+    // and only then asks the model to uninstall.
     [UITestMethod]
     public async Task UninstallAsksTheModelsQuestionFirst()
     {
@@ -129,7 +129,10 @@ public sealed class SettingsPageTests
         await Views.Until(() => context.Dialogs.Open is { IsLoaded: true }, "no question");
         var asked = context.Dialogs.Open!;
         Assert.AreEqual("Uninstall Pitboard?", asked.Title);
-        Assert.AreEqual(ContentDialogButton.None, asked.DefaultButton);
+        Assert.AreEqual(ContentDialogButton.Close, asked.DefaultButton);
+        await Views.Until(
+            () => FocusManager.GetFocusedElement(asked.XamlRoot) is Button { Name: "CloseButton" },
+            () => $"the question opened on {(FocusManager.GetFocusedElement(asked.XamlRoot) as FrameworkElement)?.Name}");
         Assert.IsEmpty(model.Sent.OfType<Intent.Uninstall>(), "uninstalled before the answer");
         Views.Press(Views.Descendants(asked).OfType<Button>().Single(button => button.Name == "PrimaryButton"));
 

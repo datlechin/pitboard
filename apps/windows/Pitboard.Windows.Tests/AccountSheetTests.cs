@@ -53,6 +53,17 @@ public sealed class AccountSheetTests
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went before the model closed it");
     }
 
+    // The mockup's step 3: the account is saved already, so Done is the one button and Cancel would cancel nothing.
+    [UITestMethod]
+    public async Task TheNameStepAfterASignInOffersDoneAlone()
+    {
+        await using var up = await Up.Over(Naming);
+
+        Assert.AreEqual("Save", up.Sheet.PrimaryButtonText);
+        Assert.AreEqual("", up.Sheet.CloseButtonText);
+        Assert.AreEqual("", up.Sheet.SecondaryButtonText);
+    }
+
     // Save was dimmed under an empty field, with nothing to say why.
     [UITestMethod]
     public async Task TheNameFieldSaysUnderItselfThatSaveWaitsForAName()
@@ -485,7 +496,11 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task ASheetSavingANameCannotBeClosed()
     {
-        await using var up = await Up.Over(Naming with { SheetText = Naming.SheetText! with { Saving = true } });
+        await using var up = await Up.Over(Snapshots.Read(1) with
+        {
+            Sheet = new Sheet.Rename("claude", "work"),
+            SheetText = Items.Rename("work") with { Saving = true },
+        });
 
         Assert.IsFalse(up.Part("CloseButton").IsEnabled, "Cancel while saving");
         Assert.IsFalse(up.Element<TextBox>("sheet.name").IsEnabled);
@@ -648,6 +663,7 @@ public sealed class AccountSheetTests
         await Views.Until(() => up.Sheet.Title as string == "Couldn’t switch to spare", "the failure did not take the sheet over");
         Assert.AreEqual("Sign in again…", up.Sheet.PrimaryButtonText);
         Assert.AreEqual(ContentDialogButton.Primary, up.Sheet.DefaultButton);
+        Assert.AreEqual("Close", up.Sheet.CloseButtonText);
         Assert.AreEqual(Visibility.Collapsed, up.Element<HyperlinkButton>("failure.learn").Visibility);
 
         Views.Press(up.Part("PrimaryButton"));

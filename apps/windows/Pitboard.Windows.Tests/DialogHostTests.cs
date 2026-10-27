@@ -91,14 +91,14 @@ public sealed class DialogHostTests
         Assert.AreEqual(ContentDialogResult.None, await secondShown);
     }
 
-    // Microsoft's dialog guidance draws the default button in the accent colour, and Enter presses it. Uninstall Pitboard's
-    // question has none, so it is read first.
+    // Microsoft's dialog guidance draws the default button in the accent colour, Enter presses it and the focus opens on it.
+    // Uninstall Pitboard's question makes Cancel its default, so it is read first.
     [UITestMethod]
     public async Task AQuestionsVerbIsItsDefaultButtonWhereTheModelSays()
     {
         var content = await Views.Shown(new Grid());
         var dialogs = new DialogHost(() => content.XamlRoot);
-        foreach (var (confirmIsDefault, expected) in new[] { (true, ContentDialogButton.Primary), (false, ContentDialogButton.None) })
+        foreach (var (confirmIsDefault, expected) in new[] { (true, ContentDialogButton.Primary), (false, ContentDialogButton.Close) })
         {
             var asked = dialogs.Confirm(new Question(
                 "Remove “spare”?", "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your browser.", "Remove",

@@ -183,7 +183,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   guidance orders it, and says **Install Pitboard 1.2.0…** in place of **Check for updates** once
   an update is found.
 - The Windows app's questions answer Enter with their verb, drawn as the accent button, except
-  **Uninstall Pitboard?**, which waits to be read.
+  **Uninstall Pitboard?**, which opens on **Cancel**, and a failure's next step sits beside
+  **Close**.
 - A question or failure that comes while the Windows app's dialog is up takes the dialog over
   until it is answered, and the dialog then goes back to its step, where it was a bar inside it.
 - The Windows installer starts Pitboard once a first install is done, which opens its welcome,

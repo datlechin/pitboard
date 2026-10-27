@@ -130,7 +130,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
         }
 
         ShowFailure(_model.SheetFailure);
-        CloseButtonText = signingIn?.Text.Cancel.Title ?? Words.Window.Cancel;
+        CloseButtonText = page.CloseTitle ?? "";
         if (page.Closable)
         {
             ClearValue(CloseButtonStyleProperty);
@@ -162,18 +162,12 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
             case WindowAlert.Asking asked:
                 Title = asked.Question.Title;
                 AskedMessage.Text = asked.Question.Message;
-                PrimaryButtonText = asked.Question.Confirm;
-                IsPrimaryButtonEnabled = true;
-                CloseButtonText = Words.Window.Cancel;
-                DefaultButton = DialogHost.DefaultOf(asked.Question);
+                DialogHost.Buttons(this, asked.Question);
                 break;
             case WindowAlert.Failed failed:
                 Title = failed.Text.Title;
                 AskedMessage.Text = failed.Text.Message;
-                PrimaryButtonText = failed.Act?.Title ?? "";
-                IsPrimaryButtonEnabled = failed.Act?.Enabled ?? false;
-                CloseButtonText = Words.Window.Ok;
-                DefaultButton = failed.Act is null ? ContentDialogButton.None : ContentDialogButton.Primary;
+                DialogHost.Buttons(this, failed);
                 break;
         }
 

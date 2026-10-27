@@ -13,6 +13,9 @@ public abstract record SheetPage
 
     public virtual bool EscapeCloses => Closable;
 
+    // What its close button says, where it has one.
+    public virtual string? CloseTitle => Words.Window.Cancel;
+
     // A sheet on its way out keeps what it showed, so it does not flash its form as it goes.
     public static SheetPage? Of(AppModel model, SheetPage? shown)
     {
@@ -65,6 +68,9 @@ public abstract record SheetPage
     {
         public override bool Closable => !Text.Saving;
 
+        // The account a sign-in added is saved under the name the step starts on, so Done is its one button.
+        public override string? CloseTitle => Sheet is Sheet.Name ? null : Words.Window.Cancel;
+
         // Microsoft's forms guidance holds the button back until what it needs is filled in; the field says so meanwhile.
         public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Problem;
 
@@ -76,6 +82,8 @@ public abstract record SheetPage
         public override bool Closable => Text.Cancel.Enabled;
 
         public override bool EscapeCloses => Text.Cancel.Enabled && Text.EscapeCancels;
+
+        public override string? CloseTitle => Text.Cancel.Title;
 
         // Held back until the tool prints it.
         public Uri? Page => Uri.TryCreate(SignIn.Url, UriKind.Absolute, out var page) ? page : null;

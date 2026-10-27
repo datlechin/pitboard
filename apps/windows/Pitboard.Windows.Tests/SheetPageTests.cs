@@ -45,6 +45,16 @@ public sealed class SheetPageTests
         Assert.AreEqual(new Intent.SignIn("claude", null), form.Start("claude"));
     }
 
+    // Plan 4.4: the account a sign-in added is already saved under the name its step starts on, so that step has Done
+    // alone; a rename keeps Cancel.
+    [TestMethod]
+    public void OnlyTheNameStepAfterASignInHasNoCancel()
+    {
+        Assert.IsNull(new SheetPage.Naming(new Sheet.Name("claude", "work", "dana@work.example"), Items.Rename("work")).CloseTitle);
+        Assert.AreEqual("Cancel", new SheetPage.Naming(new Sheet.Rename("claude", "work"), Items.Rename("work")).CloseTitle);
+        Assert.AreEqual("Cancel", new SheetPage.Form(Add, Items.AddAccount(), Running: false).CloseTitle);
+    }
+
     // The button was dimmed under an empty field whose placeholder read "work", with nothing to say why.
     [TestMethod]
     public void TheNameFieldSaysTheButtonWaitsForAName()
