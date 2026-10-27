@@ -53,11 +53,13 @@ public sealed class JumpTasksTests
         CollectionAssert.AreEqual(Tasks, parts.List.Shown.Single());
     }
 
-    // Windows keeps the list it had.
+    // Windows keeps the list it had. SetAppID gave CI's fresh standard user 0x80070003 (run 40494932963).
     [TestMethod]
-    public void AListWindowsRefusesLeavesPitboardRunning()
+    [DataRow(unchecked((int)0x80004005))]
+    [DataRow(unchecked((int)0x80070003))]
+    public void AListWindowsRefusesLeavesPitboardRunning(int refused)
     {
-        var parts = Made(Read(1), new StandInJumpList { Refuses = Marshal.GetExceptionForHR(unchecked((int)0x80004005)) });
+        var parts = Made(Read(1), new StandInJumpList { Refuses = Marshal.GetExceptionForHR(refused) });
 
         parts.Jumps.Follow();
 

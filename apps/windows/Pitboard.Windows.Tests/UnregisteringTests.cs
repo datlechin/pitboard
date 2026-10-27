@@ -106,9 +106,11 @@ public sealed class UnregisteringTests
     }
 
     [TestMethod]
-    public void AJumpListWindowsCannotDeleteStillLetsTheNotificationsGo()
+    [DataRow(unchecked((int)0x80004005))]
+    [DataRow(unchecked((int)0x80070003))]
+    public void AJumpListWindowsCannotDeleteStillLetsTheNotificationsGo(int refused)
     {
-        var jumpList = new JumpTasksTests.StandInJumpList { Refuses = Marshal.GetExceptionForHR(unchecked((int)0x80004005)) };
+        var jumpList = new JumpTasksTests.StandInJumpList { Refuses = Marshal.GetExceptionForHR(refused) };
         var notifications = new StandInNotifications();
         var registration = new StandInRegistration(Activator);
 

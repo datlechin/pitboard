@@ -42,7 +42,7 @@ public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccou
         {
             list.Show(tasks);
         }
-        catch (Exception refused) when (refused is COMException or UnauthorizedAccessException)
+        catch (Exception refused) when (refused is COMException or IOException or UnauthorizedAccessException)
         {
             // Windows keeps the list it had, and the next change writes this one again.
         }
