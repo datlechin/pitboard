@@ -400,7 +400,11 @@ public sealed class AccountsPageTests
 
         app.Apply(listing with { Revision = 2, AccountWindows = listing.AccountWindows with { Held = [window.Store] } });
 
-        await Views.Until(() => !Views.Element<Button>(spare, "detail.window.claude.ai").IsEnabled, "the window's button stayed enabled");
+        // The row's buttons are made again, and the next layout pass puts them back.
+        await Views.Until(
+            () => Views.Descendants(spare).OfType<Button>()
+                .Any(button => AutomationProperties.GetAutomationId(button) == "detail.window.claude.ai" && !button.IsEnabled),
+            () => $"the window's button stayed enabled among {Commands(spare)}");
         Assert.AreEqual(HeldStores.Note(window, [window.Store]), AutomationProperties.GetHelpText(Views.Element<Button>(spare, "detail.window.claude.ai")));
     }
 
