@@ -820,9 +820,13 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
         .filter(|account| super::needs_sign_in(account))
         .filter_map(|account| {
             let label = account.label.clone()?;
+            let standing = words::sign_in_standing(account.standing);
             Some(MenuEntry {
-                title: words::sign_in_to_again(seen.os, &seen.name_of(account), true),
-                subtitle: Some(words::sign_in_standing(account.standing).into()),
+                title: words::sign_in_to_again(seen.os, &label, true),
+                subtitle: Some(words::of_tool(
+                    seen.tool_if_shown(&account.provider).as_deref(),
+                    standing,
+                )),
                 help: None,
                 severity: None,
                 intent: Some(Intent::PresentSheet {

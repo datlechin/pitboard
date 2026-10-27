@@ -2861,6 +2861,31 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
     let (calm, _) = reading(vec![account(Some("work")).signed_in().build()]);
     assert!(calm.shown().menu_notices.sign_ins.is_empty());
     assert!(!calm.shown().menu_bar.attention);
+
+    // Its tool goes in the subtitle, as advice's does, and not inside the title.
+    let (both, _) = reading(vec![
+        account(Some("work")).signed_in().build(),
+        account(Some("old"))
+            .standing(Standing::LoginExpired)
+            .build(),
+        account(Some("job")).of("codex").signed_in().build(),
+    ]);
+    let [old] = &both.shown().menu_notices.sign_ins[..] else {
+        panic!("one sign-in");
+    };
+    assert_eq!(
+        (old.title.as_str(), old.subtitle.as_deref()),
+        (
+            words::sign_in_to_again(OS, "old", true).as_str(),
+            Some(
+                words::of_tool(
+                    Some("Claude Code"),
+                    words::sign_in_standing(Standing::LoginExpired)
+                )
+                .as_str()
+            )
+        )
+    );
 }
 
 /// When the numbers were read is said as a time rather than an age, since a menu can stay
