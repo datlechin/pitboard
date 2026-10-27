@@ -11,10 +11,18 @@ struct AccountsWindow: View {
 
     var body: some View {
         content
+            // Full height, so the banners sit at the window's top over an empty state too.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .safeAreaInset(edge: .top, spacing: 0) { banners }
             // On the list, so the inspector widens the window (docs/facts/macos-app.md).
             .frame(minWidth: 560, minHeight: 400)
-            // Before the inspector, so they stay over the list.
+            // Only beside rows: the empty states are the window's whole content.
+            .inspector(
+                isPresented: Binding(get: { inspector && listed }, set: { inspector = $0 })
+            ) {
+                AccountInspector(item: selected, act: act) { model.send($0) }
+                    .inspectorColumnWidth(min: 240, ideal: 260, max: 360)
+            }
             .toolbar {
                 ToolbarItemGroup {
                     Button {
@@ -34,23 +42,20 @@ struct AccountsWindow: View {
                     .help(words.window.addAccountHelp)
                     .accessibilityIdentifier("toolbar.addAccount")
                 }
-            }
-            // Only beside rows: the empty states are the window's whole content.
-            .inspector(
-                isPresented: Binding(get: { inspector && listed }, set: { inspector = $0 })
-            ) {
-                AccountInspector(item: selected, act: act) { model.send($0) }
-                    .inspectorColumnWidth(min: 240, ideal: 260, max: 360)
-            }
-            .toolbar {
-                Button {
-                    inspector.toggle()
-                } label: {
-                    Label(words.window.inspector ?? "", systemImage: Symbol.inspector)
+                // Apart from the list's commands, which SwiftUI draws over the inspector too.
+                if #available(macOS 26, *) {
+                    ToolbarSpacer(.fixed)
                 }
-                .help(words.window.inspectorHelp ?? "")
-                .disabled(!listed)
-                .accessibilityIdentifier("toolbar.inspector")
+                ToolbarItem {
+                    Button {
+                        inspector.toggle()
+                    } label: {
+                        Label(words.window.inspector ?? "", systemImage: Symbol.inspector)
+                    }
+                    .help(words.window.inspectorHelp ?? "")
+                    .disabled(!listed)
+                    .accessibilityIdentifier("toolbar.inspector")
+                }
             }
             .navigationTitle(words.window.accounts)
             .navigationSubtitle(model.updatedWindow)
