@@ -16,7 +16,7 @@ A Claude Desktop account signs in again inside Claude, as [Use Pitboard with Cla
 - `nothing parked`
 - `login replaced outside Pitboard`
 
-In the app, Pitboard's menu marks the account **Needs signing in again**, and its row in the Pitboard window and a notification offer **Sign In Again**. On Windows, the menu gives that line as the account's tooltip, and the button is **Sign in again**. [Account status](/reference/account-status) says what each means.
+In the app, the account's line reads **Sign-in expired**, **Not signed in** or **Sign-in no longer works**. Pitboard's menu offers **Sign In to work Again**, its row in **Accounts** offers **Sign In**, and a notification offers **Sign In Again**. On Windows, the menu names the reason after the account, as in **work (sign-in expired)**. [Account status](/reference/account-status) says what each means.
 
 A switch to such an account moves nothing and names the same command:
 
@@ -24,7 +24,7 @@ A switch to such an account moves nothing and names the same command:
 error: the parked login for `work` has expired. Run `pitboard enroll work --sign-in` to sign in to it again.
 ```
 
-A line that starts `ready · expires in` names the same command. The account still switches until its parked login expires.
+A line that starts `ready · expires in` names the same command, and the app's row reads **Sign-in expires in 2 days**, with **Sign In Again**. The account still switches until its parked login expires.
 
 On Windows, a switch that refuses with `credential_sealed` needs a sign-in again too: see [Parked logins do not open on this PC](/troubleshooting/recovery#parked-logins-do-not-open-on-this-pc).
 
@@ -34,7 +34,7 @@ On Windows, a switch that refuses with `credential_sealed` needs a sign-in again
   <Tab title="macOS">
     <Steps>
       <Step title="Open the dialog">
-        Click Pitboard's item in the menu bar, then choose the account marked **Needs signing in again**. Or, in the Pitboard window, Control-click the account and choose **Sign In Again**.
+        Click Pitboard's item in the menu bar, then choose **Sign In to work Again**. Or, in **Accounts**, click **Sign In** on the account's row, or select the account and click **Sign In Again** in the inspector.
       </Step>
       <Step title="Start the sign-in">
         In the **Sign In to work Again** dialog, click **Sign In**. Your browser opens the tool's sign-in.
@@ -47,7 +47,7 @@ On Windows, a switch that refuses with `credential_sealed` needs a sign-in again
   <Tab title="Windows">
     <Steps>
       <Step title="Open the dialog">
-        In the Pitboard window, select **Sign in again** in the account's row. Or right-click the account and select **Sign in again**.
+        In the Pitboard window, select **Sign in** on the account's row. Or right-click the account and select **Sign in again**.
       </Step>
       <Step title="Start the sign-in">
         In the **Sign in to work again** dialog, select **Sign in**. Your browser opens the tool's sign-in.
@@ -79,7 +79,7 @@ Start again and sign in as `me@company.com`.
 
 ## Sign in again to the account in use
 
-The new login takes the place of the one the tool has, and Pitboard parks nothing. In the app, sign in again from the account's shortcut menu, as for any account. After the sign-in, a notice titled **work has a new login** appears.
+The new login takes the place of the one the tool has, and Pitboard parks nothing. In the app, sign in again from the account's shortcut menu, as for any account. After the sign-in, a notice titled **Signed in to work** says the new sign-in is the one in use.
 
 On the command line, `pitboard enroll work --sign-in` ends with:
 
@@ -96,6 +96,6 @@ Pitboard replaces the login in use only once it has [identified it](/concepts/id
 - The login in use cannot be read or found.
 - A Claude Code login changed since Pitboard last identified it, and Anthropic no longer accepts it or does not answer.
 
-If `work` is the account Pitboard last recorded in use, it also warns with [`sign_in_parked_not_in_use`](/reference/errors#warning-codes). In the app, the notice is titled **The new login was parked, not put in use**.
+If `work` is the account Pitboard last recorded in use, it also warns with [`sign_in_parked_not_in_use`](/reference/errors#warning-codes). In the app, the notice is titled **The new sign-in was saved, not put in use**.
 
 To keep parked logins from expiring, see [Keep parked logins alive](/guides/renewal).

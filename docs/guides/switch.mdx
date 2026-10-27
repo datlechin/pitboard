@@ -1,6 +1,6 @@
 ---
 title: "Switch accounts"
-description: "Switch a tool to another enrolled account from the app's menu, the Pitboard window or the command line."
+description: "Switch a tool to another enrolled account from the app's menu, its window or the command line."
 ---
 
 A switch puts another account's [parked login](/concepts/switching#parked-logins) in use for Claude Code, OpenAI's Codex CLI or Claude Desktop, and parks the login the tool had. Where nothing is signed in to the tool, as on a new computer, it puts the account's login in use and parks nothing.
@@ -11,12 +11,12 @@ A switch puts another account's [parked login](/concepts/switching#parked-logins
   <Tab title="macOS">
     Click Pitboard's item in the menu bar, then choose the account.
 
-    In the Pitboard window, click **Use** in the account's row, double-click the row, or select it and press Return.
+    In **Accounts**, click **Switch** on the account's row, double-click the row, or select it and press Return.
   </Tab>
   <Tab title="Windows">
     Right-click Pitboard's icon in the notification area, then select the account.
 
-    In the Pitboard window, select **Use** in the account's row, double-click the row, or select it and press Enter.
+    In the Pitboard window, select **Switch** on the account's row, or press Enter on the row.
   </Tab>
 </Tabs>
 
@@ -43,7 +43,7 @@ An expired or refused parked login needs a [sign-in again](/guides/sign-in-again
 
 When Anthropic refuses for good the login Claude Code has in use, that login no longer works and cannot be parked. A switch asks before it puts the other account's login in its place. Replacing the refused login loses nothing.
 
-In the app, click **Replace** in the **Replace Claude Code's Login?** alert. On Windows, select **Replace** in the **Replace Claude Code's login?** dialog.
+In the app, click **Replace** when Pitboard asks **Replace Claude Code's sign-in?**. On Windows, select **Replace**.
 
 `pitboard use` asks the same at a terminal, ending with `Put work's login in its place? [y/N]`. Without a terminal, or with `--json`, it refuses with `live_login_refused` until you add `--yes`:
 
@@ -55,7 +55,7 @@ pitboard use work --yes
 
 | Tool | After a switch |
 | --- | --- |
-| Claude Code | Open sessions follow within about 33 seconds, with no restart. The Pitboard window counts down. |
+| Claude Code | Open sessions follow within about 33 seconds, with no restart. The app's notice counts down. |
 | Codex | Nothing that runs Codex follows. Restart each, as [Restart what runs Codex](/guides/codex#restart-what-runs-codex) says. |
 | Claude Desktop | Claude opens signed in to the account switched to. |
 
@@ -69,10 +69,10 @@ While the app is open, it notifies you once a limit of the account in use reache
 
 <Tabs>
   <Tab title="macOS">
-    In **Settings** > **Limits**, under **Before an account runs out**, choose **Notify Me** in **When a limit reaches**. Set the share in the field or with the stepper beside it. **Do Nothing** turns the notification off.
+    In **Settings** > **Limits**, choose **Notify Me** in **When a limit reaches**. Set the share in **At**, in its field or with its stepper. **Do Nothing** turns the notification off.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Notify me** in **When a limit reaches**, then expand it and set the share in **Share of a limit**. **Do nothing** turns the notification off.
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, select **Notify me** in **When a limit reaches**, then expand it and set the share in **At**. **Do nothing** turns the notification off.
   </Tab>
 </Tabs>
 
@@ -82,6 +82,6 @@ The command line posts no notification. [Notifications](/reference/mac-app#notif
 
 When the account in use runs out of a limit, the app offers another account of the same tool, under 100% in every limit, by the rules in [Which account it switches to](/reference/automatic-switching#which-account-it-switches-to). If no account has room, it offers nothing. The command line offers no switch.
 
-The offer is **Switch to personal** in Pitboard's menu and window.
+The offer is **Switch to personal**, on a notice in **Accounts**. On macOS, Pitboard's menu offers it too.
 
 Pitboard can also [switch Claude Code by itself](/guides/automatic-switching) before an account runs out.

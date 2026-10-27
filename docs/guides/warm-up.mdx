@@ -12,14 +12,14 @@ Warm-up is off for every account until you turn it on for one. Pitboard warms up
 
 <Tabs>
   <Tab title="macOS">
-    In **Settings** > **Limits**, under **Warm up limits**, turn on each account to warm up, and set the hours with **From** and **To**.
+    In **Settings** > **Limits**, under **Warm-Up**, turn on each account to warm up, and set the hours with **From** and **To**.
   </Tab>
   <Tab title="Windows">
-    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, expand **Warm up limits**, turn on each account to warm up, and set the hours with **From** and **To**.
+    Right-click Pitboard's icon in the notification area and select **Settings**. Under **Limits**, expand **Warm-up**, turn on each account to warm up, and set the hours with **From** and **To**.
   </Tab>
 </Tabs>
 
-The app warms up accounts only while it is open, and each account's row says when it warms up next.
+The app warms up accounts only while it is open. Each account's switch in Settings says when it warms up next, as does **Warm-Up** in its details in **Accounts**.
 
 On the command line, turn it on for an account and set the hours:
 
@@ -46,7 +46,7 @@ Anthropic's terms may cover warm-ups: see [Is this allowed](/concepts/limits#is-
 
 <Tabs>
   <Tab title="macOS">
-    In the **Accounts** pane, choose **Warm Up Now** in the account's shortcut menu.
+    In **Accounts**, select the account and click **Warm Up Now** in the inspector, or Control-click it and choose **Warm Up Now**.
   </Tab>
   <Tab title="Windows">
     In **Accounts**, right-click the account and select **Warm up now**.
@@ -85,4 +85,4 @@ Pitboard warms up no account at all while one of these holds:
 | A switch was interrupted. | Your next change finishes it, or [`pitboard abandon`](/reference/recovery-commands#abandon) gives up on it. |
 | Claude Code uses [`CLAUDE_CODE_CUSTOM_OAUTH_URL`](/reference/environment-variables). | You unset it. |
 
-The app posts **Pitboard couldn't warm up an account** once for each account and reason a warm-up came to nothing.
+The app posts **Warm-Up Didn't Start** once for each account and reason a warm-up came to nothing.

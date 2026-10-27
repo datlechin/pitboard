@@ -11,7 +11,7 @@ Pitboard changes Claude's login only while Claude is closed. On the command line
 ## Before you add a Claude Desktop account
 
 - Quit Claude with Command-Q. Closing its window leaves it running.
-- A Claude Desktop label starts with `desktop/`, as in `desktop/work`. In the app, choose **Claude Desktop** as the tool and enter the name alone.
+- A Claude Desktop label starts with `desktop/`, as in `desktop/work`. In the app, choose **Claude Desktop** as the tool: Pitboard names the account `desktop`, or `desktop-2` where that is taken, and asks for a name of your own.
 - [What Pitboard does not do for Claude Desktop](/concepts/claude-desktop#what-pitboard-does-not-do-for-claude-desktop) says how these accounts differ from Claude Code's.
 
 <Warning>
@@ -22,7 +22,7 @@ Pitboard changes Claude's login only while Claude is closed. On the command line
 
 Open Claude, check which account it shows, then quit it. Pitboard cannot ask claude.ai whose a login is.
 
-In the app, click Pitboard's item in the menu bar, then choose **Add Account**. Choose **Claude Desktop** in the **Tool** pop-up menu, enter a name such as `work`, then click **Add Account**. If Claude is open, click **Quit Claude and Add**. If the dialog says **Pitboard can't find Claude Desktop on this Mac.**, open Claude and sign in once, then return to the dialog.
+In the app, click Pitboard's item in the menu bar, then choose **Add Account**. Choose **Claude Desktop** in the **Tool** pop-up menu, then click **Add Account**. If Claude is open, click **Quit Claude and Add**. Keep the name Pitboard suggests in **Name This Account**, or enter another such as `work`, then click **Done**. If the dialog says **Pitboard can't find Claude Desktop on this Mac.**, open Claude and sign in once, then return to the dialog.
 
 On the command line:
 
@@ -38,13 +38,13 @@ Pitboard parks the account in use, which leaves Claude signed out and signs noth
 
 <Steps>
   <Step title="Open the dialog">
-    Click Pitboard's item in the menu bar, then choose **Add Account**. Choose **Claude Desktop** in the **Tool** pop-up menu, then enter a name such as `travel`.
+    Click Pitboard's item in the menu bar, then choose **Add Account**. Choose **Claude Desktop** in the **Tool** pop-up menu.
   </Step>
-  <Step title="Park the account in use">
-    Click **Park work**, or **Start Sign-In** while Claude is signed out. If Claude is open, Pitboard asks to quit it first: click **Quit Claude and Park work** or **Quit Claude and Start Sign-In**.
+  <Step title="Sign Claude out">
+    Click **Continue**. If Claude is open, Pitboard asks to quit it first: click **Quit Claude and Continue**, or **Quit Claude and Start Sign-In** while Claude is signed out.
   </Step>
   <Step title="Sign in">
-    Open Claude if it is closed, and sign in to the account you are adding. When it shows your chats, quit Claude with Command-Q. The dialog closes once Pitboard has added the account.
+    Open Claude if it is closed, and sign in to the account you are adding. When it shows your chats, quit Claude with Command-Q. Pitboard adds the account, then asks for its name in **Name This Account**: keep the name it suggests, or enter another such as `travel`, then click **Done**.
   </Step>
 </Steps>
 
@@ -71,7 +71,7 @@ An add you leave with **Later** or Control-C keeps Claude signed out: [Finish or
 
 ## Switch accounts
 
-In the app, click Pitboard's item in the menu bar, then choose the Claude Desktop account. If Claude is open, click **Quit Claude and Switch** when Pitboard asks. Pitboard opens Claude again behind the Pitboard window. If Claude has not quit within 30 seconds, nothing changes.
+In the app, click Pitboard's item in the menu bar, then choose the Claude Desktop account. If Claude is open, click **Quit Claude and Switch** when Pitboard asks. Pitboard opens Claude again behind its own windows. If Claude has not quit within 30 seconds, nothing changes.
 
 On the command line:
 
@@ -88,7 +88,7 @@ If Pitboard says Claude is open, or that part of it is still running, nothing ha
 
 ## Sign in again
 
-Sign in again when an account shows **Needs signing in again** or `nothing parked`, or when Claude asks you to sign in after a switch. It runs as [Add another account](#add-another-account) does: in the Pitboard window, Control-click `home` and choose **Sign In Again**, then follow its steps 2 and 3, signing in to `home`.
+Sign in again when an account reads **Not signed in** or **Sign-in may have expired** in the app, or `nothing parked` on the command line, or when Claude asks you to sign in after a switch. It runs as [Add another account](#add-another-account) does: in **Accounts**, Control-click `home` and choose **Sign In Again**, then follow its steps 2 and 3, signing in to `home`. Pitboard keeps the name `home`.
 
 On the command line, run the command, then sign in to `home` in Claude and quit Claude with Command-Q:
 
