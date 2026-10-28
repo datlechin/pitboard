@@ -63,9 +63,9 @@ them before you push:
 ```sh
 cargo fmt --check
 cargo clippy --all-targets --locked
-cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
+cargo clippy -p pitboard-model --all-targets --locked --features fixture
 cargo nextest run --locked
-cargo nextest run --locked -p pitboard-ffi --features fixture -E 'test(/^fixture::/)'
+cargo nextest run --locked -p pitboard-model --features fixture -E 'test(/^fixture::/)'
 cargo deny --all-features check
 cargo semver-checks --package pitboard-core
 python3 .github/scripts/windows-pending.py
@@ -81,7 +81,7 @@ cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-tar
 ```
 
 Only a Mac compiles `rusqlite`, so CI also checks `pitboard-core`, `pitboard` and
-`pitboard-ffi` on Rust 1.91 on a Mac.
+`pitboard-model` on Rust 1.91 on a Mac.
 
 Some code compiles only on Linux. To lint it from a Mac:
 
@@ -91,7 +91,7 @@ cargo-zigbuild clippy --target x86_64-unknown-linux-gnu --all-targets
 
 Every program a Rust test starts in place of `claude`, `codex` or another tool is one
 compiled stand-in, the `pitboard` crate's example `stand-in`. `cargo nextest run` builds
-it. A test run alone with `--test`, or `pitboard-ffi`'s tests on their own, does not, so
+it. A test run alone with `--test`, or `pitboard-model`'s tests on their own, does not, so
 build it first, with the `--release` or `--target` the tests use:
 
 ```sh
@@ -122,7 +122,7 @@ why the contract moved. They hold each message as `[message]`: its code is the c
 
 A test of what Pitboard does checks codes and fields, and compares a sentence with the
 function that makes it. Each sentence is pinned once, in the tests of the module that makes
-it: `pitboard_core`'s `words.rs`, `error.rs` or `doctor/words.rs`, or `pitboard-ffi`'s
+it: `pitboard_core`'s `words.rs`, `error.rs` or `doctor/words.rs`, or `pitboard-model`'s
 `present/words.rs`.
 
 Both apps' UI tests find a control by its accessibility identifier, named for the model's
@@ -321,9 +321,9 @@ that holds no real login, in PowerShell from a terminal that is not elevated:
 ```powershell
 $env:RUSTFLAGS = "-D warnings -C target-feature=+crt-static"
 cargo clippy --workspace --all-targets --locked
-cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
+cargo clippy -p pitboard-model --all-targets --locked --features fixture
 cargo nextest run --locked
-cargo nextest run --locked -p pitboard-ffi --features fixture -E 'test(/^fixture::/)'
+cargo nextest run --locked -p pitboard-model --features fixture -E 'test(/^fixture::/)'
 ```
 
 `RUSTFLAGS` replaces each target's own rustflags, so it names the static C runtime releases
@@ -354,7 +354,7 @@ cargo-xwin clippy --locked --workspace --all-targets --target aarch64-pc-windows
   --cross-compiler clang
 ```
 
-Run each once more with `-p pitboard-ffi --all-targets --features fixture` in place of
+Run each once more with `-p pitboard-model --all-targets --features fixture` in place of
 `--workspace --all-targets`, as CI does, and the workspace once without the `--cfg`, as a
 release is built.
 
@@ -424,17 +424,17 @@ fails on the style rules in `apps/windows/.editorconfig`, and CI checks the layo
 
 ### The C# bindings
 
-The Windows app reaches the core through C# bindings, generated from `pitboard-ffi` like the
-Swift ones and not committed, and `PitboardShare.exe` reaches `pitboard-share-ffi` through
-its own. They need the .NET 10 SDK, and they and their tests build and run on macOS and Linux
-as well as Windows:
+The Windows app reaches the core through C# bindings, generated like the Swift ones from the
+`pitboard-ffi` library, which holds `pitboard-model`, and not committed, and
+`PitboardShare.exe` reaches `pitboard-share-ffi` through its own. They need the .NET 10 SDK,
+and they and their tests build and run on macOS and Linux as well as Windows:
 
 ```sh
 cargo build --locked -p pitboard-ffi
 cargo build --locked -p pitboard-share-ffi
 mkdir -p apps/windows/Pitboard.Core/Generated apps/windows/Pitboard.Share.Core/Generated
 cargo run --locked -p uniffi-bindgen-csharp -- --library target/debug/libpitboard_ffi.a \
-  --out-dir apps/windows/Pitboard.Core/Generated --config crates/pitboard-ffi/uniffi.toml --no-format
+  --out-dir apps/windows/Pitboard.Core/Generated --config crates/pitboard-model/uniffi.toml --no-format
 cargo run --locked -p uniffi-bindgen-csharp -- --library target/debug/libpitboard_share_ffi.a \
   --out-dir apps/windows/Pitboard.Share.Core/Generated --config crates/pitboard-share-ffi/uniffi.toml --no-format
 cd apps/windows

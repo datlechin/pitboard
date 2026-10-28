@@ -1,6 +1,6 @@
 [package]
 name = "pitboard-ffi"
-description = "Pitboard's core as generated bindings for its native apps."
+description = "The libraries Pitboard's macOS and Windows apps link, holding pitboard-model."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,32 +10,13 @@ publish = false
 
 [lib]
 # A static library for the macOS app, a dynamic one for the Windows app to load.
-crate-type = ["lib", "staticlib", "cdylib"]
+crate-type = ["staticlib", "cdylib"]
 
 [features]
-# The fixtures: worlds an app's debug build and its UI tests launch into, the real core over
-# a machine in memory and services that answer from a script, through pitboard-core's
-# test-support. Never in a library an app ships: build-app.sh never passes it, and checks
-# that what it built holds no world's text.
-fixture = ["pitboard-core/test-support"]
+fixture = ["pitboard-model/fixture"]
 
 [dependencies]
-jiff.workspace = true
-pitboard-core.workspace = true
-pitboard-sites.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
-uniffi.workspace = true
-unicode-normalization.workspace = true
-unicode-segmentation.workspace = true
-uuid.workspace = true
-
-[dev-dependencies]
-# The core's machine in memory and its scripted services, which the model's tests run the
-# real core on. Tests alone: the libraries the apps link are built without them.
-pitboard-core = { workspace = true, features = ["test-support"] }
-tempfile.workspace = true
+pitboard-model.workspace = true
 
 [lints]
 workspace = true

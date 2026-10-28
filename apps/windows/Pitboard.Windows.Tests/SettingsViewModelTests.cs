@@ -97,18 +97,18 @@ public sealed class SettingsViewModelTests
         var updates = new StandInUpdates();
         var (shown, _, _) = Over(Snapshots.Read(1), updates: updates, version: "1.0.0");
 
-        Assert.AreEqual(PitboardFfiMethods.NamedVersion("1.0.0"), shown.UpdatesState);
+        Assert.AreEqual(PitboardModelMethods.NamedVersion("1.0.0"), shown.UpdatesState);
 
         updates.Found("1.0.1");
-        Assert.AreEqual(PitboardFfiMethods.ReadyToInstall("1.0.1"), shown.UpdatesState);
+        Assert.AreEqual(PitboardModelMethods.ReadyToInstall("1.0.1"), shown.UpdatesState);
     }
 
     [TestMethod]
     public void ABuildThatCannotUpdateSaysSoAndABetaSaysHowItGetsTheNext()
     {
-        Assert.AreEqual(PitboardFfiMethods.NoUpdateKey(), SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
+        Assert.AreEqual(PitboardModelMethods.NoUpdateKey(), SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
         CollectionAssert.AreEqual(
-            new[] { PitboardFfiMethods.NoUpdateKey(), Words.Settings.BetaUpdates },
+            new[] { PitboardModelMethods.NoUpdateKey(), Words.Settings.BetaUpdates },
             SettingsViewModel.UpdatesNotes(new NoUpdates(), "1.0.0-beta.1"));
         Assert.IsEmpty(SettingsViewModel.UpdatesNotes(new StandInUpdates(), "1.0.0"));
         Assert.AreEqual(

@@ -198,7 +198,7 @@ public sealed class SettingsPageTests
             Card(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn")), Card(Said(page, Words.Settings.OpenAtLoginNote)));
         Assert.AreEqual(Words.Settings.Version, Card(checkNow).Header);
         Assert.AreEqual(Words.Settings.Version, AutomationProperties.GetName(Card(checkNow)), "the group Narrator reads the button in");
-        Assert.AreSame(Card(checkNow), Card(Said(page, PitboardFfiMethods.NamedVersion("1.1.0"))));
+        Assert.AreSame(Card(checkNow), Card(Said(page, PitboardModelMethods.NamedVersion("1.1.0"))));
         Assert.AreEqual("C", checkNow.AccessKey);
     }
 
@@ -567,7 +567,7 @@ public sealed class SettingsPageTests
 
         updates.Found("1.0.1");
 
-        Assert.Contains(PitboardFfiMethods.ReadyToInstall("1.0.1"), Views.Texts(page));
+        Assert.Contains(PitboardModelMethods.ReadyToInstall("1.0.1"), Views.Texts(page));
     }
 
     [UITestMethod]

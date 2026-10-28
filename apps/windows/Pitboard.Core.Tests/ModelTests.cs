@@ -220,7 +220,7 @@ public sealed class ModelTests
         // it is given, so it answers at once.
         Assert.AreEqual(
             new Intent.Rename("claude", "acme", "home"),
-            PitboardFfiMethods.CheckName(new Sheet.Name("claude", "acme", "a@example.com"), "claude", " home ").Intent);
+            PitboardModelMethods.CheckName(new Sheet.Name("claude", "acme", "a@example.com"), "claude", " home ").Intent);
     }
 
     // Never started, so nothing on this machine is read.
@@ -405,8 +405,8 @@ public sealed class ModelTests
         Assert.AreEqual("Try Again", failed.Retry.Title);
         Assert.AreEqual(
             OperatingSystem.IsWindows() ? "A download is in progress. Exit anyway?" : "A download is in progress. Quit anyway?",
-            PitboardFfiMethods.DownloadsQuitQuestion(1)?.Title);
-        Assert.IsNull(PitboardFfiMethods.DownloadsQuitQuestion(0));
+            PitboardModelMethods.DownloadsQuitQuestion(1)?.Title);
+        Assert.IsNull(PitboardModelMethods.DownloadsQuitQuestion(0));
 
         Intent[] intents =
         [
@@ -694,19 +694,19 @@ public sealed class ModelTests
     {
         var named = new Sheet.Name("claude", "acme", "a@example.com");
         Assert.AreEqual(
-            new NameCheck(null, new Intent.Rename("claude", "acme", "home")), PitboardFfiMethods.CheckName(named, "claude", "  home "));
-        Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardFfiMethods.CheckName(named, "claude", " acme"));
-        Assert.AreEqual(new NameCheck("Type a name for this account.", null), PitboardFfiMethods.CheckName(named, "claude", " \n"));
-        Assert.IsNull(PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
+            new NameCheck(null, new Intent.Rename("claude", "acme", "home")), PitboardModelMethods.CheckName(named, "claude", "  home "));
+        Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardModelMethods.CheckName(named, "claude", " acme"));
+        Assert.AreEqual(new NameCheck("Type a name for this account.", null), PitboardModelMethods.CheckName(named, "claude", " \n"));
+        Assert.IsNull(PitboardModelMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
         Assert.AreEqual(
             new Intent.SignIn("codex", "work"),
-            PitboardFfiMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "codex", "").Intent);
+            PitboardModelMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "codex", "").Intent);
         Assert.AreEqual(
             new NameCheck(null, new Intent.SignIn("codex", null)),
-            PitboardFfiMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"),
+            PitboardModelMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"),
             "a new account is named once it is added");
         Assert.AreEqual(
-            new NameCheck("A name can’t contain “/”.", null), PitboardFfiMethods.CheckName(named, "claude", "codex/phu"));
+            new NameCheck("A name can’t contain “/”.", null), PitboardModelMethods.CheckName(named, "claude", "codex/phu"));
     }
 
     private sealed class Waiting : ModelListener
@@ -760,7 +760,7 @@ public sealed class ModelTests
     [TestMethod]
     public void AFixtureIsNamedOrRefusedWithWhy()
     {
-        var names = PitboardFfiMethods.FixtureNames();
+        var names = PitboardModelMethods.FixtureNames();
         var listener = new Keeping();
 
         if (names.Length == 0)
@@ -769,7 +769,7 @@ public sealed class ModelTests
                 () => PitboardModel.Fixture("twoTools", listener, new InUtc()));
             Assert.Contains("--features fixture", refused.reason);
             Assert.ThrowsExactly<FixtureException.Unavailable>(
-                () => PitboardFfiMethods.FixturePage("pitboard-fixture://claude.ai/"));
+                () => PitboardModelMethods.FixturePage("pitboard-fixture://claude.ai/"));
             return;
         }
 
@@ -783,7 +783,7 @@ public sealed class ModelTests
         var unknown = Assert.ThrowsExactly<FixtureException.Unknown>(
             () => PitboardModel.Fixture("twoTool", listener, new InUtc()));
         Assert.Contains("twoTools, oneTool", unknown.reason);
-        Assert.Contains("<title>claude.ai stand-in</title>", PitboardFfiMethods.FixturePage("pitboard-fixture://claude.ai/"));
+        Assert.Contains("<title>claude.ai stand-in</title>", PitboardModelMethods.FixturePage("pitboard-fixture://claude.ai/"));
         Assert.IsEmpty(listener.Told);
     }
 
@@ -814,7 +814,7 @@ public sealed class ModelTests
 
     private static void NeedsFixtures()
     {
-        if (PitboardFfiMethods.FixtureNames().Length == 0)
+        if (PitboardModelMethods.FixtureNames().Length == 0)
         {
             Assert.Inconclusive(NoFixtures);
         }
@@ -1055,7 +1055,7 @@ public sealed class ModelTests
             string[] homes = ["USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "PITBOARD_HOME"];
             var environment = homes.ToDictionary(
                 home => home, home => Directory.CreateDirectory(Path.Combine(root, home)).FullName);
-            var refused = PitboardFfiMethods.LaunchRefusal(environment);
+            var refused = PitboardModelMethods.LaunchRefusal(environment);
             var waiting = new Waiting();
             using var model = new PitboardModel(
                 new AppLaunch(environment, null), waiting, new StandInApps(), new Posting(), new InUtc());

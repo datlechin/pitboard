@@ -17,5 +17,5 @@ public sealed record AppStart(
         Environment,
         AppLocation: exe,
         Windows: new WindowsLaunch(
-            DataFolder, PitboardFfiMethods.WindowsRecordsKey(PitboardFfiMethods.PitboardDirectory(Environment)), Identity.LinkScheme));
+            DataFolder, PitboardModelMethods.WindowsRecordsKey(PitboardModelMethods.PitboardDirectory(Environment)), Identity.LinkScheme));
 }

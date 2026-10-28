@@ -8,6 +8,6 @@ public static class HeldStores
 {
     public static string? Note(WindowAccount window, IReadOnlyCollection<string> held) =>
         held.Contains(window.Store, StringComparer.OrdinalIgnoreCase)
-            ? PitboardFfiMethods.WindowNote(new WindowNoteKind.StoreHeld(), window)
+            ? PitboardModelMethods.WindowNote(new WindowNoteKind.StoreHeld(), window)
             : null;
 }

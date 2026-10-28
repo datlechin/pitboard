@@ -6,7 +6,7 @@ import { account, moments } from "./world.ts";
 import { changeOutcome, changeVerb } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
-const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
 const words = joined(present("words.rs"));
@@ -69,7 +69,7 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
   assert.ok(words.includes('format!("Remove “{name}”?")'));
   assert.ok(words.includes(`pub(crate) const REMOVE: &str = "${w.REMOVE}";`));
   assert.equal(w.removeTitle(account("work"), after, "macos"), "Remove “work (Claude Code)”?");
-  const windows = joined(repo("crates/pitboard-ffi/src/account_windows/accounts.rs"));
+  const windows = joined(repo("crates/pitboard-model/src/account_windows/accounts.rs"));
   assert.ok(
     windows.includes(
       "Pitboard deletes its saved sign-in and what its {} window keeps on {}, so using it again needs a sign-in in your browser.",
@@ -80,7 +80,7 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
       "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again needs a sign-in in {app}.",
     ),
   );
-  const machines = repo("crates/pitboard-ffi/src/account_windows/mod.rs");
+  const machines = repo("crates/pitboard-model/src/account_windows/mod.rs");
   assert.ok(
     machines.includes('Os::MacOs => "this Mac"') && machines.includes('Os::Windows => "this PC"'),
   );

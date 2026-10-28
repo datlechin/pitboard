@@ -1,5 +1,5 @@
 // The app's and the command line's words for world.ts, by crates/pitboard-core/src/words.rs,
-// crates/pitboard-ffi/src/present and crates/pitboard/src/render/status.rs.
+// crates/pitboard-model/src/present and crates/pitboard/src/render/status.rs.
 
 import {
   DAY,

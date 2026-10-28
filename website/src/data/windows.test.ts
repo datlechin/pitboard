@@ -22,7 +22,7 @@ import { TIP_LENGTH, menuBarLevel, shellTip, trayTip } from "../lib/words.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const views = (file: string) => repo(`apps/windows/Pitboard.Views/${file}`);
 const shell = (file: string) => repo(`apps/windows/Pitboard.Windows/${file}`);
-const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
 const core = (file: string) => repo(`crates/pitboard-core/src/${file}`);
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
@@ -132,7 +132,7 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
 });
 
 test("a site with several accounts' windows is a submenu of their labels, the one in use first", () => {
-  const source = repo("crates/pitboard-ffi/src/account_windows/accounts.rs");
+  const source = repo("crates/pitboard-model/src/account_windows/accounts.rs");
   assert.ok(source.includes("title: words::open_site(site.name()),"));
   assert.ok(present("words.rs").includes('format!("Open {site}")'));
   // in the accounts' order, which the status gives with the signed-in account first

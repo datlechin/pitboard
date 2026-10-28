@@ -59,7 +59,7 @@ public abstract record SheetPage
 
         // Null while Sign in cannot be pressed. A new account is named once it is added.
         public Intent? Start(string tool) =>
-            !Text.Saving && !Running && NotFound(tool) is null ? PitboardFfiMethods.CheckName(Sheet, tool, "").Intent : null;
+            !Text.Saving && !Running && NotFound(tool) is null ? PitboardModelMethods.CheckName(Sheet, tool, "").Intent : null;
 
         private SheetTool? Chosen(string tool) => Text.Tools.FirstOrDefault(offered => offered.Code == tool);
     }
@@ -72,9 +72,9 @@ public abstract record SheetPage
         public override string? CloseTitle => Sheet is Sheet.Name ? null : Words.Window.Cancel;
 
         // Microsoft's forms guidance holds the button back until what it needs is filled in; the field says so meanwhile.
-        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Problem;
+        public string? Problem(string typed) => PitboardModelMethods.CheckName(Sheet, Text.Tool, typed).Problem;
 
-        public Intent? Save(string typed) => Text.Saving ? null : PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Intent;
+        public Intent? Save(string typed) => Text.Saving ? null : PitboardModelMethods.CheckName(Sheet, Text.Tool, typed).Intent;
     }
 
     public sealed record SigningIn(RunningSignIn SignIn, SigningInText Text) : SheetPage

@@ -8,7 +8,7 @@ import { clock } from "./world.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const menu = repo("apps/macos/Sources/PitboardApp/MenuBar/MenuBarContent.swift");
 // a Rust string literal as it reads once its line continuations are joined
-const appWords = repo("crates/pitboard-ffi/src/present/app_words.rs").replace(/\\\n\s*/g, "");
+const appWords = repo("crates/pitboard-model/src/present/app_words.rs").replace(/\\\n\s*/g, "");
 // each command's words in app_words(), as the menu takes them, and as app_words.rs makes them
 const said: Record<string, [string, string]> = {
   "Add Account…": ["addAccount", "add_account: words::add_account(os, true),"],
@@ -53,12 +53,12 @@ test("the questions' macOS shortcuts are AccountCommands.swift's: the Account me
     /if place == \.menuBar \{\s+Button\(remove\.title, role: \.destructive\) \{ command\.act\(remove\) \}\s+\.keyboardShortcut\(\.delete\)\n/,
   );
   assert.ok(
-    repo("crates/pitboard-ffi/src/present/accounts.rs").includes(
+    repo("crates/pitboard-model/src/present/accounts.rs").includes(
       "title: words::remove_account(seen.os),",
     ),
   );
   assert.ok(
-    repo("crates/pitboard-ffi/src/present/words.rs").includes(
+    repo("crates/pitboard-model/src/present/words.rs").includes(
       'titled(os, "Remove Account…", "Remove account…")',
     ),
   );
@@ -72,7 +72,7 @@ test("the questions' macOS shortcuts are AccountCommands.swift's: the Account me
 });
 
 test("the menus say what the app says while a switch or a read runs, and of a site's one account", () => {
-  const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+  const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
   assert.ok(present("accounts.rs").includes("return Some(words::SWITCHING_NOW.into());"));
   assert.ok(present("words.rs").includes(`pub(crate) const SWITCHING_NOW: &str = "${SWITCHING}";`));
   assert.ok(present("setup.rs").includes("return words::READING.into();"));
@@ -80,7 +80,7 @@ test("the menus say what the app says while a switch or a read runs, and of a si
   assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
   assert.equal(updated(clock.read), "Updated 20:50");
   assert.ok(
-    repo("crates/pitboard-ffi/src/account_windows/accounts.rs").includes(
+    repo("crates/pitboard-model/src/account_windows/accounts.rs").includes(
       "title: words::open_site_as(site.name(), &window.label),",
     ),
   );

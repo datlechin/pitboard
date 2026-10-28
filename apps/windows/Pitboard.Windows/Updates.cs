@@ -40,7 +40,7 @@ public sealed class NoUpdates(string? refusal = null) : IUpdates
 
     public bool Available => false;
 
-    public string? Refusal => refusal ?? PitboardFfiMethods.NoUpdateKey();
+    public string? Refusal => refusal ?? PitboardModelMethods.NoUpdateKey();
 
     public bool Beta => false;
 

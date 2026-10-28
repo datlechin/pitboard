@@ -299,7 +299,7 @@ fn reserve_signin(
 
 /// A sign-in that never ran. The crash matrix needs the state a finished sign-in leaves,
 /// and running a tool's own login inside a test is neither possible nor wanted. The app
-/// model's tests in `pitboard-ffi` need it for the same reason, through `testing`.
+/// model's tests in `pitboard-model` need it for the same reason, through `testing`.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn planted(
     ctx: &Context,

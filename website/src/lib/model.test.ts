@@ -84,7 +84,7 @@ import { SITE_BANNED, bannedFromDocs, wordPattern } from "../../scripts/guard.mj
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const core = (path: string) => repo(`crates/pitboard-core/src/${path}`);
-const ffi = (path: string) => repo(`crates/pitboard-ffi/src/${path}`);
+const ffi = (path: string) => repo(`crates/pitboard-model/src/${path}`);
 const autoswitch = core("duty/autoswitch.rs");
 const advising = ffi("model/advising.rs");
 
@@ -828,7 +828,7 @@ test("everything the model says keeps the site's rules: no dash, a committed fac
   const text = face("Inter-4.1-opsz-wght");
   const mono = face("JetBrainsMono-2.304-wght");
   const banned = wordPattern([...bannedFromDocs(repo("docs/AGENTS.md")), ...SITE_BANNED]);
-  const source = ["crates/pitboard-core/src/words.rs", "crates/pitboard-ffi/src/present/words.rs"]
+  const source = ["crates/pitboard-core/src/words.rs", "crates/pitboard-model/src/present/words.rs"]
     .map(repo)
     .join("\n");
   const { said, printed } = everything();

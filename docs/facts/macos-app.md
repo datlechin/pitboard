@@ -2,8 +2,15 @@
 
 ## What the Swift app said
 
-Measured on macOS 27.0 with Swift 6.4 on 5 October 2026, so that `pitboard-ffi`'s
-`present` says what the Swift app said.
+The model and what it presents came from the macOS app's Swift. A comment in
+`pitboard-model` that names a Swift file the app no longer has, such as `MachineModel.swift`
+or `Notifier.swift`, or names `AppModel.swift`, means that file as it was before the app ran
+on the model, at commit 277539b. The account windows' bookkeeping moved later, and a comment
+that names its Swift, such as `LinkInbox.swift`, `StoreJanitor.swift`'s sweep or
+`AccountPickerTests.swift`, means it as it was at commit a3e5ce0, where the comment says so.
+
+Measured on macOS 27.0 with Swift 6.4 on 5 October 2026, so that the model's `present` says
+what the Swift app said.
 
 - The menu bar cut a label past 12 `Character`s to 11 and an ellipsis, and Swift counts
   extended grapheme clusters. Over 22 labels, accents written as combining marks, flags,

@@ -271,7 +271,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
         }
 
         _noteShown = note;
-        Note.Message = note is not null ? PitboardFfiMethods.WindowNote(note, session.Account) : "";
+        Note.Message = note is not null ? PitboardModelMethods.WindowNote(note, session.Account) : "";
         Note.IsOpen = note is not null;
         RemoveDataButton.IsEnabled = !session.PageClosed;
         ReloadButton.IsEnabled = true;
@@ -438,7 +438,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
             return;
         }
 
-        if (!await Confirm(PitboardFfiMethods.RemoveDataAlert(session.Account)))
+        if (!await Confirm(PitboardModelMethods.RemoveDataAlert(session.Account)))
         {
             return;
         }

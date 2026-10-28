@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     The core's C# bindings, an assembly of their own. The code is generated into Generated/
-    from pitboard_ffi by `cargo run -p uniffi-bindgen-csharp` and is not committed; it calls
+    from pitboard_model by `cargo run -p uniffi-bindgen-csharp` and is not committed; it calls
     the pitboard_ffi native library.
   -->
   <PropertyGroup>

@@ -1,5 +1,37 @@
 # The bindings
 
+## The model's crate and the libraries
+
+`pitboard-model` holds the model and everything the bindings export, and `pitboard-ffi` is
+`pub use pitboard_model::*;` built as the static and the dynamic library the apps link.
+Cargo builds a dependency as every crate type it names and has no way to ask for its `lib`
+alone (rust-lang/cargo#11232, open when read on 28 October 2026), so the Linux app depends on
+the model, which names none.
+
+Measured on 28 October 2026 with Rust 1.98.1, UniFFI 0.31.2 and uniffi-bindgen-cs
+v0.11.1+v0.31.0, on the debug libraries built at 6238d370, before the split, and after it:
+
+- `libpitboard_ffi.dylib` and `libpitboard_ffi.a`, on macOS 27.0 (arm64) with `nm -gU`,
+  export 126 `uniffi_pitboard_model_` symbols, 53 `ffi_pitboard_model_` and 182
+  `UNIFFI_META_`: the 361 names they exported before, with `pitboard_ffi` read as
+  `pitboard_model`. So does `pitboard_ffi.dll`, built before and after with cargo-xwin 0.23.0
+  for `x86_64-pc-windows-msvc` and read with LLVM 22.1.8's `llvm-readobj --coff-exports`.
+  `libpitboard_ffi.so`, built after with cargo-zigbuild 0.24.0 for
+  `x86_64-unknown-linux-gnu` and read with LLVM 22.1.8's `llvm-nm -D`, exports the same 361
+  as the Mac's libraries. Built in Debian 13 for `aarch64-unknown-linux-gnu`, it exports 126,
+  53 and 182 by GNU `nm -D` 2.44.
+- The bindings' namespace is the name of the crate that declares the exports,
+  `pitboard_model`. The Swift and C# generated after are what was generated before but for
+  the names made from it: the C symbols, `uniffiEnsurePitboardModelInitialized`, the C#
+  class `PitboardModelMethods` and its file `pitboard_model.cs`. And for the 56 checksums,
+  every one different, since a checksum covers the call's module
+  ([The C# bindings](#the-c-bindings)).
+- The Swift generator, given no `--config`, as `build-xcframework.sh` runs it, reads
+  `crates/pitboard-model/uniffi.toml`, the file of the crate that declares the exports: it
+  still writes `PitboardFFI.h`, `module.modulemap` and `PitboardBindings.swift`. The C#
+  generated with that file is in `Pitboard.Core` and loads `pitboard_ffi`, as its
+  `cdylib_name` says.
+
 ## The C# bindings
 
 Read in the C# that uniffi-bindgen-cs v0.11.0+v0.31.0 generated from `pitboard-ffi`, and

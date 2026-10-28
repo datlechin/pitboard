@@ -76,7 +76,7 @@ public sealed class SparkleUpdatesTests
             var updates = Made(sparkle, build, key);
 
             Assert.IsFalse(updates.Available);
-            Assert.AreEqual(PitboardFfiMethods.NoUpdateKey(), updates.Refusal);
+            Assert.AreEqual(PitboardModelMethods.NoUpdateKey(), updates.Refusal);
             Assert.IsNull(sparkle.Key, "WinSparkle was handed a key");
         }
     }

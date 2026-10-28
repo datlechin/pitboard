@@ -332,7 +332,7 @@ test("the notification comes when personal's weekly limit, at its pace, reaches 
   assert.equal(minute(clock.menuBar + left), minute(clock.warned));
   assert.deepEqual(headsUp.title, limitNotification(week, false));
   assert.equal(headsUp.body, `personal has used ${share}%. work has used 40%.`);
-  const ffi = repo("crates/pitboard-ffi/src/present/words.rs");
+  const ffi = repo("crates/pitboard-model/src/present/words.rs");
   assert.ok(ffi.includes('assert_eq!(has_used_share("work", "95%"), "work has used 95%.");'));
   assert.ok(ffi.includes('assert_eq!(other_used("spare", Some(80)), "spare has used 20%.");'));
 });
@@ -356,8 +356,8 @@ test("a label, email or plan a visitor types stays text in every line words.ts w
   for (const t of [label, email]) assert.ok(!html.join("\n").includes(t), t);
 });
 
-const ffiWords = repo("crates/pitboard-ffi/src/present/words.rs");
-const ffiAccounts = repo("crates/pitboard-ffi/src/present/accounts.rs");
+const ffiWords = repo("crates/pitboard-model/src/present/words.rs");
+const ffiAccounts = repo("crates/pitboard-model/src/present/accounts.rs");
 
 // Each `assert_eq!(call(args), "…")` of a test body, its arguments as written and the words.
 const calls = (body: string, call: string) =>
@@ -434,7 +434,7 @@ test("a limit's names, reset and menu line are present/words.rs's an_account_is_
   assert.equal(menuLine(three, w, "windows"), "5-hour 42% used, weekly 12%, weekly (Fable) 3%");
   const weekly = { ...three, limits: [at(WEEK, 12)] };
   assert.equal(menuLine(weekly, w, "windows"), "Weekly 12% used");
-  const accountsRs = repo("crates/pitboard-ffi/src/present/accounts.rs");
+  const accountsRs = repo("crates/pitboard-model/src/present/accounts.rs");
   assert.ok(accountsRs.includes("return words::limit_reached(&title, clock.as_deref());"));
   const reached = { ...three, limits: [at(5 * HOUR, 100), at(WEEK, 40)] };
   assert.equal(menuLine(reached, w), `5-hour limit reached, resets ${hm(NOW + HOUR)}`);

@@ -108,7 +108,7 @@ private func settled() async {
 // MARK: - Windows and their sessions
 
 // Which windows each account has, which open and close, what each shows first and which
-// stores go are the model's, tested in pitboard-ffi's `model/windowing.rs`.
+// stores go are the model's, tested in pitboard-model's `model/windowing.rs`.
 
 private let twoTools = [
     window(
@@ -275,7 +275,7 @@ private func settle(until done: () -> Bool) async {
 // MARK: - Pages
 
 // What a page may do, what a download is called and what a dialog is titled are the core's
-// rules, tested in pitboard-ffi. These are WebKit's side.
+// rules, tested in pitboard-model. These are WebKit's side.
 
 @Test func zoomFollowsSafarisSteps() {
     #expect(Page.zoom(from: 1, toward: .zoomIn) == 1.15)

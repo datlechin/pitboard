@@ -4,7 +4,7 @@ import Observation
 /// What the app shows, as the Rust model last said it, and the one way to ask that model for
 /// anything.
 ///
-/// The model in `pitboard-ffi` holds every rule: what is read and when, what a switch does,
+/// The model in `pitboard-model` holds every rule: what is read and when, what a switch does,
 /// what each sentence and row says. This holds its newest snapshot on the main actor, a
 /// property for each part, so a view reads what it shows and SwiftUI draws again only what
 /// changed. A view asks for something by sending an `Intent`, which returns at once: what

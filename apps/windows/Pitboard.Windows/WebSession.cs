@@ -147,10 +147,10 @@ public sealed class WebSession
     // A page of its own after the data went, so Back cannot bring the signed-in one back.
     public void StartOver(CoreWebView2 page)
     {
-        Note = PitboardFfiMethods.OpeningNote(storeMadeBefore: false);
+        Note = PitboardModelMethods.OpeningNote(storeMadeBefore: false);
         Failure = null;
         PageClosed = false;
-        _first = PitboardFfiMethods.WindowHome(_policy);
+        _first = PitboardModelMethods.WindowHome(_policy);
         _window.Changed();
         Attach(page);
     }
@@ -176,7 +176,7 @@ public sealed class WebSession
         // A sign-in window's page closes it once it is done; an account window's page cannot close it.
         page.WindowCloseRequested += (_, _) =>
         {
-            if (PitboardFfiMethods.PageMayClose(role))
+            if (PitboardModelMethods.PageMayClose(role))
             {
                 _window.CloseSignIn();
             }
@@ -201,7 +201,7 @@ public sealed class WebSession
         PageRole role, CoreWebView2 page, CoreWebView2NavigationStartingEventArgs args, bool frame, HashSet<string> stopped)
     {
         var request = PageRequests.Navigation(_policy, role, args.Uri, frame, args.IsUserInitiated, frame ? null : page.Source);
-        var decision = PitboardFfiMethods.DecideNavigation(_policy, role, request);
+        var decision = PitboardModelMethods.DecideNavigation(_policy, role, request);
         if (decision is NavigationDecision.Load or NavigationDecision.LoadInPage or NavigationDecision.Popup)
         {
             stopped.Remove(args.Uri);
@@ -230,14 +230,14 @@ public sealed class WebSession
             _policy, role, args.Uri, args.IsUserInitiated, source?.Source,
             mainFrame: source?.FrameKind == CoreWebView2FrameKind.MainFrame);
         args.Handled = true;
-        switch (PitboardFfiMethods.DecideNavigation(_policy, role, request))
+        switch (PitboardModelMethods.DecideNavigation(_policy, role, request))
         {
             case NavigationDecision.Popup:
                 var deferral = args.GetDeferral();
                 try
                 {
                     var features = args.WindowFeatures;
-                    var size = PitboardFfiMethods.SignInWindowSize(
+                    var size = PitboardModelMethods.SignInWindowSize(
                         features.HasSize ? features.Width : (double?)null, features.HasSize ? features.Height : (double?)null);
                     // WebView2 takes a new window's settings before it is set, and its resource requests after.
                     if (await _window.OpenSignIn(size) is { } signIn)
@@ -279,7 +279,7 @@ public sealed class WebSession
     {
         var operation = args.DownloadOperation;
         var facts = PageRequests.Download(operation.Uri, operation.ContentDisposition, navigations.MainFrame(operation.Uri));
-        if (PitboardFfiMethods.DecideResponse(_policy, role, facts) is ResponseDecision.Download saving)
+        if (PitboardModelMethods.DecideResponse(_policy, role, facts) is ResponseDecision.Download saving)
         {
             await _downloads.Start(Account.Store, args, saving.Ask, _window.AllowDownload);
         }
@@ -298,7 +298,7 @@ public sealed class WebSession
             CoreWebView2PermissionKind.Microphone => PagePermission.Microphone,
             _ => null,
         };
-        if (asked is { } permission && !PitboardFfiMethods.PageMayUse(permission))
+        if (asked is { } permission && !PitboardModelMethods.PageMayUse(permission))
         {
             args.State = CoreWebView2PermissionState.Deny;
             args.Handled = true;
@@ -314,7 +314,7 @@ public sealed class WebSession
             case CoreWebView2ProcessFailedKind.RenderProcessExited:
                 double? last = _lastEnded.TryGetValue(role, out var ended) ? Seconds(ended) : null;
                 _lastEnded[role] = now;
-                switch (PitboardFfiMethods.AfterContentProcessEnded(last, Seconds(now)))
+                switch (PitboardModelMethods.AfterContentProcessEnded(last, Seconds(now)))
                 {
                     case ProcessEnded.Reload:
                         page.Reload();
@@ -328,7 +328,7 @@ public sealed class WebSession
                 break;
             case CoreWebView2ProcessFailedKind.BrowserProcessExited when role == PageRole.Window:
                 // Said as a second end within the minute: no reload brings back a page WebView2 has closed.
-                if (PitboardFfiMethods.AfterContentProcessEnded(Seconds(now), Seconds(now)) is ProcessEnded.Stopped closed)
+                if (PitboardModelMethods.AfterContentProcessEnded(Seconds(now), Seconds(now)) is ProcessEnded.Stopped closed)
                 {
                     Failure = closed.Reason;
                 }

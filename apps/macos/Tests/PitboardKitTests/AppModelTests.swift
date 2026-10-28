@@ -5,7 +5,7 @@ import PitboardTestSupport
 import Testing
 
 // The app's model shows what the Rust model says. What the Rust model says, and when, is
-// tested in `pitboard-ffi`; these test the glue: which snapshot is shown, what is drawn
+// tested in `pitboard-model`; these test the glue: which snapshot is shown, what is drawn
 // again, on which thread a snapshot arrives, and that the bindings carry one end to end.
 
 /// Whether reading `part` of `model` is told of a change while `change` runs.
@@ -84,7 +84,7 @@ private final class Told: @unchecked Sendable {
 
 /// The account windows are told of their part each time a snapshot shown changes it, once:
 /// not of a snapshot that moves something else, nor of one dropped. Which windows close and
-/// which stores go, and after which reads, is the Rust model's, tested in pitboard-ffi's
+/// which stores go, and after which reads, is the Rust model's, tested in pitboard-model's
 /// `model/windowing.rs`.
 @MainActor
 @Test func theAccountWindowsAreToldOfEachChangeOnce() {

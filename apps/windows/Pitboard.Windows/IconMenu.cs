@@ -139,7 +139,7 @@ public static class IconMenu
 
         if (updates.Waiting is { } waiting)
         {
-            return [new IconMenuEntry.Command(PitboardFfiMethods.InstallUpdate(waiting), new IconCommand.CheckForUpdates()) { Id = "menu.update" }];
+            return [new IconMenuEntry.Command(PitboardModelMethods.InstallUpdate(waiting), new IconCommand.CheckForUpdates()) { Id = "menu.update" }];
         }
 
         return updates.Beta

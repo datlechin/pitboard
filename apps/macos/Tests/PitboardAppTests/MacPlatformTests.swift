@@ -6,7 +6,7 @@ import UserNotifications
 @testable import PitboardApp
 
 // How long an app is given to quit, what a run-out notice says and when a clock time names
-// its day are the model's, tested in `pitboard-ffi`. These test what macOS is asked.
+// its day are the model's, tested in `pitboard-model`. These test what macOS is asked.
 
 /// Quits when asked only if it would: an app busy with work, or whose person said no, does
 /// not.

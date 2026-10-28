@@ -11,7 +11,7 @@
 //! `<name>.stand-in.json`. [`built`] finds the stand-in beside the test that is running, and
 //! refuses, saying how to build it, where it is not built. The command line's tests run
 //! alone, as `cargo test -p pitboard --test cli` runs them, build no example, and neither
-//! does a run of `pitboard-ffi`'s tests. Nor do `--example stand-in`, `--examples` or
+//! does a run of `pitboard-model`'s tests. Nor do `--example stand-in`, `--examples` or
 //! `--all-targets` given to `cargo test`, which build it as a test of its own and not as the
 //! program, as cargo 1.98.1 did when tried. It is found, never built on demand, so a test
 //! binary run outside Cargo, as one run as another user is, finds it as well.

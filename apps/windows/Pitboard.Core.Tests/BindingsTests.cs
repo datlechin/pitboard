@@ -9,7 +9,7 @@ public sealed class BindingsTests
     {
         Assert.AreEqual(
             new Intent.Rename("claude", "home", "work"),
-            PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "home"), "claude", "work").Intent);
+            PitboardModelMethods.CheckName(new Sheet.Rename("claude", "home"), "claude", "work").Intent);
     }
 
     [TestMethod]
@@ -38,7 +38,7 @@ public sealed class BindingsTests
             "SiteLink", "ReadPitboardLink", "WindowOfStore", "IsSitePage", "WindowAddress", "StoreId",
             "SitesFor", "WindowAccounts", "SiteMenus", "SiteNames",
         ];
-        var stillCalled = typeof(PitboardFfiMethods).GetMethods()
+        var stillCalled = typeof(PitboardModelMethods).GetMethods()
             .Select(method => method.Name)
             .Intersect(olderCalls)
             .Order(StringComparer.Ordinal);
@@ -51,8 +51,8 @@ public sealed class BindingsTests
     [TestMethod]
     public void TheAppAsksTheCoreWhereThingsAreAndWhatRuns()
     {
-        Assert.IsNull(PitboardFfiMethods.AppCommandLine("/home/x/pitboard"));
-        Assert.IsFalse(PitboardFfiMethods.CanRun("/nowhere/at/all"));
+        Assert.IsNull(PitboardModelMethods.AppCommandLine("/home/x/pitboard"));
+        Assert.IsFalse(PitboardModelMethods.CanRun("/nowhere/at/all"));
     }
 
     // The home is USERPROFILE on Windows, whatever HOME says, and HOME elsewhere.
@@ -68,9 +68,9 @@ public sealed class BindingsTests
 
         Assert.AreEqual(
             windows ? @"C:\Users\x\AppData\Local\Pitboard" : "/home/x/.pitboard",
-            PitboardFfiMethods.PitboardDirectory(environment));
+            PitboardModelMethods.PitboardDirectory(environment));
         environment["PITBOARD_HOME"] = "/elsewhere/./p/";
-        Assert.AreEqual("/elsewhere/./p/", PitboardFfiMethods.PitboardDirectory(environment));
+        Assert.AreEqual("/elsewhere/./p/", PitboardModelMethods.PitboardDirectory(environment));
     }
 
     // The core's own tests take a task away on a scheduler in memory; this one reaches none.
@@ -85,16 +85,16 @@ public sealed class BindingsTests
             ["SHELL"] = "/nowhere/at/all/sh",
         };
 
-        Assert.IsFalse(PitboardFfiMethods.UnscheduleApp(environment, Path.Combine(home, "Pitboard")));
+        Assert.IsFalse(PitboardModelMethods.UnscheduleApp(environment, Path.Combine(home, "Pitboard")));
         Assert.IsFalse(Directory.Exists(home), "nothing is made");
     }
 
     [TestMethod]
     public void TheWindowsAppKeysItsRecordsByItsDirectoryInAnyCase()
     {
-        var key = PitboardFfiMethods.WindowsRecordsKey(@"c:\users\x\appdata\local\pitboard\");
+        var key = PitboardModelMethods.WindowsRecordsKey(@"c:\users\x\appdata\local\pitboard\");
 
         Assert.AreEqual(@"C:\USERS\X\APPDATA\LOCAL\PITBOARD", key);
-        Assert.AreEqual(key, PitboardFfiMethods.WindowsRecordsKey(@"\\?\C:\Users\X\AppData\Local\Pitboard"));
+        Assert.AreEqual(key, PitboardModelMethods.WindowsRecordsKey(@"\\?\C:\Users\X\AppData\Local\Pitboard"));
     }
 }

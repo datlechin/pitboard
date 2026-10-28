@@ -95,7 +95,7 @@ public sealed class RunValue(Build build, string exe, IRunKey key) : IStartupIte
         var command = Command(exe);
         if (command.Length > Longest)
         {
-            throw new InvalidOperationException(PitboardFfiMethods.PathTooLong((uint)(Longest - Command("").Length)));
+            throw new InvalidOperationException(PitboardModelMethods.PathTooLong((uint)(Longest - Command("").Length)));
         }
 
         key.Write(Name, command);

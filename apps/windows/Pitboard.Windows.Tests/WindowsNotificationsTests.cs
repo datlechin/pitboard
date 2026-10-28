@@ -17,7 +17,7 @@ public sealed class WindowsNotificationsTests
         Body: "personal has used 100%. work has used 42%.", Clicked: "accounts",
         Button: new NotificationButton("Switch to work", "switch/claude/work"));
 
-    // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-ffi/src/model/warming.rs).
+    // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-model/src/model/warming.rs).
     private static readonly RunOutNotice WarmFailed = new(
         Id: "warm-failed/personal/warm_up_not_started",
         Title: "Warm-up didn’t start", Subtitle: "Claude Code",

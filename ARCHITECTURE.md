@@ -114,7 +114,8 @@ The other crates:
   Windows build's manifest and version resource, which the FFI crates include too.
   `tests/cli/` is its one integration test binary, with the `--json` snapshots, and its
   example `stand-in` the program every test starts in place of a tool.
-- `crates/pitboard-ffi`: the core as UniFFI bindings for both apps.
+- `crates/pitboard-model`: the model both apps run on, over the core, and what their UniFFI
+  bindings export.
   - `lib.rs`: what the bindings export beside the model, and the free functions an app calls
     as it starts.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
@@ -127,6 +128,8 @@ The other crates:
   - `sites.rs`: `pitboard-sites`' sites as records of this crate's own.
   - `fixture/`: the worlds a debug build of either app launches into, behind the `fixture`
     feature.
+- `crates/pitboard-ffi`: the static and the dynamic library the two apps link, which hold
+  `pitboard-model` and nothing of their own (`lib.rs` says why).
 - `crates/pitboard-sites`: the sites an account's window opens and what a link from outside
   may be (`site.rs`, `link.rs`), the Pitboard link (`handoff.rs`) and a link read as
   Foundation reads one (`address.rs`, `web.rs`).
@@ -391,7 +394,7 @@ keeps it is in the header of the module named.
 
 ### The apps
 
-- Nothing `pitboard-ffi` exports is async or waits on the core: only the model's lanes call
+- Nothing `pitboard-model` exports is async or waits on the core: only the model's lanes call
   `AppCore`, `send` only posts, `snapshot` only copies, `shutdown` waits only for the actor and
   the sign-ins under way, and a free function reads nothing slower than a file
   (`model/mod.rs`).

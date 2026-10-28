@@ -165,7 +165,7 @@ public sealed partial class AccountWindowTests
         var web = WebEnvironment.Fixture(Path.GetTempPath());
         var window = await Views.Activated(new AccountWindow(Main.Store, web, new Downloads(web, sent.Add), sent.Add));
         var root = window.Content.XamlRoot;
-        var question = PitboardFfiMethods.DownloadQuestion("notes.txt", "chatgpt.com");
+        var question = PitboardModelMethods.DownloadQuestion("notes.txt", "chatgpt.com");
         var shown = window.AllowDownload(question);
         var waiting = window.AllowDownload(question);
         await Views.Until(() => VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count > 0, "the question did not show");

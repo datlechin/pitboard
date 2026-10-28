@@ -44,7 +44,7 @@ public static class Program
             args,
             Running,
             fixtureFolder,
-            () => refusal = PitboardFfiMethods.LaunchRefusal(environment),
+            () => refusal = PitboardModelMethods.LaunchRefusal(environment),
             () =>
             {
                 var holder = Launching.Holder<AppInstance>(

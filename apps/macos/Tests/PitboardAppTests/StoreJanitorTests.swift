@@ -4,7 +4,7 @@ import Testing
 
 @testable import PitboardApp
 
-// Which stores go, and when, is the model's, tested in pitboard-ffi's `model/windowing.rs`
+// Which stores go, and when, is the model's, tested in pitboard-model's `model/windowing.rs`
 // and `account_windows/records.rs`.
 
 @MainActor

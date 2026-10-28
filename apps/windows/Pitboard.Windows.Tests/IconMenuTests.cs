@@ -289,7 +289,7 @@ public sealed class IconMenuTests
         var entries = IconMenu.Entries(TwoTools(), new StandInUpdates(waiting: "1.2.0"));
 
         Assert.Contains("menu.settings | menu.update | menu.help | -", Said(entries));
-        Assert.AreEqual(PitboardFfiMethods.InstallUpdate("1.2.0"), Command(entries, "menu.update").Text);
+        Assert.AreEqual(PitboardModelMethods.InstallUpdate("1.2.0"), Command(entries, "menu.update").Text);
         Assert.AreEqual(new IconCommand.CheckForUpdates(), Command(entries, "menu.update").Does);
     }
 

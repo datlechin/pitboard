@@ -18,15 +18,15 @@ import { checking } from "./machine.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
 const win = (file: string) => repo(`apps/windows/${file}`);
-const words = repo("crates/pitboard-ffi/src/present/words.rs");
+const words = repo("crates/pitboard-model/src/present/words.rs");
 // app_words.rs with its string literals' line continuations joined and its code on one line
-const appWords = repo("crates/pitboard-ffi/src/present/app_words.rs")
+const appWords = repo("crates/pitboard-model/src/present/app_words.rs")
   .replace(/\\\n\s*/g, "")
   .replace(/\s+/g, " ")
   .replace(/\( /g, "(");
 // app_words.rs and words.rs with their line continuations joined, where every word the Windows
 // views draw is the model's
-const modelWords = (repo("crates/pitboard-ffi/src/present/app_words.rs") + words).replace(
+const modelWords = (repo("crates/pitboard-model/src/present/app_words.rs") + words).replace(
   /\\\n\s*/g,
   "",
 );

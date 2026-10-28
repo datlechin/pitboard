@@ -142,7 +142,7 @@ public sealed class LaunchingTests
 
         Assert.AreEqual(Exe, launch.AppLocation);
         Assert.AreEqual(
-            @"C:\Users\x\AppData\Local\Programs\Pitboard\bin\pitboard.exe", PitboardFfiMethods.AppCommandLine(launch.AppLocation!));
+            @"C:\Users\x\AppData\Local\Programs\Pitboard\bin\pitboard.exe", PitboardModelMethods.AppCommandLine(launch.AppLocation!));
         Assert.AreEqual(@"C:\Users\x\AppData\Local\Pitboard App", launch.Windows?.Directory);
         Assert.AreEqual("pitboard", launch.Windows?.LinkScheme);
     }

@@ -8,7 +8,7 @@ import { warmHours } from "../data/limits.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const service = repo("crates/pitboard-core/src/service.rs");
 const warm = repo("crates/pitboard-core/src/duty/warm/mod.rs");
-const words = repo("crates/pitboard-ffi/src/present/words.rs");
+const words = repo("crates/pitboard-model/src/present/words.rs");
 const last = () => model.get().log.at(-1)!;
 
 test("turning an account's warm-up on or off is logged as the core's warm_turn logs it", () => {

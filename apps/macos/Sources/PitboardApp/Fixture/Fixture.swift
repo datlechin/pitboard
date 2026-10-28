@@ -2,8 +2,8 @@
     import Foundation
     import PitboardKit
 
-    // pitboard-ffi's worlds, the real core and model over a machine of their own. Only a debug
-    // build reads PITBOARD_FIXTURE, so nothing outside can put a release in one.
+    // pitboard-model's worlds, the real core and model over a machine of their own. Only a
+    // debug build reads PITBOARD_FIXTURE, so nothing outside can put a release in one.
     enum Fixture {
         static let variable = "PITBOARD_FIXTURE"
         // Set, macOS refuses the fixture's login item, as it can refuse an app's own.

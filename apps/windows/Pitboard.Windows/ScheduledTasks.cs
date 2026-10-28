@@ -11,5 +11,5 @@ public interface IScheduledTasks
 // beside exe.
 public sealed class CoreScheduledTasks(Dictionary<string, string> environment) : IScheduledTasks
 {
-    public void Remove(string exe) => _ = PitboardFfiMethods.UnscheduleApp(environment, exe);
+    public void Remove(string exe) => _ = PitboardModelMethods.UnscheduleApp(environment, exe);
 }

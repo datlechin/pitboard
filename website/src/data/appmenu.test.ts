@@ -5,7 +5,7 @@ import { appMenus, NO_ACCOUNT } from "./appmenu.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
-const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
 // a Rust string literal as it reads once its line continuations are joined
 const appWords = present("app_words.rs").replace(/\\\n\s*/g, "");
 const facts = repo("docs/facts/site.md");
@@ -99,13 +99,13 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
 });
 
 test("the Account menu with nothing selected offers what the model says, each dimmed", () => {
-  const accounts = repo("crates/pitboard-ffi/src/present/accounts.rs");
+  const accounts = repo("crates/pitboard-model/src/present/accounts.rs");
   assert.ok(
     accounts.includes(
       "offers: vec![\n            words::switch_account(None),\n            words::sign_in_again(os, true),\n            words::rename(true).into(),\n        ],\n        forget: words::remove_account(os),",
     ),
   );
-  const words = repo("crates/pitboard-ffi/src/present/words.rs");
+  const words = repo("crates/pitboard-model/src/present/words.rs");
   assert.ok(words.includes(`None => SWITCH.into(),`));
   assert.ok(words.includes(`pub(crate) const SWITCH: &str = "${NO_ACCOUNT[0]}";`));
   assert.ok(words.includes(`if asks { "${NO_ACCOUNT[2]}" } else { "Rename" }`));

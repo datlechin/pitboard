@@ -9,7 +9,7 @@
 //! - [`WebAddress`]: a page's address as an account window's rules read it, to tell the
 //!   site's own pages from the rest.
 //!
-//! A leaf, with no I/O and nothing of the core: both apps reach it through pitboard-ffi, and
+//! A leaf, with no I/O and nothing of the core: both apps reach it through pitboard-model, and
 //! the macOS Share extension, which is sandboxed and links nothing of the core, through
 //! pitboard-share-ffi. Each reads a link by the same rule, as the macOS app read one in Swift
 //! before: see the `address` module for how and why.

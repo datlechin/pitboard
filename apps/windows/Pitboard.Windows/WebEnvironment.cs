@@ -62,7 +62,7 @@ public sealed class WebEnvironment
             return null;
         }
 
-        return PitboardFfiMethods.WebviewRuntimeTooOld(MinimumRuntime, version);
+        return PitboardModelMethods.WebviewRuntimeTooOld(MinimumRuntime, version);
     }
 
     public static string? Refusal()
@@ -244,7 +244,7 @@ public sealed class WebEnvironment
             return;
         }
 
-        var body = new MemoryStream(Encoding.UTF8.GetBytes(PitboardFfiMethods.FixturePage(address)));
+        var body = new MemoryStream(Encoding.UTF8.GetBytes(PitboardModelMethods.FixturePage(address)));
         args.Response = page.Environment.CreateWebResourceResponse(
             body.AsRandomAccessStream(), 200, "OK", "Content-Type: text/html; charset=utf-8");
     }

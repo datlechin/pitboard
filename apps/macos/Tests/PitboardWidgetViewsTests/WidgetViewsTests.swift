@@ -9,7 +9,7 @@ import WidgetKit
 private let golden = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .deletingLastPathComponent().deletingLastPathComponent()
-    .appending(path: "crates/pitboard-ffi/src/present/glance.json")
+    .appending(path: "crates/pitboard-model/src/present/glance.json")
 
 private let readAt = Date(timeIntervalSince1970: 1_800_000_000)
 

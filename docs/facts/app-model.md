@@ -2,7 +2,7 @@
 
 ## A look and the app's own changes
 
-Measured on 6 October 2026 on macOS 27.0 (arm64), with Rust 1.98.1 and `pitboard-ffi`'s
+Measured on 6 October 2026 on macOS 27.0 (arm64), with Rust 1.98.1 and the model's
 tests, and read in the macOS app's Swift at 0.7.0 (277539b).
 
 - A look reads when the account index was last written on the lane of reads, while a change

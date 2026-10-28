@@ -1,6 +1,7 @@
-// The one state every live figure reads, as pitboard-ffi's model keeps it, and the core's rules
-// that change it: crates/pitboard-core/src/duty/autoswitch.rs decides switches, ffi/model/advice.rs
-// notifications, duty/warm warm-ups. Figures subscribe to `model`; the actions only write.
+// The one state every live figure reads, as pitboard-model keeps it, and the core's rules that
+// change it: crates/pitboard-core/src/duty/autoswitch.rs decides switches, the model's
+// model/advice.rs notifications, duty/warm warm-ups. Figures subscribe to `model`; the actions
+// only write.
 import { map } from "nanostores";
 import {
   DAY,

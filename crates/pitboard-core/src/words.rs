@@ -1,8 +1,8 @@
 //! What Pitboard says in more than one place, each written once as a function of typed
 //! values: its sentences, the words of its columns, and the level a limit's usage is at,
 //! where the command line's colours and the app's tints change. The command line calls
-//! these functions directly, and `pitboard-ffi`'s model calls them as it makes what an app
-//! shows, so where both say a thing they say it in the same words. The bindings export none
+//! these functions directly, and `pitboard-model` calls them as it makes what an app shows,
+//! so where both say a thing they say it in the same words. The bindings export none
 //! of them: an app shows what the snapshot says. A thing said both in a column and in a
 //! sentence, such as a limit's name or a parked login's life, has a function for each form.
 //!

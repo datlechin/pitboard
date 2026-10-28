@@ -11,7 +11,7 @@ package func fixtureModel(_ name: String, in folder: URL) throws -> AppModel {
     }
 }
 
-// What is said of time in a fixture's snapshot, in UTC, as `pitboard-ffi`'s own tests say it.
+// What is said of time in a fixture's snapshot, in UTC, as `pitboard-model`'s own tests say it.
 private final class Utc: LocalTime {
     func clock(epoch: Int64, withWeekday: Bool) throws -> String { "\(epoch)" }
     func sameDay(first: Int64, second: Int64) throws -> Bool { true }

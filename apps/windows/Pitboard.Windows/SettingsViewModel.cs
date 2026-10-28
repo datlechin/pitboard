@@ -182,7 +182,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public bool ChecksAutomatically => _updates.ChecksAutomatically;
 
     public string UpdatesState =>
-        _updates.Waiting is { } waiting ? PitboardFfiMethods.ReadyToInstall(waiting) : PitboardFfiMethods.NamedVersion(Version);
+        _updates.Waiting is { } waiting ? PitboardModelMethods.ReadyToInstall(waiting) : PitboardModelMethods.NamedVersion(Version);
 
     public string[] UpdatesNoteLines => UpdatesNotes(_updates, Version);
 

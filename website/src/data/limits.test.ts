@@ -15,8 +15,8 @@ import {
 import { HIGHEST, LOWEST } from "../lib/model.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
-const machine = repo("crates/pitboard-ffi/src/present/machine.rs").replace(/\\\n\s*/g, "");
-const words = repo("crates/pitboard-ffi/src/present/words.rs").replace(/\\\n\s*/g, "");
+const machine = repo("crates/pitboard-model/src/present/machine.rs").replace(/\\\n\s*/g, "");
+const words = repo("crates/pitboard-model/src/present/words.rs").replace(/\\\n\s*/g, "");
 
 test("the Limits settings say what machine.rs gives LimitsSettings.swift and SettingsPage.xaml", () => {
   assert.ok(machine.includes("title: words::BEFORE_RUNNING_OUT.into(),"));

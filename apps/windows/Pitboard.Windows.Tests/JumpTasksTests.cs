@@ -106,7 +106,7 @@ public sealed class JumpTasksTests
         parts.App.Apply(Read(3, [.. answers, new OutsideAnswer(8, Done: false, "Pitboard is being uninstalled.", Question: null)]));
         parts.Jumps.Answered();
 
-        CollectionAssert.AreEqual(new[] { PitboardFfiMethods.JumpRefused(refused) }, parts.Posted);
+        CollectionAssert.AreEqual(new[] { PitboardModelMethods.JumpRefused(refused) }, parts.Posted);
     }
 
     [TestMethod]

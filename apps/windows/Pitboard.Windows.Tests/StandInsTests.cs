@@ -30,7 +30,7 @@ public sealed partial class StandInsTests
     // The string literals of the model's sources, its comments left out, each written on one line.
     private static string Model()
     {
-        var sources = Directory.EnumerateFiles(Repository.Path("crates", "pitboard-ffi", "src"), "*.rs", SearchOption.AllDirectories)
+        var sources = Directory.EnumerateFiles(Repository.Path("crates", "pitboard-model", "src"), "*.rs", SearchOption.AllDirectories)
             .Append(Repository.Path("crates", "pitboard-core", "src", "words.rs"))
             .Select(File.ReadAllText);
         return Continued().Replace(Comment().Replace(string.Join('\n', sources), ""), "");
