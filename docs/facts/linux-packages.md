@@ -251,7 +251,8 @@ the owner's Mac (arm64), as uid 1000, in
 `ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd` with
 `install-deps.sh`'s `repository` set from the snapshot `20261028T000000Z`: apt-utils 3.2.0,
 createrepo-c 1.2.1-2build1, appstream-generator 0.10.2-1 on libfyaml 0.9.4, appstream 1.1.2,
-gnupg 2.4.8, sqv 1.3.0, rpm 6.0.1 and jq 1.8.1; and in Fedora 43 with rpm-sign 6.0.2.
+gnupg 2.4.8, sqv 1.3.0, rpm 6.0.1 and jq 1.8.1; and in Fedora 43 with rpm-sign 6.0.2 and
+rpmrebuild 2.21.
 
 ### Debian's and apt's rules
 
@@ -344,6 +345,49 @@ gnupg 2.4.8, sqv 1.3.0, rpm 6.0.1 and jq 1.8.1; and in Fedora 43 with rpm-sign 6
   says "digests OK" and exits 0 for a package nobody signed, and "digests SIGNATURES NOT OK",
   exit 1, with `_pkgverify_level signature`; one signed by a key its database lacks is `NOKEY`,
   exit 1.
+- rpmrebuild 2.21, `--package` with `--change-spec-whole`, makes `test-linux-repository.sh`'s
+  releases from the packages given.
+
+### Set up from fresh systems
+
+Measured on 29 October 2026 by `test-linux-repository.sh`, arm64, on the packages
+`in-container.sh` built for 1.0.0-beta.6, with the images of the Linux packages' install test and
+their package managers fetching from each distribution's own archive while the images built:
+
+- Debian 13, apt 3.0.3, and Ubuntu 26.04, apt 3.2.0, with appstream and apt-config-icons:
+  `apt-get update` fetched the suite's `InRelease`, both `Packages`, `Components-arm64` and the
+  48x48 and 64x64 icons, and `apt-get install pitboard-app` brought pitboard and, by Recommends,
+  pitboard-archive-keyring, whose file took the place of the copy the setup had fetched to its
+  path, without a word. `appstreamcli get` gave the app with `Package: pitboard-app` and its
+  cached icon.
+- Given indices another key signed, Debian's apt said "Sub-process /usr/bin/sqv returned an error
+  code (1), error message is: Missing key ...", Ubuntu's "The following signatures couldn't be
+  verified because the public key is not available: NO_PUBKEY ...", and both "The repository is
+  not updated and the previous index files will be used". Each exited 0, 100 with
+  `--error-on=any`, and kept the app at its version.
+- On the beta channel, apt took the final release, "3 upgraded", with the keyring of the key
+  whose subkey was extended, and the next update verified with it, under `pitboard.pref`'s pin.
+- Fedora 43, dnf5 5.2.18.0: `dnf config-manager addrepo --from-repofile=` took the `.repo` file.
+  Its first load said "repomd.xml GPG signature verification error: Signing key not found", then
+  "Importing OpenPGP key ... From: http://127.0.0.1:8080/pitboard-archive-keyring.asc" with
+  `-y`, and the install imported it again for the packages. With
+  `--setopt=optional_metadata_types=appstream` and libdnf5-plugin-appstream, the catalog went to
+  `/var/cache/swcatalog/xml/pitboard-beta.xml` and its icons beside, and a cache made afresh held
+  the app with its icon. In one run of four, `appstreamcli get` without `--no-cache` read the
+  system cache the image's build had left and did not find the app.
+- Given indices another key signed, dnf5 said the same error twice, fetched the key again,
+  "Metadata cache created", exited 0, and `dnf upgrade` found "Nothing to do".
+- On the beta channel, dnf took the final release. rpm kept the key as first imported, its
+  subkey expiring on the first binding's date, after the extended key had signed.
+- openSUSE Tumbleweed 20261020, zypper 1.14.101: `zypper addrepo` of the `.repo` file's address
+  made the repository with `Autorefresh : No`, and with `--refresh` `Autorefresh : Yes`.
+  `$basearch` became `aarch64`.
+  `--gpg-auto-import-keys` imported the key from `gpgkey=`, and libzypp-plugin-appdata stored the
+  catalog with its icons, which a cache made afresh read.
+- Given indices another key signed, zypper said "Signature verification failed for repomd.xml"
+  and "Skipping repository", exited 4, and kept the app at its version.
+- On the beta channel, zypper took the final release, and rpm kept the key as zypper first
+  imported it, as on Fedora.
 
 ## The session bundle
 

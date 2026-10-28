@@ -225,8 +225,8 @@ The rest:
   `linux/` the Linux repository's public key, the Debian packages' `debian/` recipe, which
   `build-linux-packages.sh` copies into the source it builds, the RPM packages' spec and
   rpmlint's filters, and the images the packages' install test builds, one per package manager;
-  the repository's setup files, and apt-ftparchive's and appstream-generator's configuration in
-  `repository/`.
+  the repository's setup files, apt-ftparchive's and appstream-generator's configuration in
+  `repository/`, and the images and steps its test builds.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
@@ -306,8 +306,9 @@ keeps it is in the header of the module named.
   (`an_app_without_the_floors_libraries_is_refused`).
 - An RPM package is in RPM's format 4, which every RPM of the floor reads, whatever format the
   RPM that built it writes by default (`a_package_in_rpm_format_6_is_refused`).
-- A test installs a deb or an rpm only while it builds a container image, and runs Pitboard's
-  programs there only as uid 1000 with no network (`test-linux-packages.sh`).
+- A test installs a deb or an rpm, or sets the repository up, only while it builds a container
+  image, and runs Pitboard's programs there only as uid 1000 with no network
+  (`test-linux-packages.sh`, `test-linux-repository.sh`).
 - The Linux repository's stable suite never holds a beta or a release candidate
   (`stable_never_lists_a_beta_or_a_release_candidate`).
 - Nothing the Linux repository serves goes out unverified: an index or an RPM package the

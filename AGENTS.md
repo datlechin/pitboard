@@ -276,7 +276,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
 - Never measure a running tool on a Linux machine that holds logins. Use
   [the Linux session machines](#the-linux-session-machines).
 - Never run `apps/linux/scripts/install-deps.sh` on a machine of your own. It installs packages
-  and Rust as root, for an image `in-container.sh` builds and CI's containers alone.
+  and Rust as root, for an image `in-container.sh` or `test-linux-repository.sh` builds and CI's
+  containers alone.
 - Never run `.github/scripts/linux-runner-facts.sh` on a machine of your own, but its display
   parts in a container. It makes Linux users, mounts file systems and installs packages.
 - Only `linux-runner-facts.sh`, only through `linux-facts.yml` on a GitHub-hosted runner, may

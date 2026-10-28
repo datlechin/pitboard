@@ -3,7 +3,7 @@
 # for each rule; the signing of the RPM packages; and the repository built and signed from such
 # packages. Each format's cases need its packaging tools, which apps/linux/scripts/check.sh's
 # packages-test step runs them with, on Debian 13 and on Fedora 43, and the repository's need
-# install-deps.sh's repository set, on Ubuntu 26.04.
+# install-deps.sh's repository set, on Ubuntu 26.04, as test-linux-repository.sh runs them.
 import gzip
 import hashlib
 import importlib.util

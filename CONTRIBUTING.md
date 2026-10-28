@@ -206,13 +206,15 @@ shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-l
   .github/scripts/test-linux-packages.sh
 ```
 
-For a change to the Linux repository, `packaging/linux/repository` and its setup files there,
-or `linux-repository.sh`, `sign-linux-packages.sh` and `sign-linux-repository.sh` in
-`.github/scripts`, run the cases [The Linux repository](#the-linux-repository) names, and:
+For a change to the Linux repository, `packaging/linux/repository`, its setup files and its
+`repository-test*` images and script there, or `linux-repository.sh`, `sign-linux-packages.sh`,
+`sign-linux-repository.sh` and `test-linux-repository.sh` in `.github/scripts`, run the steps
+[The Linux repository](#the-linux-repository) lists, and:
 
 ```sh
 shellcheck -s sh .github/scripts/linux-repository.sh .github/scripts/sign-linux-packages.sh \
-  .github/scripts/sign-linux-repository.sh
+  .github/scripts/sign-linux-repository.sh .github/scripts/test-linux-repository.sh \
+  packaging/linux/repository-test.sh
 ```
 
 The macOS app, Windows, the Windows app, Linux, the Linux app and the website have checks of
@@ -959,9 +961,22 @@ A release writes Pitboard's apt and dnf repository from its packages, as
   each signature against the key alone with sqv, as apt does, and with gpgv.
 
 Both sign with the signing subkey of the key named, from the `GNUPGHOME` the caller made, and
-leave nothing in place that the key does not verify. `test-linux-packages.py` tests each rule:
-the repository's cases where `install-deps.sh`'s `repository` set is on Ubuntu 26.04, and
-`sign-linux-packages.sh`'s in `packages-test` on `fedora-43`.
+leave nothing in place that the key does not verify. Test the three on the packages of one
+machine, built into `out` as [Linux packages](#linux-packages) shows:
+
+```sh
+.github/scripts/test-linux-repository.sh out
+```
+
+It runs `test-linux-packages.py`'s repository cases in the repository's own image. Then
+`packaging/linux/repository-test.sh` builds and signs the trees it serves, with keys made in the
+build, and fresh Debian 13, Ubuntu 26.04, Fedora 43 and openSUSE Tumbleweed images set the
+repository up from them on 127.0.0.1 as the docs set up `packages.usepitboard.com`, while each
+image builds. Each installs the app and the catalog holds it, keeps the app from indices another
+key signed, and moves from a beta to the final release above it, which on apt brings the keyring
+with its signing subkey extended. `packages-test` on `fedora-43` runs the cases of
+`sign-linux-packages.sh`. CI's `linux-packaging-repository` job runs the test on `ubuntu-26.04`
+and `ubuntu-26.04-arm` with `linux-packaging`'s packages of that machine.
 
 ### The Linux session bundle
 
