@@ -32,6 +32,8 @@ jobs:
       crates: ${{ steps.check.outputs.crates }}
       latest: ${{ steps.check.outputs.latest }}
       signed: ${{ steps.check.outputs.signed }}
+      linux: ${{ steps.linux.outputs.linux }}
+      linux-suites: ${{ steps.linux.outputs.suites }}
       core: ${{ steps.core.outputs.core }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,6 +60,27 @@ jobs:
             exit 1
           fi
           cat "$RUNNER_TEMP/kind" >> "$GITHUB_OUTPUT"
+      # The Linux packages wait for a Linux session's record, and once a release has shipped them
+      # every later one must, or the repository would stop following.
+      - id: linux
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+          KIND: ${{ steps.check.outputs.kind }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]
+            | select(.draft == false)
+            | "\(.tag_name) \(.prerelease) \([.assets[].name] | any(endswith(".deb")))"' \
+            > "$RUNNER_TEMP/releases"
+          sh .github/scripts/linux-release.sh "$VERSION" "$KIND" "$LATEST" \
+            docs/facts/linux-session.md "$RUNNER_TEMP/releases" > "$RUNNER_TEMP/linux"
+          cat "$RUNNER_TEMP/linux" >> "$GITHUB_OUTPUT"
+          # What the release signs, the repository's subkey must outlast by 180 days.
+          if grep -qx linux=true "$RUNNER_TEMP/linux"; then
+            sh .github/scripts/linux-repository-key.sh packaging/linux/pitboard-archive-keyring.asc \
+              "$(date -u +%s)"
+          fi
       - id: core
         run: |
           core=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/pitboard-core/Cargo.toml | head -1)

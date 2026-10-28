@@ -315,6 +315,10 @@ keeps it is in the header of the module named.
   committed key does not verify stops the build
   (`an_index_the_committed_key_does_not_verify_stops_the_build`,
   `an_unsigned_or_wrongly_signed_rpm_stops_the_signing`).
+- A release ships the Linux packages only after a Linux session, and keeps shipping them once
+  one has: `linux-release.sh` in the guard gives no Linux job without
+  `docs/facts/linux-session.md`, and refuses the release once an earlier one shipped them
+  (`LinuxRelease`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`

@@ -4,17 +4,20 @@ A tag releases Pitboard through `.github/workflows/release.yml`. Its `guard` job
 tag with `version` under `[workspace.package]` in `Cargo.toml`, as
 `.github/scripts/release-kind.sh` does, and refuses any other pair:
 
-| Tag | `Cargo.toml` | Kind | crates.io | Latest | Windows files |
-| --- | --- | --- | --- | --- | --- |
-| `v1.2.0` | `1.2.0` | Full release | Yes | When no published full release is higher | Signed |
-| `v1.2.0-rc1` | `1.2.0` | Release candidate, a GitHub pre-release | No | No | Signed |
-| `v1.3.0-beta.1` | `1.3.0-beta.1` | Beta, a GitHub pre-release | Yes | No | Signed once a signer is set |
+| Tag | `Cargo.toml` | Kind | crates.io | Latest | Windows files | Linux repository |
+| --- | --- | --- | --- | --- | --- | --- |
+| `v1.2.0` | `1.2.0` | Full release | Yes | When no published full release is higher | Signed | When latest, `stable`, and `beta` unless a beta with packages is higher |
+| `v1.2.0-rc1` | `1.2.0` | Release candidate, a GitHub pre-release | No | No | Signed | No suite |
+| `v1.3.0-beta.1` | `1.3.0-beta.1` | Beta, a GitHub pre-release | Yes | No | Signed once a signer is set | `beta`, when higher than every release with packages |
 
 An rc's number starts at 1, a beta's runs from 1 to 98, and a beta's major version is 1 or
 more. `usepitboard.com/install.sh` and the apps' feeds lead to GitHub's latest release, so a
 0.x release made after 1.0.0 never moves them back. A release ships Windows files from major
 version 1, and the guard refuses an rc or a full release while no signer is set
-([Windows signing](#windows-signing)).
+([Windows signing](#windows-signing)). It ships the Linux packages from major version 1 once
+`docs/facts/linux-session.md` is committed, and writes the suites the last column names
+([Before the first release with the Linux app](#before-the-first-release-with-the-linux-app)).
+`.github/scripts/linux-release.sh` decides both in the guard.
 
 ## Prepare a release
 
@@ -68,8 +71,9 @@ that signs Pitboard for Windows, and 1.0.0, also rewrite what
    ```
 
    The `guard` job refuses a tag the table above does not allow, a full release or a beta
-   with no section in `CHANGELOG.md`, and a `pitboard-core` that changed while its version
-   stayed. Releases run one at a time, so this run waits until the candidate's has ended.
+   with no section in `CHANGELOG.md`, a `pitboard-core` that changed while its version
+   stayed, and, once a release has shipped the Linux packages, a commit without
+   `docs/facts/linux-session.md`. Releases run one at a time, so this run waits until the candidate's has ended.
 
 9. Approve the `publish` job when it waits in the `release` environment.
 10. Watch the run to the end. A re-run fixes nine failures:

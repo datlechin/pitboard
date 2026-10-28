@@ -29,6 +29,7 @@ LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
 LINUX_REPOSITORY_KEY = REPO / ".github" / "scripts" / "linux-repository-key.sh"
 PACK_COMMAND_LINE = REPO / ".github" / "scripts" / "pack-command-line.sh"
 PACK_LINUX_SESSION_BUNDLE = REPO / ".github" / "scripts" / "pack-linux-session-bundle.sh"
+LINUX_RELEASE = REPO / ".github" / "scripts" / "linux-release.sh"
 REPOSITORY_KEY = REPO / "packaging" / "linux" / "pitboard-archive-keyring.asc"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
@@ -1647,6 +1648,174 @@ esac
                 self.assertEqual(done.returncode, 2)
                 self.assertIn("usage:", done.stderr)
                 self.assertFalse((folder / "SHA256SUMS").exists())
+
+
+class LinuxRelease(unittest.TestCase):
+    # The Linux session's record as RELEASING.md has it written, its bundle's sentence wrapped.
+    RECORD = """# The Linux session machines
+
+Measured by hand on 2 November 2026 on the four machines. The bundle was
+`linux-facts.yml` session run 41234567890 at 1a2b3c4d, the commit that holds
+`Release {version}`, its sums checked on the Mac and on each machine.
+
+The bundle was `linux-facts.yml` session run 41234567891 at 5e6f7a8b, the commit that holds
+`Release 9.0.0`.
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        self.record = self.work / "linux-session.md"
+
+    def recorded(self, version="1.0.0-beta.8"):
+        self.record.write_text(self.RECORD.format(version=version))
+
+    def decided(self, version, kind, latest, published=()):
+        lines = self.work / "published"
+        lines.write_text("".join(f"{line}\n" for line in published))
+        return run(LINUX_RELEASE, version, kind, latest, self.record, lines)
+
+    def assertShips(self, done, linux, suites):
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "")
+        self.assertEqual(done.stdout, f"linux={linux}\nsuites={suites}\n")
+
+    def assertRefused(self, done, said):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertEqual(done.stdout, "")
+        self.assertIn(said, done.stderr)
+
+    def test_a_0_x_release_ships_no_linux_package(self):
+        self.recorded()
+        for version, kind, latest in (
+            ("0.15.3", "full", "true"),
+            ("0.15.3", "full", "false"),
+            ("0.16.0-rc1", "rc", "false"),
+        ):
+            with self.subTest(version=version, latest=latest):
+                done = self.decided(version, kind, latest, ["v1.0.0-beta.8 true true"])
+                self.assertShips(done, "false", "")
+
+    def test_without_a_session_record_nothing_ships(self):
+        published = ["v0.15.2 false false", "v1.0.0-beta.7 true false", "v1.0.0-rc1 true false"]
+        for version, kind, latest in (
+            ("1.0.0-beta.8", "beta", "false"),
+            ("1.0.0", "full", "true"),
+        ):
+            with self.subTest(version=version):
+                self.assertShips(self.decided(version, kind, latest, published), "false", "")
+
+    def test_a_missing_record_after_packages_shipped_is_refused(self):
+        for shipped in ("v1.0.0-beta.8 true true", "v1.0.0-rc1 true true", "v1.0.0 false true"):
+            with self.subTest(shipped=shipped):
+                done = self.decided("1.0.1", "full", "true", ["v0.15.2 false false", shipped])
+                self.assertRefused(
+                    done, f"{self.record} is gone, and {shipped.split()[0]} shipped the Linux packages"
+                )
+
+    def test_a_record_that_names_no_bundle_or_a_later_one_is_refused(self):
+        no_bundle = "names no bundle as 'The bundle was `linux-facts.yml` session run <run id> at"
+        for record, said in (
+            ("", no_bundle),
+            ("# The Linux session machines\n", no_bundle),
+            # The sentence in the second paragraph only.
+            ("# The Linux session machines\n\nMeasured by hand.\n\n"
+             + self.RECORD.split("\n\n", 1)[1], no_bundle),
+            (self.RECORD.format(version="1.0.0-beta.8").replace("linux-facts", "windows-facts"),
+             no_bundle),
+            (self.RECORD.format(version="1.0.0-beta.8").replace("at 1a2b3c4d", "at main"),
+             no_bundle),
+            (self.RECORD.format(version="1.0.0-rc1"), "names the bundle of 1.0.0-rc1, which no"),
+            (self.RECORD.format(version="0.15.2"), "names the bundle of 0.15.2, before 1.0.0-beta.1"),
+            (self.RECORD.format(version="1.0.0-beta.9"),
+             "names the bundle of 1.0.0-beta.9, above this release's 1.0.0-beta.8"),
+        ):
+            with self.subTest(record=record[-90:]):
+                self.record.write_text(record)
+                self.assertRefused(self.decided("1.0.0-beta.8", "beta", "false"), said)
+        # An rc is measured on its release's bundle, and a later release on an earlier one.
+        for version, kind, bundle in (
+            ("1.0.0-rc1", "rc", "1.0.0"),
+            ("1.0.0", "full", "1.0.0-beta.8"),
+            ("1.10.0", "full", "1.9.0"),
+        ):
+            with self.subTest(version=version, bundle=bundle):
+                self.recorded(bundle)
+                self.assertEqual(self.decided(version, kind, "false").returncode, 0)
+
+    def test_a_full_latest_release_writes_stable_and_beta_unless_a_beta_is_above_it(self):
+        self.recorded()
+        for published, suites in (
+            ([], "stable beta"),
+            (["v1.0.0-beta.8 true true", "v0.15.2 false false"], "stable beta"),
+            (["v1.0.0-beta.8 true true", "v1.1.0-beta.1 true true"], "stable"),
+            # A beta that shipped no packages is in no suite, and an rc never is.
+            (["v1.1.0-beta.1 true false", "v1.1.0-rc1 true true"], "stable beta"),
+            # This release, run again.
+            (["v1.0.0 false true"], "stable beta"),
+        ):
+            with self.subTest(published=published):
+                self.assertShips(self.decided("1.0.0", "full", "true", published), "true", suites)
+        done = self.decided("1.0.1", "full", "false", ["v1.1.0 false true"])
+        self.assertShips(done, "true", "")
+
+    def test_a_beta_above_every_release_writes_beta_and_never_stable(self):
+        self.recorded("1.0.0-beta.8")
+        for version, published, suites in (
+            ("1.0.0-beta.8", ["v0.15.2 false false", "v1.0.0-beta.7 true false"], "beta"),
+            ("1.1.0-beta.1", ["v1.0.0 false true", "v1.0.0-beta.9 true true"], "beta"),
+            ("1.1.0-beta.2", ["v1.1.0-beta.10 true true"], ""),
+            ("1.1.0-beta.10", ["v1.1.0-beta.9 true true", "v1.1.0-rc1 true true"], "beta"),
+            ("1.0.1-beta.1", ["v1.1.0 false true"], ""),
+            ("1.1.0-beta.1", ["v1.1.0-beta.2 true true"], ""),
+            ("1.1.0-beta.1", ["v1.1.0 false true"], ""),
+        ):
+            with self.subTest(version=version, published=published):
+                done = self.decided(version, "beta", "false", published)
+                self.assertShips(done, "true", suites)
+
+    def test_a_release_candidate_writes_no_suite(self):
+        self.recorded("1.0.0")
+        for published in ([], ["v1.0.0-beta.8 true true"]):
+            with self.subTest(published=published):
+                self.assertShips(self.decided("1.0.0-rc1", "rc", "false", published), "true", "")
+
+    def test_a_published_release_it_cannot_read_is_refused(self):
+        self.recorded()
+        for line in (
+            "v1.0.0-beta.8 true",
+            "v1.0.0-beta.8 true true more",
+            "v1.0.0-beta.8 yes true",
+            "1.0.0-beta.8 true true",
+            "v1.0.0-beta.8 false true",
+            "v1.0.0 true true",
+        ):
+            with self.subTest(line=line):
+                done = self.decided("1.0.0", "full", "true", [line])
+                self.assertRefused(done, f"cannot read the published release '{line}'")
+
+    def test_a_release_it_was_not_given_is_refused(self):
+        self.recorded()
+        for version, kind, latest in (
+            ("1.0.0", "beta", "true"),
+            ("1.0.0-rc1", "full", "false"),
+            ("1.0.0-beta.8", "rc", "false"),
+            ("1.0.0", "full", "yes"),
+            ("1.0", "full", "true"),
+            ("1.0.0\n2.0.0", "full", "true"),
+        ):
+            with self.subTest(version=version, kind=kind, latest=latest):
+                done = self.decided(version, kind, latest)
+                self.assertRefused(done, "is not a release as release-kind.sh prints it")
+
+    def test_it_takes_five_arguments(self):
+        self.recorded()
+        given = ("1.0.0", "full", "true", self.record, self.work / "published")
+        for args in (given[:4], (*given, "more")):
+            with self.subTest(args=len(args)):
+                done = run(LINUX_RELEASE, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
 
 
 class ScriptCalls(unittest.TestCase):

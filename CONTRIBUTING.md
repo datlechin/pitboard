@@ -159,10 +159,10 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
 `windows-update-key.sh`, `windows-update-sign.sh`, `session-gate.sh`, `linux-versions.sh`,
-`linux-repository-key.sh`, `pack-command-line.sh` and `pack-linux-session-bundle.sh` in
-`.github/scripts`, `apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
-`crates/pitboard/Cargo.toml`, the Linux repository's key in `packaging/linux`, or a workflow's
-call of a PowerShell script in `.github/scripts`:
+`linux-repository-key.sh`, `pack-command-line.sh`, `pack-linux-session-bundle.sh` and
+`linux-release.sh` in `.github/scripts`, `apps/macos/scripts/build-number.sh`, the
+cargo-binstall metadata in `crates/pitboard/Cargo.toml`, the Linux repository's key in
+`packaging/linux`, or a workflow's call of a PowerShell script in `.github/scripts`:
 
 ```sh
 shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.sh \
@@ -170,7 +170,7 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
   .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh \
   .github/scripts/pack-command-line.sh .github/scripts/pack-linux-session-bundle.sh \
-  apps/macos/scripts/build-number.sh
+  .github/scripts/linux-release.sh apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
 ```
 
