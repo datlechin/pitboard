@@ -1110,20 +1110,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - project: chromium
-            browser: chromium
-          - project: webkit
-            browser: webkit
-          - project: firefox
-            browser: firefox
-          - project: iphone
-            browser: webkit
-          - project: pixel
-            browser: chromium
+        project: [chromium, webkit, firefox, iphone, pixel]
     runs-on: ubuntu-latest
-    # the test step's ten minutes, and seven for the steps before it, the browser's install with
-    # apt having once taken them all
+    # Playwright's image for the version website/package.json pins, which holds every browser and
+    # what each takes from apt: WebKit's 117 MB from Ubuntu's mirror ran out the job's 17 minutes
+    # in run 40543539968. As the runner's user, who owns the checkout.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+      options: --user 1001
+    # the test step's ten minutes, and seven for the image and the steps before it
     timeout-minutes: 17
     defaults:
       run:
@@ -1150,10 +1145,6 @@ jobs:
           package-manager-cache: false
       - if: steps.touched.outputs.run
         run: npm ci
-      - if: steps.touched.outputs.run
-        env:
-          BROWSER: ${{ matrix.browser }}
-        run: npx playwright install --with-deps "$BROWSER"
       - if: steps.touched.outputs.run
         env:
           PITBOARD_SITE_OFFLINE: "1"

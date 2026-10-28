@@ -695,8 +695,10 @@ npm run test:browser
 ```
 
 CI's `website-browsers` jobs run them, one for each project, and in Chromium also compare each
-figure with its baseline in `e2e/static.spec.ts-snapshots/`. The baselines are made in CI's Linux
-image: a figure whose look changes on purpose takes its new drawing from the Chromium job's
+figure with its baseline in `e2e/static.spec.ts-snapshots/`. The jobs run in Playwright's image
+for the version `website/package.json` pins, which holds the browsers, so raise
+`@playwright/test` and the image's tag and digest in `ci.yml` together. The baselines are made in
+that image: a figure whose look changes on purpose takes its new drawing from the Chromium job's
 `website-browsers-chromium` artifact.
 
 ## Changelog
