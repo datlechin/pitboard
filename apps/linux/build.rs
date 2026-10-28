@@ -1,6 +1,6 @@
-// The program's GResource: its icons and its metainfo, with the releases CHANGELOG.md holds,
-// written by the script Meson installs the metainfo with. Only a build for Linux on Linux
-// makes it, the one build that links GTK.
+// The program's GResource: its icons, the D-Bus interfaces it serves, and its metainfo, with the
+// releases CHANGELOG.md holds, written by the script Meson installs the metainfo with. Only a
+// build for Linux on Linux makes it, the one build that links GTK.
 
 #[cfg(target_os = "linux")]
 fn main() {

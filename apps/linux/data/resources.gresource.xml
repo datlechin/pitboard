@@ -5,5 +5,7 @@
     <file>icons/scalable/apps/com.usepitboard.Pitboard.svg</file>
     <file>icons/scalable/apps/com.usepitboard.Pitboard.Devel.svg</file>
     <file>icons/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg</file>
+    <file>dbus/org.kde.StatusNotifierItem.xml</file>
+    <file>dbus/com.canonical.dbusmenu.xml</file>
   </gresource>
 </gresources>

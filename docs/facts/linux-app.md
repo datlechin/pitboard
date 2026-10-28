@@ -207,6 +207,72 @@ registered in either image, each came as written. Registered with GLib's own VFS
 inside the lookup, the run did not return in nine minutes and was stopped; made before, it
 passed. So the app registers its scheme before it runs, and every check's image has GVfs.
 
+## The status item
+
+`src/platform/tray/` serves the item and its menu over GDBus, on the connection it is given.
+Read in the sources named, each at the version Debian 13 ships where it ships one:
+
+- StatusNotifierItem 0.1 (specifications.freedesktop.org/status-notifier-item, its date "TBD")
+  has an app own `org.freedesktop.StatusNotifierItem-<pid>-<id>`, serve the item at
+  `/StatusNotifierItem` and register its name with the watcher. The trays read speak KDE's names
+  instead: Plasma 6.3.6's watcher owns `org.kde.StatusNotifierWatcher` and reads
+  `org.kde.StatusNotifierItem` (`statusnotifierwatcher/statusnotifierwatcher.cpp:39-68`), as
+  the AppIndicator extension does (v59, Debian 13's, and v66, `statusNotifierWatcher.js`, its
+  `interfaces-xml/StatusNotifierItem.xml` "Based on" KDE's). So
+  `data/dbus/org.kde.StatusNotifierItem.xml` is KStatusNotifierItem 6.13.0's
+  `src/org.kde.StatusNotifierItem.xml`: the specification's members, with `IconThemePath`,
+  `NewMenu` and `ProvideXdgActivationToken`. The item owns `org.kde.StatusNotifierItem-<pid>-1`.
+- Plasma's watcher takes a name only while it has an owner and the item answers at
+  `/StatusNotifierItem`, and lets go of it as the name goes (`:39-68,75-91`). The extension
+  takes the name's owner at the same path, and refuses a name with none (v59
+  `statusNotifierWatcher.js:174-202`). So the item owns its name before it registers, and registers again each time the watcher's name
+  gets an owner, as a restarted plasmashell's would.
+- Plasma 6.3.6's host reads every property with one `GetAll`, again on each `New*` signal
+  (`applets/systemtray/statusnotifieritemsource.cpp:88-94,215-230`), drops a tool tip whose
+  title is empty (`:344-348`), and draws the menu `Menu` names, calling `ContextMenu` only for
+  an item with none (`:533-543`). The extension shows an item only with an `Id` and a `Menu`
+  (v59 `appIndicator.js:476-524`).
+- The specification lets a tool tip's text hold a subset of HTML. Plasma 6.3.6 shows it with
+  Qt's `Text.AutoText` (`applets/systemtray/package/contents/ui/items/StatusNotifierItem.qml:21-22`),
+  as rich text only where it reads as markup, and the extension shows no tool tip. So the text
+  goes as written: escaped, an `&` would show as `&amp;` in Plasma.
+- Plasma 6.3.6 asks KWin for an activation token and provides it with
+  `ProvideXdgActivationToken` before each `Activate`, `SecondaryActivate` and `ContextMenu`
+  (`applets/systemtray/statusnotifieritemjob.cpp:26-60`). The extension provides one before
+  `Activate` (v59 `appIndicator.js:771-799`) and before the `Event` of a click on an entry
+  (v59 `dbusMenu.js:667-672`, v66 `dbusMenu.js:678-690`). KStatusNotifierItem keeps the last
+  token as the one the app activates with next (`src/kstatusnotifieritemdbus_p.cpp:294-298`).
+  So the item hands the last token on with the next click, on the item or on an entry.
+- `data/dbus/com.canonical.dbusmenu.xml` is libdbusmenu 18.10.20180917~bzr492's
+  `libdbusmenu-glib/dbus-menu.xml`, Debian 13's, which lists each entry property with its
+  default, and asks that a property at its default be left out. An underscore in a label marks
+  the key that picks the entry and two show one, so the item doubles each underscore.
+  libdbusmenu-glib serves version 3 (`libdbusmenu-glib/server.c:45`), keeps a number per entry,
+  raises the revision only as entries are added, removed or moved and says a property's change
+  with `ItemsPropertiesUpdated` (`:905-915,1097,1118,1222-1245`), and refuses a number it does
+  not have (`:1340-1350`).
+- Plasma 6.3.6's importer reads a level of the layout with every property, again on
+  `LayoutUpdated`, but takes an entry's type, toggle type and submenu once, and of an entry it
+  knows updates only the properties the new layout holds (`libdbusmenuqt/dbusmenuimporter.cpp:81-89,368-445`).
+  A property gone back to its default comes back only through `ItemsPropertiesUpdated`
+  (`:327-354`). The extension v59 reads the whole layout with `type` and `children-display`
+  alone, and an entry's properties only when it first sees its number (`dbusMenu.js:340-430`).
+  So an entry keeps its number while it stays, a radio entry and a plain one of the same id are
+  two entries, and a change to an entry that stays is said with `ItemsPropertiesUpdated`.
+- As a menu opens, Plasma 6.3.6 calls `AboutToShow(0)` and sends `opened`
+  (`dbusmenuimporter.cpp:463-479`), and the extension does both too (v59 `dbusMenu.js:938-952`),
+  and calls `AboutToShow(0)` once as it first reads the menu (`:878-879`). A click on an entry is
+  `Event(<number>, "clicked", …)`. So the item takes `AboutToShow` of the root for a glance.
+
+Measured on a bus of the test's own, as uid 1000 in Debian 13's image: an item registers with a
+stand-in watcher once its name has an owner and the watcher's has one, and again as the watcher's
+name comes back; with no watcher, nothing registered and a service file that would have started
+one was not started, which a `StartServiceByName` of it then did; a stand-in host reads the
+properties above and hears `NewStatus`, `NewIcon` and `NewToolTip` only for what changed, a new
+entry raises the revision by one with `LayoutUpdated` while the others keep their numbers, and a
+radio entry chosen or an entry enabled is said with `ItemsPropertiesUpdated` alone
+(`tests/presence`).
+
 ## The install layout
 
 Under Meson's prefix, `/usr` for a package:

@@ -218,3 +218,12 @@ in a desktop's session. Not measured, each for the Linux session machines:
   with its argument, as the stand-ins of their interfaces do.
 - `PrepareForSleep` from a real logind across a suspend. The app tells the model a wake only
   on `false` from the owner of `org.freedesktop.login1`.
+- Whether Plasma 6.8's tray and the AppIndicator extension take the status item, draw its menu
+  with its radio entries and disabled ones, and take it again after plasmashell or GNOME Shell
+  restarts, as the stand-ins of their watcher and host do.
+- Whether Plasma 6.8 and the AppIndicator extension raise the app's window with the token they
+  provide before a click on a menu entry, which the item hands on with the click (M14). KWin's
+  tracking issue lists tokens for a status item's menu as unfinished, read in the research
+  for the plan and not since.
+- Whether Plasma and the AppIndicator extension draw the status icons in the panel's text
+  colour, through KDE's `ColorScheme-Text` class and GTK's symbolic recolouring.

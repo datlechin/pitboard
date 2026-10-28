@@ -191,11 +191,13 @@ The apps:
   - `Icon`: the drawings `Pitboard.ico` is made from.
 - `apps/linux/`: the Linux app, GTK 4 and libadwaita, which Meson builds and installs.
   - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
-    launch starts anything (`launch.rs`), and the desktop's services the app speaks for the
-    model, with a fixture's stand-ins for them (`platform/`).
+    launch starts anything (`launch.rs`), what the program carries in its GResource
+    (`resources.rs`), and the desktop's services the app speaks for the model, the status item
+    among them, with a fixture's stand-ins for them (`platform/`).
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
-    KRunner's runner and the icons, and the GResource `build.rs` compiles for the program.
+    KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
+    the D-Bus interfaces the app serves, each written from its published definition (`dbus/`).
   - `scripts/`: Meson's Cargo step, and the checks: `check.sh`'s steps, the headless display
     the tests run in, the packages an image or CI's container takes, and the run of the
     checks in a container.
@@ -638,6 +640,13 @@ keeps it is in the header of the module named.
 - In a fixture, the Linux app's stand-ins for the autostart entry, the notifications, the tray
   and the browser write only in the fixture's folder and reach no bus
   (`a_fixtures_stand_ins_write_only_in_its_folder`).
+- The Linux status item comes and goes with the tray watcher's name, never a poll, and asks the
+  bus to start nothing (`an_item_registers_once_a_watcher_appears_and_again_after_it_returns`,
+  `with_no_watcher_nothing_registers_and_the_tray_is_said_to_be_absent`).
+- A change to the Linux status item's menu is said the way each tray reads one again: new or
+  gone entries with a new revision, and a changed entry, which keeps its number, by its
+  properties (`a_new_menu_raises_the_revision_and_says_so`,
+  `an_entry_that_changes_says_what_changed_and_keeps_its_number`).
 - Only a Meson release build installs anything, and it claims `com.usepitboard.Pitboard` and
   `pitboard://` alone: `check-linux-app.sh` fails a tree that holds a fixture's text,
   `.Devel`, `pitboard-debug` or a file outside its layout (`test-linux-app.py`).

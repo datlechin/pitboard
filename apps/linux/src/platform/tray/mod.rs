@@ -1,9 +1,15 @@
 //! The status item where the desktop shows a tray: its face, in StatusNotifierItem 0.1's terms,
-//! and its menu, as values of the glue's own.
+//! and its menu, as values of the glue's own, and the desktop's item that serves them over
+//! D-Bus, [`Desktop`], with its menu over DBusMenu.
+
+mod item;
+mod menu;
 
 use serde::Serialize;
 
 use super::Failed;
+
+pub use item::{Desktop, Heard};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TrayItem {
@@ -20,6 +26,17 @@ pub enum Status {
     Passive,
     Active,
     NeedsAttention,
+}
+
+impl Status {
+    /// The word StatusNotifierItem 0.1 says it with.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Status::Passive => "Passive",
+            Status::Active => "Active",
+            Status::NeedsAttention => "NeedsAttention",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
