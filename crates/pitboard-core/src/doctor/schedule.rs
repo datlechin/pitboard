@@ -123,7 +123,7 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
                 refused.vault,
                 refused.locked(),
             ),
-            words::RUNS_AGAIN_AT_ITS_NEXT_RUN,
+            words::runs_again(facts.os),
         ));
     }
     let Some(task) = &schedule.task else {

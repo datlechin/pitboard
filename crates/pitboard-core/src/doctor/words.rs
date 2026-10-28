@@ -1345,7 +1345,17 @@ pub(super) fn could_not_open(runs: &str, ago: i64, vault: Option<Vault>, locked:
     )
 }
 
-pub(super) const RUNS_AGAIN_AT_ITS_NEXT_RUN: &str = "Renewal runs again at its next daily run.";
+// On Linux renewal's service also starts with `graphical-session.target`, which GNOME's and
+// Plasma's session targets start (docs/facts/linux.md).
+pub(super) fn runs_again(os: Os) -> &'static str {
+    match os {
+        Os::Linux => {
+            "Renewal runs again at your next sign-in to GNOME or KDE Plasma, and at its next \
+             daily run."
+        }
+        Os::MacOs | Os::Windows => "Renewal runs again at its next daily run.",
+    }
+}
 
 pub(super) const AGAIN_IN_THE_APP_OR_A_TERMINAL: &str = "Turn daily renewal off and on again: in \
      the app's Settings, or with `pitboard schedule uninstall` and then `pitboard schedule \
@@ -2477,6 +2487,15 @@ mod tests {
             could_not_open(runs, 33_120, Some(Vault::SealedFiles), false),
             "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open its \
              parked logins"
+        );
+        assert_eq!(
+            runs_again(Os::Linux),
+            "Renewal runs again at your next sign-in to GNOME or KDE Plasma, and at its next \
+             daily run."
+        );
+        assert_eq!(
+            runs_again(Os::MacOs),
+            "Renewal runs again at its next daily run."
         );
         assert_eq!(
             runs_from_sign_in(Some(90), "/opt/homebrew/bin/pitboard"),

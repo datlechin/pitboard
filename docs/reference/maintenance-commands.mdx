@@ -87,7 +87,7 @@ The system starts the job without your shell's environment. `install` gives it e
     A task holds no environment, so `install` writes the proxy variables to `schedule.env` in Pitboard's directory, and each run reads them from there. `install` refuses with `schedule_program_temporary` when the program is in the temporary copy Windows makes of a zip it opened.
   </Tab>
   <Tab title="Linux">
-    A systemd user timer runs the job once each day, in the hour after midnight. Where the computer slept or was off through that hour, the job runs once it wakes or your user's systemd starts. systemd skips the job while its `pitboard` is not there. `install` writes the proxy variables and `PITBOARD_NO_ARGV` into the job.
+    A systemd user timer runs the job once each day, in the hour after midnight. Where the computer slept or was off through that hour, the job runs once it wakes or your user's systemd starts. The job also runs at each sign-in to GNOME or KDE Plasma, once the session is up, so a run that found the login keyring locked catches up. systemd skips the job while its `pitboard` is not there. `install` writes the proxy variables and `PITBOARD_NO_ARGV` into the job.
 
     Before it writes anything, `install` asks your user's systemd which folders it reads units from and which `HOME` it runs them with. It refuses with `schedule_manager_elsewhere` where systemd would not read `systemd/user` in `XDG_CONFIG_HOME`, or would run the job with another `HOME`. `uninstall` refuses with it too while systemd runs another `HOME`.
 

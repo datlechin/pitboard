@@ -623,7 +623,7 @@ fn a_run_that_could_not_open_the_store_is_said_with_when() {
                     true
                 )
                 .as_str(),
-                words::RUNS_AGAIN_AT_ITS_NEXT_RUN
+                words::runs_again(os)
             ),
             "{os:?}"
         );

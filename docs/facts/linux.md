@@ -165,6 +165,45 @@ asks the person's ([not-measured.md](not-measured.md#linux)).
   own is a full path, read as it starts. `systemctl --user set-environment` sets one until it
   stops. [Fix daily renewal](../troubleshooting/renewal.mdx) names both for `schedule_manager_elsewhere`.
 
+## The graphical session's target
+
+Read on 29 October 2026 in systemd's man pages and units at tag `v262` (commit
+`8cc40e0c5e9234bf45084751ac53b1fbfe70b492`), gnome-session at tags `48.0` (commit
+`d95cf6aa0fcbdc7f4d6fe1e4a2156f9822c99952`), `50.1` (commit
+`cd403186acf6f0ca866d014fd76f6456b4f46884`) and `51.0` (commit
+`aed00cf18229a98231c23e14f5798ddb918c4956`), and plasma-workspace at tags `v6.3.6` (commit
+`63e4bad2fe4bfc2b8c42f6347f61d2418cc7143c`) and `v6.8.2` (commit
+`30beb0095873364c6b34ebcfd292ecafd4db7f61`). No session was run.
+
+- systemd.special(7) lists `graphical-session.target` among the special passive user units: it
+  "is active whenever any graphical session is running", a target for a particular session
+  "starts and stops `graphical-session.target` with `BindsTo=graphical-session.target`", and a
+  service that "can be enabled independently" is started with it through a link in its
+  `.wants/`. So renewal's service is `WantedBy=graphical-session.target`, which `systemctl
+  enable` links (`the_renewal_service_also_runs_at_each_graphical_sign_in`).
+- systemd's own `units/user/graphical-session.target` has `RefuseManualStart=yes` and
+  `StopWhenUnneeded=yes`, so only a session's target starts it: no runner or container can start
+  it with `systemctl --user start`.
+- systemd.unit(5): `After=` orders two units only where both are being started, so a run the
+  timer starts while no session is starting waits for none.
+- gnome-session's `data/gnome-session.target` has `BindsTo=graphical-session.target` and
+  `Before=graphical-session.target` at all three tags, and `gnome-session-shutdown.target` has
+  `Conflicts=graphical-session.target`. So a GNOME sign-in starts the target once GNOME's own
+  target is up, signing out stops it, and the next sign-in starts it again. At `51.0`,
+  `gnome-session-services.target` has `Wants=oo7-daemon.service`, with the comment "Secret
+  service implementation", and `gnome-portals.conf` names `oo7-portal;gnome-keyring;` for the
+  Secret portal. At `48.0` and `50.1` no unit names a Secret Service, and the portal is
+  `gnome-keyring`.
+- plasma-workspace's `startkde/systemd/plasma-workspace.target` names `graphical-session.target`
+  in `Requires=`, `BindsTo=` and `Before=` at both tags, and has
+  `Wants=plasma-kwallet-pam.service`. Plasma starts through systemd unless `startkderc`'s
+  `[General] systemdBoot` is `false`, or `plasma-workspace.target` or
+  `xdg-desktop-autostart.target` is not installed (`useSystemdBoot` in
+  `startkde/startplasma.cpp` at `v6.8.2`). Started otherwise, it starts no
+  `graphical-session.target`.
+- So renewal runs at each sign-in to GNOME, and to Plasma started through systemd. Whether the
+  login collection is unlocked by then is [not measured](not-measured.md#linux).
+
 ## zbus
 
 Read on 29 October 2026 in each crate as crates.io serves it.

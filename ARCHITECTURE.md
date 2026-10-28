@@ -393,7 +393,10 @@ keeps it is in the header of the module named.
   by hand records nothing (`schedule::ran`,
   `a_scheduled_renewal_that_cannot_open_the_store_is_recorded_and_doctor_says_so`,
   `the_next_scheduled_renewal_that_opens_the_store_clears_the_record`,
-  `a_renewal_by_hand_records_nothing`).
+  `a_renewal_by_hand_records_nothing`). On Linux renewal also runs at each graphical sign-in,
+  and a start systemd refused leaves neither unit enabled where none was
+  (`the_renewal_service_also_runs_at_each_graphical_sign_in`,
+  `a_refused_start_takes_back_both_enables`).
 - A job is given the installing context's proxy variables, in files written private, or in
   `schedule.env` and `watch.env` on Windows, and `doctor` warns with `schedule_proxy` where
   they would send a request another way than this run

@@ -35,6 +35,16 @@ Where the last run failed, run `pitboard renew` to see what it says. [Renewal sc
 
 Where a run could not open the parked logins, renewal tries again at its next run, and the line goes once a run of it opens them. A `pitboard renew` you run yourself renews them now and leaves the line, since it says nothing of what the schedule's runs find.
 
+### Renewal found the login keyring locked
+
+On Linux, a run before you sign in can find the login keyring locked, as on a computer where `loginctl enable-linger` starts your user's systemd at boot. Renewal runs again at your next sign-in to GNOME or KDE Plasma, where signing in unlocks the keyring. In another desktop, sign in before its daily run.
+
+Where nobody signs in to a desktop, as on a server, keep the parked logins in files, which need no unlocking:
+
+```sh
+pitboard vault move files
+```
+
 ### Linux has no scheduler for it
 
 `pitboard schedule install` asks your user's systemd, as `pitboard watch install` does. Where systemd did not start the system, as in many containers, it refuses with `schedule_unsupported`. Where your user has no systemd session, such as a root shell from `su`, it refuses with `schedule_refused` and what systemd said. Run `pitboard renew` yourself instead, such as from cron.

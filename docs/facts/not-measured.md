@@ -155,4 +155,11 @@ These were not measured. Each says what Pitboard does where it cannot know.
   desktop, as over SSH. secret-service waits for the prompt to complete, as `secret-tool` does.
 - A unit of a lingering user manager before the first sign-in after boot: whether the login
   keyring is locked when the renewal timer fires, as critique 4 expects. A run the timer
-  started never asks, and is refused with `credential_store_locked`.
+  started never asks, and is refused with `credential_store_locked`, which it keeps in
+  `renewal.json` for doctor to say.
+- Whether the login collection is unlocked when `graphical-session.target` starts: on GNOME with
+  gnome-keyring, on GNOME 51 with oo7-daemon, and on Plasma with ksecretd and
+  `plasma-kwallet-pam.service`, which nothing orders before the target
+  ([linux.md](linux.md#the-graphical-sessions-target)). Renewal runs then as any scheduled run
+  does: refused, it keeps the refusal, and the next run tries again. The Linux session machines
+  measure it, under a lingering user manager too, before and after the first sign-in.

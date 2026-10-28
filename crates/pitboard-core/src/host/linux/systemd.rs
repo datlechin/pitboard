@@ -1,5 +1,6 @@
-//! Pitboard's jobs on Linux: a systemd user timer for daily renewal and a systemd user service
-//! for the watch service, which is that system's answer.
+//! Pitboard's jobs on Linux: a systemd user timer for daily renewal, whose service also starts
+//! at each graphical sign-in, and a systemd user service for the watch service, which is that
+//! system's answer.
 //!
 //! `systemctl --user` reaches the user's own systemd whatever `HOME` and `XDG_CONFIG_HOME` this
 //! process has, and that manager runs a unit with its own `HOME`, where the job then acts. So
@@ -164,11 +165,15 @@ impl Systemd {
         }
     }
 
-    // The link `systemctl enable` makes for the unit's `WantedBy=`, as systemd.unit(5) says.
-    fn wanted_by(job: Job) -> &'static str {
+    // The link `systemctl enable` makes for each unit's `WantedBy=`, as systemd.unit(5) says:
+    // its folder, and the unit it names.
+    fn links(job: Job) -> &'static [(&'static str, &'static str)] {
         match job {
-            Job::Renew => "timers.target.wants",
-            Job::Watch => "default.target.wants",
+            Job::Renew => &[
+                ("timers.target.wants", TIMER),
+                ("graphical-session.target.wants", SERVICE),
+            ],
+            Job::Watch => &[("default.target.wants", WATCH)],
         }
     }
 
@@ -179,9 +184,28 @@ impl Systemd {
     // Each `systemctl --user` call that starts the job, in order.
     fn starts(job: Job) -> &'static [&'static [&'static str]] {
         match job {
-            Job::Renew => &[&["--user", "enable", "--now", TIMER]],
+            Job::Renew => &[
+                &["--user", "enable", SERVICE],
+                &["--user", "enable", "--now", TIMER],
+            ],
             // `restart` starts a stopped service, and one already running with the new unit.
             Job::Watch => &[&["--user", "enable", WATCH], &["--user", "restart", WATCH]],
+        }
+    }
+
+    // Each call that takes back what a refused start enabled: all of it where the job was not
+    // there before. Where it was, renewal's service is enabled again from the unit put back, which
+    // an earlier Pitboard wrote with no `[Install]`, and the timer and the watch service are as
+    // they were.
+    fn takes_back(job: Job, was_there: bool) -> &'static [&'static [&'static str]] {
+        match (job, was_there) {
+            (Job::Renew, false) => &[
+                &["--user", "disable", "--now", TIMER],
+                &["--user", "disable", SERVICE],
+            ],
+            (Job::Renew, true) => &[&["--user", "disable", SERVICE]],
+            (Job::Watch, false) => &[&["--user", "disable", WATCH]],
+            (Job::Watch, true) => &[],
         }
     }
 
@@ -283,10 +307,8 @@ impl Scheduler for Systemd {
             Job::Renew => before.1.is_some(),
             Job::Watch => before.0.is_some(),
         };
-        if job == Job::Watch && !was_there {
-            let _ = self
-                .control
-                .run(permit, SYSTEMCTL, &["--user", "disable", WATCH]);
+        for args in Self::takes_back(job, was_there) {
+            let _ = self.control.run(permit, SYSTEMCTL, args);
         }
         service::restore(permit, &unit, before.0.as_deref());
         if job == Job::Renew {
@@ -300,9 +322,10 @@ impl Scheduler for Systemd {
     }
 
     /// Where the user's systemd reads the folder a job is in, it is stopped and disabled
-    /// through `systemctl`, and renewal's record of its last run cleared, as systemd.timer(5)
-    /// asks before a timer with `Persistent=` is taken away. Where it does not, it never loaded
-    /// the job, so its files and the link `enable` made go and `systemctl` is asked nothing.
+    /// through `systemctl`, renewal's service with its timer, and renewal's record of its last
+    /// run cleared, as systemd.timer(5) asks before a timer with `Persistent=` is taken away.
+    /// Where it does not, it never loaded the job, so its files and the links `enable` made go
+    /// and `systemctl` is asked nothing.
     fn remove(&self, ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
         let holding: Vec<PathBuf> = Self::folders(ctx)
             .into_iter()
@@ -327,6 +350,9 @@ impl Scheduler for Systemd {
                     stopped?;
                 }
                 if job == Job::Renew {
+                    let _ = self
+                        .control
+                        .run(permit, SYSTEMCTL, &["--user", "disable", SERVICE]);
                     let _ = self.control.run(
                         permit,
                         SYSTEMCTL,
@@ -334,12 +360,9 @@ impl Scheduler for Systemd {
                     );
                 }
             } else {
-                service::remove(
-                    permit,
-                    &folder
-                        .join(Self::wanted_by(job))
-                        .join(Self::installed_by(job)),
-                )?;
+                for (wants, unit) in Self::links(job) {
+                    service::remove(permit, &folder.join(wants).join(unit))?;
+                }
             }
             service::remove(permit, &folder.join(Self::installed_by(job)))?;
             service::remove(permit, &folder.join(Self::service(job)))?;
@@ -452,9 +475,13 @@ fn command(body: &str, job: Job) -> Option<(PathBuf, Vec<String>)> {
 ///
 /// Each service is skipped, not failed, once its program is gone or no longer runs
 /// (`ConditionFileIsExecutable=`, systemd.unit(5)), as after the package that installed it is
-/// removed. The watch service starts with the person's systemd, at their first sign-in, and
-/// again a minute after it fails or crashes: a panic exits 101, and a run an update left behind
-/// exits on a state file the new build wrote.
+/// removed. Renewal's service also starts at each graphical sign-in, once the session is up
+/// (`WantedBy=` and `After=graphical-session.target`, systemd.special(7)): a run the login
+/// keyring refused at boot runs again after signing in has unlocked it. `After=` orders only
+/// units started together (systemd.unit(5)), so a run its timer starts waits for no session.
+/// The watch service starts with the person's systemd, at their first sign-in, and again a
+/// minute after it fails or crashes: a panic exits 101, and a run an update left behind exits
+/// on a state file the new build wrote.
 fn unit_file(
     job: Job,
     program: &Spelled,
@@ -473,12 +500,16 @@ fn unit_file(
             "[Unit]\n\
              Description=Renew Pitboard's parked logins\n\
              Documentation=https://docs.usepitboard.com\n\
+             After=graphical-session.target\n\
              ConditionFileIsExecutable={condition}\n\
              \n\
              [Service]\n\
              Type=oneshot\n\
              {environment}\
-             ExecStart={run}\n"
+             ExecStart={run}\n\
+             \n\
+             [Install]\n\
+             WantedBy=graphical-session.target\n"
         ),
         Job::Watch => format!(
             "[Unit]\n\
@@ -749,15 +780,158 @@ mod tests {
         }
     }
 
+    /// GNOME's and Plasma's session targets start `graphical-session.target` at each sign-in
+    /// (docs/facts/linux.md), so renewal's service, wanted by it, runs then too, once the
+    /// session is up: a run the login keyring refused at boot runs again after signing in has
+    /// unlocked it. Installing enables the service beside the timer, and taking renewal away
+    /// disables both.
+    #[test]
+    fn the_renewal_service_also_runs_at_each_graphical_sign_in() {
+        let written = unit(Job::Renew, "/usr/bin/pitboard", &[], &[]);
+        assert!(
+            written.contains(
+                "Documentation=https://docs.usepitboard.com\n\
+                 After=graphical-session.target\n"
+            ),
+            "{written}"
+        );
+        assert!(
+            written.ends_with(
+                "ExecStart=/usr/bin/pitboard renew --scheduled\n\
+                 \n\
+                 [Install]\n\
+                 WantedBy=graphical-session.target\n"
+            ),
+            "{written}"
+        );
+
+        let (_home, ctx) = scratch_home();
+        let asked = Arc::new(Asked::default());
+        let systemd = Systemd::new(asked.clone(), Arc::new(Pretend));
+        let program = Path::new("/usr/bin/pitboard");
+        systemd
+            .put(&ctx, Permit::for_a_test(), Job::Renew, program, &[], &[])
+            .expect("installed");
+        assert_eq!(
+            asked.taken(),
+            [
+                "--user daemon-reload".to_string(),
+                format!("--user enable {SERVICE}"),
+                format!("--user enable --now {TIMER}"),
+            ]
+        );
+        assert!(
+            systemd
+                .remove(&ctx, Permit::for_a_test(), Job::Renew)
+                .expect("taken away")
+        );
+        assert_eq!(
+            asked.taken(),
+            [
+                format!("--user disable --now {TIMER}"),
+                format!("--user disable {SERVICE}"),
+                format!("--user clean --what=state {TIMER}"),
+                "--user daemon-reload".to_string(),
+            ]
+        );
+    }
+
+    /// A start systemd refused leaves neither unit enabled where none was: a link left in
+    /// `timers.target.wants` or `graphical-session.target.wants` names a unit that is gone. Over
+    /// a schedule that was there, the service's link is taken back before its units are put back
+    /// and started again, since an earlier Pitboard's service has no `[Install]` to enable it by.
+    #[test]
+    fn a_refused_start_takes_back_both_enables() {
+        let (_home, ctx) = scratch_home();
+        let asked = Arc::new(Asked::default());
+        let systemd = Systemd::new(asked.clone(), Arc::new(Pretend));
+        let program = Path::new("/usr/bin/pitboard");
+        let units = Systemd::units(&ctx);
+        let reload = "--user daemon-reload".to_string();
+        let enable = format!("--user enable {SERVICE}");
+        let start = format!("--user enable --now {TIMER}");
+        let disable = format!("--user disable {SERVICE}");
+        let stop = format!("--user disable --now {TIMER}");
+
+        for (refusing, asked_for) in [
+            (
+                SERVICE,
+                vec![
+                    reload.clone(),
+                    enable.clone(),
+                    stop.clone(),
+                    disable.clone(),
+                    reload.clone(),
+                ],
+            ),
+            (
+                TIMER,
+                vec![
+                    reload.clone(),
+                    enable.clone(),
+                    start.clone(),
+                    stop.clone(),
+                    disable.clone(),
+                    reload.clone(),
+                ],
+            ),
+        ] {
+            asked.refuse(refusing);
+            let refused = systemd
+                .put(&ctx, Permit::for_a_test(), Job::Renew, program, &[], &[])
+                .expect_err("refused");
+            assert_eq!(refused.code(), "schedule_refused", "{refusing}");
+            assert_eq!(asked.taken(), asked_for, "{refusing}");
+            assert!(!systemd.installed(&ctx, Job::Renew), "{refusing}");
+            assert!(!units.join(SERVICE).exists(), "{refusing}");
+        }
+
+        std::fs::create_dir_all(&units).expect("made");
+        let earlier = (
+            "[Service]\nType=oneshot\nExecStart=/usr/bin/pitboard renew --scheduled\n",
+            "[Timer]\nOnUnitActiveSec=86400\nOnStartupSec=900\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n",
+        );
+        std::fs::write(units.join(SERVICE), earlier.0).expect("written");
+        std::fs::write(units.join(TIMER), earlier.1).expect("written");
+        asked.refuse(TIMER);
+        systemd
+            .put(&ctx, Permit::for_a_test(), Job::Renew, program, &[], &[])
+            .expect_err("refused");
+        assert_eq!(
+            asked.taken(),
+            [
+                reload.clone(),
+                enable.clone(),
+                start.clone(),
+                disable,
+                reload,
+                enable,
+                start
+            ]
+        );
+        assert_eq!(
+            (
+                std::fs::read_to_string(units.join(SERVICE)).expect("put back"),
+                std::fs::read_to_string(units.join(TIMER)).expect("put back"),
+            ),
+            (earlier.0.to_string(), earlier.1.to_string())
+        );
+    }
+
     /// systemd skips a service whose program is gone rather than failing it each day or at
     /// each sign-in, as once the package that installed Pitboard is removed.
     #[test]
     fn a_service_whose_pitboard_is_gone_is_skipped() {
-        for (job, description) in [
-            (Job::Renew, "Renew Pitboard's parked logins"),
+        for (job, description, ordered) in [
+            (
+                Job::Renew,
+                "Renew Pitboard's parked logins",
+                "After=graphical-session.target\n",
+            ),
             (
                 Job::Watch,
                 "Switch Claude Code before an account runs out, and warm up accounts",
+                "",
             ),
         ] {
             let written = unit(job, "/usr/bin/pitboard", &[], &[]);
@@ -766,6 +940,7 @@ mod tests {
                     "[Unit]\n\
                      Description={description}\n\
                      Documentation=https://docs.usepitboard.com\n\
+                     {ordered}\
                      ConditionFileIsExecutable=/usr/bin/pitboard\n\
                      \n\
                      [Service]\n"
@@ -1059,7 +1234,7 @@ mod tests {
     }
 
     /// A manager that does not read the folder never loaded what is in it, and `systemctl`
-    /// would reach that manager: the files and the link `enable` made go, and nothing else.
+    /// would reach that manager: the files and the links `enable` made go, and nothing else.
     #[test]
     fn nothing_is_asked_of_systemctl_where_the_manager_does_not_read_the_units() {
         let (home, ctx) = scratch_home();
@@ -1072,12 +1247,16 @@ mod tests {
             reading
                 .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
                 .expect("installed");
-            let link = units
-                .join(Systemd::wanted_by(job))
-                .join(Systemd::installed_by(job));
-            std::fs::create_dir_all(link.parent().expect("its folder")).expect("made");
-            crate::host::fs::testing::link(&units.join(Systemd::installed_by(job)), &link)
-                .expect("enabled, as systemctl links it");
+            let links: Vec<PathBuf> = Systemd::links(job)
+                .iter()
+                .map(|(wants, unit)| {
+                    let link = units.join(wants).join(unit);
+                    std::fs::create_dir_all(link.parent().expect("its folder")).expect("made");
+                    crate::host::fs::testing::link(&units.join(unit), &link)
+                        .expect("enabled, as systemctl links it");
+                    link
+                })
+                .collect();
             asked.taken();
 
             assert!(
@@ -1090,11 +1269,13 @@ mod tests {
             for gone in [Systemd::service(job), Systemd::installed_by(job)] {
                 assert!(!units.join(gone).exists(), "{gone}");
             }
-            assert!(
-                std::fs::symlink_metadata(&link).is_err(),
-                "{}",
-                link.display()
-            );
+            for link in &links {
+                assert!(
+                    std::fs::symlink_metadata(link).is_err(),
+                    "{}",
+                    link.display()
+                );
+            }
         }
 
         // Where it reads them, it is asked to stop each, and to forget when renewal last ran.
@@ -1115,6 +1296,7 @@ mod tests {
             asked.taken(),
             [
                 format!("--user disable --now {TIMER}"),
+                format!("--user disable {SERVICE}"),
                 format!("--user clean --what=state {TIMER}"),
                 "--user daemon-reload".to_string(),
                 format!("--user disable --now {WATCH}"),
@@ -1216,6 +1398,7 @@ mod tests {
             asked.taken(),
             [
                 format!("--user disable --now {TIMER}"),
+                format!("--user disable {SERVICE}"),
                 format!("--user clean --what=state {TIMER}"),
                 "--user daemon-reload".to_string(),
             ]

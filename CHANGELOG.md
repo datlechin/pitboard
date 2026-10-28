@@ -17,6 +17,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   says to install it again.
 - `pitboard doctor` warns when a run of daily renewal could not open the parked logins, such as
   in a locked keychain or login keyring, until a run of it opens them.
+- On Linux, daily renewal also runs at each sign-in to GNOME or KDE Plasma, so a run that found
+  the login keyring locked catches up once you sign in.
 
 ### Changed
 
