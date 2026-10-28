@@ -70,6 +70,8 @@ struct Mind {
     // None: whoever the folder held when it opened. Some(None): logged out.
     session: Option<Option<Person>>,
     reported: bool,
+    // signed in since it opened, which empties both token caches
+    signed_in: bool,
 }
 
 const SETTINGS: &str = "config.json";
@@ -147,6 +149,7 @@ impl FakeClaude {
         *self.mind() = Mind {
             session: Some(Some(*who)),
             reported: false,
+            signed_in: true,
         };
     }
 
@@ -163,6 +166,7 @@ impl FakeClaude {
                 session,
             })),
             reported: true,
+            signed_in: false,
         };
     }
 
@@ -171,6 +175,7 @@ impl FakeClaude {
         *self.mind() = Mind {
             session: Some(None),
             reported: false,
+            signed_in: false,
         };
     }
 
@@ -290,7 +295,13 @@ fn quit(data: &Path, jar_as: JarAs, mind: &Mind) {
     let mut pairs = settings(data);
     match held {
         Some(Some(who)) => {
-            set(&mut pairs, "oauth:tokenCache", who.tokens());
+            // After a sign-in only `oauth:tokenCacheV2` was asked for a token, as in #312.
+            let legacy = if mind.signed_in {
+                EMPTIED.into()
+            } else {
+                who.tokens()
+            };
+            set(&mut pairs, "oauth:tokenCache", legacy);
             set(&mut pairs, "oauth:tokenCacheV2", who.tokens());
             if mind.reported {
                 set(
@@ -327,6 +338,7 @@ pub fn sign_in_on_disk(folder: &Path, who: &Person, jar: JarAs) {
         &Mind {
             session: Some(Some(*who)),
             reported: true,
+            signed_in: true,
         },
     );
 }

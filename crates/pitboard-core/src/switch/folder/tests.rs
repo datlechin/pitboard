@@ -475,6 +475,36 @@ fn a_session_beside_emptied_caches_is_never_taken_as_named() {
     }
 }
 
+// Claude fills each token cache as something asks it for a token, so a sign-in can leave one
+// emptied while the other holds the account's: 3.6556.2 did in #312.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Claude Desktop is macOS only: Windows refuses its folder calls"
+)]
+fn a_session_beside_one_emptied_cache_is_a_finished_sign_in() {
+    let caches = ["oauth:tokenCache", "oauth:tokenCacheV2"];
+    for (at, emptied) in caches.iter().enumerate() {
+        let m = desktop_machine(&format!("one-emptied-{at}"));
+        jar(&m, Some(&STRANGER));
+        names(&m, &STRANGER);
+        set(
+            &m,
+            emptied,
+            Some(serde_json::from_str(EMPTIED).expect("JSON")),
+        );
+        set(
+            &m,
+            caches[1 - at],
+            Some(json!(format!("acct:{}|t", STRANGER.uuid))),
+        );
+        if let Err(refused) = enrol(&m, "duy") {
+            panic!("`{emptied}` emptied: {refused}");
+        }
+        assert_eq!(in_use(&m).as_deref(), Some("duy"), "`{emptied}` emptied");
+    }
+}
+
 #[test]
 #[cfg_attr(
     windows,

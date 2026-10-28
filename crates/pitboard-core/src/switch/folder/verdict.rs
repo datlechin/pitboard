@@ -12,7 +12,7 @@ use std::path::Path;
 pub(crate) enum Holds {
     Empty,
     SignedOut,
-    // emptied: a token cache holds the value the app leaves after a Log out (E1b)
+    // emptied: each token cache there holds the value the app leaves after a Log out (E1b)
     SignedIn {
         session: SignedIn,
         named: Option<String>,
@@ -120,11 +120,11 @@ pub(crate) fn holds(ctx: &Context, app: &dyn Folder, root: &Path) -> Result<Hold
     }
     let session = app.session(ctx, &jar).map_err(unread)?;
     let emptied = |key: &&str| keys.get(key).is_some_and(|value| app.emptied(key, value));
+    let none_held = caches
+        .iter()
+        .all(|key| keys.get(key).is_none() || emptied(key));
     let Some(session) = session else {
-        return if caches
-            .iter()
-            .all(|key| keys.get(key).is_none() || emptied(key))
-        {
+        return if none_held {
             Ok(Holds::SignedOut)
         } else {
             Err(Error::LoginFolderUnknown {
@@ -137,7 +137,8 @@ pub(crate) fn holds(ctx: &Context, app: &dyn Folder, root: &Path) -> Result<Hold
     Ok(Holds::SignedIn {
         session,
         named: settings.named(app),
-        emptied: caches.iter().any(emptied),
+        // Each cache fills as something asks for a token: `desktop_token_caches_on_demand`.
+        emptied: none_held && caches.iter().any(emptied),
     })
 }
 

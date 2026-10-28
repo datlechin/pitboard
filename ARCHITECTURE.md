@@ -3647,7 +3647,7 @@ These were not measured. Each row says what Pitboard does where it cannot know.
 
 | Not measured | What Pitboard does |
 | --- | --- |
-| Whether a sign-in over a stale `lastKnownAccountUuid`, followed by a quit within seconds, leaves the new session under the old name | A session it has not seen is taken as named in one case and is never deleted. Beside a token cache holding the emptied value it is a sign-in not finished, for every reader |
+| Whether a sign-in over a stale `lastKnownAccountUuid`, followed by a quit within seconds, leaves the new session under the old name | A session it has not seen is taken as named in one case and is never deleted. Beside token caches that all hold the emptied value it is a sign-in not finished, for every reader |
 | How often Claude replaces a session in place after a login is put back (seen once) | It parks the session under the fingerprint found and says so. Nothing is deleted |
 | What the names a build Pitboard has not read makes hold | They stay, as Claude keeps them when another account signs in. Only a part of a store the move carries that no item names stops the start of a move, and names itself |
 | Whether each account keeps its own previews, connector sign-ins and session windows across a switch, and Claude makes a missing `Partitions` or `Service Worker` again (read in 2.42304.0, not run) | They move like the site's storage. An item in neither place is gone on without, and said |
