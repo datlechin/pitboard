@@ -343,6 +343,15 @@ keeps it is in the header of the module named.
 - Each reason the automatic switch does not switch, and each wait, is recorded once for its
   account, limit, reset and code, and every front end tells one from another by the core's
   one rule, `Auto::told_apart`, in the core's words (`duty/autoswitch.rs`).
+- The app and `pitboard watch` hear a write to the account index or the readings through the
+  host's watch on Pitboard's directory, and look every `LOOK_EVERY_SECONDS` only where the
+  host cannot watch it, the directory is not there yet or the watch ended (`duty/written.rs`,
+  `a_write_to_the_index_is_seen_as_it_lands`,
+  `a_folder_made_after_the_watch_began_is_watched_once_it_is_there`,
+  `a_change_made_elsewhere_is_shown_without_waiting_for_a_look`,
+  `the_loop_waits_until_it_next_reads_or_decides`). A watch never keeps `pitboard uninstall`
+  from removing the directory whole
+  (`a_watched_pitboard_directory_is_removed_whole_by_uninstall`).
 
 ### Daily renewal and the watch service
 

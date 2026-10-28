@@ -345,7 +345,7 @@ It runs in the foreground until you press Control-C, whatever the app's **When a
 While it runs, `watch`:
 
 - Reads every account when it starts and every 5 minutes, as often as [How often Pitboard asks](/concepts/usage#how-often-pitboard-asks) allows.
-- Looks every 2 seconds at when the account list and usage readings were last written, and decides again when either changed.
+- Decides again as soon as another run writes the account list or the usage readings.
 - Decides at least every 30 seconds.
 
 On standard output, each line but the first starts with the local time, such as `14:02:11`.

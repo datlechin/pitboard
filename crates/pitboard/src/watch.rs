@@ -7,16 +7,16 @@
 //! it: running it, or installing it, is the opt-in. What it decides, and what it never does, is
 //! [`pitboard_core::duty::autoswitch`]'s and [`pitboard_core::duty::warm`]'s.
 //!
-//! It asks the services about every account as often as the app does, and looks at what the
-//! status lines and the other front ends record as often as the app looks, so it costs
-//! Anthropic no more than the app would.
+//! It asks the services about every account as often as the app does, and sees what the
+//! status lines and the other front ends record as it is written, as the app does, so it costs
+//! Anthropic no more than the app would. It waits on Pitboard's directory between reads and
+//! decisions ([`pitboard_core::duty::written`]), and looks every 2 seconds where nothing can
+//! watch it.
 
 use crate::{Report, emit, followed, located, ui};
 use clap::Subcommand;
 use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
-use pitboard_core::duty::cadence::{
-    DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
-};
+use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals};
 use pitboard_core::duty::warm::{Overview, Standing};
 use pitboard_core::error::{self, Error};
 use pitboard_core::provider::ProviderId;
@@ -217,6 +217,7 @@ pub(crate) fn run(
     let mut refusals = Refusals::default();
     let mut warm_told = WarmTold::default();
     let mut warm_refusals = Refusals::default();
+    let mut written = pitboard.written();
     let (mut read_at, mut decided_at, mut seen) = (None::<i64>, 0, None);
     loop {
         let now = epoch();
@@ -226,10 +227,10 @@ pub(crate) fn run(
             let _ = pitboard.status(false);
             read_at = Some(now);
         }
-        let written = Some((pitboard.changed_at(), pitboard.readings_changed_at()));
+        let stamps = Some((pitboard.changed_at(), pitboard.readings_changed_at()));
         let due = refusals.due(instant(decided_at), every());
-        if written != seen || instant(now) >= due || now < decided_at {
-            (seen, decided_at) = (written, now);
+        if stamps != seen || instant(now) >= due || now < decided_at {
+            (seen, decided_at) = (stamps, now);
             let outcome = decided(
                 refusals.waits(instant(now)),
                 || pitboard.auto_look(threshold),
@@ -265,7 +266,12 @@ pub(crate) fn run(
                 }
             }
         }
-        std::thread::sleep(Duration::from_secs(LOOK_EVERY_SECONDS.unsigned_abs()));
+        // Whatever it came to, the loop looks at when each was last written again.
+        let _ = written.wait(waits(
+            instant(epoch()),
+            read_at,
+            refusals.due(instant(decided_at), every()),
+        ));
     }
 }
 
@@ -684,6 +690,16 @@ fn every() -> Duration {
     Duration::from_secs(DECIDE_EVERY_SECONDS.unsigned_abs())
 }
 
+/// How long the loop waits at `now`, having last read at `read_at`, with its next decision
+/// `due`: until the earlier of the next read and that decision, and no longer than a
+/// decision's every, so a clock put back holds neither up.
+fn waits(now: Duration, read_at: Option<i64>, due: Duration) -> Duration {
+    let read = read_at.map_or(now, |at| {
+        instant(at) + Duration::from_secs(READ_EVERY_SECONDS.unsigned_abs())
+    });
+    read.min(due).saturating_sub(now).min(every())
+}
+
 /// Seconds since 1970, for when to read and decide next, and for writing a moment as a person
 /// reads it. Not what is decided from: the core reads its own clock.
 pub(crate) fn epoch() -> i64 {
@@ -810,6 +826,49 @@ mod tests {
 
     /// What watching cannot mend ends it; what a later look may get past is said and watched
     /// on.
+    /// The loop waits until the next read or the next decision, whichever comes first, a write
+    /// to Pitboard's directory waking it sooner, and never longer than a decision's every, so
+    /// a clock put back holds nothing up for longer. Never `LOOK_EVERY_SECONDS`: that is the
+    /// wait's own, and only where nothing watches the directory.
+    #[test]
+    fn the_loop_waits_until_it_next_reads_or_decides() {
+        const NOW: i64 = 1_760_000_000;
+        let secs = Duration::from_secs;
+        let now = instant(NOW);
+        assert_eq!(
+            waits(now, Some(NOW - 100), now + every()),
+            every(),
+            "just decided"
+        );
+        assert_eq!(
+            waits(now, Some(NOW - READ_EVERY_SECONDS + 10), now + every()),
+            secs(10),
+            "a read comes first"
+        );
+        let mut refusals = Refusals::default();
+        refusals.refused(now - secs(55));
+        assert_eq!(
+            waits(now, Some(NOW), refusals.due(now - secs(10), every())),
+            secs(5),
+            "as a refusal's wait ends"
+        );
+        assert_eq!(
+            waits(now, Some(NOW - READ_EVERY_SECONDS - 1), now - secs(5)),
+            Duration::ZERO,
+            "both are due"
+        );
+        assert_eq!(
+            waits(now, None, now + every()),
+            Duration::ZERO,
+            "nothing read yet"
+        );
+        assert_eq!(
+            waits(now, Some(NOW + 3_600), now + secs(3_630)),
+            every(),
+            "a clock put back an hour"
+        );
+    }
+
     #[test]
     fn only_what_watching_cannot_mend_ends_it() {
         let unwritable = Error::StateWriteFailed {

@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The app and `pitboard watch` see a switch or a reading another Pitboard recorded as soon as it
+  is written, instead of looking for one every 2 seconds.
+
 ## [1.0.0-beta.7] - 2026-10-28
 
 _On macOS, an update may take away a widget or control you placed, which then needs adding
