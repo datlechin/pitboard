@@ -1319,7 +1319,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pitboard"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1339,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-conformance"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "clap 4.6.7",
  "pitboard-core",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-ffi"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "jiff",
  "pitboard-core",
@@ -1391,7 +1391,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-probe"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "clap 4.6.7",
  "hex",
@@ -1405,7 +1405,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-share-ffi"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "pitboard-sites",
  "uniffi",
@@ -1413,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "pitboard-sites"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "url",
 ]
@@ -2287,14 +2287,14 @@ dependencies = [
 
 [[package]]
 name = "uniffi-bindgen-csharp"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "uniffi-bindgen-cs",
 ]
 
 [[package]]
 name = "uniffi-bindgen-swift"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "uniffi",
 ]
