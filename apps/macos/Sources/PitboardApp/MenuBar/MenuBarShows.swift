@@ -16,10 +16,10 @@ enum MenuBarShows: String, CaseIterable, Identifiable {
         }
     }
 
-    func text(of bar: MenuBarText) -> String {
+    func text(of item: StatusItemShown) -> String {
         switch self {
-        case .nameAndUsage: bar.nameAndUsage
-        case .usage: bar.usage
+        case .nameAndUsage: item.nameAndUsage
+        case .usage: item.usage
         case .icon: ""
         }
     }

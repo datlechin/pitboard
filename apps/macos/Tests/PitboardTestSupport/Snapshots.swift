@@ -50,14 +50,14 @@ package func snapshot(
     sections: [AccountSection] = [], notices: [PanelNotice] = [],
     menuNotices: MenuNotices = MenuNotices(
         install: nil, switches: [], signIns: [], others: nil),
-    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = [], glanceRevision: UInt64 = 0,
+    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = [], widgetRevision: UInt64 = 0,
     answers: [OutsideAnswer] = []
 ) -> Snapshot {
     Snapshot(
         revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
         windowRequest: WindowRequest(serial: 0, place: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
-        menuBar: MenuBarText(
+        statusItem: StatusItemShown(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
             tip: "Pitboard"),
         sections: sections,
@@ -110,5 +110,5 @@ package func snapshot(
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),
-        glanceRevision: glanceRevision, answers: answers)
+        widgetRevision: widgetRevision, answers: answers)
 }

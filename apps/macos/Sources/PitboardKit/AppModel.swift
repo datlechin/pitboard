@@ -34,8 +34,9 @@ public final class AppModel {
     public private(set) var sheet: Sheet?
     /// What went wrong in the sheet that is up, said inside it.
     public private(set) var sheetFailure: FailureText?
-    /// What the menu bar item says beside its mark, in each form its setting can choose.
-    public private(set) var menuBar: MenuBarText
+    /// What the menu bar item says beside its mark, in each form its setting can choose. The
+    /// model says it from launch to quit: it is nil only on a front with no status item.
+    public private(set) var statusItem: StatusItemShown?
     /// The accounts, a section per tool once there is more than one.
     public private(set) var sections: [AccountSection]
     /// The Account menu's items while no account is selected.
@@ -82,12 +83,12 @@ public final class AppModel {
 
     @ObservationIgnored private var lastRequest: UInt64 = 0
     @ObservationIgnored private var answering: [UInt64: Answering] = [:]
-    @ObservationIgnored private var lastGlance = 0
-    @ObservationIgnored private var glancing: [Int: CheckedContinuation<Void, Never>] = [:]
-    @ObservationIgnored private var glanceRevision: UInt64
+    @ObservationIgnored private var lastFeedWait = 0
+    @ObservationIgnored private var feedWaits: [Int: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored private var widgetRevision: UInt64
 
-    // Told each time what a widget shows of the glance changes, once its snapshot is shown.
-    @ObservationIgnored public var glanceChanged: (@MainActor () -> Void)?
+    // Told each time what a widget shows of the widget feed changes, once its snapshot is shown.
+    @ObservationIgnored public var widgetFeedChanged: (@MainActor () -> Void)?
 
     /// The app's model over `model`, showing its last snapshot until a newer one comes.
     public init(model: any PitboardModelProtocol) {
@@ -101,7 +102,7 @@ public final class AppModel {
         signingIn = first.signingIn
         sheet = first.sheet
         sheetFailure = first.sheetFailure
-        menuBar = first.menuBar
+        statusItem = first.statusItem
         sections = first.sections
         accountMenu = first.accountMenu
         notices = first.notices
@@ -121,7 +122,7 @@ public final class AppModel {
         uninstall = first.uninstall
         removal = first.removal
         welcome = first.welcome
-        glanceRevision = first.glanceRevision
+        widgetRevision = first.widgetRevision
     }
 
     /// The model `make` makes, told of its snapshots through a listener that hands each to
@@ -160,17 +161,17 @@ public final class AppModel {
 
     // What a widget reads, for an intent in the app: after the launch's first read, which it
     // waits for as long as `patience`.
-    public func glance(within patience: Duration) async -> String? {
-        if let glance = model.glance() { return glance }
-        lastGlance += 1
-        let waiting = lastGlance
+    public func widgetFeed(within patience: Duration) async -> String? {
+        if let feed = model.widgetFeed() { return feed }
+        lastFeedWait += 1
+        let waiting = lastFeedWait
         let late = Task {
             try? await Task.sleep(for: patience)
-            glancing.removeValue(forKey: waiting)?.resume()
+            feedWaits.removeValue(forKey: waiting)?.resume()
         }
         defer { late.cancel() }
-        await withCheckedContinuation { glancing[waiting] = $0 }
-        return model.glance()
+        await withCheckedContinuation { feedWaits[waiting] = $0 }
+        return model.widgetFeed()
     }
 
     /// Stops the model, a sign-in under way with it, for the app to call as it quits.
@@ -201,7 +202,7 @@ public final class AppModel {
         update(\.signingIn, snapshot.signingIn)
         update(\.sheet, snapshot.sheet)
         update(\.sheetFailure, snapshot.sheetFailure)
-        update(\.menuBar, snapshot.menuBar)
+        update(\.statusItem, snapshot.statusItem)
         update(\.sections, snapshot.sections)
         update(\.accountMenu, snapshot.accountMenu)
         update(\.notices, snapshot.notices)
@@ -226,12 +227,12 @@ public final class AppModel {
         for answer in snapshot.answers {
             answering.removeValue(forKey: answer.request)?.resume(returning: answer)
         }
-        // The model makes its glance before it tells the snapshot that moved its revision.
-        if snapshot.glanceRevision != glanceRevision {
-            glanceRevision = snapshot.glanceRevision
-            for waiting in glancing.values { waiting.resume() }
-            glancing = [:]
-            glanceChanged?()
+        // The model makes its widget feed before it tells the snapshot that moved its revision.
+        if snapshot.widgetRevision != widgetRevision {
+            widgetRevision = snapshot.widgetRevision
+            for waiting in feedWaits.values { waiting.resume() }
+            feedWaits = [:]
+            widgetFeedChanged?()
         }
         return assigned
     }

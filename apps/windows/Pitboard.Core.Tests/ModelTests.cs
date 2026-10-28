@@ -110,7 +110,7 @@ public sealed class ModelTests
             Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
-            MenuBar: new MenuBarText(
+            StatusItem: new StatusItemShown(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
                 Tip: "Pitboard\nwork: 5-hour 42%"),
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
@@ -128,7 +128,7 @@ public sealed class ModelTests
                 Title: "Welcome to Pitboard", Lines: [], IconLink: null, ToolsHeading: "Found on this PC", Tools: [],
                 OpenAtLogin: new WelcomeLogin(Title: "Start when you sign in to Windows", On: false, Note: ""),
                 Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
-            GlanceRevision: 0, Answers: []);
+            WidgetRevision: 0, Answers: []);
 
     private static AccountWindowsShown NoWindows() => new(
         Accounts: [], Menus: [], Open: [],
@@ -259,7 +259,7 @@ public sealed class ModelTests
             Assert.IsEmpty(first.Sections);
             Assert.AreEqual(new Footing.Ready(), first.Footing);
             Assert.IsInstanceOfType<AccountsShown.Reading>(first.AccountsShown);
-            Assert.AreEqual("", first.MenuBar.NameAndUsage);
+            Assert.AreEqual("", first.StatusItem?.NameAndUsage);
             Assert.AreEqual("", first.UpdatedWindow);
             Assert.IsFalse(first.Machine.Schedule.On);
             Assert.IsEmpty(first.Machine.Checks.Groups);
@@ -488,7 +488,7 @@ public sealed class ModelTests
                 Retry: new Choice("Try Again", new Intent.Refresh(true), Enabled: true)),
         };
 
-        Assert.AreEqual("work 42%", snapshot.MenuBar.NameAndUsage);
+        Assert.AreEqual("work 42%", snapshot.StatusItem?.NameAndUsage);
         Assert.AreEqual("Updated 08:00", snapshot.UpdatedMenu);
         Assert.AreEqual(
             "Anthropic could not be reached", ((AccountsShown.ReadFailed)failed.AccountsShown).Detail);
@@ -634,7 +634,7 @@ public sealed class ModelTests
         Assert.AreEqual(new Footing.OnlyOne(new AccountKey(Tool.Claude, "work")), snapshot.Footing);
         Assert.IsInstanceOfType<Intent.PresentSheet>(snapshot.Setup?.Actions[0].Intent);
         Assert.AreEqual("Try Again", ((AccountsShown.ReadFailed)snapshot.AccountsShown).Retry.Title);
-        Assert.AreEqual("work 42%", snapshot.MenuBar.NameAndUsage);
+        Assert.AreEqual("work 42%", snapshot.StatusItem?.NameAndUsage);
     }
 
     [TestMethod]

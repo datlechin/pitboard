@@ -86,7 +86,7 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public FailureText? SheetFailure => Part<FailureText?>();
 
-    public MenuBarText MenuBar => Part<MenuBarText>();
+    public StatusItemShown? StatusItem => Part<StatusItemShown?>();
 
     public AccountSection[] Sections => Part<AccountSection[]>();
 
@@ -128,11 +128,11 @@ public sealed class AppModel : INotifyPropertyChanged
 
     public WelcomeShown Welcome => Part<WelcomeShown>();
 
-    public ulong GlanceRevision => Part<ulong>();
+    public ulong WidgetRevision => Part<ulong>();
 
     public OutsideAnswer[] Answers => Part<OutsideAnswer[]>();
 
-    public JumpTask[]? JumpList => Part<JumpTask[]?>();
+    public QuickAction[]? QuickActions => Part<QuickAction[]?>();
 
     private T Part<T>([CallerMemberName] string name = "") => (T)_parts[name]!;
 }

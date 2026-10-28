@@ -14,9 +14,9 @@ import Testing
 
     app.apply(snapshot(2))
     #expect(reloads == 0)
-    app.apply(snapshot(3, glanceRevision: 1))
-    app.apply(snapshot(4, glanceRevision: 1))
+    app.apply(snapshot(3, widgetRevision: 1))
+    app.apply(snapshot(4, widgetRevision: 1))
     #expect(reloads == 1)
-    app.apply(snapshot(5, glanceRevision: 2))
+    app.apply(snapshot(5, widgetRevision: 2))
     #expect(reloads == 2)
 }

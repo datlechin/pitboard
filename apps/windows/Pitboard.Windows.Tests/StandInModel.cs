@@ -37,5 +37,5 @@ internal sealed class StandInModel(Snapshot first) : IPitboardModel
 
     public Snapshot Snapshot() => first;
 
-    public string? Glance() => null;
+    public string? WidgetFeed() => null;
 }

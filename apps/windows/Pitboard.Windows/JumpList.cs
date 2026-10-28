@@ -13,7 +13,7 @@ namespace Pitboard.Windows;
 public interface IJumpList
 {
     // In place of the tasks it held, for the taskbar and Start to show while Pitboard runs and after it has exited.
-    void Show(IReadOnlyList<JumpTask> tasks);
+    void Show(IReadOnlyList<QuickAction> tasks);
 
     void Delete();
 }
@@ -22,7 +22,7 @@ public interface IJumpList
 // carry, and each task is a link to Pitboard.exe with its arguments.
 public sealed class SystemJumpList(Identity identity, string exe) : IJumpList
 {
-    public void Show(IReadOnlyList<JumpTask> tasks)
+    public void Show(IReadOnlyList<QuickAction> tasks)
     {
         // A Debug build registers nothing with Windows.
         if (identity.Build is Build.Debug)
@@ -49,7 +49,7 @@ public sealed class SystemJumpList(Identity identity, string exe) : IJumpList
     public void Delete() => ((ICustomDestinationList)new DestinationList()).DeleteList(identity.Aumid);
 
     // A separator between the switches, Add account and the windows, as the icon's menu has.
-    public static IEnumerable<JumpTask?> Grouped(IReadOnlyList<JumpTask> tasks)
+    public static IEnumerable<QuickAction?> Grouped(IReadOnlyList<QuickAction> tasks)
     {
         for (var index = 0; index < tasks.Count; index++)
         {
@@ -62,7 +62,7 @@ public sealed class SystemJumpList(Identity identity, string exe) : IJumpList
         }
     }
 
-    internal IObjectCollection Links(IReadOnlyList<JumpTask> tasks)
+    internal IObjectCollection Links(IReadOnlyList<QuickAction> tasks)
     {
         var links = (IObjectCollection)new EnumerableObjectCollection();
         foreach (var task in Grouped(tasks))
@@ -73,7 +73,7 @@ public sealed class SystemJumpList(Identity identity, string exe) : IJumpList
         return links;
     }
 
-    internal unsafe IShellLinkW Link(JumpTask task)
+    internal unsafe IShellLinkW Link(QuickAction task)
     {
         var link = (IShellLinkW)new ShellLink();
         link.SetPath(exe);

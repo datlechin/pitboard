@@ -96,7 +96,7 @@ fn platform(apps: Arc<dyn OtherApps>) -> Platform {
         local_time: Arc::new(Utc),
         earlier: None,
         windows: None,
-        glance: None,
+        widget_feed: None,
     }
 }
 
@@ -222,7 +222,7 @@ fn the_glance_is_written_to_the_file_the_app_names() {
         world.core(),
         Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
-            glance: Some(glance.clone()),
+            widget_feed: Some(glance.clone()),
             ..platform(StandInApps::new(&[], true))
         },
         QUICK,
@@ -231,7 +231,7 @@ fn the_glance_is_written_to_the_file_the_app_names() {
     told.until("the widgets told", |snapshots| {
         snapshots
             .last()
-            .is_some_and(|last| last.glance_revision > 0)
+            .is_some_and(|last| last.widget_revision > 0)
     });
     let text = std::fs::read_to_string(&glance).expect("written before the widgets are told");
     assert!(text.contains(r#""name":"work""#), "{text}");
@@ -250,12 +250,12 @@ fn the_glance_is_given_to_the_app_with_or_without_a_file() {
         platform(StandInApps::new(&[], true)),
         QUICK,
     );
-    assert_eq!(model.glance(), None, "nothing before the first read");
+    assert_eq!(model.widget_feed(), None, "nothing before the first read");
     model.send(Intent::Start);
     told.until("the account read", shows("work"));
-    let glance = model.glance().expect("made with the read");
+    let glance = model.widget_feed().expect("made with the read");
     assert!(glance.contains(r#""name":"work""#), "{glance}");
-    assert!(model.snapshot().glance_revision > 0);
+    assert!(model.snapshot().widget_revision > 0);
     model.shutdown();
 }
 
@@ -273,7 +273,7 @@ fn an_uninstall_deletes_the_glance_and_tells_the_widgets() {
         world.core(),
         Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
-            glance: Some(glance.clone()),
+            widget_feed: Some(glance.clone()),
             ..platform(StandInApps::new(&[], true))
         },
         QUICK,
@@ -282,9 +282,9 @@ fn an_uninstall_deletes_the_glance_and_tells_the_widgets() {
     let read = told.until("the widgets told", |snapshots| {
         snapshots
             .last()
-            .is_some_and(|last| last.glance_revision > 0)
+            .is_some_and(|last| last.widget_revision > 0)
     });
-    let before = read.last().expect("told").glance_revision;
+    let before = read.last().expect("told").widget_revision;
     model.send(Intent::Uninstall);
     let removed = told.until("Pitboard removed", |snapshots| {
         snapshots
@@ -292,8 +292,8 @@ fn an_uninstall_deletes_the_glance_and_tells_the_widgets() {
             .is_some_and(|last| last.removal == Some(crate::RemovalShown::Done))
     });
     assert!(!glance.exists());
-    assert!(removed.last().expect("told").glance_revision > before);
-    assert_eq!(model.glance(), None);
+    assert!(removed.last().expect("told").widget_revision > before);
+    assert_eq!(model.widget_feed(), None);
     assert!(
         glance.parent().is_some_and(std::path::Path::exists),
         "the app's folder stays"
@@ -1246,7 +1246,7 @@ fn model_telling_time(
             local_time: Arc::clone(clock) as Arc<dyn LocalTime>,
             earlier: None,
             windows: None,
-            glance: None,
+            widget_feed: None,
         },
         cadence,
     );
@@ -1560,7 +1560,7 @@ fn model_posting(
             local_time: Arc::new(Utc),
             earlier: None,
             windows: None,
-            glance: None,
+            widget_feed: None,
         },
         QUICK,
     );

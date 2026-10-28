@@ -51,8 +51,8 @@ use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
-    FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch,
-    Switched, Uninstalled, Usage, WarmRefused, Warning,
+    FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Surfaces,
+    Switch, Switched, Uninstalled, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{
@@ -803,6 +803,7 @@ fn taken_while_removing(intent: &Intent) -> bool {
     matches!(
         intent,
         Intent::Uninstall
+            | Intent::SurfacesChanged { .. }
             | Intent::Show { .. }
             | Intent::DismissFailure
             | Intent::WindowOpened { .. }
@@ -967,6 +968,8 @@ impl SigningIn {
 pub(crate) struct State {
     /// Which app is shown it, which says what differs by front.
     pub(crate) front: Front,
+    /// What that front's system gives it now, as the front last said.
+    pub(crate) surfaces: Surfaces,
     cadence: Cadence,
     /// Whether what runs by itself has been started. A test drives everything itself until
     /// it says so, as the Swift model's tests did.
@@ -1152,6 +1155,7 @@ impl State {
     pub(crate) fn new(front: Front, cadence: Cadence) -> State {
         State {
             front,
+            surfaces: front.surfaces(),
             cadence,
             started: false,
             status: None,
@@ -1430,6 +1434,7 @@ impl State {
                 now,
                 jobs,
             ),
+            Intent::SurfacesChanged { surfaces } => self.surfaces = surfaces,
             Intent::Refresh { asked } => self.refresh(
                 Asked {
                     fresh: asked,
@@ -1648,7 +1653,7 @@ impl State {
         self.glancing.text.as_deref()
     }
 
-    pub(crate) fn glance_revision(&self) -> u64 {
+    pub(crate) fn widget_revision(&self) -> u64 {
         self.glancing.revision
     }
 

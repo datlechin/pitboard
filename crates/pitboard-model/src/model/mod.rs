@@ -51,13 +51,13 @@ mod changing;
 #[cfg(test)]
 mod glancing;
 #[cfg(test)]
-mod jumping;
-#[cfg(test)]
 mod keeping;
 #[cfg(test)]
 mod maintaining;
 #[cfg(test)]
 mod presenting;
+#[cfg(test)]
+mod quick_actions;
 #[cfg(test)]
 mod reading;
 #[cfg(test)]
@@ -80,13 +80,13 @@ mod welcoming;
 mod windowing;
 
 use crate::account_windows::AlertText;
-use crate::present::JumpTask;
 use crate::present::{
     AccountMenuShown, AccountSection, AccountWindowsShown, AccountsShown, FailureText, Footing,
-    ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, RemovalShown,
-    SetupStep, SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
+    ItemOffer, MachineShown, MenuNotices, PanelNotice, Question, QuickAction, RemovalShown,
+    SetupStep, SheetText, SigningInText, StatusItemShown, StowText, WelcomeShown, WindowQuestion,
+    present,
 };
-use crate::{AccountKey, AppCore, Front, Tool, Warning};
+use crate::{AccountKey, AppCore, Front, Surfaces, Tool, Warning};
 use lanes::Lanes;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -122,9 +122,12 @@ pub struct AppLaunch {
     /// take once: on macOS what UserDefaults holds. `None` for an app with no earlier store.
     #[uniffi(default)]
     pub handover: Option<Handover>,
-    // Where the glance is written for widgets: only where the app names a path.
+    /// Where the model writes the widget feed, the glance of the accounts each widget,
+    /// control and Shortcuts action reads, for an app whose widgets read a file: on macOS one
+    /// in the App Group's container. `None` for one that names none: the feed is then made
+    /// and handed to the app, and written nowhere.
     #[uniffi(default)]
-    pub glance: Option<String>,
+    pub widget_feed: Option<String>,
 }
 
 /// Where the account windows' records are kept, and what this launch is to them.
@@ -224,6 +227,11 @@ pub enum Intent {
     /// Somebody looked, by opening the app's menu: the accounts are read again where the
     /// numbers shown are a minute old.
     Glanced,
+    /// What the front's system now gives it beside its windows and notifications, which the
+    /// front had as `Front::surfaces` says until it sends this: a status item comes and goes
+    /// as the system's host for one does. Neither shipping app sends it: each has its status
+    /// item from launch to quit.
+    SurfacesChanged { surfaces: Surfaces },
     /// Read the accounts again. `asked` is somebody asking, from a Refresh button, rather
     /// than something producing it, and has each tool's service asked about every account
     /// whatever it was asked moments ago.
@@ -418,7 +426,7 @@ pub enum Intent {
 /// Never more than a click in the app does.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum OutsideAsk {
-    /// `account`: its id in the glance
+    /// `account`: its id in the widget feed
     Switch {
         account: String,
     },
@@ -667,8 +675,9 @@ pub struct Snapshot {
     /// it could not save. Numbered with the failures said in the window, and gone with the
     /// sheet.
     pub sheet_failure: Option<FailureText>,
-    /// What the menu bar item says beside its mark.
-    pub menu_bar: MenuBarText,
+    /// What the front's status item says, while it has one: `None` while its system gives it
+    /// none, as `Intent::SurfacesChanged` last said.
+    pub status_item: Option<StatusItemShown>,
     /// The accounts, a section per tool once there is more than one, each as its row.
     pub sections: Vec<AccountSection>,
     pub account_menu: AccountMenuShown,
@@ -710,12 +719,15 @@ pub struct Snapshot {
     pub uninstall: ItemOffer,
     pub removal: Option<RemovalShown>,
     pub welcome: WelcomeShown,
-    // one higher each time what a widget shows of the glance changed, which reloads widgets
-    pub glance_revision: u64,
+    /// One higher each time what a widget shows of the widget feed changed, which reloads
+    /// widgets. Where the app named a file, only once the model has written it there.
+    pub widget_revision: u64,
     pub answers: Vec<OutsideAnswer>,
-    // the Windows Jump List's tasks, none where it stays as it was
+    /// What the front offers to start Pitboard with from outside it, where it keeps such a
+    /// list (`Front::keeps_quick_actions`): the Windows Jump List's tasks. `None` where the
+    /// list stays as it was.
     #[uniffi(default)]
-    pub jump_list: Option<Vec<JumpTask>>,
+    pub quick_actions: Option<Vec<QuickAction>>,
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements
@@ -870,7 +882,7 @@ pub trait OtherApps: Send + Sync {
 pub struct PitboardModel {
     mailbox: Sender<Msg>,
     shown: Arc<Mutex<Snapshot>>,
-    glance: Arc<Mutex<Option<String>>>,
+    widget_feed: Arc<Mutex<Option<String>>>,
     /// Set once the model is stopped, after which the listener is told nothing more.
     stopped: Arc<AtomicBool>,
     actor: Mutex<Option<JoinHandle<()>>>,
@@ -915,7 +927,7 @@ impl PitboardModel {
                         windows::WEB_SCHEME,
                     )
                 }),
-                glance: launch.glance.map(PathBuf::from),
+                widget_feed: launch.widget_feed.map(PathBuf::from),
             },
             Cadence::APP,
         )
@@ -927,9 +939,9 @@ impl PitboardModel {
         lock(&self.shown).clone()
     }
 
-    // The glance file's text, file or not, for an intent in the app, set before its snapshot.
-    pub fn glance(&self) -> Option<String> {
-        lock(&self.glance).clone()
+    // The widget feed's text, file or not, for an intent in the app, set before its snapshot.
+    pub fn widget_feed(&self) -> Option<String> {
+        lock(&self.widget_feed).clone()
     }
 
     /// Asks the model for `intent`. Waits for nothing and calls nothing back: what comes of
@@ -984,7 +996,8 @@ pub(crate) struct Platform {
     pub(crate) earlier: Option<EarlierPreferences>,
     /// Where the account windows' records are kept, for an app that keeps them.
     pub(crate) windows: Option<WindowsPlace>,
-    pub(crate) glance: Option<PathBuf>,
+    /// Where the widget feed is written, for an app that names a file.
+    pub(crate) widget_feed: Option<PathBuf>,
 }
 
 /// Where the account windows' records are kept and the key this launch's are kept under,
@@ -1029,7 +1042,7 @@ impl PitboardModel {
     ) -> Arc<PitboardModel> {
         let clock = Clock::starting();
         let mut state = State::new(platform.front, cadence);
-        if platform.glance.is_some() {
+        if platform.widget_feed.is_some() {
             state.glance_to_a_file();
         }
         if let Some(place) = &platform.windows {
@@ -1041,7 +1054,7 @@ impl PitboardModel {
         }
         let first = present(&state, clock.now().epoch(), platform.local_time.as_ref());
         let shown = Arc::new(Mutex::new(first));
-        let glance = Arc::new(Mutex::new(None));
+        let widget_feed = Arc::new(Mutex::new(None));
         let stopped = Arc::new(AtomicBool::new(false));
         let (mailbox, mail) = channel();
         let lanes = Lanes::open(
@@ -1052,7 +1065,7 @@ impl PitboardModel {
             lanes::Keeping {
                 earlier: platform.earlier,
                 windows: platform.windows.map(lanes::RecordsFile::of),
-                glance: platform.glance,
+                widget_feed: platform.widget_feed,
             },
             cadence,
             &mailbox,
@@ -1064,7 +1077,7 @@ impl PitboardModel {
             state,
             lanes,
             shown: Arc::clone(&shown),
-            glance: Arc::clone(&glance),
+            widget_feed: Arc::clone(&widget_feed),
             tell: lanes::notifier(listener, Arc::clone(&stopped)),
             clock,
             local_time: platform.local_time,
@@ -1076,7 +1089,7 @@ impl PitboardModel {
         Arc::new(PitboardModel {
             mailbox,
             shown,
-            glance,
+            widget_feed,
             stopped,
             actor: Mutex::new(Some(actor)),
             sign_ins,
@@ -1100,7 +1113,7 @@ impl Drop for PitboardModel {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    // A snapshot or a glance is whole whenever the lock is let go, so one held through a panic
+    // A snapshot or a widget feed is whole whenever the lock is let go, so one held through a panic
     // is still worth showing.
     mutex
         .lock()
@@ -1138,7 +1151,7 @@ struct Actor {
     state: State,
     lanes: Lanes,
     shown: Arc<Mutex<Snapshot>>,
-    glance: Arc<Mutex<Option<String>>>,
+    widget_feed: Arc<Mutex<Option<String>>>,
     tell: Sender<Snapshot>,
     clock: Clock,
     local_time: Arc<dyn LocalTime>,
@@ -1171,7 +1184,7 @@ impl Actor {
                 self.lanes.run(job);
             }
             let made = self.state.glance();
-            let mut kept = lock(&self.glance);
+            let mut kept = lock(&self.widget_feed);
             if kept.as_deref() != made {
                 *kept = made.map(str::to_owned);
             }

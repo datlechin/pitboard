@@ -11,6 +11,7 @@ use crate::model::lanes;
 use crate::model::preferences::Preferences;
 use crate::model::state::{Answer, Cadence, Job, Msg, Now, QuitOutcome, State};
 use crate::model::{Intent, Notice, OtherApps, Snapshot};
+use crate::present::StatusItemShown;
 use crate::{
     AutoLooked, AutoSwitched, Change, Check, Doctored, Enrolled, EnrolledAs, FoundCommandLine,
     GaveUp, Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Uninstalled,
@@ -837,6 +838,11 @@ impl Hand {
     /// What the state's front is shown now, its clock times read in UTC.
     pub(crate) fn shown(&self) -> Snapshot {
         crate::present::present(&self.state, self.now.epoch(), &crate::present::testing::Utc)
+    }
+
+    // What the front's status item says now, for a front that has one.
+    pub(crate) fn status_item(&self) -> StatusItemShown {
+        self.shown().status_item.expect("a status item")
     }
 
     // What the macOS app is shown now, whichever front the state is the model of.

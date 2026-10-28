@@ -30,7 +30,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         AppDependencyManager.shared.add(dependency: model)
         AppDependencyManager.shared.add(
             dependency: GlanceSource {
-                await model.glance(within: Actions.patience).flatMap { Glance(Data($0.utf8)) }
+                await model.widgetFeed(within: Actions.patience).flatMap {
+                    Glance(Data($0.utf8))
+                }
             })
         AppDependencyManager.shared.add(
             dependency: GlanceActions(

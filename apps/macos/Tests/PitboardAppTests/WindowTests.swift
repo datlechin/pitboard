@@ -38,7 +38,7 @@ import Testing
             == [macWords.accountAndUsage, macWords.usageOnly, macWords.iconOnly])
     #expect(MenuBarShows.allCases.map(\.rawValue) == ["nameAndUsage", "usage", "icon"])
     #expect(MenuBarShows.allCases.allSatisfy { $0.id == $0.rawValue })
-    let bar = MenuBarText(
+    let bar = StatusItemShown(
         nameAndUsage: "work 42%", usage: "42%", spoken: "Pitboard, work 42%", level: .plenty,
         attention: false, tip: "Pitboard\nwork: 5-hour 42%")
     #expect(MenuBarShows.allCases.map { $0.text(of: bar) } == ["work 42%", "42%", ""])

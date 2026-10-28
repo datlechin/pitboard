@@ -113,7 +113,7 @@ fn advice_told_from_what_sessions_recorded_outlasts_the_apps_next_read() {
 
     machine.answer = Ok(status(vec![work(100.0, 7_200), personal()]));
     model.refresh(&mut machine);
-    assert_eq!(model.shown().menu_bar.name_and_usage, "work 100%");
+    assert_eq!(model.status_item().name_and_usage, "work 100%");
     assert_eq!(switches_to(&model), ["claude/personal"]);
 }
 

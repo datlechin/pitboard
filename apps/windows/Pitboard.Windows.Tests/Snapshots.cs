@@ -11,7 +11,7 @@ internal static class Snapshots
             Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
-            MenuBar: new MenuBarText(
+            StatusItem: new StatusItemShown(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
                 Tip: "Pitboard\nwork: 5-hour 42% used"),
             Sections: [],
@@ -39,7 +39,7 @@ internal static class Snapshots
                 OpenAtLogin: new WelcomeLogin(
                     Title: "Start when you sign in to Windows", On: false, Note: "Pitboard watches your limits only while it’s running."),
                 Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
-            GlanceRevision: 0, Answers: []);
+            WidgetRevision: 0, Answers: []);
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(

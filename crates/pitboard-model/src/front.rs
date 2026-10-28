@@ -2,10 +2,11 @@
 //!
 //! An app names its front once, in `AppLaunch`, and the model words and decides by it what
 //! differs from one app to another: a control's case, what the machine is called, where a
-//! sheet comes up, and its account windows' engine. Each is a `match` on `Front` with no `_`
-//! arm, so a front added does not compile until each is said for it. What the core decides
-//! about the system the app runs on, such as which tools it supports or how its file system
-//! compares names, is asked of `os()`.
+//! sheet comes up, its account windows' engine, whether it has a status item and whether it
+//! offers quick actions. Each is a `match` on `Front` with no `_` arm, so a front added does
+//! not compile until each is said for it. What the core decides about the system the app runs
+//! on, such as which tools it supports or how its file system compares names, is asked of
+//! `os()`.
 
 use pitboard_core::host::Os;
 
@@ -18,6 +19,14 @@ pub enum Front {
     WindowsNotificationArea,
     /// The libadwaita app, on every Linux desktop.
     Gnome,
+}
+
+/// What a front's system gives it to show Pitboard in beside its windows and notifications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct Surfaces {
+    /// An item the system keeps for Pitboard while it runs: the macOS menu bar's, the Windows
+    /// notification area's icon.
+    pub status_item: bool,
 }
 
 /// The web engine an app's account windows load their pages in.
@@ -44,6 +53,25 @@ impl Front {
             Front::MacMenuBar => Os::MacOs,
             Front::WindowsNotificationArea => Os::Windows,
             Front::Gnome => Os::Linux,
+        }
+    }
+
+    /// What the front has from the start, until it says otherwise with
+    /// `Intent::SurfacesChanged`: a front whose system can give or take a status item while
+    /// it runs starts with none.
+    pub fn surfaces(self) -> Surfaces {
+        match self {
+            Front::MacMenuBar | Front::WindowsNotificationArea => Surfaces { status_item: true },
+            Front::Gnome => Surfaces { status_item: false },
+        }
+    }
+
+    /// Whether the front offers what the model's quick actions ask from outside it: the
+    /// Windows Jump List's tasks.
+    pub fn keeps_quick_actions(self) -> bool {
+        match self {
+            Front::WindowsNotificationArea => true,
+            Front::MacMenuBar | Front::Gnome => false,
         }
     }
 

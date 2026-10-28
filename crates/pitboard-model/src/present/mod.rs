@@ -33,10 +33,10 @@ mod accounts;
 mod app_words;
 mod checks;
 mod glance;
-mod jump_list;
 mod machine;
 pub(crate) mod next;
 mod notices;
+mod quick_actions;
 mod removal;
 mod setup;
 mod sheets;
@@ -58,11 +58,11 @@ pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
 pub(crate) use glance::{GlanceText, glance, id as glance_id};
-pub use jump_list::{JumpAsk, JumpTask, jump_refused};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
 };
+pub use quick_actions::{QuickAction, QuickAsk, outside_refused};
 pub use removal::RemovalShown;
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;
@@ -86,21 +86,22 @@ use crate::model::{Intent, LocalTime, Snapshot};
 use crate::{Account, AccountKey, Front, Tool, UsageLevel};
 use pitboard_core::provider::ProviderId;
 
-// Not `MenuBar`, which WinUI 3 has a control of: a C# file using both namespaces would find it
-// ambiguous.
+/// What a front's status item says of the account in use: the macOS menu bar item beside its
+/// mark, the Windows notification area icon by its look and its tooltip.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct MenuBarText {
+pub struct StatusItemShown {
     // "work 42%", a name past twelve characters cut to eleven and an ellipsis; empty while
     // nobody is signed in
     pub name_and_usage: String,
     // "42%", empty until measured
     pub usage: String,
-    // "Pitboard, work 80%, Codex, needs attention", whatever the bar shows
+    // "Pitboard, work 80%, Codex, needs attention", whatever the item shows
     pub spoken: String,
     pub level: Option<UsageLevel>,
     // the menu opens on something to look at
     pub attention: bool,
-    // Windows' notification area tooltip: "Pitboard", then a line for each account in use
+    // the item's tooltip, where its system shows one, as Windows does: "Pitboard", then a line
+    // for each account in use
     pub tip: String,
 }
 
@@ -872,7 +873,8 @@ pub(crate) fn present_on(front: Front, state: &State, now: i64, local: &dyn Loca
         sheet: state.sheet.clone(),
         sheet_failure: (state.sheet_failure.as_ref())
             .map(|failure| sheets::failure_text(front, failure)),
-        menu_bar: accounts::menu_bar(&seen, &menu_notices),
+        status_item: (state.surfaces.status_item)
+            .then(|| accounts::status_item(&seen, &menu_notices)),
         sections: accounts::sections(&seen),
         account_menu: accounts::account_menu(seen.front),
         menu_notices,
@@ -894,9 +896,9 @@ pub(crate) fn present_on(front: Front, state: &State, now: i64, local: &dyn Loca
         uninstall: removal::uninstall(&seen),
         removal: removal::removal(&seen),
         welcome: welcome::welcome(&seen),
-        glance_revision: state.glance_revision(),
+        widget_revision: state.widget_revision(),
         answers: glance::answers(&seen),
-        jump_list: jump_list::jump_list(&seen),
+        quick_actions: quick_actions::quick_actions(&seen),
     }
 }
 

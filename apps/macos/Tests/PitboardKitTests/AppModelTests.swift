@@ -206,14 +206,14 @@ private func answer(_ request: UInt64, _ said: String) -> OutsideAnswer {
 @Test func theGlanceWaitsForTheLaunchsFirstReadAndNoLonger() async {
     let model = StandInModel(snapshot(0))
     let app = AppModel(model: model)
-    #expect(await app.glance(within: .milliseconds(10)) == nil)
+    #expect(await app.widgetFeed(within: .milliseconds(10)) == nil)
 
-    let glanced = Task { await app.glance(within: .seconds(60)) }
+    let glanced = Task { await app.widgetFeed(within: .seconds(60)) }
     await Task.yield()
-    model.glanceText = #"{"schema":1}"#
-    app.apply(snapshot(1, glanceRevision: 1))
+    model.feed = #"{"schema":1}"#
+    app.apply(snapshot(1, widgetRevision: 1))
     #expect(await glanced.value == #"{"schema":1}"#)
-    #expect(await app.glance(within: .zero) == #"{"schema":1}"#)
+    #expect(await app.widgetFeed(within: .zero) == #"{"schema":1}"#)
 }
 
 // Shortcuts reads the accounts again as they change, and a widget would reload.
@@ -221,13 +221,13 @@ private func answer(_ request: UInt64, _ said: String) -> OutsideAnswer {
 @Test func aGlanceThatMovedIsToldOnceItsSnapshotIsShown() {
     let app = AppModel(model: StandInModel(snapshot(0)))
     var told = 0
-    app.glanceChanged = { told += 1 }
+    app.widgetFeedChanged = { told += 1 }
     app.apply(snapshot(1))
-    app.apply(snapshot(2, glanceRevision: 1))
-    app.apply(snapshot(3, glanceRevision: 1))
-    app.apply(snapshot(2, glanceRevision: 2))
+    app.apply(snapshot(2, widgetRevision: 1))
+    app.apply(snapshot(3, widgetRevision: 1))
+    app.apply(snapshot(2, widgetRevision: 2))
     #expect(told == 1, "not for a revision that stayed, nor in a snapshot dropped")
-    app.apply(snapshot(4, glanceRevision: 2))
+    app.apply(snapshot(4, widgetRevision: 2))
     #expect(told == 2)
 }
 

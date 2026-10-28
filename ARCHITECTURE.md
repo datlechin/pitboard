@@ -119,7 +119,8 @@ The other crates:
   - `lib.rs`: what the bindings export beside the model, `Tool` and `AccountKey` among them,
     and the free functions an app calls as it starts.
   - `front.rs`: `Front`, the app a model serves, and what follows from it alone: its `Engine`,
-    its system, where a sheet comes up.
+    its system, where a sheet comes up, the `Surfaces` it starts with and whether it keeps
+    quick actions.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
@@ -442,12 +443,13 @@ keeps it is in the header of the module named.
   `app.lock` until the directory goes. Nothing writes it after, and a refusal before anything
   went starts the model again (`model/removing.rs`,
   `after_uninstall_nothing_writes_pitboards_directory_again`).
-- The glance for widgets and intents names each account by an id derived from its own, never
-  by an email, a token, a uuid, a path or a notice's lines. The model hands it to the app before
-  the snapshot it changed with, writes it only where the app names a file, again with each
-  read, and deletes that file once the app uninstalls Pitboard
+- The widget feed, the glance widgets and intents read, names each account by an id derived
+  from its own, never by an email, a token, a uuid, a path or a notice's lines. The model hands
+  it to the app before the snapshot it changed with, writes it only where
+  `AppLaunch.widget_feed` names a file, again with each read, and deletes that file once the
+  app uninstalls Pitboard
   (`the_glance_is_given_to_the_app_with_or_without_a_file`,
-  `an_uninstall_deletes_the_glance_and_tells_the_widgets`). `glance_revision` moves only with
+  `an_uninstall_deletes_the_glance_and_tells_the_widgets`). `widget_revision` moves only with
   what a widget shows, since WidgetKit budgets reloads, and once the file holds it. A
   request from outside does no more than a click in the app and waits for the launch's first
   read. One that would quit an app answers with the quit question and quits it only when asked
@@ -456,7 +458,7 @@ keeps it is in the header of the module named.
 - The model names a tool and an account by type: the core's `ProviderId` and `Key` inside, and
   its own `Tool` and `AccountKey` to an app. What crosses a process stays text: a
   notification's `clicked` argument, read back as the core reads an account typed, and the ids
-  of the glance and of a request from outside. The one conversion out of the core's
+  of the widget feed and of a request from outside. The one conversion out of the core's
   `non_exhaustive` `ProviderId`, into `Tool`, is the model's only arm for a tool it does not
   know (`every_tool_the_core_knows_is_one_the_apps_name`).
 - `State` words nothing itself and imports nothing of `present::words`: a failure is what was
@@ -471,6 +473,11 @@ keeps it is in the header of the module named.
   machine is this one as the core sees it. What one front alone draws is in that front's own
   catalogue, and both shipping fronts' words are tested on every system
   (`each_shipping_fronts_catalogue_says_what_its_app_drew`).
+- A snapshot carries the status item's words only while the front has one: the shipping
+  fronts from the start, and a front that starts with none once `Intent::SurfacesChanged` says
+  one came, until it says it went (`a_front_shows_a_status_item_only_while_it_has_one`). Quick
+  actions are offered only by a front that keeps them, the Windows app alone
+  (`quick_actions_are_offered_only_where_the_front_keeps_them`).
 - One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).
@@ -505,8 +512,9 @@ keeps it is in the header of the module named.
   loads none of the core and hands a page to `Pitboard.exe` only as a Pitboard link
   ([Documented, not measured](docs/facts/windows-documented.md) has what is still to be seen).
 - The Windows Jump List is Win32's, kept under the AppUserModelId with no package identity.
-  Each task starts `Pitboard.exe` with a flag and the GUID the model gave it, read only where a
-  link would be, and its switch is a request from outside (`LaunchingTests`, `model/jumping.rs`).
+  Its tasks are the model's `quick_actions`. Each starts `Pitboard.exe` with a flag and the GUID
+  the model gave it, read only where a link would be, and its switch is a request from outside
+  (`LaunchingTests`, `model/quick_actions.rs`).
   Only a Release build writes the list, and `--unregister` deletes it.
 
 ### Account windows
@@ -551,7 +559,7 @@ on.
   no secret. Only a build signed by a team claims the App Group `<team>.com.usepitboard.Pitboard`,
   so an ad hoc build touches no group container and macOS never asks about one
   (`aBuildWithNoTeamKeepsOutOfEveryGroup`, `scripts/build-app.sh`). The widgets and the
-  control reload only with `glance_revision`
+  control reload only with `widget_revision`
   (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`). A widget's Switch, on macOS 27
   and from Xcode 27, runs in the app alone, and asked of the extension it switches nothing
   (`aSwitchTheWidgetExtensionIsAskedForSwitchesNothingAndSaysWhere`).

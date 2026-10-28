@@ -5,8 +5,8 @@
 use super::words;
 use super::{
     AccountAction, AccountDetail, AccountItem, AccountMenuShown, AccountNote, AccountSection,
-    AccountStanding, ActionKind, Choice, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
-    MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail,
+    AccountStanding, ActionKind, Choice, ItemAction, ItemOffer, LimitKind, LimitRow, MenuNotices,
+    NoteKind, Question, RowEnd, Seen, StatusItemShown, WarmDetail,
 };
 use crate::Front;
 use crate::account_windows::{forget_message, windows_of_account};
@@ -114,7 +114,7 @@ pub(crate) fn bar_title(accounts: &[Account], tools: &[ProviderId], usage_only: 
     }
 }
 
-pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
+pub(crate) fn status_item(seen: &Seen, notices: &MenuNotices) -> StatusItemShown {
     let accounts = seen.accounts();
     let name_and_usage = bar_title(accounts, &seen.tools, false);
     let titled = titled(accounts, &seen.tools);
@@ -138,7 +138,7 @@ pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
             .filter(|account| account.signed_in)
             .map(|account| (seen.name_of(account), summary(seen, account))),
     );
-    MenuBarText {
+    StatusItemShown {
         usage: bar_title(accounts, &seen.tools, true),
         name_and_usage,
         spoken,
@@ -1040,9 +1040,14 @@ mod tests {
         assert_eq!(titled(&[], &both_tools()), None);
     }
 
-    fn bar(accounts: Vec<Account>, warnings: Vec<crate::Warning>) -> MenuBarText {
+    fn bar(accounts: Vec<Account>, warnings: Vec<crate::Warning>) -> StatusItemShown {
         let state = read(status(accounts, warnings), both_tools());
-        present_on(Front::WindowsNotificationArea, &state, 0, &Utc).menu_bar
+        icon(&state)
+    }
+
+    fn icon(state: &State) -> StatusItemShown {
+        let shown = present_on(Front::WindowsNotificationArea, state, 0, &Utc);
+        shown.status_item.expect("the notification area's icon")
     }
 
     /// The step of the limit the bar names, which an icon can show where the bar has no
@@ -1109,7 +1114,7 @@ mod tests {
         assert_eq!(warned.spoken, words::bar_spoken(Some(&work_42), None, true));
 
         let state = read(status(Vec::new(), Vec::new()), Vec::new());
-        let bare = present_on(Front::WindowsNotificationArea, &state, 0, &Utc).menu_bar;
+        let bare = icon(&state);
         assert!(bare.attention, "no tool here");
         assert_eq!(bare.spoken, words::bar_spoken(None, None, true));
     }
@@ -1146,7 +1151,7 @@ mod tests {
         let shown = present_on(Front::WindowsNotificationArea, &state, 0, &Utc);
         let line = |section: usize| shown.sections[section].accounts[0].summary.clone();
         assert_eq!(
-            shown.menu_bar.tip,
+            icon(&state).tip,
             words::bar_tip(
                 false,
                 [
@@ -1189,7 +1194,7 @@ mod tests {
             words::bar_tip(true, [("work".into(), work_line())])
         );
         let state = read(status(Vec::new(), Vec::new()), Vec::new());
-        let bare = present_on(Front::WindowsNotificationArea, &state, 0, &Utc).menu_bar;
+        let bare = icon(&state);
         assert_eq!(bare.tip, words::bar_tip(true, []), "no tool here");
     }
 
@@ -1245,6 +1250,7 @@ mod tests {
     }
 
     use crate::Front;
+    use crate::model::state::State;
     use crate::present::present_on;
     use crate::present::testing::{Utc, desktop_account, read, status};
 

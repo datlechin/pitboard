@@ -8,11 +8,11 @@ public sealed class JumpTasksTests
 {
     private const string Personal = "35c0d1c9-6b25-5cdc-b543-64c0c0d8de46";
 
-    private static readonly JumpTask[] Tasks =
+    private static readonly QuickAction[] Tasks =
     [
-        new("Switch to personal", new JumpAsk.Switch(Personal)),
-        new("Add account…", new JumpAsk.AddAccount()),
-        new("Open claude.ai as work", new JumpAsk.OpenWindow("claude-work")),
+        new("Switch to personal", new QuickAsk.Switch(Personal)),
+        new("Add account…", new QuickAsk.AddAccount()),
+        new("Open claude.ai as work", new QuickAsk.OpenWindow("claude-work")),
     ];
 
     private sealed record Parts(
@@ -36,7 +36,7 @@ public sealed class JumpTasksTests
         {
             AccountWindows = read.AccountWindows with { Accounts = [Items.Window("claude", "work")] },
             Answers = answers,
-            JumpList = Tasks,
+            QuickActions = Tasks,
         };
     }
 
@@ -71,8 +71,8 @@ public sealed class JumpTasksTests
     {
         var parts = Made(Read(1));
 
-        parts.Jumps.Take(new JumpAsk.Switch(Personal));
-        parts.Jumps.Take(new JumpAsk.Switch(Personal));
+        parts.Jumps.Take(new QuickAsk.Switch(Personal));
+        parts.Jumps.Take(new QuickAsk.Switch(Personal));
 
         CollectionAssert.AreEqual(
             new Intent[]
@@ -88,8 +88,8 @@ public sealed class JumpTasksTests
     public void ASwitchRefusedSaysWhyInANotificationAndOneDoneSaysNothing()
     {
         var parts = Made(Read(1));
-        parts.Jumps.Take(new JumpAsk.Switch(Personal));
-        parts.Jumps.Take(new JumpAsk.Switch(Personal));
+        parts.Jumps.Take(new QuickAsk.Switch(Personal));
+        parts.Jumps.Take(new QuickAsk.Switch(Personal));
         var quit = new Question(
             "Quit ChatGPT to switch?",
             "ChatGPT keeps using the account it started with until it quits. Pitboard quits it, switches, and opens it again.",
@@ -106,7 +106,7 @@ public sealed class JumpTasksTests
         parts.App.Apply(Read(3, [.. answers, new OutsideAnswer(8, Done: false, "Pitboard is being uninstalled.", Question: null)]));
         parts.Jumps.Answered();
 
-        CollectionAssert.AreEqual(new[] { PitboardModelMethods.JumpRefused(Identity.Front, refused) }, parts.Posted);
+        CollectionAssert.AreEqual(new[] { PitboardModelMethods.OutsideRefused(Identity.Front, refused) }, parts.Posted);
     }
 
     [TestMethod]
@@ -114,7 +114,7 @@ public sealed class JumpTasksTests
     {
         var parts = Made(Read(1));
 
-        parts.Jumps.Take(new JumpAsk.AddAccount());
+        parts.Jumps.Take(new QuickAsk.AddAccount());
 
         Assert.AreEqual(new Intent.PresentSheet(new Sheet.Add(Tool: null)), parts.Model.Sent.Single());
     }
@@ -124,8 +124,8 @@ public sealed class JumpTasksTests
     {
         var parts = Made(Read(1));
 
-        parts.Jumps.Take(new JumpAsk.OpenWindow("CLAUDE-WORK"));
-        parts.Jumps.Take(new JumpAsk.OpenWindow("claude-gone"));
+        parts.Jumps.Take(new QuickAsk.OpenWindow("CLAUDE-WORK"));
+        parts.Jumps.Take(new QuickAsk.OpenWindow("claude-gone"));
 
         Assert.AreEqual("claude-work", parts.Opened.Single());
     }
@@ -136,7 +136,7 @@ public sealed class JumpTasksTests
     {
         var parts = Made(Snapshots.Read(1));
 
-        parts.Jumps.Take(new JumpAsk.OpenWindow("claude-work"));
+        parts.Jumps.Take(new QuickAsk.OpenWindow("claude-work"));
         Assert.IsEmpty(parts.Opened, "before the read");
         parts.App.Apply(Read(2));
         parts.Jumps.Follow();
@@ -147,13 +147,13 @@ public sealed class JumpTasksTests
 
     internal sealed class StandInJumpList : IJumpList
     {
-        public List<JumpTask[]> Shown { get; } = [];
+        public List<QuickAction[]> Shown { get; } = [];
 
         public int Deleted { get; private set; }
 
         public Exception? Refuses { get; init; }
 
-        public void Show(IReadOnlyList<JumpTask> tasks)
+        public void Show(IReadOnlyList<QuickAction> tasks)
         {
             if (Refuses is { } refused)
             {

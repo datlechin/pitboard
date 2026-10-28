@@ -1,4 +1,5 @@
-//! What a widget, a control or an intent reads of the accounts, in view of others and synced.
+//! The widget feed, the glance a widget, a control or an intent reads of the accounts, in view
+//! of others and synced.
 
 use super::accounts::{headline, limit_row, limits_said, standing_of};
 use super::sheets::quit_question;

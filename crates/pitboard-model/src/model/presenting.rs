@@ -13,7 +13,6 @@ use super::testing::records::{
 };
 use super::{Cause, Doing, Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
 use crate::AccountKey;
-use crate::Front;
 use crate::Tool;
 use crate::account_windows::WindowAccount;
 use crate::account_windows::forget_message;
@@ -25,6 +24,7 @@ use crate::present::{
     PanelNotice, Question, RowEnd, SetupStep, Severity, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Warning};
+use crate::{Front, Surfaces};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
@@ -1645,7 +1645,7 @@ fn one_tool_looks_as_it_always_did() {
         assert_eq!(shown.sections[0].heading, None);
         assert_eq!(shown.sections[0].accounts.len(), 2);
         assert_eq!(
-            shown.menu_bar.name_and_usage,
+            model.status_item().name_and_usage,
             words::in_bar(words::UNNAMED, "80%")
         );
     }
@@ -1681,6 +1681,45 @@ fn accounts_of_two_tools_are_grouped_by_tool() {
 
 // The menu bar.
 
+/// A front's status item is there only while its system gives it one: the menu bar's and the
+/// notification area's from launch to quit, and on a front that starts with none, once it says
+/// one came, until it says it went. Said while Pitboard is being removed too, which a refusal
+/// can end with the app still running.
+#[test]
+fn a_front_shows_a_status_item_only_while_it_has_one() {
+    let read = || {
+        Stub::reading(Ok(status(vec![
+            account(Some("work"))
+                .signed_in()
+                .limits(vec![window("session", 42.0)])
+                .build(),
+        ])))
+    };
+    let work = words::in_bar("work", "42%");
+    let has = |status_item| Intent::SurfacesChanged {
+        surfaces: Surfaces { status_item },
+    };
+    for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+        let mut model = Hand::on(front);
+        assert_eq!(model.status_item().name_and_usage, "", "{front:?}");
+        model.refresh(&mut read());
+        assert_eq!(model.status_item().name_and_usage, work, "{front:?}");
+    }
+
+    let mut model = Hand::on(Front::Gnome);
+    model.refresh(&mut read());
+    assert_eq!(model.shown().status_item, None, "none from the start");
+    model.send(has(true));
+    assert_eq!(model.status_item().name_and_usage, work);
+    model.send(has(false));
+    assert_eq!(model.shown().status_item, None);
+
+    model.send(Intent::Uninstall);
+    assert!(model.shown().removal.is_some());
+    model.send(has(true));
+    assert_eq!(model.status_item().name_and_usage, work, "while removing");
+}
+
 /// A read fills in the menu bar's title.
 #[test]
 fn a_read_fills_in_the_title() {
@@ -1690,7 +1729,7 @@ fn a_read_fills_in_the_title() {
             .limits(vec![window("session", 42.0).resets(None)])
             .build(),
     ]);
-    let bar = model.shown().menu_bar;
+    let bar = model.status_item();
     assert_eq!(bar.name_and_usage, words::in_bar("work", "42%"));
     assert_eq!(bar.usage, "42%");
 }
@@ -1701,7 +1740,7 @@ fn a_read_fills_in_the_title() {
 fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
     let mut model = at_noon();
     assert_eq!(
-        model.shown().menu_bar.spoken,
+        model.status_item().spoken,
         words::bar_spoken(None, None, false)
     );
     let mut machine = Stub::reading(Ok(status(vec![
@@ -1712,7 +1751,7 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
     ])));
     model.refresh(&mut machine);
     assert_eq!(
-        model.shown().menu_bar.spoken,
+        model.status_item().spoken,
         words::bar_spoken(Some(&words::in_bar("work", "42%")), None, false)
     );
 
@@ -1729,7 +1768,7 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
     ]));
     model.refresh(&mut machine);
     assert_eq!(
-        model.shown().menu_bar.spoken,
+        model.status_item().spoken,
         words::bar_spoken(Some(&words::in_bar("work", "80%")), Some("Codex"), false)
     );
 }
@@ -2949,10 +2988,10 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
             entry("gone", Standing::NothingParked)
         ]
     );
-    assert!(shown.menu_bar.attention);
+    assert!(model.status_item().attention);
     let (calm, _) = reading(vec![account(Some("work")).signed_in().build()]);
     assert!(calm.shown().menu_notices.sign_ins.is_empty());
-    assert!(!calm.shown().menu_bar.attention);
+    assert!(!calm.status_item().attention);
 
     // Its tool goes in the subtitle, as advice's does, and not inside the title.
     let (both, _) = reading(vec![

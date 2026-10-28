@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 uniffi::setup_scaffolding!();
 
 mod front;
-pub use front::{Engine, Front};
+pub use front::{Engine, Front, Surfaces};
 
 mod sites;
 pub use sites::{Site, SiteLink};
@@ -57,12 +57,12 @@ pub use present::{
     AccountStanding, AccountWindowsShown, AccountsShown, ActionKind, ActivityLine, ActivityShown,
     AtLimitChoice, AtLimitShown, CheckGroup, CheckLine, ChecksShown, Choice, CommandLineShown,
     DownloadShown, DownloadState, EmptyList, FailureText, Footing, ItemAction, ItemOffer,
-    LimitKind, LimitRow, LinkPicker, MachineShown, MenuBarText, MenuEntry, MenuNotices, Missing,
-    NameCheck, NextStep, NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount,
+    LimitKind, LimitRow, LinkPicker, MachineShown, MenuEntry, MenuNotices, Missing, NameCheck,
+    NextStep, NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount,
     PickerShown, Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
-    SheetText, SheetTool, SigningInText, StoreDeletion, StowText, TermsShown, WaitingShown,
-    WarmAccountShown, WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep, WelcomeTool,
-    WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    SheetText, SheetTool, SigningInText, StatusItemShown, StoreDeletion, StowText, TermsShown,
+    WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep,
+    WelcomeTool, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
@@ -71,7 +71,7 @@ pub use present::{
     still_switching, trash_says, usage_of, webview_runtime_too_old,
     windows_notification_area_words,
 };
-pub use present::{JumpAsk, JumpTask, jump_refused};
+pub use present::{QuickAction, QuickAsk, outside_refused};
 
 mod account_windows;
 pub use account_windows::{

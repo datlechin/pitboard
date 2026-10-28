@@ -1,35 +1,34 @@
-//! The Windows Jump List: a switch to each account, Add account, the windows.
+//! What a front offers to start Pitboard with from outside it, where it keeps such a list:
+//! the Windows Jump List's tasks, a switch to each account, Add account, the windows.
 
 use super::{Clicked, Seen, glance, in_order, words};
 use crate::account_windows::window_accounts;
 use crate::model::OutsideAnswer;
 use crate::{Front, Notice};
 
-// A task the taskbar and Start offer, which starts Pitboard.exe with what it asks.
+// What the system offers beside Pitboard, which starts Pitboard with what it asks: on Windows
+// a task the taskbar and Start offer, which starts Pitboard.exe.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct JumpTask {
+pub struct QuickAction {
     pub title: String,
-    pub ask: JumpAsk,
+    pub ask: QuickAsk,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum JumpAsk {
-    // a request from outside, by the account's id in the glance, which a rename keeps
+pub enum QuickAsk {
+    // a request from outside, by the account's id in the widget feed, which a rename keeps
     Switch { account: String },
     AddAccount,
     // the window the accounts read list under this store
     OpenWindow { store: String },
 }
 
-// The same whatever Pitboard is doing, as Microsoft asks of tasks. None where Windows keeps the
-// last one: before the accounts are read, and while uninstalling, whose MSI deletes it.
-pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
+// The same whatever Pitboard is doing, as Microsoft asks of tasks. None where the front keeps
+// none, and where Windows keeps the last one: before the accounts are read, and while
+// uninstalling, whose MSI deletes it.
+pub(crate) fn quick_actions(seen: &Seen) -> Option<Vec<QuickAction>> {
     let state = seen.state;
-    let keeps = match seen.front {
-        Front::WindowsNotificationArea => true,
-        Front::MacMenuBar | Front::Gnome => false,
-    };
-    if !keeps || state.status.is_none() || state.removing.is_some() {
+    if !seen.front.keeps_quick_actions() || state.status.is_none() || state.removing.is_some() {
         return None;
     }
     let accounts = seen.accounts();
@@ -39,37 +38,37 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
             account.provider == tool && account.key.is_some() && !account.unplaced
         })
     });
-    let mut tasks: Vec<JumpTask> = switches
-        .map(|account| JumpTask {
+    let mut actions: Vec<QuickAction> = switches
+        .map(|account| QuickAction {
             title: words::switch_to(&seen.name_of(account)),
-            ask: JumpAsk::Switch {
+            ask: QuickAsk::Switch {
                 account: glance::id(&account.id),
             },
         })
         .collect();
-    tasks.push(JumpTask {
+    actions.push(QuickAction {
         title: words::add_account(seen.front, true),
-        ask: JumpAsk::AddAccount,
+        ask: QuickAsk::AddAccount,
     });
     let windows = window_accounts(accounts);
     for site in pitboard_sites::ALL {
-        tasks.extend(
+        actions.extend(
             (windows.iter())
                 .filter(|window| window.site.host == site.host)
-                .map(|window| JumpTask {
+                .map(|window| QuickAction {
                     title: words::open_site_as(site.name(), &window.label),
-                    ask: JumpAsk::OpenWindow {
+                    ask: QuickAsk::OpenWindow {
                         store: window.store.clone(),
                     },
                 }),
         );
     }
-    Some(tasks)
+    Some(actions)
 }
 
-// A task's switch that did not happen, said where nothing else would say it.
+// A switch asked from outside that did not happen, said where nothing else would say it.
 #[uniffi::export]
-pub fn jump_refused(front: Front, answer: OutsideAnswer) -> Notice {
+pub fn outside_refused(front: Front, answer: OutsideAnswer) -> Notice {
     Notice {
         id: format!("outside-{}", answer.request),
         title: words::could_not_switch_from_outside(front),

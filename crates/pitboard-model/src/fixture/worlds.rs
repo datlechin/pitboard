@@ -781,7 +781,7 @@ impl Launched {
                     None,
                     super::pages::SCHEME,
                 )),
-                glance: None,
+                widget_feed: None,
             },
             Cadence::APP,
         )

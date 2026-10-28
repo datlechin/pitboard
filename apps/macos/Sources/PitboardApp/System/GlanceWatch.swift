@@ -20,7 +20,7 @@ struct GlanceWatch {
     }
 
     func watch(_ model: AppModel) {
-        model.glanceChanged = { [shortcuts, reload] in
+        model.widgetFeedChanged = { [shortcuts, reload] in
             shortcuts?.updateAppShortcutParameters()
             reload()
         }

@@ -16,7 +16,7 @@ use crate::account_windows::{WindowNoteKind, stores::derive};
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{
-    Account, Choice, DownloadState, JumpAsk, LinkPicker, OpenWindow, PickerShown, Question,
+    Account, Choice, DownloadState, LinkPicker, OpenWindow, PickerShown, Question, QuickAsk,
     SiteMenu, WaitingShown, WindowWaiting, downloads_quit_question,
 };
 use crate::{Engine, Front};
@@ -1102,10 +1102,10 @@ fn a_window_waits_while_its_old_store_is_held() {
         SiteMenu::One { window, .. } => window.store == personal,
         SiteMenu::Several { windows, .. } => windows.iter().any(|w| w.store == personal),
     }));
-    let opens = JumpAsk::OpenWindow {
+    let opens = QuickAsk::OpenWindow {
         store: personal.clone(),
     };
-    let jumps = |model: &Hand| model.on_windows().jump_list.expect("read");
+    let jumps = |model: &Hand| model.on_windows().quick_actions.expect("read");
     assert!(
         jumps(&model).iter().any(|task| task.ask == opens),
         "the Jump List stays as it was"

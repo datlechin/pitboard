@@ -144,11 +144,11 @@ impl Lanes {
 }
 
 /// What the model keeps that the app handed it or named: its preferences as its earlier
-/// store held them, and where the account windows' records are.
+/// store held them, where the account windows' records are, and where the widget feed goes.
 pub(crate) struct Keeping {
     pub(crate) earlier: Option<EarlierPreferences>,
     pub(crate) windows: Option<RecordsFile>,
-    pub(crate) glance: Option<PathBuf>,
+    pub(crate) widget_feed: Option<PathBuf>,
 }
 
 /// The account windows' records: `windows.json` in the directory the app named, the key this
@@ -196,7 +196,7 @@ impl Lanes {
             local_time,
             earlier: keeping.earlier,
             windows: keeping.windows,
-            glance: keeping.glance,
+            widget_feed: keeping.widget_feed,
             quit_within: cadence.quit_within,
             quit_checked_every: cadence.quit_checked_every,
             sign_ins: Arc::default(),
@@ -536,7 +536,7 @@ pub(crate) struct Worker {
     pub(crate) local_time: Arc<dyn LocalTime>,
     pub(crate) earlier: Option<EarlierPreferences>,
     pub(crate) windows: Option<RecordsFile>,
-    pub(crate) glance: Option<PathBuf>,
+    pub(crate) widget_feed: Option<PathBuf>,
     pub(crate) quit_within: Duration,
     pub(crate) quit_checked_every: Duration,
     pub(crate) sign_ins: Arc<SignIns>,
@@ -756,7 +756,7 @@ impl Worker {
                 Answer::WindowsKept { write }
             }
             Job::KeepGlance { text, reload } => {
-                if let Some(path) = &self.glance
+                if let Some(path) = &self.widget_feed
                     && let Ok(permit) = core.permit()
                 {
                     let _ = pitboard_core::app::write_file(permit, path, &text);
@@ -830,7 +830,7 @@ impl Worker {
             Job::Uninstall => {
                 let done = core.uninstall();
                 if done.is_ok()
-                    && let Some(path) = &self.glance
+                    && let Some(path) = &self.widget_feed
                 {
                     let _ = std::fs::remove_file(path);
                 }
@@ -1005,7 +1005,7 @@ mod tests {
             local_time: Arc::new(crate::present::testing::Utc),
             earlier: None,
             windows: None,
-            glance: None,
+            widget_feed: None,
             quit_within: Duration::from_millis(50),
             quit_checked_every: Duration::from_millis(5),
             sign_ins: Arc::default(),
@@ -1536,7 +1536,7 @@ mod tests {
             Keeping {
                 earlier: None,
                 windows: None,
-                glance: None,
+                widget_feed: None,
             },
             Cadence::APP,
             &answers,

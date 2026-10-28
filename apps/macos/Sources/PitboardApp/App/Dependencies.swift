@@ -37,7 +37,7 @@ struct Dependencies {
                 key: WebEnvironment.recordKey(environment: environment)),
             handover: Handover(
                 preferences: earlier.handOver(), windows: earlier.handOverWindows()),
-            glance: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
+            widgetFeed: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
         let model = AppModel.listening { listener in
             PitboardModel(
                 launch: launch, listener: listener, otherApps: MacApps.live(),

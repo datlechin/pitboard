@@ -383,7 +383,7 @@ export function menuBarShown(w: World, shows: "nameAndUsage" | "usage" | "icon")
   return shows === "usage" ? `${fullest(barAccount(w))}%` : menuBarTitle(w);
 }
 
-// The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `menu_bar`).
+// The level of the menu bar's figure, which the Windows icon draws (present/accounts.rs `status_item`).
 export const menuBarLevel = (w: World) => level(fullest(barAccount(w)));
 
 // The menu bar item's spoken name: Pitboard, its title, and the tool where more than one is read
