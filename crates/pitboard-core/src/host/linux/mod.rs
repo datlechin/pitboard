@@ -1,8 +1,9 @@
-//! Linux: files, a vault of files, `/proc` and systemd.
+//! Linux: files, a vault of files, `/proc`, systemd and the D-Bus it is asked over.
 //!
 //! Claude Code has no keyring backend on Linux, so its login is a plaintext file it sets to
 //! 0600, and Pitboard's parked logins are 0600 files in a 0700 directory beside it.
 
+mod bus;
 mod procfs;
 mod systemd;
 
@@ -188,7 +189,7 @@ pub(crate) fn write_jar(_path: &Path, _cookies: &[super::Cookie]) -> std::io::Re
 
 pub(super) fn host() -> Arc<dyn Host> {
     Arc::new(Linux {
-        scheduler: systemd::Systemd::new(service::system()),
+        scheduler: systemd::Systemd::new(service::system(), Arc::new(systemd::UserManager)),
     })
 }
 
@@ -226,15 +227,16 @@ fn started_as(
         .unwrap_or(running)
 }
 
-/// systemd as a machine in memory has it: real unit files in the test's own home, and a
-/// service manager that asks nobody.
+/// systemd as a machine in memory has it: real unit files in the test's own home, a user
+/// manager that reads them there for that home, and a service manager that asks nobody.
 #[cfg(any(test, feature = "test-support"))]
 pub(super) fn pretend_scheduler(
     refuse_start: Arc<std::sync::atomic::AtomicBool>,
 ) -> Option<Box<dyn Scheduler>> {
-    Some(Box::new(systemd::Systemd::new(Arc::new(
-        service::Pretend { refuse_start },
-    ))))
+    Some(Box::new(systemd::Systemd::new(
+        Arc::new(service::Pretend { refuse_start }),
+        Arc::new(systemd::Pretend),
+    )))
 }
 
 #[cfg(test)]

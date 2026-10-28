@@ -1,12 +1,18 @@
 //! Pitboard's jobs on Linux: a systemd user timer for daily renewal and a systemd user service
 //! for the watch service, which is that system's answer.
+//!
+//! `systemctl --user` reaches the user's own systemd whatever `HOME` and `XDG_CONFIG_HOME` this
+//! process has, and that manager runs a unit with its own `HOME`, where the job then acts. So
+//! before anything is written or taken away, the manager is asked where it reads units from and
+//! which home it runs them in, and a job is put only where it would run for this home.
 
 use super::super::unix::service::{self, Control};
+use super::bus;
 use crate::context::Context;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::host::Scheduler;
 use crate::permit::Permit;
-use crate::schedule::{EVERY_SECONDS, Job, Location, RESTART_AFTER_SECONDS};
+use crate::schedule::{EVERY_SECONDS, Elsewhere, Job, Location, RESTART_AFTER_SECONDS};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -16,18 +22,131 @@ const SERVICE: &str = "pitboard-renew.service";
 const WATCH: &str = "pitboard-watch.service";
 const RELOAD: [&str; 2] = ["--user", "daemon-reload"];
 
+/// What the user's systemd says of the units it runs: the folders it reads them from, its
+/// `UnitPath`, and the `HOME` its `Environment` gives them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Reads {
+    pub(super) unit_path: Vec<PathBuf>,
+    pub(super) home: Option<PathBuf>,
+}
+
+impl Reads {
+    fn reads_from(&self, units: &Path) -> bool {
+        self.unit_path.iter().any(|folder| folder == units)
+    }
+}
+
+/// Whoever answers for the user's systemd.
+pub(super) trait Manager: Send + Sync + std::fmt::Debug {
+    fn reads(&self, ctx: &Context) -> Result<Reads>;
+}
+
+/// The user's own systemd, asked over D-Bus.
+#[derive(Debug)]
+pub(super) struct UserManager;
+
+impl Manager for UserManager {
+    /// Never from a build for tests, which [`service::System`] runs nothing for either: the
+    /// manager a test would ask is the person's own, whatever home the test gives.
+    fn reads(&self, ctx: &Context) -> Result<Reads> {
+        if cfg!(any(test, feature = "test-support")) {
+            return Err(Error::ScheduleRefused {
+                detail: "a build for tests asked the user manager itself".into(),
+            });
+        }
+        asked(ctx).map_err(|why| Error::ScheduleRefused {
+            detail: format!("your user's systemd could not be asked where it reads units: {why}"),
+        })
+    }
+}
+
+#[zbus::proxy(
+    interface = "org.freedesktop.systemd1.Manager",
+    default_service = "org.freedesktop.systemd1",
+    default_path = "/org/freedesktop/systemd1",
+    gen_async = false
+)]
+trait SystemdManager {
+    #[zbus(property)]
+    fn unit_path(&self) -> zbus::Result<Vec<String>>;
+
+    #[zbus(property)]
+    fn environment(&self) -> zbus::Result<Vec<String>>;
+}
+
+// Both are typed arrays of strings in org.freedesktop.systemd1(5) at v262, `Environment` one
+// `NAME=value` each. No property is cached: a peer to peer connection gets no signal.
+fn asked(ctx: &Context) -> std::result::Result<Reads, String> {
+    let connection = bus::user_manager(ctx)?;
+    let manager = SystemdManagerProxy::builder(&connection)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let unit_path = manager.unit_path().map_err(|e| e.to_string())?;
+    let environment = manager.environment().map_err(|e| e.to_string())?;
+    Ok(Reads {
+        unit_path: unit_path.into_iter().map(PathBuf::from).collect(),
+        home: environment
+            .iter()
+            .find_map(|given| given.strip_prefix("HOME="))
+            .map(PathBuf::from),
+    })
+}
+
+/// The user's systemd as a machine in memory has it: it reads this context's own units folder
+/// and runs units in this context's home.
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Debug)]
+pub(super) struct Pretend;
+
+#[cfg(any(test, feature = "test-support"))]
+impl Manager for Pretend {
+    fn reads(&self, ctx: &Context) -> Result<Reads> {
+        Ok(Reads {
+            unit_path: vec![Systemd::units(ctx)],
+            home: Some(ctx.home().to_path_buf()),
+        })
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Systemd {
     control: Arc<dyn Control>,
+    manager: Arc<dyn Manager>,
 }
 
 impl Systemd {
-    pub(super) fn new(control: Arc<dyn Control>) -> Systemd {
-        Systemd { control }
+    pub(super) fn new(control: Arc<dyn Control>, manager: Arc<dyn Manager>) -> Systemd {
+        Systemd { control, manager }
     }
 
+    /// Where the user's systemd reads a person's own units, as systemd.unit(5) lists its user
+    /// search path: `systemd/user` in `XDG_CONFIG_HOME`, else in `~/.config`.
     fn units(ctx: &Context) -> PathBuf {
+        ctx.config_home()
+            .map_or_else(|| ctx.home().join(".config"), Path::to_path_buf)
+            .join("systemd/user")
+    }
+
+    // Where Pitboard wrote them before it read `XDG_CONFIG_HOME`, whatever that said.
+    fn written_before(ctx: &Context) -> PathBuf {
         ctx.home().join(".config/systemd/user")
+    }
+
+    // Each folder a job is looked for in, the one it is written in first.
+    fn folders(ctx: &Context) -> Vec<PathBuf> {
+        let (units, before) = (Self::units(ctx), Self::written_before(ctx));
+        if units == before {
+            vec![units]
+        } else {
+            vec![units, before]
+        }
+    }
+
+    fn holding(ctx: &Context, job: Job) -> Option<PathBuf> {
+        Self::folders(ctx)
+            .into_iter()
+            .find(|folder| folder.join(Self::installed_by(job)).is_file())
     }
 
     fn service(job: Job) -> &'static str {
@@ -45,11 +164,16 @@ impl Systemd {
         }
     }
 
-    fn read(ctx: &Context, job: Job) -> Option<String> {
-        if !Self::units(ctx).join(Self::installed_by(job)).is_file() {
-            return None;
+    // The link `systemctl enable` makes for the unit's `WantedBy=`, as systemd.unit(5) says.
+    fn wanted_by(job: Job) -> &'static str {
+        match job {
+            Job::Renew => "timers.target.wants",
+            Job::Watch => "default.target.wants",
         }
-        std::fs::read_to_string(Self::units(ctx).join(Self::service(job))).ok()
+    }
+
+    fn read(ctx: &Context, job: Job) -> Option<String> {
+        std::fs::read_to_string(Self::holding(ctx, job)?.join(Self::service(job))).ok()
     }
 
     // Each `systemctl --user` call that starts the job, in order.
@@ -66,6 +190,23 @@ impl Systemd {
             .iter()
             .try_for_each(|args| self.control.start(permit, SYSTEMCTL, args))
     }
+
+    /// What the user's systemd reads, where it runs units with this context's home. Where it
+    /// runs them with another, a job written here would act on that home, and one there is not
+    /// this home's to take away.
+    fn manager_of_this_home(&self, ctx: &Context, job: Job) -> Result<Reads> {
+        let reads = self.manager.reads(ctx)?;
+        if reads.home.as_deref() == Some(ctx.home()) {
+            return Ok(reads);
+        }
+        Err(Error::ScheduleManagerElsewhere {
+            elsewhere: Elsewhere::Home {
+                home: ctx.home().to_path_buf(),
+                theirs: reads.home,
+            },
+            job,
+        })
+    }
 }
 
 // sd_booted(3) asks the same: systemd as init makes this directory as the system starts.
@@ -75,11 +216,12 @@ pub(super) fn started_by_systemd(root: &Path) -> bool {
 
 impl Scheduler for Systemd {
     fn location(&self, ctx: &Context, job: Job) -> Location {
-        Location::File(Self::units(ctx).join(Self::installed_by(job)))
+        let folder = Self::holding(ctx, job).unwrap_or_else(|| Self::units(ctx));
+        Location::File(folder.join(Self::installed_by(job)))
     }
 
     fn installed(&self, ctx: &Context, job: Job) -> bool {
-        Self::units(ctx).join(Self::installed_by(job)).is_file()
+        Self::holding(ctx, job).is_some()
     }
 
     /// Read from the service's `ExecStart`, as [`unit_file`] writes it, or as Pitboard wrote
@@ -111,8 +253,15 @@ impl Scheduler for Systemd {
         options: &[String],
         environment: &[(String, String)],
     ) -> Result<()> {
-        let unit = Self::units(ctx).join(Self::service(job));
-        let timer_path = Self::units(ctx).join(TIMER);
+        let units = Self::units(ctx);
+        if !self.manager_of_this_home(ctx, job)?.reads_from(&units) {
+            return Err(Error::ScheduleManagerElsewhere {
+                elsewhere: Elsewhere::Folder { units },
+                job,
+            });
+        }
+        let unit = units.join(Self::service(job));
+        let timer_path = units.join(TIMER);
         let before = (
             std::fs::read_to_string(&unit).ok(),
             std::fs::read_to_string(&timer_path).ok(),
@@ -149,24 +298,46 @@ impl Scheduler for Systemd {
         Err(refused)
     }
 
+    /// Where the user's systemd reads the folder a job is in, it is stopped and disabled
+    /// through `systemctl`. Where it does not, it never loaded the job, so its files and the
+    /// link `enable` made go and `systemctl` is asked nothing.
     fn remove(&self, ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
-        let installed_by = Self::units(ctx).join(Self::installed_by(job));
-        if !installed_by.is_file() {
+        let holding: Vec<PathBuf> = Self::folders(ctx)
+            .into_iter()
+            .filter(|folder| folder.join(Self::installed_by(job)).is_file())
+            .collect();
+        if holding.is_empty() {
             return Ok(false);
         }
-        let stopped = self.control.run(
-            permit,
-            SYSTEMCTL,
-            &["--user", "disable", "--now", Self::installed_by(job)],
-        );
-        // A watch service left running writes in the Pitboard directory `pitboard uninstall`
-        // removes next.
-        if job == Job::Watch {
-            stopped?;
+        let reads = self.manager_of_this_home(ctx, job)?;
+        let mut loaded = false;
+        for folder in &holding {
+            if reads.reads_from(folder) {
+                loaded = true;
+                let stopped = self.control.run(
+                    permit,
+                    SYSTEMCTL,
+                    &["--user", "disable", "--now", Self::installed_by(job)],
+                );
+                // A watch service left running writes in the Pitboard directory `pitboard
+                // uninstall` removes next.
+                if job == Job::Watch {
+                    stopped?;
+                }
+            } else {
+                service::remove(
+                    permit,
+                    &folder
+                        .join(Self::wanted_by(job))
+                        .join(Self::installed_by(job)),
+                )?;
+            }
+            service::remove(permit, &folder.join(Self::installed_by(job)))?;
+            service::remove(permit, &folder.join(Self::service(job)))?;
         }
-        service::remove(permit, &installed_by)?;
-        service::remove(permit, &Self::units(ctx).join(Self::service(job)))?;
-        let _ = self.control.run(permit, SYSTEMCTL, &RELOAD);
+        if loaded {
+            let _ = self.control.run(permit, SYSTEMCTL, &RELOAD);
+        }
         Ok(true)
     }
 
@@ -384,6 +555,11 @@ mod tests {
             .collect()
     }
 
+    // The unit for a program at `path`.
+    fn unit(job: Job, path: &str, options: &[String], environment: &[(String, String)]) -> String {
+        unit_file(job, Path::new(path), options, environment)
+    }
+
     /// The service runs with systemd's environment, not the shell's, so what it is given of
     /// the installing Pitboard's, `PITBOARD_NO_ARGV` and the proxy variables, is written in,
     /// one `Environment=` line each, quoted where systemd would otherwise split or change it,
@@ -391,7 +567,7 @@ mod tests {
     /// it was.
     #[test]
     fn the_unit_gives_its_service_the_variables_it_is_handed_and_reads_them_back() {
-        let program = Path::new("/usr/local/bin/pitboard");
+        let program = "/usr/local/bin/pitboard";
         let handed = pairs(&[
             ("PITBOARD_NO_ARGV", "1"),
             ("ALL_PROXY", "socks5h://alice:p%40ss\"w\\rd@127.0.0.1:1080"),
@@ -399,9 +575,9 @@ mod tests {
             ("no_proxy", ""),
             ("NO_PROXY", "*.anthropic.com, localhost"),
         ]);
-        let unit = unit_file(Job::Renew, program, &[], &handed);
+        let written = unit(Job::Renew, program, &[], &handed);
         assert!(
-            unit.contains(
+            written.contains(
                 "Type=oneshot\n\
                  Environment=PITBOARD_NO_ARGV=1\n\
                  Environment=\"ALL_PROXY=socks5h://alice:p%%40ss\\\"w\\\\rd@127.0.0.1:1080\"\n\
@@ -410,34 +586,37 @@ mod tests {
                  Environment=\"NO_PROXY=*.anthropic.com, localhost\"\n\
                  ExecStart=/usr/local/bin/pitboard renew --scheduled\n"
             ),
-            "{unit}"
+            "{written}"
         );
-        assert_eq!(given(&unit), handed);
-        assert!(!unit_file(Job::Renew, program, &[], &[]).contains("Environment="));
-        assert_eq!(given(&unit_file(Job::Renew, program, &[], &[])), Vec::new());
+        assert_eq!(given(&written), handed);
+        assert!(!unit(Job::Renew, program, &[], &[]).contains("Environment="));
+        assert_eq!(given(&unit(Job::Renew, program, &[], &[])), Vec::new());
 
         // A line break in a value never ends the line it is on.
         let broken = pairs(&[("NO_PROXY", "a\nExecStart=/bin/false\u{85}")]);
-        let unit = unit_file(Job::Renew, program, &[], &broken);
+        let written = unit(Job::Renew, program, &[], &broken);
         assert!(
-            unit.contains("Environment=\"NO_PROXY=a\\x0aExecStart=/bin/false\\u0085\"\n"),
-            "{unit}"
+            written.contains("Environment=\"NO_PROXY=a\\x0aExecStart=/bin/false\\u0085\"\n"),
+            "{written}"
         );
         assert_eq!(
-            unit.lines().filter(|l| l.starts_with("ExecStart=")).count(),
+            written
+                .lines()
+                .filter(|l| l.starts_with("ExecStart="))
+                .count(),
             1,
-            "{unit}"
+            "{written}"
         );
-        assert_eq!(given(&unit), broken);
+        assert_eq!(given(&written), broken);
     }
 
     // From the person's first sign-in, and again a minute after it fails or crashes.
     #[test]
     fn the_watch_service_starts_with_the_users_systemd_and_reads_back_its_share() {
         let at = ["--at".to_string(), "90".to_string()];
-        let unit = unit_file(Job::Watch, Path::new("/usr/local/bin/pitboard"), &at, &[]);
+        let written = unit(Job::Watch, "/usr/local/bin/pitboard", &at, &[]);
         assert!(
-            unit.contains(
+            written.contains(
                 "[Service]\n\
                  ExecStart=/usr/local/bin/pitboard watch --scheduled --at 90\n\
                  Restart=on-failure\n\
@@ -446,26 +625,26 @@ mod tests {
                  [Install]\n\
                  WantedBy=default.target\n"
             ),
-            "{unit}"
+            "{written}"
         );
-        assert!(!unit.contains("Type=oneshot"), "{unit}");
+        assert!(!written.contains("Type=oneshot"), "{written}");
         assert_eq!(
-            command(&unit, Job::Watch),
+            command(&written, Job::Watch),
             Some((PathBuf::from("/usr/local/bin/pitboard"), at.to_vec()))
         );
-        assert_eq!(command(&unit, Job::Renew), None, "not renewal's");
+        assert_eq!(command(&written, Job::Renew), None, "not renewal's");
     }
 
     /// The service runs one verb, with the marker a run of the schedule is told apart by,
     /// rather than by what systemd passes it.
     #[test]
     fn the_unit_runs_one_verb_and_the_timer_survives_a_machine_being_off() {
-        let unit = unit_file(Job::Renew, Path::new("/usr/local/bin/pitboard"), &[], &[]);
+        let written = unit(Job::Renew, "/usr/local/bin/pitboard", &[], &[]);
         assert!(
-            unit.contains("ExecStart=/usr/local/bin/pitboard renew --scheduled\n"),
-            "{unit}"
+            written.contains("ExecStart=/usr/local/bin/pitboard renew --scheduled\n"),
+            "{written}"
         );
-        assert!(!unit.contains("status"));
+        assert!(!written.contains("status"));
         let timer = timer();
         assert!(timer.contains("Persistent=true"));
         assert!(timer.contains("WantedBy=timers.target"));
@@ -508,9 +687,12 @@ mod tests {
         );
         assert_eq!(installed_program(&ctx), Some(program));
 
-        let systemd = Systemd::new(Arc::new(service::Pretend {
-            refuse_start: Arc::default(),
-        }));
+        let systemd = Systemd::new(
+            Arc::new(service::Pretend {
+                refuse_start: Arc::default(),
+            }),
+            Arc::new(Pretend),
+        );
         assert!(systemd.started_this_process(Job::Renew, Some(SERVICE)));
         assert!(!systemd.started_this_process(Job::Renew, Some(TIMER)));
         assert!(
@@ -553,12 +735,32 @@ mod tests {
                 .expect("a poisoned test is a failed test");
             if refusing.is_some_and(|word| args.contains(&word)) {
                 *refusing = None;
-                return Err(crate::error::Error::ScheduleRefused {
+                return Err(Error::ScheduleRefused {
                     detail: format!("systemctl refused {call} in a test"),
                 });
             }
             Ok(())
         }
+    }
+
+    // The user's systemd as a test says it is.
+    #[derive(Debug)]
+    struct Says(Reads);
+
+    impl Manager for Says {
+        fn reads(&self, _ctx: &Context) -> Result<Reads> {
+            Ok(self.0.clone())
+        }
+    }
+
+    fn says(unit_path: &[&Path], home: Option<&Path>) -> Arc<Says> {
+        Arc::new(Says(Reads {
+            unit_path: unit_path
+                .iter()
+                .map(|folder| folder.to_path_buf())
+                .collect(),
+            home: home.map(Path::to_path_buf),
+        }))
     }
 
     fn scratch_home() -> (tempfile::TempDir, Context) {
@@ -567,13 +769,348 @@ mod tests {
         (home, ctx)
     }
 
+    // A context read as the command line reads one, with this home and `XDG_CONFIG_HOME`.
+    fn configured_in(home: &Path, config: &Path) -> Context {
+        let named = |path: &Path| path.to_string_lossy().into_owned();
+        let env: crate::context::Environment =
+            [("HOME", named(home)), ("XDG_CONFIG_HOME", named(config))]
+                .into_iter()
+                .collect();
+        Context::for_command_line(&env).with_memory_stores(MemoryHost::new())
+    }
+
+    /// The manager `systemctl --user` reaches is the user's whatever this shell's
+    /// `XDG_CONFIG_HOME` says, so a unit in a folder it does not read would never run, or a
+    /// branch build's would run beside the real ones. Nothing is written or asked of
+    /// `systemctl` then.
+    #[test]
+    fn a_unit_is_written_only_where_the_user_manager_reads_its_folder() {
+        let (home, ctx) = scratch_home();
+        let asked = Arc::new(Asked::default());
+        let program = Path::new("/usr/local/bin/pitboard");
+        let units = Systemd::units(&ctx);
+        let elsewhere = home.path().join("elsewhere/systemd/user");
+        let systemd = Systemd::new(asked.clone(), says(&[&elsewhere], Some(home.path())));
+        for job in [Job::Renew, Job::Watch] {
+            let refused = systemd
+                .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
+                .expect_err("refused");
+            assert_eq!(refused.code(), "schedule_manager_elsewhere");
+            assert!(
+                refused.to_string().contains(&units.display().to_string()),
+                "{refused}"
+            );
+        }
+        assert!(!units.exists(), "nothing was written");
+        assert_eq!(asked.taken(), Vec::<String>::new(), "nor asked");
+
+        let systemd = Systemd::new(
+            asked.clone(),
+            says(&[&elsewhere, &units], Some(home.path())),
+        );
+        systemd
+            .put(&ctx, Permit::for_a_test(), Job::Renew, program, &[], &[])
+            .expect("installed where it is read");
+        assert!(systemd.installed(&ctx, Job::Renew));
+    }
+
+    /// The manager runs a unit with its own `HOME`, where renewal and the watch service then
+    /// act, so one that runs another home's, or none, is given nothing, and nothing of this
+    /// home's is taken away through it.
+    #[test]
+    fn a_unit_is_written_only_for_the_home_the_user_manager_runs_with() {
+        let (home, ctx) = scratch_home();
+        let asked = Arc::new(Asked::default());
+        let program = Path::new("/usr/local/bin/pitboard");
+        let units = Systemd::units(&ctx);
+        let other = home.path().join("other");
+        for theirs in [Some(other.as_path()), None] {
+            let systemd = Systemd::new(asked.clone(), says(&[&units], theirs));
+            for job in [Job::Renew, Job::Watch] {
+                let refused = systemd
+                    .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
+                    .expect_err("refused");
+                assert_eq!(refused.code(), "schedule_manager_elsewhere");
+                let said = refused.to_string();
+                assert!(said.contains(&home.path().display().to_string()), "{said}");
+                if let Some(theirs) = theirs {
+                    assert!(said.contains(&theirs.display().to_string()), "{said}");
+                }
+            }
+        }
+        assert!(!units.exists(), "nothing was written");
+        assert_eq!(asked.taken(), Vec::<String>::new());
+
+        let ours = Systemd::new(asked.clone(), says(&[&units], Some(home.path())));
+        ours.put(&ctx, Permit::for_a_test(), Job::Watch, program, &[], &[])
+            .expect("installed for this home");
+        asked.taken();
+        let theirs = Systemd::new(asked.clone(), says(&[&units], Some(&other)));
+        let refused = theirs
+            .remove(&ctx, Permit::for_a_test(), Job::Watch)
+            .expect_err("another home's manager");
+        assert_eq!(refused.code(), "schedule_manager_elsewhere");
+        assert!(units.join(WATCH).is_file(), "still there");
+        assert_eq!(asked.taken(), Vec::<String>::new());
+    }
+
+    /// A manager that does not read the folder never loaded what is in it, and `systemctl`
+    /// would reach that manager: the files and the link `enable` made go, and nothing else.
+    #[test]
+    fn nothing_is_asked_of_systemctl_where_the_manager_does_not_read_the_units() {
+        let (home, ctx) = scratch_home();
+        let asked = Arc::new(Asked::default());
+        let program = Path::new("/usr/local/bin/pitboard");
+        let units = Systemd::units(&ctx);
+        let reading = Systemd::new(asked.clone(), says(&[&units], Some(home.path())));
+        let not_reading = Systemd::new(asked.clone(), says(&[], Some(home.path())));
+        for job in [Job::Renew, Job::Watch] {
+            reading
+                .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
+                .expect("installed");
+            let link = units
+                .join(Systemd::wanted_by(job))
+                .join(Systemd::installed_by(job));
+            std::fs::create_dir_all(link.parent().expect("its folder")).expect("made");
+            crate::host::fs::testing::link(&units.join(Systemd::installed_by(job)), &link)
+                .expect("enabled, as systemctl links it");
+            asked.taken();
+
+            assert!(
+                not_reading
+                    .remove(&ctx, Permit::for_a_test(), job)
+                    .expect("taken away")
+            );
+            assert_eq!(asked.taken(), Vec::<String>::new(), "{job:?}");
+            assert!(!reading.installed(&ctx, job));
+            for gone in [Systemd::service(job), Systemd::installed_by(job)] {
+                assert!(!units.join(gone).exists(), "{gone}");
+            }
+            assert!(
+                std::fs::symlink_metadata(&link).is_err(),
+                "{}",
+                link.display()
+            );
+        }
+
+        // Where it reads them, it is asked to stop each.
+        for job in [Job::Renew, Job::Watch] {
+            reading
+                .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
+                .expect("installed");
+        }
+        asked.taken();
+        for job in [Job::Renew, Job::Watch] {
+            assert!(
+                reading
+                    .remove(&ctx, Permit::for_a_test(), job)
+                    .expect("taken away")
+            );
+        }
+        assert_eq!(
+            asked.taken(),
+            [
+                format!("--user disable --now {TIMER}"),
+                "--user daemon-reload".to_string(),
+                format!("--user disable --now {WATCH}"),
+                "--user daemon-reload".to_string(),
+            ]
+        );
+    }
+
+    /// Where `XDG_CONFIG_HOME` names a full path, the user's systemd reads units from
+    /// `systemd/user` there, not in `~/.config` (systemd.unit(5)).
+    #[test]
+    fn the_units_go_where_xdg_config_home_says() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let (home, config) = (scratch.path().join("home"), scratch.path().join("config"));
+        let program = home.join("bin/pitboard");
+        std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
+        std::fs::write(&program, "").expect("a program");
+        let ctx = configured_in(&home, &config).with_schedule_program(program.clone());
+        let units = config.join("systemd/user");
+
+        let location = install(&ctx, Permit::for_a_test()).expect("installed");
+        assert_eq!(location, Location::File(units.join(TIMER)));
+        for file in [TIMER, SERVICE] {
+            assert!(units.join(file).is_file(), "{file}");
+        }
+        assert!(!home.join(".config").exists(), "nothing in ~/.config");
+        assert_eq!(installed_program(&ctx), Some(program));
+    }
+
+    /// A Pitboard before this one wrote its units in `~/.config/systemd/user` whatever
+    /// `XDG_CONFIG_HOME` said, so they are looked for there too: `status` and doctor find
+    /// them, and taking the job away takes them, through `systemctl` only where the manager
+    /// reads that folder.
+    #[test]
+    fn a_unit_an_earlier_pitboard_wrote_in_dot_config_is_still_found_and_taken_away() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let (home, config) = (scratch.path().join("home"), scratch.path().join("config"));
+        let ctx = configured_in(&home, &config);
+        let before = home.join(".config/systemd/user");
+        let program = "/usr/local/bin/pitboard";
+        let earlier = || {
+            std::fs::create_dir_all(before.join("timers.target.wants")).expect("made");
+            std::fs::write(
+                before.join(TIMER),
+                "[Timer]\nOnUnitActiveSec=86400\nOnStartupSec=900\nPersistent=true\n",
+            )
+            .expect("written");
+            std::fs::write(
+                before.join(SERVICE),
+                format!("[Service]\nType=oneshot\nExecStart={program} renew --scheduled\n"),
+            )
+            .expect("written");
+            crate::host::fs::testing::link(
+                &before.join(TIMER),
+                &before.join("timers.target.wants").join(TIMER),
+            )
+            .expect("enabled");
+        };
+        let asked = Arc::new(Asked::default());
+
+        earlier();
+        let systemd = Systemd::new(
+            asked.clone(),
+            says(&[&config.join("systemd/user")], Some(&home)),
+        );
+        assert!(systemd.installed(&ctx, Job::Renew));
+        assert_eq!(
+            systemd.location(&ctx, Job::Renew),
+            Location::File(before.join(TIMER))
+        );
+        assert_eq!(
+            systemd.program(&ctx, Job::Renew),
+            Some(PathBuf::from(program))
+        );
+        assert!(
+            systemd
+                .remove(&ctx, Permit::for_a_test(), Job::Renew)
+                .expect("taken away")
+        );
+        assert_eq!(asked.taken(), Vec::<String>::new(), "never loaded");
+        assert!(!systemd.installed(&ctx, Job::Renew));
+        for gone in [TIMER, SERVICE, "timers.target.wants/pitboard-renew.timer"] {
+            assert!(
+                std::fs::symlink_metadata(before.join(gone)).is_err(),
+                "{gone}"
+            );
+        }
+
+        // A manager without that XDG_CONFIG_HOME reads it, and is asked to stop it.
+        earlier();
+        let systemd = Systemd::new(asked.clone(), says(&[&before], Some(&home)));
+        assert!(
+            systemd
+                .remove(&ctx, Permit::for_a_test(), Job::Renew)
+                .expect("taken away")
+        );
+        assert_eq!(
+            asked.taken(),
+            [
+                format!("--user disable --now {TIMER}"),
+                "--user daemon-reload".to_string(),
+            ]
+        );
+        assert!(!before.join(TIMER).exists());
+    }
+
+    // The user's systemd as a test plays it: the two properties, on the object and interface
+    // org.freedesktop.systemd1(5) names.
+    struct Plays {
+        unit_path: Vec<String>,
+        environment: Vec<String>,
+    }
+
+    #[zbus::interface(name = "org.freedesktop.systemd1.Manager")]
+    impl Plays {
+        #[zbus(property)]
+        fn unit_path(&self) -> Vec<String> {
+            self.unit_path.clone()
+        }
+
+        #[zbus(property)]
+        fn environment(&self) -> Vec<String> {
+            self.environment.clone()
+        }
+    }
+
+    /// The private socket in the runtime folder is reached peer to peer, as systemd serves it,
+    /// and `HOME` is read out of the manager's `Environment`. Served here by a stand-in in the
+    /// test's own folder: no build for tests asks the user's own systemd.
+    #[test]
+    fn the_user_manager_is_asked_on_its_private_socket_for_its_folders_and_home() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let runtime = scratch.path().join("runtime");
+        std::fs::create_dir_all(runtime.join("systemd")).expect("made");
+        let listener = std::os::unix::net::UnixListener::bind(runtime.join("systemd/private"))
+            .expect("listening");
+        let folders = ["/home/x/.config/systemd/user", "/usr/lib/systemd/user"];
+        let plays = Plays {
+            unit_path: folders.map(String::from).to_vec(),
+            environment: ["LANG=C.UTF-8", "HOME=/home/x", "PATH=/usr/bin"]
+                .map(String::from)
+                .to_vec(),
+        };
+        let serving = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("asked");
+            let connection = zbus::blocking::connection::Builder::async_io_unix_stream(stream)
+                .server(zbus::Guid::generate())
+                .and_then(|builder| builder.p2p().serve_at("/org/freedesktop/systemd1", plays))
+                .and_then(zbus::blocking::connection::Builder::build)
+                .expect("a peer to peer connection");
+            connection.closed();
+        });
+        let runtime = runtime.to_string_lossy().into_owned();
+        let env = crate::context::Environment::on(
+            crate::host::Os::Linux,
+            [("HOME", "/home/x"), ("XDG_RUNTIME_DIR", runtime.as_str())],
+        );
+        let reads = asked(&Context::read(&env, "cli")).expect("answered");
+        assert_eq!(
+            reads,
+            Reads {
+                unit_path: folders.map(PathBuf::from).to_vec(),
+                home: Some(PathBuf::from("/home/x")),
+            }
+        );
+        serving
+            .join()
+            .expect("served until the question was answered");
+    }
+
+    /// The system's own manager, asked from a build for tests, refuses before it reaches a bus,
+    /// whether or not systemd started this system, and nothing is written.
+    #[test]
+    fn the_systems_user_manager_is_never_asked_from_a_build_for_tests() {
+        let (_home, ctx) = scratch_home();
+        let refused = UserManager.reads(&ctx).expect_err("refused");
+        assert_eq!(refused.code(), "schedule_refused");
+        let systemd = Systemd::new(service::system(), Arc::new(UserManager));
+        for job in [Job::Renew, Job::Watch] {
+            let refused = systemd
+                .put(
+                    &ctx,
+                    Permit::for_a_test(),
+                    job,
+                    Path::new("/usr/local/bin/pitboard"),
+                    &[],
+                    &[],
+                )
+                .expect_err("refused");
+            assert!(refused.to_string().contains("user manager"), "{refused}");
+        }
+        assert!(!Systemd::units(&ctx).exists());
+    }
+
     // Enabled but not running, a new service would start at the next sign-in all the same; one
     // before is restarted as it was.
     #[test]
     fn a_watch_service_systemd_will_not_restart_is_taken_away_or_put_back() {
         let (_home, ctx) = scratch_home();
         let asked = Arc::new(Asked::default());
-        let systemd = Systemd::new(asked.clone());
+        let systemd = Systemd::new(asked.clone(), Arc::new(Pretend));
         let program = Path::new("/usr/local/bin/pitboard");
         let at = |percent: &str| vec!["--at".to_string(), percent.to_string()];
         let reload = "--user daemon-reload".to_string();
@@ -646,7 +1183,7 @@ mod tests {
     fn a_watch_service_systemd_will_not_stop_stays_installed() {
         let (_home, ctx) = scratch_home();
         let asked = Arc::new(Asked::default());
-        let systemd = Systemd::new(asked.clone());
+        let systemd = Systemd::new(asked.clone(), Arc::new(Pretend));
         let program = Path::new("/usr/local/bin/pitboard");
         for job in [Job::Renew, Job::Watch] {
             systemd

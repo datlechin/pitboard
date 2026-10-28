@@ -50,6 +50,16 @@ pub(crate) fn same_variable(a: &str, b: &str) -> bool {
     }
 }
 
+// What a build for tests is told on installing a job: its system's scheduler refuses it, and on
+// Linux there is none where systemd did not start the system, as in a container (sd_booted(3)).
+pub(crate) fn schedule_refused_with() -> &'static str {
+    match OS {
+        Os::MacOs | Os::Windows => "schedule_refused",
+        Os::Linux if Path::new("/run/systemd/system").is_dir() => "schedule_refused",
+        Os::Linux => "schedule_unsupported",
+    }
+}
+
 // Pitboard switches Claude Desktop accounts on macOS alone, and a test's jar is SQLite there.
 pub(crate) fn claude_desktop_runs_here() -> bool {
     match OS {

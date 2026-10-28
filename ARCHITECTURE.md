@@ -59,8 +59,9 @@ built with a `context::Context`:
   of its own, which a build for tests refuses. `watch.rs` watches one folder through each
   system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
-    launchd, SQLite and managed preferences; `/proc`, systemd and glibc's way to keep
-    descriptors from the login shell; and what both POSIX systems share.
+    launchd, SQLite and managed preferences; `/proc`, systemd, the D-Bus it is asked over
+    (`bus.rs`) and glibc's way to keep descriptors from the login shell; and what both POSIX
+    systems share.
   - `host/windows/`: Credential Manager, DPAPI seals, Task Scheduler, processes, tokens, jobs,
     the registry and files made private by their access list.
   - `acl.rs`, `owner.rs`, `replace.rs`, `token.rs`, `task.rs`: Windows' rules, compiled on
@@ -364,6 +365,10 @@ keeps it is in the header of the module named.
   whatever `PITBOARD_HOME` says, and installing either refuses elsewhere with
   `schedule_not_default_home` (`schedule::serves`,
   `the_schedule_belongs_to_the_default_home_alone`).
+- On Linux a unit is written only where the user's systemd reads its folder and runs it with
+  this home, asked before anything is written or taken away
+  (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`,
+  `a_unit_is_written_only_for_the_home_the_user_manager_runs_with`).
 - A job is given the installing context's proxy variables, in files written private, or in
   `schedule.env` and `watch.env` on Windows, and `doctor` warns with `schedule_proxy` where
   they would send a request another way than this run
@@ -386,7 +391,8 @@ keeps it is in the header of the module named.
   folders.
 - No test starts the person's login shell or reaches the system's scheduler. A test names a
   shell of its own, and the real hosts refuse launchd, systemd and Task Scheduler in any build
-  for tests (`a_test_never_reaches_the_systems_own_scheduler`). The Release build
+  for tests (`a_test_never_reaches_the_systems_own_scheduler`), and on Linux the user's systemd
+  is asked nothing (`the_systems_user_manager_is_never_asked_from_a_build_for_tests`). The Release build
   `ReleaseGateTests` starts at 1.x only reads Task Scheduler and writes no task.
 - No test addresses a name a real login may be kept under, or a folder that is, holds or lies
   in a real login place: `guard_not_live` refuses `provider::names`' families, `host::lies_in`

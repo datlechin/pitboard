@@ -33,7 +33,19 @@ Where the last run failed, run `pitboard renew` to see what it says. [Renewal sc
 
 ### Linux has no scheduler for it
 
-`pitboard schedule install` asks your user's systemd, as `pitboard watch install` does. Where systemd did not start the system, as in many containers, it refuses with `schedule_unsupported`. Where your user has no systemd session, such as a root shell from `su`, it refuses with `schedule_refused` and what `systemctl` said. Run `pitboard renew` yourself instead, such as from cron.
+`pitboard schedule install` asks your user's systemd, as `pitboard watch install` does. Where systemd did not start the system, as in many containers, it refuses with `schedule_unsupported`. Where your user has no systemd session, such as a root shell from `su`, it refuses with `schedule_refused` and what systemd said. Run `pitboard renew` yourself instead, such as from cron.
+
+### systemd reads units from another folder or home
+
+`pitboard schedule install` and `pitboard watch install` refuse with `schedule_manager_elsewhere` where your user's systemd would not run the job for your home. systemd reads your units from `systemd/user` in its own `XDG_CONFIG_HOME`, or in `~/.config`, and runs them with its own `HOME`.
+
+Compare your shell's `HOME` and `XDG_CONFIG_HOME` with systemd's:
+
+```sh
+systemctl --user show-environment
+```
+
+Make them the same, then install again. Unset `XDG_CONFIG_HOME` in your shell where systemd has none. Give systemd yours with `systemctl --user set-environment XDG_CONFIG_HOME=<folder>`, or for every session in a `.conf` file in `~/.config/environment.d`, as environment.d(5) says.
 
 ### The schedule uses another proxy
 

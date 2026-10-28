@@ -73,6 +73,20 @@ pub enum Installed {
     Unsupported,
 }
 
+/// Why the user's systemd on Linux would not run a job for this home
+/// ([`Error::ScheduleManagerElsewhere`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Elsewhere {
+    /// It reads no units from `units`, the folder the job is written in.
+    Folder { units: PathBuf },
+    /// It runs units with `theirs`, or with no `HOME`, rather than with `home`, where the job
+    /// would then act.
+    Home {
+        home: PathBuf,
+        theirs: Option<PathBuf>,
+    },
+}
+
 /// Where a person finds the schedule.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
@@ -1395,7 +1409,9 @@ mod tests {
     }
 
     /// A real context's scheduler is never asked from a test: the system's own service
-    /// manager would reach the person's real schedule.
+    /// manager would reach the person's real schedule. On Linux the user's systemd is asked
+    /// first, before anything is written, and refuses; where systemd did not start the system,
+    /// as in a container, there is no scheduler to reach.
     #[test]
     fn a_test_never_reaches_the_systems_own_scheduler() {
         let scratch = tempfile::tempdir().expect("a scratch folder");
@@ -1405,7 +1421,16 @@ mod tests {
         let ctx = Context::new(root.clone()).with_schedule_program(program);
         let refused =
             install(&ctx, Permit::for_a_test()).expect_err("refused before it reaches the system");
-        assert_eq!(refused.code(), "schedule_refused");
-        assert_eq!(status(&ctx), Installed::No, "and nothing is left written");
+        match scheduler(&ctx) {
+            None => assert_eq!(refused.code(), "schedule_unsupported"),
+            Some(_) => assert_eq!(refused.code(), "schedule_refused"),
+        }
+        if crate::host::OS == Os::Linux && scheduler(&ctx).is_some() {
+            assert!(refused.to_string().contains("user manager"), "{refused}");
+        }
+        assert!(
+            !matches!(status(&ctx), Installed::Yes { .. }),
+            "and nothing is left written"
+        );
     }
 }

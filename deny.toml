@@ -27,6 +27,11 @@ version = 2
 yanked = "deny"
 ignore = [
   { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained, not vulnerable, and runs only inside askama's derive at build time; every askama release still uses it" },
+  # zbus 6.0.0 took these three in as modules of its own, and dropped the blocking API the core
+  # takes zbus 5 for (docs/facts/linux.md). Unmaintained, not vulnerable: zbus 5 still uses them.
+  { id = "RUSTSEC-2026-0370", reason = "zvariant is zbus 5's own, merged into zbus 6, which has no blocking API" },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names is zbus 5's own, merged into zbus 6, which has no blocking API" },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is zbus 5's own, merged into zbus 6, which has no blocking API" },
 ]
 
 [licenses]

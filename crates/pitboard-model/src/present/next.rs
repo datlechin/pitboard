@@ -233,6 +233,7 @@ fn error_section(code: &str, desktop: bool) -> Option<&'static str> {
         "schedule_unsupported"
         | "schedule_not_default_home"
         | "schedule_refused"
+        | "schedule_manager_elsewhere"
         | "schedule_program_missing"
         | "schedule_program_temporary"
         | "schedule_program_unnamed" => "renewal-schedule",

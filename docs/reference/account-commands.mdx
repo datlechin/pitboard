@@ -410,6 +410,7 @@ After you update Pitboard, the service runs the updated `pitboard` from your nex
 `install` follows the rules of [`schedule install`](/reference/maintenance-commands#schedule):
 
 - It watches the accounts in Pitboard's own directory, whatever `PITBOARD_HOME` it is given. While `PITBOARD_HOME` names another directory, `install` refuses with `schedule_not_default_home`.
+- On Linux, it refuses with `schedule_manager_elsewhere` where your user's systemd would not read the service, or would run it with another `HOME`.
 - It gives the service each proxy variable it was started with. Run `install` again after your proxy changes.
 - Where Pitboard may change nothing, it refuses with `elevated` or `system_too_old`.
 

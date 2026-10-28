@@ -328,6 +328,15 @@ pub enum Error {
         job: crate::schedule::Job,
     },
 
+    /// On Linux, the user's systemd would not run the job for this home, which `elsewhere`
+    /// says why. Its `UnitPath` and `HOME` are asked before anything is written, and before a
+    /// job is taken away.
+    #[error("{}", manager_elsewhere(elsewhere, *job))]
+    ScheduleManagerElsewhere {
+        elsewhere: crate::schedule::Elsewhere,
+        job: crate::schedule::Job,
+    },
+
     /// An app that names no command line for the schedule, where the only other thing to
     /// schedule is the app itself, which renews nothing.
     #[error("this copy of Pitboard has no command line inside it for the renewal schedule to run.")]
@@ -1029,6 +1038,7 @@ impl Error {
             ScheduleProgramMissing { .. } => "schedule_program_missing",
             ScheduleProgramTemporary { .. } => "schedule_program_temporary",
             ScheduleProgramUnnamed => "schedule_program_unnamed",
+            ScheduleManagerElsewhere { .. } => "schedule_manager_elsewhere",
             HomeUnwritable { .. } => "home_unwritable",
             ClaudeConfigMissing { .. } => "claude_config_missing",
             ClaudeConfigUnreadable { .. } => "claude_config_unreadable",
@@ -1298,6 +1308,39 @@ fn temporary_copy(path: &std::path::Path, job: crate::schedule::Job) -> String {
              and {turn_on} again.",
             job_named(job),
             path.display()
+        ),
+    }
+}
+
+fn manager_elsewhere(elsewhere: &crate::schedule::Elsewhere, job: crate::schedule::Job) -> String {
+    use crate::schedule::Elsewhere;
+    match elsewhere {
+        Elsewhere::Folder { units } => format!(
+            "{} would be written in {}, and your user's systemd does not read units from there. \
+             Nothing was {}. Give this shell and systemd the same XDG_CONFIG_HOME, set or unset \
+             as `systemctl --user show-environment` shows systemd's, then install it again.",
+            job_named(job),
+            units.display(),
+            job_done(job)
+        ),
+        Elsewhere::Home {
+            home,
+            theirs: Some(theirs),
+        } => format!(
+            "your user's systemd runs {} with HOME set to {}, not to {}, so it would not serve \
+             this home. Nothing was changed. Run this from a shell whose HOME is {}.",
+            job_named(job),
+            theirs.display(),
+            home.display(),
+            theirs.display()
+        ),
+        Elsewhere::Home { home, theirs: None } => format!(
+            "your user's systemd runs {} with no HOME, so it would not serve {}. Nothing was \
+             changed. Give systemd yours with `systemctl --user set-environment HOME={}`, then \
+             try again.",
+            job_named(job),
+            home.display(),
+            home.display()
         ),
     }
 }

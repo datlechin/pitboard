@@ -173,8 +173,9 @@ fn front_ends_that_decide_at_once_from_one_reading_make_one_switch() {
 
 /// No build for tests asks the system's own service manager, which is the person's whatever
 /// home a test gives: `watch install` from the default home is refused with
-/// `schedule_refused`, and nothing is left saying the service is on. From another home it is
-/// refused first, with `schedule_not_default_home`.
+/// `schedule_refused`, or `schedule_unsupported` where systemd did not start Linux, and
+/// nothing is left saying the service is on. From another home it is refused first, with
+/// `schedule_not_default_home`.
 #[test]
 fn no_build_for_tests_installs_the_watch_service() {
     let env = two_accounts("watch-service");
@@ -202,10 +203,14 @@ fn no_build_for_tests_installs_the_watch_service() {
 
     let (out, _, code) = env.run_with(&["watch", "install", "--json"], &given);
     assert_eq!(code, 1, "{out}");
-    assert_eq!(envelope(&out)["error"]["code"], "schedule_refused", "{out}");
+    assert_eq!(
+        envelope(&out)["error"]["code"],
+        crate::common::os::schedule_refused_with(),
+        "{out}"
+    );
     let (out, err, code) = env.run_with(&["watch", "status", "--json"], &given);
     assert_eq!(code, 0, "{err}");
-    assert_eq!(envelope(&out)["data"], json!({"installed": false}), "{out}");
+    assert_eq!(envelope(&out)["data"]["installed"], json!(false), "{out}");
 }
 
 #[test]

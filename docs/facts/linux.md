@@ -104,3 +104,55 @@ Read on 28 October 2026 in the desktop file each desktop's process monitor insta
   `e4cd4bcdfe56eb67c08bcf42b5af708f9d96a8c2`).
 - So a process left of an app is quit in System Monitor on Linux, whichever of the two runs
   (`what_is_left_of_an_app_is_quit_where_the_system_quits_it`).
+
+## The user's systemd
+
+Read on 29 October 2026 in systemd's source at tag `v262` (commit
+`8cc40e0c5e9234bf45084751ac53b1fbfe70b492`), its man pages and the files named. No user manager
+was asked: a container has none without systemd as its first process, and no build for tests
+asks the person's ([not-measured.md](not-measured.md#linux)).
+
+- `systemctl --user` reaches the manager in `bus_connect_transport_systemd`
+  (`src/shared/bus-util.c`). With `XDG_RUNTIME_DIR` set, `bus_connect_user_systemd` connects to
+  `unix:path=$XDG_RUNTIME_DIR/systemd/private` with `sd_bus_new`, which sends no `Hello`, and
+  `bus_check_peercred` refuses a peer that is neither root nor this user. A private socket that
+  does not answer is the error, with no fallback. Only with `XDG_RUNTIME_DIR` unset and
+  `DBUS_SESSION_BUS_ADDRESS` set does it take the session bus (`sd_bus_default_user`).
+- sd-bus finds the session bus in `DBUS_SESSION_BUS_ADDRESS`, else at
+  `unix:path=$XDG_RUNTIME_DIR/bus` (`bus_set_address_user` in
+  `src/libsystemd/sd-bus/sd-bus.c`), and waits 25 seconds for an answer (`BUS_DEFAULT_TIMEOUT`
+  in `bus-internal.h`). So `host/linux/bus.rs` and `Context::session_bus`
+  (`the_user_manager_is_reached_as_systemctl_reaches_it`,
+  `the_session_bus_is_found_as_sd_bus_finds_it`).
+- org.freedesktop.systemd1(5): `Manager.UnitPath`, an `as`, "encodes the currently active unit
+  file search path". `Manager.Environment`, an `as` of `NAME=value`, "encodes the environment
+  block passed to all executed services". In `src/core/dbus-manager.c`, `UnitPath` is
+  `lookup_paths.search_path`, and `Environment` is `manager_get_effective_environment`, the
+  manager's own environment merged with what clients set. A user manager starts with its own
+  environment, `PATH` replaced and the session's variables dropped (`manager_default_environment`
+  in `src/core/manager.c`), so the `HOME` there is the one its units run with. Pitboard asks both
+  before it writes or removes a unit
+  (`the_user_manager_is_asked_on_its_private_socket_for_its_folders_and_home`).
+- systemd.unit(5) puts a user's own units in `$XDG_CONFIG_HOME/systemd/user`, else
+  `~/.config/systemd/user`. `src/libsystemd/sd-path/path-lookup.c` builds `UnitPath` from the
+  variables' text and resolves no link, and `SYSTEMD_UNIT_PATH` in the manager's environment
+  replaces it. So a folder is compared by its components
+  (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`).
+- environment.d(5): the user manager gives its services the variables of
+  `~/.config/environment.d/*.conf`, or of `environment.d` in `XDG_CONFIG_HOME` where the manager's
+  own is a full path, read as it starts. `systemctl --user set-environment` sets one until it
+  stops. [Fix daily renewal](../troubleshooting/renewal.mdx) names both for `schedule_manager_elsewhere`.
+
+## zbus
+
+Read on 29 October 2026 in each crate as crates.io serves it.
+
+- zbus 6.0.0, of 16 October 2026, has "Remove the blocking API" in its `CHANGELOG.md`.
+  zbus_systemd 0.26201.0 depends on zbus 6 and is async only. So the core takes zbus 5.19 with
+  `blocking-api` and `p2p`, and its own two-property proxy for the user manager.
+- In zbus 5.19.0, the blocking `Connection::peer_creds` is declared an `async fn`
+  (`src/blocking/connection/mod.rs`), and `peer_credentials`, deprecated since 5.13, is its
+  blocking form, which `host/linux/bus.rs` asks.
+- `async-io` runs zbus's own executor, so the musl command line links no tokio:
+  `cargo tree -p pitboard --target aarch64-unknown-linux-musl -e normal,build -i tokio` finds
+  nothing.

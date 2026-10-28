@@ -123,3 +123,18 @@ and date, or stays in the table of what was not measured, with what was seen.
 | What an overflow of ReadDirectoryChangesW's buffer comes to through notify 8.2.1 | Where the watch ends, it watches again and its caller looks. Where nothing is said, a write in it goes unheard until the next write, the next read, or, for `pitboard watch`, the next decision |
 | inotify on btrfs, which needs a mount Docker gives only a privileged container | It watches a folder on btrfs as any other |
 | Whether FSEvents hears a write another machine makes on a share, or on a volume autofs mounts | It watches only a volume statfs marks `MNT_LOCAL`, and looks every 2 seconds on any other |
+
+## Linux
+
+These were not measured. Each says what Pitboard does where it cannot know.
+
+- A running user manager. `host/linux/systemd.rs` was tested against a stand-in served on
+  a private socket in a test's own folder, never against systemd: whether systemd's private
+  socket takes zbus 5.19's peer to peer handshake, `UnitPath` and `Environment` as a running
+  manager answers them, a refused start and its restore, and `uninstall`. Until a run on a machine with systemd measures them, Pitboard does what systemd
+  262's source says ([linux.md](linux.md#the-users-systemd)).
+- The watch service's `PATH`. A user manager gives its services `default_user_PATH()`, the
+  system's own `bin` folders (`src/basic/path-util.h` at `v262`), and `environment.d` can add
+  to it. Whether that `PATH` finds `claude` and `codex` where people install them, such as
+  `~/.local/bin`, is not measured. The watch service looks for each tool only on the `PATH` it
+  was given.

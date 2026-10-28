@@ -57,6 +57,8 @@ Each run renews whatever is due. Behind a proxy, turn it on with `pitboard sched
 
 It renews only the parked logins in Pitboard's own directory: `~/.pitboard`, or `%USERPROFILE%\AppData\Local\Pitboard` on Windows. While `PITBOARD_HOME` names another directory, turning it on fails with `schedule_not_default_home`. To renew the parked logins there, run `pitboard renew` yourself with `PITBOARD_HOME` set.
 
+On Linux, turning it on fails with `schedule_manager_elsewhere` where your user's systemd would run it for another home: see [systemd reads units from another folder or home](/troubleshooting/renewal#systemd-reads-units-from-another-folder-or-home).
+
 ## Check or turn off daily renewal
 
 In the app, **Keep Saved Sign-Ins Fresh** in **Settings** > **Advanced** shows whether it is on. Turn it off to stop daily renewal.

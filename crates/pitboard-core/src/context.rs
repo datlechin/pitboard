@@ -55,6 +55,8 @@ const READ: &[&str] = &[
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",
     "XDG_CACHE_HOME",
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
     "WSL_DISTRO_NAME",
     "CODEX_HOME",
     "CODEX_INSTALL_DIR",
@@ -403,6 +405,10 @@ pub struct Context {
     pub(crate) config_home: Option<PathBuf>,
     pub(crate) data_home: Option<PathBuf>,
     pub(crate) cache_home: Option<PathBuf>,
+    // `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` on Linux, where the user's systemd and
+    // the session's D-Bus are found.
+    pub(crate) runtime_dir: Option<PathBuf>,
+    pub(crate) session_bus_address: Option<String>,
     /// The scheduler's job this process runs as, where a test says. `None` is whatever the
     /// scheduler said when it started this process.
     pub(crate) scheduled_job: Option<String>,
@@ -465,6 +471,19 @@ fn base_folder(
     }
 }
 
+/// Where a context finds the session's D-Bus ([`Context::session_bus`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(dead_code, reason = "only Linux has a session bus to find")
+)]
+pub(crate) enum SessionBus {
+    /// A D-Bus address, as `DBUS_SESSION_BUS_ADDRESS` gives it.
+    Address(String),
+    /// A socket's path.
+    Socket(PathBuf),
+}
+
 const CONFIG_HOME: &[&str] = &[".config"];
 const DATA_HOME: &[&str] = &[".local", "share"];
 const CACHE_HOME: &[&str] = &[".cache"];
@@ -514,6 +533,31 @@ impl Context {
     /// The same for what may be thrown away: `XDG_CACHE_HOME`, else `.cache` in the home.
     pub fn cache_home(&self) -> Option<&std::path::Path> {
         self.cache_home.as_deref()
+    }
+
+    /// `XDG_RUNTIME_DIR` on Linux, where it names a full path. None where it does not, as
+    /// XDG Base Directory 0.8 ignores a relative one, and off Linux.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a user manager to find")
+    )]
+    pub(crate) fn runtime_dir(&self) -> Option<&std::path::Path> {
+        self.runtime_dir.as_deref()
+    }
+
+    /// The session's D-Bus, as sd-bus finds it at systemd 262 (`bus_set_address_user`):
+    /// `DBUS_SESSION_BUS_ADDRESS` as given, else `bus` in the runtime folder. None where neither
+    /// is set, and off Linux.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a session bus to find")
+    )]
+    pub(crate) fn session_bus(&self) -> Option<SessionBus> {
+        match (&self.session_bus_address, &self.runtime_dir) {
+            (Some(address), _) => Some(SessionBus::Address(address.clone())),
+            (None, Some(runtime)) => Some(SessionBus::Socket(runtime.join("bus"))),
+            (None, None) => None,
+        }
     }
 
     // The one the schedule renews, whatever `PITBOARD_HOME` says.
@@ -575,6 +619,8 @@ impl Context {
             config_home,
             data_home,
             cache_home,
+            runtime_dir: None,
+            session_bus_address: None,
             scheduled_job: None,
             started_by: None,
             sudo: false,
@@ -996,6 +1042,11 @@ impl Context {
             config_home,
             data_home,
             cache_home,
+            runtime_dir: env
+                .named_folder("XDG_RUNTIME_DIR")
+                .filter(|folder| env.os() == Os::Linux && folder.is_absolute()),
+            session_bus_address: owned("DBUS_SESSION_BUS_ADDRESS")
+                .filter(|address| env.os() == Os::Linux && !address.is_empty()),
             scheduled_job: None,
             started_by: None,
             sudo: env.set("SUDO_UID"),
@@ -1646,6 +1697,47 @@ mod tests {
             (None, None, None),
             "Windows has none"
         );
+    }
+
+    // On Linux alone: an empty address reads as unset, and a relative runtime folder is ignored.
+    #[test]
+    fn the_session_bus_is_found_as_sd_bus_finds_it() {
+        let (_scratch, home, named) = full_home();
+        let runtime = home.with_file_name("runtime");
+        let full = runtime.to_string_lossy().into_owned();
+        let read = |os: Os, pairs: &[(&str, &str)]| {
+            let homes = [("HOME", named.as_str()), ("USERPROFILE", named.as_str())];
+            Context::read(
+                &Environment::on(os, homes.iter().chain(pairs).copied()),
+                "cli",
+            )
+        };
+        let address = "unix:path=/tmp/a%20bus,guid=0123456789abcdef0123456789abcdef";
+        let both = [
+            ("XDG_RUNTIME_DIR", full.as_str()),
+            ("DBUS_SESSION_BUS_ADDRESS", address),
+        ];
+        let given = read(Os::Linux, &both);
+        assert_eq!(given.runtime_dir(), Some(runtime.as_path()));
+        assert_eq!(
+            given.session_bus(),
+            Some(SessionBus::Address(address.into()))
+        );
+        let in_the_runtime_folder = read(
+            Os::Linux,
+            &[("XDG_RUNTIME_DIR", &full), ("DBUS_SESSION_BUS_ADDRESS", "")],
+        );
+        assert_eq!(
+            in_the_runtime_folder.session_bus(),
+            Some(SessionBus::Socket(runtime.join("bus")))
+        );
+        let relative = read(Os::Linux, &[("XDG_RUNTIME_DIR", "relative/runtime")]);
+        assert_eq!(
+            (relative.runtime_dir(), relative.session_bus()),
+            (None, None)
+        );
+        let mac = read(Os::MacOs, &both);
+        assert_eq!((mac.runtime_dir(), mac.session_bus()), (None, None));
     }
 
     // A full path on every system, which nothing makes, in a folder of the test's own.

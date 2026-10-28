@@ -27,7 +27,9 @@ A variable that names a folder must hold a full path: [`home_not_absolute`](/ref
 | `ANTHROPIC_API_KEY` and nine more | All | Both | Not empty: Claude Code ignores the login Pitboard switches. See [Variables that override the login](#variables-that-override-the-login). |
 | `ANTHROPIC_PROFILE`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID` | All | Both | Can make Claude Code sign in with an Anthropic profile, not the login Pitboard switches. See [Anthropic profiles](#anthropic-profiles). |
 | `ANTHROPIC_CONFIG_DIR` | All | Both | The folder that holds Claude Code's [Anthropic profiles](#anthropic-profiles). |
-| `XDG_CONFIG_HOME` | macOS, Linux | Both | Its `anthropic` folder holds Claude Code's [Anthropic profiles](#anthropic-profiles) while `ANTHROPIC_CONFIG_DIR` is unset. |
+| `XDG_CONFIG_HOME` | macOS, Linux | Both | Its `anthropic` folder holds Claude Code's [Anthropic profiles](#anthropic-profiles) while `ANTHROPIC_CONFIG_DIR` is unset. On Linux, where it names a full path, its `systemd/user` folder holds the units of the [renewal schedule](/reference/files#renewal-schedule) and the [watch service](/reference/files#watch-service). |
+| `XDG_RUNTIME_DIR` | Linux | Command line | Where Pitboard reaches your user's systemd, at `systemd/private`, as `systemctl --user` does. A relative one counts as unset. |
+| `DBUS_SESSION_BUS_ADDRESS` | Linux | Command line | The session bus, where Pitboard reaches your user's systemd while `XDG_RUNTIME_DIR` is unset. Empty counts as unset. |
 | `CLAUDE_CODE_HOVER_REST` | All | Both | `1` or `true`: `pitboard doctor`'s `storage v5` check reads as on. Measured in 2.1.278, the login stays in the keychain. |
 | `CODEX_HOME` | All | Both | Codex's directory, in place of `~/.codex`, or on Windows `.codex` in your profile folder. Empty counts as unset. On Windows, one that names no folder stops Codex, and Pitboard refuses with `codex_home_missing`. |
 | `CODEX_INSTALL_DIR` | Windows | App | Where Codex's installer put `codex`, which the app looks in after the `PATH`. Unset, `Programs\OpenAI\Codex\bin` in `LOCALAPPDATA`. |
