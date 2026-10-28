@@ -190,6 +190,7 @@ jobs:
           apps/linux/scripts/in-container.sh apps/linux/scripts/check.sh
           apps/linux/plasmoid/tests/run-tests.sh
           .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh
+          .github/scripts/test-linux-packages.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
@@ -1222,6 +1223,44 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # The Debian packages on both machines they are for, with in-container.sh's steps, as a
+  # contributor runs them: the command line packed as a release packs it, the packages built on
+  # Debian 13 from the commit and checked, the check's own tests, and the packages installed on
+  # fresh Debian 13 and Ubuntu 26.04 images and purged again.
+  linux-packaging:
+    name: linux-packaging (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # in-container.sh fills the Cargo registry here with `cargo metadata`.
+      - uses: ./.github/actions/rust
+        with:
+          cache: "false"
+      - run: apps/linux/scripts/in-container.sh debian-13 command-line "$RUNNER_TEMP/command-line"
+      - run: >
+          git archive HEAD | apps/linux/scripts/in-container.sh debian-13 deb
+          "$RUNNER_TEMP"/command-line/pitboard-v*.tar.gz "$RUNNER_TEMP/packages"
+      - run: apps/linux/scripts/in-container.sh debian-13 packages-test
+      - run: sh .github/scripts/test-linux-packages.sh "$RUNNER_TEMP/packages"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-packages-${{ matrix.arch }}
+          path: ${{ runner.temp }}/packages/*.deb
+          if-no-files-found: ignore
+          retention-days: 7
+
   # The floor the manifests promise, built the way someone on an older toolchain builds it.
   msrv:
     runs-on: ubuntu-latest
@@ -1436,6 +1475,7 @@ jobs:
       - linux-app
       - linux-app-floor
       - linux-app-fedora
+      - linux-packaging
       - msrv
       - semver
       - deny

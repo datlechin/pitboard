@@ -195,12 +195,14 @@ python3 .github/scripts/test-linux-app.py
 `appstreamcli` are not on `PATH`, as on a Mac. `apps/linux/scripts/in-container.sh debian-13
 scripts` runs every case, as [The Linux app](#the-linux-app) says.
 
-For a change to the Linux packages, `packaging/linux/debian`, or `build-linux-packages.sh` and
-`check-linux-packages.sh` in `.github/scripts`, run the steps [Linux packages](#linux-packages)
-lists, and:
+For a change to the Linux packages, `packaging/linux/debian`,
+`packaging/linux/install-test.Containerfile`, or `build-linux-packages.sh`,
+`check-linux-packages.sh` and `test-linux-packages.sh` in `.github/scripts`, run the steps
+[Linux packages](#linux-packages) lists, and:
 
 ```sh
-shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh
+shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh \
+  .github/scripts/test-linux-packages.sh
 ```
 
 The macOS app, Windows, the Windows app, Linux, the Linux app and the website have checks of
@@ -873,13 +875,14 @@ fixture empties first.
 The Debian packages are built on Debian 13, the floor, by debhelper from
 `packaging/linux/debian` over the Meson install: `pitboard`, the release tarball's command line
 byte for byte with its man page and completions; `pitboard-app`, which depends on the
-`pitboard` of its own version; and `pitboard-archive-keyring`, the repository's key. Build
-and check them in containers, into a folder `out` of your choosing:
+`pitboard` of its own version; and `pitboard-archive-keyring`, the repository's key. Build,
+check and install them in containers, into a folder `out` of your choosing:
 
 ```sh
 apps/linux/scripts/in-container.sh debian-13 command-line out
 git archive HEAD | apps/linux/scripts/in-container.sh debian-13 deb out/pitboard-v*.tar.gz out
 apps/linux/scripts/in-container.sh debian-13 packages-test
+.github/scripts/test-linux-packages.sh out
 ```
 
 - `command-line` builds the command line for musl and packs it with `pack-command-line.sh`, as a
@@ -890,6 +893,8 @@ apps/linux/scripts/in-container.sh debian-13 packages-test
   since GitHub renames a release file whose name holds the `~` of a Debian version.
 - `packages-test` runs `test-linux-packages.py`, which builds packages broken for each rule of
   the check.
+- `test-linux-packages.sh` installs the packages on fresh Debian 13 and Ubuntu 26.04 images,
+  checks them there and purges them.
 
 The engine copies a step's files in and out with its own `cp`, so the containers mount nothing
 more. A failed step's files are copied out too.
@@ -904,6 +909,12 @@ more. A failed step's files are copied out too.
   fails;
 - whose keyring is not `packaging/linux/pitboard-archive-keyring.asc`, unarmored;
 - that lintian warns about.
+
+A package manager runs as root only while an image builds. Pitboard's programs run in the
+images only as uid 1000, with fresh homes and no network.
+
+CI's `linux-packaging` job runs the four on `ubuntu-26.04` and `ubuntu-26.04-arm`, and keeps
+the packages as `linux-packages-<arch>` for 7 days.
 
 ## Tool registers
 

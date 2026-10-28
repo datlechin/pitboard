@@ -121,3 +121,18 @@ binutils 2.44 and rustup's stable, Rust 1.99.1.
 - dpkg-buildpackage stops on `build-essential:native` where build-essential is not installed,
   though Build-Depends never names it.
 
+### Installed
+
+Measured the same day by `test-linux-packages.sh`, arm64, with apt fetching from each
+distribution's archive while the image built:
+
+- On Debian 13, `debian:13@sha256:8c4733a9…`, and Ubuntu 26.04,
+  `ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd`, apt
+  installed the three packages, `pitboard --version` ran as uid 1000 with no network,
+  desktop-file-validate and `appstreamcli validate --no-net` passed the installed launcher and
+  metainfo, and `apt-get purge` left none of the packages' files.
+- Both resolve the floor's libraries by the names dpkg-shlibdeps writes. On 29 October apt
+  installed the app with libgtk-4-1 4.22.4+ds-0ubuntu0.1, libadwaita-1-0 1.9.1-0ubuntu0.2 and
+  libglib2.0-0t64 2.88.0-1ubuntu0.1 on Ubuntu 26.04, and with Debian 13.7's libgtk-4-1
+  4.18.6+ds-2 and libadwaita-1-0 1.7.6-1~deb13u1 beside the libglib2.0-0t64 2.84.4-3~deb13u5 the
+  validators had brought.
