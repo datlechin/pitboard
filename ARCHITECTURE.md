@@ -558,7 +558,9 @@ on.
   under before the model did: on macOS Foundation's standardised path, which reads the file
   system, so the app gives it, and on Windows the directory as Windows compares paths, which
   the model makes (`each_front_keys_its_records_as_its_app_did`,
-  `theRecordsKeyIsFoundationsByNameAndByTheFileSystem`).
+  `theRecordsKeyIsFoundationsByNameAndByTheFileSystem`). The Linux app kept none before, and
+  its key is the directory made absolute, by its components, with each `..` kept
+  (`the_linux_app_keys_its_records_by_the_directory_the_core_reaches`).
 - A store is recorded in `windows.json` before WebKit or WebView2 makes it, and deleted only
   where this Pitboard directory recorded it and a read that succeeded no longer derives it from
   an enrolled account. Another directory's record keeps it

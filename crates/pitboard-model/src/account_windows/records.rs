@@ -20,6 +20,7 @@ use crate::Front;
 use crate::model::EarlierWindowRecords;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 /// The file's name, in the directory the app names.
 pub(crate) const FILE: &str = "windows.json";
@@ -30,35 +31,20 @@ pub(crate) const FILE: &str = "windows.json";
 /// standardised file path, which reads the file system and Apple's own Unicode tables, so the
 /// app says it, as `given` (docs/facts/foundation-urls.md); without it, as for a test or a
 /// fixture, the directory as given. Windows' compares as Windows compares paths, as the app
-/// keyed its records before. The Linux app's is the directory with `.` and `..` resolved by
-/// name, which nothing has read yet.
+/// keyed its records before. The Linux app kept none before, so its key is the directory the
+/// core reaches, made absolute from the working directory and taken by its components; a `..`
+/// stays, since only the file system says where one leads past a link.
 pub(crate) fn key(front: Front, directory: &str, given: Option<String>) -> String {
     match front {
         Front::MacMenuBar => given.unwrap_or_else(|| directory.to_owned()),
         Front::WindowsNotificationArea => pitboard_core::host::path_key_in_any_case(directory),
-        Front::Gnome => by_name(directory),
-    }
-}
-
-// A link's target is never read: `a/link/..` stays `a`.
-fn by_name(directory: &str) -> String {
-    let rooted = directory.starts_with('/');
-    let mut names: Vec<&str> = Vec::new();
-    for name in directory.split('/') {
-        match name {
-            "" | "." => {}
-            ".." if names.last().is_some_and(|last| *last != "..") => {
-                names.pop();
-            }
-            ".." if rooted => {}
-            name => names.push(name),
-        }
-    }
-    let joined = names.join("/");
-    match (rooted, joined.is_empty()) {
-        (true, _) => format!("/{joined}"),
-        (false, true) => ".".into(),
-        (false, false) => joined,
+        Front::Gnome => std::path::absolute(directory)
+            .ok()
+            .and_then(|path| {
+                let path: PathBuf = path.components().collect();
+                path.into_os_string().into_string().ok()
+            })
+            .unwrap_or_else(|| directory.to_owned()),
     }
 }
 
@@ -310,7 +296,7 @@ mod tests {
 
     /// Each app's records were kept under its own key before the model kept them: macOS's as
     /// Foundation standardises the directory, which the app gives; Windows' as
-    /// `windows_records_key` keyed them for the app; Linux's by name.
+    /// `windows_records_key` keyed them for the app.
     #[test]
     fn each_front_keys_its_records_as_its_app_did() {
         let mac = |directory: &str, given: Option<&str>| {
@@ -348,15 +334,22 @@ mod tests {
             r"C:\USERS\X\PITBOARD",
             "only macOS's app gives its key"
         );
+    }
 
+    /// The Linux app kept no records before the model, so its key is the directory the core
+    /// reaches: made absolute from the working directory, a `.`, a doubled `/` and a trailing
+    /// `/` keying alike, and a `..` kept, since only the file system says where one leads past a
+    /// link. Unix's rules: that app runs on Linux alone.
+    #[cfg(unix)]
+    #[test]
+    fn the_linux_app_keys_its_records_by_the_directory_the_core_reaches() {
         let gnome = |directory: &str| key(Front::Gnome, directory, None);
         assert_eq!(
             gnome("/home/dana/./work/../pitboard/"),
-            "/home/dana/pitboard"
+            "/home/dana/work/../pitboard"
         );
         assert_eq!(gnome("//home//dana/.pitboard"), "/home/dana/.pitboard");
-        assert_eq!(gnome("/home/dana/.pitboard/.."), "/home/dana");
-        assert_eq!(gnome("/../x"), "/x");
+        assert_eq!(gnome("/home/dana/.pitboard/.."), "/home/dana/.pitboard/..");
         assert_eq!(gnome("/"), "/");
         assert_eq!(gnome("/a/..b/.../c"), "/a/..b/.../c");
         assert_eq!(
@@ -364,12 +357,14 @@ mod tests {
             "/home/Dana/Báo cáo",
             "names as they are"
         );
+        let here = std::env::current_dir().expect("the tests' working directory");
         assert_eq!(
-            gnome("../a/./b/.."),
-            "../a",
-            "a relative one stays relative"
+            gnome("./a/./b/../"),
+            here.join("a/b/..")
+                .to_str()
+                .expect("a working directory in UTF-8"),
+            "a relative one from the working directory, as the core reaches it"
         );
-        assert_eq!(gnome("a/.."), ".");
     }
 
     const DANA: &str = "/Users/dana/.pitboard";
