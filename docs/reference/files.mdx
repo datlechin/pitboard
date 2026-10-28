@@ -140,19 +140,22 @@ Each place was read in Codex 0.160.0, and in 0.164.0 on Windows.
 
 On Windows, Codex's home is `.codex` in the profile folder Windows names for your account, whatever `USERPROFILE` says, as read in Codex 0.164.0.
 
-Pitboard switches Codex only while `auth.json` is its store, which `cli_auth_credentials_store` chooses. The `Codex login store` line of [`pitboard doctor`](/reference/maintenance-commands#doctor) names it. Each other store keeps the login elsewhere, as read in Codex 0.154.0 on macOS and in 0.164.0 on Windows:
+Pitboard switches Codex only while `auth.json` is its store, which `cli_auth_credentials_store` chooses. The `Codex login store` line of [`pitboard doctor`](/reference/maintenance-commands#doctor) names it. Each other store keeps the login elsewhere, as read in Codex 0.154.0 on macOS, in 0.165.0 on Linux and in 0.164.0 on Windows:
 
 | `Codex login store` | System | Where Codex keeps the login |
 | --- | --- | --- |
-| `keyring` | macOS, Linux | A keychain item Codex made for itself. |
+| `keyring` | macOS | A keychain item Codex made for itself. |
+| `keyring` | Linux | A Secret Service item of the service `Codex Auth`, in the default collection. Codex writes nothing to the kernel keyring. |
 | `keyring` | Windows | A Credential Manager item, while `secret_auth_storage` is off. |
-| `auto` | macOS, Linux | The same keychain item, falling back to the file. |
+| `auto` | macOS | The same keychain item, falling back to the file. |
+| `auto` | Linux | The same Secret Service item, falling back to the file. |
 | `auto` | Windows | The same Credential Manager item, falling back to the file, while `secret_auth_storage` is off. |
-| `secrets` | macOS, Linux | An encrypted file whose key is in the keychain: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
+| `secrets` | macOS | An encrypted file whose key is in the keychain: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
+| `secrets` | Linux | `secrets/codex_auth.age` in Codex's home, whose key is a Secret Service item: `keyring` or `auto` with `secret_auth_storage` turned on in `[features]`. |
 | `secrets` | Windows | `secrets\codex_auth.age` in Codex's home, whose key is in Credential Manager: `keyring` or `auto` while `secret_auth_storage` is on, as it is by default. |
 | `ephemeral` | All | In memory, for one run of Codex. |
 
-On macOS and Linux, Pitboard does not read Codex's keychain stores, because every read would ask you for permission. A login kept in memory leaves nothing to park.
+On macOS, Pitboard does not read Codex's keychain stores, because every read would ask you for permission. A login kept in memory leaves nothing to park.
 
 Codex reads `cli_auth_credentials_store`, and `secret_auth_storage` under `[features]`, from these places, each over the one before:
 

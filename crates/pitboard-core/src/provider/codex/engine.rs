@@ -75,15 +75,24 @@ impl RawStore for InPlace {
 }
 
 fn kept_elsewhere(ctx: &Context, store: &layers::Store) -> String {
-    let kept = match (crate::host::OS, store.backend) {
-        (Os::MacOs | Os::Linux, _) => "in the keychain".into(),
-        (Os::Windows, paths::Backend::Secrets) => format!(
-            "in {}, encrypted with a key it keeps in Credential Manager",
+    let sealed = |key_in: &str| {
+        format!(
+            "in {}, encrypted with a key it keeps in {key_in}",
             paths::home(ctx)
                 .join("secrets")
                 .join("codex_auth.age")
                 .display()
-        ),
+        )
+    };
+    let kept = match (crate::host::OS, store.backend) {
+        (Os::MacOs, _) => "in the keychain".into(),
+        // `codex_keyring_store_on_linux`.
+        (Os::Linux, paths::Backend::Secrets) => sealed("the Secret Service"),
+        (Os::Linux, paths::Backend::Either) => {
+            "in the Secret Service, and in auth.json only where that fails".into()
+        }
+        (Os::Linux, _) => "in the Secret Service".into(),
+        (Os::Windows, paths::Backend::Secrets) => sealed("Credential Manager"),
         (Os::Windows, paths::Backend::Either) => {
             "in Credential Manager, and in auth.json only where that fails".into()
         }
@@ -866,8 +875,9 @@ mod tests {
     }
 
     /// A keychain store is refused with a reason rather than read: every read of an item
-    /// Codex made for itself would put a permission prompt in front of the person. On Windows
-    /// it is a store Codex keeps its login in only when told to, which Pitboard does not follow.
+    /// Codex made for itself would put a permission prompt in front of the person. On Linux
+    /// and Windows it is a store Codex keeps its login in only when told to, which Pitboard
+    /// does not follow.
     #[test]
     fn a_keychain_store_is_refused_with_a_reason_and_never_read() {
         let scratch = tempfile::tempdir().expect("a scratch folder");
@@ -891,8 +901,10 @@ mod tests {
             "`cli_auth_credentials_store = \"keyring\"` in {}",
             config.display()
         );
+        let not_followed = "Pitboard handles Codex's file store, auth.json, and does not \
+                            follow Codex into a store it uses only when told to";
         match crate::host::OS {
-            Os::MacOs | Os::Linux => assert_eq!(
+            Os::MacOs => assert_eq!(
                 refused(keyring),
                 format!(
                     "this machine's Codex keeps its login in the keychain ({setting}). Pitboard \
@@ -901,9 +913,32 @@ mod tests {
                      {to_use_the_file}"
                 )
             ),
+            // `codex_keyring_store_on_linux`.
+            Os::Linux => {
+                assert_eq!(
+                    refused(keyring),
+                    format!(
+                        "this machine's Codex keeps its login in the Secret Service ({setting}). \
+                         {not_followed}. {to_use_the_file}"
+                    )
+                );
+                let on = "[features]\nsecret_auth_storage = true\n";
+                assert!(refused(&format!("{keyring}{on}")).starts_with(&format!(
+                        "this machine's Codex keeps its login in {}, encrypted with a key it \
+                         keeps in the Secret Service (",
+                        paths::home(&ctx)
+                            .join("secrets")
+                            .join("codex_auth.age")
+                            .display()
+                    )));
+                assert!(
+                    refused("cli_auth_credentials_store = \"auto\"\n").starts_with(
+                        "this machine's Codex keeps its login in the Secret Service, and in \
+                         auth.json only where that fails ("
+                    )
+                );
+            }
             Os::Windows => {
-                let not_followed = "Pitboard handles Codex's file store, auth.json, and does \
-                                    not follow Codex into a store it uses only when told to";
                 assert_eq!(
                     refused(keyring),
                     format!(
