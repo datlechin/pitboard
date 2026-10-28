@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace Pitboard.Core.Tests;
 
 [TestClass]
@@ -24,7 +26,7 @@ public sealed class BindingsTests
         string[] older =
         [
             "Pitboard", "SignIn", "Settings", "PitboardException", "Cause", "Switched", "Switch",
-            "Adoption", "Enrolled", "EnrolledAs", "Changed", "Holding", "Remedy", "Diagnosis", "Change",
+            "Adoption", "Enrolled", "EnrolledAs", "Holding", "Remedy", "Diagnosis", "Change",
             "SignInView", "Check", "Renewed", "LinkRefusal", "Status", "Account", "Usage", "Limit", "Parked",
             "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Failure", "Warning", "Held",
             "Schedule", "QuitQuestion", "ReplaceQuestion", "Conjunction",
@@ -46,6 +48,21 @@ public sealed class BindingsTests
         Assert.AreEqual(nameof(PitboardModel), string.Join(", ", objects));
         Assert.AreEqual("", string.Join(", ", stillOffered));
         Assert.AreEqual("", string.Join(", ", stillCalled));
+    }
+
+    // The Windows app shows each part a snapshot names as the snapshot's property of its name, so each part names one,
+    // and a property no part names would never be shown again.
+    [TestMethod]
+    public void EveryPartNamesOneProperty()
+    {
+        var properties = typeof(Snapshot).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(property => property.Name)
+            .Except([nameof(Snapshot.Revision), nameof(Snapshot.Changed)])
+            .Order(StringComparer.Ordinal);
+        var parts = Enum.GetValues<Part>().Select(part => part.ToString()).Order(StringComparer.Ordinal);
+
+        Assert.AreEqual(string.Join(", ", properties), string.Join(", ", parts));
+        CollectionAssert.AreEqual(Enum.GetValues<Part>(), PitboardModelMethods.EveryPart(), "every part, in order");
     }
 
     [TestMethod]

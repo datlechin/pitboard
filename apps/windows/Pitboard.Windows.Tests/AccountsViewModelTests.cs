@@ -186,7 +186,7 @@ public sealed class AccountsViewModelTests
     {
         var (_, _, app, told) = Over(Snapshots.Read(1) with { Reading = true });
 
-        app.Apply(Snapshots.Read(2));
+        app.Apply(Snapshots.Read(2) with { Changed = new(1, [Part.Reading]) });
 
         Assert.AreEqual(nameof(AccountsViewModel.CanRefresh), string.Join(", ", told));
     }

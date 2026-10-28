@@ -107,7 +107,8 @@ public sealed class ModelTests
 
     private static Snapshot Read(ulong revision) =>
         new(
-            Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
+            Revision: revision, Changed: new Changed(Since: 0, Parts: Enum.GetValues<Part>()), Reading: false,
+            QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             StatusItem: new StatusItemShown(
@@ -255,6 +256,8 @@ public sealed class ModelTests
             model.Shutdown();
 
             Assert.AreEqual(0UL, first.Revision);
+            Assert.AreEqual(0UL, first.Changed.Since);
+            CollectionAssert.AreEqual(Enum.GetValues<Part>(), first.Changed.Parts, "every part");
             Assert.IsFalse(first.Reading);
             Assert.IsEmpty(first.Sections);
             Assert.AreEqual(new Footing.Ready(), first.Footing);
@@ -727,6 +730,17 @@ public sealed class ModelTests
 
         public int? TellingThread { get; private set; }
 
+        public Snapshot[] Told
+        {
+            get
+            {
+                lock (_told)
+                {
+                    return [.. _told];
+                }
+            }
+        }
+
         public bool? ToldOnThePool { get; private set; }
 
         public void Changed(Snapshot snapshot)
@@ -872,6 +886,24 @@ public sealed class ModelTests
         Assert.AreNotEqual(Environment.CurrentManagedThreadId, waiting.TellingThread);
         Assert.IsFalse(waiting.ToldOnThePool, "told on a thread of .NET's thread pool");
         Assert.AreEqual(read.UpdatedWindow, read.UpdatedMenu);
+    }
+
+    // The first since the one Snapshot() gave before anything was told.
+    [TestMethod]
+    public void EachSnapshotToldNamesWhatChangedSinceTheOneToldBefore()
+    {
+        NeedsFixtures();
+        var waiting = new Waiting();
+        using var model = PitboardModel.FixtureIn("oneTool", Front.WindowsNotificationArea, _own, waiting, new StandInApps(), new Posting(), new InUtc());
+
+        Start(model, waiting);
+        model.Shutdown();
+
+        var told = waiting.Told;
+        CollectionAssert.AreEqual(
+            told.Select(snapshot => snapshot.Revision).Prepend(0UL).SkipLast(1).ToArray(),
+            told.Select(snapshot => snapshot.Changed.Since).ToArray());
+        Assert.IsTrue(told.All(snapshot => snapshot.Changed.Parts.Length > 0), "a snapshot that changed nothing");
     }
 
     [TestMethod]

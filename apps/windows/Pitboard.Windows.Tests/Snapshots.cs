@@ -3,12 +3,14 @@ using Pitboard.Core;
 namespace Pitboard.Windows.Tests;
 
 // Each call makes every list anew, as the bindings do for every snapshot told. Each sentence is the model's own, as
-// present/words/ pins it, which StandInsTests checks.
+// present/words/ pins it, which StandInsTests checks. Each names every part, as Snapshot() does, unless a test says
+// what changed.
 internal static class Snapshots
 {
     public static Snapshot Read(ulong revision) =>
         new(
-            Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
+            Revision: revision, Changed: new Changed(Since: 0, Parts: Enum.GetValues<Part>()), Reading: false,
+            QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
             StatusItem: new StatusItemShown(

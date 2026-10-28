@@ -16,7 +16,8 @@
 //! until it stops, as the Swift model's SignInCalls read it. Between messages it waits until
 //! the next timer is due. After each message it makes the snapshot, and where that differs
 //! from the last one it numbers it one higher and hands it to the one notifier thread, which
-//! tells the listener in order.
+//! tells the listener in order, each snapshot naming the parts that changed since the one it
+//! told before, so no app compares them.
 //!
 //! It reads accounts, notices changes made elsewhere, switches, quits an app that holds a
 //! login when asked to, keeps what each tool's last switch said, runs sign-ins, enrols,
@@ -657,6 +658,10 @@ pub struct Snapshot {
     /// those waiting, and `snapshot` can give one it was never told, so an app can see 3 and
     /// then 5. It keeps the snapshot with the highest it has seen and drops any other.
     pub revision: u64,
+    /// The parts that differ from the snapshot told before this one, numbered `since`. An app
+    /// that shows that one shows only these again, and one that shows another shows every
+    /// part, so no app compares them. What `snapshot` gives names every part.
+    pub changed: Changed,
     /// Whether a read of the accounts is under way, so a Refresh button can say so.
     pub reading: bool,
     /// The question asked before Pitboard quits an app that holds a tool's login, for a
@@ -728,6 +733,202 @@ pub struct Snapshot {
     /// list stays as it was.
     #[uniffi(default)]
     pub quick_actions: Option<Vec<QuickAction>>,
+}
+
+/// One part of a [`Snapshot`], named for its field: each field but `revision` and `changed`
+/// has one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum Part {
+    Reading,
+    QuitQuestion,
+    ReplaceQuestion,
+    WindowRequest,
+    SigningIn,
+    Sheet,
+    SheetFailure,
+    StatusItem,
+    Sections,
+    AccountMenu,
+    Notices,
+    MenuNotices,
+    Footing,
+    Setup,
+    AccountsShown,
+    MenuAccountsNote,
+    UpdatedAt,
+    UpdatedMenu,
+    UpdatedWindow,
+    SheetText,
+    SigningInText,
+    StowText,
+    FailureAlert,
+    Machine,
+    AccountWindows,
+    Uninstall,
+    Removal,
+    Welcome,
+    WidgetRevision,
+    Answers,
+    QuickActions,
+}
+
+impl Part {
+    /// Every part, in the order of the snapshot's fields, as `every_part` gives them.
+    pub(crate) const EVERY: [Part; 31] = [
+        Part::Reading,
+        Part::QuitQuestion,
+        Part::ReplaceQuestion,
+        Part::WindowRequest,
+        Part::SigningIn,
+        Part::Sheet,
+        Part::SheetFailure,
+        Part::StatusItem,
+        Part::Sections,
+        Part::AccountMenu,
+        Part::Notices,
+        Part::MenuNotices,
+        Part::Footing,
+        Part::Setup,
+        Part::AccountsShown,
+        Part::MenuAccountsNote,
+        Part::UpdatedAt,
+        Part::UpdatedMenu,
+        Part::UpdatedWindow,
+        Part::SheetText,
+        Part::SigningInText,
+        Part::StowText,
+        Part::FailureAlert,
+        Part::Machine,
+        Part::AccountWindows,
+        Part::Uninstall,
+        Part::Removal,
+        Part::Welcome,
+        Part::WidgetRevision,
+        Part::Answers,
+        Part::QuickActions,
+    ];
+}
+
+/// The parts of a snapshot that differ from those of the snapshot numbered `since`, in the
+/// order of the snapshot's fields.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Changed {
+    pub since: u64,
+    pub parts: Vec<Part>,
+}
+
+impl Changed {
+    /// Every part, since the first snapshot: what `snapshot` gives, which the listener may
+    /// never have been told.
+    pub(crate) fn every() -> Changed {
+        Changed {
+            since: 0,
+            parts: Part::EVERY.to_vec(),
+        }
+    }
+}
+
+impl Snapshot {
+    /// The parts of this snapshot that differ from `before`'s, in the order of its fields. Each
+    /// field is named, and there are as many comparisons as `Part::EVERY` holds parts, so a
+    /// field added to `Snapshot` does not compile until it has a part there.
+    pub(crate) fn parts_changed_since(&self, before: &Snapshot) -> Vec<Part> {
+        let Snapshot {
+            revision: _,
+            changed: _,
+            reading,
+            quit_question,
+            replace_question,
+            window_request,
+            signing_in,
+            sheet,
+            sheet_failure,
+            status_item,
+            sections,
+            account_menu,
+            notices,
+            menu_notices,
+            footing,
+            setup,
+            accounts_shown,
+            menu_accounts_note,
+            updated_at,
+            updated_menu,
+            updated_window,
+            sheet_text,
+            signing_in_text,
+            stow_text,
+            failure_alert,
+            machine,
+            account_windows,
+            uninstall,
+            removal,
+            welcome,
+            widget_revision,
+            answers,
+            quick_actions,
+        } = self;
+        let compared: [(Part, bool); Part::EVERY.len()] = [
+            (Part::Reading, before.reading != *reading),
+            (Part::QuitQuestion, before.quit_question != *quit_question),
+            (
+                Part::ReplaceQuestion,
+                before.replace_question != *replace_question,
+            ),
+            (
+                Part::WindowRequest,
+                before.window_request != *window_request,
+            ),
+            (Part::SigningIn, before.signing_in != *signing_in),
+            (Part::Sheet, before.sheet != *sheet),
+            (Part::SheetFailure, before.sheet_failure != *sheet_failure),
+            (Part::StatusItem, before.status_item != *status_item),
+            (Part::Sections, before.sections != *sections),
+            (Part::AccountMenu, before.account_menu != *account_menu),
+            (Part::Notices, before.notices != *notices),
+            (Part::MenuNotices, before.menu_notices != *menu_notices),
+            (Part::Footing, before.footing != *footing),
+            (Part::Setup, before.setup != *setup),
+            (
+                Part::AccountsShown,
+                before.accounts_shown != *accounts_shown,
+            ),
+            (
+                Part::MenuAccountsNote,
+                before.menu_accounts_note != *menu_accounts_note,
+            ),
+            (Part::UpdatedAt, before.updated_at != *updated_at),
+            (Part::UpdatedMenu, before.updated_menu != *updated_menu),
+            (
+                Part::UpdatedWindow,
+                before.updated_window != *updated_window,
+            ),
+            (Part::SheetText, before.sheet_text != *sheet_text),
+            (
+                Part::SigningInText,
+                before.signing_in_text != *signing_in_text,
+            ),
+            (Part::StowText, before.stow_text != *stow_text),
+            (Part::FailureAlert, before.failure_alert != *failure_alert),
+            (Part::Machine, before.machine != *machine),
+            (
+                Part::AccountWindows,
+                before.account_windows != *account_windows,
+            ),
+            (Part::Uninstall, before.uninstall != *uninstall),
+            (Part::Removal, before.removal != *removal),
+            (Part::Welcome, before.welcome != *welcome),
+            (
+                Part::WidgetRevision,
+                before.widget_revision != *widget_revision,
+            ),
+            (Part::Answers, before.answers != *answers),
+            (Part::QuickActions, before.quick_actions != *quick_actions),
+        ];
+        (compared.into_iter())
+            .filter_map(|(part, changed)| changed.then_some(part))
+            .collect()
+    }
 }
 
 /// What a platform's own code could not do. Every method of a trait an app implements
@@ -933,8 +1134,9 @@ impl PitboardModel {
         )
     }
 
-    /// The last snapshot, for a first paint and whenever an app wants it. A lock and a
-    /// copy, on any thread, the listener's own included.
+    /// The last snapshot, for a first paint and whenever an app wants it, naming every part:
+    /// the listener may never have been told it. A lock and a copy, on any thread, the
+    /// listener's own included.
     pub fn snapshot(&self) -> Snapshot {
         lock(&self.shown).clone()
     }
@@ -1053,7 +1255,7 @@ impl PitboardModel {
             );
         }
         let first = present(&state, clock.now().epoch(), platform.local_time.as_ref());
-        let shown = Arc::new(Mutex::new(first));
+        let shown = Arc::new(Mutex::new(first.clone()));
         let widget_feed = Arc::new(Mutex::new(None));
         let stopped = Arc::new(AtomicBool::new(false));
         let (mailbox, mail) = channel();
@@ -1078,7 +1280,7 @@ impl PitboardModel {
             lanes,
             shown: Arc::clone(&shown),
             widget_feed: Arc::clone(&widget_feed),
-            tell: lanes::notifier(listener, Arc::clone(&stopped)),
+            tell: lanes::notifier(listener, first, Arc::clone(&stopped)),
             clock,
             local_time: platform.local_time,
         };
@@ -1194,12 +1396,12 @@ impl Actor {
     }
 
     // Made before the lock is taken: making it asks the app's `LocalTime`, and the model never
-    // holds a lock while it calls out.
+    // holds a lock while it calls out. Its parts are compared, never its revision or what it
+    // says changed, which the notifier says of what it tells.
     fn publish(&self, now: Now) {
         let mut made = present(&self.state, now.epoch(), self.local_time.as_ref());
         let mut shown = lock(&self.shown);
-        made.revision = shown.revision;
-        if made == *shown {
+        if made.parts_changed_since(&shown).is_empty() {
             return;
         }
         made.revision = shown.revision + 1;

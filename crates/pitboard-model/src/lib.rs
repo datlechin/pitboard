@@ -8,8 +8,9 @@
 //! whose answer differs by front takes the front first. Beside the model and the records its
 //! snapshots carry, the bindings export the sites' records (`sites.rs`), the account windows'
 //! rules (`account_windows`), `check_name` and `downloads_quit_question` of `present`, the
-//! fixtures' `fixture_names` and `fixture_page`, `started`, which every app asks first, three
-//! free functions the macOS app asks of its bundle and its environment, `app_command_line`,
+//! fixtures' `fixture_names` and `fixture_page`, `started`, which every app asks first,
+//! `every_part`, what an app shows of a snapshot it shows whole, three free functions the
+//! macOS app asks of its bundle and its environment, `app_command_line`,
 //! `can_run` and `pitboard_directory`, and the Windows app's `launch_refusal` and
 //! `unschedule_app`. The snapshot carries what an app shows of the accounts and the machine,
 //! such as a limit's names or how long an account lasts, made by `present` and the model, so
@@ -39,10 +40,10 @@ pub use sites::{Site, SiteLink};
 
 mod model;
 pub use model::{
-    AccountWindowsLaunch, AppId, AppLaunch, AtLimit, DownloadEnd, EarlierPreferences,
+    AccountWindowsLaunch, AppId, AppLaunch, AtLimit, Changed, DownloadEnd, EarlierPreferences,
     EarlierWindowRecords, Handover, Intent, Listener, LocalTime, Notice, NoticeButton,
     NoticeButtonKind, NoticeButtonOffer, Notifier, OtherApps, OutsideAnswer, OutsideAsk, Pane,
-    PitboardModel, Place, PlatformError, ReadFailure, RunningSignIn, SettingsSection, Sheet,
+    Part, PitboardModel, Place, PlatformError, ReadFailure, RunningSignIn, SettingsSection, Sheet,
     Snapshot, Tip, WindowRequest,
 };
 
@@ -234,6 +235,13 @@ pub fn no_update_key() -> String {
 #[uniffi::export]
 pub fn notice_buttons(front: Front) -> Vec<NoticeButtonOffer> {
     present::notice_buttons(front)
+}
+
+/// Every part of a snapshot, in the order of its fields: what an app shows again of a snapshot
+/// whose `changed` is since another than the one it shows.
+#[uniffi::export]
+pub fn every_part() -> Vec<Part> {
+    Part::EVERY.to_vec()
 }
 
 /// Which build of an app this is: a debug build is launched into a fixture, a release never.

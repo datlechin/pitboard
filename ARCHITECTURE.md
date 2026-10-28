@@ -480,13 +480,26 @@ keeps it is in the header of the module named.
   (`quick_actions_are_offered_only_where_the_front_keeps_them`).
 - One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
-  (`snapshots_made_while_many_threads_send_arrive_in_order`).
+  (`snapshots_made_while_many_threads_send_arrive_in_order`). Each names the parts that differ
+  from the one told before it, the first from the one `snapshot` gave, dropped ones between
+  them or not, and `snapshot` names every part, so no app compares them
+  (`each_snapshot_names_the_parts_changed_since_the_one_told_before`,
+  `a_snapshot_told_after_others_were_dropped_names_what_changed_since_the_last_told`,
+  `a_snapshot_asked_for_names_every_part`). A field added to `Snapshot` does not compile until
+  it has a `Part` (`Snapshot::parts_changed_since`).
 - One change to daily renewal runs at a time, and turning it on is refused where the command
   line inside this copy would not last (`schedule::in_a_temporary_copy`,
   `model/maintaining.rs`).
 - The macOS app's `AppModel` shows only a snapshot newer than the one it shows
   (`aSnapshotThatIsNotNewerIsDropped`), and `ModelListening` holds it weakly, since the model
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).
+- Each app's `AppModel` assigns the parts a snapshot names where it changed since the one
+  shown, every part where it changed since another, and compares none
+  (`aSnapshotBasedOnTheOneShownAssignsOnlyItsParts`, `aSnapshotBasedOnAnotherAssignsEveryPart`,
+  in Swift and, capitalised, in C#). The account windows' code, the widgets and a request from outside
+  waiting on its answer are told only by a snapshot that names their part. The Windows one
+  shows each part as the snapshot's property of its name (`EveryPartNamesOneProperty`,
+  `TheModelShowsEveryPartOfASnapshot`).
 - The Windows app asks the core's gate, `launch_refusal`, before anything else a launch does
   but `--unregister` and `--unregister-share`, and after `started` alone, which reads only the
   variables it is given (`ReleaseGateTests`).
@@ -559,7 +572,7 @@ on.
   no secret. Only a build signed by a team claims the App Group `<team>.com.usepitboard.Pitboard`,
   so an ad hoc build touches no group container and macOS never asks about one
   (`aBuildWithNoTeamKeepsOutOfEveryGroup`, `scripts/build-app.sh`). The widgets and the
-  control reload only with `widget_revision`
+  control reload only as a snapshot shown names `widget_revision`
   (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`). A widget's Switch, on macOS 27
   and from Xcode 27, runs in the app alone, and asked of the extension it switches nothing
   (`aSwitchTheWidgetExtensionIsAskedForSwitchesNothingAndSaysWhere`).

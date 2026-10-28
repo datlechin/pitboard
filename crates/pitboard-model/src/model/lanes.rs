@@ -30,8 +30,8 @@ use super::machine::Scheduled;
 use super::preferences::Preferences;
 use super::state::{Answer, Cadence, Job, Msg, QuitOutcome};
 use super::{
-    AppId, EarlierPreferences, Listener, LocalTime, Notifier, OtherApps, QuitQuestion, Snapshot,
-    WindowsPlace,
+    AppId, Changed, EarlierPreferences, Listener, LocalTime, Notifier, OtherApps, QuitQuestion,
+    Snapshot, WindowsPlace,
 };
 use crate::account_windows::records::{self, Records};
 use crate::{AppCore, Holding, Remedy, SignInSession};
@@ -955,18 +955,29 @@ pub(crate) fn quit(
 /// were made, which several threads calling at once would not keep.
 ///
 /// Where several are waiting, only the newest is told: an app shows the newest and drops
-/// the rest. Once `stopped` is set nothing more is told. The thread ends once the sender has
-/// gone, and drops the listener then.
-pub(crate) fn notifier(listener: Arc<dyn Listener>, stopped: Arc<AtomicBool>) -> Sender<Snapshot> {
+/// the rest. Each told names the parts that changed since the one told before it, the first
+/// since `first`, which `snapshot` gives until another is made, so an app that shows that one
+/// shows only those again. Once `stopped` is set nothing more is told. The thread ends once
+/// the sender has gone, and drops the listener then.
+pub(crate) fn notifier(
+    listener: Arc<dyn Listener>,
+    first: Snapshot,
+    stopped: Arc<AtomicBool>,
+) -> Sender<Snapshot> {
     let (tell, told) = channel::<Snapshot>();
     std::thread::Builder::new()
         .name("pitboard-notifier".into())
-        .spawn(move || notify(listener.as_ref(), &told, &stopped))
+        .spawn(move || notify(listener.as_ref(), first, &told, &stopped))
         .expect("the system starts a thread for the model's listener");
     tell
 }
 
-fn notify(listener: &dyn Listener, told: &Receiver<Snapshot>, stopped: &AtomicBool) {
+fn notify(
+    listener: &dyn Listener,
+    mut last: Snapshot,
+    told: &Receiver<Snapshot>,
+    stopped: &AtomicBool,
+) {
     while let Ok(mut snapshot) = told.recv() {
         while let Ok(newer) = told.try_recv() {
             snapshot = newer;
@@ -974,8 +985,13 @@ fn notify(listener: &dyn Listener, told: &Receiver<Snapshot>, stopped: &AtomicBo
         if stopped.load(Ordering::SeqCst) {
             return;
         }
-        // What the app could not take in is the app's to say; the next snapshot comes all
-        // the same.
+        snapshot.changed = Changed {
+            since: last.revision,
+            parts: snapshot.parts_changed_since(&last),
+        };
+        last = snapshot.clone();
+        // What the app could not take in is the app's to say. The next snapshot comes all the
+        // same, changed since this one, so an app that did not show this one shows all of it.
         let _ = listener.changed(snapshot);
     }
 }
@@ -987,9 +1003,10 @@ mod tests {
     use crate::model::Intent;
     use crate::model::QuitQuestion;
     use crate::model::state::{After, Cadence, Now, State};
-    use crate::model::testing::platform::{Posted, StandInApps};
+    use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told};
     use crate::model::testing::records::{CHATGPT_CODEX, CLAUDE, chatgpt_holding, mac_app};
     use crate::model::testing::world::World;
+    use crate::model::{Part, Sheet};
     use pitboard_core::host::awake;
     use pitboard_core::provider::ProviderId;
     use pitboard_core::testing::fs as files;
@@ -2095,6 +2112,58 @@ mod tests {
             quit_chatgpt(true),
             QuitOutcome::Lingering { copy },
             "the codex inside ChatGPT is waited for"
+        );
+    }
+
+    /// Snapshots sent while the listener is still being told one are dropped but for the
+    /// newest, which names what changed since the one told, a change only a dropped one made
+    /// included and one a dropped one made and the newest took back left out: an app shows the
+    /// one told, never one dropped.
+    #[test]
+    fn a_snapshot_told_after_others_were_dropped_names_what_changed_since_the_last_told() {
+        let listener = Arc::new(Told::default());
+        let (release, held) = channel();
+        *listener.hold.lock().expect("a test's own lock") = Some(held);
+        let (entered, inside) = channel();
+        *listener.entered.lock().expect("a test's own lock") = Some(entered);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let first = crate::present::present(&state, 0, &crate::present::testing::Utc);
+        let tell = notifier(
+            Arc::clone(&listener) as Arc<dyn Listener>,
+            first.clone(),
+            Arc::default(),
+        );
+
+        let reading = Snapshot {
+            revision: 1,
+            reading: true,
+            ..first
+        };
+        tell.send(reading.clone()).expect("the notifier");
+        assert_eq!(inside.recv_timeout(PATIENCE), Ok(1), "told the first");
+        let read = Snapshot {
+            revision: 2,
+            updated_menu: "Updated 14:05".into(),
+            sheet: Some(Sheet::Add { tool: None }),
+            ..reading.clone()
+        };
+        let over = Snapshot {
+            revision: 3,
+            reading: false,
+            sheet: None,
+            ..read.clone()
+        };
+        tell.send(read).expect("the notifier");
+        tell.send(over).expect("the notifier");
+        drop(release);
+
+        let told = listener.until("the newest", |told| told.len() == 2);
+        let changed = |snapshot: &Snapshot| (snapshot.revision, snapshot.changed.clone());
+        let since = |since, parts| Changed { since, parts };
+        assert_eq!(changed(&told[0]), (1, since(0, vec![Part::Reading])));
+        assert_eq!(
+            changed(&told[1]),
+            (3, since(1, vec![Part::Reading, Part::UpdatedMenu]))
         );
     }
 }

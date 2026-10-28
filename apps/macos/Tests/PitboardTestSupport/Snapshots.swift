@@ -43,9 +43,17 @@ package func windowsShown(
                 + "Share menu to open it as one of your accounts."))
 }
 
-// What a model that has read nothing yet would make, apart from what a test says.
+// What the Rust model tells: the parts a snapshot names as changed since the one numbered
+// `revision`.
+package func since(_ revision: UInt64, _ parts: Part...) -> Changed {
+    Changed(since: revision, parts: parts)
+}
+
+// What a model that has read nothing yet would make, apart from what a test says, naming every
+// part as `snapshot()` does unless the test says what changed.
 package func snapshot(
-    _ revision: UInt64, updated: String = "", reading: Bool = false,
+    _ revision: UInt64, changed: Changed = Changed(since: 0, parts: everyPart()),
+    updated: String = "", reading: Bool = false,
     windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = [],
     sections: [AccountSection] = [], notices: [PanelNotice] = [],
     menuNotices: MenuNotices = MenuNotices(
@@ -54,7 +62,8 @@ package func snapshot(
     answers: [OutsideAnswer] = []
 ) -> Snapshot {
     Snapshot(
-        revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
+        revision: revision, changed: changed, reading: reading, quitQuestion: nil,
+        replaceQuestion: nil,
         windowRequest: WindowRequest(serial: 0, place: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
         statusItem: StatusItemShown(

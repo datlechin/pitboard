@@ -1,8 +1,9 @@
 //! The model as an app has it: its mailbox, its actor, its lanes and its listener, over the
 //! real core on a machine of the test's own. What these prove is what no test of
-//! `State::apply` can: that snapshots reach the listener one at a time and in order, that a
-//! listener may call the model back, stopping it too, and that stopping or dropping the
-//! model ends every thread it started, a drop waiting on none of them.
+//! `State::apply` can: that snapshots reach the listener one at a time and in order, each
+//! naming what changed since the one told before, that a listener may call the model back,
+//! stopping it too, and that stopping or dropping the model ends every thread it started, a
+//! drop waiting on none of them.
 
 use super::state::Cadence;
 use super::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
@@ -10,7 +11,8 @@ use super::testing::records::{CHATGPT, CHATGPT_CODEX, percent, read_in, warning}
 use super::testing::world::StandIn;
 use super::testing::world::World;
 use super::{
-    Intent, Listener, LocalTime, OtherApps, PitboardModel, Platform, PlatformError, Sheet, Snapshot,
+    Changed, Intent, Listener, LocalTime, OtherApps, Part, PitboardModel, Platform, PlatformError,
+    Sheet, Snapshot,
 };
 use crate::AccountKey;
 use crate::AppCore;
@@ -386,6 +388,115 @@ fn snapshots_made_while_many_threads_send_arrive_in_order() {
     });
     assert!(in_order(&snapshots), "{snapshots:#?}");
     model.shutdown();
+}
+
+/// What an app does with a part a snapshot names: shows it as that snapshot has it.
+fn show(part: Part, shown: &mut Snapshot, told: &Snapshot) {
+    let told = told.clone();
+    match part {
+        Part::Reading => shown.reading = told.reading,
+        Part::QuitQuestion => shown.quit_question = told.quit_question,
+        Part::ReplaceQuestion => shown.replace_question = told.replace_question,
+        Part::WindowRequest => shown.window_request = told.window_request,
+        Part::SigningIn => shown.signing_in = told.signing_in,
+        Part::Sheet => shown.sheet = told.sheet,
+        Part::SheetFailure => shown.sheet_failure = told.sheet_failure,
+        Part::StatusItem => shown.status_item = told.status_item,
+        Part::Sections => shown.sections = told.sections,
+        Part::AccountMenu => shown.account_menu = told.account_menu,
+        Part::Notices => shown.notices = told.notices,
+        Part::MenuNotices => shown.menu_notices = told.menu_notices,
+        Part::Footing => shown.footing = told.footing,
+        Part::Setup => shown.setup = told.setup,
+        Part::AccountsShown => shown.accounts_shown = told.accounts_shown,
+        Part::MenuAccountsNote => shown.menu_accounts_note = told.menu_accounts_note,
+        Part::UpdatedAt => shown.updated_at = told.updated_at,
+        Part::UpdatedMenu => shown.updated_menu = told.updated_menu,
+        Part::UpdatedWindow => shown.updated_window = told.updated_window,
+        Part::SheetText => shown.sheet_text = told.sheet_text,
+        Part::SigningInText => shown.signing_in_text = told.signing_in_text,
+        Part::StowText => shown.stow_text = told.stow_text,
+        Part::FailureAlert => shown.failure_alert = told.failure_alert,
+        Part::Machine => shown.machine = told.machine,
+        Part::AccountWindows => shown.account_windows = told.account_windows,
+        Part::Uninstall => shown.uninstall = told.uninstall,
+        Part::Removal => shown.removal = told.removal,
+        Part::Welcome => shown.welcome = told.welcome,
+        Part::WidgetRevision => shown.widget_revision = told.widget_revision,
+        Part::Answers => shown.answers = told.answers,
+        Part::QuickActions => shown.quick_actions = told.quick_actions,
+    }
+}
+
+/// Each snapshot told names the parts that changed since the one told before it, the first
+/// since the one `snapshot` gave before anything was told: an app showing the one before that
+/// takes only the parts named shows what it was told, and each part named did change.
+#[test]
+fn each_snapshot_names_the_parts_changed_since_the_one_told_before() {
+    let world = World::new("changed");
+    world.enrolled("work", "here", 42.0);
+    let told = Arc::new(Told::default());
+    let model = model(&world.core(), &told);
+    let mut shown = model.snapshot();
+    model.send(Intent::Start);
+    told.until("the account read", shows("work"));
+    let work = AccountKey {
+        tool: Tool::Claude,
+        label: "work".into(),
+    };
+    model.send(Intent::PresentSheet {
+        sheet: Sheet::Rename { account: work },
+    });
+    let snapshots = told.until("the sheet", |told| {
+        told.last().is_some_and(|last| last.sheet.is_some())
+    });
+    model.shutdown();
+
+    for snapshot in &snapshots {
+        assert_eq!(snapshot.changed.since, shown.revision, "{snapshots:#?}");
+        for &part in &snapshot.changed.parts {
+            let before = shown.clone();
+            show(part, &mut shown, snapshot);
+            assert_ne!(
+                shown, before,
+                "{part:?} named in {} is as it was",
+                snapshot.revision
+            );
+        }
+        shown.revision = snapshot.revision;
+        shown.changed = snapshot.changed.clone();
+        assert!(
+            shown == *snapshot,
+            "{} changed {:?} and did not name them",
+            snapshot.revision,
+            snapshot.parts_changed_since(&shown)
+        );
+    }
+}
+
+/// What `snapshot` gives names every part, since the first snapshot, before anything is told
+/// and after: it can be one the listener was never told, so an app shows all of it.
+#[test]
+fn a_snapshot_asked_for_names_every_part() {
+    let world = World::new("asked");
+    world.enrolled("work", "here", 42.0);
+    let told = Arc::new(Told::default());
+    let model = model(&world.core(), &told);
+    let every = Changed {
+        since: 0,
+        parts: crate::every_part(),
+    };
+    assert_eq!(model.snapshot().changed, every);
+
+    model.send(Intent::Start);
+    told.until("the account read", shows("work"));
+    assert_eq!(model.snapshot().changed, every);
+    model.shutdown();
+    assert!(
+        (every.parts.iter().enumerate()).all(|(at, &part)| part as usize == at),
+        "each part once, in the order they are declared: {:?}",
+        every.parts
+    );
 }
 
 /// `shutdown` stops everything the model started: the listener is told nothing more, a

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Pitboard.Core;
 
 namespace Pitboard.Windows.Tests;
@@ -25,35 +24,38 @@ public sealed class AppModelTests
     private static Snapshot Listing(ulong revision) =>
         Snapshots.Read(revision) with { Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))] };
 
-    // Every list in the newer snapshot is a new array holding what the shown one held.
+    // Which parts differ is the model's to say: a part the snapshot does not name stays as it was, whatever it holds.
     [TestMethod]
-    public void OnlyThePartsThatChangedAreAssignedAndTold()
+    public void ASnapshotBasedOnTheOneShownAssignsOnlyItsParts()
     {
         var model = new AppModel(Listing(1));
         var sections = model.Sections;
         var told = new List<string?>();
         model.PropertyChanged += (_, changed) => told.Add(changed.PropertyName);
 
-        var assigned = model.Apply(Listing(3) with { Reading = true });
+        var reading = Listing(2) with { Changed = new(1, [Part.Reading]), Reading = true, UpdatedMenu = "Updated 12:05" };
+
+        var assigned = model.Apply(reading);
 
         Assert.AreEqual("Revision, Reading", string.Join(", ", assigned));
         Assert.AreEqual("Revision, Reading", string.Join(", ", told));
-        Assert.AreSame(sections, model.Sections);
         Assert.IsTrue(model.Reading);
+        Assert.AreSame(sections, model.Sections);
+        Assert.AreEqual("Updated 12:00", model.UpdatedMenu, "a part it does not name");
     }
 
+    // Snapshot() can give one the listener was never told, so a snapshot changed since another is shown whole.
     [TestMethod]
-    public void AChangeInsideAListIsAChangeOfItsPart()
+    public void ASnapshotBasedOnAnotherAssignsEveryPart()
     {
         var model = new AppModel(Listing(1));
-        var read = Listing(2);
-        var section = read.Sections[0];
-        var renamed = section with { Accounts = [section.Accounts[0] with { Title = "office" }] };
+        string[] every = [nameof(AppModel.Revision), .. Enum.GetValues<Part>().Select(part => part.ToString())];
 
-        var assigned = model.Apply(read with { Sections = [renamed] });
+        var assigned = model.Apply(Listing(3) with { Changed = new(2, [Part.Reading]), UpdatedMenu = "Updated 12:05" });
 
-        Assert.AreEqual("Revision, Sections", string.Join(", ", assigned));
-        Assert.AreEqual("office", model.Sections[0].Accounts[0].Title);
+        CollectionAssert.AreEqual(every, assigned.ToArray());
+        Assert.AreEqual("Updated 12:05", model.UpdatedMenu);
+        Assert.AreEqual(3UL, model.Revision);
     }
 
     [TestMethod]
@@ -62,12 +64,15 @@ public sealed class AppModelTests
         var snapshot = Snapshots.Read(1);
         var model = new AppModel(snapshot);
 
-        foreach (var part in typeof(Snapshot).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        Assert.AreEqual(snapshot.Revision, model.Revision);
+        foreach (var part in Enum.GetValues<Part>())
         {
-            var shown = typeof(AppModel).GetProperty(part.Name);
-            Assert.IsNotNull(shown, part.Name);
-            Assert.AreEqual(part.PropertyType, shown.PropertyType, part.Name);
-            Assert.AreEqual(part.GetValue(snapshot), shown.GetValue(model), part.Name);
+            var told = typeof(Snapshot).GetProperty(part.ToString());
+            var shown = typeof(AppModel).GetProperty(part.ToString());
+            Assert.IsNotNull(told, part.ToString());
+            Assert.IsNotNull(shown, part.ToString());
+            Assert.AreEqual(told.PropertyType, shown.PropertyType, part.ToString());
+            Assert.AreEqual(told.GetValue(snapshot), shown.GetValue(model), part.ToString());
         }
     }
 }

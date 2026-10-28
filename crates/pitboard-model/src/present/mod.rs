@@ -82,7 +82,7 @@ pub(crate) use notices::{
 
 use crate::account_windows::{AlertText, WindowAccount};
 use crate::model::state::State;
-use crate::model::{Intent, LocalTime, Snapshot};
+use crate::model::{Changed, Intent, LocalTime, Snapshot};
 use crate::{Account, AccountKey, Front, Tool, UsageLevel};
 use pitboard_core::provider::ProviderId;
 
@@ -844,9 +844,10 @@ pub(crate) fn clock_of(local: &dyn LocalTime, at: i64, now: i64) -> String {
         .unwrap_or_else(|_| words::utc_clock(at, now))
 }
 
-/// Everything the model has to show, as of `now` in epoch seconds, numbered 0: the actor
-/// numbers what it hands on. Asks `local` for each clock time, and nothing else of anyone.
-/// What differs by front is the state's front's.
+/// Everything the model has to show, as of `now` in epoch seconds, numbered 0 and naming every
+/// part: the actor numbers what it hands on, and the notifier names what changed in what it
+/// tells. Asks `local` for each clock time, and nothing else of anyone. What differs by front
+/// is the state's front's.
 pub(crate) fn present(state: &State, now: i64, local: &dyn LocalTime) -> Snapshot {
     present_on(state.front, state, now, local)
 }
@@ -861,6 +862,7 @@ pub(crate) fn present_on(front: Front, state: &State, now: i64, local: &dyn Loca
     let notices = notices::over(&accounts_shown, notices);
     Snapshot {
         revision: 0,
+        changed: Changed::every(),
         reading: state.reads > 0,
         quit_question: state
             .asking_for()
