@@ -196,8 +196,11 @@ struct AccountsWindow: View {
         }
     }
 
+    // By place: a switch puts the account in use first, and macOS 27 crashed moving its row there
+    // (docs/facts/macos-app.md). The tag keeps the selection on the account.
     private func rows(of section: AccountSection) -> some View {
-        ForEach(section.accounts, id: \.id) { item in
+        let places = section.accounts.indices.map { "\(section.id)/\($0)" }
+        return ForEach(Array(zip(places, section.accounts)), id: \.0) { _, item in
             AccountRow(item: item, perform: { model.send($0) }, act: act)
                 .tag(item.id)
         }

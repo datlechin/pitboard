@@ -9,8 +9,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- On macOS, the Accounts window builds its list afresh as a tool's accounts come or go, where
-  macOS 27 could quit Pitboard while it updated the list in place.
+- On macOS, the Accounts window keeps working through a switch, and as a tool's accounts come
+  or go, where macOS 27 could quit Pitboard while the list moved its rows.
 
 ## [1.0.0-beta.6] - 2026-10-28
 

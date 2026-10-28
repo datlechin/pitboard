@@ -118,12 +118,22 @@ its own date.
   while their headers came and went. Over 960 random changes to eight accounts under two
   headings, while a third section and some of the accounts came and went, it was logged 90 to
   114 times. With the third section never shown, or with every account kept, it was logged
-  none. Pitboard 1.0.0-beta.6
-  crashed under the same `endUpdates`, in `-[NSTableRowData rowIndexForView:lookupUpdateData:]`,
-  reading a five-entry array of row views whose storage was null. With the list given a new
+  none. Pitboard 1.0.0-beta.6 crashed under the same `endUpdates`, in
+  `-[NSTableRowData rowIndexForView:lookupUpdateData:]`, reading a five-entry array of row views
+  whose storage was null. With the list given a new
   identity whenever its sections' ids or headings change, none was logged over 960 such changes,
   nor over 1,600 that also chose rows, hid and showed the inspector and resized the window.
   `theListStartsAfreshWhenAToolComesOrGoesAndOnlyThen` holds it.
+- Measured the same way on the same day, with the `twoTools` fixture's own model switching its
+  Claude Code and Codex accounts, and the table's insert, remove and move methods counted in the
+  test's process: each switch put the account in use first in its section, and SwiftUI moved its
+  row with `-[NSOutlineView moveItemAtIndex:inParent:toIndex:inParent:]` under `endUpdates`,
+  twice for a Claude Code switch and once for a Codex one. 1.0.0-beta.6 crashed right after a
+  switch, and the next switch, once Pitboard was open again, did not. With the rows keyed by
+  their section and place, the same switches moved no row, and each insert and remove SwiftUI
+  still sent named no row. Keyed by place alone, the UI tests found the second section's rows
+  showing the first section's accounts, two of them selected: a `List` tells rows apart by
+  their ids across sections. `aSwitchDrawsTheRowsAgainWhereTheyStand` holds it.
 
 ## Shortcuts, the widgets and the app's name
 
