@@ -10,8 +10,9 @@ use super::{
 use crate::context::Context;
 use crate::permit::Permit;
 use crate::provider::claude::credman::FORCE;
+use crate::state::VaultForm;
 use crate::store::memory::{Fault, MemoryStore, Touch};
-use crate::store::{Backend, Cost, Error, RawStore};
+use crate::store::{Backend, Cost, Error, RawStore, Refused};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -125,6 +126,11 @@ pub struct MemoryHost {
     /// keychain. So by default, because that is where the rules about another Pitboard's
     /// parks are needed.
     shared_vault: AtomicBool,
+    // Whether each home keeps its parks in the form it recorded, as on Linux: `vault` as the
+    // Secret Service every home shares, or files of its own (`MemoryHost::by_form`).
+    by_form: bool,
+    // Whether the Secret Service answers on this machine's bus.
+    secret_service_answers: AtomicBool,
     /// This system's scheduler, writing in the test's own home.
     scheduler: Option<Box<dyn Scheduler>>,
     /// Whether the scheduler refuses the next schedule it is asked to start.
@@ -184,6 +190,16 @@ impl MemoryHost {
         Arc::new(host)
     }
 
+    /// Parking as Linux does, on any system: each home in the form it recorded, the Secret
+    /// Service, which `vault` plays and every home shares, or files of its own; a home that
+    /// recorded none takes the Secret Service where it answers. It answers until a test says
+    /// otherwise.
+    pub fn by_form() -> Arc<MemoryHost> {
+        let mut host = MemoryHost::parking_in(Backend::SecretService, true);
+        host.by_form = true;
+        Arc::new(host)
+    }
+
     fn parking_in(vault: Backend, shared: bool) -> MemoryHost {
         let refuse_start = Arc::new(AtomicBool::new(false));
         let trail = Arc::default();
@@ -210,6 +226,8 @@ impl MemoryHost {
             jar_faults: Mutex::new(HashMap::new()),
             versions: Mutex::new(HashMap::new()),
             shared_vault: AtomicBool::new(shared),
+            by_form: false,
+            secret_service_answers: AtomicBool::new(true),
             scheduler: super::os::pretend_scheduler(Arc::clone(&refuse_start)),
             refuse_start,
             unscheduled: AtomicBool::new(false),
@@ -280,6 +298,26 @@ impl MemoryHost {
     /// does off macOS.
     pub fn vault_of_its_own(&self) {
         self.shared_vault.store(false, Ordering::SeqCst);
+    }
+
+    /// From now on the Secret Service answers on this machine's bus, or nothing does, as over
+    /// SSH or in a container.
+    pub fn secret_service_answers(&self, answers: bool) {
+        self.secret_service_answers.store(answers, Ordering::SeqCst);
+    }
+
+    /// The files a home keeps its parks in where it recorded that form, by that home's vault.
+    pub fn files_vault(&self, ctx: &Context) -> Arc<MemoryStore> {
+        self.file_at(crate::store::vault_dir(ctx))
+    }
+
+    /// Where the home `ctx` names keeps its parks: [`MemoryHost::vault`], unless this machine
+    /// parks by form and that home's form is files.
+    pub fn parks_of(&self, ctx: &Context) -> Arc<MemoryStore> {
+        match crate::store::home_form(ctx) {
+            Ok(Some(VaultForm::Files)) => self.files_vault(ctx),
+            _ => Arc::clone(&self.vault),
+        }
     }
 
     /// Say that `count` processes are running `program`, each started by its bare name, the
@@ -505,12 +543,48 @@ impl Host for MemoryHost {
         Box::new(self.file_at(path))
     }
 
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
-        Box::new(Opened::of(&self.vault, ctx, ""))
+    fn vault_forms(&self) -> &'static [VaultForm] {
+        if self.by_form {
+            &[VaultForm::SecretService, VaultForm::Files]
+        } else {
+            &[]
+        }
     }
 
-    fn vault_is_shared(&self) -> bool {
-        self.shared_vault.load(Ordering::SeqCst)
+    fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
+        self.by_form.then(|| {
+            if self.secret_service_answers.load(Ordering::SeqCst) {
+                VaultForm::SecretService
+            } else {
+                VaultForm::Files
+            }
+        })
+    }
+
+    fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {
+        if !self.by_form {
+            return Box::new(Opened::of(&self.vault, ctx, ""));
+        }
+        match form {
+            Some(VaultForm::SecretService)
+                if self.secret_service_answers.load(Ordering::SeqCst) =>
+            {
+                Box::new(Opened::of(&self.vault, ctx, ""))
+            }
+            // As the real one is refused where nothing answers: never as one holding nothing.
+            Some(VaultForm::SecretService) => {
+                Box::new(Refused::new(Backend::SecretService, Error::Locked))
+            }
+            Some(VaultForm::Files) | None => Box::new(self.files_vault(ctx)),
+        }
+    }
+
+    fn vault_is_shared(&self, form: Option<VaultForm>) -> bool {
+        if self.by_form {
+            form == Some(VaultForm::SecretService)
+        } else {
+            self.shared_vault.load(Ordering::SeqCst)
+        }
     }
 
     // What `runs`, `runs_at` and `listed_from` said, each with a pid of its own.

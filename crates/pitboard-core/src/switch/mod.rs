@@ -16,6 +16,12 @@ mod forget;
 #[cfg(test)]
 #[allow(
     clippy::disallowed_methods,
+    reason = "a test reads the state file a home saved"
+)]
+mod forms;
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_methods,
     reason = "a test sets up its scratch files as a person or a tool would"
 )]
 pub(crate) mod harness;

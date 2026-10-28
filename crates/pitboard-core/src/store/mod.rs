@@ -22,6 +22,7 @@ pub(crate) use file::PlainFile;
 use crate::context::Context;
 use crate::host::SecretStore;
 use crate::permit::Permit;
+use crate::state::VaultForm;
 
 use serde_json::Value;
 use std::path::PathBuf;
@@ -38,6 +39,16 @@ pub(crate) enum Backend {
     // Windows' store of generic credentials, where Claude Code keeps its login once its store
     // there is on (`windows_backend_choice`).
     CredentialManager,
+    // Items of the Secret Service's default collection: Pitboard's parks on Linux, where a home
+    // records that form (`state::VaultForm`).
+    #[cfg_attr(
+        not(any(target_os = "linux", test, feature = "test-support")),
+        allow(
+            dead_code,
+            reason = "only Linux and a machine in memory offer the Secret Service"
+        )
+    )]
+    SecretService,
     Absent,
     // A store Pitboard does not read: Claude Code's on Windows where a login sits in Credential
     // Manager though nothing Pitboard reads turns that store on.
@@ -51,6 +62,7 @@ impl Backend {
             Backend::File => "file",
             Backend::SealedFile => "sealed_file",
             Backend::CredentialManager => "credential_manager",
+            Backend::SecretService => "secret_service",
             Backend::Absent => "absent",
             Backend::Unknown => "unknown",
         }
@@ -61,7 +73,12 @@ impl Backend {
         match self {
             Backend::Keychain => Some(SecretStore::Keychain),
             Backend::CredentialManager => Some(SecretStore::CredentialManager),
-            Backend::File | Backend::SealedFile | Backend::Absent | Backend::Unknown => None,
+            // No file is behind a park, and the Secret Service has no ceiling.
+            Backend::File
+            | Backend::SealedFile
+            | Backend::SecretService
+            | Backend::Absent
+            | Backend::Unknown => None,
         }
     }
 }
@@ -262,8 +279,27 @@ pub(crate) trait RawStore: Send + Sync {
     }
 }
 
+// The vault of the form this home keeps its parks in; one that cannot say which is refused, never
+// guessed at, since a vault of the other form would read as holding none of them.
 fn vault(ctx: &Context) -> Box<dyn RawStore> {
-    ctx.host().vault(ctx)
+    match home_form(ctx) {
+        Ok(form) => ctx.host().vault(ctx, form),
+        Err(why) => Box::new(Refused::new(
+            Backend::Unknown,
+            Error::Unreadable(format!("where this home keeps its parked logins: {why}")),
+        )),
+    }
+}
+
+/// The form this home keeps its parked logins in, where the system offers a choice: the one
+/// its state file records, else the one a new home takes. `None` where the system keeps them
+/// one way, which reads no file.
+pub(crate) fn home_form(ctx: &Context) -> crate::error::Result<Option<VaultForm>> {
+    let host = ctx.host();
+    if host.vault_forms().is_empty() {
+        return Ok(None);
+    }
+    Ok(crate::state::vault_form(ctx)?.or_else(|| host.new_home_form(ctx)))
 }
 
 /// Only "not found" means absent. A permission error or a loop in the path says nothing about
@@ -495,8 +531,9 @@ pub(crate) fn vault_list(ctx: &Context) -> Result<Option<Vec<String>>, Error> {
 }
 
 /// Whether another `PITBOARD_HOME` could have parked a login where this one parks its own.
+// One whose form cannot be read is taken for shared: what another home may hold is left alone.
 pub(crate) fn vault_is_shared(ctx: &Context) -> bool {
-    ctx.host().vault_is_shared()
+    home_form(ctx).map_or(true, |form| ctx.host().vault_is_shared(form))
 }
 
 pub(crate) fn vault_kind(ctx: &Context) -> Backend {

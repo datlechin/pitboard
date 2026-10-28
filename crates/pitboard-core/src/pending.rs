@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn a_sealed_park_that_will_not_open_is_never_deleted() {
         let (ctx, mem, _root) = machine_on(MemoryHost::sealed());
-        assert_eq!(ctx.host().vault(&ctx).kind(), store::Backend::SealedFile);
+        assert_eq!(store::vault_kind(&ctx), store::Backend::SealedFile);
         assert!(!store::vault_is_shared(&ctx));
         let ours = "pitboard-park-acc-1760000000000";
         let stranger = "pitboard-park-other-1760000000001";

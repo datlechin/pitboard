@@ -18,6 +18,7 @@ use super::unix::service;
 use super::unix::shell::Spawn;
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Scheduler};
 use crate::context::{Context, Environment};
+use crate::state::VaultForm;
 use crate::store::{PlainFile, RawStore};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -74,11 +75,11 @@ impl Host for MacOs {
         Box::new(PlainFile::at(path))
     }
 
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
+    fn vault(&self, ctx: &Context, _form: Option<VaultForm>) -> Box<dyn RawStore> {
         Box::new(keychain::Keychain::vault(ctx))
     }
 
-    fn vault_is_shared(&self) -> bool {
+    fn vault_is_shared(&self, _form: Option<VaultForm>) -> bool {
         true
     }
 

@@ -16,6 +16,7 @@ use super::unix::service;
 use super::unix::shell::Spawn;
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Process, Scheduler};
 use crate::context::{Context, Environment};
+use crate::state::VaultForm;
 use crate::store::vault::FileVault;
 use crate::store::{PlainFile, RawStore};
 use std::path::{Path, PathBuf};
@@ -77,11 +78,19 @@ impl Host for Linux {
         Box::new(PlainFile::at(path))
     }
 
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore> {
+    fn vault_forms(&self) -> &'static [VaultForm] {
+        &[VaultForm::Files]
+    }
+
+    fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
+        Some(VaultForm::Files)
+    }
+
+    fn vault(&self, ctx: &Context, _form: Option<VaultForm>) -> Box<dyn RawStore> {
         Box::new(FileVault::new(ctx))
     }
 
-    fn vault_is_shared(&self) -> bool {
+    fn vault_is_shared(&self, _form: Option<VaultForm>) -> bool {
         false
     }
 

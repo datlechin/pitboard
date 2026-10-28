@@ -22,6 +22,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The app and `pitboard watch` see a switch or a reading another Pitboard recorded as soon as it
   is written, instead of looking for one every 2 seconds, which they still do on a network drive.
 - On Linux, Pitboard writes its units in `$XDG_CONFIG_HOME/systemd/user`.
+- The account index is schema 9, which earlier versions cannot read, so update the command line
+  and the app together.
 
 ### Fixed
 

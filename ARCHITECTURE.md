@@ -88,8 +88,8 @@ built with a `context::Context`:
   - `auto.rs`, `warm.rs`, `stow.rs`: the automatic switch, the warm-up and putting away, under
     the lock every change takes.
   - `switch/folder/`: every change to a tool whose login is its app's files.
-  - `crash.rs`, `harness.rs`, `two_tools.rs`, `pinned.rs`, `refusals.rs`, `foreign.rs`: the
-    crash matrix and the changes' tests.
+  - `crash.rs`, `harness.rs`, `two_tools.rs`, `pinned.rs`, `refusals.rs`, `foreign.rs`,
+    `forms.rs`: the crash matrix and the changes' tests.
 - `lock.rs`: Claude Code's locks around its login, taken as it takes them.
 - `duty/`: what a front end does by itself: how often (`cadence.rs`), what it tried and said
   (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`), the warm-up (`warm/`), and when
@@ -676,7 +676,7 @@ is parked, and whose login each tool has stored. It carries a `schema` number.
 - An older Pitboard refuses a newer file and says to update
   (`a_file_from_a_newer_pitboard_is_refused`). A field an older version would drop at its next
   save, or a shape it would misread, is a bump, not a field beside the old ones, so that
-  Pitboard refuses it (`renewing` at 7, typed `discarded` at 8).
+  Pitboard refuses it (`renewing` at 7, typed `discarded` at 8, `vault` at 9).
 - A file naming a tool this build does not know is a newer Pitboard's, never corrupt: the
   advice for a corrupt file is to delete it, which would orphan every parked login
   (`an_account_of_an_unknown_tool_asks_for_an_upgrade_not_a_deletion`).
@@ -692,6 +692,10 @@ What it holds besides the accounts:
 - `aside`: each folder under `parks` no account holds, with why it was set aside. Only `forget`
   of its account and `uninstall` delete one, and `repair` gives one back.
 - `awaiting`: by tool, a sign-in inside the tool's app that Pitboard waits for.
+- `vault`: how this home keeps its parked logins, where the system offers more than one way
+  (`Host::vault_forms`). The home's first save records it, before its first park is written,
+  and no save changes it (`a_home_keeps_the_vault_form_it_recorded`). macOS and Windows record
+  none.
 
 ## Tool registers
 

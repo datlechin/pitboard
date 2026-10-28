@@ -1178,7 +1178,15 @@ pub struct ScratchMachine {
 impl ScratchMachine {
     // Panics where `more` put back this machine's keychain or the network, before any write.
     pub fn at(home: &std::path::Path, more: impl FnOnce(Context) -> Context) -> ScratchMachine {
-        let host = crate::host::memory::MemoryHost::new();
+        ScratchMachine::on(crate::host::memory::MemoryHost::new(), home, more)
+    }
+
+    // As `at`, on a machine in memory a test made, such as one that parks by form.
+    pub fn on(
+        host: Arc<crate::host::memory::MemoryHost>,
+        home: &std::path::Path,
+        more: impl FnOnce(Context) -> Context,
+    ) -> ScratchMachine {
         let api = crate::api::scripted::ScriptedApi::new();
         let ctx = more(
             Context::new(home.to_path_buf())

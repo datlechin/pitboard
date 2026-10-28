@@ -25,6 +25,7 @@ use crate::context::{Context, Environment};
 use crate::error::Result;
 use crate::permit::Permit;
 use crate::schedule::Job;
+use crate::state::VaultForm;
 use crate::store::RawStore;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -889,16 +890,29 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// The single file at `path`, as a store.
     fn file(&self, path: PathBuf) -> Box<dyn RawStore>;
 
-    /// Where Pitboard's own parked logins go: the system's store of secrets where there is
-    /// one, a private directory of files where there is not. This one really is a fact
-    /// about the machine.
-    fn vault(&self, ctx: &Context) -> Box<dyn RawStore>;
+    /// The forms a home may keep its parked logins in, where this system offers a choice,
+    /// which each home records in `state.json`: Linux's Secret Service and files. None where
+    /// the system keeps them one way, as macOS does in the keychain and Windows in sealed files.
+    fn vault_forms(&self) -> &'static [VaultForm] {
+        &[]
+    }
 
-    /// Whether every `PITBOARD_HOME` on this machine parks its logins in the one vault. A
-    /// keychain belongs to the whole login session, so a park in it that one home cannot
-    /// account for may be another home's; a vault of files lives inside its home, and
-    /// nothing in it can be anybody else's.
-    fn vault_is_shared(&self) -> bool;
+    /// The form a home that records none takes, where the system offers a choice. Asked again
+    /// at each look until the home's first save records it.
+    fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
+        None
+    }
+
+    /// Where Pitboard's own parked logins go: the system's store of secrets where there is
+    /// one, a private directory of files where there is not, and where the system offers
+    /// both, the one `form` names. This one really is a fact about the machine.
+    fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore>;
+
+    /// Whether every `PITBOARD_HOME` on this machine that keeps its parks in `form` parks
+    /// them in the one vault. A keychain or a Secret Service collection belongs to the whole
+    /// login session, so a park in it that one home cannot account for may be another home's;
+    /// a vault of files lives inside its home, and nothing in it can be anybody else's.
+    fn vault_is_shared(&self, form: Option<VaultForm>) -> bool;
 
     // Every process this user runs, in any session; Err says why the list could not be read.
     fn listing(&self) -> std::result::Result<Vec<Listed>, String>;

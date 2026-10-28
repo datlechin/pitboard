@@ -257,8 +257,10 @@ pub(super) fn judge_store(facts: &Facts) -> Check {
                 Os::Linux | Os::Windows => ok("credential_store", "credential store", detail),
             }
         }
-        // No tool keeps its login in Pitboard's sealed files.
-        Ok(store::Backend::Unknown | store::Backend::SealedFile) => fail(
+        // No tool keeps its login in Pitboard's sealed files or its Secret Service items.
+        Ok(
+            store::Backend::Unknown | store::Backend::SealedFile | store::Backend::SecretService,
+        ) => fail(
             "credential_store",
             "credential store",
             words::NOT_READ_YET,

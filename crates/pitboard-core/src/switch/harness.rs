@@ -179,6 +179,11 @@ fn scratch_home(name: &str) -> tempfile::TempDir {
 
 // `here` signed in and `there` parked and ready: the shape every switch starts from.
 pub(crate) fn machine(name: &str) -> Rig {
+    machine_on(MemoryHost::new(), name)
+}
+
+// [`machine`], on a machine in memory a test made.
+pub(crate) fn machine_on(host: Arc<MemoryHost>, name: &str) -> Rig {
     let scratch = scratch_home(name);
     let root = scratch.path();
 
@@ -186,7 +191,7 @@ pub(crate) fn machine(name: &str) -> Rig {
         ctx,
         host: mem,
         api,
-    } = ScratchMachine::at(root, |ctx| {
+    } = ScratchMachine::on(host, root, |ctx| {
         ctx.with_pitboard_home(root.join(".pitboard"))
             .with_clock(Arc::new(FixedClock::at(NOW)) as Arc<dyn Clock>)
             // A test holding one of Claude Code's locks lets go of it at a point, not after a while.
@@ -805,6 +810,7 @@ pub(crate) fn hold(m: &Rig, after: &str) {
     // Nothing in the vault that the state does not name. An item nobody names holds a live
     // refresh token that no command will ever renew or delete, and on macOS nothing can
     // even list it.
+    let vault = m.mem.parks_of(&m.ctx);
     let named: HashSet<&str> = state
         .accounts
         .iter()
@@ -812,7 +818,7 @@ pub(crate) fn hold(m: &Rig, after: &str) {
         .map(|p| p.service.as_str())
         .chain(state.discarded.iter().map(|d| d.service.as_str()))
         .collect();
-    for service in m.mem.vault().services() {
+    for service in vault.services() {
         assert!(
             named.contains(service.as_str()),
             "{after}: {service} holds a login nothing on this machine names"
@@ -825,8 +831,8 @@ pub(crate) fn hold(m: &Rig, after: &str) {
     let tool = provider::document(m.which);
     let mut seen: HashSet<String> = HashSet::new();
     let mut fingerprints = Vec::new();
-    for service in m.mem.vault().services() {
-        let raw = m.mem.vault().peek(&service).expect("just listed");
+    for service in vault.services() {
+        let raw = vault.peek(&service).expect("just listed");
         let value: Value = serde_json::from_str(&raw).expect("a park is JSON");
         fingerprints.push((service, tool.fingerprint(&value)));
     }
@@ -860,7 +866,7 @@ pub(crate) fn hold(m: &Rig, after: &str) {
                 a.label
             );
             assert!(
-                m.mem.vault().peek(&park.service).is_some(),
+                vault.peek(&park.service).is_some(),
                 "{after}: {} names a park that is not in the vault",
                 a.label
             );

@@ -7,6 +7,7 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
+use crate::host::Os;
 use crate::in_use::{Identified, InUse, Replaced};
 use crate::permit::Permit;
 use crate::provider::ProviderId;
@@ -17,7 +18,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const SCHEMA: u32 = 8;
+const SCHEMA: u32 = 9;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -33,6 +34,22 @@ impl ParkKind {
     pub fn is_vault(&self) -> bool {
         matches!(self, ParkKind::Vault)
     }
+}
+
+/// How a home keeps its parked logins, where its system offers more than one way
+/// ([`crate::host::Host::vault_forms`]): on Linux, as items of the Secret Service or as files
+/// in the home.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultForm {
+    SecretService,
+    Files,
+}
+
+// Where a home's parks are, recorded by its first save on a system that offers a choice.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Vault {
+    pub(crate) form: VaultForm,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -411,6 +428,11 @@ pub struct State {
     // by tool code
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub awaiting: BTreeMap<String, Awaited>,
+    /// How this home keeps its parked logins, where the system offers a choice. Recorded by
+    /// the home's first save and never changed by a save after it: the parks are where it
+    /// says, and a home that took another form would no longer find them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) vault: Option<Vault>,
 }
 
 impl Default for State {
@@ -429,6 +451,7 @@ impl Default for State {
             moving: BTreeMap::new(),
             aside: Vec::new(),
             awaiting: BTreeMap::new(),
+            vault: None,
         }
     }
 }
@@ -953,20 +976,10 @@ pub(crate) fn load(ctx: &Context) -> Result<State> {
 /// A build that may do nothing here reads nothing either ([`crate::release`]), so an app on
 /// a Windows build of a release before Windows is released is refused at its first read.
 pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
-    crate::release::check()?;
     let path = file(ctx);
-    home::check_absolute(ctx)?;
-    home::check_location(ctx, &home::dir(ctx))?;
-    let raw = match atomic::read(&path, |path| std::fs::read_to_string(path)) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((State::default(), true)),
-        Err(source) => return Err(Error::StateUnreadable { path, source }),
+    let Some(document) = current_document(ctx)? else {
+        return Ok((State::default(), true));
     };
-    let mut document: Value = serde_json::from_str(&raw).map_err(|source| Error::StateCorrupt {
-        path: path.clone(),
-        source,
-    })?;
-    migrate(&mut document, &path)?;
     // An account of a tool this build does not know was written by a newer Pitboard, not
     // damaged. Said as such, because the advice for a corrupt file is to delete it, and
     // following that here would orphan every parked login in the vault.
@@ -993,6 +1006,57 @@ pub(crate) fn load_any_machine(ctx: &Context) -> Result<(State, bool)> {
     Ok((state, here))
 }
 
+// The state file brought up to this schema, or `None` where there is no file yet.
+fn current_document(ctx: &Context) -> Result<Option<Value>> {
+    crate::release::check()?;
+    let path = file(ctx);
+    home::check_absolute(ctx)?;
+    home::check_location(ctx, &home::dir(ctx))?;
+    let raw = match atomic::read(&path, |path| std::fs::read_to_string(path)) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(Error::StateUnreadable { path, source }),
+    };
+    let mut document: Value = serde_json::from_str(&raw).map_err(|source| Error::StateCorrupt {
+        path: path.clone(),
+        source,
+    })?;
+    migrate(&mut document, &path, ctx.os)?;
+    Ok(Some(document))
+}
+
+/// How this home keeps its parked logins, as its state file records it: `None` where it
+/// records none, as a home with no state file yet does, and every home on a system that
+/// keeps its parks one way.
+///
+/// Read from the file at each look rather than from a state in memory, so the vault every
+/// caller opens is the one the home's last save named.
+pub(crate) fn vault_form(ctx: &Context) -> Result<Option<VaultForm>> {
+    let Some(mut document) = current_document(ctx)? else {
+        return Ok(None);
+    };
+    let Some(vault) = document.get_mut("vault").map(Value::take) else {
+        return Ok(None);
+    };
+    let vault: Vault = serde_json::from_value(vault).map_err(|source| Error::StateCorrupt {
+        path: file(ctx),
+        source,
+    })?;
+    Ok(Some(vault.form))
+}
+
+/// Where a home that records no form yet writes down the one its parks go in, before the
+/// first is written: a save of the state as it stands, which records it. The park, its name
+/// and the save that names it then agree, even where the Secret Service stops answering
+/// between them. Nothing is written where the system offers no choice, or the home recorded one.
+pub(crate) fn record_vault(ctx: &Context, permit: Permit) -> Result<()> {
+    if ctx.host().vault_forms().is_empty() || vault_form(ctx)?.is_some() {
+        return Ok(());
+    }
+    let (state, _) = load_any_machine(ctx)?;
+    save(ctx, permit, &state)
+}
+
 /// The first tool an account names that this build does not know, if any.
 fn unknown_tool(document: &Value) -> Option<String> {
     document
@@ -1009,7 +1073,10 @@ fn unknown_tool(document: &Value) -> Option<String> {
 /// The command line and the app carry their own copy of this crate and update by different
 /// routes, so on one machine an older Pitboard will meet a file a newer one wrote. Reading
 /// forwards is what this is for; reading backwards is not possible, and says so.
-fn migrate(document: &mut Value, path: &std::path::Path) -> Result<()> {
+///
+/// `os` is the system reading it, which wrote it: a step may bring a file forward as that
+/// system's Pitboard kept it.
+fn migrate(document: &mut Value, path: &std::path::Path, os: Os) -> Result<()> {
     // Each bump adds a step after the ones before it, so a file two versions behind is
     // brought all the way forward in one read.
     let found = document
@@ -1032,7 +1099,10 @@ fn migrate(document: &mut Value, path: &std::path::Path) -> Result<()> {
             if found <= 6 {
                 six_to_seven(document);
             }
-            seven_to_eight(document);
+            if found <= 7 {
+                seven_to_eight(document);
+            }
+            eight_to_nine(document, os);
             Ok(())
         }
         // Nothing released wrote 1 or 2: the schema reached 3 before the first release.
@@ -1154,6 +1224,19 @@ fn seven_to_eight(document: &mut Value) {
     document["schema"] = serde_json::json!(8);
 }
 
+/// Schema 9 records how a home keeps its parks (`vault`), where the system offers a choice. On
+/// Linux every earlier Pitboard parked in files, so a schema 8 file there comes forward with
+/// its parks in files; macOS and Windows keep theirs one way and record none. A bump: an
+/// earlier Pitboard would drop `vault` at its next save and look for this home's parks in
+/// files, where a home on the Secret Service has none.
+fn eight_to_nine(document: &mut Value, os: Os) {
+    match os {
+        Os::Linux => document["vault"] = serde_json::json!({ "form": "files" }),
+        Os::MacOs | Os::Windows => {}
+    }
+    document["schema"] = serde_json::json!(9);
+}
+
 pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
     home::check_absolute(ctx)?;
     home::check_location(ctx, &home::dir(ctx))?;
@@ -1163,6 +1246,7 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
             state.in_slot(tool, slot);
         }
     }
+    state.vault = recorded_vault(ctx, &state)?;
     let state = &state;
     let path = file(ctx);
     let write = |source| Error::StateWriteFailed {
@@ -1172,6 +1256,20 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
     home::ensure(ctx, permit).map_err(write)?;
     let body = serde_json::to_string_pretty(state).expect("State is always serialisable");
     atomic::write(permit, &path, body.as_bytes(), atomic::Perms::Secret).map_err(write)
+}
+
+// The form a save writes: none where the system keeps parks one way; otherwise the one this
+// state holds, else the one the file records, else the one a new home takes.
+fn recorded_vault(ctx: &Context, state: &State) -> Result<Option<Vault>> {
+    let host = ctx.host();
+    if host.vault_forms().is_empty() {
+        return Ok(None);
+    }
+    let form = match state.vault {
+        Some(vault) => Some(vault.form),
+        None => vault_form(ctx)?.or_else(|| host.new_home_form(ctx)),
+    };
+    Ok(form.map(|form| Vault { form }))
 }
 
 #[cfg(test)]
@@ -1311,7 +1409,12 @@ mod tests {
             "discarded": []
         });
         let mut document = written;
-        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("still current");
+        migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("still current");
         let state: State = serde_json::from_value(document).expect("still parses");
         assert_eq!(state.get(&claude("work")).unwrap().email, "a@b.c");
         assert_eq!(state.get(&claude("work")).unwrap().id, "acc-1");
@@ -1340,10 +1443,20 @@ mod tests {
             "slot": "Claude Code-credentials",
             "discarded": ["gone"]
         });
-        migrate(&mut once, std::path::Path::new("/tmp/state.json")).expect("3 to 8");
+        migrate(
+            &mut once,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("3 to 9");
         assert_eq!(once["discarded"], serde_json::json!([{"service": "gone"}]));
         let mut twice = once.clone();
-        migrate(&mut twice, std::path::Path::new("/tmp/state.json")).expect("8 is current");
+        migrate(
+            &mut twice,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("9 is current");
         assert_eq!(once, twice, "a second migration must change nothing");
         assert!(once.get("active").is_none());
         assert_eq!(
@@ -1366,7 +1479,12 @@ mod tests {
         let mut document = serde_json::json!({
             "schema": 3, "machine": machine_id(), "accounts": [], "discarded": []
         });
-        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("3 to 8");
+        migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("3 to 9");
         let state: State = serde_json::from_value(document).expect("parses");
         assert!(state.in_use.is_empty() && state.slot.is_empty());
     }
@@ -1434,7 +1552,7 @@ mod tests {
     }
 
     #[test]
-    fn a_schema_6_file_is_written_back_at_schema_8_and_otherwise_as_it_was() {
+    fn a_schema_6_file_is_written_back_at_this_schema_and_otherwise_as_it_was() {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
@@ -1459,12 +1577,13 @@ mod tests {
         let state = load(&ctx).expect("a schema 6 file is read");
         save(&ctx, Permit::for_a_test(), &state).expect("saved");
 
-        written["schema"] = 8.into();
+        brought_forward(&mut written);
         assert_eq!(read(&path), written);
     }
 
     #[test]
-    fn a_schema_7_file_0_11_0_wrote_is_written_back_at_schema_8_with_its_discarded_parks_typed() {
+    fn a_schema_7_file_0_11_0_wrote_is_written_back_at_this_schema_with_its_discarded_parks_typed()
+    {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let home = scratch.path().to_path_buf();
         let ctx = Context::new(home.clone()).with_pitboard_home(home.clone());
@@ -1485,7 +1604,7 @@ mod tests {
         let state = load(&ctx).expect("a schema 7 file is read");
         save(&ctx, Permit::for_a_test(), &state).expect("saved");
 
-        written["schema"] = 8.into();
+        brought_forward(&mut written);
         written["discarded"] = serde_json::json!([
             {"service": "pitboard-park-a-1"},
             {"service": "pitboard-park-b-2"}
@@ -1701,7 +1820,12 @@ mod tests {
             "schema": 7, "machine": machine_id(), "accounts": [],
             "discarded": ["pitboard-park-a-1", {"service": "pitboard-park-b-2"}]
         });
-        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("7 to 8");
+        migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("7 to 9");
         assert_eq!(
             document["discarded"],
             serde_json::json!([{"service": "pitboard-park-a-1"}, {"service": "pitboard-park-b-2"}])
@@ -1730,7 +1854,7 @@ mod tests {
         assert_eq!(state.accounts[0].plan.as_deref(), Some("pro"));
         save(&ctx, Permit::for_a_test(), &state).expect("saved");
 
-        written["schema"] = 8.into();
+        brought_forward(&mut written);
         assert_eq!(read(&path), written);
         assert_eq!(read(&path)["accounts"][0]["label"], "work");
     }
@@ -1779,7 +1903,12 @@ mod tests {
             "discarded": [],
             "foreign": []
         });
-        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("4 to 6");
+        migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("4 to 9");
         let state: State = serde_json::from_value(document).expect("parses");
 
         let work = state.get(&claude("work")).unwrap();
@@ -1933,14 +2062,94 @@ mod tests {
         assert_ne!(written_at(100), written_at(600));
     }
 
+    // Every Linux Pitboard before schema 9 parked in files (`store/vault.rs`), so a home it kept
+    // stays in files, even where a Secret Service answers by now.
+    #[test]
+    fn a_schema_8_file_linux_wrote_comes_forward_with_its_parks_in_files() {
+        let written = serde_json::json!({
+            "schema": 8, "machine": machine_id(), "accounts": [], "discarded": []
+        });
+        let mut document = written.clone();
+        migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            Os::Linux,
+        )
+        .expect("8 to 9");
+        assert_eq!(document["schema"], 9);
+        assert_eq!(document["vault"], serde_json::json!({"form": "files"}));
+        let state: State = serde_json::from_value(document).expect("parses");
+        assert_eq!(
+            state.vault,
+            Some(Vault {
+                form: VaultForm::Files
+            })
+        );
+
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
+        let env = crate::context::Environment::on(
+            Os::Linux,
+            [("HOME", home.to_string_lossy().into_owned())],
+        );
+        let mem = crate::host::memory::MemoryHost::by_form();
+        let ctx = Context::read(&env, "cli")
+            .with_pitboard_home(home.join(".pitboard"))
+            .with_memory_stores(std::sync::Arc::clone(&mem));
+        std::fs::create_dir_all(home.join(".pitboard")).expect("a Pitboard home");
+        std::fs::write(home.join(".pitboard/state.json"), written.to_string()).expect("written");
+        assert_eq!(vault_form(&ctx).expect("read"), Some(VaultForm::Files));
+        save(&ctx, Permit::for_a_test(), &load(&ctx).expect("loaded")).expect("saved");
+        let saved: Value = serde_json::from_str(
+            &std::fs::read_to_string(home.join(".pitboard/state.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(saved["vault"], serde_json::json!({"form": "files"}));
+        assert_eq!(saved["schema"], SCHEMA);
+    }
+
+    // macOS keeps every park in the keychain and Windows in files sealed to the account: one way
+    // each, so neither records one.
+    #[test]
+    fn a_schema_8_file_from_macos_or_windows_comes_forward_with_no_vault_form() {
+        for os in [Os::MacOs, Os::Windows] {
+            let mut document = serde_json::json!({
+                "schema": 8, "machine": machine_id(), "accounts": [], "discarded": []
+            });
+            migrate(&mut document, std::path::Path::new("/tmp/state.json"), os).expect("8 to 9");
+            assert_eq!(document["schema"], 9, "{os:?}");
+            assert!(document.get("vault").is_none(), "{os:?}: {document}");
+            let state: State = serde_json::from_value(document).expect("parses");
+            assert_eq!(state.vault, None, "{os:?}");
+        }
+
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let ctx = Context::new(scratch.path().to_path_buf())
+            .with_pitboard_home(scratch.path().join(".pitboard"))
+            .with_memory_stores(crate::host::memory::MemoryHost::new());
+        save(&ctx, Permit::for_a_test(), &State::default()).expect("saved");
+        let saved = std::fs::read_to_string(scratch.path().join(".pitboard/state.json")).unwrap();
+        assert!(!saved.contains("vault"), "{saved}");
+    }
+
     /// The other direction cannot work, and the message has to say which half to upgrade.
     #[test]
     fn a_file_from_a_newer_pitboard_is_refused() {
         let mut current =
             serde_json::json!({"schema": SCHEMA, "machine": machine_id(), "accounts": []});
-        migrate(&mut current, std::path::Path::new("/tmp/state.json")).expect("this one's own");
+        migrate(
+            &mut current,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("this one's own");
         let mut document = serde_json::json!({"schema": SCHEMA + 1});
-        let err = migrate(&mut document, std::path::Path::new("/tmp/state.json")).unwrap_err();
+        let err = migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .unwrap_err();
         assert_eq!(err.code(), "state_from_newer_version");
         let said = err.to_string();
         assert!(said.contains("Update this Pitboard"), "{said}");
@@ -1957,7 +2166,12 @@ mod tests {
             "machine": machine_id(),
             "accounts": []
         });
-        let err = migrate(&mut document, std::path::Path::new("/tmp/state.json")).unwrap_err();
+        let err = migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .unwrap_err();
         assert_eq!(err.code(), "state_from_newer_version");
     }
 
@@ -1969,6 +2183,8 @@ mod tests {
             (5, five_to_six),
             (6, six_to_seven),
             (7, seven_to_eight),
+            (8, |document| eight_to_nine(document, Os::Linux)),
+            (8, |document| eight_to_nine(document, Os::MacOs)),
         ] {
             let mut document = serde_json::json!({"schema": from, "accounts": []});
             step(&mut document);
@@ -1977,6 +2193,16 @@ mod tests {
     }
 
     use super::*;
+
+    // An older file as this schema writes it back, on this system: on Linux, with its parks in
+    // files, where every earlier Pitboard there kept them.
+    fn brought_forward(written: &mut Value) {
+        written["schema"] = SCHEMA.into();
+        match crate::host::OS {
+            Os::Linux => written["vault"] = serde_json::json!({"form": "files"}),
+            Os::MacOs | Os::Windows => {}
+        }
+    }
 
     fn claude(label: &str) -> Key {
         Key::new(ProviderId::Claude, label)
@@ -2336,7 +2562,12 @@ mod tests {
             "active": {}, "slot": {}, "discarded": []
         });
         let mut document = written;
-        migrate(&mut document, std::path::Path::new("/tmp/state.json")).expect("current");
+        migrate(
+            &mut document,
+            std::path::Path::new("/tmp/state.json"),
+            crate::host::OS,
+        )
+        .expect("current");
         let mut state: State = serde_json::from_value(document).expect("still parses");
         assert!(state.foreign.is_empty());
         state.remove(&Key::new(ProviderId::Codex, "work"));
