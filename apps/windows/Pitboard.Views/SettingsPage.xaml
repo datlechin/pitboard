@@ -80,7 +80,7 @@
           </toolkit:SettingsCard.Description>
         </toolkit:SettingsCard>
         <toolkit:SettingsCard
-            Header="{x:Bind shown:Words.Settings.CheckForUpdatesAutomatically}"
+            Header="{x:Bind shown:Words.Own.CheckForUpdatesAutomatically}"
             Visibility="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE895;" />
@@ -88,7 +88,7 @@
           <ToggleSwitch
               IsOn="{x:Bind ViewModel.ChecksAutomatically, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.checkAutomatically"
-              AutomationProperties.Name="{x:Bind shown:Words.Settings.CheckForUpdatesAutomatically}"
+              AutomationProperties.Name="{x:Bind shown:Words.Own.CheckForUpdatesAutomatically}"
               Toggled="OnAutomaticChecksToggled" />
         </toolkit:SettingsCard>
         <!-- A card that cannot be clicked is a group, which Narrator names only by its own name. -->
@@ -110,7 +110,7 @@
           </toolkit:SettingsCard.Description>
           <Button
               MinWidth="120"
-              Content="{x:Bind shown:Words.Settings.CheckNow}"
+              Content="{x:Bind shown:Words.Own.CheckNow}"
               AccessKey="C"
               IsEnabled="{x:Bind ViewModel.UpdatesAvailable, Mode=OneWay}"
               AutomationProperties.AutomationId="settings.checkNow"

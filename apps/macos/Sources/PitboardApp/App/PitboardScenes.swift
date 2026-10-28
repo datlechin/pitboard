@@ -47,7 +47,7 @@ public struct PitboardScenes: Scene {
             CommandGroup(replacing: .appInfo) {
                 Button(words.menu.about) { AppVersion.showAboutPanel() }
                 if updates.available {
-                    Button(words.menu.checkForUpdates) { updates.check() }
+                    Button(macWords.checkForUpdates) { updates.check() }
                 }
             }
             // Nothing here makes a document: what is new here is an account, from any window.

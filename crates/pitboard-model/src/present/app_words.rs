@@ -25,7 +25,6 @@ pub struct MenuWords {
     pub refresh: String,
     pub open_pitboard: String,
     pub settings: String,
-    pub check_for_updates: String,
     pub about: String,
     pub help: String,
     // "Quit Pitboard" on macOS, "Exit" in the notification area's menu
@@ -84,11 +83,7 @@ pub struct SettingsWords {
     pub notifications: String,
     pub notifications_off: String,
     pub open_notification_settings: String,
-    // over General's update settings
-    pub updates: String,
-    pub check_for_updates_automatically: String,
     pub version: String,
-    pub check_now: String,
     pub keep_saved_sign_ins_fresh: String,
     pub command_line: String,
     // beside where the command line is
@@ -166,8 +161,13 @@ pub struct MacMenuBarWords {
     pub account_and_usage: String,
     pub usage_only: String,
     pub icon_only: String,
-    // under General's update settings
+    // Sparkle's, in the app's menu and the menu bar item's
+    pub check_for_updates: String,
+    // General's update settings, under their heading
+    pub updates: String,
+    pub check_for_updates_automatically: String,
     pub download_and_install_automatically: String,
+    pub check_now: String,
     pub install_command_line: String,
     pub link_failed: String,
     pub cannot_link_command_line: String,
@@ -210,6 +210,10 @@ pub struct WindowsNotificationAreaWords {
     // a copy that has no update to check for yet, or is a beta
     pub no_release_to_update_to: String,
     pub beta_updates: String,
+    // WinSparkle's, in the icon's menu and Settings
+    pub check_for_updates: String,
+    pub check_for_updates_automatically: String,
+    pub check_now: String,
     // a copy that cannot update itself
     pub update_key_invalid: String,
     pub win_sparkle_missing: String,
@@ -223,6 +227,41 @@ pub struct WindowsNotificationAreaWords {
     pub warm_to: String,
     // an account window whose page could not be made
     pub could_not_open: String,
+}
+
+// What the Linux app alone draws. Rust's alone, so neither other app's bindings carry it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GnomeWords {
+    // the header bar's menu button, as GNOME's guidelines name it to a person and a screen reader
+    pub main_menu: String,
+    // that menu's items no other front has
+    pub open_link: String,
+    pub keyboard_shortcuts: String,
+    pub shortcuts: GnomeShortcutWords,
+    // Open Link's button that takes a link from the clipboard, and what it says as one is dragged
+    // over it
+    pub paste_link: String,
+    pub drop_link: String,
+    // Preferences' switch, where `MachineShown::watch_service` offers it
+    pub watch_service: String,
+    // what closing the window does while no status item keeps Pitboard
+    pub close_note: String,
+    // beside each command `package_removal` gives once Uninstall is done
+    pub copy_command: String,
+}
+
+// What the keyboard shortcuts dialog calls each shortcut the window answers, under `general`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GnomeShortcutWords {
+    pub general: String,
+    pub add_account: String,
+    pub refresh: String,
+    pub preferences: String,
+    pub keyboard_shortcuts: String,
+    pub main_menu: String,
+    pub back: String,
+    pub close_window: String,
+    pub quit: String,
 }
 
 // A switch Pitboard hasn't answered in the time Shortcuts gives an action.
@@ -306,9 +345,10 @@ pub fn trash_says(link: Option<String>) -> String {
 
 #[uniffi::export]
 pub fn app_words(front: Front) -> AppWords {
+    // The macOS toolbar's has no ellipsis, as Apple's own toolbars' have none.
     let add_account_asks = match front {
-        Front::WindowsNotificationArea => true,
-        Front::MacMenuBar | Front::Gnome => false,
+        Front::WindowsNotificationArea | Front::Gnome => true,
+        Front::MacMenuBar => false,
     };
     AppWords {
         app_name: words::PITBOARD.into(),
@@ -316,13 +356,19 @@ pub fn app_words(front: Front) -> AppWords {
             add_account: words::add_account(front, true),
             refresh: words::REFRESH.into(),
             open_pitboard: titled(front, "Open Pitboard", "Open Pitboard"),
-            settings: titled(front, "Settings…", "Settings"),
-            check_for_updates: titled(front, "Check for Updates…", "Check for updates"),
+            settings: words::settings(front, true),
             about: titled(front, "About Pitboard", "About Pitboard"),
-            help: titled(front, "Pitboard Help", "Pitboard help"),
+            // GNOME's primary menu says Help, as its guidelines name the item.
+            help: match front {
+                Front::MacMenuBar | Front::WindowsNotificationArea => {
+                    titled(front, "Pitboard Help", "Pitboard help")
+                }
+                Front::Gnome => "Help".into(),
+            },
             quit: match front {
                 Front::WindowsNotificationArea => "Exit",
-                Front::MacMenuBar | Front::Gnome => "Quit Pitboard",
+                Front::MacMenuBar => "Quit Pitboard",
+                Front::Gnome => "Quit",
             }
             .into(),
             account: words::ACCOUNT.into(),
@@ -362,21 +408,23 @@ pub fn app_words(front: Front) -> AppWords {
             refresh_help: "Read the log again".into(),
         },
         settings: SettingsWords {
-            title: "Settings".into(),
+            title: words::settings(front, false),
             general: "General".into(),
             limits: "Limits".into(),
             advanced: "Advanced".into(),
             open_at_login: words::open_at_login(front).0.into(),
             open_at_login_note: words::open_at_login(front).1.into(),
             notifications: words::NOTIFICATIONS.into(),
+            // Each desktop keeps its own, so GNOME's names none of them.
             notifications_off: match front {
                 Front::WindowsNotificationArea => {
                     "Notifications from Pitboard are turned off in Settings > System > \
                      Notifications."
                 }
-                Front::MacMenuBar | Front::Gnome => {
+                Front::MacMenuBar => {
                     "Notifications from Pitboard are turned off in System Settings."
                 }
+                Front::Gnome => "Notifications from Pitboard are turned off.",
             }
             .into(),
             open_notification_settings: titled(
@@ -384,14 +432,7 @@ pub fn app_words(front: Front) -> AppWords {
                 "Open Notification Settings…",
                 "Open notification settings",
             ),
-            updates: "Updates".into(),
-            check_for_updates_automatically: titled(
-                front,
-                "Check for Updates Automatically",
-                "Check for updates automatically",
-            ),
             version: "Version".into(),
-            check_now: titled(front, "Check Now", "Check now"),
             keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(front),
             command_line: titled(front, "Command Line", "Command line"),
             path: "Path".into(),
@@ -445,14 +486,18 @@ pub fn app_words(front: Front) -> AppWords {
             go: "Go".into(),
             download: words::DOWNLOAD.into(),
             stop_download_help: "Stop this download".into(),
+            // GTK's file launcher opens the folder that holds it, in whichever file manager
+            // the desktop has.
             show_file: match front {
                 Front::WindowsNotificationArea => "Show in folder",
-                Front::MacMenuBar | Front::Gnome => "Show in Finder",
+                Front::MacMenuBar => "Show in Finder",
+                Front::Gnome => "Open Containing Folder",
             }
             .into(),
             show_file_help: match front {
                 Front::WindowsNotificationArea => "Show the file in its folder",
-                Front::MacMenuBar | Front::Gnome => "Show the file in Finder",
+                Front::MacMenuBar => "Show the file in Finder",
+                Front::Gnome => "Open the folder that holds the file",
             }
             .into(),
         },
@@ -471,7 +516,11 @@ pub fn mac_menu_bar_words() -> MacMenuBarWords {
         account_and_usage: "Account and Usage".into(),
         usage_only: "Usage Only".into(),
         icon_only: "Icon Only".into(),
+        check_for_updates: "Check for Updates…".into(),
+        updates: "Updates".into(),
+        check_for_updates_automatically: "Check for Updates Automatically".into(),
         download_and_install_automatically: "Download and Install Automatically".into(),
+        check_now: "Check Now".into(),
         install_command_line: "Install Command Line Tool…".into(),
         link_failed: "The link couldn’t be made.".into(),
         cannot_link_command_line: "This copy of Pitboard can’t link the command line inside it."
@@ -519,6 +568,9 @@ pub fn windows_notification_area_words() -> WindowsNotificationAreaWords {
         beta_updates: "A beta updates itself to 1.0.0 once that is out. Install a later beta by \
                        hand."
             .into(),
+        check_for_updates: "Check for updates".into(),
+        check_for_updates_automatically: "Check for updates automatically".into(),
+        check_now: "Check now".into(),
         update_key_invalid: "This copy of Pitboard can’t update itself: the update key it was \
                              built with isn’t a valid key. Install a later version by hand."
             .into(),
@@ -537,6 +589,33 @@ pub fn windows_notification_area_words() -> WindowsNotificationAreaWords {
         could_not_open: "Couldn’t open this window".into(),
     }
 }
+
+pub fn gnome_words() -> GnomeWords {
+    let front = Front::Gnome;
+    GnomeWords {
+        main_menu: "Main Menu".into(),
+        open_link: "Open Link…".into(),
+        keyboard_shortcuts: KEYBOARD_SHORTCUTS.into(),
+        shortcuts: GnomeShortcutWords {
+            general: "General".into(),
+            add_account: words::add_account(front, false),
+            refresh: words::REFRESH.into(),
+            preferences: words::settings(front, false),
+            keyboard_shortcuts: KEYBOARD_SHORTCUTS.into(),
+            main_menu: "Open Main Menu".into(),
+            back: "Go Back".into(),
+            close_window: "Close Window".into(),
+            quit: "Quit".into(),
+        },
+        paste_link: "Paste Link".into(),
+        drop_link: "Drop Link to Open".into(),
+        watch_service: "Watch in the Background".into(),
+        close_note: words::CLOSING_QUITS.into(),
+        copy_command: "Copy".into(),
+    }
+}
+
+const KEYBOARD_SHORTCUTS: &str = "Keyboard Shortcuts";
 
 #[cfg(test)]
 mod tests {
@@ -622,8 +701,10 @@ mod tests {
         let said = [
             strings_of(&app_words(Front::MacMenuBar)),
             strings_of(&app_words(Front::WindowsNotificationArea)),
+            strings_of(&app_words(Front::Gnome)),
             strings_of(&mac_menu_bar_words()),
             strings_of(&windows_notification_area_words()),
+            strings_of(&gnome_words()),
         ];
         for said in said.into_iter().flatten() {
             assert!(mechanism_words(&said).is_empty(), "{said}");
@@ -743,7 +824,11 @@ mod tests {
                 mac.account_and_usage,
                 mac.usage_only,
                 mac.icon_only,
+                mac.check_for_updates,
+                mac.updates,
+                mac.check_for_updates_automatically,
                 mac.download_and_install_automatically,
+                mac.check_now,
                 mac.install_command_line,
                 mac.link_failed,
                 mac.cannot_link_command_line,
@@ -765,7 +850,11 @@ mod tests {
                 "Account and Usage",
                 "Usage Only",
                 "Icon Only",
+                "Check for Updates…",
+                "Updates",
+                "Check for Updates Automatically",
                 "Download and Install Automatically",
+                "Check Now",
                 "Install Command Line Tool…",
                 "The link couldn’t be made.",
                 "This copy of Pitboard can’t link the command line inside it.",
@@ -802,6 +891,9 @@ mod tests {
                 windows.notifications_off_by_policy,
                 windows.no_release_to_update_to,
                 windows.beta_updates,
+                windows.check_for_updates,
+                windows.check_for_updates_automatically,
+                windows.check_now,
                 windows.update_key_invalid,
                 windows.win_sparkle_missing,
                 windows.notifications_unoffered,
@@ -827,6 +919,9 @@ mod tests {
                 "No full release of Pitboard for Windows is out yet, so there is no update to \
                  check for.",
                 "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.",
+                "Check for updates",
+                "Check for updates automatically",
+                "Check now",
                 "This copy of Pitboard can’t update itself: the update key it was built with isn’t \
                  a valid key. Install a later version by hand.",
                 "This copy of Pitboard can’t update itself: WinSparkle.dll, which updates it, is \
@@ -842,10 +937,121 @@ mod tests {
         );
     }
 
+    // GNOME's guidelines: header capitalisation on a title, a button and a menu item, an ellipsis
+    // only where one asks for more, Preferences and Help as its primary menu names them, and
+    // Quit, as its apps have it.
+    #[test]
+    fn gnome_draws_its_controls_in_its_own_words() {
+        let gnome = app_words(Front::Gnome);
+        assert_eq!(
+            [
+                gnome.menu.add_account.as_str(),
+                gnome.menu.open_pitboard.as_str(),
+                gnome.menu.settings.as_str(),
+                gnome.menu.about.as_str(),
+                gnome.menu.help.as_str(),
+                gnome.menu.quit.as_str(),
+                gnome.menu.copy_email.as_str(),
+            ],
+            [
+                "Add Account…",
+                "Open Pitboard",
+                "Preferences",
+                "About Pitboard",
+                "Help",
+                "Quit",
+                "Copy Email Address",
+            ]
+        );
+        assert_eq!(gnome.window.add_account, "Add Account…", "it asks for more");
+        assert_eq!(gnome.window.open_link, "Open Link", "the window's title");
+        assert_eq!(gnome.window.sign_in, "Sign-In");
+        assert_eq!(gnome.settings.title, "Preferences");
+        assert_eq!(
+            (
+                gnome.settings.open_at_login.as_str(),
+                gnome.settings.open_at_login_note.as_str()
+            ),
+            (
+                "Start Pitboard at Login",
+                "Pitboard watches your limits only while it’s running."
+            )
+        );
+        assert_eq!(
+            gnome.settings.notifications_off,
+            "Notifications from Pitboard are turned off."
+        );
+        assert_eq!(
+            gnome.settings.keep_saved_sign_ins_fresh,
+            "Keep Saved Sign-Ins Fresh"
+        );
+        assert_eq!(gnome.settings.uninstall, "Uninstall");
+        assert_eq!(
+            (
+                gnome.account_window.show_file.as_str(),
+                gnome.account_window.show_file_help.as_str()
+            ),
+            (
+                "Open Containing Folder",
+                "Open the folder that holds the file"
+            )
+        );
+        assert_eq!(
+            gnome.account_window.remove_website_data,
+            "Remove Website Data…"
+        );
+    }
+
+    // Every word the Linux app alone draws.
+    #[test]
+    fn the_gnome_catalogue_says_what_the_linux_app_draws() {
+        let gnome = gnome_words();
+        assert_eq!(
+            [
+                gnome.main_menu,
+                gnome.open_link,
+                gnome.keyboard_shortcuts,
+                gnome.paste_link,
+                gnome.drop_link,
+                gnome.watch_service,
+                gnome.close_note,
+                gnome.copy_command,
+            ],
+            [
+                "Main Menu",
+                "Open Link…",
+                "Keyboard Shortcuts",
+                "Paste Link",
+                "Drop Link to Open",
+                "Watch in the Background",
+                "Pitboard quits once its window is closed.",
+                "Copy",
+            ]
+        );
+        assert_eq!(
+            gnome.shortcuts,
+            GnomeShortcutWords {
+                general: "General".into(),
+                add_account: "Add Account".into(),
+                refresh: "Refresh".into(),
+                preferences: "Preferences".into(),
+                keyboard_shortcuts: "Keyboard Shortcuts".into(),
+                main_menu: "Open Main Menu".into(),
+                back: "Go Back".into(),
+                close_window: "Close Window".into(),
+                quit: "Quit".into(),
+            }
+        );
+    }
+
     // A spinner says nothing on screen, so each system's screen reader is told what it waits for.
     #[test]
     fn a_spinner_is_named_on_each_system() {
-        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+        for front in [
+            Front::MacMenuBar,
+            Front::WindowsNotificationArea,
+            Front::Gnome,
+        ] {
             let words = app_words(front);
             assert_eq!(words.window.checking, "Checking");
             assert_eq!(

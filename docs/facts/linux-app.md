@@ -97,6 +97,40 @@ service file nor a launcher, and quits before it reaches the bus (`launch.rs`).
   GTK 4.18.6 answers `""` (`gtk/a11y/gtkatspicontext.c:770-771`), so the UI tests run where
   GTK is 4.22, Ubuntu 26.04's, and the floor's leg runs the rest.
 
+## GNOME's words
+
+`Front::Gnome` words every surface for GNOME's Human Interface Guidelines, read on 29 October
+2026 at developer.gnome.org/hig, and on every desktop the same: one front serves Plasma too, so
+no word names one desktop's settings or another system's place
+(`no_gnome_word_names_a_desktops_settings_or_another_systems_place`).
+
+- **Header capitalisation** for "any headings, including headings in header bars, tab titles,
+  and view titles", and for "short control labels that do not normally form proper sentences";
+  sentence capitalisation "for labels that form sentences or that run on to other text"
+  (Writing Style, Capitalization). Header capitalisation capitalises "all words with four or more
+  letters", verbs and nouns of any length, the first and last word and each part of a hyphenated
+  word. That is Apple's title case in every title Pitboard has but one with "with", so
+  `titled` gives GNOME the title case and `use_with_codex` says "Use Pitboard With Codex". A
+  menu line of limits runs on, so it is sentence case, as on Windows (`limits_line`).
+- **Ellipses** "if further input or confirmation is required from the user", and "do not add an
+  ellipsis to labels such as Properties or Preferences" (Writing Style, Ellipses). So Add
+  Account…, Open Link…, Sign In Again… and Uninstall Pitboard… have one, the window's Add
+  Account included, and Preferences none.
+- **The primary menu** ends with Preferences, Keyboard Shortcuts, Help and About Pitboard, and
+  "primary menus shouldn’t include menu items for Close or Quit"; its button's "tooltip and
+  accessibility label should refer to the menu as ‘Main Menu’" (Menus). Quit stays in the
+  status item's menu and on Ctrl+Q.
+- **The app's settings are Preferences** on GNOME (`words::settings`), and a download's folder
+  is opened with Open Containing Folder, after GTK's `gtk_file_launcher_open_containing_folder`,
+  which "launches a file manager to show the file in its parent directory" (GTK 4.10 and later,
+  docs.gtk.org), so no file manager is named.
+- **A status item's menu entry** has a label and no subtitle (DBusMenu, [The status
+  item](#the-status-item)), so an account's entry says its figure beside its name, as the
+  Windows menu's does (`named_in_menu`).
+- **After Uninstall** the app names its package manager's command: `apt` for the deb, and `dnf`
+  and `zypper` for the rpm, which one build serves to Fedora and openSUSE alike
+  (`package_removal`).
+
 ## Notifications
 
 `src/platform/notifications.rs` posts through GNotification. Read in GLib 2.84.4 and GNOME Shell

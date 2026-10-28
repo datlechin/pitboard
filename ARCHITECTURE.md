@@ -557,7 +557,9 @@ keeps it is in the header of the module named.
   supports, is asked with the front's `os()`, and `host::OS` is read only by the fixtures, whose
   machine is this one as the core sees it. What one front alone draws is in that front's own
   catalogue, and both shipping fronts' words are tested on every system
-  (`each_shipping_fronts_catalogue_says_what_its_app_drew`).
+  (`each_shipping_fronts_catalogue_says_what_its_app_drew`). One GNOME front serves every Linux
+  desktop, so none of its words names one desktop's settings or another system's place
+  (`no_gnome_word_names_a_desktops_settings_or_another_systems_place`).
 - A snapshot carries the status item's words only while the front has one: the shipping
   fronts from the start, and a front that starts with none once `Intent::SurfacesChanged` says
   one came, until it says it went (`a_front_shows_a_status_item_only_while_it_has_one`). Quick

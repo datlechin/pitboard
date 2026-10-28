@@ -82,7 +82,8 @@ impl Front {
             Front::MacMenuBar => true,
             // The main window hosts them.
             Front::WindowsNotificationArea => false,
-            // No app runs on Linux, which answers as the Mac does.
+            // The welcome is a dialog over the main window, and libadwaita puts each dialog
+            // presented after it over it.
             Front::Gnome => true,
         }
     }
@@ -91,6 +92,14 @@ impl Front {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // GNOME's welcome is a dialog that what it starts comes up over, as the Mac's window is.
+    #[test]
+    fn a_sheet_comes_up_over_the_welcome_where_the_welcome_hosts_it() {
+        assert!(Front::MacMenuBar.welcome_hosts_sheets());
+        assert!(Front::Gnome.welcome_hosts_sheets());
+        assert!(!Front::WindowsNotificationArea.welcome_hosts_sheets());
+    }
 
     // So no front loads its pages in another's engine, or runs on another's system.
     #[test]

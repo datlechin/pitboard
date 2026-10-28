@@ -71,7 +71,7 @@ test("the icon's menu says what IconMenu.cs gives it, in Microsoft's order, Open
     order.map(at),
     order.map(at).toSorted((a, b) => a - b),
   );
-  assert.ok(source.includes("Words.Menu.CheckForUpdates"));
+  assert.ok(source.includes("Words.Own.CheckForUpdates"));
   assert.ok(
     menu(true).some((e) => "command" in e && e.command === "Open Pitboard" && e.bold),
     "the click's default is bold",
@@ -90,7 +90,7 @@ test("a beta's menu has no Check for updates, as IconMenu.cs offers it only besi
 test("the menu heads each tool's accounts with its name, one group of them, and names each account with how much it has used", () => {
   assert.ok(
     catalogue.includes(
-      '(Front::WindowsNotificationArea, Some(aside)) => {\n            format!("{title} ({})", uncapitalised(aside))',
+      '(Front::WindowsNotificationArea | Front::Gnome, Some(aside)) => {\n            format!("{title} ({})", uncapitalised(aside))',
     ),
   );
   assert.ok(
@@ -133,7 +133,7 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
   // in sentence case, as the Windows app says each limit after the first
   assert.ok(
     catalogue.includes(
-      '(_, Front::WindowsNotificationArea) => format!("{} {figure}", uncapitalised(name)),',
+      '(_, Front::WindowsNotificationArea | Front::Gnome) => {\n                format!("{} {figure}", uncapitalised(name))',
     ),
   );
   assert.equal(work.tip, "5-hour 12% used, weekly 40%");
@@ -520,7 +520,7 @@ test("the notification at the share says what WindowsNotifications.cs builds fro
   assert.ok(source.includes("new AppNotificationButton(button.Title)"));
   const words = joined(catalogue);
   // a toast takes any button, so it names the account it switches to
-  assert.ok(words.includes("Front::WindowsNotificationArea => switch_to(label),"));
+  assert.ok(words.includes("Front::WindowsNotificationArea | Front::Gnome => switch_to(label),"));
   const notices = present("notices.rs");
   assert.ok(notices.includes("words::switch_button(front, instead),"));
   // short of 100%, the title names the limit, and the body how much of it the account has used

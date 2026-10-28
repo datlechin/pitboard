@@ -939,6 +939,14 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
         Some(words::NEW_TERMINALS),
         "Windows' installer puts it on the PATH"
     );
+    assert_eq!(
+        present_on(Front::Gnome, &model.state, model.now.epoch(), &Utc)
+            .machine
+            .command_line
+            .terminal_note,
+        None,
+        "a Linux package installs it where every terminal looks"
+    );
 
     for (found, note) in [
         (

@@ -39,7 +39,8 @@ use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::words::capitalised;
 use std::ops::Range;
 
-// macOS title-cases a control or a title, as Apple's guidelines do; Windows sentence-cases all.
+// macOS title-cases a control or a title, as Apple's guidelines do, and GNOME gives one its
+// header capitalisation, which these title cases are too; Windows sentence-cases all.
 pub(crate) fn titled(front: Front, title_case: &str, sentence_case: &str) -> String {
     debug_assert!(
         cased_alike(title_case, sentence_case),
@@ -50,6 +51,17 @@ pub(crate) fn titled(front: Front, title_case: &str, sentence_case: &str) -> Str
         Front::MacMenuBar | Front::Gnome => title_case,
     }
     .to_owned()
+}
+
+// What each front calls the app's own settings. The macOS menu's item ends in an ellipsis, as
+// Apple's Settings… does; GNOME's guidelines give Preferences none.
+pub(crate) fn settings(front: Front, menu_item: bool) -> String {
+    match front {
+        Front::MacMenuBar if menu_item => "Settings…",
+        Front::MacMenuBar | Front::WindowsNotificationArea => "Settings",
+        Front::Gnome => "Preferences",
+    }
+    .into()
 }
 
 fn cased_alike(title_case: &str, sentence_case: &str) -> bool {
@@ -368,6 +380,31 @@ pub(crate) const CANCEL: &str = "Cancel";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // GNOME's header capitalisation heads a title or a control as Apple's title case does.
+    #[test]
+    fn each_front_cases_a_title_its_own_way() {
+        let check = |front| titled(front, "Check for Updates…", "Check for updates");
+        assert_eq!(check(Front::MacMenuBar), "Check for Updates…");
+        assert_eq!(check(Front::Gnome), "Check for Updates…");
+        assert_eq!(check(Front::WindowsNotificationArea), "Check for updates");
+        assert_eq!(
+            [
+                settings(Front::MacMenuBar, true),
+                settings(Front::MacMenuBar, false),
+                settings(Front::WindowsNotificationArea, true),
+                settings(Front::Gnome, true),
+                settings(Front::Gnome, false),
+            ],
+            [
+                "Settings…",
+                "Settings",
+                "Settings",
+                "Preferences",
+                "Preferences"
+            ]
+        );
+    }
 
     /// A phrase that starts a line starts with a capital, and nothing else about it changes:
     /// a figure first stays as it is, and so does a phrase already capitalised.

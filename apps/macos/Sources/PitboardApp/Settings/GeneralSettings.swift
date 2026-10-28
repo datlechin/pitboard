@@ -40,7 +40,7 @@ struct GeneralSettings: View {
             Section {
                 if updates.available {
                     Toggle(
-                        said.checkForUpdatesAutomatically,
+                        macWords.checkForUpdatesAutomatically,
                         isOn: Binding(
                             get: { updates.checksAutomatically },
                             set: { updates.checksAutomatically = $0 }))
@@ -56,7 +56,7 @@ struct GeneralSettings: View {
                     HStack {
                         Text(AppVersion.whole() ?? "")
                         if updates.available {
-                            Button(said.checkNow) { updates.check() }
+                            Button(macWords.checkNow) { updates.check() }
                         }
                     }
                 } label: {
@@ -66,7 +66,7 @@ struct GeneralSettings: View {
                     }
                 }
             } header: {
-                Text(said.updates)
+                Text(macWords.updates)
             } footer: {
                 // Without this, a build with no update key would look broken.
                 if !updates.available {

@@ -1,4 +1,5 @@
-//! Uninstall Pitboard…, and how removing Pitboard from this machine goes once it is asked.
+//! Uninstall Pitboard…, how removing Pitboard from this machine goes once it is asked, and what
+//! the Linux app says of its packages after.
 
 use super::{Choice, ItemOffer, Question, Seen, words};
 use crate::model::state::Removing;
@@ -64,5 +65,104 @@ fn again(seen: &Seen) -> Choice {
         title: words::try_again(seen.front),
         intent: Intent::Uninstall,
         enabled: seen.state.may_uninstall(),
+    }
+}
+
+// How a Linux build of the app was packaged, which says how its package manager removes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Package {
+    Deb,
+    Rpm,
+    // built with no package named
+    Unknown,
+}
+
+// What the Linux app says once Pitboard's own data is gone: an app removes no package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageRemoval {
+    pub title: String,
+    pub message: String,
+    // what a terminal runs to remove the app and its command line, none where not known
+    pub commands: Vec<PackageCommand>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageCommand {
+    // the systems it is for, where one package serves systems whose package managers differ
+    pub on: Option<String>,
+    pub run: String,
+}
+
+// One rpm serves Fedora and openSUSE, so it names both package managers.
+pub fn package_removal(package: Package) -> PackageRemoval {
+    let command = |on: Option<&str>, manager: &str| PackageCommand {
+        on: on.map(str::to_owned),
+        run: format!("sudo {manager} remove {PACKAGES}"),
+    };
+    let (then, commands) = match package {
+        Package::Deb => (
+            "Remove the app and its command line with this command in a terminal.",
+            vec![command(None, "apt")],
+        ),
+        Package::Rpm => (
+            "Remove the app and its command line with your system’s command in a terminal.",
+            vec![
+                command(Some("Fedora"), "dnf"),
+                command(Some("openSUSE"), "zypper"),
+            ],
+        ),
+        Package::Unknown => ("Remove the app the way you installed it.", Vec::new()),
+    };
+    PackageRemoval {
+        title: words::REMOVE_THE_APP.into(),
+        message: format!("{} {then}", words::DATA_DELETED),
+        commands,
+    }
+}
+
+// The app's package, then the command line's, which it depends on.
+const PACKAGES: &str = "pitboard-app pitboard";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_package_manager_removes_what_the_app_cannot() {
+        let deb = package_removal(Package::Deb);
+        assert_eq!(deb.title, "Remove the App");
+        assert_eq!(
+            deb.message,
+            "Pitboard’s saved sign-ins and settings are deleted. Remove the app and its command \
+             line with this command in a terminal."
+        );
+        assert_eq!(
+            deb.commands,
+            [PackageCommand {
+                on: None,
+                run: "sudo apt remove pitboard-app pitboard".into(),
+            }]
+        );
+        let rpm = package_removal(Package::Rpm);
+        assert_eq!(
+            rpm.commands,
+            [
+                PackageCommand {
+                    on: Some("Fedora".into()),
+                    run: "sudo dnf remove pitboard-app pitboard".into(),
+                },
+                PackageCommand {
+                    on: Some("openSUSE".into()),
+                    run: "sudo zypper remove pitboard-app pitboard".into(),
+                },
+            ]
+        );
+        let unknown = package_removal(Package::Unknown);
+        assert_eq!(
+            unknown.message,
+            "Pitboard’s saved sign-ins and settings are deleted. Remove the app the way you \
+             installed it."
+        );
+        assert_eq!(unknown.commands, []);
     }
 }

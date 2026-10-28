@@ -72,6 +72,11 @@ pub use present::{
     still_switching, trash_says, usage_of, webview_runtime_too_old,
     windows_notification_area_words,
 };
+// What only the Linux app says, which it links as Rust: no other app's bindings carry it.
+pub use present::{
+    GnomeShortcutWords, GnomeWords, Package, PackageCommand, PackageRemoval, gnome_words,
+    package_removal,
+};
 pub use present::{QuickAction, QuickAsk, outside_refused};
 
 mod account_windows;

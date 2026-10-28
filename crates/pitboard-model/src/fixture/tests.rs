@@ -1330,7 +1330,8 @@ fn one_account_is_offered_a_second_until_not_now() {
     );
     model.send(Intent::DeclineSecondAccount { tool: Tool::Claude });
     told.last_where("the next tip, for Codex", |snapshot| {
-        snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some(words::USE_WITH_CODEX)
+        snapshot.setup.as_ref().map(|step| step.title.as_str())
+            == Some(words::use_with_codex(FRONT).as_str())
     });
     let started = Instant::now();
     while !launched

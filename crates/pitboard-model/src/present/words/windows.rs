@@ -95,3 +95,28 @@ pub(crate) fn quit_with_downloads(
     };
     (title, stops, quit)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // GNOME says its account windows' words as a Mac does, in its header capitalisation.
+    #[test]
+    fn gnome_words_the_account_windows_as_a_mac_does() {
+        let gnome = Front::Gnome;
+        assert_eq!(
+            quit_with_downloads(gnome, 2),
+            (
+                "2 downloads are in progress. Quit anyway?".into(),
+                "Quitting Pitboard stops them, and they won’t resume.",
+                "Quit"
+            )
+        );
+        assert_eq!(open_in_browser(gnome), "Open in Browser");
+        assert_eq!(
+            no_site_account(gnome, "claude.ai").0,
+            "No claude.ai Account"
+        );
+        assert_eq!(cannot_open_link(gnome), "Can’t Open This Link");
+    }
+}

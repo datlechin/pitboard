@@ -1,7 +1,7 @@
 //! What Settings and Activity say of this machine: keeping saved sign-ins fresh, what happens
 //! at a limit, warm-ups, the command line, updates, uninstalling, and each change listed.
 
-use super::{sign_in_standing, store_in_front, this_machine, titled, typeset};
+use super::{settings, sign_in_standing, store_in_front, this_machine, titled, typeset};
 use crate::Front;
 use crate::model::AtLimit;
 use pitboard_core::status::Standing;
@@ -50,9 +50,10 @@ pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
              from a temporary copy, which is gone once Pitboard quits."
                 .into()
         }
-        // No app runs on Linux.
-        Front::Gnome => "First move Pitboard to a folder it will stay in. Until then it runs \
-                         from a temporary copy, which is gone once Pitboard quits."
+        // The Linux app is installed by its package, and a copy run from anywhere else is the
+        // one a person is told to install.
+        Front::Gnome => "Install Pitboard from its package first. Until then it runs from a \
+                         temporary copy, which is gone once Pitboard quits."
             .into(),
         // The Windows app is installed by its installer, and a copy run from anywhere else,
         // such as from inside a zip, is the one a person is told to install.
@@ -149,7 +150,12 @@ pub(crate) fn warm_up(front: Front) -> String {
 }
 
 pub(crate) fn warm_up_settings(front: Front) -> String {
-    titled(front, "Warm-Up Settings…", "Warm-up settings")
+    match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => {
+            titled(front, "Warm-Up Settings…", "Warm-up settings")
+        }
+        Front::Gnome => format!("{} {}", warm_up(front), settings(front, true)),
+    }
 }
 
 pub(crate) fn warm_up_now(front: Front) -> String {
@@ -257,9 +263,8 @@ pub(crate) fn cannot_link(front: Front) -> String {
              from a temporary copy, and a link to that would break."
                 .into()
         }
-        // No app runs on Linux.
-        Front::Gnome => "First move Pitboard to a folder it will stay in. Until then it runs \
-                         from a temporary copy, and a link to that would break."
+        Front::Gnome => "Install Pitboard from its package first. Until then it runs from a \
+                         temporary copy, and a link to that would break."
             .into(),
         Front::WindowsNotificationArea => {
             "Install Pitboard first. Until then Windows runs it from a temporary \
@@ -293,6 +298,11 @@ pub(crate) const UNINSTALL_SAYS: &str = "Pitboard deletes its saved sign-ins, se
 pub(crate) const UNINSTALL: &str = "Uninstall";
 
 pub(crate) const UNINSTALLING: &str = "Uninstalling Pitboard…";
+
+// Once the Linux app has deleted Pitboard's own data, over what its package manager does.
+pub(crate) const REMOVE_THE_APP: &str = "Remove the App";
+
+pub(crate) const DATA_DELETED: &str = "Pitboard’s saved sign-ins and settings are deleted.";
 
 pub(crate) const KEPT_ITS_FOLDER: &str = "Pitboard couldn’t remove everything";
 
@@ -643,9 +653,28 @@ mod tests {
         assert_eq!(
             (
                 warm_up(Front::MacMenuBar),
+                warm_up(Front::Gnome),
                 warm_up(Front::WindowsNotificationArea)
             ),
-            ("Warm-Up".into(), "Warm-up".into())
+            ("Warm-Up".into(), "Warm-Up".into(), "Warm-up".into())
+        );
+        assert_eq!(
+            (
+                warm_up_settings(Front::MacMenuBar),
+                warm_up_settings(Front::Gnome),
+                warm_up_settings(Front::WindowsNotificationArea)
+            ),
+            (
+                "Warm-Up Settings…".into(),
+                "Warm-Up Preferences".into(),
+                "Warm-up settings".into()
+            ),
+            "GNOME's guidelines give Preferences no ellipsis"
+        );
+        assert_eq!(warm_up_now(Front::Gnome), "Warm Up Now");
+        assert_eq!(
+            at_limit_choice(Front::Gnome, AtLimit::Switch),
+            "Switch Automatically"
         );
         assert_eq!(NONE_TO_WARM, "Add a Claude Code account to warm it up.");
         assert_eq!(
@@ -671,9 +700,14 @@ mod tests {
         assert_eq!(
             (
                 uninstall_pitboard(Front::MacMenuBar),
+                uninstall_pitboard(Front::Gnome),
                 uninstall_pitboard(Front::WindowsNotificationArea)
             ),
-            ("Uninstall Pitboard…".into(), "Uninstall…".into()),
+            (
+                "Uninstall Pitboard…".into(),
+                "Uninstall Pitboard…".into(),
+                "Uninstall…".into()
+            ),
             "it asks before it acts"
         );
         assert_eq!(UNINSTALL_QUESTION, "Uninstall Pitboard?");
@@ -737,7 +771,7 @@ mod tests {
 
     /// What the settings and the machine pane say of this machine name it as each system
     /// names itself, and say what a copy run from a temporary place is to do in that system's
-    /// words. No app runs on Linux, so its sentences name no system's own places.
+    /// words. The Linux app is installed by its package, and names no other system's places.
     #[test]
     fn what_is_said_of_this_machine_names_it_as_its_system_does() {
         assert_eq!(
@@ -780,13 +814,18 @@ mod tests {
         );
         assert_eq!(
             cannot_schedule(Front::Gnome, true),
-            "First move Pitboard to a folder it will stay in. Until then it runs from a \
-             temporary copy, which is gone once Pitboard quits."
+            "Install Pitboard from its package first. Until then it runs from a temporary copy, \
+             which is gone once Pitboard quits."
         );
         assert_eq!(
             cannot_link(Front::Gnome),
-            "First move Pitboard to a folder it will stay in. Until then it runs from a \
-             temporary copy, and a link to that would break."
+            "Install Pitboard from its package first. Until then it runs from a temporary copy, \
+             and a link to that would break."
+        );
+        assert_eq!(
+            renewal_about(Front::Gnome, false),
+            "This computer refreshes your saved sign-ins once a day, so one you leave alone \
+             doesn’t expire."
         );
         assert_eq!(
             cannot_schedule(Front::WindowsNotificationArea, true),

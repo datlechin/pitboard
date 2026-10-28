@@ -42,22 +42,18 @@ test("macOS's General says what app_words.rs gives GeneralSettings.swift and Men
   const general = mac("Settings/GeneralSettings.swift");
   for (const [word, made, said] of [
     ["openAtLogin", "open_at_login: words::open_at_login(front).0.into(),", macGeneral.openAtLogin],
-    ["updates", 'updates: "', macGeneral.updates],
-    [
-      "checkForUpdatesAutomatically",
-      'check_for_updates_automatically: titled(front, "',
-      macGeneral.checks,
-    ],
     ["version", 'version: "', macGeneral.version],
-    ["checkNow", 'check_now: titled(front, "', macGeneral.checkNow],
   ]) {
     assert.ok(general.includes(`said.${word}`), word);
     assert.ok(appWords.includes(made.endsWith('"') ? `${made}${said}"` : made), said);
   }
-  // what the macOS app alone draws, from its own catalogue
+  // what the macOS app alone draws, from its own catalogue, Sparkle's settings among it
   for (const [word, made, said] of [
     ["menuBarShows", "menu_bar_shows", macGeneral.menuBarShows],
+    ["updates", "updates", macGeneral.updates],
+    ["checkForUpdatesAutomatically", "check_for_updates_automatically", macGeneral.checks],
     ["downloadAndInstallAutomatically", "download_and_install_automatically", macGeneral.installs],
+    ["checkNow", "check_now", macGeneral.checkNow],
   ]) {
     assert.ok(general.includes(`macWords.${word}`), word);
     assert.ok(appWords.includes(`${made}: "${said}".into(),`), said);
@@ -73,14 +69,15 @@ test("macOS's General says what app_words.rs gives GeneralSettings.swift and Men
 
 test("Windows' General says what SettingsPage.xaml binds from app_words(), and the updater", () => {
   const page = win("Pitboard.Views/SettingsPage.xaml");
+  // WinSparkle's from the Windows app's own catalogue, the rest from app_words()
   for (const [field, said] of [
-    ["General", winGeneral.section],
-    ["OpenAtLogin", winGeneral.startAtSignIn],
-    ["CheckForUpdatesAutomatically", winGeneral.checksAutomatically],
-    ["Version", winGeneral.version],
-    ["CheckNow", winGeneral.checkNow],
+    ["Settings.General", winGeneral.section],
+    ["Settings.OpenAtLogin", winGeneral.startAtSignIn],
+    ["Own.CheckForUpdatesAutomatically", winGeneral.checksAutomatically],
+    ["Settings.Version", winGeneral.version],
+    ["Own.CheckNow", winGeneral.checkNow],
   ]) {
-    assert.ok(page.includes(`{x:Bind shown:Words.Settings.${field}}`), field);
+    assert.ok(page.includes(`{x:Bind shown:Words.${field}}`), field);
     assert.ok(owned(said), said);
   }
   // under Start when you sign in to Windows, what the welcome says under its own

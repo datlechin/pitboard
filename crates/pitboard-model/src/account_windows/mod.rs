@@ -50,7 +50,7 @@ pub struct AlertText {
 pub(crate) fn this_machine(front: Front) -> &'static str {
     match front {
         Front::MacMenuBar => "this Mac",
-        // No app runs on Linux.
+        // One front on every Linux desktop, so no desktop's own name for it.
         Front::Gnome => "this computer",
         // As Windows 11 names the machine in its own Settings and File Explorer.
         Front::WindowsNotificationArea => "this PC",
