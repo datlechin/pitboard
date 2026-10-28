@@ -349,9 +349,11 @@ keeps it is in the header of the module named.
   `a_write_to_the_index_is_seen_as_it_lands`,
   `a_folder_made_after_the_watch_began_is_watched_once_it_is_there`,
   `a_change_made_elsewhere_is_shown_without_waiting_for_a_look`,
-  `the_loop_waits_until_it_next_reads_or_decides`). A watch never keeps `pitboard uninstall`
-  from removing the directory whole
-  (`a_watched_pitboard_directory_is_removed_whole_by_uninstall`).
+  `the_loop_waits_until_it_next_reads_or_decides`). The host cannot watch where another
+  machine may write: on Linux a network file system, FUSE or 9p, and on macOS a volume statfs
+  does not mark local (`a_file_system_another_machine_writes_is_not_watched`,
+  `only_a_volume_of_this_macs_own_is_watched`). A watch never keeps `pitboard uninstall` from
+  removing the directory whole (`a_watched_pitboard_directory_is_removed_whole_by_uninstall`).
 
 ### Daily renewal and the watch service
 

@@ -114,3 +114,17 @@ kept. Read the same day in notify 8.2.1's source.
   without looking at the length the system gave (`_bytes_written`, `:333`, `:381-385`), so
   what an overflow comes to is not known
   ([Not measured](not-measured.md#watching-pitboards-directory)).
+- inotify "reports only events that a user-space program triggers through the filesystem API"
+  and "does not catch remote events that occur on network filesystems", for which
+  "applications must fall back to polling" (inotify(7), Linux man-pages 6.19 of 14 February
+  2026, read on 29 October 2026). So the Linux host watches no folder whose `fstatfs` names a
+  network file system of `<linux/magic.h>` at Linux 6.17: NFS, SMB, CIFS, SMB2, either AFS,
+  Ceph, Coda, OCFS2's shared disk, or 9p, where WSL 2 mounts Windows' drives. Nor FUSE, whose
+  one `f_type` covers every daemon, sshfs among them, which GLib 2.84.0 takes as remote
+  (`gio/glocalfile.c`, `is_remote_fs_type`). Pitboard's directory is looked at every 2 seconds
+  there (`a_file_system_another_machine_writes_is_not_watched`). None of them was mounted:
+  Docker gives them only to a privileged container.
+- On macOS, the host watches only a volume `fstatfs` marks `MNT_LOCAL`. On macOS 27.0.1,
+  `auto_home`'s autofs mount is not one (`only_a_volume_of_this_macs_own_is_watched`). Whether
+  FSEvents hears a write another machine makes on a share is
+  [not measured](not-measured.md#watching-pitboards-directory).
