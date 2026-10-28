@@ -26,6 +26,7 @@ use super::refresh::{self, Place, Progress, Refreshing, Renewed, Stop};
 use super::{Settled, identify, live_store, purge, read_stored, shape, write_lock};
 use crate::context::Context;
 use crate::error::{Cause, Error, Partway, Result};
+use crate::host::SecretStore;
 use crate::permit::Permit;
 use crate::provider::Owner;
 use crate::provider::claude::live;
@@ -45,6 +46,8 @@ const TOOL: ProviderId = ProviderId::Claude;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Left {
     pub path: PathBuf,
+    /// The store the file is behind.
+    pub store: SecretStore,
     /// A handle on what the file holds, byte for byte, never what it holds: it is put away
     /// only while it still holds what this was taken of.
     pub seen: String,
@@ -132,6 +135,8 @@ impl Kept {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stowed {
     pub path: PathBuf,
+    /// The store the file was behind.
+    pub store: SecretStore,
     pub kept: Kept,
     pub dropped: Vec<String>,
 }
@@ -148,7 +153,7 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
     let tool = provider::claude_code();
     let path = live::credential_file(ctx);
     let live = live_store(ctx, tool)?;
-    let Some((_, raw)) = read_left(&live)? else {
+    let Some((store, _, raw)) = read_left(&live)? else {
         return Ok(None);
     };
     let held = contents(&raw)?;
@@ -174,6 +179,7 @@ pub(crate) fn find(ctx: &Context, state: &State) -> Result<Option<Left>> {
     };
     Ok(Some(Left {
         path,
+        store,
         seen: store::fingerprint(&raw),
         login,
         dropped: held.dropped,
@@ -250,8 +256,8 @@ impl Stowing<'_> {
         let tool = provider::claude_code();
         refresh::finished(ctx, permit, state, TOOL)?;
         let live = live_store(ctx, tool)?;
-        let (_, mut raw) = read_left(&live)?
-            .filter(|(_, raw)| store::fingerprint(raw) == seen)
+        let (behind, _, mut raw) = read_left(&live)?
+            .filter(|(_, _, raw)| store::fingerprint(raw) == seen)
             .ok_or_else(|| self.changed())?;
         let mut held = contents(&raw)?;
         let stored = read_stored(tool, &live)?.map(|(_, document)| document);
@@ -314,6 +320,7 @@ impl Stowing<'_> {
         }
         Ok(Stowed {
             path: self.path.clone(),
+            store: behind,
             kept,
             dropped: held.dropped,
         })
@@ -422,20 +429,23 @@ fn let_go(writing: Option<lock::Guard>) -> bool {
     writing.as_ref().is_some_and(lock::Guard::compromised)
 }
 
-/// What the file behind the store in use holds, with the store it is in, or `None` where
-/// nothing is behind that store.
-fn read_left(live: &provider::LiveStore) -> Result<Option<(&dyn RawStore, String)>> {
-    let Some(file) = store::behind(&live.chain, &live.service)? else {
+/// What the file behind the store in use holds, with that store and the store the file is
+/// in, or `None` where nothing is behind a store of the system's.
+fn read_left(live: &provider::LiveStore) -> Result<Option<(SecretStore, &dyn RawStore, String)>> {
+    let Some((holder, file)) = store::behind(&live.chain, &live.service)? else {
         return Ok(None);
     };
-    Ok(file.read(&live.service)?.map(|raw| (file, raw)))
+    let Some(ahead) = holder.kind().secret_store() else {
+        return Ok(None);
+    };
+    Ok(file.read(&live.service)?.map(|raw| (ahead, file, raw)))
 }
 
 /// The store the file is in, where it still holds `raw` byte for byte.
 fn unchanged<'a>(live: &'a provider::LiveStore, raw: &str) -> Result<Option<&'a dyn RawStore>> {
     Ok(read_left(live)?
-        .filter(|(_, now)| now == raw)
-        .map(|(file, _)| file))
+        .filter(|(_, _, now)| now == raw)
+        .map(|(_, file, _)| file))
 }
 
 /// Whether Claude Code has still stored `judged`, the login stored that the file's was told

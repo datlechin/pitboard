@@ -1132,6 +1132,7 @@ mod tests {
         let fallback = || Warning::FallbackLogin {
             tool: ProviderId::Claude,
             path: "/Users/me/.claude/.credentials.json".into(),
+            store: pitboard_core::host::SecretStore::Keychain,
             held: Held::Login,
         };
         let overridden = || Warning::AuthOverridden {

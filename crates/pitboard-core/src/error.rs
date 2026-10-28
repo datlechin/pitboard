@@ -1,7 +1,7 @@
 //! Every way Pitboard can fail. Each variant has a message naming the cause and an action,
 //! a stable code for programs to branch on, and an exit code.
 
-use crate::host::Os;
+use crate::host::{Os, SecretStore};
 use crate::provider::ProviderId;
 use crate::state::Key;
 use crate::words::Spelling;
@@ -189,12 +189,14 @@ pub enum Error {
     #[error("{}.", codex_home_missing(path))]
     CodexHomeMissing { path: PathBuf },
 
-    #[error("{}", too_large(crate::host::OS, *tool, label, *bytes, *limit))]
+    #[error("{}", too_large(*store, *tool, label, *bytes, *limit))]
     CredentialTooLarge {
         tool: ProviderId,
         label: String,
         bytes: usize,
         limit: usize,
+        // The store whose ceiling `limit` is.
+        store: SecretStore,
     },
 
     #[error(
@@ -827,7 +829,7 @@ pub enum Error {
     )]
     SignInPinnedToConsole { layer: String },
 
-    #[error("{}", pitboard_open(home))]
+    #[error("{}", pitboard_open(crate::host::OS, home))]
     PitboardOpen { home: PathBuf },
 
     #[error("{}", app_open(app, still))]
@@ -1419,7 +1421,9 @@ fn session_expired(tool: ProviderId, program: &str, refused: bool) -> String {
 fn make_readable(os: Os, tool: ProviderId) -> &'static str {
     match tool {
         ProviderId::Claude => match os {
-            Os::MacOs | Os::Linux => "Unlock the keychain",
+            Os::MacOs => "Unlock the keychain",
+            // The file is Claude Code's only store there (`live_chain_order`).
+            Os::Linux => "Make Claude Code's .credentials.json readable to you again",
             Os::Windows => {
                 "Check that you can read and change Claude Code's folder and its .credentials.json"
             }
@@ -1439,15 +1443,21 @@ fn login_elsewhere(os: Os, email: &str) -> String {
 }
 
 // A keychain's ceiling is what `security` reads from stdin; Credential Manager's, 256 pieces.
-fn too_large(os: Os, tool: ProviderId, label: &str, bytes: usize, limit: usize) -> String {
-    match os {
-        Os::MacOs | Os::Linux => format!(
+fn too_large(
+    store: SecretStore,
+    tool: ProviderId,
+    label: &str,
+    bytes: usize,
+    limit: usize,
+) -> String {
+    match store {
+        SecretStore::Keychain => format!(
             "the login for `{label}` needs {bytes} bytes and `security` reads {limit} from \
              stdin, so it can only be written on the argument line, which PITBOARD_NO_ARGV \
              forbids. {}",
             smaller(tool)
         ),
-        Os::Windows => format!(
+        SecretStore::CredentialManager => format!(
             "the login for `{label}` needs {}. Sign out of MCP servers you no longer use to make \
              the login smaller.",
             crate::words::past_credential_manager(bytes, limit)
@@ -1555,9 +1565,11 @@ pub enum LoginDoubt {
     },
 }
 
-fn pitboard_open(home: &std::path::Path) -> String {
-    let quit = match crate::host::OS {
-        Os::MacOs | Os::Linux => "Quit it from its item in the menu bar",
+fn pitboard_open(os: Os, home: &std::path::Path) -> String {
+    let quit = match os {
+        Os::MacOs => "Quit it from its item in the menu bar",
+        // Every desktop shows its window; only some show a tray.
+        Os::Linux => "Quit it from the main menu in its window",
         Os::Windows => "Exit it from its icon's menu in the notification area",
     };
     format!(
@@ -1797,23 +1809,27 @@ fn recovery_elsewhere(tool: ProviderId, from: &str, to: &str, slot: &str) -> Str
 mod tests {
     use super::*;
 
-    // Claude Code keeps no keychain on Windows: its file, or Credential Manager.
+    // Claude Code keeps no keychain on Windows: its file, or Credential Manager. On Linux the
+    // file alone.
     #[test]
     fn claude_codes_lost_and_unreadable_logins_are_worded_for_each_system() {
-        let keychain = "the login for `l` needs 9 bytes and `security` reads 4 from stdin, so it \
-                        can only be written on the argument line, which PITBOARD_NO_ARGV \
-                        forbids. Unset it, or sign out of MCP servers you no longer use to make \
-                        the login smaller.";
-        for (os, too_large_said) in [
-            (Os::MacOs, keychain),
-            (Os::Linux, keychain),
+        for (store, too_large_said) in [
             (
-                Os::Windows,
+                SecretStore::Keychain,
+                "the login for `l` needs 9 bytes and `security` reads 4 from stdin, so it can only \
+                 be written on the argument line, which PITBOARD_NO_ARGV forbids. Unset it, or \
+                 sign out of MCP servers you no longer use to make the login smaller.",
+            ),
+            (
+                SecretStore::CredentialManager,
                 "the login for `l` needs 9 bytes, past the 4 Claude Code keeps in Credential \
                  Manager. Sign out of MCP servers you no longer use to make the login smaller.",
             ),
         ] {
-            assert_eq!(too_large(os, ProviderId::Claude, "l", 9, 4), too_large_said);
+            assert_eq!(
+                too_large(store, ProviderId::Claude, "l", 9, 4),
+                too_large_said
+            );
         }
         for (os, places, readable) in [
             (
@@ -1823,8 +1839,8 @@ mod tests {
             ),
             (
                 Os::Linux,
-                "in the keychain or in the file it also reads",
-                "Unlock the keychain",
+                "in .credentials.json",
+                "Make Claude Code's .credentials.json readable to you again",
             ),
             (
                 Os::Windows,
@@ -1841,6 +1857,21 @@ mod tests {
             );
             assert_eq!(make_readable(os, ProviderId::Claude), readable);
         }
+    }
+
+    #[test]
+    fn no_sentence_said_on_linux_names_a_keychain_a_menu_bar_or_activity_monitor() {
+        let linux = Os::Linux;
+        let named: Vec<String> = ProviderId::ALL
+            .iter()
+            .map(|tool| make_readable(linux, *tool).to_owned())
+            .chain([
+                login_elsewhere(linux, "a@example.com"),
+                pitboard_open(linux, std::path::Path::new("/home/x/.pitboard")),
+            ])
+            .filter(|said| crate::words::names_what_linux_has_not(said))
+            .collect();
+        assert!(named.is_empty(), "{named:#?}");
     }
 
     // Word for word what each said before a tool could be an app, with npm's `.cmd` where found.

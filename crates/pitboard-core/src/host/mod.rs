@@ -97,6 +97,16 @@ pub enum Os {
 /// The system this build runs on.
 pub const OS: Os = os::OS;
 
+/// A system's store of secrets that holds a login ahead of a tool's file, with a ceiling on
+/// what one item takes: the login keychain on macOS, Credential Manager on Windows. On Linux
+/// Claude Code keeps its login in `.credentials.json` alone (`live_chain_order`), so no file
+/// there is behind a store, and no store's ceiling refuses a write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretStore {
+    Keychain,
+    CredentialManager,
+}
+
 /// The only program trusted to read Claude Code's keychain item. Named here so the backend
 /// that runs it and the doctor check that looks for it cannot drift apart.
 pub(crate) const SECURITY: &str = "/usr/bin/security";

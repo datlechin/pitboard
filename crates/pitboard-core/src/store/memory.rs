@@ -343,6 +343,7 @@ impl RawStore for Arc<MemoryStore> {
             needs: contents.len(),
             limit,
             second_route: true,
+            store: crate::host::SecretStore::Keychain,
         })
     }
 }

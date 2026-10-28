@@ -34,6 +34,7 @@ pub(crate) use status_item::*;
 pub(crate) use windows::*;
 
 use crate::Front;
+use pitboard_core::host::SecretStore;
 use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::words::capitalised;
 use std::ops::Range;
@@ -106,6 +107,15 @@ pub(crate) fn utc_date(epoch: i64) -> String {
                 .to_string()
         })
         .unwrap_or_default()
+}
+
+// The store a sign-in file is left behind. Claude Code leaves none on Linux, so there only a
+// fixture's machine, whose keychain is in memory, shows these words.
+fn store_in_front(front: Front) -> &'static str {
+    pitboard_core::words::store_in_front(match front {
+        Front::MacMenuBar | Front::Gnome => SecretStore::Keychain,
+        Front::WindowsNotificationArea => SecretStore::CredentialManager,
+    })
 }
 
 /// How a sentence names the machine the app runs on, as the account windows' alerts do.

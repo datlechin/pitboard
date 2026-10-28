@@ -48,6 +48,7 @@ pub(crate) fn facts() -> Facts {
             needs: 900,
             limit: 4032,
             second_route: true,
+            store: crate::host::SecretStore::Keychain,
         }),
         no_argv: false,
         service: "Claude Code-credentials".into(),

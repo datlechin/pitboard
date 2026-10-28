@@ -1,6 +1,6 @@
 use super::network::ProxyFact;
 use crate::host::task::Drift;
-use crate::host::{Access, Os};
+use crate::host::{Access, Os, SecretStore};
 use crate::words as said;
 use std::fmt::Display;
 
@@ -53,9 +53,14 @@ pub(super) const NOTHING_READABLE_BY_OTHERS: &str =
 
 pub(super) fn others_can_read(os: Os, commands: &[String]) -> String {
     let these = match os {
-        Os::MacOs | Os::Linux => {
+        Os::MacOs => {
             "These hold usable OAuth tokens in plain text, which is how Claude Code stores them \
              where there is no keychain. Anyone else on this machine can read them"
+        }
+        // Claude Code's file, and parks Pitboard keeps in files.
+        Os::Linux => {
+            "These hold usable OAuth tokens in plain text. Anyone else on this machine can read \
+             them"
         }
         Os::Windows => {
             "These hold a login: Claude Code's file in plain text, a sealed park only this \
@@ -143,6 +148,9 @@ pub(super) fn could_not_be_read_this_time(names: usize) -> String {
 pub(super) const UNLOCK_AND_RUN_ANY_COMMAND: &str = "Pitboard wrote these names down before \
      creating a login in them and cannot read them back to find out what is there. Unlock the \
      keychain and run any Pitboard command; it resolves them before doing anything else.";
+
+pub(super) const RUN_ANY_COMMAND: &str = "Pitboard wrote these names down before creating a \
+     login in them. Run any Pitboard command; it resolves them before doing anything else.";
 
 pub(super) fn not_switched_to_for(seconds: i64) -> String {
     format!(
@@ -493,15 +501,15 @@ pub(super) fn file_refresh(path: impl Display, fingerprint: &str) -> String {
     format!("{path}  ·  refresh {fingerprint}")
 }
 
-pub(super) fn the_file_signs_sessions_in(os: Os) -> String {
-    let cannot = said::out_of_reach(os);
-    let (could_not, such_as, as_login) = match os {
-        Os::MacOs | Os::Linux => (
+pub(super) fn the_file_signs_sessions_in(store: SecretStore) -> String {
+    let cannot = said::out_of_reach(store);
+    let (could_not, such_as, as_login) = match store {
+        SecretStore::Keychain => (
             "the keychain could not be read",
             "in a session started over SSH".to_owned(),
             "`/login` over SSH does".to_owned(),
         ),
-        Os::Windows => (
+        SecretStore::CredentialManager => (
             "Credential Manager could not be reached",
             format!("in {}", said::SSH_SIGN_IN),
             format!("`/login` does in {}", said::SSH_SIGN_IN),
@@ -532,12 +540,12 @@ pub(super) fn file_not_read(path: impl Display, why: impl Display) -> String {
     format!("{path}  ·  not read: {why}")
 }
 
-pub(super) fn delete_it_yourself(os: Os, command: &str) -> String {
+pub(super) fn delete_it_yourself(store: SecretStore, command: &str) -> String {
     format!(
         "Pitboard could not read it, so whether it holds a login, which a session that {} signs \
          in with, cannot be told, and `pitboard stow` cannot put it away. {} Deleting it lets \
          them follow a switch, and takes whatever it holds with it: `{command}`.",
-        said::out_of_reach(os),
+        said::out_of_reach(store),
         while_it_is_there()
     )
 }
@@ -551,7 +559,14 @@ pub(super) const MAYBE_NOT_THE_SAME_FILE: &str = "Pitboard reads the plaintext f
      Code was given a backend of its own, that is not the same file. Check for an update before \
      switching.";
 
-pub(super) const ON_IN_THE_KEYCHAIN: &str = "switched on; the keychain is still where the login is";
+pub(super) fn on_in(store: SecretStore) -> String {
+    format!(
+        "switched on; {} is still where the login is",
+        said::store_in_front(store)
+    )
+}
+
+pub(super) const SWITCHED_ON: &str = "switched on";
 
 pub(super) fn refused_as_a_session_starts(accounts: &str) -> String {
     format!(
@@ -1434,6 +1449,14 @@ mod tests {
              /home/x/.claude/.credentials.json`."
         );
         assert_eq!(
+            others_can_read(
+                Os::Linux,
+                &["chmod go-rwx /home/x/.claude/.credentials.json".into()]
+            ),
+            "These hold usable OAuth tokens in plain text. Anyone else on this machine can read \
+             them: `chmod go-rwx /home/x/.claude/.credentials.json`."
+        );
+        assert_eq!(
             others_can_read(Os::Windows, &[]),
             "These hold a login: Claude Code's file in plain text, a sealed park only this account \
              opens. Claude Code's file takes the access list of the folder it is in, and a seal \
@@ -1723,7 +1746,7 @@ mod tests {
             "/home/x/.claude/.credentials.json  ·  refresh 0123456789abcdef"
         );
         assert_eq!(
-            the_file_signs_sessions_in(Os::MacOs),
+            the_file_signs_sessions_in(SecretStore::Keychain),
             "Claude Code signs in with this wherever it cannot read the keychain, such as in a \
              session started over SSH, and no switch reaches it. A sign-in made where the keychain \
              could not be read leaves one, as `/login` over SSH does. While it is there, Claude \
@@ -1733,7 +1756,7 @@ mod tests {
              the file, which leaves one login for every session."
         );
         assert_eq!(
-            the_file_signs_sessions_in(Os::Windows),
+            the_file_signs_sessions_in(SecretStore::CredentialManager),
             "Claude Code signs in with this wherever it cannot reach Credential Manager, such as \
              in a sign-in over SSH with a key, and no switch reaches it. A sign-in made where \
              Credential Manager could not be reached leaves one, as `/login` does in a sign-in \
@@ -1759,7 +1782,10 @@ mod tests {
             "/home/x/.claude/.credentials.json  ·  not read: Permission denied"
         );
         assert_eq!(
-            delete_it_yourself(Os::MacOs, "rm '/home/x/.claude/.credentials.json'"),
+            delete_it_yourself(
+                SecretStore::Keychain,
+                "rm '/home/x/.claude/.credentials.json'"
+            ),
             "Pitboard could not read it, so whether it holds a login, which a session that cannot \
              read the keychain signs in with, cannot be told, and `pitboard stow` cannot put it \
              away. While it is there, Claude Code sessions already running at a switch keep the \
@@ -1769,7 +1795,7 @@ mod tests {
         );
         assert_eq!(
             delete_it_yourself(
-                Os::Windows,
+                SecretStore::CredentialManager,
                 r"Remove-Item -LiteralPath 'C:\Users\dana\.claude\.credentials.json'"
             ),
             "Pitboard could not read it, so whether it holds a login, which a session that cannot \

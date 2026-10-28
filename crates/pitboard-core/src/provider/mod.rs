@@ -376,6 +376,8 @@ pub enum Adoption {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Behind {
     pub path: std::path::PathBuf,
+    /// The store it is behind.
+    pub store: crate::host::SecretStore,
     pub held: Held,
 }
 

@@ -21,7 +21,7 @@ use super::{
 use crate::context::Context;
 use crate::error::Error;
 use crate::host::task::{Drift, Task};
-use crate::host::{Access, Kind, Os};
+use crate::host::{Access, Kind, Os, SecretStore};
 use crate::in_use::Stored;
 use crate::permit::Permit;
 use crate::provider::ProviderId;
@@ -253,10 +253,11 @@ pub(super) fn everything_said(os: Os) -> Facts {
     f.floor = crate::host::Floor::Below { build: 22631 };
     f.elevation = crate::host::Elevation::Elevated { why: "with sudo" };
     f.no_argv = true;
-    f.fallback_login = Some(FallbackLogin {
+    let fallback = |store| FallbackLogin {
         path: PathBuf::from("/home/x/.claude/.credentials.json"),
+        store,
         fingerprint: Ok(None),
-    });
+    };
     f.machine_id_known = os == Os::Windows;
     f.interrupted = true;
     f.pending_parks = vec!["pitboard-park-y-1".into()];
@@ -286,6 +287,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
         Os::Windows => {
             f.backend = Ok(store::Backend::CredentialManager);
             f.vault = store::Backend::SealedFile;
+            f.fallback_login = Some(fallback(SecretStore::CredentialManager));
             f.codex.stored_elsewhere = (1, 1);
             f.windows = Some(WindowsHomes {
                 home: PathBuf::from(r"C:\Users\dana"),
@@ -314,14 +316,23 @@ pub(super) fn everything_said(os: Os) -> Facts {
                 runs_pitboard: true,
             });
         }
+        // Claude Code's file is its only store, with no ceiling, and parks are files.
         Os::Linux => {
+            f.backend = Ok(store::Backend::File);
+            f.vault = store::Backend::File;
+            f.credential_cost = None;
+            f.readable_by_others = vec![(
+                "/home/x/.claude/.credentials.json".into(),
+                Kind::File,
+                mode(0o644),
+            )];
             f.wsl = Some(WslFact {
                 distribution: Some("Ubuntu".into()),
                 codex_home_on_windows: None,
             });
             f.desktop = None;
         }
-        Os::MacOs => {}
+        Os::MacOs => f.fallback_login = Some(fallback(SecretStore::Keychain)),
     }
     f
 }

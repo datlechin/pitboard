@@ -1,7 +1,7 @@
 //! What Settings and Activity say of this machine: keeping saved sign-ins fresh, what happens
 //! at a limit, warm-ups, the command line, updates, uninstalling, and each change listed.
 
-use super::{sign_in_standing, this_machine, titled, typeset};
+use super::{sign_in_standing, store_in_front, this_machine, titled, typeset};
 use crate::Front;
 use crate::model::AtLimit;
 use pitboard_core::status::Standing;
@@ -106,7 +106,7 @@ pub(crate) fn at_limit_note(
         AtLimit::Switch if file_left => Some(format!(
             "Pitboard switches Claude Code at {at}%, but its running sessions don’t follow while a \
              sign-in file is left behind {}.",
-            pitboard_core::words::store_in_front(front.os())
+            store_in_front(front)
         )),
         AtLimit::Switch => Some(format!(
             "Pitboard switches Claude Code at {at}%, and its running sessions follow within about \

@@ -35,6 +35,7 @@ pub enum Warning {
     FallbackLogin {
         tool: ProviderId,
         path: std::path::PathBuf,
+        store: crate::host::SecretStore,
         held: Held,
     },
     /// The login was too large for `security`'s stdin, so it went on the argument line.
@@ -297,6 +298,7 @@ impl fmt::Display for Warning {
             Warning::FallbackLogin {
                 tool,
                 path,
+                store,
                 held: Held::Login,
             } => write!(
                 f,
@@ -306,13 +308,14 @@ impl fmt::Display for Warning {
                  holds no other it can switch to, then deletes the file.",
                 path = path.display(),
                 tool = tool.name(),
-                reader = crate::words::reads_only_the_file(crate::host::OS),
+                reader = crate::words::reads_only_the_file(*store),
                 running = crate::words::kept_until_renewed(),
             ),
             Warning::FallbackLogin {
                 tool,
                 path,
                 held: Held::NoLogin,
+                ..
             } => write!(
                 f,
                 "{path} is there with no {tool} login in it. While it is, {tool} sessions \
@@ -326,6 +329,7 @@ impl fmt::Display for Warning {
                 tool,
                 path,
                 held: Held::Unreadable,
+                ..
             } => write!(
                 f,
                 "{path} is there, and Pitboard could not read it. While it is, {tool} sessions \

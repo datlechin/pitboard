@@ -10,6 +10,7 @@ use crate::Front;
 use crate::Held;
 use crate::present::Severity;
 use crate::present::words;
+use pitboard_core::host::SecretStore;
 use pitboard_core::provider::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
 use std::path::PathBuf;
@@ -34,6 +35,7 @@ fn fallback_login(held: Held) -> crate::Warning {
 pub(super) fn left(login: Foreseen) -> Left {
     Left {
         path: PathBuf::from(FILE),
+        store: SecretStore::Keychain,
         seen: "0123456789abcdef".into(),
         login,
         dropped: vec!["mcpOAuth".into()],
@@ -148,6 +150,7 @@ fn putting_away_sends_what_the_sheet_showed_and_says_what_it_did() {
     machine.answer = Ok(warned(vec![claude("work", true, 10.0)], Vec::new()));
     let stowed = Stowed {
         path: PathBuf::from(FILE),
+        store: SecretStore::Keychain,
         kept: parked_now("work"),
         dropped: vec!["mcpOAuth".into()],
     };

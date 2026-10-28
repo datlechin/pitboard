@@ -20,6 +20,7 @@ pub(crate) mod vault;
 pub(crate) use file::PlainFile;
 
 use crate::context::Context;
+use crate::host::SecretStore;
 use crate::permit::Permit;
 
 use serde_json::Value;
@@ -52,6 +53,15 @@ impl Backend {
             Backend::CredentialManager => "credential_manager",
             Backend::Absent => "absent",
             Backend::Unknown => "unknown",
+        }
+    }
+
+    /// The system's store of secrets this is, where it is one.
+    pub(crate) fn secret_store(self) -> Option<SecretStore> {
+        match self {
+            Backend::Keychain => Some(SecretStore::Keychain),
+            Backend::CredentialManager => Some(SecretStore::CredentialManager),
+            Backend::File | Backend::SealedFile | Backend::Absent | Backend::Unknown => None,
         }
     }
 }
@@ -205,6 +215,8 @@ pub(crate) struct Cost {
     pub(crate) limit: usize,
     /// Whether the store has another route above the ceiling, and is allowed to use it.
     pub(crate) second_route: bool,
+    /// The store whose ceiling `limit` is.
+    pub(crate) store: SecretStore,
 }
 
 impl Cost {
@@ -357,9 +369,9 @@ fn with_live<T>(live: &Live, run: impl FnOnce(&[&dyn RawStore]) -> T) -> T {
 fn behind_in<'a>(
     chain: &[&'a dyn RawStore],
     service: &str,
-) -> Result<Option<&'a dyn RawStore>, Error> {
+) -> Result<Option<(&'a dyn RawStore, &'a dyn RawStore)>, Error> {
     match resolve_in(chain, service)? {
-        Some(holder) => after_in(chain, holder, service),
+        Some(holder) => Ok(after_in(chain, holder, service)?.map(|behind| (holder, behind))),
         None => Ok(None),
     }
 }
@@ -382,8 +394,11 @@ fn after_in<'a>(
 /// and what no write to it reaches. A backend is behind wherever its own look says it is
 /// there, so a file is behind holding `{}`, nothing at all, or what cannot be read, as a file
 /// that is not text or that this user may not read: reading it then gives the error. `None`
-/// where the login in use is in the last backend, or nowhere.
-pub(crate) fn behind<'a>(live: &'a Live, service: &str) -> Result<Option<&'a dyn RawStore>, Error> {
+/// where the login in use is in the last backend, or nowhere. With the backend holding it.
+pub(crate) fn behind<'a>(
+    live: &'a Live,
+    service: &str,
+) -> Result<Option<(&'a dyn RawStore, &'a dyn RawStore)>, Error> {
     behind_in(&live.refs(), service)
 }
 
@@ -550,7 +565,7 @@ mod tests {
         let held = |chain: &[&dyn RawStore]| -> Option<String> {
             behind_in(chain, "svc")
                 .unwrap()
-                .map(|behind| behind.read("svc").unwrap().expect("there"))
+                .map(|(_, behind)| behind.read("svc").unwrap().expect("there"))
         };
         assert_eq!(held(&chain), None);
 
@@ -587,10 +602,10 @@ mod tests {
         let file = PlainFile::at(path);
         let chain: [&dyn RawStore; 2] = [&keychain, &file];
 
-        let behind = behind_in(&chain, "svc")
+        let (_, behind) = behind_in(&chain, "svc")
             .expect("which backend is in use is told")
-            .expect("the file is behind")
-            .read("svc");
+            .expect("the file is behind");
+        let behind = behind.read("svc");
         assert!(matches!(behind, Err(Error::Unreadable(_))), "{behind:?}");
     }
 
@@ -659,7 +674,8 @@ mod tests {
             Some(Cost {
                 needs: 1,
                 limit: 2560,
-                second_route: true
+                second_route: true,
+                store: SecretStore::Keychain,
             }),
             "the first store's ceiling, while the file holds the login"
         );

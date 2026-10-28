@@ -4,7 +4,7 @@
 
 use super::{credman, paths as claude, slot};
 use crate::context::Context;
-use crate::host::{OS, Os};
+use crate::host::{OS, Os, SecretStore};
 use crate::permit::Permit;
 use crate::store::{self, Backend, Error, Live, RawStore, Refused};
 use serde_json::Value;
@@ -54,11 +54,13 @@ pub(crate) fn chain(ctx: &Context) -> Live {
 ///
 /// `None` too where whether it is there cannot be told: the keychain cannot be read, which
 /// reading the login in use says as well, or the file cannot even be looked at, which
-/// Claude Code's own look cannot either, and takes for a file that is not there.
-pub(crate) fn behind(ctx: &Context) -> Option<Result<String, Error>> {
+/// Claude Code's own look cannot either, and takes for a file that is not there. With the
+/// store it is behind.
+pub(crate) fn behind(ctx: &Context) -> Option<(SecretStore, Result<String, Error>)> {
     let (live, service) = (chain(ctx), claude::live_service(ctx));
     let holder = store::holder(&live, &service).ok()??;
-    behind_holder(&live, holder, &service)
+    let ahead = holder.kind().secret_store()?;
+    behind_holder(&live, holder, &service).map(|read| (ahead, read))
 }
 
 // What [`behind`] reads, with the backend holding the login in use already found in `live`.
@@ -101,8 +103,9 @@ pub(crate) fn login_in(held: &str) -> Option<Value> {
 }
 
 // The login in the file [`behind`] reads, where it holds one, as the provider reads it.
-pub(crate) fn login_behind(ctx: &Context) -> Option<Result<Option<Value>, Error>> {
-    Some(behind(ctx)?.map(|held| login_in(&held)))
+pub(crate) fn login_behind(ctx: &Context) -> Option<(SecretStore, Result<Option<Value>, Error>)> {
+    let (ahead, read) = behind(ctx)?;
+    Some((ahead, read.map(|held| login_in(&held))))
 }
 
 // What a private sign-in left: the keychain item its own hashing names, or the file inside the

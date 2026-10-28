@@ -712,7 +712,7 @@ fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> Result<bool, Error>) 
     if let Some(refused) = left.refusal() {
         return Some(Report::failed(Some("stow"), refused));
     }
-    match confirm(&left_question(pitboard_core::host::OS, &left)) {
+    match confirm(&left_question(&left)) {
         Ok(true) => {}
         Ok(false) => return None,
         Err(refused) => return Some(Report::failed(Some("stow"), refused)),
@@ -726,18 +726,18 @@ fn stow(pitboard: &Pitboard, confirm: impl FnOnce(&str) -> Result<bool, Error>) 
                 "account": stowed.kept.account(),
                 "dropped": stowed.dropped,
             }),
-            stowed_lines(pitboard_core::host::OS, &stowed),
+            stowed_lines(&stowed),
         )
     }))
 }
 
-fn left_question(os: pitboard_core::host::Os, left: &pitboard_core::switch::Left) -> String {
-    let lines = pitboard_core::words::left_lines(os, left);
+fn left_question(left: &pitboard_core::switch::Left) -> String {
+    let lines = pitboard_core::words::left_lines(left);
     format!("{}\nPut it away? [y/N] ", lines.join("\n"))
 }
 
-fn stowed_lines(os: pitboard_core::host::Os, stowed: &pitboard_core::switch::Stowed) -> String {
-    pitboard_core::words::stowed_lines(os, stowed)
+fn stowed_lines(stowed: &pitboard_core::switch::Stowed) -> String {
+    pitboard_core::words::stowed_lines(stowed)
         .into_iter()
         .map(|line| format!("{line}\n"))
         .collect()
@@ -1624,7 +1624,7 @@ mod tests {
     /// Once it has, it says the same of what it did.
     #[test]
     fn stow_asks_saying_what_the_file_holds_and_says_what_it_did() {
-        use pitboard_core::host::Os;
+        use pitboard_core::host::SecretStore;
         use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
         let path = std::path::PathBuf::from("/Users/x/.claude/.credentials.json");
         let parked = Kept::ParkedNow {
@@ -1632,11 +1632,12 @@ mod tests {
         };
         let left = Left {
             path: path.clone(),
+            store: SecretStore::Keychain,
             seen: "0123456789abcdef".into(),
             login: Foreseen::Kept(parked),
             dropped: vec!["mcpOAuth".into()],
         };
-        let question = left_question(Os::MacOs, &left);
+        let question = left_question(&left);
         assert_eq!(
             question,
             "/Users/x/.claude/.credentials.json holds `work`'s login, and Pitboard holds no \
@@ -1649,20 +1650,21 @@ mod tests {
              signed out.\n\
              Put it away? [y/N] "
         );
-        let on_windows = left_question(Os::Windows, &left);
+        let on_windows = left_question(&Left {
+            store: SecretStore::CredentialManager,
+            ..left
+        });
         assert!(
             on_windows.contains("Claude Code's document in Credential Manager keeps its own.")
                 && on_windows.contains("such as one in a sign-in over SSH with a key, is signed"),
             "{on_windows}"
         );
-        let said = stowed_lines(
-            Os::MacOs,
-            &Stowed {
-                path,
-                kept: Kept::NoLogin,
-                dropped: vec!["mcpOAuth".into(), "coworkRemoteDevice".into()],
-            },
-        );
+        let said = stowed_lines(&Stowed {
+            path,
+            store: SecretStore::Keychain,
+            kept: Kept::NoLogin,
+            dropped: vec!["mcpOAuth".into(), "coworkRemoteDevice".into()],
+        });
         assert_eq!(
             said,
             "Deleted /Users/x/.claude/.credentials.json, which held no Claude Code login.\n\

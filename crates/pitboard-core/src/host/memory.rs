@@ -5,7 +5,7 @@
 
 use super::{
     Administered, Cookie, Elevation, Floor, Host, Jar, JarError, Listed, Process, Scheduler,
-    WindowsSettings,
+    SecretStore, WindowsSettings,
 };
 use crate::context::Context;
 use crate::permit::Permit;
@@ -91,6 +91,7 @@ impl RawStore for Opened {
                 needs: contents.len(),
                 limit: crate::provider::claude::pieces::BLOB,
                 second_route: false,
+                store: SecretStore::CredentialManager,
             });
         }
         RawStore::cost(&self.store, &self.key(service), contents).map(|cost| Cost {

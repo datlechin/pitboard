@@ -719,9 +719,8 @@ fn a_switch_killed_before_it_took_the_file_away_leaves_a_login_doctor_names() {
         m.live().expect("a login")["claudeAiOauth"]["refreshToken"],
         "there-refresh"
     );
-    let behind = provider::claude::live::behind(&m.ctx)
-        .expect("a file behind")
-        .expect("read");
+    let (_, behind) = provider::claude::live::behind(&m.ctx).expect("a file behind");
+    let behind = behind.expect("read");
     assert!(behind.contains("here-refresh"), "{behind}");
     hold(&m, "killed before the file was taken away");
 }

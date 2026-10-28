@@ -1093,6 +1093,7 @@ fn priced(
             label: label.to_string(),
             bytes: price.needs,
             limit: price.limit,
+            store: price.store,
         });
     }
     Ok(price

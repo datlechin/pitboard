@@ -175,6 +175,7 @@ fn a_machine_with_only_codex_is_not_judged_on_claude_code() {
     windows.os = Os::Windows;
     windows.fallback_login = Some(FallbackLogin {
         path: windows.credential_file.clone(),
+        store: SecretStore::CredentialManager,
         fingerprint: Ok(None),
     });
     windows.status_line = Some(StatusLineFact {
@@ -269,6 +270,18 @@ fn doctor_checks_nothing_under_a_home_that_is_not_a_full_path() {
         assert_eq!(diagnosis.checks[0].advice, words::SET_A_FULL_PATH);
         assert_eq!(diagnosis.environment, json!({}));
     }
+}
+
+#[test]
+fn no_check_said_on_linux_names_a_keychain_a_menu_bar_or_activity_monitor() {
+    let named: Vec<String> = evaluate(&everything_said(Os::Linux))
+        .into_iter()
+        .flat_map(|check| {
+            [check.name, check.detail, check.advice].map(|said| format!("{}: {said}", check.code))
+        })
+        .filter(|said| crate::words::names_what_linux_has_not(said))
+        .collect();
+    assert!(named.is_empty(), "{named:#?}");
 }
 
 // The command line heads each tool's section where its codes start.
@@ -396,10 +409,8 @@ fn the_checks_come_in_the_order_each_system_prints_them() {
             "identity",
             "in_use",
             "slot",
-            "credential_size",
             "credential_store",
             "credential",
-            "fallback_login",
             "home",
             "private_on_disk",
             "state",

@@ -89,3 +89,18 @@ is built from. No AppImage was run.
   October 2026, the debug `pitboard` for `x86_64-unknown-linux-gnu` named no
   `posix_spawn_file_actions_addclosefrom_np` and no symbol version past `GLIBC_2.28`, so a glibc
   build of the command line still links before glibc 2.34.
+
+## System Monitor
+
+Read on 28 October 2026 in the desktop file each desktop's process monitor installs.
+
+- GNOME's, `gnome-system-monitor`, is `Name=System Monitor` in
+  `data/org.gnome.SystemMonitor.desktop.in.in` at tag `48.1` (commit
+  `68dab9ea315aae5a6318153e05797657092d9d9e`) and tag `51.1` (commit
+  `386dbf1754ec3d6063a0575ccc4e937aef3cc712`).
+- KDE Plasma's, `plasma-systemmonitor`, is `Name=System Monitor` in
+  `org.kde.plasma-systemmonitor.desktop` at tag `v6.3.6` (commit
+  `be4f1594995698cac59959b8baa4421f435a1015`) and tag `v6.8.2` (commit
+  `e4cd4bcdfe56eb67c08bcf42b5af708f9d96a8c2`).
+- So a process left of an app is quit in System Monitor on Linux, whichever of the two runs
+  (`what_is_left_of_an_app_is_quit_where_the_system_quits_it`).

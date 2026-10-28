@@ -832,6 +832,7 @@ impl Pitboard {
         Some(Warning::FallbackLogin {
             tool,
             path: behind.path,
+            store: behind.store,
             held: behind.held,
         })
     }

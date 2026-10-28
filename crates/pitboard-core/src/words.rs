@@ -10,7 +10,7 @@
 //! `time::moment`, and the app in the format its Mac is set to.
 
 use crate::doctor::Level;
-use crate::host::{Os, WINDOWS_FLOOR, token};
+use crate::host::{Os, SecretStore, WINDOWS_FLOOR, token};
 use crate::schedule::Job;
 use crate::state::renewal_due;
 use crate::time::{DAY, HOUR, MINUTE, WEEK};
@@ -330,18 +330,18 @@ pub fn nothing_left() -> &'static str {
      put away."
 }
 
-pub fn store_in_front(os: Os) -> &'static str {
-    match os {
-        Os::MacOs | Os::Linux => "the keychain",
-        Os::Windows => "Credential Manager",
+pub fn store_in_front(store: SecretStore) -> &'static str {
+    match store {
+        SecretStore::Keychain => "the keychain",
+        SecretStore::CredentialManager => "Credential Manager",
     }
 }
 
 // What a session cannot do that signs in with the file behind the store a switch writes.
-pub(crate) fn out_of_reach(os: Os) -> &'static str {
-    match os {
-        Os::MacOs | Os::Linux => "cannot read the keychain",
-        Os::Windows => "cannot reach Credential Manager",
+pub(crate) fn out_of_reach(store: SecretStore) -> &'static str {
+    match store {
+        SecretStore::Keychain => "cannot read the keychain",
+        SecretStore::CredentialManager => "cannot reach Credential Manager",
     }
 }
 
@@ -358,31 +358,31 @@ pub(crate) fn past_credential_manager(bytes: usize, limit: usize) -> String {
     format!("{bytes} bytes, past the {limit} Claude Code keeps in Credential Manager")
 }
 
-pub(crate) fn reads_only_the_file(os: Os) -> String {
-    let such_as = match os {
-        Os::MacOs | Os::Linux => "one started over SSH".to_owned(),
-        Os::Windows => format!("one in {SSH_SIGN_IN}"),
+pub(crate) fn reads_only_the_file(store: SecretStore) -> String {
+    let such_as = match store {
+        SecretStore::Keychain => "one started over SSH".to_owned(),
+        SecretStore::CredentialManager => format!("one in {SSH_SIGN_IN}"),
     };
-    format!("a session that {}, such as {such_as}", out_of_reach(os))
+    format!("a session that {}, such as {such_as}", out_of_reach(store))
 }
 
-pub fn left_lines(os: Os, left: &crate::switch::Left) -> Vec<String> {
+pub fn left_lines(left: &crate::switch::Left) -> Vec<String> {
     use crate::switch::{Foreseen, Kept};
     if let Foreseen::NotEnrolled(_) = left.login {
         return vec![left_login(left)];
     }
     let held_a_login = left.login != Foreseen::Kept(Kept::NoLogin);
     std::iter::once(left_login(left))
-        .chain(dropped_keys(os, &left.dropped, false))
-        .chain(std::iter::once(once_stowed(os, held_a_login)))
+        .chain(dropped_keys(left.store, &left.dropped, false))
+        .chain(std::iter::once(once_stowed(left.store, held_a_login)))
         .collect()
 }
 
-pub fn stowed_lines(os: Os, stowed: &crate::switch::Stowed) -> Vec<String> {
+pub fn stowed_lines(stowed: &crate::switch::Stowed) -> Vec<String> {
     let held_a_login = stowed.kept != crate::switch::Kept::NoLogin;
     std::iter::once(stowed_login(stowed))
-        .chain(dropped_keys(os, &stowed.dropped, true))
-        .chain(std::iter::once(once_stowed(os, held_a_login)))
+        .chain(dropped_keys(stowed.store, &stowed.dropped, true))
+        .chain(std::iter::once(once_stowed(stowed.store, held_a_login)))
         .collect()
 }
 
@@ -467,7 +467,7 @@ fn stowed_login(stowed: &crate::switch::Stowed) -> String {
     }
 }
 
-fn dropped_keys(os: Os, keys: &[String], gone: bool) -> Option<String> {
+fn dropped_keys(store: SecretStore, keys: &[String], gone: bool) -> Option<String> {
     let one = match keys.len() {
         0 => return None,
         n => n == 1,
@@ -486,19 +486,19 @@ fn dropped_keys(os: Os, keys: &[String], gone: bool) -> Option<String> {
     Some(format!(
         "It also {holds} {count}, {names}, which {goes} with the file: Pitboard does not move \
          {them}, and Claude Code's document in {} keeps its own.",
-        store_in_front(os)
+        store_in_front(store)
     ))
 }
 
-fn once_stowed(os: Os, held_a_login: bool) -> String {
+fn once_stowed(store: SecretStore, held_a_login: bool) -> String {
     let follow = format!(
         "Once the file is gone, Claude Code sessions already running follow a switch within \
          {} seconds again",
         crate::switch::ADOPTION_CEILING_SECONDS
     );
-    let over_ssh = match os {
-        Os::MacOs | Os::Linux => "one over SSH".to_owned(),
-        Os::Windows => format!("one in {SSH_SIGN_IN}"),
+    let over_ssh = match store {
+        SecretStore::Keychain => "one over SSH".to_owned(),
+        SecretStore::CredentialManager => format!("one in {SSH_SIGN_IN}"),
     };
     if held_a_login {
         format!(
@@ -985,8 +985,9 @@ pub(crate) fn elsewhere_way_out(tool: crate::provider::ProviderId) -> String {
 
 pub fn wait_for_still(os: Os, then: &str) -> String {
     let monitor = match os {
-        // No app that keeps a tool's login runs on Linux.
-        Os::MacOs | Os::Linux => "Activity Monitor",
+        Os::MacOs => "Activity Monitor",
+        // GNOME's and Plasma's are both named so (docs/facts/linux.md).
+        Os::Linux => "System Monitor",
         Os::Windows => "Task Manager",
     };
     format!("Wait until it ends, or quit it in {monitor}, then {then}.")
@@ -1201,7 +1202,8 @@ pub fn forget_question(tool: Option<crate::provider::ProviderId>, label: &str) -
 // login: Pitboard is looking in the wrong place.
 pub(crate) fn named_but_not_found(os: Os, email: &str) -> String {
     let places = match os {
-        Os::MacOs | Os::Linux => "in the keychain or in the file it also reads",
+        Os::MacOs => "in the keychain or in the file it also reads",
+        Os::Linux => "in .credentials.json",
         Os::Windows => "in .credentials.json or in Credential Manager",
     };
     format!(
@@ -1400,6 +1402,15 @@ pub fn listed<T: AsRef<str>>(items: impl IntoIterator<Item = T>) -> String {
     }
 }
 
+// Linux has no keychain, no menu bar item of Pitboard's and no Activity Monitor.
+#[cfg(test)]
+pub(crate) fn names_what_linux_has_not(said: &str) -> bool {
+    let said = said.to_lowercase();
+    ["keychain", "menu bar", "activity monitor"]
+        .iter()
+        .any(|word| said.contains(word))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1419,51 +1430,72 @@ mod tests {
     fn a_file_left_behind_the_store_is_said_in_the_words_of_its_system() {
         use crate::switch::{Foreseen, Kept, Left, Stowed};
         let path = std::path::PathBuf::from("/x/.credentials.json");
-        let left = Left {
-            path: path.clone(),
-            seen: "0123456789abcdef".into(),
-            login: Foreseen::Kept(Kept::ParkKept {
-                label: "work".into(),
-            }),
-            dropped: vec!["mcpOAuth".into()],
-        };
-        let stowed = Stowed {
-            path,
-            kept: Kept::ParkKept {
-                label: "work".into(),
-            },
-            dropped: vec!["mcpOAuth".into()],
-        };
-        for (os, store, over_ssh, reader) in [
+        for (store, named, over_ssh, reader) in [
             (
-                Os::MacOs,
+                SecretStore::Keychain,
                 "the keychain",
                 "one over SSH",
                 "a session that cannot read the keychain, such as one started over SSH",
             ),
             (
-                Os::Windows,
+                SecretStore::CredentialManager,
                 "Credential Manager",
                 "one in a sign-in over SSH with a key",
                 "a session that cannot reach Credential Manager, such as one in a sign-in over \
                  SSH with a key",
             ),
         ] {
-            for lines in [left_lines(os, &left), stowed_lines(os, &stowed)] {
+            let left = Left {
+                path: path.clone(),
+                store,
+                seen: "0123456789abcdef".into(),
+                login: Foreseen::Kept(Kept::ParkKept {
+                    label: "work".into(),
+                }),
+                dropped: vec!["mcpOAuth".into()],
+            };
+            let stowed = Stowed {
+                path: path.clone(),
+                store,
+                kept: Kept::ParkKept {
+                    label: "work".into(),
+                },
+                dropped: vec!["mcpOAuth".into()],
+            };
+            for lines in [left_lines(&left), stowed_lines(&stowed)] {
                 assert!(
                     lines[1]
-                        .ends_with(&format!("Claude Code's document in {store} keeps its own.")),
-                    "{os:?}: {lines:?}"
+                        .ends_with(&format!("Claude Code's document in {named} keeps its own.")),
+                    "{store:?}: {lines:?}"
                 );
                 assert!(
                     lines[2].ends_with(&format!(
                         "one that signed in with its login, such as {over_ssh}, is signed out."
                     )),
-                    "{os:?}: {lines:?}"
+                    "{store:?}: {lines:?}"
                 );
             }
-            assert_eq!(reads_only_the_file(os), reader);
+            assert_eq!(reads_only_the_file(store), reader);
         }
+    }
+
+    // What is said of a file behind a store takes that store, which Linux has none of.
+    #[test]
+    fn no_sentence_said_on_linux_names_a_keychain_a_menu_bar_or_activity_monitor() {
+        let linux = Os::Linux;
+        let said = [
+            wait_for_still(linux, "run this again"),
+            named_but_not_found(linux, "a@example.com"),
+            elevated(linux, None).refusal,
+            elevated(linux, Some("as root")).because,
+            no_scheduler(linux, Job::Renew),
+            no_scheduler(linux, Job::Watch),
+        ];
+        let named: Vec<&String> = said
+            .iter()
+            .filter(|said| names_what_linux_has_not(said))
+            .collect();
+        assert!(named.is_empty(), "{named:#?}");
     }
 
     #[test]
@@ -1479,14 +1511,14 @@ mod tests {
 
     #[test]
     fn what_is_left_of_an_app_is_quit_where_the_system_quits_it() {
-        assert_eq!(
-            wait_for_still(Os::Windows, "run this again"),
-            "Wait until it ends, or quit it in Task Manager, then run this again."
-        );
-        for os in [Os::MacOs, Os::Linux] {
+        for (os, monitor) in [
+            (Os::MacOs, "Activity Monitor"),
+            (Os::Linux, "System Monitor"),
+            (Os::Windows, "Task Manager"),
+        ] {
             assert_eq!(
                 wait_for_still(os, "run this again"),
-                "Wait until it ends, or quit it in Activity Monitor, then run this again."
+                format!("Wait until it ends, or quit it in {monitor}, then run this again.")
             );
         }
     }
