@@ -275,6 +275,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Pitboard adds and switches a Claude Desktop account whose `oauth:tokenCacheV2` holds its
+  tokens while `oauth:tokenCache` stays emptied, as Claude 3.6556.2 leaves them after a sign-in,
+  where it said Claude had not finished signing in.
 - On Windows, Pitboard reads Codex's requirements from the file the policy `RequirementsPath` in
   `HKLM\SOFTWARE\Policies\OpenAI\Codex` names, as Codex 0.164.0 does, before it switches Codex.
 - Pitboard renews a parked Codex login at the issuer and as the client Codex 0.164.0 records in

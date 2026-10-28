@@ -1,6 +1,7 @@
 // `M` is 2.7032.0's `.vite/build/index.chunk-D3OyLXgG.js`, `P` its `index.pre.js`, `@n` a byte.
 // `N` is 2.42304.0's `.vite/build/index.chunk-muI2IV6k.js`; its other chunks go by their hash.
 // `R` is 3.6556.2's `.vite/build/index.pre.js`, and `Q` its `index.chunk-jPKPzV-P.js`.
+// `S` is 4.29.0's `.vite/build/index.chunk-C7NkbHFq.js`.
 
 use crate::assumptions::OnSystem::{NotRead, Read};
 use crate::assumptions::{Assumption, PerSystem};
@@ -309,9 +310,36 @@ pub(crate) const ASSUMPTIONS: &[Assumption] = &[
                     11 October 2026, `M` @2977015, @2945841",
         verified_against: VERIFIED_AGAINST,
         depends: "`Desktop::emptied`; signed out with the name kept is certain; a session \
-                  Pitboard has not seen beside an emptied cache is a sign-in not finished, \
-                  never taken under the name Claude kept",
+                  Pitboard has not seen beside caches that all hold the emptied value is a \
+                  sign-in not finished, never taken under the name Claude kept",
         probe: &["clearing oauth cache"],
+        absent: &[],
+    },
+    Assumption {
+        name: "desktop_token_caches_on_demand",
+        fact: "Claude writes a token cache only as something asks it for a token: \
+               `oauth:tokenCache` for its telemetry and the API token of its own deployment, \
+               `oauth:tokenCacheV2` for the Code tab's settings and credential. A sign-in writes \
+               the account to `lastKnownAccountUuid` before either cache takes a token for it, \
+               and empties both unless it brings back the account Claude last named or, behind \
+               a feature gate, one its account switcher holds. So one cache can stay emptied \
+               while the other holds the account's tokens.",
+        read_from: "This repository's static read of 2.7032.0's, 3.6556.2's and 4.29.0's \
+                    `app.asar`, 28 October 2026: the caches `M` @2938294 and @2956450, `Q` \
+                    @3054888 and @3074896, `S` @2993414 and @3013803; the telemetry token `M` \
+                    @2989080, `Q` @3110636, `S` @3048100; the deployment's token `M` @2918671, \
+                    `Q` @3033590, `S` @2971717; the Code tab's `M` @6000088, `Q` @6260565, `S` \
+                    @6333736; the sign-in `M` @2974715, `Q` @3095957, `S` @3035027, and its \
+                    name `M` @2976997, `Q` @3098664, `S` @3037755. Issue #312: \
+                    3.6556.2 signed in, its `oauth:tokenCache` 28 characters and \
+                    `oauth:tokenCacheV2` 2244",
+        verified_against: READ_FROM_CLAUDE_3,
+        depends: "`switch::folder::verdict::holds`: a sign-in is unfinished only while every \
+                  token cache there holds the emptied value",
+        probe: &[
+            "[EventLogging] Telemetry token obtained",
+            "[ccdCredential] base-scope token unavailable",
+        ],
         absent: &[],
     },
     Assumption {
@@ -489,6 +517,7 @@ pub(crate) const PER_SYSTEM: &[PerSystem] = &[
     on_a_mac("desktop_session_replaced_in_place", VERIFIED_AGAINST),
     on_a_mac("desktop_logout_revokes", VERIFIED_AGAINST),
     on_a_mac("desktop_logout_keeps_name", VERIFIED_AGAINST),
+    on_a_mac("desktop_token_caches_on_demand", READ_FROM_CLAUDE_3),
     on_a_mac("desktop_name_after_sign_in", VERIFIED_AGAINST),
     on_a_mac("desktop_name_written_on_report", READ_FROM_THE_ARCHIVE),
     on_a_mac("desktop_writes_at_quit", VERIFIED_AGAINST),
