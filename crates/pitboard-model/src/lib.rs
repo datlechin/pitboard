@@ -601,4 +601,35 @@ mod tests {
         let key = Key::new(ProviderId::Codex, "team/a");
         assert_eq!(Key::from(AccountKey::from(key.clone())), key);
     }
+
+    // So no system the core adds an app of reaches the arm that is none of the apps' systems:
+    // a holding job that met it would be lost, and taken as nothing holding the login.
+    #[test]
+    fn every_app_a_holder_names_is_one_the_apps_name() {
+        use pitboard_core::holder::{AppId as Core, Remedy};
+        let mut apps = Vec::new();
+        for &tool in ProviderId::ALL {
+            for holder in pitboard_core::testing::holders(tool) {
+                let Remedy::ReopenApp { app, .. } = holder.remedy else {
+                    continue;
+                };
+                let named = match (app, AppId::from(app)) {
+                    (Core::MacBundle(core), AppId::MacBundle { id })
+                    | (Core::WindowsAumid(core), AppId::WindowsAumid { id }) => core == id,
+                    _ => false,
+                };
+                assert!(named, "{app:?}");
+                apps.push(app.as_str());
+            }
+        }
+        assert_eq!(
+            apps,
+            [
+                "com.openai.codex",
+                "OpenAI.Codex_2p2nqsd0c76g0!App",
+                "com.anthropic.claudefordesktop"
+            ],
+            "ChatGPT on a Mac and on Windows, and Claude"
+        );
+    }
 }

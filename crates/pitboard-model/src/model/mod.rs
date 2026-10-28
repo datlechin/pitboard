@@ -1046,7 +1046,8 @@ impl From<pitboard_core::holder::AppId> for AppId {
             Core::MacBundle(id) => AppId::MacBundle { id: id.into() },
             Core::WindowsAumid(id) => AppId::WindowsAumid { id: id.into() },
             // The core's `AppId` is `non_exhaustive`, and a system it adds is given an `AppId`
-            // here before any holder of it is found, as a tool is given a `Tool`.
+            // here before any holder of it is found, as
+            // `every_app_a_holder_names_is_one_the_apps_name` holds.
             _ => unreachable!("{app:?} is an app the apps do not name"),
         }
     }

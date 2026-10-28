@@ -470,9 +470,11 @@ keeps it is in the header of the module named.
 - The model names a tool and an account by type: the core's `ProviderId` and `Key` inside, and
   its own `Tool` and `AccountKey` to an app. What crosses a process stays text: a
   notification's `clicked` argument, read back as the core reads an account typed, and the ids
-  of the widget feed and of a request from outside. The one conversion out of the core's
-  `non_exhaustive` `ProviderId`, into `Tool`, is the model's only arm for a tool it does not
-  know (`every_tool_the_core_knows_is_one_the_apps_name`).
+  of the widget feed and of a request from outside. The conversions out of the core's
+  `non_exhaustive` `ProviderId` and `holder::AppId`, into `Tool` and `AppId`, are the model's
+  only arms for a tool or an app it does not know
+  (`every_tool_the_core_knows_is_one_the_apps_name`,
+  `every_app_a_holder_names_is_one_the_apps_name`).
 - `State` words nothing itself and imports nothing of `present::words`: a failure is what was
   being done and why, and a switch's or a sign-in's notice what it did, which `present` words
   for the front it shows on (`Failure`'s `Doing` and `Cause`, `LastSwitch`'s `SignedIn` and
