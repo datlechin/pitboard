@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- On Linux, `pitboard doctor` warns of a renewal or watch unit an earlier Pitboard wrote, and
+  says to install it again.
+
 ### Changed
 
 - **Breaking:** On Linux, `pitboard schedule install` and `pitboard watch install` refuse with
@@ -22,6 +27,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Where Codex has an account of the same name, the app keeps what a switch to a Claude Code
   account said once you sign in to that account again or rename it, where it put the notice away.
+- On Linux, daily renewal runs once each calendar day and catches up after the computer slept or
+  was off, where it counted only time awake.
+- On Linux, a renewal or watch unit whose Pitboard was removed is skipped rather than failing
+  each day or at each sign-in.
+- On Linux, daily renewal and the watch service run a `pitboard` whose path holds a space or a
+  `%`.
 - On Linux, Pitboard's messages, `pitboard doctor` and `pitboard --help` no longer name the
   keychain, the menu bar, Activity Monitor or Claude Desktop.
 - On Windows, `pitboard doctor` says Credential Manager still holds Claude Code's login under

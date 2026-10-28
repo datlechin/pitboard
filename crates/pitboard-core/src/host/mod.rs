@@ -1109,6 +1109,12 @@ pub(crate) trait Scheduler: Send + Sync + std::fmt::Debug {
     fn task(&self, _ctx: &Context, _job: Job) -> Option<task::Task> {
         None
     }
+
+    // Whether the job is there as an earlier Pitboard wrote it, which installing again mends:
+    // systemd's alone.
+    fn outdated(&self, _ctx: &Context, _job: Job) -> bool {
+        false
+    }
 }
 
 // Time awake since a fixed moment (boot on Windows, the first call elsewhere); a sleep adds none.

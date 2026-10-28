@@ -305,6 +305,11 @@ pub(crate) fn task(ctx: &Context, job: Job) -> Option<crate::host::task::Task> {
     scheduler(ctx)?.task(ctx, job)
 }
 
+/// Whether `job` is there as an earlier Pitboard wrote it, which installing it again mends.
+pub(crate) fn outdated(ctx: &Context, job: Job) -> bool {
+    scheduler(ctx).is_some_and(|s| s.outdated(ctx, job))
+}
+
 /// The Pitboard the installed schedule runs, read back from what `install` wrote. `None`
 /// where nothing is installed, and where what is there does not name one the way `install`
 /// writes it.

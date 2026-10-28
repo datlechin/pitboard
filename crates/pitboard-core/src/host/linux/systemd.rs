@@ -12,7 +12,7 @@ use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::host::Scheduler;
 use crate::permit::Permit;
-use crate::schedule::{EVERY_SECONDS, Elsewhere, Job, Location, RESTART_AFTER_SECONDS};
+use crate::schedule::{Elsewhere, Job, Location, RESTART_AFTER_SECONDS};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -253,6 +253,7 @@ impl Scheduler for Systemd {
         options: &[String],
         environment: &[(String, String)],
     ) -> Result<()> {
+        let program = spelled(program)?;
         let units = Self::units(ctx);
         if !self.manager_of_this_home(ctx, job)?.reads_from(&units) {
             return Err(Error::ScheduleManagerElsewhere {
@@ -269,7 +270,7 @@ impl Scheduler for Systemd {
         service::write(
             permit,
             &unit,
-            &unit_file(job, program, options, environment),
+            &unit_file(job, &program, options, environment),
         )?;
         if job == Job::Renew {
             service::write(permit, &timer_path, &timer())?;
@@ -299,8 +300,9 @@ impl Scheduler for Systemd {
     }
 
     /// Where the user's systemd reads the folder a job is in, it is stopped and disabled
-    /// through `systemctl`. Where it does not, it never loaded the job, so its files and the
-    /// link `enable` made go and `systemctl` is asked nothing.
+    /// through `systemctl`, and renewal's record of its last run cleared, as systemd.timer(5)
+    /// asks before a timer with `Persistent=` is taken away. Where it does not, it never loaded
+    /// the job, so its files and the link `enable` made go and `systemctl` is asked nothing.
     fn remove(&self, ctx: &Context, permit: Permit, job: Job) -> Result<bool> {
         let holding: Vec<PathBuf> = Self::folders(ctx)
             .into_iter()
@@ -323,6 +325,13 @@ impl Scheduler for Systemd {
                 // uninstall` removes next.
                 if job == Job::Watch {
                     stopped?;
+                }
+                if job == Job::Renew {
+                    let _ = self.control.run(
+                        permit,
+                        SYSTEMCTL,
+                        &["--user", "clean", "--what=state", TIMER],
+                    );
                 }
             } else {
                 service::remove(
@@ -349,21 +358,88 @@ impl Scheduler for Systemd {
     fn started_this_process(&self, job: Job, said: Option<&str>) -> bool {
         said == Some(Self::service(job))
     }
+
+    // A timer written before `OnCalendar=` counted only time awake, and a service written
+    // before `ConditionFileIsExecutable=` fails at each start once its Pitboard is gone.
+    fn outdated(&self, ctx: &Context, job: Job) -> bool {
+        let Some(folder) = Self::holding(ctx, job) else {
+            return false;
+        };
+        let lacks = |file: &str, setting: &str| {
+            !std::fs::read_to_string(folder.join(file))
+                .is_ok_and(|body| body.lines().any(|line| line.starts_with(setting)))
+        };
+        lacks(Self::service(job), "ConditionFileIsExecutable=")
+            || (job == Job::Renew && lacks(TIMER, "OnCalendar="))
+    }
+}
+
+/// A program's path as a unit spells it, read in systemd.service(5), systemd.syntax(7) and
+/// systemd's `src/core/load-fragment.c` at tag `v262`. `ExecStart=` unquotes its first word,
+/// then expands specifiers, so the path is in double quotes where it holds a space and each `%`
+/// is `%%`; `$` is kept, since no variable is expanded in the program a unit runs.
+/// `ConditionFileIsExecutable=` is not unquoted, only expanded, so there it is the path with
+/// `%%`.
+struct Spelled {
+    run: String,
+    condition: String,
+}
+
+/// `program` spelled for a unit, or refused before anything is written where no unit can run
+/// it: `config_parse_exec` refuses a program whose path is not UTF-8 or holds a control
+/// character, a backslash or a quote (`string_is_safe`), and the unit file parser strips a space
+/// at the end of a line.
+fn spelled(program: &Path) -> Result<Spelled> {
+    let refused = |what: &str| Error::ScheduleRefused {
+        detail: format!(
+            "a systemd unit cannot run a program whose path holds {what}, so nothing was \
+             written. Install Pitboard where its path holds none, then try again."
+        ),
+    };
+    let path = program
+        .to_str()
+        .ok_or_else(|| refused("bytes that are not UTF-8"))?;
+    if let Some(c) = path.chars().find(char::is_ascii_control) {
+        return Err(refused(&format!("the character U+{:04X}", u32::from(c))));
+    }
+    if path.contains('\\') {
+        return Err(refused("a backslash"));
+    }
+    if path.contains(['"', '\'']) {
+        return Err(refused("a quote"));
+    }
+    if path.ends_with(' ') {
+        return Err(refused("a space at its end"));
+    }
+    let condition = path.replace('%', "%%");
+    let run = if condition.contains(' ') {
+        format!("\"{condition}\"")
+    } else {
+        condition.clone()
+    };
+    Ok(Spelled { run, condition })
 }
 
 /// The program and the options a service's `ExecStart` runs, as [`unit_file`] writes it, or
-/// as Pitboard wrote renewal's before its job carried the marker.
+/// as Pitboard wrote it before: the path as it is, and for renewal before its job carried the
+/// marker, `<program> renew`.
 fn command(body: &str, job: Job) -> Option<(PathBuf, Vec<String>)> {
     let run = body
         .lines()
         .find_map(|line| line.strip_prefix("ExecStart="))?;
     let marked = format!(" {}", job.marked().join(" "));
-    let (program, options) = run.rsplit_once(marked.as_str()).or_else(|| match job {
-        Job::Renew => run.strip_suffix(" renew").map(|program| (program, "")),
-        Job::Watch => None,
-    })?;
+    let quoted = run
+        .strip_prefix('"')
+        .and_then(|quoted| quoted.split_once('"'));
+    let (program, options) = match quoted {
+        Some((program, after)) => (program, after.strip_prefix(marked.as_str())?),
+        None => run.rsplit_once(marked.as_str()).or_else(|| match job {
+            Job::Renew => run.strip_suffix(" renew").map(|program| (program, "")),
+            Job::Watch => None,
+        })?,
+    };
     let options = options.split_whitespace().map(str::to_owned).collect();
-    Some((PathBuf::from(program), options))
+    Some((PathBuf::from(program.replace("%%", "%")), options))
 }
 
 /// systemd's own format. `environment` is as for the launchd job: the service runs with
@@ -374,12 +450,14 @@ fn command(body: &str, job: Job) -> Option<(PathBuf, Vec<String>)> {
 /// rejects the flag, so after going back to one the timer fails every day until that
 /// Pitboard's `schedule install` rewrites the unit, which the CHANGELOG says.
 ///
-/// The watch service starts with the person's systemd, at their first sign-in, and again a
-/// minute after it fails or crashes: a panic exits 101, and a run an update left behind exits
-/// on a state file the new build wrote.
+/// Each service is skipped, not failed, once its program is gone or no longer runs
+/// (`ConditionFileIsExecutable=`, systemd.unit(5)), as after the package that installed it is
+/// removed. The watch service starts with the person's systemd, at their first sign-in, and
+/// again a minute after it fails or crashes: a panic exits 101, and a run an update left behind
+/// exits on a state file the new build wrote.
 fn unit_file(
     job: Job,
-    program: &Path,
+    program: &Spelled,
     options: &[String],
     environment: &[(String, String)],
 ) -> String {
@@ -388,33 +466,34 @@ fn unit_file(
         .map(|(name, value)| assignment(name, value))
         .collect::<String>();
     let run = [job.marked().join(" "), options.join(" ")].join(" ");
-    let run = run.trim_end();
+    let run = format!("{} {}", program.run, run.trim_end());
+    let condition = &program.condition;
     match job {
         Job::Renew => format!(
             "[Unit]\n\
              Description=Renew Pitboard's parked logins\n\
              Documentation=https://docs.usepitboard.com\n\
+             ConditionFileIsExecutable={condition}\n\
              \n\
              [Service]\n\
              Type=oneshot\n\
              {environment}\
-             ExecStart={} {run}\n",
-            program.display(),
+             ExecStart={run}\n"
         ),
         Job::Watch => format!(
             "[Unit]\n\
              Description=Switch Claude Code before an account runs out, and warm up accounts\n\
              Documentation=https://docs.usepitboard.com\n\
+             ConditionFileIsExecutable={condition}\n\
              \n\
              [Service]\n\
              {environment}\
-             ExecStart={} {run}\n\
+             ExecStart={run}\n\
              Restart=on-failure\n\
              RestartSec={RESTART_AFTER_SECONDS}\n\
              \n\
              [Install]\n\
-             WantedBy=default.target\n",
-            program.display(),
+             WantedBy=default.target\n"
         ),
     }
 }
@@ -504,19 +583,23 @@ fn unquoted(quoted: &str) -> String {
     text
 }
 
+/// Once each calendar day, read in systemd.timer(5) at tag `v262`. `OnCalendar=` counts the
+/// wall clock, which goes on while the computer sleeps, and a run due then happens once it
+/// wakes. `Persistent=` acts only with `OnCalendar=`: it keeps the last run on disk and starts
+/// one missed while the computer was off as the timer starts. `RandomizedDelaySec=` spreads
+/// each start, a catch-up's too, over the hour after it is due.
 fn timer() -> String {
-    format!(
-        "[Unit]\n\
-         Description=Renew Pitboard's parked logins daily\n\
-         \n\
-         [Timer]\n\
-         OnUnitActiveSec={EVERY_SECONDS}\n\
-         OnStartupSec=900\n\
-         Persistent=true\n\
-         \n\
-         [Install]\n\
-         WantedBy=timers.target\n"
-    )
+    "[Unit]\n\
+     Description=Renew Pitboard's parked logins daily\n\
+     \n\
+     [Timer]\n\
+     OnCalendar=daily\n\
+     Persistent=true\n\
+     RandomizedDelaySec=1h\n\
+     \n\
+     [Install]\n\
+     WantedBy=timers.target\n"
+        .to_string()
 }
 
 #[cfg(test)]
@@ -555,9 +638,10 @@ mod tests {
             .collect()
     }
 
-    // The unit for a program at `path`.
+    // The unit for a program at `path`, which a unit can run.
     fn unit(job: Job, path: &str, options: &[String], environment: &[(String, String)]) -> String {
-        unit_file(job, Path::new(path), options, environment)
+        let program = spelled(Path::new(path)).expect("a path a unit holds");
+        unit_file(job, &program, options, environment)
     }
 
     /// The service runs with systemd's environment, not the shell's, so what it is given of
@@ -636,9 +720,11 @@ mod tests {
     }
 
     /// The service runs one verb, with the marker a run of the schedule is told apart by,
-    /// rather than by what systemd passes it.
+    /// rather than by what systemd passes it. The timer counts calendar days, which go on
+    /// while the computer sleeps, and starts a run missed while it was off: its
+    /// `Persistent=true` did nothing beside `OnUnitActiveSec=`, which counts only time awake.
     #[test]
-    fn the_unit_runs_one_verb_and_the_timer_survives_a_machine_being_off() {
+    fn the_timer_runs_on_each_calendar_day_and_catches_up_after_sleep() {
         let written = unit(Job::Renew, "/usr/local/bin/pitboard", &[], &[]);
         assert!(
             written.contains("ExecStart=/usr/local/bin/pitboard renew --scheduled\n"),
@@ -646,8 +732,126 @@ mod tests {
         );
         assert!(!written.contains("status"));
         let timer = timer();
-        assert!(timer.contains("Persistent=true"));
-        assert!(timer.contains("WantedBy=timers.target"));
+        assert!(
+            timer.contains(
+                "[Timer]\n\
+                 OnCalendar=daily\n\
+                 Persistent=true\n\
+                 RandomizedDelaySec=1h\n\
+                 \n\
+                 [Install]\n\
+                 WantedBy=timers.target\n"
+            ),
+            "{timer}"
+        );
+        for monotonic in ["OnUnitActiveSec", "OnStartupSec", "OnBootSec"] {
+            assert!(!timer.contains(monotonic), "{timer}");
+        }
+    }
+
+    /// systemd skips a service whose program is gone rather than failing it each day or at
+    /// each sign-in, as once the package that installed Pitboard is removed.
+    #[test]
+    fn a_service_whose_pitboard_is_gone_is_skipped() {
+        for (job, description) in [
+            (Job::Renew, "Renew Pitboard's parked logins"),
+            (
+                Job::Watch,
+                "Switch Claude Code before an account runs out, and warm up accounts",
+            ),
+        ] {
+            let written = unit(job, "/usr/bin/pitboard", &[], &[]);
+            assert!(
+                written.starts_with(&format!(
+                    "[Unit]\n\
+                     Description={description}\n\
+                     Documentation=https://docs.usepitboard.com\n\
+                     ConditionFileIsExecutable=/usr/bin/pitboard\n\
+                     \n\
+                     [Service]\n"
+                )),
+                "{written}"
+            );
+        }
+    }
+
+    /// `ExecStart=` unquotes the program before it expands specifiers, and the condition only
+    /// expands them, so each spells it its own way and both name the same file.
+    #[test]
+    fn a_program_path_with_a_space_or_a_percent_reads_back_as_written() {
+        let path = "/home/x/100% sure/bin/pitboard";
+        let at = ["--at".to_string(), "90".to_string()];
+        for (job, options, run) in [
+            (Job::Renew, &[][..], "renew --scheduled"),
+            (Job::Watch, &at[..], "watch --scheduled --at 90"),
+        ] {
+            let written = unit(job, path, options, &[]);
+            assert!(
+                written.contains("ConditionFileIsExecutable=/home/x/100%% sure/bin/pitboard\n"),
+                "{written}"
+            );
+            assert!(
+                written.contains(&format!(
+                    "ExecStart=\"/home/x/100%% sure/bin/pitboard\" {run}\n"
+                )),
+                "{written}"
+            );
+            assert_eq!(
+                command(&written, job),
+                Some((PathBuf::from(path), options.to_vec())),
+                "{written}"
+            );
+        }
+        let dollar = unit(Job::Renew, "/opt/$x/pitboard", &[], &[]);
+        assert!(dollar.contains("ExecStart=/opt/$x/pitboard renew --scheduled\n"));
+        assert_eq!(
+            command(&dollar, Job::Renew).map(|(program, _)| program),
+            Some(PathBuf::from("/opt/$x/pitboard"))
+        );
+
+        // Installed and read back from the disk, as `schedule status` and doctor read it.
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let home = scratch.path().join("home");
+        let program = home.join("100% sure").join("pitboard");
+        std::fs::create_dir_all(program.parent().expect("its folder")).expect("made");
+        std::fs::write(&program, "").expect("a program");
+        let ctx = Context::new(home)
+            .with_memory_stores(MemoryHost::new())
+            .with_schedule_program(program.clone());
+        install(&ctx, Permit::for_a_test()).expect("installed");
+        assert_eq!(installed_program(&ctx), Some(program));
+    }
+
+    /// `config_parse_exec` refuses such a program, and the unit file parser strips a space at the
+    /// end of the condition, so nothing is written.
+    #[test]
+    fn a_program_path_no_unit_can_run_is_refused_before_anything_is_written() {
+        let (_home, ctx) = scratch_home();
+        let asked = Arc::new(Asked::default());
+        let systemd = Systemd::new(asked.clone(), Arc::new(Pretend));
+        for (path, named) in [
+            ("/opt/a\"b/pitboard", "a quote"),
+            ("/opt/it's/pitboard", "a quote"),
+            ("/opt/a\\b/pitboard", "a backslash"),
+            ("/opt/a\nb/pitboard", "the character U+000A"),
+            ("/opt/a\tb/pitboard", "the character U+0009"),
+            ("/opt/pitboard ", "a space at its end"),
+        ] {
+            let refused = systemd
+                .put(
+                    &ctx,
+                    Permit::for_a_test(),
+                    Job::Renew,
+                    Path::new(path),
+                    &[],
+                    &[],
+                )
+                .expect_err("refused");
+            assert_eq!(refused.code(), "schedule_refused", "{path:?}");
+            assert!(refused.to_string().contains(named), "{refused}");
+        }
+        assert!(!Systemd::units(&ctx).exists(), "nothing was written");
+        assert_eq!(asked.taken(), Vec::<String>::new());
     }
 
     /// A unit Pitboard wrote before its job carried the marker still names the Pitboard it
@@ -893,7 +1097,7 @@ mod tests {
             );
         }
 
-        // Where it reads them, it is asked to stop each.
+        // Where it reads them, it is asked to stop each, and to forget when renewal last ran.
         for job in [Job::Renew, Job::Watch] {
             reading
                 .put(&ctx, Permit::for_a_test(), job, program, &[], &[])
@@ -911,6 +1115,7 @@ mod tests {
             asked.taken(),
             [
                 format!("--user disable --now {TIMER}"),
+                format!("--user clean --what=state {TIMER}"),
                 "--user daemon-reload".to_string(),
                 format!("--user disable --now {WATCH}"),
                 "--user daemon-reload".to_string(),
@@ -984,6 +1189,7 @@ mod tests {
             systemd.program(&ctx, Job::Renew),
             Some(PathBuf::from(program))
         );
+        assert!(systemd.outdated(&ctx, Job::Renew));
         assert!(
             systemd
                 .remove(&ctx, Permit::for_a_test(), Job::Renew)
@@ -1010,6 +1216,7 @@ mod tests {
             asked.taken(),
             [
                 format!("--user disable --now {TIMER}"),
+                format!("--user clean --what=state {TIMER}"),
                 "--user daemon-reload".to_string(),
             ]
         );

@@ -138,6 +138,28 @@ asks the person's ([not-measured.md](not-measured.md#linux)).
   variables' text and resolves no link, and `SYSTEMD_UNIT_PATH` in the manager's environment
   replaces it. So a folder is compared by its components
   (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`).
+- systemd.timer(5): `OnUnitActiveSec=` and the other monotonic settings count on a clock that
+  stops in suspend. `OnCalendar=` counts the wall clock, and "once the system is later resumed it
+  will catch up and process all timers that triggered while the system was sleeping".
+  `Persistent=` "only has an effect on timers configured with `OnCalendar=`", and its catch-up "is
+  nonetheless subject to the delay imposed by `RandomizedDelaySec=`". So the timer Pitboard wrote
+  before, `OnUnitActiveSec=86400` and `OnStartupSec=900` with `Persistent=true`, counted only time
+  awake (`the_timer_runs_on_each_calendar_day_and_catches_up_after_sleep`).
+- systemd.timer(5) asks for `systemctl clean --what=state` before a timer with `Persistent=` is
+  uninstalled. `timer_clean` in `src/core/timer.c` deletes `stamp-<timer>` in
+  `$XDG_DATA_HOME/systemd/timers`, else `~/.local/share/systemd/timers`, and only from a timer
+  that is stopped.
+- systemd.unit(5): a unit whose condition fails is skipped, "mostly silently", and not put in
+  the `failed` state. `ConditionFileIsExecutable=` checks that a path "exists, is a regular file,
+  and marked executable". `config_parse_unit_condition_path` in `src/core/load-fragment.c`
+  expands specifiers in the value and unquotes nothing (`a_service_whose_pitboard_is_gone_is_skipped`).
+- `config_parse_exec` in the same file unquotes and unescapes `ExecStart=`'s first word, then
+  expands its specifiers (`unit_path_printf`), so a `%` is written `%%`. systemd.service(5): no
+  variable is expanded in the program a unit runs. `string_is_safe` refuses a program that is not
+  UTF-8 or holds a control character, a backslash or a quote. The unit file parser,
+  `src/shared/conf-parser.c`, strips the ends of each line and joins a line that ends in a
+  backslash to the next (`a_program_path_with_a_space_or_a_percent_reads_back_as_written`,
+  `a_program_path_no_unit_can_run_is_refused_before_anything_is_written`).
 - environment.d(5): the user manager gives its services the variables of
   `~/.config/environment.d/*.conf`, or of `environment.d` in `XDG_CONFIG_HOME` where the manager's
   own is a full path, read as it starts. `systemctl --user set-environment` sets one until it

@@ -16,6 +16,8 @@ pub(crate) struct ScheduleFact {
     pub(crate) network: NetworkFact,
     // Another proxy, user name, password or exempt host than this run's.
     pub(crate) network_differs: bool,
+    // Written by an earlier Pitboard, as `Scheduler::outdated` reads it.
+    pub(crate) outdated: bool,
 }
 
 pub(crate) struct WatchServiceFact {
@@ -25,6 +27,7 @@ pub(crate) struct WatchServiceFact {
     pub(crate) at: Option<crate::duty::autoswitch::Threshold>,
     // Task Scheduler's word on its runs and its settings; none from launchd or systemd.
     pub(crate) task: Option<Task>,
+    pub(crate) outdated: bool,
 }
 
 pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
@@ -43,6 +46,7 @@ pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
         task: crate::schedule::task(ctx, crate::schedule::Job::Renew),
         network: network_fact(&proxies),
         network_differs: !proxies.same_way(&ctx.proxy),
+        outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Renew),
     })
 }
 
@@ -61,6 +65,7 @@ pub(super) fn watch_service_fact(ctx: &Context) -> Option<WatchServiceFact> {
         location,
         at,
         task: crate::watch_service::task(ctx),
+        outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Watch),
     })
 }
 
@@ -96,6 +101,14 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
         None => {}
     }
     let runs = words::runs_daily(program.display());
+    if schedule.outdated {
+        return Some(warn(
+            "schedule",
+            "renewal schedule",
+            words::renews_by_time_awake(&runs),
+            again,
+        ));
+    }
     let Some(task) = &schedule.task else {
         return Some(ok("schedule", "renewal schedule", runs));
     };
@@ -146,6 +159,14 @@ pub(super) fn judge_watch_service(facts: &Facts) -> Option<Check> {
         ));
     }
     let runs = words::runs_from_sign_in(service.at.map(|at| at.percent()), program.display());
+    if service.outdated {
+        return Some(warn(
+            "watch_service",
+            "watch service",
+            words::fails_once_its_pitboard_is_gone(&runs),
+            again,
+        ));
+    }
     Some(match service.task.as_ref().and_then(Task::failed) {
         Some(result) => warn(
             "watch_service",

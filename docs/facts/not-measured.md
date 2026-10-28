@@ -131,8 +131,12 @@ These were not measured. Each says what Pitboard does where it cannot know.
 - A running user manager. `host/linux/systemd.rs` was tested against a stand-in served on
   a private socket in a test's own folder, never against systemd: whether systemd's private
   socket takes zbus 5.19's peer to peer handshake, `UnitPath` and `Environment` as a running
-  manager answers them, a refused start and its restore, and `uninstall`. Until a run on a machine with systemd measures them, Pitboard does what systemd
+  manager answers them, a refused start and its restore, a service skipped by its condition, and
+  `uninstall`. Until a run on a machine with systemd measures them, Pitboard does what systemd
   262's source says ([linux.md](linux.md#the-users-systemd)).
+- A timer across suspend: whether a calendar timer that came due while the computer slept runs
+  once it wakes, as systemd.timer(5) says, and how late `RandomizedDelaySec=` makes that run.
+  Renewal renews only what is due, so a run late or one more changes nothing else.
 - The watch service's `PATH`. A user manager gives its services `default_user_PATH()`, the
   system's own `bin` folders (`src/basic/path-util.h` at `v262`), and `environment.d` can add
   to it. Whether that `PATH` finds `claude` and `codex` where people install them, such as

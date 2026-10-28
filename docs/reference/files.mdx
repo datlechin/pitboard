@@ -219,13 +219,13 @@ Pitboard reads the list of processes to tell whether Claude is open:
 
 `pitboard schedule install`, or turning on **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, writes these. `pitboard schedule uninstall`, or turning it off, removes them. So do `pitboard uninstall` and the app's **Uninstall Pitboard** while Pitboard's directory is its default one. On Windows, [uninstalling the app](/install/remove#remove-pitboard-itself) removes the task where it runs the app's own `pitboard.exe`.
 
-On Linux, `status`, `uninstall` and `pitboard doctor` look for the units in `~/.config/systemd/user` too.
+On Linux, `uninstall` also has systemd forget when the timer last ran. `status`, `uninstall` and `pitboard doctor` look for the units in `~/.config/systemd/user` too.
 
 | Item | macOS | Windows | Linux |
 | --- | --- | --- | --- |
 | Where | `~/Library/LaunchAgents/com.datlechin.pitboard.renew.plist` | The task `\Pitboard\Renew <SID>` in Task Scheduler, `<SID>` being your account's security identifier | `pitboard-renew.service` and `pitboard-renew.timer` in `systemd/user` in `XDG_CONFIG_HOME`, or in `~/.config` while it is unset |
 | Runs | `<program> renew` | `<program> renew --scheduled` | `<program> renew --scheduled` |
-| When | `StartInterval` 86400 and `RunAtLoad` false: first a day after it is written | Each day at the time of day it was written, first a day after. Only while you are signed in, at least privilege, with a 10-minute limit, and as soon as it can after a missed start | `OnUnitActiveSec=86400`, `OnStartupSec=900` and `Persistent=true` |
+| When | `StartInterval` 86400 and `RunAtLoad` false: first a day after it is written | Each day at the time of day it was written, first a day after. Only while you are signed in, at least privilege, with a 10-minute limit, and as soon as it can after a missed start | `OnCalendar=daily`, `RandomizedDelaySec=1h` and `Persistent=true`: once each day in the hour after midnight, or after the computer wakes or your user's systemd starts where it missed that hour. `ConditionFileIsExecutable=`: skipped while `<program>` is not there |
 | Environment | `EnvironmentVariables` | `schedule.env` in Pitboard's directory | One `Environment=` line each |
 
 `<program>` is the `pitboard` that installed the job, by the path it was started with, such as Homebrew's link. From the app, it is the command line that came with it: `Pitboard.app/Contents/Helpers/pitboard` on macOS and `bin\pitboard.exe` in the app's folder on Windows.
@@ -240,7 +240,7 @@ The environment holds the proxy variables as they were set at install, and on ma
 | --- | --- | --- | --- |
 | Where | `~/Library/LaunchAgents/com.datlechin.pitboard.watch.plist` | The task `\Pitboard\Watch <SID>` in Task Scheduler | `pitboard-watch.service` in the folder of the renewal schedule's units |
 | Runs | `<program> watch --scheduled --at <PERCENT>` | The same | The same |
-| When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `SuccessfulExit` false and `Crashed` true, and `ThrottleInterval` 60: again a minute after it fails or crashes | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-failure` and `RestartSec=60`: again a minute after it fails or crashes |
+| When | `RunAtLoad` true, so at install and at each login. `KeepAlive` with `SuccessfulExit` false and `Crashed` true, and `ThrottleInterval` 60: again a minute after it fails or crashes | At install, and at each sign-in to your Windows account. Only while you are signed in, at least privilege, with no time limit | At install, and as your user's systemd starts, through `WantedBy=default.target`. `Restart=on-failure` and `RestartSec=60`: again a minute after it fails or crashes. `ConditionFileIsExecutable=`: skipped while `<program>` is not there |
 | Environment | `EnvironmentVariables` | `watch.env` in Pitboard's directory | One `Environment=` line each |
 | Lines it prints | `~/Library/Logs/Pitboard/watch.log`, removed with the service | Kept nowhere | Your user's journal |
 

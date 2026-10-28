@@ -366,9 +366,10 @@ keeps it is in the header of the module named.
   `schedule_not_default_home` (`schedule::serves`,
   `the_schedule_belongs_to_the_default_home_alone`).
 - On Linux a unit is written only where the user's systemd reads its folder and runs it with
-  this home, asked before anything is written or taken away
-  (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`,
-  `a_unit_is_written_only_for_the_home_the_user_manager_runs_with`).
+  this home, asked before anything is written or taken away, and each service is skipped where
+  its Pitboard is gone (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`,
+  `a_unit_is_written_only_for_the_home_the_user_manager_runs_with`,
+  `a_service_whose_pitboard_is_gone_is_skipped`).
 - A job is given the installing context's proxy variables, in files written private, or in
   `schedule.env` and `watch.env` on Windows, and `doctor` warns with `schedule_proxy` where
   they would send a request another way than this run

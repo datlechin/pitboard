@@ -17,6 +17,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         program_found: true,
         network: direct(),
         network_differs: false,
+        outdated: false,
     });
     let checks = evaluate(&f);
     let found = check(&checks, "schedule");
@@ -47,6 +48,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         program_found: true,
         network: direct(),
         network_differs: false,
+        outdated: false,
     });
     f.os = Os::MacOs;
     let checks = evaluate(&f);
@@ -106,6 +108,7 @@ fn the_watch_service_is_judged_by_its_pitboard_and_its_last_run() {
         program_found: true,
         at: crate::duty::autoswitch::Threshold::new(90),
         task,
+        outdated: false,
     };
 
     f.watch_service = Some(service(Some("/opt/homebrew/bin/pitboard"), None));
@@ -166,6 +169,7 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
         program_found: true,
         network: direct(),
         network_differs: false,
+        outdated: false,
     };
     let judged = |f: &Facts| {
         evaluate(f)
@@ -219,6 +223,102 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
         )
     );
     assert_eq!(drifted.advice, again(Os::Windows));
+}
+
+/// A timer an earlier Pitboard wrote counts only time awake, and a service it wrote fails
+/// once its Pitboard is gone, which installing again mends. Read from the disk on Linux, the
+/// one system whose jobs say so.
+#[test]
+fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
+    let mut f = facts();
+    let program = "/usr/local/bin/pitboard";
+    f.schedule = Some(ScheduleFact {
+        outdated: true,
+        ..scheduled(direct(), false)
+    });
+    f.watch_service = Some(WatchServiceFact {
+        location: Location::File(PathBuf::from(
+            "/home/x/.config/systemd/user/pitboard-watch.service",
+        )),
+        program: Some(PathBuf::from(program)),
+        program_found: true,
+        at: None,
+        task: None,
+        outdated: true,
+    });
+    let checks = evaluate(&f);
+    let renewal = check(&checks, "schedule");
+    assert_eq!(
+        (
+            renewal.level,
+            renewal.detail.clone(),
+            renewal.advice.as_str()
+        ),
+        (
+            Level::Warn,
+            words::renews_by_time_awake(&words::runs_daily(program)),
+            again(f.os)
+        )
+    );
+    let watch = check(&checks, "watch_service");
+    assert_eq!(
+        (watch.level, watch.detail.clone(), watch.advice.as_str()),
+        (
+            Level::Warn,
+            words::fails_once_its_pitboard_is_gone(&words::runs_from_sign_in(None, program)),
+            words::INSTALL_THE_SERVICE_AGAIN
+        )
+    );
+    f.schedule.as_mut().expect("set above").program_found = false;
+    assert_eq!(
+        check(&evaluate(&f), "schedule").level,
+        Level::Fail,
+        "a Pitboard gone is said first"
+    );
+
+    #[cfg(target_os = "linux")]
+    {
+        let scratch = tempfile::tempdir().expect("a scratch home");
+        let home = scratch.path().to_path_buf();
+        let program = home.join("bin/pitboard");
+        std::fs::create_dir_all(program.parent().expect("its folder")).expect("a bin");
+        std::fs::write(&program, "").expect("a Pitboard");
+        let ctx = Context::new(home.clone())
+            .with_memory_stores(crate::host::memory::MemoryHost::new())
+            .with_schedule_program(program.clone());
+        let units = home.join(".config/systemd/user");
+        std::fs::create_dir_all(&units).expect("made");
+        for (file, body) in [
+            (
+                "pitboard-renew.timer",
+                "[Timer]\nOnUnitActiveSec=86400\nOnStartupSec=900\nPersistent=true\n".to_string(),
+            ),
+            (
+                "pitboard-renew.service",
+                format!(
+                    "[Service]\nType=oneshot\nExecStart={} renew --scheduled\n",
+                    program.display()
+                ),
+            ),
+            (
+                "pitboard-watch.service",
+                format!(
+                    "[Service]\nExecStart={} watch --scheduled --at 90\n",
+                    program.display()
+                ),
+            ),
+        ] {
+            std::fs::write(units.join(file), body).expect("as an earlier Pitboard wrote it");
+        }
+        assert!(schedule_fact(&ctx).expect("installed").outdated);
+        assert!(watch_service_fact(&ctx).expect("installed").outdated);
+
+        crate::schedule::install(&ctx, Permit::for_a_test()).expect("installed again");
+        let at = crate::duty::autoswitch::Threshold::new(90).expect("a share");
+        crate::watch_service::install(&ctx, Permit::for_a_test(), at).expect("installed again");
+        assert!(!schedule_fact(&ctx).expect("installed").outdated);
+        assert!(!watch_service_fact(&ctx).expect("installed").outdated);
+    }
 }
 
 #[test]

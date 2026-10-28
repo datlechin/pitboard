@@ -122,6 +122,7 @@ pub(super) fn scheduled(network: NetworkFact, network_differs: bool) -> Schedule
         program_found: true,
         network,
         network_differs,
+        outdated: false,
     }
 }
 
@@ -268,6 +269,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
         program_found: true,
         at: None,
         task: None,
+        outdated: false,
     });
     f.login_pins = vec!["`forceLoginOrgUUID` set to `org` in managed settings".into()];
     f.parks = vec![
@@ -318,6 +320,9 @@ pub(super) fn everything_said(os: Os) -> Facts {
         }
         // Claude Code's file is its only store, with no ceiling, and parks are files.
         Os::Linux => {
+            // Only systemd's units are read as an earlier Pitboard wrote them.
+            f.schedule.as_mut().expect("set above").outdated = true;
+            f.watch_service.as_mut().expect("set above").outdated = true;
             f.backend = Ok(store::Backend::File);
             f.vault = store::Backend::File;
             f.credential_cost = None;

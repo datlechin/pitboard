@@ -1218,6 +1218,20 @@ pub(super) fn runs_daily(program: impl Display) -> String {
     format!("daily  ·  runs {program}")
 }
 
+pub(super) fn renews_by_time_awake(runs: &str) -> String {
+    format!(
+        "{runs}, as an earlier Pitboard wrote it: it counts only time awake, and fails each day \
+         once that Pitboard is gone"
+    )
+}
+
+pub(super) fn fails_once_its_pitboard_is_gone(runs: &str) -> String {
+    format!(
+        "{runs}, as an earlier Pitboard wrote it: it fails at each sign-in once that Pitboard is \
+         gone"
+    )
+}
+
 pub(super) fn drifted_in_task_scheduler(runs: &str, drifted: &[String]) -> String {
     format!("{runs}, but in Task Scheduler it {}", said::listed(drifted))
 }

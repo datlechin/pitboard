@@ -21,6 +21,7 @@ description: "Fix an expired parked login, a renewal schedule that stopped or us
 | `which is the app itself and not a command line` | macOS | The schedule runs the app, which renews nothing. |
 | `but in Task Scheduler it`, then what changed, such as `is disabled` | Windows | Someone changed the task in Task Scheduler. |
 | `and its last run`, then how it ended | Windows | The last run failed. |
+| `as an earlier Pitboard wrote it` | Linux | The timer counts only time awake, and the units fail once their `pitboard` is gone. |
 
 As it starts, the app points a schedule whose `pitboard` is gone at its own command line. Otherwise, turn daily renewal off and on again: with **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, or on the command line:
 
