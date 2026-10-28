@@ -612,10 +612,10 @@ mod tests {
         Utc, awaiting, claude_code, claude_desktop, desktop_account, desktop_warning, read, status,
     };
 
-    fn asked(account: Key, app_id: &str, name: &str) -> QuitQuestion {
+    fn asked(account: Key, app: &str, name: &str) -> QuitQuestion {
         QuitQuestion {
             account,
-            app_id: app_id.into(),
+            app: crate::model::testing::records::mac_app(app),
             name: name.into(),
         }
     }

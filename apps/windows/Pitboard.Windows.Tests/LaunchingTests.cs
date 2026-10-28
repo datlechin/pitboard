@@ -143,8 +143,9 @@ public sealed class LaunchingTests
         Assert.AreEqual(Exe, launch.AppLocation);
         Assert.AreEqual(
             @"C:\Users\x\AppData\Local\Programs\Pitboard\bin\pitboard.exe", PitboardModelMethods.AppCommandLine(launch.AppLocation!));
-        Assert.AreEqual(@"C:\Users\x\AppData\Local\Pitboard App", launch.Windows?.Directory);
-        Assert.AreEqual("pitboard", launch.Windows?.LinkScheme);
+        Assert.AreEqual(@"C:\Users\x\AppData\Local\Pitboard App", launch.AccountWindows?.Directory);
+        Assert.AreEqual("pitboard", launch.AccountWindows?.LinkScheme);
+        Assert.IsNull(launch.AccountWindows?.Key, "the model keys the Windows app's records");
     }
 
     // Nothing registers pitboard-debug, so only a person or a test hands a Debug build one, which outside a fixture

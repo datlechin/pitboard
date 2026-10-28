@@ -1,4 +1,4 @@
-use crate::model::Snapshot;
+use crate::model::{AppId, Snapshot};
 use crate::present::testing::standing_of;
 use crate::{
     Account, Adoption, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, Level,
@@ -10,6 +10,11 @@ use pitboard_core::usage::Window;
 
 /// The ChatGPT app's bundle id, which is how the core's holder detection names it.
 pub(crate) const CHATGPT: &str = "com.openai.codex";
+
+/// The Mac app `id` names, as the core's holder detection names one.
+pub(crate) fn mac_app(id: &str) -> AppId {
+    AppId::MacBundle { id: id.into() }
+}
 
 /// Where ChatGPT runs its own `codex`, as the process list of a Mac running ChatGPT
 /// 26.928.31416 gave it, which is how the core tells the app is open.
@@ -30,7 +35,7 @@ pub(crate) fn claude_holding() -> Holding {
         phrase: "Claude".into(),
         pids: vec![812],
         remedy: Remedy::ReopenApp {
-            app_id: CLAUDE.into(),
+            app: mac_app(CLAUDE),
             name: "Claude".into(),
         },
     }
@@ -207,7 +212,7 @@ pub(crate) fn chatgpt_holding() -> Holding {
         phrase: "the ChatGPT app".into(),
         pids: vec![4242, 4243],
         remedy: Remedy::ReopenApp {
-            app_id: CHATGPT.into(),
+            app: mac_app(CHATGPT),
             name: "ChatGPT".into(),
         },
     }

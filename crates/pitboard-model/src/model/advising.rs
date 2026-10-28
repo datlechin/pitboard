@@ -7,7 +7,8 @@ use super::switching::switch;
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{already_active, refusal, status, switched, warned, warning};
 use super::{
-    AtLimit, Intent, NotificationButton, Place, RunOutNotice, SettingsSection, Sheet, WindowRequest,
+    AtLimit, Intent, Notice, NoticeButton, NoticeButtonKind, Place, SettingsSection, Sheet,
+    WindowRequest,
 };
 use crate::Account;
 use crate::AccountKey;
@@ -285,7 +286,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: "claude/work/session/-7200".into(),
             title: words::limit_notification(Front::MacMenuBar, "5-hour", None, true),
             subtitle: Some("Claude Code".into()),
@@ -295,7 +296,8 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
                 words::other_used("personal", Some(90))
             ),
             clicked: "accounts".into(),
-            button: Some(NotificationButton {
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SwitchTo,
                 title: words::switch_button(Front::MacMenuBar, "personal"),
                 clicked: "switch/claude/personal".into(),
             }),
@@ -559,9 +561,11 @@ fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
     );
     // macOS draws the button from the category registered under its title; a toast takes any.
     assert!(
-        crate::notification_buttons(Front::MacMenuBar)
+        crate::notice_buttons(Front::MacMenuBar)
             .iter()
-            .any(|kind| kind.title == button.title && !kind.opens_window),
+            .any(|offer| offer.kind == button.kind
+                && offer.title == button.title
+                && !offer.opens_window),
         "a switch needs no window"
     );
     machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
@@ -670,7 +674,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: "claude/work/session/-7200".into(),
             title: words::limit_notification(Front::MacMenuBar, "5-hour", None, false),
             subtitle: Some("Claude Code".into()),
@@ -680,7 +684,8 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
                 words::other_used("personal", Some(90))
             ),
             clicked: "accounts".into(),
-            button: Some(NotificationButton {
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SwitchTo,
                 title: words::switch_button(Front::MacMenuBar, "personal"),
                 clicked: "switch/claude/personal".into(),
             }),

@@ -14,8 +14,8 @@ use super::tools::{Browser, Warmer};
 use crate::model::preferences::Preferences;
 use crate::model::state::Cadence;
 use crate::model::{
-    AppControl, AtLimit, LocalTime, ModelListener, Notifications, PitboardModel, Platform,
-    WindowsLaunch, WindowsPlace,
+    AccountWindowsLaunch, AtLimit, Listener, LocalTime, Notifier, OtherApps, PitboardModel,
+    Platform, WindowsPlace,
 };
 use crate::{AppCore, Front, Made};
 use pitboard_core::app::AppFile;
@@ -733,7 +733,9 @@ pub(crate) struct Launched {
     pub(crate) apps: Arc<FixtureApps>,
     /// Where the account windows' records are kept: in the fixture's own folder, made again
     /// at each launch, never in the app's own directory.
-    pub(crate) windows: WindowsLaunch,
+    pub(crate) windows: AccountWindowsLaunch,
+    /// The Pitboard directory of the fixture's machine, which the records are kept under.
+    pub(crate) pitboard: String,
     /// The machine, for a test to look at. The core keeps it as long as it needs it.
     #[cfg(test)]
     pub(crate) machine: Arc<Stage>,
@@ -744,23 +746,23 @@ impl Launched {
     /// world's apps, posting nothing.
     pub(crate) fn model(
         &self,
-        listener: Arc<dyn ModelListener>,
+        listener: Arc<dyn Listener>,
         local_time: Arc<dyn LocalTime>,
     ) -> Arc<PitboardModel> {
         self.model_over(
             listener,
-            Arc::clone(&self.apps) as Arc<dyn AppControl>,
+            Some(Arc::clone(&self.apps) as Arc<dyn OtherApps>),
             Arc::new(Unposted),
             local_time,
         )
     }
 
-    /// The app's model over this world, asking `apps` and posting through `notifications`.
+    /// The app's model over this world, asking `other_apps` and posting through `notifier`.
     pub(crate) fn model_over(
         &self,
-        listener: Arc<dyn ModelListener>,
-        apps: Arc<dyn AppControl>,
-        notifications: Arc<dyn Notifications>,
+        listener: Arc<dyn Listener>,
+        other_apps: Option<Arc<dyn OtherApps>>,
+        notifier: Arc<dyn Notifier>,
         local_time: Arc<dyn LocalTime>,
     ) -> Arc<PitboardModel> {
         PitboardModel::over(
@@ -768,14 +770,17 @@ impl Launched {
             listener,
             Platform {
                 front: self.front,
-                apps,
-                notifications,
+                other_apps,
+                notifier,
                 local_time,
                 earlier: None,
-                windows: Some(WindowsPlace {
-                    launch: self.windows.clone(),
-                    web_scheme: super::pages::SCHEME.into(),
-                }),
+                windows: Some(WindowsPlace::of(
+                    self.front,
+                    self.windows.clone(),
+                    &self.pitboard,
+                    None,
+                    super::pages::SCHEME,
+                )),
                 glance: None,
             },
             Cadence::APP,
@@ -832,20 +837,21 @@ pub(crate) fn make(world: World, folder: Folder, front: Front) -> Result<Launche
         },
         crate::ASK_AGAIN_AFTER,
     ));
-    let windows = WindowsLaunch {
+    let windows = AccountWindowsLaunch {
         directory: machine.root().to_string_lossy().into_owned(),
-        key: service::Pitboard::new(machine.base.clone())
-            .directory()
-            .to_string_lossy()
-            .into_owned(),
         link_scheme: LINK_SCHEME.into(),
-        earlier: None,
+        key: None,
     };
+    let pitboard = service::Pitboard::new(machine.base.clone())
+        .directory()
+        .to_string_lossy()
+        .into_owned();
     Ok(Launched {
         front,
         core,
         apps,
         windows,
+        pitboard,
         #[cfg(test)]
         machine,
     })

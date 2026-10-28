@@ -43,8 +43,8 @@ use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
 use super::{
-    AtLimit, Back, Cause, Doing, Failure, Intent, LastSwitch, Opens, OutsideAsk, Pane, Place,
-    QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice, RunningSignIn, SettingsSection, Sheet,
+    AtLimit, Back, Cause, Doing, Failure, Intent, LastSwitch, Notice, Opens, OutsideAsk, Pane,
+    Place, QuitQuestion, ReadFailure, RestartNeeded, RunningSignIn, SettingsSection, Sheet,
     SignedIn, Tip, WindowRequest,
 };
 use crate::account_windows::records::{Entry, Loaded};
@@ -255,7 +255,7 @@ pub(crate) enum Job {
     /// still there recorded too.
     CheckShared { stores: Vec<String> },
     /// Post a notification through the app's own system.
-    Post { notice: RunOutNotice },
+    Post { notice: Notice },
     /// Point a renewal schedule an app up to 0.3.0 wrote, which runs that app and renews
     /// nothing, at the command line inside this one: once a launch.
     RepairSchedule,

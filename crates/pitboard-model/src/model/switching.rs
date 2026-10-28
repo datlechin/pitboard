@@ -14,7 +14,7 @@ use super::testing::machine::{
 use super::testing::platform::StandInApps;
 use super::testing::records::{
     CHATGPT, CLAUDE, already_active, chatgpt_holding, claude, codex_account, desktop_account,
-    desktop_warning, percent, refusal, status, still_running, switched, warned, warning,
+    desktop_warning, mac_app, percent, refusal, status, still_running, switched, warned, warning,
 };
 use super::{
     Cause, Doing, Intent, LastSwitch, Place, QuitQuestion, RestartNeeded, Sheet, WindowRequest,
@@ -877,7 +877,7 @@ fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
         model.state.asking(),
         Some(&QuitQuestion {
             account: Key::new(ProviderId::Codex, "spare"),
-            app_id: CHATGPT.into(),
+            app: mac_app(CHATGPT),
             name: "ChatGPT".into(),
         })
     );
@@ -1096,6 +1096,54 @@ fn an_answer_to_quit_is_taken_once_and_only_for_the_question_asked() {
     assert_eq!(
         machine.apps.asked(),
         [format!("quit {CHATGPT}"), format!("open {CHATGPT}")]
+    );
+}
+
+/// A front whose system has no app Pitboard may quit, as the Linux app's, names no other apps.
+/// ChatGPT holding Codex's login is then said as the command line says it, in the core's
+/// warning beside the switch, and nothing is asked of it: no question, no quit, no look at
+/// whether it runs.
+#[test]
+fn with_no_other_apps_a_holding_app_is_said_and_not_quit() {
+    let (mut model, mut machine) = chatgpt_open(true);
+    machine.other_apps = false;
+    machine.answer = Ok(status(vec![
+        codex_account("spare", true),
+        codex_account("main", false),
+    ]));
+    let held = warning(
+        "sessions_still_running",
+        "The ChatGPT app started before this switch is still running and still using \
+         `codex/main`. Quit ChatGPT with Command-Q and open it again to use the new account. \
+         Do not sign out in it: signing out there revokes `codex/main`'s login, which \
+         Pitboard has just parked.",
+    );
+    machine.switched = switched(
+        ProviderId::Codex,
+        "codex/main",
+        "codex/spare",
+        vec![held.clone()],
+    );
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+
+    let shown = model.shown();
+    assert_eq!(shown.quit_question, None, "nothing asked");
+    assert_eq!(machine.switched_to, ["codex/spare"], "switched at once");
+    assert!(machine.apps.asked().is_empty(), "nothing quit or opened");
+    assert_eq!(machine.apps.running_calls(), 0, "nor asked whether it runs");
+    let last = model
+        .state
+        .last_switches
+        .first()
+        .expect("what the switch said");
+    assert_eq!(last.warnings, std::slice::from_ref(&held));
+    assert!(
+        shown
+            .notices
+            .iter()
+            .any(|notice| notice.lines.contains(&held.message)),
+        "{:?}",
+        shown.notices
     );
 }
 

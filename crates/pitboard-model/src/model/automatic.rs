@@ -8,7 +8,7 @@ use super::preferences::Preferences;
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub, any_read, offline_read};
 use super::testing::records::{Refusal, refusal, status, switched, watching};
-use super::{AtLimit, Intent, NotificationButton, Place, RunOutNotice};
+use super::{AtLimit, Intent, Notice, NoticeButton, NoticeButtonKind, Place};
 use crate::AccountKey;
 use crate::Front;
 use crate::Tool;
@@ -427,7 +427,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
 
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: format!("auto/work/personal/{}", model.now.epoch()),
             title: words::switched_to(None, "personal"),
             subtitle: Some("Claude Code".into()),
@@ -437,7 +437,8 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
                 &words::follows(&Adoption::PollingWithin(33))
             ),
             clicked: "accounts".into(),
-            button: Some(NotificationButton {
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SwitchBack,
                 title: words::switch_back(Front::MacMenuBar),
                 clicked: r#"switch-back/["claude/work","claude/personal"]"#.into(),
             }),
@@ -465,7 +466,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
 }
 
 // What switching from `work` to `personal` by itself posted, read after with `personal` in use.
-fn switched_by_itself(model: &mut Hand, machine: &mut Stub) -> RunOutNotice {
+fn switched_by_itself(model: &mut Hand, machine: &mut Stub) -> Notice {
     let resets = model.now.epoch() + 3_600;
     turned_on(model, machine);
     machine.look = Ok(AutoLooked::Act);
@@ -514,11 +515,11 @@ fn only_a_switch_by_itself_offers_switch_back_from_its_notification_and_its_noti
     let button = posted.button.expect("Switch Back");
     assert_eq!(button.title, words::switch_back(Front::MacMenuBar));
     assert_eq!(
-        crate::notification_buttons(Front::MacMenuBar)
+        crate::notice_buttons(Front::MacMenuBar)
             .into_iter()
-            .find(|kind| kind.title == button.title)
-            .map(|kind| (kind.opens_window, kind.symbol)),
-        Some((false, "arrow.uturn.backward".into()))
+            .find(|offer| offer.title == button.title)
+            .map(|offer| (offer.kind, offer.opens_window)),
+        Some((NoticeButtonKind::SwitchBack, false))
     );
     model.later(Duration::from_secs(60));
     let shown = model.shown();
@@ -765,7 +766,7 @@ fn a_reason_it_is_not_watching_is_said_once() {
     assert!(machine.auto_at.is_empty());
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: "auto-not-watching/switch_interrupted".into(),
             title: words::not_switching(Front::MacMenuBar),
             subtitle: Some("Claude Code".into()),

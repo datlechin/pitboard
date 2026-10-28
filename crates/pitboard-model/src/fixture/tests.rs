@@ -11,10 +11,10 @@ use crate::AccountKey;
 use crate::Front;
 use crate::Tool;
 use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
-use crate::model::testing::records::read_in;
+use crate::model::testing::records::{mac_app, read_in};
 use crate::model::{
-    AppControl, Doing, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
-    PitboardModel, Place, PlatformError, RunOutNotice, Sheet, Snapshot, Tip,
+    Doing, Intent, Listener, LocalTime, Notice, NoticeButton, NoticeButtonKind, Notifier,
+    OtherApps, Pane, PitboardModel, Place, PlatformError, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
 use crate::present::words;
@@ -669,7 +669,7 @@ fn shows_in_use(snapshot: &Snapshot) -> Vec<String> {
 /// The app's model over `launched`, started, once the accounts have been read.
 fn started(launched: &Launched) -> (Arc<PitboardModel>, Arc<Told>) {
     let told = Arc::new(Told::default());
-    let model = launched.model(Arc::clone(&told) as Arc<dyn ModelListener>, Arc::new(Utc));
+    let model = launched.model(Arc::clone(&told) as Arc<dyn Listener>, Arc::new(Utc));
     model.send(Intent::Start);
     told.last_where("the accounts read", read_in);
     (model, told)
@@ -688,7 +688,7 @@ fn a_launch_reads_without_being_asked() {
 }
 
 // On Windows by its package, so the quit question names the AUMID the Windows app's
-// AppControl takes.
+// OtherApps takes.
 #[test]
 fn the_chatgpt_fixture_is_the_app_the_core_finds_on_each_system() {
     use crate::launch::Remedy;
@@ -707,7 +707,7 @@ fn the_chatgpt_fixture_is_the_app_the_core_finds_on_each_system() {
             [(
                 "chatgpt_app".to_owned(),
                 Remedy::ReopenApp {
-                    app_id: chatgpt.app.into(),
+                    app: chatgpt.app_id(),
                     name: "ChatGPT".into(),
                 }
             )],
@@ -960,21 +960,21 @@ fn an_add_left_halfway_is_put_back_by_use() {
 
 #[test]
 fn a_claude_pitboard_quits_before_anybody_signs_in_writes_nothing_after() {
-    use crate::model::AppControl;
+    use crate::model::OtherApps;
     // windows: Claude Desktop is macOS only
     if !ProviderId::Desktop.supported_on(OS) {
         return;
     }
     let launched = made(World::ClaudeDesktopOpen);
     let apps = &launched.apps;
-    let copy = apps.running(CLAUDE.into()).expect("asked").expect("open");
-    apps.request_quit(CLAUDE.into()).expect("asked to quit");
+    let copy = apps.running(mac_app(CLAUDE)).expect("asked").expect("open");
+    apps.request_quit(mac_app(CLAUDE)).expect("asked to quit");
     let session = launched
         .core
         .sign_in(ProviderId::Desktop, None)
         .expect("work parked");
     apps.reopen(copy, true).expect("opened for the sign-in");
-    apps.request_quit(CLAUDE.into()).expect("asked to quit");
+    apps.request_quit(mac_app(CLAUDE)).expect("asked to quit");
     apps.played();
     assert!(!launched.machine.claude.holds_a_session());
     assert!(!launched.apps.is_running(CLAUDE));
@@ -1125,15 +1125,16 @@ fn a_move_the_give_up_settles_is_said_as_finished() {
 /// opened again, so the core sees it go and come back as it would on a real machine.
 #[test]
 fn chatgpt_leaves_the_process_list_as_it_quits() {
-    use crate::model::AppControl;
+    use crate::model::OtherApps;
     let launched = made(World::ChatGptOpen);
     let (apps, core) = (&launched.apps, &launched.core);
     let copy = apps
-        .running(CHATGPT.into())
+        .running(chatgpt(OS).app_id())
         .expect("asked")
         .expect("running");
-    apps.request_quit(CHATGPT.into()).expect("asked to quit");
-    assert_eq!(apps.running(CHATGPT.into()).expect("asked"), None);
+    apps.request_quit(chatgpt(OS).app_id())
+        .expect("asked to quit");
+    assert_eq!(apps.running(chatgpt(OS).app_id()).expect("asked"), None);
     assert!(core.holding(ProviderId::Codex).is_empty());
     apps.reopen(copy, false).expect("opened");
     assert_eq!(core.holding(ProviderId::Codex).len(), 1);
@@ -1625,7 +1626,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
 fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     let launched = made(World::ReadFailure);
     let told = Arc::new(Told::default());
-    let model = launched.model(Arc::clone(&told) as Arc<dyn ModelListener>, Arc::new(Utc));
+    let model = launched.model(Arc::clone(&told) as Arc<dyn Listener>, Arc::new(Utc));
     model.send(Intent::Start);
     let shown = told.last_where("the read failed", |snapshot| {
         !snapshot.reading && matches!(snapshot.accounts_shown, AccountsShown::ReadFailed { .. })
@@ -1905,10 +1906,7 @@ impl LocalTime for Twelve {
 fn this_pc_says_when_a_check_was_made_on_the_persons_clock() {
     let launched = made(World::OneTool);
     let told = Arc::new(Told::default());
-    let model = launched.model(
-        Arc::clone(&told) as Arc<dyn ModelListener>,
-        Arc::new(Twelve),
-    );
+    let model = launched.model(Arc::clone(&told) as Arc<dyn Listener>, Arc::new(Twelve));
     model.send(Intent::Start);
     told.last_where("the accounts read", read_in);
     model.send(Intent::PaneShown { pane: Pane::Checks });
@@ -2232,7 +2230,7 @@ fn an_exported_fixture_is_made_in_the_temporary_directory() {
     let model = PitboardModel::fixture(
         "oneTool".into(),
         FRONT,
-        Arc::clone(&listener) as Arc<dyn ModelListener>,
+        Arc::clone(&listener) as Arc<dyn Listener>,
         Arc::new(Utc),
     )
     .expect("a fixture");
@@ -2269,8 +2267,8 @@ fn an_exported_fixture_in_a_directory_of_its_own_is_made_there() {
         "oneTool".into(),
         FRONT,
         own.path().to_string_lossy().into_owned(),
-        Arc::clone(&listener) as Arc<dyn ModelListener>,
-        StandInApps::new(&[], true),
+        Arc::clone(&listener) as Arc<dyn Listener>,
+        Some(StandInApps::new(&[], true)),
         Arc::new(Posted::default()),
         Arc::new(Utc),
     )
@@ -2319,9 +2317,9 @@ fn started_in(
         world.name().into(),
         FRONT,
         own.path().to_string_lossy().into_owned(),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
-        Arc::clone(apps) as Arc<dyn AppControl>,
-        Arc::clone(posted) as Arc<dyn Notifications>,
+        Arc::clone(&told) as Arc<dyn Listener>,
+        Some(Arc::clone(apps) as Arc<dyn OtherApps>),
+        Arc::clone(posted) as Arc<dyn Notifier>,
         Arc::new(Utc),
     )
     .expect("a fixture");
@@ -2438,7 +2436,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
     assert!(resets_at.parse::<i64>().is_ok(), "{resets_at}");
     assert_eq!(
         posted,
-        [RunOutNotice {
+        [Notice {
             id: format!("claude/personal/session/-{resets_at}"),
             title: words::limit_notification(FRONT, "5-hour", None, true),
             subtitle: Some("Claude Code".into()),
@@ -2448,7 +2446,8 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
                 words::other_used("work", Some(58))
             ),
             clicked: "accounts".into(),
-            button: Some(NotificationButton {
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SwitchTo,
                 title: words::switch_button(FRONT, "work"),
                 clicked: "switch/claude/work".into(),
             }),
@@ -2472,7 +2471,7 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
     model.shutdown();
 
     // The account in use has run out too, which is posted after it.
-    let said: Vec<(String, String, Option<NotificationButton>)> = posted
+    let said: Vec<(String, String, Option<NoticeButton>)> = posted
         .posted()
         .into_iter()
         .filter(|notice| notice.id.starts_with("warning/login_replaced/"))
@@ -2489,7 +2488,8 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
         [(
             words::sign_in_replaced(FRONT),
             words::in_app_warning(FRONT, &replaced).expect("the app's words"),
-            Some(NotificationButton {
+            Some(NoticeButton {
+                kind: NoticeButtonKind::SignInAgain,
                 title: words::sign_in_again_button(FRONT),
                 clicked: "sign-in-again/claude/work".into(),
             })
@@ -2543,7 +2543,7 @@ fn no_word_on_screen_is_park_put_away_give_up_enrol_record_or_settle() {
     for world in World::ALL {
         let launched = made(world);
         let told = Arc::new(Told::default());
-        let model = launched.model(Arc::clone(&told) as Arc<dyn ModelListener>, Arc::new(Utc));
+        let model = launched.model(Arc::clone(&told) as Arc<dyn Listener>, Arc::new(Utc));
         model.send(Intent::Start);
         told.last_where("the accounts read, or not", |snapshot| {
             read_in(snapshot) || matches!(snapshot.accounts_shown, AccountsShown::ReadFailed { .. })

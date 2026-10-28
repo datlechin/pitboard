@@ -78,3 +78,38 @@ app.
   the U+F900 pair too, and takes two that differ only in case for two, as the Swift did.
 - `CharacterSet.whitespaces`, which trims a `Content-Disposition`, is a tab, Unicode's
   `Zs` and U+200B ZERO WIDTH SPACE, checked over every scalar. It holds no newline.
+
+## The account windows' records key
+
+The macOS app keys each Pitboard directory's account-window records by
+`URL(fileURLWithPath:).standardizedFileURL.path`, `WebEnvironment.recordKey`, and the model
+takes that key as the app gives it, `AccountWindowsLaunch.key`. Measured on macOS 27.0.1
+(26A434) with Swift 6.4 on 29 October 2026, and read in swift-foundation at 55b480fc
+(`String+Path.swift`, `URL_Swift.swift`, `String+Internals.swift`), whose `FOUNDATION_FRAMEWORK`
+parts the macOS build has and the repository leaves out:
+
+- By name: doubled slashes are one, trailing ones go, `.` and `..` are resolved, `/..` is `/`,
+  and a relative directory is joined to the current one. `~/x` is in the person's home; `~` and
+  `~user/x` are relative names. The path is decomposed as its file system representation:
+  `Báo cáo` is `Ba\u{301}o ca\u{301}o`.
+- By the file system: where a component is `..`, links are resolved, through `getattrlist`'s
+  `ATTR_CMN_FULLPATH`, but only where the whole path is there: `link/..` is the link's target's
+  folder, `link/../nowhere` is resolved by name. A leading `/private/`, `/var/automount/` or
+  `/private/var/automount/` goes where what follows is there and is not under `/Applications`,
+  `/Library`, `/System`, `/Users`, `/Volumes`, `/bin`, `/cores`, `/dev`, `/opt`, `/private`,
+  `/sbin` or `/usr`: `/private/tmp` is `/tmp`, `/private/var/nowhere` stays.
+- The decomposition is HFS+'s, from a table in the framework alone. Of the 1,112,062
+  scalars but NUL and `/`, each after `/a`, Foundation changed 12,197, and NFD by
+  `unicode-normalization` 0.1.26 the same ones and U+105C9 and U+105E4, Todhri letters of
+  Unicode 16. Both keep
+  U+2000 to U+2FFF, U+F900 to U+FAFF and U+2F800 to U+2FAFF. Swift's combining classes, by
+  which Foundation orders marks, are zero for 34 scalars Unicode 17 gives one, which
+  `unicode-normalization` 0.1.26 has.
+- A port of these rules to Rust, given 57 directories, said what Foundation said of all but
+  `/System/Volumes/Data/Users/../Users`: Foundation's is `/Users`, `std::fs::canonicalize`'s
+  `/System/Volumes/Data/Users`.
+
+So the key rests on the file system and on Apple's and Swift's Unicode tables, and only
+Foundation can make it: the model leaves it to the app.
+`theRecordsKeyIsFoundationsByNameAndByTheFileSystem` holds the rules above.
+

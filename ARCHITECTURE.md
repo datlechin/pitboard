@@ -387,7 +387,7 @@ keeps it is in the header of the module named.
   where the tool is not supported rather than being ignored.
 - No test makes the app model over the machine's own environment. The Rust tests run the real
   core over a `ScratchMachine`, the C# and Swift tests only a fixture's model or one never
-  started, and every `AppControl` and `Notifications` a test hands in records and posts
+  started, and every `OtherApps` and `Notifier` a test hands in records and posts
   nothing.
 - A fixture is the real core and the real model over a machine of its own, `MemoryHost`,
   `ScriptedApi` and a folder in the temporary directory. Only the `fixture` feature builds one
@@ -470,7 +470,7 @@ keeps it is in the header of the module named.
   machine is this one as the core sees it. What one front alone draws is in that front's own
   catalogue, and both shipping fronts' words are tested on every system
   (`each_shipping_fronts_catalogue_says_what_its_app_drew`).
-- One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
+- One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).
 - One change to daily renewal runs at a time, and turning it on is refused where the command
@@ -514,6 +514,11 @@ on.
   never changes, so a rename keeps its sign-in
   (`an_enrolled_claude_account_has_a_store_derived_from_its_account_id`,
   `an_account_id_is_lowered_as_swift_lowered_it`).
+- Each Pitboard directory's records in `windows.json` are kept under the key its app kept them
+  under before the model did: on macOS Foundation's standardised path, which reads the file
+  system, so the app gives it, and on Windows the directory as Windows compares paths, which
+  the model makes (`each_front_keys_its_records_as_its_app_did`,
+  `theRecordsKeyIsFoundationsByNameAndByTheFileSystem`).
 - A store is recorded in `windows.json` before WebKit or WebView2 makes it, and deleted only
   where this Pitboard directory recorded it and a read that succeeded no longer derives it from
   an enrolled account. Another directory's record keeps it
@@ -564,7 +569,9 @@ on.
 - Each app and the core meet at the model. The app has no rule of its own for what the core
   decides: its homes, Pitboard's directory, whether a path is a program, the sites and the
   links it opens are the core's, and every word and button a view shows is the model's.
-  `AppControl` names an app by the id holder detection gives it.
+  `OtherApps` names an app by the `AppId` holder detection gives it, and a front that has no
+  app Pitboard may quit names no `OtherApps`, so what holds a login there is said in words
+  (`with_no_other_apps_a_holding_app_is_said_and_not_quit`).
 - Pitboard and each tool meet at the tool's [register](#tool-registers).
 - Pitboard and each service meet at a few requests, which
   [What leaves your machine](https://docs.usepitboard.com/security#what-leaves-your-machine)
@@ -583,7 +590,7 @@ on.
   stored value. It decrypts nothing, reads no keychain item for Claude Desktop and asks
   claude.ai nothing. It opens `Cookies` and moves the items `Desktop::items` names only while
   Claude is closed, under an advisory lock on the folder, and deletes nothing of Claude's.
-- Pitboard and a running app meet at the process list and the app's `AppControl`. The core
+- Pitboard and a running app meet at the process list and the app's `OtherApps`. The core
   tells that Claude runs by the bundle each program runs from, and neither starts nor quits it.
 - The code and the release meet at a `v` tag, which `.github/workflows/release.yml` turns
   into a release. [RELEASING.md](RELEASING.md) has the procedure.

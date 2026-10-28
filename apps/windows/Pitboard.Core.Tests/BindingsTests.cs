@@ -88,13 +88,4 @@ public sealed class BindingsTests
         Assert.IsFalse(PitboardModelMethods.UnscheduleApp(environment, Path.Combine(home, "Pitboard")));
         Assert.IsFalse(Directory.Exists(home), "nothing is made");
     }
-
-    [TestMethod]
-    public void TheWindowsAppKeysItsRecordsByItsDirectoryInAnyCase()
-    {
-        var key = PitboardModelMethods.WindowsRecordsKey(@"c:\users\x\appdata\local\pitboard\");
-
-        Assert.AreEqual(@"C:\USERS\X\APPDATA\LOCAL\PITBOARD", key);
-        Assert.AreEqual(key, PitboardModelMethods.WindowsRecordsKey(@"\\?\C:\Users\X\AppData\Local\Pitboard"));
-    }
 }

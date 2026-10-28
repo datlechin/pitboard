@@ -524,8 +524,8 @@ jobs:
             --config crates/pitboard-model/uniffi.toml --no-format
           cmp apps/windows/Pitboard.Core/Generated/pitboard_model.cs \
             "$RUNNER_TEMP/fixture-bindings/pitboard_model.cs"
-      # Here the fixtures' models are started, and call the listener, AppControl,
-      # Notifications and LocalTime written in C# from threads of their own.
+      # Here the fixtures' models are started, and call the Listener, OtherApps,
+      # Notifier and LocalTime written in C# from threads of their own.
       - working-directory: apps/windows
         run: >
           dotnet test --solution Pitboard.slnx

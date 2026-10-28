@@ -6,7 +6,7 @@ use super::{Intent, Place};
 use crate::account_windows::stores::derive;
 use crate::present::testing::account;
 use crate::present::{glance_id, words};
-use crate::{Account, Front, JumpAsk, JumpTask, OutsideAnswer, RunOutNotice, jump_refused};
+use crate::{Account, Front, JumpAsk, JumpTask, Notice, OutsideAnswer, jump_refused};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::Standing;
 
@@ -162,7 +162,7 @@ fn a_task_refused_is_said_in_a_notification_that_opens_the_accounts() {
     );
     assert_eq!(
         notice,
-        RunOutNotice {
+        Notice {
             id: "outside-3".into(),
             title: words::could_not_switch_from_outside(Front::WindowsNotificationArea),
             subtitle: None,

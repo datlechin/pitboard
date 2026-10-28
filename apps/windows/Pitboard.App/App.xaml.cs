@@ -6,6 +6,7 @@ using Pitboard.Core;
 using Pitboard.Views;
 using Pitboard.Windows;
 using Windows.Graphics;
+using Handover = Pitboard.Windows.Handover;
 using Launcher = Windows.System.Launcher;
 
 namespace Pitboard.App;
@@ -144,7 +145,7 @@ public partial class App : Application, IIconTargets
         }
     }
 
-    private AppModel? Model(DispatcherQueue queue, Notifications notifications)
+    private AppModel? Model(DispatcherQueue queue, Notifier notifier)
     {
 #if DEBUG
         if (_start.Fixture is { } fixture)
@@ -172,7 +173,7 @@ public partial class App : Application, IIconTargets
         var apps = new WindowsApps(() => queue.TryEnqueue(Ui.Guarded(() => _window?.Bring())));
         return AppModel.Listening(
             queue,
-            listener => new PitboardModel(launch, listener, apps, notifications, new WindowsLocalTime()));
+            listener => new PitboardModel(launch, listener, apps, notifier, new WindowsLocalTime()));
     }
 
     // A fixture's windows show its stand-in pages, in a user data folder of the fixture's own, or of the UI tests' run.

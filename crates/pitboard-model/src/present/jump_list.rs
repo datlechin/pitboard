@@ -3,7 +3,7 @@
 use super::{Clicked, Seen, glance, in_order, words};
 use crate::account_windows::window_accounts;
 use crate::model::OutsideAnswer;
-use crate::{Front, RunOutNotice};
+use crate::{Front, Notice};
 
 // A task the taskbar and Start offer, which starts Pitboard.exe with what it asks.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -69,8 +69,8 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
 
 // A task's switch that did not happen, said where nothing else would say it.
 #[uniffi::export]
-pub fn jump_refused(front: Front, answer: OutsideAnswer) -> RunOutNotice {
-    RunOutNotice {
+pub fn jump_refused(front: Front, answer: OutsideAnswer) -> Notice {
+    Notice {
         id: format!("outside-{}", answer.request),
         title: words::could_not_switch_from_outside(front),
         subtitle: None,

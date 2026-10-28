@@ -32,7 +32,7 @@ public sealed class AppModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     // The queue runs nothing it was handed before this returns, so Deliver is set before any snapshot.
-    public static AppModel Listening(DispatcherQueue queue, Func<ModelListener, IPitboardModel> make)
+    public static AppModel Listening(DispatcherQueue queue, Func<Listener, IPitboardModel> make)
     {
         var listening = new ModelListening(queue);
         var app = new AppModel(make(listening));
@@ -138,7 +138,7 @@ public sealed class AppModel : INotifyPropertyChanged
 }
 
 // The model's next snapshot waits for this call, so it only queues the snapshot on the app's thread.
-public sealed class ModelListening(DispatcherQueue queue) : ModelListener
+public sealed class ModelListening(DispatcherQueue queue) : Listener
 {
     public Action<Snapshot>? Deliver { get; set; }
 

@@ -9,8 +9,8 @@ use crate::model::EarlierPreferences;
 use crate::model::advice::Told;
 use crate::model::lanes;
 use crate::model::preferences::Preferences;
-use crate::model::state::{Answer, Cadence, Job, Msg, Now, State};
-use crate::model::{AppControl, Intent, RunOutNotice, Snapshot};
+use crate::model::state::{Answer, Cadence, Job, Msg, Now, QuitOutcome, State};
+use crate::model::{Intent, Notice, OtherApps, Snapshot};
 use crate::{
     AutoLooked, AutoSwitched, Change, Check, Doctored, Enrolled, EnrolledAs, FoundCommandLine,
     GaveUp, Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Uninstalled,
@@ -77,6 +77,8 @@ pub(crate) struct Stub {
     pub held: HashMap<ProviderId, Vec<Holding>>,
     /// The other apps on this machine.
     pub apps: Arc<StandInApps>,
+    /// Whether the app names them: one whose front has no app Pitboard may quit names none.
+    pub other_apps: bool,
     /// What giving up on an interrupted switch gives.
     pub abandoned: Result<GaveUp, Refusal>,
     /// What starting a sign-in's tool gives.
@@ -126,7 +128,7 @@ pub(crate) struct Stub {
     /// Every record of what was told the model kept, in order.
     pub kept: Vec<Told>,
     /// Every notification posted, in order.
-    pub posted: Vec<RunOutNotice>,
+    pub posted: Vec<Notice>,
     // why the app's system refuses each notification, while it does
     pub post_refused: Option<String>,
     /// What `app.json` held before the model started, where it was there.
@@ -205,6 +207,11 @@ pub(crate) fn no_warm() -> pitboard_core::duty::warm::Overview {
 }
 
 impl Stub {
+    fn other_apps(&self) -> Option<&dyn OtherApps> {
+        self.other_apps
+            .then_some(self.apps.as_ref() as &dyn OtherApps)
+    }
+
     pub(crate) fn reading(answer: Result<Status, Refusal>) -> Stub {
         Stub {
             answer,
@@ -221,6 +228,7 @@ impl Stub {
             auto_at: Vec::new(),
             held: HashMap::new(),
             apps: StandInApps::new(&[], true),
+            other_apps: true,
             abandoned: Ok(GaveUp::default()),
             starting: Ok(()),
             put_back: None,
@@ -410,20 +418,22 @@ impl Stub {
             Job::Holding { account, then } => {
                 let holdings = (self.held.get(&account.provider)).map_or(&[][..], Vec::as_slice);
                 Answer::Held {
-                    question: lanes::holder(holdings, self.apps.as_ref(), &account),
+                    question: lanes::holder(holdings, self.other_apps(), &account),
                     account,
                     then,
                 }
             }
             Job::Quit { question, then } => Answer::Quit {
-                outcome: lanes::quit(
-                    self.apps.as_ref(),
-                    &question.app_id,
-                    Duration::ZERO,
-                    Duration::ZERO,
-                    || self.lingers,
-                    pitboard_core::host::awake,
-                ),
+                outcome: self.other_apps().map_or(QuitOutcome::StillRunning, |apps| {
+                    lanes::quit(
+                        apps,
+                        &question.app,
+                        Duration::ZERO,
+                        Duration::ZERO,
+                        || self.lingers,
+                        pitboard_core::host::awake,
+                    )
+                }),
                 question,
                 then,
             },
@@ -462,7 +472,10 @@ impl Stub {
                 front,
             } => {
                 let may = if front { !self.moving } else { self.whole };
-                let opened = may && self.apps.reopen(location, front).is_ok();
+                let opened = may
+                    && self
+                        .other_apps()
+                        .is_some_and(|apps| apps.reopen(location, front).is_ok());
                 Answer::Opened {
                     tool,
                     front,

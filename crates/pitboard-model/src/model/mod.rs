@@ -1,7 +1,7 @@
 //! The app's model in Rust: what both apps show, and every decision about it.
 //!
 //! An app makes one [`PitboardModel`], sends it what the person or the system asked for as
-//! an [`Intent`], and shows the [`Snapshot`]s its [`ModelListener`] is told of. Nothing it
+//! an [`Intent`], and shows the [`Snapshot`]s its [`Listener`] is told of. Nothing it
 //! exports is async, and nothing it exports waits on the core: `send` puts an intent in the
 //! model's mailbox and waits for nothing, `snapshot` takes the lock the actor holds only
 //! while it compares and copies a snapshot, and `shutdown` waits for the actor to take the
@@ -22,7 +22,7 @@
 //! login when asked to, keeps what each tool's last switch said, runs sign-ins, enrols,
 //! renames and forgets, keeps the sheet over the main window, and says which account to
 //! switch to once the one in use has run out, notifying it through the app's
-//! `Notifications` once for each reset, across launches. It also keeps what is about this
+//! `Notifier` once for each reset, across launches. It also keeps what is about this
 //! machine rather than its accounts: the daily renewal schedule, repaired once a launch,
 //! doctor's checks, the activity log and the `pitboard` a terminal would run.
 //! And it keeps the account windows' books, in `windows.rs`: which store is whose and the
@@ -113,17 +113,15 @@ pub struct AppLaunch {
     /// Which app this is, which says what differs by front: its words, its engine and where a
     /// sheet comes up.
     pub front: Front,
-    /// The app's own preferences as its earlier store held them, before the model kept them
-    /// in Pitboard's directory: on macOS what UserDefaults holds, for the model to take once.
-    /// Where the model's own file is there it wins, and this is not read. `None` for an app
-    /// with no earlier store.
+    /// Where the account windows' records are kept, for an app that has account windows.
+    /// `None` for one that keeps them nowhere: its windows are then recorded for as long as
+    /// it runs, and no store is deleted.
     #[uniffi(default)]
-    pub earlier_preferences: Option<EarlierPreferences>,
-    /// Where the account windows' records are kept, and what this launch is to them. `None`
-    /// for an app that keeps them nowhere: its windows are then recorded for as long as it
-    /// runs, and no store is deleted.
+    pub account_windows: Option<AccountWindowsLaunch>,
+    /// What the app kept in a store of its own before the model kept it, for the model to
+    /// take once: on macOS what UserDefaults holds. `None` for an app with no earlier store.
     #[uniffi(default)]
-    pub windows: Option<WindowsLaunch>,
+    pub handover: Option<Handover>,
     // Where the glance is written for widgets: only where the app names a path.
     #[uniffi(default)]
     pub glance: Option<String>,
@@ -134,32 +132,43 @@ pub struct AppLaunch {
 /// The records are the app's whichever Pitboard directory it serves, as its web stores are:
 /// WebKit keeps every store of one app under the person's own Library, whatever `HOME` says.
 /// So they are kept in a directory of the app's own, not in Pitboard's directory, and each
-/// Pitboard directory's are kept apart in them, under `key`.
+/// Pitboard directory's are kept apart in them, under its `key`.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct WindowsLaunch {
+pub struct AccountWindowsLaunch {
     /// A directory of the app's own, the same whatever `HOME` says: on macOS the app's folder
     /// in Application Support, named by its bundle id. The model keeps `windows.json` there,
     /// making the directory where it is not there yet.
     pub directory: String,
-    /// What this launch's Pitboard directory is called in the records: on macOS the
-    /// directory as Foundation standardises a file URL, as the app keyed `webStores` and
-    /// `windowPages` before the model kept them. Another key would leave every store recorded
-    /// before nobody's, never to be deleted, and every window without its last page.
-    pub key: String,
     /// The scheme of the Pitboard links this build answers, as its Share extension writes
     /// them: `pitboard`, or `pitboard-debug` for a debug build.
     pub link_scheme: String,
-    /// What the app's earlier store held of the records, before the model kept them: on macOS
-    /// UserDefaults' `webStores` and `windowPages`, for the model to take once. Where
-    /// `windows.json` is there it wins, and this is not read. `None` for an app with no
-    /// earlier store.
+    /// What this launch's Pitboard directory is called in the records, where only the app's
+    /// own system can say it: on macOS the directory as Foundation standardises a file URL,
+    /// which the app keyed `webStores` and `windowPages` by before the model kept them, and
+    /// which reads the file system and Apple's own Unicode tables
+    /// (docs/facts/foundation-urls.md). `None` for every other front, whose key the model
+    /// makes itself.
     #[uniffi(default)]
-    pub earlier: Option<EarlierWindowRecords>,
+    pub key: Option<String>,
+}
+
+/// What an app kept in a store of its own before the model kept it in files of its own, for
+/// the model to take once: on macOS what UserDefaults held. Where the model's own file is
+/// there it wins, and what is here of it is not read.
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
+pub struct Handover {
+    /// The app's own preferences, which the model keeps in `app.json`.
+    #[uniffi(default)]
+    pub preferences: Option<EarlierPreferences>,
+    /// The account windows' records, which the model keeps in `windows.json`: on macOS
+    /// UserDefaults' `webStores` and `windowPages`.
+    #[uniffi(default)]
+    pub windows: Option<EarlierWindowRecords>,
 }
 
 /// The account windows' records as an app's earlier store held them, every Pitboard
-/// directory's, by the key each was kept under, as `WindowsLaunch` hands them over once. A
-/// store id may be in either case: Foundation writes a UUID in upper case.
+/// directory's, by the key each was kept under, as `Handover` hands them over once. A store
+/// id may be in either case: Foundation writes a UUID in upper case.
 #[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
 pub struct EarlierWindowRecords {
     /// The stores each directory's windows were made with: `webStores`.
@@ -179,7 +188,7 @@ pub enum DownloadEnd {
     Cancelled,
 }
 
-/// The app's own preferences as an app's earlier store held them, as `AppLaunch` hands them
+/// The app's own preferences as an app's earlier store held them, as `Handover` hands them
 /// over once.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct EarlierPreferences {
@@ -207,10 +216,10 @@ pub enum Intent {
     /// only over a scratch home. Until an app sends this, nothing runs by itself. Sent again,
     /// it starts nothing more.
     Start,
-    /// The machine woke from sleep: numbers read before it slept say nothing about now. An
-    /// app sends it every time: on macOS the model's timers count only the time the machine
-    /// is awake, so without it the timer's read after a long sleep comes up to five minutes
-    /// late.
+    /// The machine woke from sleep: numbers read before it slept say nothing about now. Every
+    /// front sends it each time its system wakes: the model's timers count only the time the
+    /// machine is awake, on each system (`pitboard_core::host::awake`), so without it the
+    /// timer's read after a long sleep comes up to five minutes late.
     Woke,
     /// Somebody looked, by opening the app's menu: the accounts are read again where the
     /// numbers shown are a minute old.
@@ -484,9 +493,8 @@ pub struct RunningSignIn {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct QuitQuestion {
     pub(crate) account: Key,
-    // as the core's holder detection names it and `AppControl` takes it: on macOS its bundle
-    // id, on Windows its Application User Model ID
-    pub(crate) app_id: String,
+    // as the core's holder detection names it and `OtherApps` takes it
+    pub(crate) app: AppId,
     // as a person knows it: "ChatGPT"
     pub(crate) name: String,
 }
@@ -728,9 +736,10 @@ impl From<uniffi::UnexpectedUniFFICallbackError> for PlatformError {
 }
 
 // A notification, posted once for what it says: an account near or past a limit, a login to
-// sign in to again, or what switching or warming up by itself came to.
+// sign in to again, what switching or warming up by itself came to, or how a request from
+// outside ended.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RunOutNotice {
+pub struct Notice {
     // the same for the same news, so the system shows it once
     pub id: String,
     pub title: String,
@@ -739,32 +748,41 @@ pub struct RunOutNotice {
     pub body: String,
     // what a click on the notification hands back, as `Intent::NotificationClicked`
     pub clicked: String,
-    pub button: Option<NotificationButton>,
+    pub button: Option<NoticeButton>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct NotificationButton {
+pub struct NoticeButton {
+    pub kind: NoticeButtonKind,
     pub title: String,
     // what a click on it hands back, as `Intent::NotificationClicked`
     pub clicked: String,
 }
 
-// A button any notification can carry, by its title, as macOS registers it at launch.
+/// What a notice's button does, which a front may show its own way: macOS beside a symbol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum NoticeButtonKind {
+    SwitchTo,
+    SwitchBack,
+    SignInAgain,
+}
+
+// A button any notice can carry, by its title, for a system that registers each before any
+// notice is posted, as macOS does.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct NotificationButtonKind {
+pub struct NoticeButtonOffer {
+    pub kind: NoticeButtonKind,
     pub title: String,
     // what it asks for always opens a window, so the system brings the app forward with it
     pub opens_window: bool,
-    // the SF Symbol macOS shows beside it
-    pub symbol: String,
 }
 
 // The app's system's notifications, called on a thread of the model's own. Asking for
 // permission is the app's, and a refusal is no error: the window says the same either way.
 #[uniffi::export(with_foreign)]
-pub trait Notifications: Send + Sync {
+pub trait Notifier: Send + Sync {
     // This Mac and This PC show why it was refused, so the reason names no path or secret.
-    fn post(&self, notice: RunOutNotice) -> Result<(), PlatformError>;
+    fn post(&self, notice: Notice) -> Result<(), PlatformError>;
 }
 
 /// The person's own clock, as the app's system formats it: their locale, and whether they read
@@ -791,21 +809,56 @@ pub trait LocalTime: Send + Sync {
 
 /// Told of every snapshot, by the app.
 #[uniffi::export(with_foreign)]
-pub trait ModelListener: Send + Sync {
+pub trait Listener: Send + Sync {
     /// A newer snapshot, on a thread of the model's own, never the app's main thread, and
     /// one call at a time, in order. It may call `snapshot` and `send` on the model, and
     /// should hand the snapshot to the app's main thread and return: the next one waits.
     fn changed(&self, snapshot: Snapshot) -> Result<(), PlatformError>;
 }
 
+/// An app on this machine, as its own system names it, which `OtherApps` is asked about.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum AppId {
+    /// A Mac app, by its bundle id.
+    MacBundle { id: String },
+    /// A Windows app, by its Application User Model ID, `<package family>!<app>`.
+    WindowsAumid { id: String },
+}
+
+impl From<pitboard_core::holder::AppId> for AppId {
+    fn from(app: pitboard_core::holder::AppId) -> AppId {
+        use pitboard_core::holder::AppId as Core;
+        match app {
+            Core::MacBundle(id) => AppId::MacBundle { id: id.into() },
+            Core::WindowsAumid(id) => AppId::WindowsAumid { id: id.into() },
+            // The core's `AppId` is `non_exhaustive`, and a system it adds is given an `AppId`
+            // here before any holder of it is found, as a tool is given a `Tool`.
+            _ => unreachable!("{app:?} is an app the apps do not name"),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "fixture"))]
+impl AppId {
+    // What a stand-in keeps an app by, whichever system names it.
+    pub(crate) fn id(&self) -> &str {
+        match self {
+            AppId::MacBundle { id } | AppId::WindowsAumid { id } => id,
+        }
+    }
+}
+
+/// The other apps on this machine that hold a tool's login, which Pitboard may quit and open
+/// again for a switch. A front whose system has no such app Pitboard can quit names none, and
+/// what holds a login there is said in words, as the command line says it.
 #[uniffi::export(with_foreign)]
-pub trait AppControl: Send + Sync {
-    /// Where the running copy of the app was opened from, which is what `reopen` takes, or
+pub trait OtherApps: Send + Sync {
+    /// Where the running copy of `app` was opened from, which is what `reopen` takes, or
     /// `None` when it is not running.
-    fn running(&self, app: String) -> Result<Option<String>, PlatformError>;
-    /// Asks the app to quit the way a person quits it, which lets it ask about work in
+    fn running(&self, app: AppId) -> Result<Option<String>, PlatformError>;
+    /// Asks `app` to quit the way a person quits it, which lets it ask about work in
     /// progress. Returns at once; the app may take a while, or decline.
-    fn request_quit(&self, app: String) -> Result<(), PlatformError>;
+    fn request_quit(&self, app: AppId) -> Result<(), PlatformError>;
     // Not `open`, which UniFFI 0.31.2 backticks into the C header and no C compiler takes.
     // front: brought to the front, for a sign-in in the app; otherwise behind Pitboard's window
     fn reopen(&self, location: String, front: bool) -> Result<(), PlatformError>;
@@ -830,30 +883,37 @@ pub struct PitboardModel {
 #[uniffi::export]
 impl PitboardModel {
     /// The app's model, over the core the app's environment and location make, read the
-    /// way the command line reads its own; over `apps`, the other apps on this machine;
-    /// posting what has run out through `notifications`; and saying clock times as
-    /// `local_time` does, the person's own. Nothing runs by itself until the app sends
-    /// `Intent::Start`.
+    /// way the command line reads its own; over `other_apps`, the apps on this machine
+    /// Pitboard may quit, where the front names any; posting what has run out through
+    /// `notifier`; and saying clock times as `local_time` does, the person's own. Nothing runs
+    /// by itself until the app sends `Intent::Start`.
     #[uniffi::constructor]
     pub fn new(
         launch: AppLaunch,
-        listener: Arc<dyn ModelListener>,
-        apps: Arc<dyn AppControl>,
-        notifications: Arc<dyn Notifications>,
+        listener: Arc<dyn Listener>,
+        other_apps: Option<Arc<dyn OtherApps>>,
+        notifier: Arc<dyn Notifier>,
         local_time: Arc<dyn LocalTime>,
     ) -> Arc<Self> {
+        let pitboard = crate::pitboard_directory(launch.environment.clone());
+        let handover = launch.handover.unwrap_or_default();
         PitboardModel::over(
             AppCore::for_app(launch.environment, launch.app_location, launch.front),
             listener,
             Platform {
                 front: launch.front,
-                apps,
-                notifications,
+                other_apps,
+                notifier,
                 local_time,
-                earlier: launch.earlier_preferences,
-                windows: launch.windows.map(|launch| WindowsPlace {
-                    launch,
-                    web_scheme: windows::WEB_SCHEME.into(),
+                earlier: handover.preferences,
+                windows: launch.account_windows.map(|windows| {
+                    WindowsPlace::of(
+                        launch.front,
+                        windows,
+                        &pitboard,
+                        handover.windows,
+                        windows::WEB_SCHEME,
+                    )
                 }),
                 glance: launch.glance.map(PathBuf::from),
             },
@@ -914,10 +974,10 @@ const SIGN_INS_STOP_WITHIN: Duration = Duration::from_secs(10);
 pub(crate) struct Platform {
     /// Which app this is.
     pub(crate) front: Front,
-    /// Other apps on this machine.
-    pub(crate) apps: Arc<dyn AppControl>,
+    /// The apps on this machine Pitboard may quit, for a front that names them.
+    pub(crate) other_apps: Option<Arc<dyn OtherApps>>,
     /// The system's notifications.
-    pub(crate) notifications: Arc<dyn Notifications>,
+    pub(crate) notifier: Arc<dyn Notifier>,
     /// The person's own clock.
     pub(crate) local_time: Arc<dyn LocalTime>,
     /// The app's preferences as its earlier store held them, taken once.
@@ -927,18 +987,43 @@ pub(crate) struct Platform {
     pub(crate) glance: Option<PathBuf>,
 }
 
-/// Where the account windows' records are kept, and the scheme their pages are on.
+/// Where the account windows' records are kept and the key this launch's are kept under,
+/// what the app's earlier store held of them, and the schemes their links and pages are on.
 pub(crate) struct WindowsPlace {
-    pub(crate) launch: WindowsLaunch,
+    /// A directory of the app's own, which holds `windows.json`.
+    pub(crate) directory: PathBuf,
+    pub(crate) key: String,
+    pub(crate) link_scheme: String,
+    pub(crate) earlier: Option<EarlierWindowRecords>,
     /// The scheme every page a window keeps is on: `https`, or a fixture's own.
     pub(crate) web_scheme: String,
+}
+
+impl WindowsPlace {
+    /// Where `front`'s app keeps the records `launch` names, for the Pitboard directory
+    /// `pitboard`, as the environment gives it.
+    pub(crate) fn of(
+        front: Front,
+        launch: AccountWindowsLaunch,
+        pitboard: &str,
+        earlier: Option<EarlierWindowRecords>,
+        web_scheme: &str,
+    ) -> WindowsPlace {
+        WindowsPlace {
+            directory: PathBuf::from(launch.directory),
+            key: crate::account_windows::records::key(front, pitboard, launch.key),
+            link_scheme: launch.link_scheme,
+            earlier,
+            web_scheme: web_scheme.into(),
+        }
+    }
 }
 
 impl PitboardModel {
     /// A model over `core` and `platform`, doing what it does by itself every `cadence`.
     pub(crate) fn over(
         core: Arc<AppCore>,
-        listener: Arc<dyn ModelListener>,
+        listener: Arc<dyn Listener>,
         platform: Platform,
         cadence: Cadence,
     ) -> Arc<PitboardModel> {
@@ -950,7 +1035,7 @@ impl PitboardModel {
         if let Some(place) = &platform.windows {
             state.windows.on(
                 platform.front.engine(),
-                &place.launch.link_scheme,
+                &place.link_scheme,
                 &place.web_scheme,
             );
         }
@@ -961,14 +1046,12 @@ impl PitboardModel {
         let (mailbox, mail) = channel();
         let lanes = Lanes::open(
             core,
-            platform.apps,
-            platform.notifications,
+            platform.other_apps,
+            platform.notifier,
             Arc::clone(&platform.local_time),
             lanes::Keeping {
                 earlier: platform.earlier,
-                windows: platform
-                    .windows
-                    .map(|place| lanes::RecordsFile::of(place.launch)),
+                windows: platform.windows.map(lanes::RecordsFile::of),
                 glance: platform.glance,
             },
             cadence,

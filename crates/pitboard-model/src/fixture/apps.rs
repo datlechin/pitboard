@@ -1,7 +1,7 @@
 //! What a fixture's model asks of the app's own system, played by the fixture: the other
 //! apps on its machine, and notifications, which it posts none of.
 
-use crate::model::{AppControl, Notifications, PlatformError, RunOutNotice};
+use crate::model::{AppId, Notice, Notifier, OtherApps, PlatformError};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::testing::MemoryHost;
 use pitboard_core::testing::desktop::FakeClaude;
@@ -18,7 +18,7 @@ pub(crate) const CLAUDE: &str = "com.anthropic.claudefordesktop";
 /// ChatGPT on one system, as pitboard-core's `provider::codex::holders` tells it from the
 /// process list: what tells the core the app is open.
 pub(crate) struct ChatGpt {
-    /// As `AppControl` takes it: on macOS its bundle id, on Windows its AUMID.
+    /// As `OtherApps` takes it: on macOS its bundle id, on Windows its AUMID.
     pub(crate) app: &'static str,
     /// Where it runs its own `codex`, two of them, as there were on the Mac.
     codex: &'static str,
@@ -45,6 +45,16 @@ pub(crate) const fn chatgpt(os: Os) -> ChatGpt {
 }
 
 impl ChatGpt {
+    /// As the core names it: by its AUMID where it runs in a package, else by its bundle id.
+    #[cfg(test)]
+    pub(crate) fn app_id(&self) -> AppId {
+        let id = self.app.into();
+        match self.package {
+            Some(_) => AppId::WindowsAumid { id },
+            None => AppId::MacBundle { id },
+        }
+    }
+
     pub(crate) fn opens(&self, host: &MemoryHost) {
         let codex = [self.codex, self.codex];
         match self.package {
@@ -164,8 +174,8 @@ impl FixtureApps {
     }
 
     // The core waits for a quit app's processes to leave the process list, so with an app's
-    // own AppControl the list follows what that one says runs.
-    pub(crate) fn following(self: &Arc<Self>, apps: Arc<dyn AppControl>) -> Arc<dyn AppControl> {
+    // own OtherApps the list follows what that one says runs.
+    pub(crate) fn following(self: &Arc<Self>, apps: Arc<dyn OtherApps>) -> Arc<dyn OtherApps> {
         Arc::new(Following {
             apps,
             machine: Arc::clone(self),
@@ -174,26 +184,26 @@ impl FixtureApps {
 }
 
 struct Following {
-    apps: Arc<dyn AppControl>,
+    apps: Arc<dyn OtherApps>,
     machine: Arc<FixtureApps>,
 }
 
-impl AppControl for Following {
-    fn running(&self, app: String) -> Result<Option<String>, PlatformError> {
+impl OtherApps for Following {
+    fn running(&self, app: AppId) -> Result<Option<String>, PlatformError> {
         let found = self.apps.running(app.clone());
         if let Ok(copy) = &found
-            && copy.is_some() != self.machine.is_running(&app)
+            && copy.is_some() != self.machine.is_running(app.id())
         {
             if copy.is_some() {
-                self.machine.started(&app);
+                self.machine.started(app.id());
             } else {
-                self.machine.stopped(&app);
+                self.machine.stopped(app.id());
             }
         }
         found
     }
 
-    fn request_quit(&self, app: String) -> Result<(), PlatformError> {
+    fn request_quit(&self, app: AppId) -> Result<(), PlatformError> {
         self.apps.request_quit(app)
     }
 
@@ -202,16 +212,18 @@ impl AppControl for Following {
     }
 }
 
-impl AppControl for FixtureApps {
-    fn running(&self, app: String) -> Result<Option<String>, PlatformError> {
-        Ok(self.is_running(&app).then(|| FixtureApps::copy_of(&app)))
+impl OtherApps for FixtureApps {
+    fn running(&self, app: AppId) -> Result<Option<String>, PlatformError> {
+        Ok(self
+            .is_running(app.id())
+            .then(|| FixtureApps::copy_of(app.id())))
     }
 
     /// Quits at once, as an app with no work in progress does, and its processes leave the
     /// process list with it.
-    fn request_quit(&self, app: String) -> Result<(), PlatformError> {
-        held(&self.held.0).asked.push(format!("quit {app}"));
-        self.stopped(&app);
+    fn request_quit(&self, app: AppId) -> Result<(), PlatformError> {
+        held(&self.held.0).asked.push(format!("quit {}", app.id()));
+        self.stopped(app.id());
         Ok(())
     }
 
@@ -268,8 +280,8 @@ impl AppControl for FixtureApps {
 /// nothing, a notification's permission included.
 pub(crate) struct Unposted;
 
-impl Notifications for Unposted {
-    fn post(&self, _notice: RunOutNotice) -> Result<(), PlatformError> {
+impl Notifier for Unposted {
+    fn post(&self, _notice: Notice) -> Result<(), PlatformError> {
         Ok(())
     }
 }

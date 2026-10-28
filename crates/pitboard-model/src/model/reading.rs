@@ -10,7 +10,7 @@ use super::testing::machine::{Hand, Stub, any_read, fresh_read, installed_ask, o
 use super::testing::records::{
     account, claude, claude_code, codex, codex_account, percent, refusal, status, warned, warning,
 };
-use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
+use super::{Intent, Notice, NoticeButton, NoticeButtonKind, ReadFailure, Sheet};
 use crate::AccountKey;
 use crate::Front;
 use crate::Tool;
@@ -280,13 +280,14 @@ fn a_login_replaced_outside_is_posted_once_while_it_stands() {
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: "warning/login_replaced/claude:work".into(),
             title: words::sign_in_replaced(Front::MacMenuBar),
             subtitle: None,
             body: replaced.message.clone(),
             clicked: "accounts".into(),
-            button: Some(NotificationButton {
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SignInAgain,
                 title: words::sign_in_again_button(Front::MacMenuBar),
                 clicked: "sign-in-again/claude/work".into(),
             }),
@@ -340,9 +341,11 @@ fn a_login_replaced_outside_offers_to_sign_in_again() {
     );
     let button = machine.posted[0].button.clone().expect("a button");
     assert!(
-        crate::notification_buttons(Front::MacMenuBar)
+        crate::notice_buttons(Front::MacMenuBar)
             .iter()
-            .any(|kind| kind.title == button.title && kind.opens_window),
+            .any(|offer| offer.kind == button.kind
+                && offer.title == button.title
+                && offer.opens_window),
         "its sheet needs the window"
     );
 }
@@ -415,13 +418,14 @@ fn a_parked_login_that_stops_being_usable_is_posted_once() {
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: "unusable/claude:work".into(),
             title: words::sign_in_title(Front::MacMenuBar, Standing::LoginExpired),
             subtitle: Some("Claude Code".into()),
             body: words::sign_in_to_keep("work"),
             clicked: "accounts".into(),
-            button: Some(NotificationButton {
+            button: Some(NoticeButton {
+                kind: NoticeButtonKind::SignInAgain,
                 title: words::sign_in_again_button(Front::MacMenuBar),
                 clicked: "sign-in-again/claude/work".into(),
             }),

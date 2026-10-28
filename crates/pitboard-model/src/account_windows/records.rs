@@ -1,27 +1,66 @@
 //! The account windows' records: the stores each Pitboard directory made, and the page each of
 //! its windows was last on. The model keeps them in `windows.json`, in a directory of the
-//! app's own that the app names in `AppLaunch::windows`, since the web stores they describe
-//! are the app's whichever Pitboard directory it serves: WebKit keeps every store of one app
-//! under the person's own Library, whatever `HOME` says. Inside, each directory's records
-//! are kept apart, under the key the app gives it, so a copy of the app run with another home
-//! never takes the installed copy's stores for its own.
+//! app's own that the app names in `AppLaunch::account_windows`, since the web stores they
+//! describe are the app's whichever Pitboard directory it serves: WebKit keeps every store of
+//! one app under the person's own Library, whatever `HOME` says. Inside, each directory's
+//! records are kept apart, under its `key`, so a copy of the app run with another home never
+//! takes the installed copy's stores for its own.
 //!
 //! The macOS app kept these in UserDefaults, as `webStores` and `windowPages`, by the same
 //! keys, with each store id in upper case, as Foundation writes a UUID: WebsiteData.swift's
 //! `StoreRecord` and `PageRecord`, as they were at a3e5ce0. It hands what it held over once,
-//! as `AppLaunch`'s `EarlierWindowRecords`, the way it hands over its earlier preferences.
+//! in `Handover::windows`, the way it hands over its earlier preferences.
 //! A store id is compared without regard to case wherever it comes from: read as written,
 //! every store the macOS app recorded would be taken for an orphan, and deleted with the
 //! sign-in it holds.
 //!
 //! What is here is pure: it reads the file's text as the lane read it, and says what to write.
 
+use crate::Front;
 use crate::model::EarlierWindowRecords;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The file's name, in the directory the app names.
 pub(crate) const FILE: &str = "windows.json";
+
+/// What `front`'s app calls the Pitboard directory `directory`, as the environment gives it,
+/// in the records: the key each app kept its records under before the model kept them, so
+/// every store and page recorded since is still that directory's. macOS's is Foundation's
+/// standardised file path, which reads the file system and Apple's own Unicode tables, so the
+/// app says it, as `given` (docs/facts/foundation-urls.md); without it, as for a test or a
+/// fixture, the directory as given. Windows' compares as Windows compares paths, as the app
+/// keyed its records before. The Linux app's is the directory with `.` and `..` resolved by
+/// name, which nothing has read yet.
+pub(crate) fn key(front: Front, directory: &str, given: Option<String>) -> String {
+    match front {
+        Front::MacMenuBar => given.unwrap_or_else(|| directory.to_owned()),
+        Front::WindowsNotificationArea => pitboard_core::host::path_key_in_any_case(directory),
+        Front::Gnome => by_name(directory),
+    }
+}
+
+// A link's target is never read: `a/link/..` stays `a`.
+fn by_name(directory: &str) -> String {
+    let rooted = directory.starts_with('/');
+    let mut names: Vec<&str> = Vec::new();
+    for name in directory.split('/') {
+        match name {
+            "" | "." => {}
+            ".." if names.last().is_some_and(|last| *last != "..") => {
+                names.pop();
+            }
+            ".." if rooted => {}
+            name => names.push(name),
+        }
+    }
+    let joined = names.join("/");
+    match (rooted, joined.is_empty()) {
+        (true, _) => format!("/{joined}"),
+        (false, true) => ".".into(),
+        (false, false) => joined,
+    }
+}
 
 /// A store id as the records keep and compare it: in lower case, as `stores::derive` writes
 /// one, so one Foundation wrote in upper case is the same store.
@@ -268,6 +307,70 @@ pub(crate) fn shared(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    /// Each app's records were kept under its own key before the model kept them: macOS's as
+    /// Foundation standardises the directory, which the app gives; Windows' as
+    /// `windows_records_key` keyed them for the app; Linux's by name.
+    #[test]
+    fn each_front_keys_its_records_as_its_app_did() {
+        let mac = |directory: &str, given: Option<&str>| {
+            key(Front::MacMenuBar, directory, given.map(str::to_owned))
+        };
+        assert_eq!(
+            mac(
+                "/Users/dana/./work/../pitboard/",
+                Some("/Users/dana/pitboard")
+            ),
+            "/Users/dana/pitboard",
+            "Foundation's, as the app gives it"
+        );
+        assert_eq!(
+            mac("/tmp/f/./x/", None),
+            "/tmp/f/./x/",
+            "a fixture's, as given"
+        );
+
+        let windows = |directory: &str| key(Front::WindowsNotificationArea, directory, None);
+        assert_eq!(
+            windows(r"c:\users\x\appdata\local\pitboard\"),
+            windows(r"\\?\C:\Users\X\AppData\Local\Pitboard")
+        );
+        assert_eq!(
+            windows("C:/Users/X/AppData/Local/Pitboard"),
+            r"C:\USERS\X\APPDATA\LOCAL\PITBOARD"
+        );
+        assert_eq!(
+            key(
+                Front::WindowsNotificationArea,
+                r"C:\Users\X\.\AppData\..\Pitboard",
+                Some("ignored".into())
+            ),
+            r"C:\USERS\X\PITBOARD",
+            "only macOS's app gives its key"
+        );
+
+        let gnome = |directory: &str| key(Front::Gnome, directory, None);
+        assert_eq!(
+            gnome("/home/dana/./work/../pitboard/"),
+            "/home/dana/pitboard"
+        );
+        assert_eq!(gnome("//home//dana/.pitboard"), "/home/dana/.pitboard");
+        assert_eq!(gnome("/home/dana/.pitboard/.."), "/home/dana");
+        assert_eq!(gnome("/../x"), "/x");
+        assert_eq!(gnome("/"), "/");
+        assert_eq!(gnome("/a/..b/.../c"), "/a/..b/.../c");
+        assert_eq!(
+            gnome("/home/Dana/Báo cáo"),
+            "/home/Dana/Báo cáo",
+            "names as they are"
+        );
+        assert_eq!(
+            gnome("../a/./b/.."),
+            "../a",
+            "a relative one stays relative"
+        );
+        assert_eq!(gnome("a/.."), ".");
+    }
 
     const DANA: &str = "/Users/dana/.pitboard";
     const SCRATCH: &str = "/tmp/test/.pitboard";

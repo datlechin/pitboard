@@ -16,7 +16,7 @@ public sealed class JumpTasksTests
     ];
 
     private sealed record Parts(
-        JumpTasks Jumps, AppModel App, StandInModel Model, StandInJumpList List, List<string> Opened, List<RunOutNotice> Posted);
+        JumpTasks Jumps, AppModel App, StandInModel Model, StandInJumpList List, List<string> Opened, List<Notice> Posted);
 
     private static Parts Made(Snapshot first, StandInJumpList? list = null)
     {
@@ -24,7 +24,7 @@ public sealed class JumpTasksTests
         var app = new AppModel(model);
         var shown = list ?? new StandInJumpList();
         var opened = new List<string>();
-        var posted = new List<RunOutNotice>();
+        var posted = new List<Notice>();
         return new Parts(new JumpTasks(app, shown, window => opened.Add(window.Store), posted.Add), app, model, shown, opened, posted);
     }
 

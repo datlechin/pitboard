@@ -40,19 +40,23 @@ private final class StandInRunningApp: RunningApp {
     let busy = StandInRunningApp(at: "/Applications/ChatGPT.app", quits: false)
     let other = StandInRunningApp(at: "/Users/x/Applications/ChatGPT.app", quits: true)
     let opened = Opened()
-    let apps = MacAppControl(
+    let apps = MacApps(
         copies: { $0 == "com.openai.codex" ? [busy, other] : [] },
         open: { url, front in opened.keep(Opening(url: url, front: front)) })
+    let chatGPT = AppId.macBundle(id: "com.openai.codex")
 
-    #expect(try apps.running(app: "com.openai.codex") == "/Applications/ChatGPT.app")
-    #expect(try apps.running(app: "com.example.none") == nil)
+    #expect(try apps.running(app: chatGPT) == "/Applications/ChatGPT.app")
+    #expect(try apps.running(app: .macBundle(id: "com.example.none")) == nil)
+    #expect(
+        try apps.running(app: .windowsAumid(id: "com.openai.codex")) == nil,
+        "a Mac runs no app Windows names")
 
-    try apps.requestQuit(app: "com.openai.codex")
+    try apps.requestQuit(app: chatGPT)
     #expect(busy.asked == ["terminate"])
     #expect(other.asked == ["terminate"])
-    #expect(try apps.running(app: "com.openai.codex") == "/Applications/ChatGPT.app")
+    #expect(try apps.running(app: chatGPT) == "/Applications/ChatGPT.app")
 
-    try apps.requestQuit(app: "com.openai.codex")
+    try apps.requestQuit(app: chatGPT)
     #expect(busy.asked == ["terminate", "terminate"], "a copy that quit is not asked again")
     #expect(other.asked == ["terminate"])
 
@@ -65,7 +69,7 @@ private final class StandInRunningApp: RunningApp {
 
 @Test func anAppComesForwardOnlyWhenAsked() throws {
     let opened = Opened()
-    let apps = MacAppControl(
+    let apps = MacApps(
         copies: { _ in [] },
         open: { url, front in opened.keep(Opening(url: url, front: front)) })
     try apps.reopen(location: "/Applications/Claude.app", front: true)
@@ -73,8 +77,8 @@ private final class StandInRunningApp: RunningApp {
     let claude = URL(fileURLWithPath: "/Applications/Claude.app")
     #expect(
         opened.asked == [Opening(url: claude, front: true), Opening(url: claude, front: false)])
-    #expect(MacAppControl.opening(front: true).activates)
-    #expect(!MacAppControl.opening(front: false).activates)
+    #expect(MacApps.opening(front: true).activates)
+    #expect(!MacApps.opening(front: false).activates)
 }
 
 private struct Opening: Equatable {
@@ -144,11 +148,12 @@ private final class Opened: @unchecked Sendable {
 
 @Test func aRunOutIsPostedWithItsButtonsCategoryAndWhatEachClickHandsBack() {
     let content = MacNotifications.content(
-        of: RunOutNotice(
+        of: Notice(
             id: "claude/work/session/1768399500", title: "work has no 5-hour limit left",
             subtitle: "Claude Code", body: "spare has 80% of its own left.",
             clicked: "accounts",
-            button: NotificationButton(title: "Switch", clicked: "switch/claude/spare")))
+            button: NoticeButton(
+                kind: .switchTo, title: "Switch", clicked: "switch/claude/spare")))
     #expect(content.title == "work has no 5-hour limit left")
     #expect(content.subtitle == "Claude Code")
     #expect(content.body == "spare has 80% of its own left.")
@@ -169,7 +174,7 @@ private final class Opened: @unchecked Sendable {
 /// No category, so no button, and a click on it still hands back what it asks for.
 @Test func aNoticeWithNoButtonHasNoCategory() {
     let content = MacNotifications.content(
-        of: RunOutNotice(
+        of: Notice(
             id: "auto-refused/switch_failed", title: "Pitboard couldn’t switch Claude Code",
             subtitle: nil, body: "It was refused.", clicked: "limits", button: nil))
     #expect(content.categoryIdentifier.isEmpty)
@@ -183,7 +188,7 @@ private final class Opened: @unchecked Sendable {
 /// Each button the model can post is registered at launch with its symbol, and only one that
 /// opens a window brings Pitboard forward, which macOS refuses the app itself from the background.
 @Test func everyButtonHasACategoryOfItsOwn() {
-    let buttons = notificationButtons(front: front)
+    let buttons = noticeButtons(front: front)
     let categories = MacNotifications.categories(buttons)
     #expect(Set(categories.map(\.identifier)) == Set(buttons.map(\.title)))
     for category in categories {
@@ -192,9 +197,19 @@ private final class Opened: @unchecked Sendable {
         let options: UNNotificationActionOptions = opens ? .foreground : []
         #expect(category.actions.allSatisfy { $0.options == options && $0.icon != nil })
     }
-    #expect(buttons.contains { $0.title == "Sign In Again" && $0.opensWindow })
-    #expect(buttons.contains { $0.title == "Switch" && !$0.opensWindow })
-    #expect(buttons.contains { $0.title == "Switch Back" && !$0.opensWindow })
+    let offered = buttons.map { "\($0.kind) \($0.title) \($0.opensWindow)" }
+    #expect(
+        Set(offered) == [
+            "signInAgain Sign In Again true", "switchTo Switch false",
+            "switchBack Switch Back false",
+        ])
+}
+
+/// The symbols the model named for each button before it named the button's kind instead.
+@Test func eachKindOfButtonShowsTheSymbolItDid() {
+    #expect(MacNotifications.symbol(of: .switchTo) == "arrow.left.arrow.right")
+    #expect(MacNotifications.symbol(of: .switchBack) == "arrow.uturn.backward")
+    #expect(MacNotifications.symbol(of: .signInAgain) == "person.crop.circle")
 }
 
 /// A notification an older Pitboard posted has no click of its own, and opens the accounts.

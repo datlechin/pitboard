@@ -89,7 +89,7 @@ export interface Advice {
   left: number | null;
 }
 
-// present/notices.rs `RunOutNotice`, as the system's notification shows it: its button switches to
+// present/notices.rs `Notice`, as the system's notification shows it: its button switches to
 // an account, Switch at a limit and Switch Back after a switch Pitboard made by itself.
 export interface Posted {
   id: string;

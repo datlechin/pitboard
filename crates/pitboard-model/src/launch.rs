@@ -201,9 +201,12 @@ pub(crate) enum Remedy {
     /// Quit it and start it again.
     Restart,
     /// Quit the app the way its system quits an app, and open it again. The model may do
-    /// both. `app_id` is what that system names it by, as `AppControl` takes it: on macOS
-    /// its bundle id, on Windows its Application User Model ID.
-    ReopenApp { app_id: String, name: String },
+    /// both, where the front names other apps. `app` is what that system names it by, as
+    /// `OtherApps` takes it.
+    ReopenApp {
+        app: crate::model::AppId,
+        name: String,
+    },
     /// Run this command.
     Run { command: String },
     /// Do this, somewhere Pitboard cannot reach.
@@ -230,7 +233,7 @@ impl From<pitboard_core::holder::Holding> for Holding {
             remedy: match held.holder.remedy {
                 Core::Restart => Remedy::Restart,
                 Core::ReopenApp { app, name } => Remedy::ReopenApp {
-                    app_id: app.as_str().into(),
+                    app: app.into(),
                     name: name.into(),
                 },
                 Core::Run { arguments, .. } => Remedy::Run {
@@ -1246,10 +1249,10 @@ impl AppCore {
     }
 
     // Only what quitting that app puts right: a `codex` in a terminal is not waited for.
-    pub(crate) fn holds_app(&self, tool: ProviderId, app_id: &str) -> bool {
-        self.holding(tool).iter().any(
-            |held| matches!(&held.remedy, Remedy::ReopenApp { app_id: app, .. } if app == app_id),
-        )
+    pub(crate) fn holds_app(&self, tool: ProviderId, app: &crate::model::AppId) -> bool {
+        self.holding(tool)
+            .iter()
+            .any(|held| matches!(&held.remedy, Remedy::ReopenApp { app: its, .. } if its == app))
     }
 
     /// What Pitboard has changed, newest last: nothing where nothing may be read here, as

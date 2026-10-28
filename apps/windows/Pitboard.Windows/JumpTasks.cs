@@ -5,7 +5,7 @@ namespace Pitboard.Windows;
 
 // The model's Jump List, and what a task chosen there asks once it reaches this copy. A switch is a request from
 // outside, so it never asks a question, and one refused says why in a notification: a Jump List has no reply.
-public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccount> open, Action<RunOutNotice> post)
+public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccount> open, Action<Notice> post)
 {
     private readonly HashSet<ulong> _asked = [];
     private readonly List<string> _windows = [];

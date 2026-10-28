@@ -10,7 +10,7 @@ use super::{
 use crate::model::advice::HeadsUp;
 use crate::model::state::in_its_app;
 use crate::model::{Doing, Intent, LastSwitch, Opens, Place, Sheet, SignedIn};
-use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
+use crate::model::{Notice, NoticeButton, NoticeButtonKind, NoticeButtonOffer};
 use crate::{Account, Adoption, Front, Held, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -600,8 +600,8 @@ fn posted(
     tool: Option<ProviderId>,
     body: String,
     clicked: &Clicked,
-) -> RunOutNotice {
-    RunOutNotice {
+) -> Notice {
+    Notice {
         id,
         title,
         subtitle: tool.map(|tool| tool.name().into()),
@@ -611,36 +611,37 @@ fn posted(
     }
 }
 
-fn button(title: String, clicked: &Clicked) -> Option<NotificationButton> {
-    Some(NotificationButton {
+fn button(kind: NoticeButtonKind, title: String, clicked: &Clicked) -> Option<NoticeButton> {
+    Some(NoticeButton {
+        kind,
         title,
         clicked: clicked.argument(),
     })
 }
 
 // A switch asks for a window only where it ends in a question.
-pub(crate) fn notification_buttons(front: Front) -> Vec<NotificationButtonKind> {
+pub(crate) fn notice_buttons(front: Front) -> Vec<NoticeButtonOffer> {
     vec![
-        NotificationButtonKind {
+        NoticeButtonOffer {
+            kind: NoticeButtonKind::SwitchTo,
             title: words::SWITCH.into(),
             opens_window: false,
-            symbol: "arrow.left.arrow.right".into(),
         },
-        NotificationButtonKind {
+        NoticeButtonOffer {
+            kind: NoticeButtonKind::SwitchBack,
             title: words::switch_back(front),
             opens_window: false,
-            symbol: "arrow.uturn.backward".into(),
         },
-        NotificationButtonKind {
+        NoticeButtonOffer {
+            kind: NoticeButtonKind::SignInAgain,
             title: words::sign_in_again_button(front),
             opens_window: true,
-            symbol: "person.crop.circle".into(),
         },
     ]
 }
 
 // Its id names the account, the limit and the reset: one notification for each limit.
-pub(crate) fn at_limit_notice(front: Front, heads_up: &HeadsUp, now: i64) -> RunOutNotice {
+pub(crate) fn at_limit_notice(front: Front, heads_up: &HeadsUp, now: i64) -> Notice {
     let limit = &heads_up.window;
     let title = words::limit_notification(
         front,
@@ -654,12 +655,13 @@ pub(crate) fn at_limit_notice(front: Front, heads_up: &HeadsUp, now: i64) -> Run
         (None, None) => String::new(),
     };
     let used = words::has_used_share(&heads_up.ran, &said::figure(heads_up.window.percent));
-    RunOutNotice {
+    Notice {
         button: heads_up
             .instead
             .as_ref()
             .and_then(|(instead, _, switch_to)| {
                 button(
+                    NoticeButtonKind::SwitchTo,
                     words::switch_button(front, instead),
                     &Clicked::Switch(switch_to.clone()),
                 )
@@ -683,14 +685,18 @@ pub(crate) fn auto_switched_notice(
     used: &str,
     adoption: &Adoption,
     at: i64,
-) -> RunOutNotice {
+) -> Notice {
     let (left, put) = accounts;
     let back = Clicked::SwitchBack {
         from: left.clone(),
         to: put.clone(),
     };
-    RunOutNotice {
-        button: button(words::switch_back(front), &back),
+    Notice {
+        button: button(
+            NoticeButtonKind::SwitchBack,
+            words::switch_back(front),
+            &back,
+        ),
         ..posted(
             format!("auto/{from}/{to}/{at}"),
             words::switched_to(None, &put.label),
@@ -709,7 +715,7 @@ pub(crate) fn auto_skipped_notice(
     from: &str,
     used: &str,
     why: &str,
-) -> RunOutNotice {
+) -> Notice {
     posted(
         format!("auto-{key}"),
         words::not_switched(front),
@@ -721,7 +727,7 @@ pub(crate) fn auto_skipped_notice(
 
 /// Where Pitboard cannot judge whether to switch Claude Code by itself: why, in the core's
 /// words. Identified by what tells the reason apart, `key`.
-pub(crate) fn auto_not_watching_notice(front: Front, key: &str, why: &str) -> RunOutNotice {
+pub(crate) fn auto_not_watching_notice(front: Front, key: &str, why: &str) -> Notice {
     posted(
         format!("auto-{key}"),
         words::not_switching(front),
@@ -732,14 +738,11 @@ pub(crate) fn auto_not_watching_notice(front: Front, key: &str, why: &str) -> Ru
 }
 
 // A sign-in replaced outside Pitboard, posted once, with Sign In Again for `again` where added.
-pub(crate) fn standing_notice(
-    front: Front,
-    warning: &Warning,
-    again: Option<&Key>,
-) -> RunOutNotice {
-    RunOutNotice {
+pub(crate) fn standing_notice(front: Front, warning: &Warning, again: Option<&Key>) -> Notice {
+    Notice {
         button: again.and_then(|account| {
             button(
+                NoticeButtonKind::SignInAgain,
                 words::sign_in_again_button(front),
                 &Clicked::SignInAgain(account.clone()),
             )
@@ -755,11 +758,12 @@ pub(crate) fn standing_notice(
 }
 
 // Titled as its row is marked.
-pub(crate) fn unusable_notice(front: Front, account: &Account) -> RunOutNotice {
+pub(crate) fn unusable_notice(front: Front, account: &Account) -> Notice {
     let label = account.label.as_deref().unwrap_or_default();
-    RunOutNotice {
+    Notice {
         button: account.key.as_ref().and_then(|key| {
             button(
+                NoticeButtonKind::SignInAgain,
                 words::sign_in_again_button(front),
                 &Clicked::SignInAgain(key.clone()),
             )
@@ -775,7 +779,7 @@ pub(crate) fn unusable_notice(front: Front, account: &Account) -> RunOutNotice {
 }
 
 /// A switch Pitboard tried by itself and could not make, in the core's words.
-pub(crate) fn auto_refused_notice(front: Front, code: &str, message: &str) -> RunOutNotice {
+pub(crate) fn auto_refused_notice(front: Front, code: &str, message: &str) -> Notice {
     posted(
         format!("auto-refused/{code}"),
         words::could_not_switch_itself(front),
@@ -786,7 +790,7 @@ pub(crate) fn auto_refused_notice(front: Front, code: &str, message: &str) -> Ru
 }
 
 // By what tells it apart, so one account's does not replace another's.
-pub(crate) fn warm_failed_notice(front: Front, told_apart: &str, message: &str) -> RunOutNotice {
+pub(crate) fn warm_failed_notice(front: Front, told_apart: &str, message: &str) -> Notice {
     posted(
         format!("warm-failed/{told_apart}"),
         words::could_not_warm_itself(front),

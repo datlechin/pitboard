@@ -7,7 +7,7 @@ use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
-use super::{Doing, Intent, RunOutNotice};
+use super::{Doing, Intent, Notice};
 use crate::AccountKey;
 use crate::Front;
 use crate::Tool;
@@ -193,7 +193,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
     assert_eq!(machine.warmed.len(), 1);
     assert_eq!(
         machine.posted,
-        [RunOutNotice {
+        [Notice {
             id: "warm-failed/personal/warm_up_not_started".into(),
             title: words::could_not_warm_itself(Front::MacMenuBar),
             subtitle: Some("Claude Code".into()),

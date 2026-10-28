@@ -5,13 +5,13 @@
 //! so a look for changes waits behind a read on the network exactly as it did there.
 //! `changes` makes one change at a time, so a read answers while a switch waits on a lock or
 //! on a service. `processes` asks what holds a tool's login, which lists processes and
-//! nothing else, and asks the app's own code about other apps, waiting while one is given its
-//! time to quit. `discovery` asks which tools are installed, which can wait on the person's
-//! login shell, and is needed before the first read can say anything useful about it, so it
-//! waits behind nothing. `kept` reads and writes what the model keeps: in Pitboard's
-//! directory, and the account windows' records in the app's own, read again as each write
-//! is made, so another copy of the app's records stay as it wrote them. A lane ends once the
-//! actor has gone and its last job is done.
+//! nothing else, and asks the app's own code about the other apps it names, waiting while one
+//! is given its time to quit. `discovery` asks which tools are installed, which can wait on
+//! the person's login shell, and is needed before the first read can say anything useful
+//! about it, so it waits behind nothing. `kept` reads and writes what the model keeps: in
+//! Pitboard's directory, and the account windows' records in the app's own, read again as
+//! each write is made, so another copy of the app's records stay as it wrote them. A lane ends
+//! once the actor has gone and its last job is done.
 //!
 //! Each sign-in has a thread of its own, as the Swift model's SignInCalls made one for each
 //! call that waits on a person in a browser: it starts the tool's sign-in, hands on what the
@@ -30,8 +30,8 @@ use super::machine::Scheduled;
 use super::preferences::Preferences;
 use super::state::{Answer, Cadence, Job, Msg, QuitOutcome};
 use super::{
-    AppControl, EarlierPreferences, LocalTime, ModelListener, Notifications, QuitQuestion,
-    Snapshot, WindowsLaunch,
+    AppId, EarlierPreferences, Listener, LocalTime, Notifier, OtherApps, QuitQuestion, Snapshot,
+    WindowsPlace,
 };
 use crate::account_windows::records::{self, Records};
 use crate::{AppCore, Holding, Remedy, SignInSession};
@@ -161,11 +161,11 @@ pub(crate) struct RecordsFile {
 }
 
 impl RecordsFile {
-    pub(crate) fn of(launch: WindowsLaunch) -> RecordsFile {
+    pub(crate) fn of(place: WindowsPlace) -> RecordsFile {
         RecordsFile {
-            path: Path::new(&launch.directory).join(records::FILE),
-            key: launch.key,
-            earlier: launch.earlier.as_ref().map(Records::earlier),
+            path: place.directory.join(records::FILE),
+            key: place.key,
+            earlier: place.earlier.as_ref().map(Records::earlier),
         }
     }
 
@@ -177,13 +177,13 @@ impl RecordsFile {
 }
 
 impl Lanes {
-    /// Starts the lanes over `core`, `apps`, `notifications` and the person's clock,
+    /// Starts the lanes over `core`, `other_apps`, `notifier` and the person's clock,
     /// `local_time`, answering to `answers`, giving an app as long to quit as `cadence` says,
     /// with what the model keeps as `keeping` says.
     pub(crate) fn open(
         core: Arc<AppCore>,
-        apps: Arc<dyn AppControl>,
-        notifications: Arc<dyn Notifications>,
+        other_apps: Option<Arc<dyn OtherApps>>,
+        notifier: Arc<dyn Notifier>,
         local_time: Arc<dyn LocalTime>,
         keeping: Keeping,
         cadence: Cadence,
@@ -191,8 +191,8 @@ impl Lanes {
     ) -> Lanes {
         let worker = Arc::new(Worker {
             core,
-            apps,
-            notifications,
+            other_apps,
+            notifier,
             local_time,
             earlier: keeping.earlier,
             windows: keeping.windows,
@@ -530,8 +530,8 @@ impl SignIns {
 /// What every lane works with.
 pub(crate) struct Worker {
     pub(crate) core: Arc<AppCore>,
-    pub(crate) apps: Arc<dyn AppControl>,
-    pub(crate) notifications: Arc<dyn Notifications>,
+    pub(crate) other_apps: Option<Arc<dyn OtherApps>>,
+    pub(crate) notifier: Arc<dyn Notifier>,
     /// The person's clock, which doctor's checks say their moments on.
     pub(crate) local_time: Arc<dyn LocalTime>,
     pub(crate) earlier: Option<EarlierPreferences>,
@@ -610,20 +610,26 @@ impl Worker {
             Job::Holding { account, then } => {
                 let holdings = core.holding(account.provider);
                 Answer::Held {
-                    question: holder(&holdings, self.apps.as_ref(), &account),
+                    question: holder(&holdings, self.other_apps.as_deref(), &account),
                     account,
                     then,
                 }
             }
+            // Only asked of a question `holder` asked, which it asks only of other apps.
             Job::Quit { question, then } => Answer::Quit {
-                outcome: quit(
-                    self.apps.as_ref(),
-                    &question.app_id,
-                    self.quit_within,
-                    self.quit_checked_every,
-                    || core.holds_app(question.account.provider, &question.app_id),
-                    pitboard_core::host::awake,
-                ),
+                outcome: self
+                    .other_apps
+                    .as_deref()
+                    .map_or(QuitOutcome::StillRunning, |apps| {
+                        quit(
+                            apps,
+                            &question.app,
+                            self.quit_within,
+                            self.quit_checked_every,
+                            || core.holds_app(question.account.provider, &question.app),
+                            pitboard_core::host::awake,
+                        )
+                    }),
                 question,
                 then,
             },
@@ -672,7 +678,11 @@ impl Worker {
                 } else {
                     core.whole(tool)
                 };
-                let opened = may && self.apps.reopen(location, front).is_ok();
+                let opened = may
+                    && self
+                        .other_apps
+                        .as_ref()
+                        .is_some_and(|apps| apps.reopen(location, front).is_ok());
                 Answer::Opened {
                     tool,
                     front,
@@ -780,7 +790,7 @@ impl Worker {
             Job::Post { notice } => Answer::Posted {
                 title: notice.title.clone(),
                 refused: self
-                    .notifications
+                    .notifier
                     .post(notice)
                     .err()
                     .map(|refused| refused.to_string()),
@@ -879,18 +889,20 @@ pub(crate) fn set_schedule(
 /// quit and open again, as the question to ask about it. Asked of the core,
 /// which read the process list into `holdings`, and only taken where the app is running:
 /// what is left of one that has gone cannot be quit. An app whose own code cannot say
-/// whether it runs is asked about, since the process list says it does.
+/// whether it runs is asked about, since the process list says it does. With no `other_apps`
+/// nothing is asked: the app is the person's to quit, as the switch's warning says.
 pub(crate) fn holder(
     holdings: &[Holding],
-    apps: &dyn AppControl,
+    other_apps: Option<&dyn OtherApps>,
     account: &Key,
 ) -> Option<QuitQuestion> {
+    let apps = other_apps?;
     holdings.iter().find_map(|held| match &held.remedy {
-        Remedy::ReopenApp { app_id, name } => {
-            let running = !matches!(apps.running(app_id.clone()), Ok(None));
+        Remedy::ReopenApp { app, name } => {
+            let running = !matches!(apps.running(app.clone()), Ok(None));
             running.then(|| QuitQuestion {
                 account: account.clone(),
-                app_id: app_id.clone(),
+                app: app.clone(),
                 name: name.clone(),
             })
         }
@@ -903,19 +915,19 @@ pub(crate) fn holder(
 /// to answer is taken as still running, and one it fails to ask is still running, so nothing
 /// is switched under it.
 pub(crate) fn quit(
-    apps: &dyn AppControl,
-    app: &str,
+    apps: &dyn OtherApps,
+    app: &AppId,
     within: Duration,
     every: Duration,
     held: impl Fn() -> bool,
     awake: impl Fn() -> Duration,
 ) -> QuitOutcome {
-    let copy = match apps.running(app.to_owned()) {
+    let copy = match apps.running(app.clone()) {
         Ok(Some(copy)) => copy,
         Ok(None) => return QuitOutcome::NotRunning,
         Err(_) => return QuitOutcome::StillRunning,
     };
-    if apps.request_quit(app.to_owned()).is_err() {
+    if apps.request_quit(app.clone()).is_err() {
         return QuitOutcome::StillRunning;
     }
     let deadline = awake() + within;
@@ -929,7 +941,7 @@ pub(crate) fn quit(
         }
         true
     };
-    if !wait(&|| matches!(apps.running(app.to_owned()), Ok(None))) {
+    if !wait(&|| matches!(apps.running(app.clone()), Ok(None))) {
         return QuitOutcome::StillRunning;
     }
     if !wait(&|| !held()) {
@@ -945,10 +957,7 @@ pub(crate) fn quit(
 /// Where several are waiting, only the newest is told: an app shows the newest and drops
 /// the rest. Once `stopped` is set nothing more is told. The thread ends once the sender has
 /// gone, and drops the listener then.
-pub(crate) fn notifier(
-    listener: Arc<dyn ModelListener>,
-    stopped: Arc<AtomicBool>,
-) -> Sender<Snapshot> {
+pub(crate) fn notifier(listener: Arc<dyn Listener>, stopped: Arc<AtomicBool>) -> Sender<Snapshot> {
     let (tell, told) = channel::<Snapshot>();
     std::thread::Builder::new()
         .name("pitboard-notifier".into())
@@ -957,7 +966,7 @@ pub(crate) fn notifier(
     tell
 }
 
-fn notify(listener: &dyn ModelListener, told: &Receiver<Snapshot>, stopped: &AtomicBool) {
+fn notify(listener: &dyn Listener, told: &Receiver<Snapshot>, stopped: &AtomicBool) {
     while let Ok(mut snapshot) = told.recv() {
         while let Ok(newer) = told.try_recv() {
             snapshot = newer;
@@ -979,7 +988,7 @@ mod tests {
     use crate::model::QuitQuestion;
     use crate::model::state::{After, Cadence, Now, State};
     use crate::model::testing::platform::{Posted, StandInApps};
-    use crate::model::testing::records::{CHATGPT_CODEX, CLAUDE, chatgpt_holding};
+    use crate::model::testing::records::{CHATGPT_CODEX, CLAUDE, chatgpt_holding, mac_app};
     use crate::model::testing::world::World;
     use pitboard_core::host::awake;
     use pitboard_core::provider::ProviderId;
@@ -991,8 +1000,8 @@ mod tests {
     fn worker(core: Arc<AppCore>, apps: Arc<StandInApps>) -> Worker {
         Worker {
             core,
-            apps,
-            notifications: Arc::new(Posted::default()),
+            other_apps: Some(apps),
+            notifier: Arc::new(Posted::default()),
             local_time: Arc::new(crate::present::testing::Utc),
             earlier: None,
             windows: None,
@@ -1022,7 +1031,7 @@ mod tests {
         let world = World::new("refused-post");
         let mut worker = worker(world.core(), StandInApps::new(&[], true));
         let ran_out = crate::present::words::ran_out("work", "5-hour");
-        let notice = crate::model::RunOutNotice {
+        let notice = crate::model::Notice {
             id: "claude/work/session/-1800018000".into(),
             title: ran_out.clone(),
             subtitle: None,
@@ -1038,7 +1047,7 @@ mod tests {
         };
         assert_eq!(answered(&worker), (ran_out.clone(), None));
 
-        worker.notifications = Arc::new(Posted::refusing("COMException 0x80070490"));
+        worker.notifier = Arc::new(Posted::refusing("COMException 0x80070490"));
         assert_eq!(
             answered(&worker),
             (ran_out, Some("COMException 0x80070490".into()))
@@ -1081,7 +1090,7 @@ mod tests {
     fn a_switch_runs_on_a_lane_of_its_own() {
         let question = QuitQuestion {
             account: Key::new(ProviderId::Codex, "work"),
-            app_id: CHATGPT.into(),
+            app: mac_app(CHATGPT),
             name: "ChatGPT".into(),
         };
         let switch = Job::Switch {
@@ -1163,7 +1172,7 @@ mod tests {
             held(Key::new(ProviderId::Codex, "spare")),
             Some(QuitQuestion {
                 account: Key::new(ProviderId::Codex, "spare"),
-                app_id: CHATGPT.into(),
+                app: mac_app(CHATGPT),
                 name: "ChatGPT".into(),
             })
         );
@@ -1204,14 +1213,14 @@ mod tests {
         assert_eq!(
             holder(
                 &[sessions, daemon],
-                apps.as_ref(),
+                Some(apps.as_ref()),
                 &Key::new(ProviderId::Codex, "w")
             ),
             None
         );
         let found = holder(
             &[chatgpt_holding()],
-            apps.as_ref(),
+            Some(apps.as_ref()),
             &Key::new(ProviderId::Codex, "w"),
         );
         assert_eq!(found.map(|q| q.name), Some("ChatGPT".into()));
@@ -1225,10 +1234,10 @@ mod tests {
         apps.fail_running(true);
         let found = holder(
             &[chatgpt_holding()],
-            apps.as_ref(),
+            Some(apps.as_ref()),
             &Key::new(ProviderId::Codex, "w"),
         );
-        assert_eq!(found.map(|q| q.app_id), Some(CHATGPT.into()));
+        assert_eq!(found.map(|q| q.app), Some(mac_app(CHATGPT)));
     }
 
     /// An app that quits when asked is waited for, and the copy that ran is the one to open
@@ -1240,13 +1249,27 @@ mod tests {
         let within = Duration::from_millis(50);
         let every = Duration::from_millis(5);
         assert_eq!(
-            quit(apps.as_ref(), CHATGPT, within, every, || false, awake),
+            quit(
+                apps.as_ref(),
+                &mac_app(CHATGPT),
+                within,
+                every,
+                || false,
+                awake
+            ),
             QuitOutcome::Quit {
                 copy: StandInApps::copy_of(CHATGPT)
             }
         );
         assert_eq!(
-            quit(apps.as_ref(), CHATGPT, within, every, || false, awake),
+            quit(
+                apps.as_ref(),
+                &mac_app(CHATGPT),
+                within,
+                every,
+                || false,
+                awake
+            ),
             QuitOutcome::NotRunning
         );
         assert_eq!(
@@ -1259,7 +1282,14 @@ mod tests {
         let within = Duration::from_millis(100);
         let started = Instant::now();
         assert_eq!(
-            quit(busy.as_ref(), CHATGPT, within, every, || false, awake),
+            quit(
+                busy.as_ref(),
+                &mac_app(CHATGPT),
+                within,
+                every,
+                || false,
+                awake
+            ),
             QuitOutcome::StillRunning
         );
         assert!(started.elapsed() >= within);
@@ -1284,7 +1314,7 @@ mod tests {
             let within = Duration::from_secs(30);
             quit(
                 apps.as_ref(),
-                CHATGPT,
+                &mac_app(CHATGPT),
                 within,
                 Duration::from_millis(1),
                 || false,
@@ -1309,7 +1339,7 @@ mod tests {
         let busy = StandInApps::new(&[CHATGPT], false);
         let outcome = quit(
             busy.as_ref(),
-            CHATGPT,
+            &mac_app(CHATGPT),
             Duration::from_millis(100),
             Duration::from_millis(20),
             || false,
@@ -1333,7 +1363,14 @@ mod tests {
         let unseen = StandInApps::new(&[CHATGPT], true);
         unseen.fail_running(true);
         assert_eq!(
-            quit(unseen.as_ref(), CHATGPT, within, every, || false, awake),
+            quit(
+                unseen.as_ref(),
+                &mac_app(CHATGPT),
+                within,
+                every,
+                || false,
+                awake
+            ),
             QuitOutcome::StillRunning
         );
         assert!(
@@ -1344,7 +1381,14 @@ mod tests {
         let unasked = StandInApps::new(&[CHATGPT], true);
         unasked.fail_quit(true);
         assert_eq!(
-            quit(unasked.as_ref(), CHATGPT, within, every, || false, awake),
+            quit(
+                unasked.as_ref(),
+                &mac_app(CHATGPT),
+                within,
+                every,
+                || false,
+                awake
+            ),
             QuitOutcome::StillRunning
         );
         assert!(unasked.is_running(CHATGPT));
@@ -1486,7 +1530,7 @@ mod tests {
         let (answers, answered) = channel();
         let lanes = Lanes::open(
             world.core(),
-            StandInApps::new(&[], true),
+            Some(StandInApps::new(&[], true)),
             Arc::new(Posted::default()),
             Arc::new(crate::present::testing::Utc),
             Keeping {
@@ -1876,7 +1920,7 @@ mod tests {
         let asked = std::sync::atomic::AtomicUsize::new(0);
         let outcome = quit(
             apps.as_ref(),
-            CHATGPT,
+            &mac_app(CHATGPT),
             Duration::from_millis(500),
             Duration::from_millis(5),
             || asked.fetch_add(1, Ordering::SeqCst) < 3,
@@ -1902,7 +1946,7 @@ mod tests {
             std::thread::spawn(move || {
                 quit(
                     apps.as_ref(),
-                    CHATGPT,
+                    &mac_app(CHATGPT),
                     within,
                     Duration::from_millis(5),
                     || {
@@ -2033,7 +2077,7 @@ mod tests {
             match worker.work(Job::Quit {
                 question: QuitQuestion {
                     account: Key::new(ProviderId::Codex, "work"),
-                    app_id: CHATGPT.into(),
+                    app: mac_app(CHATGPT),
                     name: "ChatGPT".into(),
                 },
                 then: After::Switch,

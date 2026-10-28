@@ -17,6 +17,5 @@ public sealed record AppStart(
         Environment,
         AppLocation: exe,
         Front: Identity.Front,
-        Windows: new WindowsLaunch(
-            DataFolder, PitboardModelMethods.WindowsRecordsKey(PitboardModelMethods.PitboardDirectory(Environment)), Identity.LinkScheme));
+        AccountWindows: new AccountWindowsLaunch(DataFolder, Identity.LinkScheme));
 }

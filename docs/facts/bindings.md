@@ -44,21 +44,26 @@ between.
   calls `Destroy()`. So .NET's finalizer thread can be the one that drops a
   `PitboardModel`, and its `Drop` waits on nothing.
 - The first call loads the library, and before it answers, the bindings compare the
-  checksum of every export, the model's constructor and methods and
-  `ModelListener.changed` among them, and hand the library each foreign trait's table of
-  calls.
-- A trait an app implements is an interface of the trait's own name, `ModelListener`,
-  `AppControl`, `Notifications` and `LocalTime`. Its error is an exception named for it,
-  `PlatformException`, whose variant the app throws. An `Option<String>` it gives back is a
-  `string?`.
+  checksum of every export, the model's constructor and methods and `Listener.changed` among
+  them, and hand the library each foreign trait's table of calls.
+- A trait an app implements is an interface of the trait's own name, `Listener`,
+  `OtherApps`, `Notifier` and `LocalTime`, `ModelListener`, `AppControl` and `Notifications`
+  before 29 October 2026. Its error is an exception named for it, `PlatformException`, whose
+  variant the app throws. An `Option<String>` it gives back is a `string?`.
+- An `Option<Arc<dyn OtherApps>>` the app passes is an `OtherApps?` in C# and an
+  `OtherApps?` in Swift, and a `null` or `nil` reaches Rust as `None`. Read in what the
+  generators wrote from the debug library on 29 October 2026, and measured by
+  `ModelTests.AModelOverNoOtherAppsSwitchesWithoutAskingToQuitChatGpt` and by the Swift tests'
+  `fixtureModel`, which passes `nil`.
 - Each call the bindings write for a trait catches a `PlatformException` and hands Rust its
   variant, and catches any other exception and hands Rust its message, which
   `From<UnexpectedUniFFICallbackError>` makes `PlatformError::Failed`. So nothing an app's
   code throws goes past Rust. Read in the generated `AppControl` calls.
-  `ModelTests.APlatformExceptionFromTheAppsAppControlStopsTheSwitch` measured the first on
-  13 October 2026, in CI on Linux with the .NET SDK 10.0.401 and the release library built
-  with the `fixture` feature: `RequestQuit` throwing `PlatformException.Failed` stopped the
-  switch as an error from `request_quit` does, and `Running` was not asked again.
+  `ModelTests.APlatformExceptionFromTheAppsOtherAppsStopsTheSwitch`, then named for
+  `AppControl`, measured the first on 13 October 2026, in CI on Linux with the .NET SDK
+  10.0.401 and the release library built with the `fixture` feature: `RequestQuit` throwing
+  `PlatformException.Failed` stopped the switch as an error from `request_quit` does, and
+  `Running` was not asked again.
 - A record holds a list as an array, and a C# record compares arrays by reference, so two
   snapshots read alike are not equal. `ModelTests.ASnapshotCarriesWhatWasRead` measures it.
   Two records C# makes with an empty collection expression, `[]`, for each list do compare
@@ -93,14 +98,14 @@ Swift UniFFI 0.31.2 generates and the Swift 6.4 of Xcode 27.1, on 5 October 2026
   `` UniffiCallbackInterfaceAppControlMethod2 _Nonnull `open`; ``, which clang refuses
   ("expected member name or ';' after declaration specifiers"), and the bindings do not
   build. Read in `uniffi_bindgen` 0.31.2: the list in `bindings/swift/gen_swift/mod.rs`, and
-  `BridgingHeaderTemplate.h` naming each field through `var_name`. `AppControl`'s method that
+  `BridgingHeaderTemplate.h` naming each field through `var_name`. `OtherApps`' method that
   opens an app again is `reopen` for that reason.
 - A type the bindings export that `PitboardApp` also declares is the app's own inside
   `PitboardApp`, and ambiguous in a module that imports both, as the app's tests do: with
   the bindings' `AppControl` beside the app's protocol of that name, `swift test` stopped at
   "'AppControl' is ambiguous for type lookup in this context" in `Fixtures.swift`. The app
-  has implemented the bindings' trait, as `MacAppControl`, since it runs on the model, and
-  declares no `AppControl` of its own.
+  implements the bindings' trait, now `OtherApps`, as `MacApps`, and declares no type of
+  that name of its own.
 - A type the bindings export is declared in the same Swift package as the app, so making
   one conform to a protocol, as `Sheet` to `Identifiable` for a sheet's binding, takes no
   `@retroactive`: Swift 6.4 refuses it there, "'retroactive' attribute does not apply;

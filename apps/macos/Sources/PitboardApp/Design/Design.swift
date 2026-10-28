@@ -83,6 +83,7 @@ enum Symbol {
     static let add = "plus"
     static let refresh = "arrow.clockwise"
     static let switchAccount = "arrow.left.arrow.right"
+    static let switchBack = "arrow.uturn.backward"
     static let signIn = "person.crop.circle.badge.exclamationmark"
     static let terminal = "terminal"
     static let general = "gearshape"

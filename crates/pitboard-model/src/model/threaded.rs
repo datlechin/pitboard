@@ -10,8 +10,7 @@ use super::testing::records::{CHATGPT, CHATGPT_CODEX, percent, read_in, warning}
 use super::testing::world::StandIn;
 use super::testing::world::World;
 use super::{
-    AppControl, Intent, LocalTime, ModelListener, PitboardModel, Platform, PlatformError, Sheet,
-    Snapshot,
+    Intent, Listener, LocalTime, OtherApps, PitboardModel, Platform, PlatformError, Sheet, Snapshot,
 };
 use crate::AccountKey;
 use crate::AppCore;
@@ -89,11 +88,11 @@ fn in_order(told: &[Snapshot]) -> bool {
 }
 
 /// The system as a test's model has it: `apps`, and a clock read in UTC.
-fn platform(apps: Arc<dyn AppControl>) -> Platform {
+fn platform(apps: Arc<dyn OtherApps>) -> Platform {
     Platform {
         front: Front::MacMenuBar,
-        apps,
-        notifications: Arc::new(Posted::default()),
+        other_apps: Some(apps),
+        notifier: Arc::new(Posted::default()),
         local_time: Arc::new(Utc),
         earlier: None,
         windows: None,
@@ -114,8 +113,8 @@ fn model_with(
 ) -> Arc<PitboardModel> {
     let model = PitboardModel::over(
         Arc::clone(core),
-        Arc::clone(told) as Arc<dyn ModelListener>,
-        platform(Arc::clone(apps) as Arc<dyn AppControl>),
+        Arc::clone(told) as Arc<dyn Listener>,
+        platform(Arc::clone(apps) as Arc<dyn OtherApps>),
         QUICK,
     );
     let _ = told.model.set(Arc::downgrade(&model));
@@ -221,7 +220,7 @@ fn the_glance_is_written_to_the_file_the_app_names() {
     let told = Arc::new(Told::default());
     let model = PitboardModel::over(
         world.core(),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
             glance: Some(glance.clone()),
             ..platform(StandInApps::new(&[], true))
@@ -247,7 +246,7 @@ fn the_glance_is_given_to_the_app_with_or_without_a_file() {
     let told = Arc::new(Told::default());
     let model = PitboardModel::over(
         world.core(),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Arc::clone(&told) as Arc<dyn Listener>,
         platform(StandInApps::new(&[], true)),
         QUICK,
     );
@@ -272,7 +271,7 @@ fn an_uninstall_deletes_the_glance_and_tells_the_widgets() {
     let told = Arc::new(Told::default());
     let model = PitboardModel::over(
         world.core(),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
             glance: Some(glance.clone()),
             ..platform(StandInApps::new(&[], true))
@@ -477,8 +476,8 @@ fn dropping_the_model_waits_for_nothing() {
     // Not given the model, so the test's is the last of it.
     let model = PitboardModel::over(
         Arc::clone(&core),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
-        platform(StandInApps::new(&[], true) as Arc<dyn AppControl>),
+        Arc::clone(&told) as Arc<dyn Listener>,
+        platform(StandInApps::new(&[], true) as Arc<dyn OtherApps>),
         QUICK,
     );
     model.send(Intent::Start);
@@ -1239,11 +1238,11 @@ fn model_telling_time(
 ) -> Arc<PitboardModel> {
     let model = PitboardModel::over(
         Arc::clone(core),
-        Arc::clone(told) as Arc<dyn ModelListener>,
+        Arc::clone(told) as Arc<dyn Listener>,
         Platform {
             front: Front::MacMenuBar,
-            apps: StandInApps::new(&[], true),
-            notifications: Arc::new(Posted::default()),
+            other_apps: Some(StandInApps::new(&[], true)),
+            notifier: Arc::new(Posted::default()),
             local_time: Arc::clone(clock) as Arc<dyn LocalTime>,
             earlier: None,
             windows: None,
@@ -1553,11 +1552,11 @@ fn model_posting(
 ) -> Arc<PitboardModel> {
     let model = PitboardModel::over(
         Arc::clone(core),
-        Arc::clone(told) as Arc<dyn ModelListener>,
+        Arc::clone(told) as Arc<dyn Listener>,
         Platform {
             front: Front::MacMenuBar,
-            apps: StandInApps::new(&[], true),
-            notifications: Arc::clone(posted) as Arc<dyn super::Notifications>,
+            other_apps: Some(StandInApps::new(&[], true)),
+            notifier: Arc::clone(posted) as Arc<dyn super::Notifier>,
             local_time: Arc::new(Utc),
             earlier: None,
             windows: None,
@@ -1927,7 +1926,7 @@ fn an_account_enrolled_by_0_8_0_keeps_its_window() {
 /// closed and its store asked for, the record keeping it until the app has deleted it.
 #[test]
 fn the_windows_records_are_kept_in_the_apps_own_directory() {
-    use super::{DownloadEnd, EarlierWindowRecords, WindowsLaunch, WindowsPlace};
+    use super::{DownloadEnd, EarlierWindowRecords, WindowsPlace};
     use std::collections::HashMap;
 
     let world = World::new("windows");
@@ -1946,21 +1945,16 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
     let told = Arc::new(Told::default());
     let model = PitboardModel::over(
         world.core(),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
             windows: Some(WindowsPlace {
-                launch: WindowsLaunch {
-                    directory: directory.to_string_lossy().into_owned(),
-                    key: key.clone(),
-                    link_scheme: "pitboard".into(),
-                    earlier: Some(EarlierWindowRecords {
-                        stores: HashMap::from([(
-                            key,
-                            vec![gone.to_uppercase(), work.to_uppercase()],
-                        )]),
-                        pages: HashMap::new(),
-                    }),
-                },
+                directory: directory.clone(),
+                key: key.clone(),
+                link_scheme: "pitboard".into(),
+                earlier: Some(EarlierWindowRecords {
+                    stores: HashMap::from([(key, vec![gone.to_uppercase(), work.to_uppercase()])]),
+                    pages: HashMap::new(),
+                }),
                 web_scheme: "https".into(),
             }),
             ..platform(StandInApps::new(&[], true))
@@ -2058,7 +2052,7 @@ fn the_windows_records_are_kept_in_the_apps_own_directory() {
 /// plan does, and until then the platform's delete is not gated.
 #[test]
 fn the_windows_records_are_not_written_where_pitboard_may_change_nothing() {
-    use super::{EarlierWindowRecords, WindowsLaunch, WindowsPlace};
+    use super::{EarlierWindowRecords, WindowsPlace};
     use std::collections::HashMap;
 
     let world = World::new("windows-elevated");
@@ -2076,21 +2070,16 @@ fn the_windows_records_are_not_written_where_pitboard_may_change_nothing() {
     let told = Arc::new(Told::default());
     let model = PitboardModel::over(
         world.core(),
-        Arc::clone(&told) as Arc<dyn ModelListener>,
+        Arc::clone(&told) as Arc<dyn Listener>,
         Platform {
             windows: Some(WindowsPlace {
-                launch: WindowsLaunch {
-                    directory: directory.to_string_lossy().into_owned(),
-                    key: key.clone(),
-                    link_scheme: "pitboard".into(),
-                    earlier: Some(EarlierWindowRecords {
-                        stores: HashMap::from([(
-                            key,
-                            vec![gone.to_uppercase(), work.to_uppercase()],
-                        )]),
-                        pages: HashMap::new(),
-                    }),
-                },
+                directory: directory.clone(),
+                key: key.clone(),
+                link_scheme: "pitboard".into(),
+                earlier: Some(EarlierWindowRecords {
+                    stores: HashMap::from([(key, vec![gone.to_uppercase(), work.to_uppercase()])]),
+                    pages: HashMap::new(),
+                }),
                 web_scheme: "https".into(),
             }),
             ..platform(StandInApps::new(&[], true))

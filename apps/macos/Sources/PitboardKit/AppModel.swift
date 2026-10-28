@@ -128,7 +128,7 @@ public final class AppModel {
     /// this app's model on the main actor, in order. The listener holds the app's model
     /// weakly: the model holds the listener, and the app's model holds the model.
     public static func listening(
-        _ make: (any ModelListener) throws -> any PitboardModelProtocol
+        _ make: (any Listener) throws -> any PitboardModelProtocol
     ) rethrows -> AppModel {
         let listener = ModelListening()
         let app = AppModel(model: try make(listener))
@@ -251,7 +251,7 @@ private typealias Answering = CheckedContinuation<OutsideAnswer?, Never>
 /// The model tells its listener on a thread of its own, one call at a time, and the next
 /// waits for this one to return, so this only queues the snapshot on the main queue, which
 /// runs what it is given in the order it was given, and returns.
-public final class ModelListening: ModelListener {
+public final class ModelListening: Listener {
     /// Where each snapshot goes, on the main actor.
     @MainActor public var deliver: (@MainActor (Snapshot) -> Void)?
 

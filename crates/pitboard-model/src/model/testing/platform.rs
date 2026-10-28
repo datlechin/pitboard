@@ -1,5 +1,5 @@
 use crate::model::{
-    AppControl, ModelListener, Notifications, PitboardModel, PlatformError, RunOutNotice, Snapshot,
+    AppId, Listener, Notice, Notifier, OtherApps, PitboardModel, PlatformError, Snapshot,
 };
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -105,8 +105,8 @@ impl StandInApps {
     }
 }
 
-impl AppControl for StandInApps {
-    fn running(&self, app: String) -> Result<Option<String>, PlatformError> {
+impl OtherApps for StandInApps {
+    fn running(&self, app: AppId) -> Result<Option<String>, PlatformError> {
         self.running_calls.fetch_add(1, Ordering::SeqCst);
         if let Some((arrived, held)) = self.hold.lock().expect("a test's own lock").as_ref() {
             let _ = arrived.send(());
@@ -115,21 +115,26 @@ impl AppControl for StandInApps {
         if self.fail_running.load(Ordering::SeqCst) {
             return Err(StandInApps::refused("to say what runs"));
         }
-        Ok(self.is_running(&app).then(|| StandInApps::copy_of(&app)))
+        Ok(self
+            .is_running(app.id())
+            .then(|| StandInApps::copy_of(app.id())))
     }
 
-    fn request_quit(&self, app: String) -> Result<(), PlatformError> {
+    fn request_quit(&self, app: AppId) -> Result<(), PlatformError> {
         if self.fail_quit.load(Ordering::SeqCst) {
             return Err(StandInApps::refused("to ask an app to quit"));
         }
         self.asked
             .lock()
             .expect("a test's own lock")
-            .push(format!("quit {app}"));
+            .push(format!("quit {}", app.id()));
         if self.quits.load(Ordering::SeqCst) {
-            self.running.lock().expect("a test's own lock").remove(&app);
+            self.running
+                .lock()
+                .expect("a test's own lock")
+                .remove(app.id());
             if let Some(then) = self.on_quit.lock().expect("a test's own lock").as_ref() {
-                then(&app);
+                then(app.id());
             }
         }
         Ok(())
@@ -158,7 +163,7 @@ impl AppControl for StandInApps {
 /// none reaches the machine running the tests.
 #[derive(Default)]
 pub(crate) struct Posted {
-    posted: Mutex<Vec<RunOutNotice>>,
+    posted: Mutex<Vec<Notice>>,
     // why the system refuses each one, where it does
     refused: Option<String>,
 }
@@ -171,13 +176,13 @@ impl Posted {
         }
     }
 
-    pub(crate) fn posted(&self) -> Vec<RunOutNotice> {
+    pub(crate) fn posted(&self) -> Vec<Notice> {
         self.posted.lock().expect("a test's own lock").clone()
     }
 }
 
-impl Notifications for Posted {
-    fn post(&self, notice: RunOutNotice) -> Result<(), PlatformError> {
+impl Notifier for Posted {
+    fn post(&self, notice: Notice) -> Result<(), PlatformError> {
         self.posted.lock().expect("a test's own lock").push(notice);
         match &self.refused {
             Some(reason) => Err(PlatformError::Failed {
@@ -212,7 +217,7 @@ pub(crate) struct Told {
     pub(crate) hold: Mutex<Option<Receiver<()>>>,
 }
 
-impl ModelListener for Told {
+impl Listener for Told {
     fn changed(&self, snapshot: Snapshot) -> Result<(), PlatformError> {
         if let Some(model) = self.model.get().and_then(Weak::upgrade) {
             let inside = model.snapshot().revision;

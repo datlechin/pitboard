@@ -23,9 +23,10 @@ public static class Program
 
     private const string AumidKey = $@"Software\Classes\AppUserModelId\{Aumid}";
 
-    private static readonly RunOutNotice RunOut = new(
+    private static readonly Notice RunOut = new(
         Id: "pitboard-probe-run-out", Title: "work has no 5-hour limit left", Subtitle: null,
-        Body: "spare has 80% of its own left.", Clicked: "accounts", Button: new NotificationButton("Switch", "switch/claude/spare"));
+        Body: "spare has 80% of its own left.", Clicked: "accounts",
+        Button: new NoticeButton(NoticeButtonKind.SwitchTo, "Switch", "switch/claude/spare"));
 
     // As long as the model waits for an app it asked to quit, looking as often.
     private static readonly TimeSpan QuitWithin = TimeSpan.FromSeconds(30);
@@ -189,7 +190,7 @@ public static class Program
 
     private static int Running(string app)
     {
-        Console.WriteLine(Apps().Running(app) is { } running ? $"Running as {running}." : "Not running.");
+        Console.WriteLine(Apps().Running(new AppId.WindowsAumid(app)) is { } running ? $"Running as {running}." : "Not running.");
         return 0;
     }
 
@@ -198,7 +199,7 @@ public static class Program
     private static int Quit(string app)
     {
         var apps = Apps();
-        if (apps.Running(app) is null)
+        if (apps.Running(new AppId.WindowsAumid(app)) is null)
         {
             Console.WriteLine("Not running.");
             return 0;
@@ -209,7 +210,7 @@ public static class Program
         var asked = Stopwatch.StartNew();
         var answered = apps.Quit(app).ContinueWith(quit => (Error: quit.Result, After: asked.Elapsed), TaskScheduler.Default);
         var gone = true;
-        while (apps.Running(app) is not null)
+        while (apps.Running(new AppId.WindowsAumid(app)) is not null)
         {
             if (asked.Elapsed >= QuitWithin)
             {

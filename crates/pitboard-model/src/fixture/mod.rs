@@ -20,7 +20,7 @@
 //! none.
 
 use crate::Front;
-use crate::model::{AppControl, LocalTime, ModelListener, Notifications, PitboardModel};
+use crate::model::{Listener, LocalTime, Notifier, OtherApps, PitboardModel};
 use std::sync::Arc;
 
 #[cfg(feature = "fixture")]
@@ -108,7 +108,7 @@ impl PitboardModel {
     pub fn fixture(
         name: String,
         front: Front,
-        listener: Arc<dyn ModelListener>,
+        listener: Arc<dyn Listener>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
         #[cfg(feature = "fixture")]
@@ -126,22 +126,23 @@ impl PitboardModel {
     }
 
     /// The model of the fixture called `name`, for a test of an app's bindings, over the app's
-    /// own platform as `new` takes it: it asks `apps` about other apps and posts through
-    /// `notifications`, in place of the fixture's own apps and posting nothing. The world
-    /// still supplies the machine, and its process list follows what `apps` says runs, so in
-    /// `chatGPTOpen` the core sees ChatGPT running Codex's login until `apps` says it has
-    /// quit. The machine is the folder `pitboard-fixture` in `temporary_directory`, emptied
-    /// and made again as `fixture` makes its own, and left there, so a test empties no debug
-    /// build's fixture, nor that of another run of the same tests. An app launching into a
-    /// fixture calls `fixture`. Refused as `fixture` is.
+    /// own platform as `new` takes it: it asks `other_apps` about other apps and posts through
+    /// `notifier`, in place of the fixture's own apps and posting nothing. The world still
+    /// supplies the machine, and its process list follows what `other_apps` says runs, so in
+    /// `chatGPTOpen` the core sees ChatGPT running Codex's login until `other_apps` says it
+    /// has quit. With no `other_apps`, the app names none, and ChatGPT runs until the end. The
+    /// machine is the folder `pitboard-fixture` in `temporary_directory`, emptied and made
+    /// again as `fixture` makes its own, and left there, so a test empties no debug build's
+    /// fixture, nor that of another run of the same tests. An app launching into a fixture
+    /// calls `fixture`. Refused as `fixture` is.
     #[uniffi::constructor]
     pub fn fixture_in(
         name: String,
         front: Front,
         temporary_directory: String,
-        listener: Arc<dyn ModelListener>,
-        apps: Arc<dyn AppControl>,
-        notifications: Arc<dyn Notifications>,
+        listener: Arc<dyn Listener>,
+        other_apps: Option<Arc<dyn OtherApps>>,
+        notifier: Arc<dyn Notifier>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
         #[cfg(feature = "fixture")]
@@ -150,8 +151,8 @@ impl PitboardModel {
             let folder = worlds::Folder::within(std::path::Path::new(&temporary_directory))
                 .map_err(failed)?;
             let launched = worlds::make(world, folder, front).map_err(failed)?;
-            let apps = launched.apps.following(apps);
-            Ok(launched.model_over(listener, apps, notifications, local_time))
+            let other_apps = other_apps.map(|apps| launched.apps.following(apps));
+            Ok(launched.model_over(listener, other_apps, notifier, local_time))
         }
         #[cfg(not(feature = "fixture"))]
         {
@@ -160,8 +161,8 @@ impl PitboardModel {
                 front,
                 temporary_directory,
                 listener,
-                apps,
-                notifications,
+                other_apps,
+                notifier,
                 local_time,
             );
             Err(unavailable())
@@ -198,7 +199,7 @@ mod without {
 
     struct Unheard;
 
-    impl ModelListener for Unheard {
+    impl Listener for Unheard {
         fn changed(&self, _snapshot: Snapshot) -> Result<(), PlatformError> {
             Ok(())
         }
@@ -232,7 +233,7 @@ mod without {
             Front::WindowsNotificationArea,
             directory.to_string_lossy().into_owned(),
             Arc::new(Unheard),
-            StandInApps::new(&[], true),
+            Some(StandInApps::new(&[], true)),
             Arc::new(Posted::default()),
             Arc::new(crate::present::testing::Utc),
         );

@@ -15,7 +15,7 @@ use super::testing::machine::{
 use super::testing::platform::StandInApps;
 use super::testing::records::{
     CLAUDE, awaiting, claude, claude_code, claude_desktop, codex, codex_account, desktop_account,
-    desktop_warning, enrolled_as, refusal, status, still_running, switched, warning,
+    desktop_warning, enrolled_as, mac_app, refusal, status, still_running, switched, warning,
 };
 use super::{
     Cause, Doing, Intent, Place, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, SignedIn,
@@ -1718,7 +1718,7 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
         model.state.asking(),
         Some(&QuitQuestion {
             account: Key::new(ProviderId::Desktop, ""),
-            app_id: CLAUDE.into(),
+            app: mac_app(CLAUDE),
             name: "Claude".into(),
         })
     );

@@ -8,7 +8,7 @@ namespace Pitboard.Windows;
 internal sealed record AppProcess(uint Id, uint Parent, string? Family, string? Aumid, bool OwnsAWindow);
 
 // Store apps such as ChatGPT, by their AUMID, asked to quit and never forced.
-public sealed class WindowsApps : AppControl
+public sealed class WindowsApps : OtherApps
 {
     private readonly Func<IReadOnlyList<AppProcess>> _listed;
     private readonly Func<uint, RM_UNIQUE_PROCESS?> _unique;
@@ -33,10 +33,17 @@ public sealed class WindowsApps : AppControl
         _pitboardForward = pitboardForward;
     }
 
-    // Where its own AUMID cannot be read it still runs, by the core's.
-    public string? Running(string app) => Windowed(app) is { } running ? running.Aumid ?? app : null;
+    // Where its own AUMID cannot be read it still runs, by the core's. A Mac app never runs here.
+    public string? Running(AppId app) =>
+        app is AppId.WindowsAumid { Id: var aumid } && Windowed(aumid) is { } running ? running.Aumid ?? aumid : null;
 
-    public void RequestQuit(string app) => _ = Quit(app);
+    public void RequestQuit(AppId app)
+    {
+        if (app is AppId.WindowsAumid { Id: var aumid })
+        {
+            _ = Quit(aumid);
+        }
+    }
 
     public void Reopen(string location, bool front)
     {

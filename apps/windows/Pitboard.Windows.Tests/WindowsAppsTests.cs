@@ -11,6 +11,8 @@ public sealed class WindowsAppsTests
 
     private const string App = $"{Family}!App";
 
+    private static readonly AppId TheApp = new AppId.WindowsAumid(App);
+
     private const uint RmForceShutdown = 0x1;
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
@@ -43,14 +45,14 @@ public sealed class WindowsAppsTests
         var apps = new WindowsApps(
             () => listed, id => Unique(id), new StandInRestartManager(), aumid => did.Add($"activate {aumid}"), () => did.Add("Pitboard in front"));
 
-        var location = apps.Running(App);
+        var location = apps.Running(TheApp);
         apps.Reopen(location!, front: true);
         apps.Reopen(location!, front: false);
 
         Assert.AreEqual($"{Family}!Main", location);
         CollectionAssert.AreEqual(
             new[] { $"activate {Family}!Main", $"activate {Family}!Main", "Pitboard in front" }, did);
-        Assert.IsNull(apps.Running("Other.App_1111111111111!App"));
+        Assert.IsNull(apps.Running(new AppId.WindowsAumid("Other.App_1111111111111!App")));
         CollectionAssert.AreEqual(new uint[] { 21 }, apps.Windowless(App).ToArray());
     }
 
@@ -58,7 +60,7 @@ public sealed class WindowsAppsTests
     [TestMethod]
     public void AnAppWithOnlyWindowlessProcessesLeftIsNotRunning()
     {
-        Assert.IsNull(Apps([ChatGptOpen[1]], new StandInRestartManager()).Running(App));
+        Assert.IsNull(Apps([ChatGptOpen[1]], new StandInRestartManager()).Running(TheApp));
     }
 
     [TestMethod]
@@ -66,7 +68,7 @@ public sealed class WindowsAppsTests
     {
         AppProcess[] listed = [ChatGptOpen[0] with { Aumid = null }];
 
-        Assert.AreEqual(App, Apps(listed, new StandInRestartManager()).Running(App));
+        Assert.AreEqual(App, Apps(listed, new StandInRestartManager()).Running(TheApp));
     }
 
     // Never its codex, which a shutdown would end as a console process, and never forced. RmShutdown returns only once the
@@ -100,12 +102,12 @@ public sealed class WindowsAppsTests
         using var waited = new StandInRestartManager { Answers = (WIN32_ERROR)answer };
         var apps = Apps(ChatGptOpen, asked);
 
-        apps.RequestQuit(App);
+        apps.RequestQuit(TheApp);
         var shut = await Apps(ChatGptOpen, waited).Quit(App).WaitAsync(Patience);
 
         Assert.IsTrue(asked.Ended.Wait(Patience), "the session never ended");
         Assert.AreEqual("start, register 20 started 140, shutdown 0, end", string.Join(", ", asked.Asked));
-        Assert.AreEqual(App, apps.Running(App));
+        Assert.AreEqual(App, apps.Running(TheApp));
         Assert.AreEqual((int)answer, shut);
         CollectionAssert.AreEqual(asked.Asked, waited.Asked);
     }
@@ -116,7 +118,7 @@ public sealed class WindowsAppsTests
         using var restart = new StandInRestartManager { RegisterGives = WIN32_ERROR.ERROR_ACCESS_DENIED };
         var apps = Apps(ChatGptOpen, restart);
 
-        var refused = Assert.ThrowsExactly<PlatformException.Failed>(() => apps.RequestQuit(App));
+        var refused = Assert.ThrowsExactly<PlatformException.Failed>(() => apps.RequestQuit(TheApp));
 
         StringAssert.Contains(refused.Message, "register process 20 with Restart Manager");
         Assert.AreEqual("start, register 20 started 140, end", string.Join(", ", restart.Asked));
@@ -128,10 +130,22 @@ public sealed class WindowsAppsTests
         using var restart = new StandInRestartManager { StartGives = WIN32_ERROR.ERROR_SESSION_CREDENTIAL_CONFLICT };
         var apps = Apps(ChatGptOpen, restart);
 
-        var refused = Assert.ThrowsExactly<PlatformException.Failed>(() => apps.RequestQuit(App));
+        var refused = Assert.ThrowsExactly<PlatformException.Failed>(() => apps.RequestQuit(TheApp));
 
         StringAssert.Contains(refused.Message, "start a Restart Manager session");
         Assert.AreEqual("start", string.Join(", ", restart.Asked));
+    }
+
+    // The core names a Mac app only on a Mac: nothing here runs one, and none is quit.
+    [TestMethod]
+    public void AMacAppNeverRunsHere()
+    {
+        using var restart = new StandInRestartManager();
+        var apps = Apps(ChatGptOpen, restart);
+
+        Assert.IsNull(apps.Running(new AppId.MacBundle(App)));
+        apps.RequestQuit(new AppId.MacBundle(App));
+        Assert.IsEmpty(restart.Asked);
     }
 
     [TestMethod]

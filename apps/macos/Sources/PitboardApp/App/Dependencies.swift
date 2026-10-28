@@ -31,17 +31,17 @@ struct Dependencies {
         let notifications = MacNotifications(delivering: bundle.pathExtension == "app")
         let launch = AppLaunch(
             environment: environment, appLocation: bundle.path, front: front,
-            earlierPreferences: earlier.handOver(),
-            windows: WindowsLaunch(
+            accountWindows: AccountWindowsLaunch(
                 directory: records.path,
-                key: WebEnvironment.recordKey(environment: environment),
                 linkScheme: LinkTarget.scheme(in: .main) ?? "pitboard",
-                earlier: earlier.handOverWindows()),
+                key: WebEnvironment.recordKey(environment: environment)),
+            handover: Handover(
+                preferences: earlier.handOver(), windows: earlier.handOverWindows()),
             glance: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
         let model = AppModel.listening { listener in
             PitboardModel(
-                launch: launch, listener: listener, apps: MacAppControl.live(),
-                notifications: notifications, localTime: MacLocalTime())
+                launch: launch, listener: listener, otherApps: MacApps.live(),
+                notifier: notifications, localTime: MacLocalTime())
         }
         notifications.onClick = { [weak model] argument in
             model?.send(.notificationClicked(argument: argument))

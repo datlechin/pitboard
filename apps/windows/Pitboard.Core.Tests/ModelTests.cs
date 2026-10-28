@@ -9,7 +9,7 @@ public sealed class ModelTests
 {
     private const long At = 1_800_000_000;
 
-    private sealed class Keeping : ModelListener
+    private sealed class Keeping : Listener
     {
         public List<Snapshot> Told { get; } = [];
 
@@ -34,14 +34,14 @@ public sealed class ModelTests
         public string Date(long epoch) => At(epoch).ToString("MMM d", CultureInfo.InvariantCulture);
     }
 
-    private sealed class Posting : Notifications
+    private sealed class Posting : Notifier
     {
-        public Calls<RunOutNotice> Posted { get; } = new();
+        public Calls<Notice> Posted { get; } = new();
 
         // Why the system refuses each notification, where it does.
         public string? Refuses { get; init; }
 
-        public void Post(RunOutNotice notice)
+        public void Post(Notice notice)
         {
             Posted.Add(notice);
             if (Refuses is { } reason)
@@ -170,7 +170,7 @@ public sealed class ModelTests
         "Anthropic’s terms may cover automatic switching and warm-ups.", "Is this allowed?", "https://docs.usepitboard.com/concepts/limits#is-this-allowed");
 
     // ChatGPT, open, as the fixture chatGPTOpen's process list has it. On Windows its running copy is its AUMID.
-    private sealed class StandInApps : AppControl
+    private sealed class StandInApps : OtherApps
     {
         public static readonly string ChatGpt = OperatingSystem.IsWindows() ? "OpenAI.Codex_2p2nqsd0c76g0!App" : "com.openai.codex";
 
@@ -182,25 +182,33 @@ public sealed class ModelTests
 
         public bool RefusesToQuit { get; init; }
 
-        public string? Running(string app)
+        public string? Running(AppId app)
         {
-            Asked.Add($"running {app}");
-            return app == ChatGpt && _chatGptOpen ? ChatGptCopy : null;
+            Asked.Add($"running {Id(app)}");
+            return Id(app) == ChatGpt && _chatGptOpen ? ChatGptCopy : null;
         }
 
-        public void RequestQuit(string app)
+        public void RequestQuit(AppId app)
         {
-            Asked.Add($"quit {app}");
+            Asked.Add($"quit {Id(app)}");
             if (RefusesToQuit)
             {
-                throw new PlatformException.Failed($"{app} would not quit");
+                throw new PlatformException.Failed($"{Id(app)} would not quit");
             }
 
-            if (app == ChatGpt)
+            if (Id(app) == ChatGpt)
             {
                 _chatGptOpen = false;
             }
         }
+
+        // By its own system's id, which the core gives as the system's kind of id.
+        private static string Id(AppId app) => app switch
+        {
+            AppId.MacBundle mac => mac.Id,
+            AppId.WindowsAumid aumid => aumid.Id,
+            _ => throw new ArgumentOutOfRangeException(nameof(app)),
+        };
 
         public void Reopen(string location, bool front)
         {
@@ -348,14 +356,16 @@ public sealed class ModelTests
         const string Store = "7e15c34f-69ec-55b4-9542-f1c1fe3d7085";
         var launch = new AppLaunch(
             new Dictionary<string, string>(), null, Front.WindowsNotificationArea,
-            Windows: new WindowsLaunch(
-                Directory: @"C:\Users\dana\AppData\Local\Pitboard", Key: @"C:\Users\dana\.pitboard",
-                LinkScheme: "pitboard",
-                Earlier: new EarlierWindowRecords(
+            AccountWindows: new AccountWindowsLaunch(
+                Directory: @"C:\Users\dana\AppData\Local\Pitboard", LinkScheme: "pitboard"),
+            Handover: new Handover(
+                Windows: new EarlierWindowRecords(
                     Stores: new Dictionary<string, string[]> { [@"C:\Users\dana\.pitboard"] = [Store] },
                     Pages: new Dictionary<string, Dictionary<string, string>>())));
-        Assert.AreEqual("pitboard", launch.Windows?.LinkScheme);
-        Assert.IsNull(new AppLaunch(new Dictionary<string, string>(), null, Front.WindowsNotificationArea).Windows);
+        Assert.AreEqual("pitboard", launch.AccountWindows?.LinkScheme);
+        Assert.IsNull(launch.AccountWindows?.Key, "the model keys the Windows app's records");
+        Assert.IsNull(launch.Handover?.Preferences);
+        Assert.IsNull(new AppLaunch(new Dictionary<string, string>(), null, Front.WindowsNotificationArea).AccountWindows);
 
         var work = new WindowAccount(
             Sites.Claude, Label: "work", Email: "work@example.com", Store: Store, InUse: true, Title: "work");
@@ -495,15 +505,16 @@ public sealed class ModelTests
             Front.WindowsNotificationArea);
         var moved = launch with
         {
-            EarlierPreferences = new EarlierPreferences(
-                SecondAccountDeclined: ["codex"], HasBeenSeen: true, SecondAccountNudgeHidden: false),
+            Handover = new Handover(
+                Preferences: new EarlierPreferences(
+                    SecondAccountDeclined: ["codex"], HasBeenSeen: true, SecondAccountNudgeHidden: false)),
         };
 
         Assert.AreEqual(@"C:\Users\x", launch.Environment["USERPROFILE"]);
         Assert.AreEqual(@"C:\Program Files\Pitboard", launch.AppLocation);
-        Assert.IsNull(launch.EarlierPreferences);
-        Assert.AreEqual("codex", moved.EarlierPreferences?.SecondAccountDeclined.Single());
-        Assert.IsTrue(moved.EarlierPreferences?.HasBeenSeen);
+        Assert.IsNull(launch.Handover);
+        Assert.AreEqual("codex", moved.Handover?.Preferences?.SecondAccountDeclined.Single());
+        Assert.IsTrue(moved.Handover?.Preferences?.HasBeenSeen);
     }
 
     [TestMethod]
@@ -710,7 +721,7 @@ public sealed class ModelTests
             new NameCheck("A name can’t contain “/”.", null), PitboardModelMethods.CheckName(named, Tool.Claude, "codex/phu"));
     }
 
-    private sealed class Waiting : ModelListener
+    private sealed class Waiting : Listener
     {
         private readonly List<Snapshot> _told = [];
 
@@ -864,7 +875,7 @@ public sealed class ModelTests
     }
 
     [TestMethod]
-    public void ACodexSwitchAsksTheAppsAppControlToQuitChatGptAndOpenItAgain()
+    public void ACodexSwitchAsksTheAppsOtherAppsToQuitChatGptAndOpenItAgain()
     {
         NeedsFixtures();
         var waiting = new Waiting();
@@ -891,7 +902,7 @@ public sealed class ModelTests
     }
 
     [TestMethod]
-    public void APlatformExceptionFromTheAppsAppControlStopsTheSwitch()
+    public void APlatformExceptionFromTheAppsOtherAppsStopsTheSwitch()
     {
         NeedsFixtures();
         var waiting = new Waiting();
@@ -915,8 +926,25 @@ public sealed class ModelTests
         CollectionAssert.AreEqual(refused, apps.Asked.All);
     }
 
+    // A front that names no other apps, as the Linux app's: none crosses, and ChatGPT is said and never quit.
     [TestMethod]
-    public void ARunOutIsPostedThroughTheAppsNotifications()
+    public void AModelOverNoOtherAppsSwitchesWithoutAskingToQuitChatGpt()
+    {
+        NeedsFixtures();
+        var waiting = new Waiting();
+        using var model = PitboardModel.FixtureIn("chatGPTOpen", Front.WindowsNotificationArea, _own, waiting, null, new Posting(), new InUtc());
+        Start(model, waiting);
+
+        model.Send(new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
+        var switched = waiting.Until(snapshot => Uses(snapshot, "codex/spare"), Patience);
+        model.Shutdown();
+
+        Assert.IsNotNull(switched, "the switch was never read back");
+        Assert.IsNull(switched.QuitQuestion, "nothing asked to quit");
+    }
+
+    [TestMethod]
+    public void ARunOutIsPostedThroughTheAppsNotifier()
     {
         NeedsFixtures();
         var waiting = new Waiting();
@@ -933,13 +961,13 @@ public sealed class ModelTests
         // When the limit resets is the read's.
         var resetsAt = posted[0].Id["claude/personal/session/-".Length..];
         Assert.IsTrue(long.TryParse(resetsAt, CultureInfo.InvariantCulture, out _), resetsAt);
-        RunOutNotice[] ranOut =
+        Notice[] ranOut =
         [
             new(
                 Id: $"claude/personal/session/-{resetsAt}",
                 Title: LimitReached, Subtitle: "Claude Code", Body: "personal has used 100%. work has used 42%.",
                 Clicked: "accounts",
-                Button: new NotificationButton("Switch to work", "switch/claude/work")),
+                Button: new NoticeButton(NoticeButtonKind.SwitchTo, "Switch to work", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
     }
@@ -964,7 +992,7 @@ public sealed class ModelTests
             "work’s sign-in was replaced outside Pitboard: Claude Code is now signed in to personal, " +
             "and Pitboard has no sign-in saved for work.",
             notice.Body);
-        Assert.AreEqual(new NotificationButton(again, "sign-in-again/claude/work"), notice.Button);
+        Assert.AreEqual(new NoticeButton(NoticeButtonKind.SignInAgain, again, "sign-in-again/claude/work"), notice.Button);
     }
 
     // Plan 4.13: whom it switched to, under the tool, and Switch Back, which switches to the account it left.
