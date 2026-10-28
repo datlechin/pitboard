@@ -276,8 +276,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
 - Never measure a running tool on a Linux machine that holds logins. Use
   [the Linux session machines](#the-linux-session-machines).
 - Never run `apps/linux/scripts/install-deps.sh` on a machine of your own. It installs packages
-  and Rust as root, for an image `in-container.sh` or `test-linux-repository.sh` builds and CI's
-  containers alone.
+  and Rust as root, for an image `in-container.sh` or `test-linux-repository.sh` builds, CI's
+  containers and `release.yml`'s `linux-sign` and `linux-repository` containers alone.
 - Never run `.github/scripts/linux-runner-facts.sh` on a machine of your own, but its display
   parts in a container. It makes Linux users, mounts file systems and installs packages.
 - Only `linux-runner-facts.sh`, only through `linux-facts.yml` on a GitHub-hosted runner, may
@@ -294,12 +294,17 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   redacted reports and the session bundle encrypted to the owner's age key.
 - Never write to or delete from the `pitboard-packages` bucket, or anything served at
   `packages.usepitboard.com`, by hand. `release.yml` writes them on a `v*` tag, from the
-  `linux-packages` environment.
+  `linux-packages` environment, through `upload-linux-repository.sh` in its `linux-repository`
+  job.
 - Never put a beta or a release candidate in the repository's `stable` suite. Only a release
   the workflow marks latest writes it.
 - Never keep the Linux repository's key with the update keys or the Developer ID certificate.
   Its primary key's secret stays in the owner's offline copy alone, and `linux-packages` holds
   only the signing subkey.
+- Never sign a package or an index with the Linux repository's key but in `release.yml`'s
+  `linux-sign` and `linux-repository` on a `v*` tag. A test signs with a key it makes.
+- A test or a script installs Pitboard's packages or its repository only while it builds a
+  container image.
 
 ### The session machine
 

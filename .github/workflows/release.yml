@@ -796,6 +796,124 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
+  # The Linux packages from 1.0.0, once a Linux session has measured them, built as CI's
+  # linux-packaging job builds them on every pull request: each format on the oldest system of the
+  # floor that uses it, Debian 13 or Fedora 43, by in-container.sh, from the tag's commit and the
+  # build job's tarball, whose command line each package carries byte for byte. Each is checked as
+  # this release's, then installed on fresh images and removed again. The keyring, which both
+  # Debian builds make under one name, ships from the x86_64 one. No cache here or in linux-sign:
+  # the repository's key signs only what this run built.
+  linux-build:
+    name: linux-build (${{ matrix.format }}, ${{ matrix.arch }})
+    needs: [guard, build]
+    if: needs.guard.outputs.linux == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+            format: deb
+            distro: debian-13
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            format: deb
+            distro: debian-13
+          - os: ubuntu-26.04
+            arch: x86_64
+            format: rpm
+            distro: fedora-43
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            format: rpm
+            distro: fedora-43
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      FORMAT: ${{ matrix.format }}
+      DISTRO: ${{ matrix.distro }}
+      TARBALL: pitboard-${{ github.ref_name }}-${{ matrix.arch }}-unknown-linux-musl.tar.gz
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # in-container.sh fills the Cargo registry here with `cargo metadata`.
+      - uses: ./.github/actions/rust
+        with:
+          cache: "false"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-${{ matrix.arch }}-unknown-linux-musl
+          path: ${{ runner.temp }}/command-line
+      - name: The packages, built from the tag's commit and checked as this release's
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: >
+          git archive HEAD | apps/linux/scripts/in-container.sh "$DISTRO" "$FORMAT"
+          "$RUNNER_TEMP/command-line/$TARBALL" "$RUNNER_TEMP/packages" "$VERSION"
+      - name: The packages, installed and removed on fresh systems
+        run: sh .github/scripts/test-linux-packages.sh "$FORMAT" "$RUNNER_TEMP/packages"
+      - if: matrix.format == 'deb' && matrix.arch == 'aarch64'
+        run: rm "$RUNNER_TEMP/packages/pitboard-archive-keyring-$GITHUB_REF_NAME-all.deb"
+      # Not dist-, so publish never takes them: only linux-sign hands a package on.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-linux-${{ matrix.format }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/packages/*.${{ matrix.format }}
+          if-no-files-found: error
+
+  # Every Linux package reaches publish through here: each RPM package signed with the
+  # repository's signing subkey on Fedora 43, which built it, and checked against the committed key
+  # alone, and each Debian package as built, since apt trusts one through the index the repository
+  # signs. with-linux-signing-key.sh refuses a PACKAGES_SIGNING_KEY that is not the committed key's
+  # subkey at its binding before anything is signed. Only this job and linux-repository read the
+  # key, in the linux-packages environment, which takes deployments from v* tags only.
+  linux-sign:
+    needs: [guard, linux-build]
+    if: needs.guard.outputs.linux == 'true'
+    runs-on: ubuntu-26.04
+    container:
+      image: docker.io/library/fedora:43@sha256:a651ddf48ea28a06ed4e1e6519f51c9f47e7a5a138722ade87369b8fbb7e5b42
+    timeout-minutes: 15
+    environment: linux-packages
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh apps/linux/scripts/install-deps.sh fedora-43 repository
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: unsigned-linux-*
+          path: signed
+          merge-multiple: true
+      - name: Both formats for both machines, and the keyring once
+        run: |
+          found=$(cd signed && find . -type f | sed 's|^\./||' | sort)
+          expected=$(for package in pitboard pitboard-app; do
+            for machine in amd64.deb arm64.deb x86_64.rpm aarch64.rpm; do
+              echo "$package-$GITHUB_REF_NAME-$machine"
+            done
+          done; echo "pitboard-archive-keyring-$GITHUB_REF_NAME-all.deb")
+          if [ "$found" != "$(printf '%s\n' "$expected" | sort)" ]; then
+            echo "linux-build handed on $(printf '%s\n' "$found" | tr '\n' ' ')" >&2
+            exit 1
+          fi
+      - name: Sign
+        env:
+          PACKAGES_SIGNING_KEY: ${{ secrets.PACKAGES_SIGNING_KEY }}
+          PACKAGES_SIGNING_PASSPHRASE: ${{ secrets.PACKAGES_SIGNING_PASSPHRASE }}
+        run: >
+          sh .github/scripts/with-linux-signing-key.sh packaging/linux/pitboard-archive-keyring.asc
+          sh .github/scripts/sign-linux-packages.sh signed packaging/linux/pitboard-archive-keyring.asc
+      # Overwritten, so a linux-sign job run again can hand them over again.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-linux
+          path: |
+            signed/*.deb
+            signed/*.rpm
+          if-no-files-found: error
+          overwrite: true
+
   # The menu bar app, signed and notarised when the Apple secrets are set; without them it
   # is still built and released, ad-hoc signed, which Gatekeeper warns about on first
   # launch. RELEASING.md lists the secrets.
@@ -936,15 +1054,18 @@ jobs:
             ${{ runner.temp }}/dist/appcast.xml
 
   # A skipped job skips every job after it in the chain unless their `if` says otherwise, and the
-  # Windows jobs are skipped below 1.0.0. So publish and the jobs after it name what they need.
+  # Windows jobs are skipped below 1.0.0, the Linux jobs until a Linux session. So publish and the
+  # jobs after it name what they need.
   publish:
-    needs: [guard, build, app, windows-sign, windows-msi, windows-update-sign]
+    needs: [guard, build, app, windows-sign, windows-msi, windows-update-sign, linux-sign]
     if: >-
       ${{ !cancelled() && needs.build.result == 'success' && needs.app.result == 'success' &&
       ((needs.guard.outputs.windows == 'false' && needs.windows-sign.result == 'skipped' &&
       needs.windows-msi.result == 'skipped' && needs.windows-update-sign.result == 'skipped') ||
       (needs.windows-sign.result == 'success' && needs.windows-msi.result == 'success' &&
-      needs.windows-update-sign.result == 'success')) }}
+      needs.windows-update-sign.result == 'success')) &&
+      ((needs.guard.outputs.linux == 'false' && needs.linux-sign.result == 'skipped') ||
+      needs.linux-sign.result == 'success') }}
     runs-on: ubuntu-latest
     # Uploading the MSIs takes most of it.
     timeout-minutes: 15
@@ -981,7 +1102,7 @@ jobs:
         working-directory: ${{ runner.temp }}/dist
         run: |
           set -- *.tar.gz *.zip
-          for file in *.msi; do
+          for file in *.msi *.deb *.rpm; do
             if [ -e "$file" ]; then
               set -- "$@" "$file"
             fi
@@ -1022,23 +1143,39 @@ jobs:
         env:
           WINDOWS: ${{ needs.guard.outputs.windows }}
           SIGNED: ${{ needs.guard.outputs.signed }}
+          LINUX: ${{ needs.guard.outputs.linux }}
         run: |
           bom() {
-            cargo cyclonedx --manifest-path "crates/$1/Cargo.toml" --target "$2" \
+            cargo cyclonedx --manifest-path "$1" --target "$2" \
               --format json --spec-version 1.5 --all --override-filename bom
-            mv "crates/$1/bom.json" "$3"
-            find crates -name bom.json -delete
+            mv "$(dirname "$1")/bom.json" "$3"
+            find crates apps -name bom.json -delete
           }
           # macOS and musl resolve different dependencies, so each target has its own.
           for target in aarch64-apple-darwin x86_64-apple-darwin \
                         x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-            bom pitboard "$target" \
+            bom crates/pitboard/Cargo.toml "$target" \
               "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-${target}.tar.gz.cdx.json"
           done
           if [ "$WINDOWS" = true ]; then
             for target in x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
-              bom pitboard "$target" \
+              bom crates/pitboard/Cargo.toml "$target" \
                 "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-${target}.zip.cdx.json"
+            done
+          fi
+          # A command line package holds its tarball's pitboard, byte for byte, and the app's
+          # package the Linux app built for glibc. No lockfile describes the keyring.
+          if [ "$LINUX" = true ]; then
+            for machine in x86_64:amd64 aarch64:arm64; do
+              arch=${machine%%:*}
+              deb=${machine#*:}
+              tarball=$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-${arch}-unknown-linux-musl.tar.gz.cdx.json
+              for package in "pitboard-${GITHUB_REF_NAME}-$deb.deb" "pitboard-${GITHUB_REF_NAME}-$arch.rpm"; do
+                cp "$tarball" "$RUNNER_TEMP/dist/$package.cdx.json"
+              done
+              app=$RUNNER_TEMP/dist/pitboard-app-${GITHUB_REF_NAME}-$deb.deb.cdx.json
+              bom apps/linux/Cargo.toml "$arch-unknown-linux-gnu" "$app"
+              cp "$app" "$RUNNER_TEMP/dist/pitboard-app-${GITHUB_REF_NAME}-$arch.rpm.cdx.json"
             done
           fi
           # The app carries the core for both macOS architectures, which resolve to the
@@ -1046,8 +1183,9 @@ jobs:
           # and Sparkle, which no lockfile here mentions. The extension's library is no
           # download of its own, so its bill of materials stays out of dist.
           app=$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-macos.zip.cdx.json
-          bom pitboard-ffi aarch64-apple-darwin "$app"
-          bom pitboard-share-ffi aarch64-apple-darwin "$RUNNER_TEMP/pitboard-share-ffi.cdx.json"
+          bom crates/pitboard-ffi/Cargo.toml aarch64-apple-darwin "$app"
+          bom crates/pitboard-share-ffi/Cargo.toml aarch64-apple-darwin \
+            "$RUNNER_TEMP/pitboard-share-ffi.cdx.json"
           python3 .github/scripts/sbom-add-crate.py "$app" \
             "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-aarch64-apple-darwin.tar.gz.cdx.json"
           python3 .github/scripts/sbom-add-crate.py "$app" "$RUNNER_TEMP/pitboard-share-ffi.cdx.json"
@@ -1062,12 +1200,13 @@ jobs:
               target=${pair#*:}
               msi=$RUNNER_TEMP/dist/Pitboard-${GITHUB_REF_NAME}-windows-$arch.msi.cdx.json
               dotnet=$RUNNER_TEMP/bom-windows/bom-windows-$arch
-              bom pitboard-ffi "$target" "$msi"
+              bom crates/pitboard-ffi/Cargo.toml "$target" "$msi"
               python3 .github/scripts/sbom-add-crate.py "$msi" \
                 "$RUNNER_TEMP/dist/pitboard-${GITHUB_REF_NAME}-${target}.zip.cdx.json"
               python3 .github/scripts/sbom-add-crate.py "$msi" "$dotnet/dotnet-app.cdx.json"
               if [ "$SIGNED" = true ]; then
-                bom pitboard-share-ffi "$target" "$RUNNER_TEMP/pitboard-share-ffi-$arch.cdx.json"
+                bom crates/pitboard-share-ffi/Cargo.toml "$target" \
+                  "$RUNNER_TEMP/pitboard-share-ffi-$arch.cdx.json"
                 python3 .github/scripts/sbom-add-crate.py "$msi" "$RUNNER_TEMP/pitboard-share-ffi-$arch.cdx.json"
                 python3 .github/scripts/sbom-add-crate.py "$msi" "$dotnet/dotnet-share.cdx.json"
               fi
@@ -1134,6 +1273,12 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ runner.temp }}/dist/*.msi
+      - if: needs.guard.outputs.linux == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/dist/*.deb
+            ${{ runner.temp }}/dist/*.rpm
       - if: needs.guard.outputs.latest == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -1164,6 +1309,8 @@ jobs:
             ${{ runner.temp }}/dist/*.tar.gz
             ${{ runner.temp }}/dist/*.zip
             ${{ runner.temp }}/dist/*.msi
+            ${{ runner.temp }}/dist/*.deb
+            ${{ runner.temp }}/dist/*.rpm
             ${{ runner.temp }}/dist/*.cdx.json
             ${{ runner.temp }}/dist/appcast.xml
             ${{ runner.temp }}/dist/appcast-windows.xml
@@ -1721,6 +1868,157 @@ jobs:
             sleep 15
           done
           exit 1
+
+  # The apt and dnf repository at packages.usepitboard.com, for a release that writes a suite: a
+  # full release marked latest writes stable and, unless a beta with packages is above it, beta; a
+  # beta above every release with packages writes beta. Built on Ubuntu 26.04, whose
+  # appstream-generator alone of the floor's runs its rpmmd backend, from the packages publish
+  # published, each checked against the run's own SHA256SUMS first, then signed with the
+  # repository's subkey and put in the bucket by upload-linux-repository.sh, in amazon/aws-cli,
+  # which never deletes. Its secrets and its endpoint are the linux-packages environment's. No
+  # cache: the key signs only indices of what this run built.
+  linux-repository:
+    needs: [guard, publish]
+    if: >-
+      ${{ !cancelled() && needs.publish.result == 'success' && needs.guard.outputs.linux == 'true' &&
+      needs.guard.outputs.linux-suites != '' }}
+    runs-on: ubuntu-26.04
+    container:
+      image: docker.io/library/ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd
+    timeout-minutes: 30
+    environment: linux-packages
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh apps/linux/scripts/install-deps.sh ubuntu-26.04 repository
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-linux
+          path: packages
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: SHA256SUMS
+          path: sums
+      - name: Each package as publish summed and published it
+        run: |
+          grep -E '  [^ ]+[.](deb|rpm)$' sums/SHA256SUMS > sums/packages
+          set -- packages/*
+          if [ "$(wc -l < sums/packages)" -ne "$#" ]; then
+            echo "SHA256SUMS lists $(wc -l < sums/packages) packages, and linux-sign handed on $#" >&2
+            exit 1
+          fi
+          cd packages
+          sha256sum --check --strict ../sums/packages
+      - name: The tree of each suite this release writes
+        env:
+          SUITES: ${{ needs.guard.outputs.linux-suites }}
+        run: >
+          sh .github/scripts/linux-repository.sh "$SUITES" packages
+          packaging/linux/pitboard-archive-keyring.asc repository
+      - name: Sign
+        env:
+          PACKAGES_SIGNING_KEY: ${{ secrets.PACKAGES_SIGNING_KEY }}
+          PACKAGES_SIGNING_PASSPHRASE: ${{ secrets.PACKAGES_SIGNING_PASSPHRASE }}
+        run: >
+          sh .github/scripts/with-linux-signing-key.sh packaging/linux/pitboard-archive-keyring.asc
+          sh .github/scripts/sign-linux-repository.sh repository
+          packaging/linux/pitboard-archive-keyring.asc
+      # AWS CLI 2.38.1, whose image's index GitHub's runner resolves for its machine.
+      - name: Upload
+        uses: docker://docker.io/amazon/aws-cli@sha256:733d5be1015825e4038c6016f3fa9954868ddee1f611b73be795a9cc2e706bfd
+        env:
+          PACKAGES_R2_ACCESS_KEY_ID: ${{ secrets.PACKAGES_R2_ACCESS_KEY_ID }}
+          PACKAGES_R2_SECRET_ACCESS_KEY: ${{ secrets.PACKAGES_R2_SECRET_ACCESS_KEY }}
+          PACKAGES_R2_ENDPOINT: ${{ vars.PACKAGES_R2_ENDPOINT }}
+        with:
+          entrypoint: /bin/sh
+          args: .github/scripts/upload-linux-repository.sh repository
+
+  # What somebody who follows the install docs gets, got, from packages.usepitboard.com: each suite
+  # this release wrote, set up on fresh Debian 13, Ubuntu 26.04, Fedora 43 and openSUSE Tumbleweed
+  # images on both machines, which wait up to two minutes for it to serve this version, then
+  # install the app. The command line must say this version, apt's keyring and the key the
+  # repository serves must be the committed key. Nothing here reads a secret.
+  linux-repository-install:
+    name: linux-repository-install (${{ matrix.system }}, ${{ matrix.os }})
+    needs: [guard, linux-repository]
+    if: ${{ !cancelled() && needs.linux-repository.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm]
+        system: [debian-13, ubuntu-26.04, fedora-43, opensuse-tumbleweed]
+        include:
+          - system: debian-13
+            manager: apt
+            image: docker.io/library/debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259
+          - system: ubuntu-26.04
+            manager: apt
+            image: docker.io/library/ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd
+          - system: fedora-43
+            manager: dnf
+            image: docker.io/library/fedora:43@sha256:a651ddf48ea28a06ed4e1e6519f51c9f47e7a5a138722ade87369b8fbb7e5b42
+          - system: opensuse-tumbleweed
+            manager: zypper
+            image: docker.io/opensuse/tumbleweed@sha256:216f7358df3fabe995e8acb94343c19afc95875c5572617a4996d70149a5e83a
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The key packages.usepitboard.com serves
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/served.asc" \
+            https://packages.usepitboard.com/pitboard-archive-keyring.asc
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$RUNNER_TEMP/served.pgp" \
+            https://packages.usepitboard.com/pitboard-archive-keyring.pgp
+          gpg --dearmor < packaging/linux/pitboard-archive-keyring.asc > "$RUNNER_TEMP/committed.pgp"
+          cmp packaging/linux/pitboard-archive-keyring.asc "$RUNNER_TEMP/served.asc"
+          cmp "$RUNNER_TEMP/committed.pgp" "$RUNNER_TEMP/served.pgp"
+      - name: Each suite, set up and installed from as the docs say
+        env:
+          SUITES: ${{ needs.guard.outputs.linux-suites }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          BASE: ${{ needs.guard.outputs.base }}
+          MANAGER: ${{ matrix.manager }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          package=$(sh .github/scripts/linux-versions.sh "$VERSION" | sed -n 's/^deb=//p')
+          # Pitboard's programs run as uid 1000, with homes of their own and no network.
+          inside() {
+            docker run --rm --user 1000:1000 --network none --env HOME=/tmp/home \
+              --env XDG_CONFIG_HOME=/tmp/home/.config --env XDG_DATA_HOME=/tmp/home/.local/share \
+              --env XDG_CACHE_HOME=/tmp/home/.cache --env XDG_STATE_HOME=/tmp/home/.local/state \
+              "$image" "$@"
+          }
+          mkdir "$RUNNER_TEMP/context"
+          for suite in $SUITES; do
+            setup=pitboard
+            [ "$suite" = stable ] || setup=pitboard-beta
+            image=pitboard-repository-install:$suite
+            docker build -f packaging/linux/repository-install.Containerfile --target "$MANAGER" \
+              --build-arg "BASE=$IMAGE" --build-arg "SETUP=$setup" --build-arg "VERSION=$package" \
+              -t "$image" "$RUNNER_TEMP/context"
+            said=$(inside pitboard --version)
+            if [ "$said" != "pitboard $BASE" ]; then
+              echo "$suite installed a pitboard that says '$said', not 'pitboard $BASE'" >&2
+              exit 1
+            fi
+            if [ "$MANAGER" = apt ]; then
+              inside cat /usr/share/keyrings/pitboard-archive-keyring.pgp > "$RUNNER_TEMP/installed.pgp"
+              if ! cmp -s "$RUNNER_TEMP/committed.pgp" "$RUNNER_TEMP/installed.pgp"; then
+                echo "$suite installed a keyring that is not the committed key" >&2
+                exit 1
+              fi
+            fi
+            echo "$suite: pitboard-app $package installed, and it says '$said'"
+          done
 
   # What somebody who downloads a Windows zip or MSI gets, got, on each machine: the published zip
   # and MSI against SHA256SUMS and their attestations, every signature in them, the zip's command

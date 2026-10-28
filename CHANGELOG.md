@@ -31,6 +31,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a later one opens them.
 - On Linux, daily renewal also runs at each sign-in to GNOME or KDE Plasma, so a run that found
   the login keyring locked catches up once you sign in.
+- On Linux, each release comes as `.deb` and `.rpm` packages of the app and the command line,
+  for x86_64 and aarch64.
+- A signed apt and dnf repository at `packages.usepitboard.com` brings Pitboard's updates on
+  Linux, with a beta channel you can choose instead.
 
 ### Changed
 

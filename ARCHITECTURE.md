@@ -226,14 +226,15 @@ The rest:
   `build-linux-packages.sh` copies into the source it builds, the RPM packages' spec and
   rpmlint's filters, and the images the packages' install test builds, one per package manager;
   the repository's setup files, apt-ftparchive's and appstream-generator's configuration in
-  `repository/`, and the images and steps its test builds.
+  `repository/`, the images and steps its test builds, and the images the release installs the
+  app from `packages.usepitboard.com` in.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
-- `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
-  `conformance.yml` for the registers, `windows-facts.yml` for the Windows runners and the
-  session bundle, `linux-facts.yml` for the Linux runners and the Linux session bundle,
-  `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and `winsparkle.yml` for new
-  releases of the updaters and the Windows App SDK.
+- `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag
+  and the Linux repository it writes, `conformance.yml` for the registers, `windows-facts.yml`
+  for the Windows runners and the session bundle, `linux-facts.yml` for the Linux runners and the
+  Linux session bundle, `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and
+  `winsparkle.yml` for new releases of the updaters and the Windows App SDK.
 - `.github/actions/`: the steps the workflows share.
 - `.github/scripts/`: what the workflows run, and its tests, `test-*.py`,
   `test-windows-app.ps1` and `test-windows-release.ps1`.
@@ -319,6 +320,13 @@ keeps it is in the header of the module named.
   one has: `linux-release.sh` in the guard gives no Linux job without
   `docs/facts/linux-session.md`, and refuses the release once an earlier one shipped them
   (`LinuxRelease`).
+- A release's Linux packages build with the Rust flags its other builds take, none, while every
+  check `in-container.sh` runs denies warnings (`InContainer`).
+- Only `linux-sign` and `linux-repository` reach the `linux-packages` environment, and no job on
+  their way takes a cache (`LinuxJobs`). Each signs only with the committed key's subkey at its
+  binding (`with-linux-signing-key.sh`, `LinuxSigningKey`).
+- The bucket only gains files, each index after the files it names and the signed indices last
+  (`upload-linux-repository.sh`, `UploadLinuxRepository`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`
@@ -903,6 +911,8 @@ on.
   Claude is closed, under an advisory lock on the folder, and deletes nothing of Claude's.
 - Pitboard and a running app meet at the process list and the app's `OtherApps`. The core
   tells that Claude runs by the bundle each program runs from, and neither starts nor quits it.
+- Pitboard and a Linux package manager meet at `packages.usepitboard.com`, which only
+  `release.yml` writes, and at the release's packages.
 - The code and the release meet at a `v` tag, which `.github/workflows/release.yml` turns
   into a release. [RELEASING.md](RELEASING.md) has the procedure.
 

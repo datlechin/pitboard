@@ -257,4 +257,14 @@ arm64, in Docker on a Mac, with keys a test made. Not measured:
   again, and libzypp's changelog for 17.25.4 says "Fix update of gpg keys with elongated expire
   date (bsc#1179222)"; neither has run on this key.
 - The real key's signatures, and `packages.usepitboard.com` serving the tree: no release has
-  written it.
+  written it. Until the first one does:
+  - which `Cache-Control` the zone honours for R2 behind `packages.usepitboard.com`, whether it
+    caches a file without an extension, `InRelease` and `Packages` among them, and how soon a
+    `no-cache` index that changed is served;
+  - whether R2 takes AWS CLI 2.38.1's upload, `aws-chunked` with its
+    `x-amz-checksum-crc64nvme` trailer ([the release](linux-packages.md#r2-and-the-aws-cli)),
+    which R2's S3 page neither lists nor refuses, and whether it then serves each object
+    without that `Content-Encoding`.
+- Every Linux job of `release.yml`: none has run, and their steps ran on the Mac alone
+  ([the release](linux-packages.md#the-release)). Among them a `docker://` step in a job that
+  runs in a container, which the upload is, and the rpm build of an rc.

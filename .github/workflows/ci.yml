@@ -194,6 +194,7 @@ jobs:
           .github/scripts/linux-repository.sh .github/scripts/sign-linux-packages.sh
           .github/scripts/sign-linux-repository.sh .github/scripts/test-linux-repository.sh
           packaging/linux/repository-test.sh .github/scripts/linux-release.sh
+          .github/scripts/with-linux-signing-key.sh .github/scripts/upload-linux-repository.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
@@ -1230,7 +1231,8 @@ jobs:
   # contributor runs them: the command line packed as a release packs it, the packages built on
   # Debian 13 or Fedora 43 from the commit and checked, the check's own tests, and the packages
   # installed on fresh Debian 13 and Ubuntu 26.04, or Fedora 43, Fedora 44 and Tumbleweed, images
-  # and removed again.
+  # and removed again. in-container.sh hands the builds the workflow's RUSTFLAGS, so a warning
+  # fails them here, where a release's builds deny none.
   linux-packaging:
     name: linux-packaging (${{ matrix.format }}, ${{ matrix.arch }})
     strategy:

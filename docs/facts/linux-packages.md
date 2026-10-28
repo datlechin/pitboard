@@ -170,6 +170,12 @@ and rustup's stable, from `fedora` and `updates` of that day.
   `-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes` in a build. `%undefine
   build_rustflags` leaves `RUSTFLAGS` as the caller set it. Its `CFLAGS` and `LDFLAGS` are
   Fedora's hardened ones.
+- `in-container.sh` gives the package builds its caller's `RUSTFLAGS`, which a release's
+  `linux-build` and the session bundle leave unset. Measured on 29 October with RPM 6.0.2: with
+  `RUSTFLAGS` unset and `build_rustflags` undefined, `%{set_build_flags}` exports no `RUSTFLAGS`,
+  and with it defined, Fedora's `-Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none
+  -Cforce-frame-pointers=yes --cap-lints=warn`. Debian 13's `dpkg-buildflags --list` names no
+  `RUSTFLAGS`. Built so on arm64, the Debian and RPM packages of 1.0.0-beta.6 passed the check.
 - `%meson` sets up `%{_vpath_srcdir}` in `redhat-linux-build` with `--buildtype=plain
   --wrap-mode=nodownload --auto-features=enabled`, and C1's Cargo step built the app in it with
   no network. `%meson_test` ran the 14 Meson tests in `%check`.
@@ -388,6 +394,82 @@ their package managers fetching from each distribution's own archive while the i
   and "Skipping repository", exited 4, and kept the app at its version.
 - On the beta channel, zypper took the final release, and rpm kept the key as zypper first
   imported it, as on Fedora.
+
+## The release
+
+Read on 29 October 2026 in the sources named, and measured where a line says so: in Docker on
+the owner's Mac (arm64), as uid 1000, in the images of
+[the repository](#the-repository) and
+`amazon/aws-cli@sha256:733d5be1015825e4038c6016f3fa9954868ddee1f611b73be795a9cc2e706bfd`, on the
+1.0.0-beta.6 packages `in-container.sh` built, with a key made for it.
+
+### R2 and the AWS CLI
+
+- Cloudflare's R2 page "aws CLI", last updated 15 October 2026: "The `region` value can be set to
+  `auto` since it is required by the SDK but not used by R2", and the endpoint
+  `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`. It says nothing of checksums.
+- Cloudflare's R2 page "S3 API compatibility", last updated 14 October 2026: PutObject takes
+  `Cache-Control`, `Content-Type` and `Content-MD5`. `CRC64NVME` is supported for `FULL_OBJECT`
+  checksums, and CRC-32, CRC-32C, SHA-1 and SHA-256 for `COMPOSITE` alone. The page names no
+  `aws-chunked` upload and no trailer.
+- Docker Hub's `amazon/aws-cli:2.38.1`, pushed 2026-10-14: the index
+  `sha256:733d5be1015825e4038c6016f3fa9954868ddee1f611b73be795a9cc2e706bfd`, with linux/amd64
+  `sha256:387821d4c8ac3a462e7a7f9ffd6dae99288c9fbf84888e519ed68245fd5e0f8b` and linux/arm64
+  `sha256:3ba1877e0cf03276f02fbb0abddd5b3cf91d8a03e81943b973877029620b4f14`. Measured on arm64:
+  aws-cli 2.38.1 on Python 3.14.6 and Amazon Linux 2023, `/bin/sh` is bash, and `find` and
+  `sort` are there.
+- Measured: `upload-linux-repository.sh` in that image, with the workspace at
+  `/github/workspace` as a `docker://` step has it, put the 63 files of a signed beta tree into a
+  stand-in for S3 behind a test CA on a Docker network with no way out, in 40 seconds, in the
+  script's order. Each request was one PUT with a SigV4 signature for region `auto`,
+  `Content-Encoding: aws-chunked`, `x-amz-content-sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER`,
+  `x-amz-decoded-content-length`, `x-amz-trailer: x-amz-checksum-crc64nvme` with that checksum
+  after the last chunk, and the `Cache-Control` given.
+- Measured: the CLI's `Content-Type` was `application/x-debian-package` for a `.deb`,
+  `application/x-rpm` for a `.rpm`, `application/x-tar` for a `.tar` and a `.tar.gz`,
+  `application/yaml` for `Components-<arch>.yml` and its `.gz` and `.xz`, `text/xml` for
+  `repomd.xml` and each `.xml.gz`, and none for a file without an extension, `InRelease` and
+  `Packages` among them. It sent no `Content-Encoding: gzip`.
+- Measured: in that tree, createrepo_c 1.2.1 and modifyrepo_c named every file of `repodata`
+  but `repomd.xml` and its signature `<SHA-256>-<type>`, and apt-ftparchive put its copies at
+  `by-hash/SHA256/<SHA-256>` beside each index, which `upload-linux-repository.sh` keeps a year.
+
+### The signing key in a job
+
+Measured with gpg 2.4.8 on Ubuntu 26.04 and 2.4.9 on Fedora 43:
+
+- `gpg --batch --import` of a signing subkey exported alone with `--export-secret-subkeys`, under
+  a passphrase, asked for nothing. `--list-secret-keys --with-colons` then gave the primary a `#`
+  in its fifteenth field, a stub, and the subkey a `+`.
+- With `allow-preset-passphrase` in `gpg-agent.conf` and the passphrase handed on stdin to
+  `gpg-preset-passphrase --preset` for the subkey's keygrip, from `gpgconf --list-dirs
+  libexecdir`, gpg's `--detach-sign` and `--clearsign` and rpmsign 6.0.2 signed with nobody to
+  ask. Given a wrong passphrase, gpg refused, "Inappropriate ioctl for device" on Ubuntu and "No
+  pinentry" on Fedora, and so did rpmsign.
+- `with-linux-signing-key.sh` ran `sign-linux-packages.sh` on Fedora 43 and
+  `sign-linux-repository.sh` on Ubuntu 26.04 that way, each verifying what it signed. On macOS,
+  `mktemp -d` put its folder in the system's temporary folder whatever `TMPDIR` said, so the
+  script gives it a template.
+
+### Installed from the repository
+
+Measured with `repository-install.Containerfile`, its address turned into a local server of the
+signed beta tree over HTTP on the Mac:
+
+- Debian 13, Ubuntu 26.04, Fedora 43 and openSUSE Tumbleweed each set the beta channel up and
+  installed `pitboard-app` at `1.0.0~beta.6` at the first attempt. `pitboard --version` said
+  `pitboard 1.0.0-beta.6`, and on Debian and Ubuntu the keyring at
+  `/usr/share/keyrings/pitboard-archive-keyring.pgp` was `gpg --dearmor` of the committed key,
+  which pitboard-archive-keyring brought by Recommends in place of the copy fetched.
+- Asked for `1.0.0~beta.7`, which the tree did not hold, each waited twelve times and its build
+  failed: apt after 155 seconds, `apt-get install` exiting 100; dnf after 195, "No match for
+  argument: pitboard-app-1.0.0~beta.7", exit 1; zypper after 181, "No provider of 'pitboard-app =
+  1.0.0~beta.7-1' found", exit 104. zypper's `refresh` of every repository took 111 seconds at
+  the first attempt, so its wait refreshes Pitboard's alone.
+- `in-container.sh debian-13 deb` given an rc's tarball, `pitboard-v1.0.0-rc1-...`, and the
+  version `1.0.0-rc1` built `1.0.0~rc1` packages under `v1.0.0-rc1` names, and
+  `check-linux-packages.sh` passed them. Checked at `Cargo.toml`'s version, it would refuse every
+  package of an rc.
 
 ## The session bundle
 

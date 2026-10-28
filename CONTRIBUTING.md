@@ -159,10 +159,11 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
 `windows-update-key.sh`, `windows-update-sign.sh`, `session-gate.sh`, `linux-versions.sh`,
-`linux-repository-key.sh`, `pack-command-line.sh`, `pack-linux-session-bundle.sh` and
-`linux-release.sh` in `.github/scripts`, `apps/macos/scripts/build-number.sh`, the
-cargo-binstall metadata in `crates/pitboard/Cargo.toml`, the Linux repository's key in
-`packaging/linux`, or a workflow's call of a PowerShell script in `.github/scripts`:
+`linux-repository-key.sh`, `pack-command-line.sh`, `pack-linux-session-bundle.sh`,
+`linux-release.sh`, `with-linux-signing-key.sh` and `upload-linux-repository.sh` in
+`.github/scripts`, `apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
+`crates/pitboard/Cargo.toml`, the Linux repository's key in `packaging/linux`, or a workflow's
+call of a PowerShell script in `.github/scripts`:
 
 ```sh
 shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.sh \
@@ -170,7 +171,8 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
   .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh \
   .github/scripts/pack-command-line.sh .github/scripts/pack-linux-session-bundle.sh \
-  .github/scripts/linux-release.sh apps/macos/scripts/build-number.sh
+  .github/scripts/linux-release.sh .github/scripts/with-linux-signing-key.sh \
+  .github/scripts/upload-linux-repository.sh apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
 ```
 
@@ -801,10 +803,10 @@ With no step it runs the steps of the distribution's job on CI: `lint`, `test`, 
 `widget` on `fedora-44`. `fedora-43` builds the RPM packages, and runs only the steps
 [Linux packages](#linux-packages) names. A container runs as uid 1000, sees the repository and
 this machine's Cargo registry read only, and keeps Cargo's and Meson's folders in the volume
-`pitboard-linux-app-target`, or the one `PITBOARD_TARGET_VOLUME` names. Only a `cargo fetch`
-before the steps has the network, for Cargo's git checkouts. The release's link, at more than
-one job, takes most of 8 GiB: where the machine or Docker's VM has less, set
-`CARGO_BUILD_JOBS=1`.
+`pitboard-linux-app-target`, or the one `PITBOARD_TARGET_VOLUME` names. Each of these steps
+builds with `RUSTFLAGS=-D warnings`, as CI does. Only a `cargo fetch` before the steps has the
+network, for Cargo's git checkouts. The release's link, at more than one job, takes most of 8
+GiB: where the machine or Docker's VM has less, set `CARGO_BUILD_JOBS=1`.
 
 `apps/linux/scripts/headless.sh <command>` runs a command as the app's tests run: as a user,
 never root, in a headless mutter with one virtual monitor, on a private session bus, with
@@ -909,9 +911,13 @@ apps/linux/scripts/in-container.sh fedora-43 packages-test
   release does.
 - `deb` and `rpm` build the packages with `build-linux-packages.sh` from the commit
   `git archive` writes, not the working tree, and from the tarball named, then check them with
-  `check-linux-packages.sh`. Each goes to `out` as
+  `check-linux-packages.sh` as the release `Cargo.toml` names, or as the version given after
+  `out`, which a release candidate's release passes. Each goes to `out` as
   `<package>-v<version>-<architecture>.<deb|rpm>`, since GitHub renames a release file whose name
   holds the `~` of a package version.
+- `command-line`, `deb` and `rpm` build with your `RUSTFLAGS`, none unless you set it, as a
+  release's builds do. CI's `linux-packaging` sets `-D warnings`: set it too to build as CI
+  does.
 - `packages-test` runs `test-linux-packages.py`, which builds packages broken for each rule of
   the check, with the tools of the system's format.
 - `test-linux-packages.sh` installs the Debian packages on fresh Debian 13 and Ubuntu 26.04
@@ -961,7 +967,10 @@ A release writes Pitboard's apt and dnf repository from its packages, as
   each signature against the key alone with sqv, as apt does, and with gpgv.
 
 Both sign with the signing subkey of the key named, from the `GNUPGHOME` the caller made, and
-leave nothing in place that the key does not verify. Test the three on the packages of one
+leave nothing in place that the key does not verify. In a release, `with-linux-signing-key.sh`
+makes that `GNUPGHOME` from the `linux-packages` environment's key, and
+`upload-linux-repository.sh` puts the signed tree in the bucket. `test-release.py` tests both,
+the upload against a stand-in `aws`. Test the three on the packages of one
 machine, built into `out` as [Linux packages](#linux-packages) shows:
 
 ```sh
