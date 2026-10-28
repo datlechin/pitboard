@@ -10,6 +10,7 @@ pub(crate) const POSIX_UNLINK_RENAME: u32 = 0x400;
 // none.
 pub(crate) const PERSISTENT_ACLS: u32 = 0x8;
 
+const ERROR_FILE_NOT_FOUND: i32 = 2;
 const ERROR_ACCESS_DENIED: i32 = 5;
 const ERROR_SHARING_VIOLATION: i32 = 32;
 
@@ -34,6 +35,19 @@ pub(crate) fn route(flags: Option<u32>) -> Route {
 // A reader or a scanner that holds the file for a moment. Anything else fails at once.
 pub(crate) fn waited_out(error: Option<i32>) -> bool {
     matches!(error, Some(ERROR_ACCESS_DENIED | ERROR_SHARING_VIOLATION))
+}
+
+// A file missing from a folder that is there, as a reader can find one NTFS replaces. A
+// folder that is not there, 3, is no replace.
+pub(crate) fn read_again(error: Option<i32>) -> bool {
+    error == Some(ERROR_FILE_NOT_FOUND)
+}
+
+// Six waits doubling from 1 ms to 32 ms, 63 ms in all: six times the 10 ms a miss outlasted in
+// runs 40499207815 and 40525130910, and below the 114 ms the fastest warm status line took in
+// run 39000408726.
+pub(crate) fn read_waits() -> impl Iterator<Item = Duration> {
+    (0..6u32).map(|attempt| Duration::from_millis(1 << attempt))
 }
 
 // 50 waits doubling from 1 ms to 50 ms, about 2.3 s in all. Beside readers that reopen the file
@@ -76,6 +90,20 @@ mod tests {
         for other in [None, Some(2), Some(3), Some(87), Some(145), Some(183)] {
             assert!(!waited_out(other), "{other:?}");
         }
+    }
+
+    #[test]
+    fn a_reader_looks_again_only_for_a_file_missing_from_a_folder_that_is_there() {
+        assert!(read_again(Some(2)));
+        for other in [None, Some(3), Some(5), Some(32)] {
+            assert!(!read_again(other), "{other:?}");
+        }
+    }
+
+    #[test]
+    fn a_readers_waits_double_to_thirty_two_milliseconds_and_end() {
+        let waits: Vec<u128> = read_waits().map(|wait| wait.as_millis()).collect();
+        assert_eq!(waits, [1, 2, 4, 8, 16, 32]);
     }
 
     #[test]

@@ -95,14 +95,16 @@ fn replace(
 
 // Any reader can find a file missing while NTFS replaces it (docs/facts/windows-runners.md).
 pub(crate) fn read<T>(path: &Path, read: impl Fn(&Path) -> io::Result<T>) -> io::Result<T> {
-    let mut again = 0;
+    let mut waits = crate::host::replace::read_waits();
     loop {
         match read(path) {
             Err(missing)
-                if cfg!(windows) && missing.kind() == io::ErrorKind::NotFound && again < 5 =>
+                if cfg!(windows) && crate::host::replace::read_again(missing.raw_os_error()) =>
             {
-                again += 1;
-                std::thread::sleep(std::time::Duration::from_millis(2));
+                match waits.next() {
+                    Some(wait) => std::thread::sleep(wait),
+                    None => return Err(missing),
+                }
             }
             read => return read,
         }
@@ -195,21 +197,29 @@ mod tests {
         assert!(private(&path));
     }
 
+    // Six misses in a row, as runs 40499207815 and 40525130910 saw.
     #[test]
     fn a_read_looks_again_where_windows_shows_a_file_being_replaced_missing() {
-        let misses = std::cell::Cell::new(2);
+        let misses = std::cell::Cell::new(6);
         let found = read(Path::new("state.json"), |_| match misses.get() {
             0 => Ok("whole"),
             left => {
                 misses.set(left - 1);
-                Err(io::Error::from(io::ErrorKind::NotFound))
+                Err(io::Error::from_raw_os_error(2))
             }
         });
         assert_eq!(found.is_ok(), cfg!(windows), "{found:?}");
-        let gone = read(Path::new("state.json"), |_| {
-            Err::<(), _>(io::Error::from(io::ErrorKind::NotFound))
-        });
-        assert_eq!(gone.unwrap_err().kind(), io::ErrorKind::NotFound);
+        let tries = |error: i32| {
+            let tried = std::cell::Cell::new(0);
+            let gone = read(Path::new("state.json"), |_| {
+                tried.set(tried.get() + 1);
+                Err::<(), _>(io::Error::from_raw_os_error(error))
+            });
+            assert_eq!(gone.unwrap_err().raw_os_error(), Some(error));
+            tried.get()
+        };
+        assert_eq!(tries(2), if cfg!(windows) { 7 } else { 1 });
+        assert_eq!(tries(3), 1, "a folder that is not there is read once");
     }
 
     #[test]
