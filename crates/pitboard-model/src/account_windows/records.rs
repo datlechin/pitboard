@@ -339,7 +339,8 @@ mod tests {
     /// The Linux app kept no records before the model, so its key is the directory the core
     /// reaches: made absolute from the working directory, a `.`, a doubled `/` and a trailing
     /// `/` keying alike, and a `..` kept, since only the file system says where one leads past a
-    /// link. Unix's rules: that app runs on Linux alone.
+    /// link.
+    // windows: the Linux app runs on Linux alone, and Windows makes a path absolute on a drive
     #[cfg(unix)]
     #[test]
     fn the_linux_app_keys_its_records_by_the_directory_the_core_reaches() {
