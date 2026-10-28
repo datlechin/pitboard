@@ -757,6 +757,39 @@ fn a_rename_carries_what_was_said_about_the_account() {
     assert_eq!(machine.posted.len(), 1);
 }
 
+/// The same where Codex has a `work` too, for which the core says Claude Code's switch was to
+/// `claude/work` (`switch/journal.rs` types it with `State::typed`): the rename carries what the
+/// switch said, and the read after it, which finds the account in use under its new name,
+/// keeps it.
+#[test]
+fn a_rename_carries_what_the_switch_said_where_another_tool_has_an_account_of_its_name() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        claude("work", true, 10.0),
+        claude("personal", false, 10.0),
+        codex_account("work", false),
+    ])));
+    let parked = warning("written_on_the_command_line", "on the argument line");
+    machine.switched = switched(
+        ProviderId::Claude,
+        "personal",
+        "claude/work",
+        vec![parked.clone()],
+    );
+    switch(&mut model, &mut machine, Tool::Claude, "work");
+    assert_eq!(tos(&model), ["work"]);
+
+    machine.answer = Ok(status(vec![
+        claude("office", true, 10.0),
+        claude("personal", false, 10.0),
+        codex_account("work", false),
+    ]));
+    model.send(rename(Tool::Claude, "work", "office"));
+    model.run(&mut machine);
+    assert_eq!(tos(&model), ["office"], "still in use, under its new name");
+    assert_eq!(model.state.last_switches[0].warnings, [parked]);
+}
+
 // What the Swift model did not do.
 
 /// A name is saved without the white space around it, as the sheet's Save offers it, and a

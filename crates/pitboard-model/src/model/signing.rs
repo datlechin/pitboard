@@ -479,6 +479,43 @@ fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
     assert_eq!(last.warnings, [still_running(), parked]);
 }
 
+/// Where Codex has a `work` too, the core says Claude Code's switch was to `claude/work`
+/// (`switch/journal.rs` types it with `State::typed`). A sign-in to that account is to the one
+/// the switch put in use, so it keeps what the switch said: when sessions follow, and what it
+/// warned about.
+#[test]
+fn a_sign_in_keeps_what_the_last_switch_said_where_another_tool_has_an_account_of_its_name() {
+    let mut model = Hand::new();
+    let mut machine = Stub::reading(Ok(status(vec![
+        claude("work", true, 0.0),
+        claude("personal", false, 0.0),
+        codex_account("work", false),
+    ])));
+    let parked = warning("written_on_the_command_line", "on the argument line");
+    machine.switched = switched(
+        ProviderId::Claude,
+        "personal",
+        "claude/work",
+        vec![parked.clone()],
+    );
+    model.send(Intent::SwitchTo {
+        account: AccountKey::new(Tool::Claude, "work"),
+    });
+    model.run(&mut machine);
+    let follows_at = model.state.last_switches[0].follows_at;
+    assert!(follows_at.is_some(), "Claude Code's sessions follow");
+
+    machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
+    signs_in(&mut model, &mut machine, Tool::Claude, Some("work"), &[]);
+
+    let [last] = &model.state.last_switches[..] else {
+        panic!("one tool's: {:#?}", model.state.last_switches);
+    };
+    assert_eq!(last.follows_at, follows_at);
+    assert_eq!(last.said, Some(signed_in_again("work")));
+    assert_eq!(last.warnings, [parked]);
+}
+
 /// A sign-in to the account in use that could not tell what still runs Codex says so beside
 /// the sign-in, as a count of sessions is said. Where Codex's last switch could not tell
 /// either, the sign-in says nothing more: the switch's warning is about the same sessions,
