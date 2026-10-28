@@ -234,8 +234,10 @@ keeps it is in the header of the module named.
   `a_windows_folder_that_syncs_or_roams_is_refused`).
 - Which system Pitboard runs on is decided in `host/mod.rs` alone, and anything else that
   differs by system is the host's to answer or a `match` on `host::OS` with no `_` arm, so a
-  system added to `host::Os` does not compile until each is said. A context carries the system
-  its environment was read as, so Windows' homes and variable names are tested everywhere.
+  system added to `host::Os` does not compile until each is said. The command line's help is
+  one such `match` (`the_help_names_claude_desktop_only_on_macos`). A context carries the
+  system its environment was read as, so Windows' homes and variable names are tested
+  everywhere.
 - A `\\?\` path is for comparing alone: what Pitboard shows, locks by or hands a tool is
   spelled without it (`a_verbatim_path_is_spelled_as_libuv_and_codex_spell_it`).
 - Pitboard changes nothing as root or under sudo, elevated on Windows, or on a Windows older

@@ -19,6 +19,7 @@ use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
 use pitboard_core::duty::cadence::{DECIDE_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals};
 use pitboard_core::duty::warm::{Overview, Standing};
 use pitboard_core::error::{self, Error};
+use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Changing, Done, Failed, Pitboard};
 use pitboard_core::switch::warm::{WarmUp, told_apart};
@@ -91,11 +92,12 @@ pub(crate) fn service(pitboard: &Pitboard, what: &WatchCommand) -> Report {
                          and warms up the accounts `pitboard warm on` turned on.\n{}{location}\n\n\
                          {}\n",
                         threshold.percent(),
-                        if cfg!(target_os = "linux") {
-                            "Your user's systemd runs it while you are signed in. To keep it \
-                             running when you are not, run `loginctl enable-linger`.\n"
-                        } else {
-                            ""
+                        match pitboard_core::host::OS {
+                            Os::Linux => {
+                                "Your user's systemd runs it while you are signed in. To keep \
+                                 it running when you are not, run `loginctl enable-linger`.\n"
+                            }
+                            Os::MacOs | Os::Windows => "",
                         },
                         terms()
                     ),
@@ -781,7 +783,7 @@ mod tests {
                 "Your user's systemd runs it while you are signed in. To keep it running when \
                  you are not, run `loginctl enable-linger`.\n"
             ),
-            cfg!(target_os = "linux"),
+            pitboard_core::host::OS == Os::Linux,
             "{}",
             installed.human
         );

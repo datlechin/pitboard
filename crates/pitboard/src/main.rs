@@ -4,6 +4,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
+use pitboard_core::host::Os;
 use pitboard_core::provider::{Adoption, SignsIn};
 use pitboard_core::schedule::{Job, Location};
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
@@ -45,13 +46,16 @@ struct Cli {
     command: Option<Command>,
 }
 
-// Pitboard switches Claude Desktop on macOS alone, so Windows' help never names it.
-const ABOUT: &str = if cfg!(windows) {
-    "Switch Claude Code and Codex between your own accounts without signing out, and see what \
-     each account has left"
-} else {
-    "Switch Claude Code, Codex and Claude Desktop between your own accounts without signing \
-     out, and see what each Claude Code and Codex account has left"
+// Pitboard switches Claude Desktop on macOS alone, so no other system's help names it.
+const ABOUT: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "Switch Claude Code, Codex and Claude Desktop between your own accounts without signing \
+         out, and see what each Claude Code and Codex account has left"
+    }
+    Os::Linux | Os::Windows => {
+        "Switch Claude Code and Codex between your own accounts without signing out, and see \
+         what each account has left"
+    }
 };
 
 // Styled as clap styles `Commands:` and the commands under it.
@@ -75,24 +79,39 @@ fn examples() -> String {
     said
 }
 
-const LABEL_TO_ENROLL: &str = if cfg!(windows) {
-    "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
-     account; a bare name means Claude Code"
-} else {
-    "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
-     account, `desktop/work` a Claude Desktop one; a bare name means Claude Code"
+const LABEL_TO_ENROLL: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
+         account, `desktop/work` a Claude Desktop one; a bare name means Claude Code"
+    }
+    Os::Linux | Os::Windows => {
+        "A short name for this account, such as `personal` or `work`. `codex/work` names a Codex \
+         account; a bare name means Claude Code"
+    }
 };
 
-const LABEL_TO_USE: &str = if cfg!(windows) {
-    "The label the account was enrolled under, such as `work` or `codex/work`"
-} else {
-    "The label the account was enrolled under, such as `work`, `codex/work` or `desktop/work`"
+const LABEL_TO_USE: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "The label the account was enrolled under, such as `work`, `codex/work` or `desktop/work`"
+    }
+    Os::Linux | Os::Windows => {
+        "The label the account was enrolled under, such as `work` or `codex/work`"
+    }
 };
 
-const STOW: &str = if cfg!(windows) {
-    "Put away the login Claude Code left in a file behind Credential Manager, then delete the file"
-} else {
-    "Put away the login Claude Code left in a file behind the keychain, then delete the file"
+// Claude Code keeps its login in the file alone on Linux, so nothing is left behind there.
+const STOW: &str = match pitboard_core::host::OS {
+    Os::MacOs => {
+        "Put away the login Claude Code left in a file behind the keychain, then delete the file"
+    }
+    Os::Linux => {
+        "Put away the login Claude Code left in a file behind the store it keeps its login in, \
+         then delete the file"
+    }
+    Os::Windows => {
+        "Put away the login Claude Code left in a file behind Credential Manager, then delete \
+         the file"
+    }
 };
 
 #[derive(Subcommand)]
@@ -998,12 +1017,7 @@ fn repair(pitboard: &Pitboard) -> Report {
 
 // Parked logins are keychain items the whole Mac shares, and on Linux and Windows files in the
 // vault of this Pitboard directory.
-fn repaired(
-    os: pitboard_core::host::Os,
-    r: &pitboard_core::switch::Reclaimed,
-    parks: &std::path::Path,
-) -> String {
-    use pitboard_core::host::Os;
+fn repaired(os: Os, r: &pitboard_core::switch::Reclaimed, parks: &std::path::Path) -> String {
     if r.is_empty() {
         return "Every parked login here is accounted for.\n".to_string();
     }
@@ -1103,7 +1117,7 @@ fn uninstall_question(pitboard: &Pitboard) -> String {
     )
 }
 
-fn uninstall(pitboard: &Pitboard, os: pitboard_core::host::Os) -> Report {
+fn uninstall(pitboard: &Pitboard, os: Os) -> Report {
     let folder = pitboard.shown(&pitboard.directory());
     changed("uninstall", pitboard.uninstall(), |removed| {
         let mut human = format!(
@@ -1686,7 +1700,6 @@ mod tests {
     // the vault of this Pitboard directory, which no keychain locks.
     #[test]
     fn repair_says_why_it_left_parked_logins_alone_in_the_words_of_its_system() {
-        use pitboard_core::host::Os;
         let left = pitboard_core::switch::Reclaimed {
             strangers: vec!["pitboard-park-a-1".into()],
             unreadable: vec!["pitboard-park-b-1".into()],
@@ -1777,13 +1790,12 @@ mod tests {
                 .with_pitboard_home(elsewhere.clone())
                 .with_memory_stores(MemoryHost::new()),
         );
-        let named = if cfg!(windows) {
-            elsewhere.display().to_string()
-        } else {
-            std::path::Path::new("~")
+        let named = match pitboard_core::host::OS {
+            Os::Windows => elsewhere.display().to_string(),
+            Os::MacOs | Os::Linux => std::path::Path::new("~")
                 .join("elsewhere")
                 .display()
-                .to_string()
+                .to_string(),
         };
         let asked = uninstall_question(&pitboard);
         assert!(
@@ -1806,7 +1818,6 @@ mod tests {
     // A warm-up's tool runs in a home inside Pitboard's directory while it holds `warm.lock`.
     #[test]
     fn uninstall_keeps_the_folder_a_warm_up_runs_in_and_says_so() {
-        use pitboard_core::host::Os;
         use pitboard_core::testing::MemoryHost;
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let home = scratch.path().join("home");
@@ -2163,9 +2174,16 @@ mod tests {
 
     #[test]
     // windows: macOS and Linux print this help; Windows' has the tests below
-    #[cfg(not(windows))]
-    fn the_help_reads_as_it_did_off_windows() {
+    #[cfg(target_os = "macos")]
+    fn the_help_reads_as_it_did_on_macos() {
         insta::assert_snapshot!("help", every_help());
+    }
+
+    #[test]
+    // windows: macOS and Linux print this help; Windows' has the tests below
+    #[cfg(target_os = "linux")]
+    fn the_help_reads_as_it_did_on_linux() {
+        insta::assert_snapshot!("help_on_linux", every_help());
     }
 
     // Claude Code's login file on Windows sits behind Credential Manager.
@@ -2356,14 +2374,34 @@ mod tests {
 
     #[test]
     // windows: macOS and Linux print this help, tree and these scripts; Windows' are the test below
-    #[cfg(not(windows))]
-    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_off_windows() {
+    #[cfg(target_os = "macos")]
+    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_on_macos() {
         insta::assert_json_snapshot!("command_tree", command_tree());
         insta::assert_snapshot!("help_in_80_columns", every_help_typed());
         insta::assert_snapshot!("completions_zsh", completions(clap_complete::Shell::Zsh));
         insta::assert_snapshot!("completions_fish", completions(clap_complete::Shell::Fish));
         insta::assert_snapshot!(
             "completions_elvish",
+            completions(clap_complete::Shell::Elvish)
+        );
+    }
+
+    #[test]
+    // windows: macOS and Linux print this help, tree and these scripts; Windows' are the test below
+    #[cfg(target_os = "linux")]
+    fn the_command_tree_help_and_zsh_fish_and_elvish_completions_read_as_they_did_on_linux() {
+        insta::assert_json_snapshot!("command_tree_on_linux", command_tree());
+        insta::assert_snapshot!("help_in_80_columns_on_linux", every_help_typed());
+        insta::assert_snapshot!(
+            "completions_zsh_on_linux",
+            completions(clap_complete::Shell::Zsh)
+        );
+        insta::assert_snapshot!(
+            "completions_fish_on_linux",
+            completions(clap_complete::Shell::Fish)
+        );
+        insta::assert_snapshot!(
+            "completions_elvish_on_linux",
             completions(clap_complete::Shell::Elvish)
         );
     }
@@ -2379,9 +2417,9 @@ mod tests {
         );
     }
 
-    // Pitboard switches Claude Desktop on macOS alone; Linux's help keeps the words it had.
+    // Pitboard switches Claude Desktop on macOS alone, and only macOS keeps a login in a keychain.
     #[test]
-    fn the_help_names_claude_desktop_only_off_windows() {
+    fn the_help_names_claude_desktop_only_on_macos() {
         let help = |command: Option<&str>| {
             let mut cli = Cli::command();
             let said = match command {
@@ -2397,37 +2435,45 @@ mod tests {
                 .join(" ")
         };
         let enroll = help(Some("enroll"));
-        if cfg!(windows) {
-            let every = every_help();
-            assert!(!every.contains("Desktop"), "{every}");
-            assert!(!every.contains("desktop/"), "{every}");
-            assert!(
-                enroll
-                    .contains("`codex/work` names a Codex account; a bare name means Claude Code"),
-                "{enroll}"
-            );
-            assert!(help(Some("use")).contains("such as `work` or `codex/work`"));
-            assert!(help(None).contains(
-                "Switch Claude Code and Codex between your own accounts without signing out, \
-                 and see what each account has left"
-            ));
-            return;
+        match pitboard_core::host::OS {
+            Os::MacOs => {
+                assert!(
+                    enroll.contains(
+                        "`codex/work` names a Codex account, `desktop/work` a Claude Desktop \
+                         one; a bare name means Claude Code"
+                    ),
+                    "{enroll}"
+                );
+                assert!(help(Some("use")).contains("`desktop/work`"));
+                assert!(help(None).contains(
+                    "Switch Claude Code, Codex and Claude Desktop between your own accounts \
+                     without signing out, and see what each Claude Code and Codex account has \
+                     left"
+                ));
+                assert!(
+                    help(Some("status"))
+                        .contains("how much each Claude Code and Codex account has left")
+                );
+                assert!(help(Some("stow")).contains("in a file behind the keychain"));
+            }
+            Os::Linux | Os::Windows => {
+                let every = every_help();
+                for named in ["Desktop", "desktop/", "keychain"] {
+                    assert!(!every.contains(named), "{named}: {every}");
+                }
+                assert!(
+                    enroll.contains(
+                        "`codex/work` names a Codex account; a bare name means Claude Code"
+                    ),
+                    "{enroll}"
+                );
+                assert!(help(Some("use")).contains("such as `work` or `codex/work`"));
+                assert!(help(None).contains(
+                    "Switch Claude Code and Codex between your own accounts without signing out, \
+                     and see what each account has left"
+                ));
+            }
         }
-        assert!(
-            enroll.contains(
-                "`codex/work` names a Codex account, `desktop/work` a Claude Desktop one; a bare \
-                 name means Claude Code"
-            ),
-            "{enroll}"
-        );
-        assert!(help(Some("use")).contains("`desktop/work`"));
-        assert!(help(None).contains(
-            "Switch Claude Code, Codex and Claude Desktop between your own accounts without \
-                 signing out, and see what each Claude Code and Codex account has left"
-        ));
-        assert!(
-            help(Some("status")).contains("how much each Claude Code and Codex account has left")
-        );
     }
 
     #[test]

@@ -9,6 +9,8 @@ None of these commands takes an argument. [JSON output](/reference/json-output#d
 
 `pitboard stow` puts away Claude Code's `.credentials.json` where it sits behind the keychain on macOS, or behind Credential Manager on Windows. The [`fallback_login`](/reference/errors#warning-codes) warning names that file. While it is there, open Claude Code sessions follow a switch only at their next renewal, as [Open sessions](/concepts/open-sessions) explains. [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account) says how the file gets there.
 
+On Linux, `.credentials.json` is Claude Code's only store, so no file sits behind one, and `stow` says there is nothing to put away.
+
 | Option | Description |
 | --- | --- |
 | `-y, --yes` | Do not ask first; needed without a terminal or with `--json` |

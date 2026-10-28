@@ -16,8 +16,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Where Codex has an account of the same name, the app keeps what a switch to a Claude Code
   account said once you sign in to that account again or rename it, where it put the notice away.
-- On Linux, Pitboard's messages and `pitboard doctor` no longer name the keychain, the menu bar
-  or Activity Monitor.
+- On Linux, Pitboard's messages, `pitboard doctor` and `pitboard --help` no longer name the
+  keychain, the menu bar, Activity Monitor or Claude Desktop.
 - On Windows, `pitboard doctor` says Credential Manager still holds Claude Code's login under
   storage v5, and no longer says to unlock a keychain for parked logins it has yet to delete or
   account for.
