@@ -235,8 +235,14 @@ Replacing a file:
   40030964166). In run 38878569423 no reader found it missing on either image, and on ReFS
   none ever has. Every writer of `state.json` loads it under Pitboard's lock, so a read
   without the lock, the app's, the status line's or `pitboard status`'s, could take it for
-  missing and show no accounts. On Windows `atomic::read`, which `state.json`'s load uses,
-  looks again five times, 2 ms apart, before it takes a file it replaces for missing.
+  missing and show no accounts.
+- Through five looks again 2 ms apart, the replace test's reader still found the file missing
+  in 5 of 1850950 reads on windows-11-arm (run 40499207815) and 2 of 3586285 on windows-2025
+  (run 40525130910), each six times in a row, beside the other tests. In runs 40641149227 and
+  40642867084, 12.2 million reads that did not look again found it missing in none, on either
+  image, the second with every core busy for the 10000 renames, which made one take 4.7 s. On
+  Windows `atomic::read`, which `state.json`'s load uses, looks again where `CreateFileW` fails
+  2, six times, 1 ms to 32 ms apart, and reads once where the folder is not there, 3.
 - Beside readers that reopen the file without a pause, one not sharing delete,
   `MoveFileExW` fails 5 most of the time. In 180 s it replaced the file 154 times on
   windows-2025, 30 rounds running out of 50 retries, and 2439 times on windows-11-arm, in up
