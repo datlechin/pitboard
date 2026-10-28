@@ -58,7 +58,7 @@ use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
     FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Surfaces,
-    Switch, Switched, Uninstalled, Usage, WarmRefused, Warning,
+    Switch, Switched, Uninstalled, Usage, WarmRefused, Warning, WatchService,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{
@@ -277,6 +277,12 @@ pub(crate) enum Job {
     /// on is not asked of the scheduler where this copy of the app has no command line a
     /// schedule would keep reaching.
     SetSchedule { on: bool },
+    /// Read the watch service. `after_change` is the read after a change to it, which ends
+    /// that change once it lands.
+    ReadWatchService { after_change: bool },
+    /// Have this machine's service manager run `pitboard watch` at `at`, or take it away,
+    /// refused as `SetSchedule` is.
+    SetWatchService { on: bool, at: Threshold },
     /// Make every check `pitboard doctor` makes.
     Check,
     /// Read the newest `limit` changes Pitboard made.
@@ -568,6 +574,19 @@ pub(crate) enum Answer {
         own: OwnCommandLine,
         outcome: Scheduled,
     },
+    /// The watch service as the core reads it, or `None` where nothing may be read, with
+    /// what the command line inside this copy is.
+    WatchServiceRead {
+        service: Option<WatchService>,
+        own: OwnCommandLine,
+        after_change: bool,
+    },
+    /// What a change to the watch service came to, with what the command line inside this copy
+    /// is.
+    WatchServiceSet {
+        own: OwnCommandLine,
+        outcome: Scheduled,
+    },
     /// Doctor's checks, or `None` where this build makes none.
     Checked {
         doctored: Option<Doctored>,
@@ -606,6 +625,7 @@ impl Answer {
             | Answer::Looked { .. }
             | Answer::AutoLooked { .. }
             | Answer::ScheduleRead { .. }
+            | Answer::WatchServiceRead { .. }
             | Answer::Checked { .. }
             | Answer::Logged { .. }
             | Answer::LookedLeft(_)
@@ -619,6 +639,7 @@ impl Answer {
             | Answer::Stowed { .. }
             | Answer::Repaired { .. }
             | Answer::ScheduleSet { .. }
+            | Answer::WatchServiceSet { .. }
             | Answer::WarmSet { .. }
             | Answer::WarmedUp { .. }
             | Answer::Kept { .. }
@@ -1327,6 +1348,12 @@ impl State {
         .min()
     }
 
+    // Where no status item keeps Pitboard running once its window is closed, the watch service
+    // runs what would stop with it.
+    pub(crate) fn offers_watch_service(&self) -> bool {
+        !self.surfaces.status_item
+    }
+
     /// Whether a sign-in is under way.
     pub(crate) fn sign_in_under_way(&self) -> bool {
         self.signing_in.is_some()
@@ -1638,12 +1665,27 @@ impl State {
             Intent::Stow => self.stow(jobs),
             Intent::DismissStowed => self.stowed = None,
             Intent::PaneShown { pane } => self.pane_shown(pane, now, jobs),
-            Intent::ReadSchedule => jobs.push(Job::ReadSchedule {
-                after_change: false,
-            }),
+            Intent::ReadSchedule => {
+                jobs.push(Job::ReadSchedule {
+                    after_change: false,
+                });
+                if self.offers_watch_service() {
+                    jobs.push(Job::ReadWatchService {
+                        after_change: false,
+                    });
+                }
+            }
             Intent::SetSchedule { on } => {
                 if self.machine.schedule(on) {
                     jobs.push(Job::SetSchedule { on });
+                }
+            }
+            Intent::SetWatchService { on } => {
+                if self.offers_watch_service() && self.machine.watch(on) {
+                    jobs.push(Job::SetWatchService {
+                        on,
+                        at: self.preferences.threshold(),
+                    });
                 }
             }
             Intent::LookForCommandLine => jobs.push(Job::FindCommandLine),
@@ -3159,6 +3201,18 @@ impl State {
                     jobs.push(Job::ReadSchedule { after_change: true });
                 }
             }
+            Answer::WatchServiceRead {
+                service,
+                own,
+                after_change,
+            } => self
+                .machine
+                .watch_service_read(service, Some(own), after_change),
+            Answer::WatchServiceSet { own, outcome } => {
+                if self.machine.watched(own, outcome) {
+                    jobs.push(Job::ReadWatchService { after_change: true });
+                }
+            }
             Answer::Checked { doctored } => self.machine.checked(doctored, now.epoch()),
             Answer::Logged { changes } => self.machine.logged(changes),
             Answer::CommandLineFound { found, own } => {
@@ -3262,6 +3316,12 @@ impl State {
                 }
                 // What it did is not known: the schedule is read back to show where it is.
                 Job::SetSchedule { .. } => jobs.push(Job::ReadSchedule { after_change: true }),
+                Job::ReadWatchService { after_change } => {
+                    self.machine.watch_service_read(None, None, after_change);
+                }
+                Job::SetWatchService { .. } => {
+                    jobs.push(Job::ReadWatchService { after_change: true });
+                }
                 Job::Check => self.machine.checked(None, now.epoch()),
                 Job::ReadLog { .. } | Job::FindCommandLine => {}
                 Job::Uninstall => self.uninstalled(Err(None), now, jobs),

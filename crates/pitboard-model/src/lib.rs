@@ -62,8 +62,9 @@ pub use present::{
     NextStep, NoteKind, NoticeAction, OpenWindow, PageLoad, PanelNotice, PickerAccount,
     PickerShown, Question, RemovalShown, RowEnd, ScheduleShown, SetupLink, SetupStep, Severity,
     SheetText, SheetTool, SigningInText, StatusItemShown, StoreDeletion, StowText, TermsShown,
-    WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WelcomeLogin, WelcomeShown, WelcomeStep,
-    WelcomeTool, WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
+    WaitingShown, WarmAccountShown, WarmDetail, WarmShown, WatchServiceShown, WelcomeLogin,
+    WelcomeShown, WelcomeStep, WelcomeTool, WindowQuestion, WindowWaiting, check_name,
+    downloads_quit_question,
 };
 pub use present::{
     AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
@@ -333,6 +334,16 @@ pub(crate) struct Abandoned {
     pub to: String,
     // copies kept rather than deleted, since which one is live is now unknown
     pub logins_kept: u32,
+}
+
+// Whether this machine's own service manager runs `pitboard watch` from each sign-in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WatchService {
+    // switching at `at` percent, where its job says one the way Pitboard writes it
+    Installed { at: Option<u8> },
+    Absent,
+    // no service manager Pitboard knows how to write to
+    Unsupported,
 }
 
 // Whether anything keeps parked logins alive on this machine without a command being run.

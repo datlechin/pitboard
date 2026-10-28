@@ -88,6 +88,7 @@ impl Job {
             | Job::Look
             | Job::AutoLook { .. }
             | Job::ReadSchedule { .. }
+            | Job::ReadWatchService { .. }
             | Job::Check
             | Job::ReadLog { .. }
             | Job::LookLeft => Lane::Reads,
@@ -102,6 +103,7 @@ impl Job {
             | Job::Stow { .. }
             | Job::RepairSchedule
             | Job::SetSchedule { .. }
+            | Job::SetWatchService { .. }
             | Job::SetWarm { .. }
             | Job::SetWarmRange { .. }
             | Job::Uninstall => Lane::Changes,
@@ -973,6 +975,24 @@ impl Worker {
                     own,
                 }
             }
+            Job::ReadWatchService { after_change } => Answer::WatchServiceRead {
+                service: core.watch_service(),
+                own: core.own_command_line(),
+                after_change,
+            },
+            Job::SetWatchService { on, at } => {
+                let own = core.own_command_line();
+                Answer::WatchServiceSet {
+                    outcome: set_schedule(on, own, |on| {
+                        if on {
+                            core.watch_service_install(at).map(drop)
+                        } else {
+                            core.watch_service_uninstall().map(drop)
+                        }
+                    }),
+                    own,
+                }
+            }
             Job::Check => Answer::Checked {
                 doctored: core.doctor(self.local_time.as_ref()),
             },
@@ -1023,11 +1043,11 @@ impl Worker {
     }
 }
 
-/// Turns daily renewal on or off through `change`, which asks the scheduler, as
-/// MachineModel.swift's `setSchedule` did. Turning it on is refused before the scheduler is
-/// asked where the command line inside this copy, `own`, is not one a schedule would keep
-/// reaching, so nothing writes a schedule that fails every day without telling anyone.
-/// Turning it off never is: that is how such a schedule is taken away.
+/// Turns daily renewal or the watch service on or off through `change`, which asks the
+/// system's scheduler, as MachineModel.swift's `setSchedule` did. Turning one on is refused
+/// before the scheduler is asked where the command line inside this copy, `own`, is not one a
+/// job would keep reaching, so nothing writes a job that fails every time without telling
+/// anyone. Turning one off never is: that is how such a job is taken away.
 pub(crate) fn set_schedule(
     on: bool,
     own: crate::OwnCommandLine,

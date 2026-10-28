@@ -12,7 +12,7 @@ use crate::model::state::in_its_app;
 use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence, typeset};
 use crate::{
     Abandoned, Account, Awaiting, FoundCommandLine, Front, Level, Parked, Schedule, Status, Usage,
-    Warning, found_command_line,
+    Warning, WatchService, found_command_line,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
@@ -1322,6 +1322,42 @@ impl AppCore {
     /// Take it away. `false` when there was nothing installed.
     pub(crate) fn schedule_uninstall(&self) -> Result<bool, PitboardError> {
         self.core().core.schedule_uninstall().said(self.front)
+    }
+
+    /// Whether this computer's own service manager runs `pitboard watch` from each sign-in.
+    /// `None` where nothing may be read here, which is not a service that is absent.
+    pub(crate) fn watch_service(&self) -> Option<WatchService> {
+        use pitboard_core::watch_service::Installed;
+        Some(match self.readable().ok()?.core.watch_service() {
+            Installed::Yes { at, .. } => WatchService::Installed {
+                at: at.map(Threshold::percent),
+            },
+            Installed::No => WatchService::Absent,
+            Installed::Unsupported => WatchService::Unsupported,
+        })
+    }
+
+    /// Have this computer's own service manager run `pitboard watch`, switching at `at`, from
+    /// now on and at each sign-in. Refused as `schedule_install` is.
+    pub(crate) fn watch_service_install(&self, at: Threshold) -> Result<String, PitboardError> {
+        let made = self.core();
+        made.core.permit().said(self.front)?;
+        if made.helper.is_none() {
+            return Err(PitboardError::refused(
+                self.front,
+                &pitboard_core::error::Error::ScheduleProgramUnnamed,
+            ));
+        }
+        Ok(made
+            .core
+            .watch_service_install(at)
+            .said(self.front)?
+            .to_string())
+    }
+
+    /// Stop it and take it away. `false` when there was nothing installed.
+    pub(crate) fn watch_service_uninstall(&self) -> Result<bool, PitboardError> {
+        self.core().core.watch_service_uninstall().said(self.front)
     }
 
     /// Point a schedule an app up to 0.3.0 wrote at the command line this app comes with.

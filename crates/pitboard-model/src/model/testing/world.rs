@@ -137,6 +137,11 @@ impl World {
     /// The app's core over this machine, made from its parts as `AppCore::for_app` makes it
     /// from what the app was started with, with Claude Code's program found.
     pub(crate) fn core(&self) -> Arc<AppCore> {
+        self.core_on(Front::MacMenuBar)
+    }
+
+    /// The same, for the app `front` names, which words what the core refuses.
+    pub(crate) fn core_on(&self, front: Front) -> Arc<AppCore> {
         let ctx = self.ctx.clone();
         let (helper, places, search_path, alive) = (
             self.helper.clone(),
@@ -145,7 +150,7 @@ impl World {
             self.cores.clone(),
         );
         Arc::new(AppCore::asking(
-            Front::MacMenuBar,
+            front,
             move || {
                 let _alive = &alive;
                 let made = Made {

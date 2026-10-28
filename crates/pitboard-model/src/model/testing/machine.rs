@@ -15,7 +15,7 @@ use crate::present::StatusItemShown;
 use crate::{
     AutoLooked, AutoSwitched, Change, Check, Doctored, Enrolled, EnrolledAs, FoundCommandLine,
     GaveUp, Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Uninstalled,
-    WarmRefused, Warning,
+    WarmRefused, Warning, WatchService,
 };
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -163,6 +163,13 @@ pub(crate) struct Stub {
     pub uninstalls: usize,
     /// What the scheduler refuses each change with, while it does.
     pub refusing: Option<Refusal>,
+    /// What the service manager has of the watch service, the shares it was asked to switch
+    /// at, and how many times it was read and asked to take it away. It refuses as the
+    /// scheduler does, `refusing`.
+    pub watch_service: WatchService,
+    pub watch_installs: Vec<u8>,
+    pub watch_reads: usize,
+    pub watch_uninstalls: usize,
     /// What repairing a schedule an older app wrote gives.
     pub repairs: Result<bool, Refusal>,
     pub repair_asks: usize,
@@ -276,6 +283,10 @@ impl Stub {
             installs: 0,
             uninstalls: 0,
             refusing: None,
+            watch_service: WatchService::Absent,
+            watch_installs: Vec::new(),
+            watch_reads: 0,
+            watch_uninstalls: 0,
             repairs: Ok(false),
             repair_asks: 0,
             own: OwnCommandLine::default(),
@@ -673,6 +684,35 @@ impl Stub {
                     Ok(())
                 }),
             },
+            Job::ReadWatchService { after_change } => {
+                self.watch_reads += 1;
+                Answer::WatchServiceRead {
+                    service: Some(self.watch_service.clone()),
+                    own: self.own,
+                    after_change,
+                }
+            }
+            Job::SetWatchService { on, at } => Answer::WatchServiceSet {
+                own: self.own,
+                outcome: lanes::set_schedule(on, self.own, |on| {
+                    if on {
+                        self.watch_installs.push(at.percent());
+                    } else {
+                        self.watch_uninstalls += 1;
+                    }
+                    if let Some(refused) = &self.refusing {
+                        return Err(refused.error());
+                    }
+                    self.watch_service = if on {
+                        WatchService::Installed {
+                            at: Some(at.percent()),
+                        }
+                    } else {
+                        WatchService::Absent
+                    };
+                    Ok(())
+                }),
+            },
             Job::Check => {
                 self.doctor_asks += 1;
                 Answer::Checked {
@@ -811,9 +851,14 @@ impl Hand {
 
     /// Answers every job from `machine`, and every job those answers lead to, oldest first.
     pub(crate) fn run(&mut self, machine: &mut Stub) {
+        self.run_by(|job| machine.answer(job));
+    }
+
+    /// The same, each job answered by `answer`: a lane's worker over a real core, say.
+    pub(crate) fn run_by(&mut self, mut answer: impl FnMut(Job) -> Answer) {
         while let Some(job) = self.pending.pop_front() {
-            let answer = machine.answer(job);
-            self.give(answer);
+            let answered = answer(job);
+            self.give(answered);
         }
     }
 

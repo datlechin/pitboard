@@ -88,6 +88,12 @@ service file nor a launcher, and quits before it reaches the bus (`launch.rs`).
   `DBusSignalWatcher` from v6.4.0 (`components/dbus/` at each tag), so the widget follows the
   feed without a poll from Plasma 6.4. Debian 13's 6.3.6 has neither, so the widget is
   packaged apart.
+- **Without a status item, closing the window quits**, and the watch service runs the
+  automatic switch and the warm-ups once it has, which Preferences turns on (brief `close`):
+  stock GNOME has no StatusNotifierItem host, and Background Apps lists no host app (synthesis
+  1). The model offers it while the app reports no status item, reads it on each visit to
+  Preferences and installs it, at the share Limits has, through the core's watch service, which
+  on Linux the core's systemd host writes as a user service.
 - **Ctrl+? is an `AdwDialog` of `AdwActionRow`s.** `AdwShortcutsDialog` is libadwaita 1.8, and
   GTK 4.18.6 deprecates `GtkShortcutsWindow` and `GtkShortcutLabel` ("Deprecated: 4.18",
   `gtk/deprecated/gtkshortcutswindow.c:119`, `gtk/deprecated/gtkshortcutlabel.c:36`). It becomes

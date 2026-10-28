@@ -1,7 +1,9 @@
 //! What Settings and Activity say of this machine: keeping saved sign-ins fresh, what happens
 //! at a limit, warm-ups, the command line, updates, uninstalling, and each change listed.
 
-use super::{settings, sign_in_standing, store_in_front, this_machine, titled, typeset};
+use super::{
+    CLOSING_QUITS, settings, sign_in_standing, store_in_front, this_machine, titled, typeset,
+};
 use crate::Front;
 use crate::model::AtLimit;
 use pitboard_core::status::Standing;
@@ -42,7 +44,7 @@ pub(crate) fn no_scheduler(front: Front) -> String {
 /// app there is only the app itself to schedule, which renews nothing.
 pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
     if !temporary {
-        return "This copy of Pitboard has no command line inside it to run on a schedule.".into();
+        return no_command_line(front, "on a schedule");
     }
     match front {
         Front::MacMenuBar => {
@@ -62,6 +64,49 @@ pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
              copy, which is gone once Pitboard quits."
                 .into()
         }
+    }
+}
+
+// The Linux package puts the command line beside the app, where the other apps hold it inside.
+fn no_command_line(front: Front, to_run: &str) -> String {
+    let place = match front {
+        Front::MacMenuBar | Front::WindowsNotificationArea => "inside",
+        Front::Gnome => "beside",
+    };
+    format!("This copy of Pitboard has no command line {place} it to run {to_run}.")
+}
+
+/// Why the watch service cannot be turned on from this copy of the app, as daily renewal
+/// cannot: it runs the command line long after the app has quit.
+pub(crate) fn cannot_watch(front: Front, temporary: bool) -> String {
+    if temporary {
+        cannot_schedule(front, true)
+    } else {
+        no_command_line(front, "in the background")
+    }
+}
+
+// Preferences' switch for it, which the Linux app titles so.
+pub(crate) const WATCH_IN_THE_BACKGROUND: &str = "Watch in the Background";
+
+// Under the watch service's switch, `at` the share it switches at.
+pub(crate) fn watch_service_about(front: Front, at: u8) -> String {
+    format!(
+        "{CLOSING_QUITS} Turned on, {} goes on switching Claude Code at {at}% and warming up the \
+         accounts {} turns on, from each login.",
+        this_machine(front),
+        warm_up(front)
+    )
+}
+
+// After the at-limit note on a front whose window's closing quits Pitboard: what switches then.
+pub(crate) fn switching_once_closed(watched: bool) -> String {
+    if watched {
+        "Once its window is closed, the watch service goes on switching it.".into()
+    } else {
+        format!(
+            "Once its window is closed, nothing switches it unless {WATCH_IN_THE_BACKGROUND} is on."
+        )
     }
 }
 
@@ -187,8 +232,18 @@ pub(crate) fn warm_hours(
 
 pub(crate) const NONE_TO_WARM: &str = "Add a Claude Code account to warm it up.";
 
-pub(crate) const WARM_UP_NOTE: &str = "Pitboard starts each account’s 5-hour limit again as soon \
-                                       as it resets, within these hours, while it’s open.";
+// `once_closed`: where closing the window quits Pitboard, whether the watch service goes on.
+pub(crate) fn warm_up_note(once_closed: Option<bool>) -> String {
+    let runs = match once_closed {
+        None => "while it’s open",
+        Some(false) => "while its window is open",
+        Some(true) => "and the watch service goes on once its window is closed",
+    };
+    format!(
+        "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these \
+         hours, {runs}."
+    )
+}
 
 pub(crate) fn warm_up_failed(failed: &str) -> String {
     format!("The last warm-up didn’t start: {failed}")
@@ -685,9 +740,33 @@ mod tests {
         );
         assert_eq!(NONE_TO_WARM, "Add a Claude Code account to warm it up.");
         assert_eq!(
-            WARM_UP_NOTE,
+            warm_up_note(None),
             "Pitboard starts each account’s 5-hour limit again as soon as it resets, within \
              these hours, while it’s open."
+        );
+        assert_eq!(
+            warm_up_note(Some(false)),
+            "Pitboard starts each account’s 5-hour limit again as soon as it resets, within \
+             these hours, while its window is open."
+        );
+        assert_eq!(
+            warm_up_note(Some(true)),
+            "Pitboard starts each account’s 5-hour limit again as soon as it resets, within \
+             these hours, and the watch service goes on once its window is closed."
+        );
+        assert_eq!(
+            switching_once_closed(true),
+            "Once its window is closed, the watch service goes on switching it."
+        );
+        assert_eq!(
+            switching_once_closed(false),
+            "Once its window is closed, nothing switches it unless Watch in the Background is \
+             on."
+        );
+        assert_eq!(
+            watch_service_about(Front::Gnome, 95),
+            "Pitboard quits once its window is closed. Turned on, this computer goes on switching \
+             Claude Code at 95% and warming up the accounts Warm-Up turns on, from each login."
         );
         assert_eq!(
             warm_up_failed("Claude Code failed."),
@@ -805,16 +884,25 @@ mod tests {
             checking(Front::WindowsNotificationArea),
             "Checking this PC…"
         );
-        for front in [
-            Front::MacMenuBar,
-            Front::Gnome,
-            Front::WindowsNotificationArea,
-        ] {
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
             assert_eq!(
                 cannot_schedule(front, false),
                 "This copy of Pitboard has no command line inside it to run on a schedule."
             );
         }
+        assert_eq!(
+            cannot_schedule(Front::Gnome, false),
+            "This copy of Pitboard has no command line beside it to run on a schedule.",
+            "its package puts the command line beside the app"
+        );
+        assert_eq!(
+            cannot_watch(Front::Gnome, false),
+            "This copy of Pitboard has no command line beside it to run in the background."
+        );
+        assert_eq!(
+            cannot_watch(Front::Gnome, true),
+            cannot_schedule(Front::Gnome, true)
+        );
         assert_eq!(
             cannot_schedule(Front::MacMenuBar, true),
             "Move Pitboard to your Applications folder first. Until then macOS runs it from a \

@@ -1,22 +1,31 @@
 //! What the model keeps of this machine rather than its accounts, as MachineModel.swift kept
 //! it: the daily renewal schedule and the one change to it at a time, the repair once a
 //! launch, doctor's checks, the activity log and the `pitboard` a terminal runs, with what the
-//! settings, MachinePane.swift and ActivityPane.swift said of them. The state is driven through
-//! `State::apply` by hand over a core the test scripts, and read as `present` makes it on a
-//! Mac, its clock times in UTC. Opening at login and linking the command line with an
-//! administrator's password are the app's own, and so are their tests.
+//! settings, MachinePane.swift and ActivityPane.swift said of them; and the watch service, where
+//! the front has no status item. The state is driven through `State::apply` by hand over a core
+//! the test scripts, or, for the watch service, over the real core on a machine of the test's
+//! own, and read as `present` makes it on a Mac, or on GNOME for the watch service, its clock
+//! times in UTC. Opening at login and linking the command line with an administrator's password
+//! are the app's own, and so are their tests.
 
+use super::lanes::{Watching, Worker};
 use super::machine::ScheduleFailure;
 use super::state::Job;
 use super::testing::machine::{Hand, Stub};
+use super::testing::platform::Posted;
 use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
+use super::testing::world::World;
 use super::{Intent, Pane};
 use crate::Front;
 use crate::present::testing::Utc;
-use crate::present::{CheckLine, MachineShown, present_on, words};
+use crate::present::{CheckLine, MachineShown, WatchServiceShown, present_on, words};
+use crate::{AppCore, Surfaces};
 use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
+use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
+use pitboard_core::watch_service::Installed;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// What a Mac's app shows of this machine now.
@@ -1036,4 +1045,176 @@ fn what_came_to_nothing_holds_nothing_back() {
     let check = model.next();
     model.give(Answer::Lost(check));
     assert!(!shown(&model).checks.checking);
+}
+
+/// A lane's worker over `core`, which answers each job as the model's lanes do.
+fn worker(core: Arc<AppCore>) -> Worker {
+    Worker {
+        core,
+        other_apps: None,
+        notifier: Arc::new(Posted::default()),
+        local_time: Arc::new(Utc),
+        earlier: None,
+        windows: None,
+        widget_feed: None,
+        quit_within: Duration::from_millis(50),
+        quit_checked_every: Duration::from_millis(5),
+        sign_ins: Arc::default(),
+        watch: Watching::default(),
+        next_look: Arc::default(),
+    }
+}
+
+/// A scratch machine of the real core's, its scheduler in memory, whose default home holds an
+/// app with a command line beside it for the service to run.
+fn service_machine(name: &str) -> World {
+    let mut world = World::new(name);
+    world.in_the_default_home();
+    world.app_with_a_command_line();
+    world
+}
+
+/// What GNOME's app shows of the watch service now.
+fn watch_service(model: &Hand) -> Option<WatchServiceShown> {
+    present_on(Front::Gnome, &model.state, model.now.epoch(), &Utc)
+        .machine
+        .watch_service
+}
+
+/// Without a status item, closing the window quits Pitboard, so the settings offer to run the
+/// automatic switch and the warm-ups in the watch service, which the real core installs at the
+/// share the settings have, and the notes say what runs once the window is closed.
+#[test]
+fn without_a_status_item_the_watch_service_is_offered_and_turning_it_on_installs_it() {
+    let world = service_machine("watch-service");
+    let lanes = worker(world.core_on(Front::Gnome));
+    let mut model = Hand::on(Front::Gnome);
+    model.state.preferences.at_limit = Some("switch".into());
+    model.send(Intent::ReadSchedule);
+    model.run_by(|job| lanes.work(job));
+    let about = words::watch_service_about(Front::Gnome, 95);
+    assert_eq!(
+        watch_service(&model),
+        Some(WatchServiceShown {
+            on: false,
+            enabled: true,
+            note: None,
+            failed: None,
+            about: about.clone(),
+        })
+    );
+    let notes = |model: &Hand| {
+        let machine = present_on(Front::Gnome, &model.state, 0, &Utc).machine;
+        (machine.at_limit.note.unwrap_or_default(), machine.warm.note)
+    };
+    let (at_limit, warm) = notes(&model);
+    assert!(
+        at_limit.ends_with(&words::switching_once_closed(false)),
+        "{at_limit}"
+    );
+    assert_eq!(warm, words::warm_up_note(Some(false)));
+
+    assert_eq!(
+        model.send(Intent::SetWatchService { on: true }),
+        [Job::SetWatchService {
+            on: true,
+            at: Threshold::DEFAULT,
+        }]
+    );
+    assert_eq!(
+        watch_service(&model).map(|shown| (shown.on, shown.enabled)),
+        Some((true, false)),
+        "what was asked for, while it changes"
+    );
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(
+        watch_service(&model),
+        Some(WatchServiceShown {
+            on: true,
+            enabled: true,
+            note: None,
+            failed: None,
+            about,
+        })
+    );
+    let Installed::Yes { at, .. } = world.elsewhere().watch_service() else {
+        panic!("installed in the scratch machine");
+    };
+    assert_eq!(at, Some(Threshold::DEFAULT));
+    let (at_limit, warm) = notes(&model);
+    assert!(
+        at_limit.ends_with(&words::switching_once_closed(true)),
+        "{at_limit}"
+    );
+    assert_eq!(warm, words::warm_up_note(Some(true)));
+
+    model.send(Intent::SetWatchService { on: false });
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(watch_service(&model).map(|shown| shown.on), Some(false));
+    assert_eq!(world.elsewhere().watch_service(), Installed::No);
+}
+
+/// A status item keeps Pitboard running once its window is closed, so nothing is offered, read
+/// or installed, on a front that has one from the start or once its desktop gives it one.
+#[test]
+fn with_a_status_item_it_is_not_offered() {
+    let mut mac = Hand::new();
+    let mut gnome = Hand::on(Front::Gnome);
+    gnome.send(Intent::SurfacesChanged {
+        surfaces: Surfaces { status_item: true },
+    });
+    for (model, front) in [(&mut mac, Front::MacMenuBar), (&mut gnome, Front::Gnome)] {
+        assert_eq!(
+            model.send(Intent::ReadSchedule),
+            [Job::ReadSchedule {
+                after_change: false
+            }],
+            "{front:?}"
+        );
+        assert_eq!(model.send(Intent::SetWatchService { on: true }), []);
+        let machine = present_on(front, &model.state, 0, &Utc).machine;
+        assert_eq!(machine.watch_service, None, "{front:?}");
+        assert_eq!(machine.warm.note, words::warm_up_note(None));
+    }
+}
+
+/// A terminal can install or take away the watch service while the app runs, so each visit to
+/// the settings reads it again from the core, as it reads daily renewal.
+#[test]
+fn the_watch_service_is_read_on_each_visit() {
+    let world = service_machine("watch-service-read");
+    let lanes = worker(world.core_on(Front::Gnome));
+    let mut model = Hand::on(Front::Gnome);
+    assert_eq!(watch_service(&model).map(|shown| shown.on), Some(false));
+    assert_eq!(
+        model.send(Intent::ReadSchedule),
+        [
+            Job::ReadSchedule {
+                after_change: false
+            },
+            Job::ReadWatchService {
+                after_change: false
+            }
+        ]
+    );
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(watch_service(&model).map(|shown| shown.on), Some(false));
+
+    world
+        .elsewhere()
+        .watch_service_install(Threshold::new(90).expect("a share"))
+        .expect("installed from a terminal");
+    model.send(Intent::ReadSchedule);
+    model.run_by(|job| lanes.work(job));
+    let shown = watch_service(&model).expect("offered");
+    assert!(shown.on);
+    assert_eq!(shown.about, words::watch_service_about(Front::Gnome, 90));
+
+    world
+        .elsewhere()
+        .watch_service_uninstall()
+        .expect("taken away from a terminal");
+    model.send(Intent::ReadSchedule);
+    model.run_by(|job| lanes.work(job));
+    assert_eq!(watch_service(&model).map(|shown| shown.on), Some(false));
 }

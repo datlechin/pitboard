@@ -465,8 +465,20 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
   assert.ok(catalogue.includes(`titled(front, "Warm-Up", "${w.header}")`));
   // what a warm-up does under its name, its hours beside it, and its icon, Brightness
   assert.ok(xaml.includes('<TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" />'));
-  assert.ok(present("machine.rs").includes("note: words::WARM_UP_NOTE.into(),"));
-  assert.ok(owned(w.note));
+  // where the notification area keeps Pitboard, as Windows' always does, no watch service runs
+  // once its window closes
+  assert.ok(present("machine.rs").includes("note: words::warm_up_note(once_closed(seen)),"));
+  const note = joined(catalogue);
+  assert.ok(note.includes('None => "while it’s open",'));
+  assert.ok(
+    note.includes(
+      '"Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, {runs}."',
+    ),
+  );
+  assert.equal(
+    w.note,
+    "Pitboard starts each account’s 5-hour limit again as soon as it resets, within these hours, while it’s open.",
+  );
   assert.ok(
     xaml.includes(
       '<TextBlock Text="{x:Bind ViewModel.WarmRange, Mode=OneWay}" AutomationProperties.AutomationId="settings.warmRange" />',

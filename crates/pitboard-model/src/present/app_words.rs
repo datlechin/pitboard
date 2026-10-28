@@ -609,7 +609,7 @@ pub fn gnome_words() -> GnomeWords {
         },
         paste_link: "Paste Link".into(),
         drop_link: "Drop Link to Open".into(),
-        watch_service: "Watch in the Background".into(),
+        watch_service: words::WATCH_IN_THE_BACKGROUND.into(),
         close_note: words::CLOSING_QUITS.into(),
         copy_command: "Copy".into(),
     }

@@ -1,13 +1,17 @@
 //! What the model knows of this machine rather than its accounts, as MachineModel.swift held
 //! it: the daily renewal schedule and the one change to it under way, doctor's checks, what
-//! Pitboard has changed, and the `pitboard` a terminal would run. `State` takes each intent
-//! and answer about them, and `present` says them.
+//! Pitboard has changed, and the `pitboard` a terminal would run; and, for a front with no
+//! status item, the watch service and the one change to it under way. `State` takes each
+//! intent and answer about them, and `present` says them.
 //!
 //! Opening at login and linking the command line onto the `PATH` with an administrator's
 //! password are the app's own, as its system's: once it has linked it, the app sends
 //! `Intent::LookForCommandLine`, and the model looks for the command line again.
 
-use crate::{Change, Check, Doctored, FoundCommandLine, OwnCommandLine, PitboardError, Schedule};
+use crate::{
+    Change, Check, Doctored, FoundCommandLine, OwnCommandLine, PitboardError, Schedule,
+    WatchService,
+};
 
 /// How many changes the activity pane reads, the newest of them, as ActivityPane.swift
 /// asked MachineModel.swift's `readChanges` for them.
@@ -25,6 +29,11 @@ pub(crate) struct MachineState {
     pub(crate) scheduling: Option<bool>,
     /// Why the last change to the schedule could not be made, until the next is asked for.
     pub(crate) schedule_failed: Option<ScheduleFailure>,
+    /// The watch service as the core last read it, or `None` before it has been read, and
+    /// the change to it under way and why the last could not be made, as for the schedule.
+    pub(crate) watch_service: Option<WatchService>,
+    pub(crate) watching: Option<bool>,
+    pub(crate) watch_failed: Option<ScheduleFailure>,
     /// The command line inside this copy of the app, as last read with the schedule, a
     /// change to it, the repair at launch or the command line found.
     pub(crate) own: Option<OwnCommandLine>,
@@ -52,7 +61,7 @@ pub(crate) struct PostRefused {
     pub(crate) at: i64,
 }
 
-/// Why a change to the schedule could not be made.
+/// Why a change to the schedule or the watch service could not be made.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ScheduleFailure {
     /// Turning it on was refused before the scheduler was asked: this copy of the app has no
@@ -63,7 +72,8 @@ pub(crate) enum ScheduleFailure {
     Refused { message: String },
 }
 
-/// What a change to the schedule came to, as the lane of changes answers it.
+/// What a change to the schedule or the watch service came to, as the lane of changes answers
+/// it.
 #[derive(Debug)]
 pub(crate) enum Scheduled {
     /// The scheduler did as asked.
@@ -93,20 +103,12 @@ impl MachineState {
     /// changed nothing, so nothing is read, and the change is over.
     pub(crate) fn scheduled(&mut self, own: OwnCommandLine, outcome: Scheduled) -> bool {
         self.own = Some(own);
-        match outcome {
-            Scheduled::Done => true,
-            Scheduled::Refused(PitboardError::Failed { message, .. }) => {
-                self.schedule_failed = Some(ScheduleFailure::Refused { message });
-                true
-            }
-            Scheduled::CannotSchedule => {
-                self.schedule_failed = Some(ScheduleFailure::CannotSchedule {
-                    temporary: own.temporary,
-                });
-                self.scheduling = None;
-                false
-            }
-        }
+        came_to(
+            own,
+            outcome,
+            &mut self.scheduling,
+            &mut self.schedule_failed,
+        )
     }
 
     /// The schedule as the core read it. The read after a change ends that change.
@@ -127,6 +129,40 @@ impl MachineState {
         }
     }
 
+    /// A change to the watch service, as `schedule` makes one to the schedule.
+    pub(crate) fn watch(&mut self, on: bool) -> bool {
+        if self.watching.is_some() {
+            return false;
+        }
+        self.watching = Some(on);
+        self.watch_failed = None;
+        true
+    }
+
+    /// What a change to the watch service came to, as `scheduled` says of the schedule.
+    pub(crate) fn watched(&mut self, own: OwnCommandLine, outcome: Scheduled) -> bool {
+        self.own = Some(own);
+        came_to(own, outcome, &mut self.watching, &mut self.watch_failed)
+    }
+
+    /// The watch service as the core read it. The read after a change ends that change.
+    pub(crate) fn watch_service_read(
+        &mut self,
+        service: Option<WatchService>,
+        own: Option<OwnCommandLine>,
+        after_change: bool,
+    ) {
+        if let Some(service) = service {
+            self.watch_service = Some(service);
+        }
+        if let Some(own) = own {
+            self.own = Some(own);
+        }
+        if after_change {
+            self.watching = None;
+        }
+    }
+
     /// Doctor's checks came in at `at`, in place of the last ones, or a check came to nothing.
     pub(crate) fn checked(&mut self, doctored: Option<Doctored>, at: i64) {
         self.checking = self.checking.saturating_sub(1);
@@ -144,5 +180,29 @@ impl MachineState {
     /// The core's log came in, oldest first as it keeps it: shown newest first.
     pub(crate) fn logged(&mut self, changes: Vec<Change>) {
         self.log = changes.into_iter().rev().collect();
+    }
+}
+
+// Whether the job is to be read back after a change came to `outcome`: not where it was refused
+// before the system was asked, which changed nothing and ends the change.
+fn came_to(
+    own: OwnCommandLine,
+    outcome: Scheduled,
+    changing: &mut Option<bool>,
+    failed: &mut Option<ScheduleFailure>,
+) -> bool {
+    match outcome {
+        Scheduled::Done => true,
+        Scheduled::Refused(PitboardError::Failed { message, .. }) => {
+            *failed = Some(ScheduleFailure::Refused { message });
+            true
+        }
+        Scheduled::CannotSchedule => {
+            *failed = Some(ScheduleFailure::CannotSchedule {
+                temporary: own.temporary,
+            });
+            *changing = None;
+            false
+        }
     }
 }

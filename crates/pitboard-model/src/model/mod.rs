@@ -343,8 +343,9 @@ pub enum Intent {
     /// for `Pane::Accounts`, the accounts where the numbers shown are a minute old, as for
     /// `Glanced`. What was shown stays meanwhile.
     PaneShown { pane: Pane },
-    /// Read the daily renewal schedule again, as the settings do when they show it: a
-    /// terminal can change it while the app runs.
+    /// Read the daily renewal schedule again, and the watch service where the settings offer
+    /// it, as the settings do when they show them: a terminal can change either while the app
+    /// runs.
     ReadSchedule,
     /// Hand renewing parked logins to this machine's own scheduler, or take it back: the
     /// settings' switch. One change at a time: the switch shows what was asked for until the
@@ -353,6 +354,12 @@ pub enum Intent {
     /// command line that a schedule would keep reaching, and nothing is asked of the
     /// scheduler; turning it off never is, since that is how such a schedule is taken away.
     SetSchedule { on: bool },
+    /// Have this machine's own service manager run the automatic switch and the warm-ups from
+    /// each sign-in, at the share the settings have, or take that away: the switch
+    /// `MachineShown::watch_service` offers, on a front with no status item to keep Pitboard
+    /// running once its window is closed, and taken only there. One change at a time, refused
+    /// as `SetSchedule` is.
+    SetWatchService { on: bool },
     /// Taken only once the preferences are read, as `AtLimitShown::enabled` says.
     SetAtLimit { choice: AtLimit, at: u8 },
     /// "Not Now" to a setup tip, kept with the app's preferences.
