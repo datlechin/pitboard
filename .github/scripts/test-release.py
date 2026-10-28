@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import tomllib
 import unittest
 from pathlib import Path
@@ -25,6 +26,8 @@ WINDOWS_UPDATE_KEY = REPO / ".github" / "scripts" / "windows-update-key.sh"
 WINDOWS_UPDATE_SIGN = REPO / ".github" / "scripts" / "windows-update-sign.sh"
 SESSION_GATE = REPO / ".github" / "scripts" / "session-gate.sh"
 LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
+LINUX_REPOSITORY_KEY = REPO / ".github" / "scripts" / "linux-repository-key.sh"
+REPOSITORY_KEY = REPO / "packaging" / "linux" / "pitboard-archive-keyring.asc"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
 SCRIPTS = REPO / ".github" / "scripts"
@@ -1163,6 +1166,242 @@ class LinuxVersions(unittest.TestCase):
                 done = run(LINUX_VERSIONS, *args)
                 self.assertEqual(done.returncode, 2)
                 self.assertIn("usage:", done.stderr)
+
+
+class RepositoryKey(unittest.TestCase):
+    PRIMARY = "22DCF748069770D807A1804F47C507760C9A97E3"
+    SIGNING = "C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8"
+    DAY = 86400
+    # Every key here is made at the start of the day the tests run, in UTC, so each lasts to the
+    # same second whatever the hour, and gpg, which judges a subkey expired by its own clock,
+    # finds it as the case made it.
+    MADE_AT = int(time.time()) // DAY * DAY
+
+    def setUp(self):
+        needs(self, "gpg")
+        self.work = Path(tempfile.mkdtemp())
+        home = self.work / "gnupg"
+        home.mkdir(mode=0o700)
+        self.tmp = self.work / "tmp"
+        self.tmp.mkdir()
+        self.env = {**os.environ, "GNUPGHOME": str(home)}
+        self.made = 0
+
+    def tearDown(self):
+        subprocess.run(["gpgconf", "--kill", "all"], env=self.env, capture_output=True)
+        shutil.rmtree(self.work)
+
+    def gpg(self, *args, made=None, given=None):
+        done = subprocess.run(
+            ["gpg", "--batch", "--quiet", "--passphrase", "", "--faked-system-time",
+             f"{self.MADE_AT if made is None else made}!", *args],
+            input=given,
+            capture_output=True,
+            text=True,
+            env=self.env,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def key(self, usage="cert", lasts=10 * 365, subkeys=(("sign", 2 * 365),), sha1=(), made=0):
+        # Each key lasts that many days from when it is made, or for ever where None, and the
+        # primary is made that many days before MADE_AT. A subkey made earlier than MADE_AT names
+        # the days before it third. sha1 names what is signed with SHA-1: the user ID's
+        # self-signature, or each subkey's binding and back signature.
+        def expiry(days):
+            return "never" if days is None else f"seconds={days * self.DAY}"
+
+        weak = ["--cert-digest-algo", "SHA1", "--allow-weak-key-signatures"]
+        algo = "rsa2048" if sha1 else "ed25519"
+        self.made += 1
+        made = self.gpg(
+            *(weak if "user ID" in sha1 else []),
+            "--status-fd", "1",
+            "--quick-gen-key", f"Test {self.made}", algo, usage, expiry(lasts),
+            made=self.MADE_AT - made * self.DAY,
+        )
+        fingerprint = re.search(r"KEY_CREATED [PB] ([0-9A-F]{40})", made).group(1)
+        for subkey_usage, subkey_lasts, *before in subkeys:
+            self.gpg(
+                *(weak if "binding" in sha1 else []),
+                "--quick-add-key", fingerprint,
+                "cv25519" if subkey_usage == "encr" and not sha1 else algo,
+                subkey_usage, expiry(subkey_lasts),
+                made=self.MADE_AT - (before[0] if before else 0) * self.DAY,
+            )
+        return fingerprint
+
+    def exported(self, fingerprint):
+        path = self.work / f"{fingerprint}.asc"
+        self.gpg("--armor", "--output", str(path), "--yes", "--export", fingerprint)
+        return path
+
+    def subkeys(self, fingerprint):
+        listed = self.gpg("--with-colons", "--with-subkey-fingerprints", "--list-keys", fingerprint)
+        return re.findall(r"^fpr:+([0-9A-F]{40}):", listed, re.M)[1:]
+
+    # Revokes the primary's nth subkey, from 1, as an owner revokes a lost one with gpg's
+    # --edit-key: no reason given beside that one.
+    def revoke(self, fingerprint, nth):
+        self.gpg(
+            "--command-fd", "0", "--edit-key", fingerprint,
+            given=f"key {nth}\nrevkey\ny\n0\n\ny\nsave\n",
+        )
+
+    def at(self, days):
+        return str(self.MADE_AT + days * self.DAY)
+
+    def checked(self, key, now):
+        done = subprocess.run(
+            ["sh", LINUX_REPOSITORY_KEY, key, now],
+            capture_output=True,
+            text=True,
+            env={**self.env, "TMPDIR": str(self.tmp)},
+        )
+        self.assertEqual(os.listdir(self.tmp), [], "it left its GNUPGHOME behind")
+        return done
+
+    def assertPasses(self, done):
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "")
+        return dict(line.split("=", 1) for line in done.stdout.splitlines())
+
+    def assertRefused(self, done, said):
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertEqual(done.stdout, "")
+        self.assertIn(said, done.stderr)
+
+    def test_the_committed_key_is_the_owners(self):
+        # 2026-10-28, when the owner made it.
+        done = self.checked(REPOSITORY_KEY, "1793145600")
+        self.assertPasses(done)
+        # The signing subkey expires at 2028-10-27 11:00:12 UTC.
+        self.assertEqual(
+            done.stdout,
+            f"primary={self.PRIMARY}\nsigning={self.SIGNING}\nexpires=1856257212\n",
+        )
+        listed = subprocess.run(
+            ["gpg", "--batch", "--quiet", "--with-colons", "--with-subkey-fingerprints",
+             "--show-keys", REPOSITORY_KEY],
+            capture_output=True,
+            text=True,
+            env=self.env,
+        )
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        records = [line.split(":") for line in listed.stdout.splitlines()]
+        # RSA 4096 each: the primary certifies to 2036-10-25, and the subkey signs.
+        self.assertEqual(
+            [(r[0], r[2], r[3], r[6], r[11]) for r in records if r[0] in ("pub", "sub")],
+            [("pub", "4096", "1", "2108545210", "cSC"), ("sub", "4096", "1", "1856257212", "s")],
+        )
+        self.assertEqual([r[9] for r in records if r[0] == "fpr"], [self.PRIMARY, self.SIGNING])
+        # RELEASING.md's last second before CI fails, 2028-04-30 11:00:12 UTC.
+        self.assertPasses(self.checked(REPOSITORY_KEY, "1840705212"))
+        self.assertRefused(self.checked(REPOSITORY_KEY, "1840705213"), "has 179 days left")
+
+    def test_a_signing_subkey_with_fewer_than_180_days_left_is_refused(self):
+        key = self.exported(self.key(subkeys=(("sign", 400),)))
+        found = self.assertPasses(self.checked(key, self.at(400 - 180)))
+        self.assertEqual(found["primary"], key.stem)
+        self.assertEqual(found["expires"], self.at(400))
+        for now, left in (
+            (str(self.MADE_AT + (400 - 180) * self.DAY + 1), "179 days"),
+            (self.at(399), "1 day"),
+            (self.at(400), "no day"),
+            (self.at(2000), "no day"),
+        ):
+            with self.subTest(now=now):
+                done = self.checked(key, now)
+                self.assertRefused(
+                    done, f"{found['signing']} has {left} left: extend the key 180 days ahead"
+                )
+
+    def test_a_primary_that_expires_first_shortens_its_subkey(self):
+        primary = self.key(lasts=300, subkeys=(("sign", 2 * 365),))
+        key = self.exported(primary)
+        self.assertPasses(self.checked(key, self.at(300 - 180)))
+        self.assertRefused(
+            self.checked(key, self.at(300 - 179)),
+            f"has 179 days left, until its primary {primary} expires",
+        )
+
+    def test_a_key_with_no_signing_subkey_or_two_is_refused(self):
+        none = "has no signing subkey that is neither revoked nor expired"
+        for subkeys, said in (
+            ((), none),
+            ((("encr", 400),), none),
+            ((("sign", 400), ("sign", 800)), "has 2 signing subkeys"),
+            ((("sign", 400), ("encr", 400), ("sign", 800)), "has 2 signing subkeys"),
+            # Made 100 days ago for 30, so expired by gpg's clock.
+            ((("sign", 30, 100),), none),
+        ):
+            with self.subTest(subkeys=subkeys):
+                key = self.exported(self.key(subkeys=subkeys, made=100))
+                self.assertRefused(self.checked(key, self.at(0)), said)
+
+    def test_a_subkey_revoked_or_expired_beside_a_new_one_is_left_out(self):
+        rotated = self.key(subkeys=(("sign", 2 * 365), ("sign", 2 * 365)), made=100)
+        old, new = self.subkeys(rotated)
+        self.revoke(rotated, 1)
+        expired = self.key(subkeys=(("sign", 30, 100), ("sign", 2 * 365)), made=100)
+        for primary, kept in ((rotated, new), (expired, self.subkeys(expired)[1])):
+            with self.subTest(primary=primary):
+                found = self.assertPasses(self.checked(self.exported(primary), self.at(0)))
+                self.assertEqual((found["primary"], found["signing"]), (primary, kept))
+                self.assertEqual(found["expires"], self.at(2 * 365))
+        listed = self.gpg("--with-colons", "--list-keys", rotated)
+        self.assertEqual([r.split(":")[1] for r in listed.splitlines() if r.startswith("sub:")],
+                         ["r", "u"])
+        self.assertNotEqual(old, new)
+
+    def test_a_signing_subkey_that_never_expires_is_refused(self):
+        key = self.exported(self.key(subkeys=(("sign", None),)))
+        self.assertRefused(self.checked(key, self.at(0)), "never expires")
+
+    def test_a_primary_that_signs_is_refused(self):
+        primary = self.key(usage="sign")
+        self.assertRefused(
+            self.checked(self.exported(primary), self.at(0)), f"the primary key {primary} signs"
+        )
+
+    def test_a_signature_under_sha_256_is_refused(self):
+        for sha1, refused in (
+            (("user ID",), ["class 0x13: SHA-1"]),
+            (("binding",), ["class 0x18: SHA-1", "class 0x19: SHA-1"]),
+        ):
+            with self.subTest(sha1=sha1):
+                done = self.checked(self.exported(self.key(sha1=sha1)), self.at(0))
+                self.assertRefused(done, "holds signatures under SHA-256, which apt's sqv refuses")
+                self.assertEqual([line.strip() for line in done.stderr.splitlines()[1:]], refused)
+
+    def test_a_file_that_holds_no_key_or_two_is_refused(self):
+        two = self.work / "two.asc"
+        two.write_text(
+            self.exported(self.key()).read_text() + self.exported(self.key()).read_text()
+        )
+        not_a_key = self.work / "not-a-key.asc"
+        not_a_key.write_text("Pitboard\n")
+        for path, said in (
+            (two, "holds 2 primary keys"),
+            (not_a_key, "gpg read no key from"),
+            (self.work / "missing.asc", "gpg read no key from"),
+        ):
+            with self.subTest(path=path.name):
+                self.assertRefused(self.checked(path, self.at(0)), said)
+
+    def test_it_takes_a_key_and_seconds_since_the_epoch(self):
+        for args in (
+            (REPOSITORY_KEY,),
+            (REPOSITORY_KEY, "1793145600", "1793145601"),
+            (REPOSITORY_KEY, "2026-10-28"),
+            (REPOSITORY_KEY, ""),
+            (REPOSITORY_KEY, "-1"),
+            (REPOSITORY_KEY, "1793145600\n1856257212"),
+        ):
+            with self.subTest(args=args[1:]):
+                done = run(LINUX_REPOSITORY_KEY, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage: linux-repository-key.sh <public key> <seconds", done.stderr)
 
 
 class ScriptCalls(unittest.TestCase):

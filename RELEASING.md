@@ -505,3 +505,42 @@ variable to its version.
 The release workflow cannot make rung one: `windows-update-sign` checks each signature with the
 key the release carries, and `windows-feed` with the key in the published MSIs, which rung one
 has moved on from.
+
+## The Linux repository key
+
+Pitboard's apt and dnf repository at `packages.usepitboard.com` and its rpm packages are signed
+with one OpenPGP key, made for them alone. Its public key is
+`packaging/linux/pitboard-archive-keyring.asc`.
+
+| Part | Fingerprint | Expires | Its secret |
+| --- | --- | --- | --- |
+| Primary, RSA 4096, certifies only | `22DCF748069770D807A1804F47C507760C9A97E3` | 2036-10-25 | In the owner's offline copy alone |
+| Signing subkey, RSA 4096 | `C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` | 2028-10-27 | In the offline copy, and in the `linux-packages` environment |
+
+`PACKAGES_SIGNING_KEY` holds the signing subkey alone, as `gpg --armor --export-secret-subkeys
+C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8!` writes it, with the primary's secret left out, and
+`PACKAGES_SIGNING_PASSPHRASE` its passphrase. Both are secrets of `linux-packages`, which has a
+deployment rule for `v*` tags. Keep the offline copy apart from the Sparkle key, the Windows
+update key, the Developer ID certificate and the signer's account.
+
+`.github/scripts/linux-repository-key.sh` refuses the committed key unless it has one primary
+that does not sign, one signing subkey that is neither revoked nor expired, no signature under
+SHA-256, and 180 days or more before the subkey or its primary expires. CI's `install-script`
+runs it at the time it runs, so from 2028-04-30 11:00 UTC every pull request fails until the
+subkey is extended. GitHub CLI extended its repository key just before it expired on
+2024-09-06, and `apt update` failed wherever the old copy stayed (cli/cli#9569).
+
+### Extend the signing subkey
+
+On the offline machine, with the offline copy:
+
+1. `gpg --quick-set-expire 22DCF748069770D807A1804F47C507760C9A97E3 2y
+   C348A22094AA62F6F3F4CBA14C7CAA49E81E0FF8` binds the subkey again, to two years from that day.
+2. `gpg --armor --export 22DCF748069770D807A1804F47C507760C9A97E3` replaces
+   `packaging/linux/pitboard-archive-keyring.asc`. The same pull request gives
+   `test_the_committed_key_is_the_owners` in `.github/scripts/test-release.py` the new expiry
+   and RELEASING.md the new dates.
+3. Export the subkey again, as above, into `PACKAGES_SIGNING_KEY`. The copy there carries the
+   old binding, and gpg signs nothing with a subkey whose binding has expired.
+
+The primary is extended the same way, without the subkey's fingerprint.

@@ -221,7 +221,8 @@ The apps:
 
 The rest:
 
-- `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills.
+- `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills, and in
+  `linux/` the Linux repository's public key.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
@@ -290,6 +291,8 @@ keeps it is in the header of the module named.
   Authenticode signature. `check-windows-app.ps1` fails a Release build without the key, and
   `windows-update-key.sh` a key that changed since the last MSI unless a rotation names the
   release.
+- The Linux repository's signing subkey has 180 days left whenever CI passes:
+  `linux-repository-key.sh` in `install-script` fails otherwise (`RepositoryKey`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`

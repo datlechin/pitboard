@@ -146,7 +146,8 @@ jobs:
           name: junit-${{ matrix.triple }}
           path: target/nextest/ci/junit.xml
 
-  # The install script under each shell named here, with no network, and the release's scripts.
+  # The install script under each shell named here, with no network, the release's scripts, and
+  # the Linux repository's key.
   install-script:
     strategy:
       fail-fast: false
@@ -154,7 +155,7 @@ jobs:
         include:
           - os: ubuntu-latest
             shells: sh dash bash zsh busybox
-            tools: dpkg rpm
+            tools: dpkg rpm gpg
           - os: macos-latest
             shells: sh dash bash zsh
     runs-on: ${{ matrix.os }}
@@ -182,7 +183,7 @@ jobs:
           .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
           .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
-          .github/scripts/linux-versions.sh
+          .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh
           apps/macos/scripts/build-number.sh
           .github/scripts/check-linux-app.sh apps/linux/scripts/cargo-build.sh
           apps/linux/scripts/install-deps.sh apps/linux/scripts/headless.sh
@@ -198,6 +199,11 @@ jobs:
       - env:
           TEST_LINUX_APP_TOOLS: ${{ runner.os == 'Linux' && 'desktop-file-validate appstreamcli' || '' }}
         run: python3 .github/scripts/test-linux-app.py
+      - name: The repository key has 180 days left
+        if: runner.os == 'Linux'
+        run: >
+          sh .github/scripts/linux-repository-key.sh packaging/linux/pitboard-archive-keyring.asc
+          "$(date -u +%s)"
 
   # Every test Windows leaves out, by an ignore, a cfg or an early return, gives a reason
   # .github/scripts/windows-pending.py accepts.
