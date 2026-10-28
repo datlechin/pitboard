@@ -87,6 +87,7 @@ built with a `context::Context`:
     renewed where Claude Code keeps it.
   - `auto.rs`, `warm.rs`, `stow.rs`: the automatic switch, the warm-up and putting away, under
     the lock every change takes.
+  - `vault.rs`: where a home keeps its parked logins of Claude Code and Codex.
   - `switch/folder/`: every change to a tool whose login is its app's files.
   - `crash.rs`, `harness.rs`, `two_tools.rs`, `pinned.rs`, `refusals.rs`, `foreign.rs`,
     `forms.rs`: the crash matrix and the changes' tests.
@@ -115,7 +116,7 @@ The other crates:
 
 - `crates/pitboard`: the command line. `main.rs` holds the commands, `render/` what each says
   to a person, `ui.rs` its styles and column widths, `json.rs` the one writer of `--json`,
-  `manpage.rs` the man page, and `watch.rs` and `warm.rs` their commands. `build/` is a
+  `manpage.rs` the man page, and `watch.rs`, `warm.rs` and `vault.rs` their commands. `build/` is a
   Windows build's manifest and version resource, which the FFI crates include too.
   `tests/cli/` is its one integration test binary, with the `--json` snapshots, and its
   example `stand-in` the program every test starts in place of a tool.

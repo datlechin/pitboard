@@ -18,6 +18,7 @@ mod json;
 mod manpage;
 mod render;
 mod ui;
+mod vault;
 mod warm;
 mod watch;
 
@@ -114,6 +115,13 @@ const STOW: &str = match pitboard_core::host::OS {
     }
 };
 
+// One way of keeping them on macOS and Windows, two on Linux.
+const VAULT: &str = match pitboard_core::host::OS {
+    Os::MacOs => "Where parked logins are kept: in the login keychain",
+    Os::Linux => "Where parked logins are kept: in the login keyring, or in 0600 files",
+    Os::Windows => "Where parked logins are kept: in files sealed to your Windows account",
+};
+
 #[derive(Subcommand)]
 enum Command {
     /// What is signed in, and how much each Claude Code and Codex account has left (the default)
@@ -191,6 +199,11 @@ enum Command {
         #[command(subcommand)]
         what: ScheduleCommand,
     },
+    #[command(about = VAULT)]
+    Vault {
+        #[command(subcommand)]
+        what: Option<vault::VaultCommand>,
+    },
     /// What Pitboard has changed, and when
     Log {
         /// How many changes to show
@@ -239,6 +252,7 @@ impl Command {
             Command::Adopt => "adopt",
             Command::Renew { .. } => "renew",
             Command::Schedule { .. } => "schedule",
+            Command::Vault { .. } => "vault",
             Command::Log { .. } => "log",
             Command::Uninstall { .. } => "uninstall",
             Command::Rename { .. } => "rename",
@@ -998,7 +1012,8 @@ fn adopt(pitboard: &Pitboard) -> Report {
 
 fn repair(pitboard: &Pitboard) -> Report {
     changed("repair", pitboard.repair(), |r| {
-        let human = repaired(pitboard.vault(), &r, &pitboard.parks_folder());
+        let place = pitboard.vault().ok().and_then(|kept| kept.place);
+        let human = repaired(place, &r, &pitboard.parks_folder());
         (
             json!({
                 "given_back": r.given_back.iter().map(|(label, service)| json!({
@@ -1439,6 +1454,7 @@ fn main() -> ExitCode {
         Command::Adopt => adopt(&pitboard),
         Command::Renew { .. } => renew(&pitboard),
         Command::Schedule { ref what } => schedule(&pitboard, what),
+        Command::Vault { ref what } => vault::run(&pitboard, what.as_ref()),
         Command::Log { lines } => log(&pitboard, lines),
         Command::Uninstall { yes } => {
             let question = uninstall_question(&pitboard);
@@ -2528,6 +2544,7 @@ mod tests {
             "pitboard schedule install",
             "pitboard schedule status",
             "pitboard schedule uninstall",
+            "pitboard vault status",
             "pitboard log",
             "pitboard uninstall",
             "pitboard rename",

@@ -551,14 +551,22 @@ impl Host for MemoryHost {
         }
     }
 
-    fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
+    fn new_home_form(&self, ctx: &Context) -> Option<VaultForm> {
         self.by_form.then(|| {
-            if self.secret_service_answers.load(Ordering::SeqCst) {
+            if self.answers(ctx, VaultForm::SecretService) {
                 VaultForm::SecretService
             } else {
                 VaultForm::Files
             }
         })
+    }
+
+    fn answers(&self, _ctx: &Context, form: VaultForm) -> bool {
+        self.by_form
+            && match form {
+                VaultForm::SecretService => self.secret_service_answers.load(Ordering::SeqCst),
+                VaultForm::Files => true,
+            }
     }
 
     fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {

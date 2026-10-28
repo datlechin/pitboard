@@ -9,6 +9,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `pitboard vault` says where parked logins are kept.
 - On Linux, `pitboard doctor` warns of a renewal or watch unit an earlier Pitboard wrote, and
   says to install it again.
 

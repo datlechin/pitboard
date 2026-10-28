@@ -122,6 +122,18 @@ pub enum Vault {
     SealedFiles,
 }
 
+impl Vault {
+    /// What a program branches on: `keychain`, `secret_service`, `files` or `sealed_files`.
+    pub fn code(self) -> &'static str {
+        match self {
+            Vault::Keychain => "keychain",
+            Vault::SecretService => "secret_service",
+            Vault::Files => "files",
+            Vault::SealedFiles => "sealed_files",
+        }
+    }
+}
+
 /// The only program trusted to read Claude Code's keychain item. Named here so the backend
 /// that runs it and the doctor check that looks for it cannot drift apart.
 pub(crate) const SECURITY: &str = "/usr/bin/security";
@@ -915,6 +927,13 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     /// at each look until the home's first save records it.
     fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
         None
+    }
+
+    /// Whether a vault of `form` answers here, for a form this system offers: files always do,
+    /// and the Secret Service where something on this session's bus has a default collection,
+    /// locked or not. Nothing is unlocked to tell.
+    fn answers(&self, _ctx: &Context, _form: VaultForm) -> bool {
+        false
     }
 
     /// Where Pitboard's own parked logins go: the system's store of secrets where there is

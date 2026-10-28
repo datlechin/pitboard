@@ -1,6 +1,6 @@
 ---
 title: "Maintenance commands"
-description: "`renew`, `schedule`, `log`, `uninstall` and `doctor`: usage, options, output and exit status."
+description: "`renew`, `schedule`, `vault`, `log`, `uninstall` and `doctor`: usage, options, output and exit status."
 ---
 
 ## `renew`
@@ -109,6 +109,34 @@ It renews your own parked logins and does nothing else: it never switches accoun
 ```
 
 On Windows, the second line is the task's path, such as `\Pitboard\Renew S-1-5-21-…`.
+
+## `vault`
+
+```text
+Where parked logins are kept: in the login keychain
+
+Usage: pitboard vault [OPTIONS] [COMMAND]
+```
+
+| Command | What it does |
+| --- | --- |
+| `status` | Says where this Pitboard directory keeps the [parked logins](/security#where-parked-logins-are-kept) of Claude Code and Codex. The default. |
+
+`status` reads Pitboard's own files and changes nothing. Its first line says where they are:
+
+| First line | When |
+| --- | --- |
+| `Parked logins are kept in the login keychain, which every Pitboard directory on this Mac shares.` | macOS. |
+| `Parked logins are kept in files in C:\Users\me\AppData\Local\Pitboard\vault, sealed to your Windows account.` | Windows. |
+| `Parked logins are kept in the login keyring, which every Pitboard directory of your session shares.` | Linux, in the Secret Service. |
+| `Parked logins are kept in 0600 files in ~/.pitboard/vault, which only you can read.` | Linux, in files. |
+
+On Linux, a second line follows where no Secret Service answers on your session's bus:
+
+| Second line | When |
+| --- | --- |
+| `No Secret Service answers on this session's bus, so they cannot be read from here. Run Pitboard in your desktop session, where signing in unlocks the login keyring.` | In the Secret Service. |
+| `No Secret Service answers on this session's bus, as over SSH or in a container.` | In files. |
 
 ## `log`
 

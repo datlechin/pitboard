@@ -71,6 +71,9 @@ _pitboard() {
             pitboard,use)
                 cmd="pitboard__subcmd__use"
                 ;;
+            pitboard,vault)
+                cmd="pitboard__subcmd__vault"
+                ;;
             pitboard,warm)
                 cmd="pitboard__subcmd__warm"
                 ;;
@@ -128,6 +131,9 @@ _pitboard() {
             pitboard__subcmd__help,use)
                 cmd="pitboard__subcmd__help__subcmd__use"
                 ;;
+            pitboard__subcmd__help,vault)
+                cmd="pitboard__subcmd__help__subcmd__vault"
+                ;;
             pitboard__subcmd__help,warm)
                 cmd="pitboard__subcmd__help__subcmd__warm"
                 ;;
@@ -142,6 +148,9 @@ _pitboard() {
                 ;;
             pitboard__subcmd__help__subcmd__schedule,uninstall)
                 cmd="pitboard__subcmd__help__subcmd__schedule__subcmd__uninstall"
+                ;;
+            pitboard__subcmd__help__subcmd__vault,status)
+                cmd="pitboard__subcmd__help__subcmd__vault__subcmd__status"
                 ;;
             pitboard__subcmd__help__subcmd__warm,now)
                 cmd="pitboard__subcmd__help__subcmd__warm__subcmd__now"
@@ -187,6 +196,18 @@ _pitboard() {
                 ;;
             pitboard__subcmd__schedule__subcmd__help,uninstall)
                 cmd="pitboard__subcmd__schedule__subcmd__help__subcmd__uninstall"
+                ;;
+            pitboard__subcmd__vault,help)
+                cmd="pitboard__subcmd__vault__subcmd__help"
+                ;;
+            pitboard__subcmd__vault,status)
+                cmd="pitboard__subcmd__vault__subcmd__status"
+                ;;
+            pitboard__subcmd__vault__subcmd__help,help)
+                cmd="pitboard__subcmd__vault__subcmd__help__subcmd__help"
+                ;;
+            pitboard__subcmd__vault__subcmd__help,status)
+                cmd="pitboard__subcmd__vault__subcmd__help__subcmd__status"
                 ;;
             pitboard__subcmd__warm,help)
                 cmd="pitboard__subcmd__warm__subcmd__help"
@@ -249,7 +270,7 @@ _pitboard() {
 
     case "${cmd}" in
         pitboard)
-            opts="-h -V --json --help --version status use enroll rename forget watch warm statusline renew schedule log doctor uninstall stow repair abandon adopt completions help"
+            opts="-h -V --json --help --version status use enroll rename forget watch warm statusline renew schedule vault log doctor uninstall stow repair abandon adopt completions help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -347,7 +368,7 @@ _pitboard() {
             return 0
             ;;
         pitboard__subcmd__help)
-            opts="status use enroll rename forget watch warm statusline renew schedule log doctor uninstall stow repair abandon adopt completions help"
+            opts="status use enroll rename forget watch warm statusline renew schedule vault log doctor uninstall stow repair abandon adopt completions help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -629,6 +650,34 @@ _pitboard() {
         pitboard__subcmd__help__subcmd__use)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__help__subcmd__vault)
+            opts="status"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__help__subcmd__vault__subcmd__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -1015,6 +1064,76 @@ _pitboard() {
         pitboard__subcmd__use)
             opts="-y -h --yes --json --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__vault)
+            opts="-h --json --help status help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__vault__subcmd__help)
+            opts="status help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__vault__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__vault__subcmd__help__subcmd__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__vault__subcmd__status)
+            opts="-h --json --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

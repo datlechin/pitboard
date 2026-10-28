@@ -43,6 +43,7 @@ mod stow;
 #[cfg(test)]
 mod two_tools;
 mod uninstall;
+mod vault;
 pub mod warm;
 
 pub use crate::pending::Reclaimed;
@@ -74,6 +75,8 @@ pub(crate) use stow::stow;
 pub use stow::{Foreseen, Kept, Left, Stowed};
 pub use uninstall::Removed;
 pub(crate) use uninstall::{uninstall, uninstall_from_app};
+pub use vault::Keeping;
+pub(crate) use vault::keeping;
 
 use crate::context::Context;
 use crate::error::{Error, Result};

@@ -37,6 +37,7 @@ set edit:completion:arg-completer[pitboard] = {|@words|
             cand statusline 'One line for Claude Code''s status bar; reads its session JSON on stdin'
             cand renew 'Renew every parked login that is due, and nothing else'
             cand schedule 'Keep parked logins alive without running anything yourself'
+            cand vault 'Where parked logins are kept: in the login keyring, or in 0600 files'
             cand log 'What Pitboard has changed, and when'
             cand doctor 'Check that what Pitboard relies on still holds on this machine'
             cand uninstall 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files'
@@ -215,6 +216,26 @@ set edit:completion:arg-completer[pitboard] = {|@words|
         }
         &'pitboard;schedule;help;help'= {
         }
+        &'pitboard;vault'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand status 'Say where parked logins are kept (the default)'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;vault;status'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'pitboard;vault;help'= {
+            cand status 'Say where parked logins are kept (the default)'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'pitboard;vault;help;status'= {
+        }
+        &'pitboard;vault;help;help'= {
+        }
         &'pitboard;log'= {
             cand -n 'How many changes to show'
             cand --lines 'How many changes to show'
@@ -272,6 +293,7 @@ set edit:completion:arg-completer[pitboard] = {|@words|
             cand statusline 'One line for Claude Code''s status bar; reads its session JSON on stdin'
             cand renew 'Renew every parked login that is due, and nothing else'
             cand schedule 'Keep parked logins alive without running anything yourself'
+            cand vault 'Where parked logins are kept: in the login keyring, or in 0600 files'
             cand log 'What Pitboard has changed, and when'
             cand doctor 'Check that what Pitboard relies on still holds on this machine'
             cand uninstall 'Delete every parked login this Pitboard wrote, the daily renewal schedule, the watch service and Pitboard''s own files'
@@ -331,6 +353,11 @@ set edit:completion:arg-completer[pitboard] = {|@words|
         &'pitboard;help;schedule;status'= {
         }
         &'pitboard;help;schedule;uninstall'= {
+        }
+        &'pitboard;help;vault'= {
+            cand status 'Say where parked logins are kept (the default)'
+        }
+        &'pitboard;help;vault;status'= {
         }
         &'pitboard;help;log'= {
         }

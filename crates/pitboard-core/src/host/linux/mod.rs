@@ -86,11 +86,18 @@ impl Host for Linux {
     }
 
     fn new_home_form(&self, ctx: &Context) -> Option<VaultForm> {
-        Some(if secret_service::answers(ctx) {
+        Some(if self.answers(ctx, VaultForm::SecretService) {
             VaultForm::SecretService
         } else {
             VaultForm::Files
         })
+    }
+
+    fn answers(&self, ctx: &Context, form: VaultForm) -> bool {
+        match form {
+            VaultForm::SecretService => secret_service::answers(ctx),
+            VaultForm::Files => true,
+        }
     }
 
     fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {

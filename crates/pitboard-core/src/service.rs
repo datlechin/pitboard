@@ -595,10 +595,9 @@ impl Pitboard {
         }
     }
 
-    /// Where this home keeps the parked logins of Claude Code and Codex. `None` where its state
-    /// file cannot say.
-    pub fn vault(&self) -> Option<crate::host::Vault> {
-        crate::store::vault_place(&self.ctx)
+    /// Where this home keeps the parked logins of Claude Code and Codex, from its files alone.
+    pub fn vault(&self) -> Result<switch::Keeping> {
+        switch::keeping(&self.ctx)
     }
 
     /// Where an app's parked logins and the folders set aside are kept.

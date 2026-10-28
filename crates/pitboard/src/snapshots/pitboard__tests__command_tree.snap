@@ -1603,6 +1603,130 @@ expression: command_tree()
       ]
     },
     {
+      "name": "vault",
+      "aliases": [],
+      "hidden": false,
+      "about": "Where parked logins are kept: in the login keychain",
+      "arguments": [
+        {
+          "id": "json",
+          "long": "json",
+          "short": null,
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [
+            "JSON"
+          ],
+          "num_args": "0",
+          "action": "SetTrue",
+          "index": null,
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [
+            "false"
+          ],
+          "conflicts_with": [],
+          "help": "Print JSON instead of text"
+        },
+        {
+          "id": "help",
+          "long": "help",
+          "short": "h",
+          "aliases": [],
+          "short_aliases": [],
+          "value_names": [],
+          "num_args": "0",
+          "action": "Help",
+          "index": null,
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "possible_values": [],
+          "default_values": [],
+          "conflicts_with": [],
+          "help": "Print help"
+        }
+      ],
+      "commands": [
+        {
+          "name": "status",
+          "aliases": [],
+          "hidden": false,
+          "about": "Say where parked logins are kept (the default)",
+          "arguments": [
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "help",
+          "aliases": [],
+          "hidden": false,
+          "about": "Print this message or the help of the given subcommand(s)",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "status",
+              "aliases": [],
+              "hidden": false,
+              "about": "Say where parked logins are kept (the default)",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "help",
+              "aliases": [],
+              "hidden": false,
+              "about": "Print this message or the help of the given subcommand(s)",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "log",
       "aliases": [],
       "hidden": false,
@@ -2300,6 +2424,23 @@ expression: command_tree()
               "aliases": [],
               "hidden": false,
               "about": "Take it away",
+              "arguments": [],
+              "commands": []
+            }
+          ]
+        },
+        {
+          "name": "vault",
+          "aliases": [],
+          "hidden": false,
+          "about": "Where parked logins are kept: in the login keychain",
+          "arguments": [],
+          "commands": [
+            {
+              "name": "status",
+              "aliases": [],
+              "hidden": false,
+              "about": "Say where parked logins are kept (the default)",
               "arguments": [],
               "commands": []
             }

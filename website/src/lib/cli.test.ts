@@ -630,7 +630,7 @@ test("the scripts each system's release would write: kept, or the kept one in th
   const off = readTree(snaps("command_tree"));
   const on = readTree(snaps("command_tree_on_windows"));
   const pairs = differing(off, on);
-  assert.equal(pairs.length, 4);
+  assert.equal(pairs.length, 5);
   const zsh = snapshot(snaps("completions_zsh"));
   const powershell = snapshot(snaps("completions_powershell_on_windows"));
   for (const [script, toWindows] of [
@@ -663,6 +663,7 @@ test("everything the command line prints keeps the site's rules: no dash, a comm
   const banned = wordPattern([...bannedFromDocs(repo("docs/AGENTS.md")), ...SITE_BANNED]);
   const source = [
     "crates/pitboard/src/main.rs",
+    "crates/pitboard/src/vault.rs",
     "crates/pitboard/src/warm.rs",
     "crates/pitboard/src/watch.rs",
     "crates/pitboard-core/src/words.rs",

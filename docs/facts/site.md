@@ -95,7 +95,9 @@ The script sorts its offers with `Sort-Object -Property ListItemText`, which com
 and passes over the hyphens:
 
 - `pitboard ` offers `abandon adopt completions doctor enroll forget -h help --help --json log
-  rename renew repair schedule status statusline stow uninstall use -V --version warm watch`.
+  rename renew repair schedule status statusline stow uninstall use -V vault --version warm
+  watch`. RF-S1 read the list before there was a `vault`, which stands where the same order puts
+  it, unread until RF-S1 runs again.
 - `pitboard u` offers `uninstall use`; `pitboard s` offers `schedule status statusline stow`.
 - `pitboard use ` offers `-h --help --json -y --yes`; `pitboard watch ` offers
   `--at -h help --help install --json --once status uninstall`; `pitboard completions ` offers
