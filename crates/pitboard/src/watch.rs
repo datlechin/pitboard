@@ -824,8 +824,6 @@ mod tests {
         );
     }
 
-    /// What watching cannot mend ends it; what a later look may get past is said and watched
-    /// on.
     /// The loop waits until the next read or the next decision, whichever comes first, a write
     /// to Pitboard's directory waking it sooner, and never longer than a decision's every, so
     /// a clock put back holds nothing up for longer. Never `LOOK_EVERY_SECONDS`: that is the
@@ -869,6 +867,8 @@ mod tests {
         );
     }
 
+    /// What watching cannot mend ends it; what a later look may get past is said and watched
+    /// on.
     #[test]
     fn only_what_watching_cannot_mend_ends_it() {
         let unwritable = Error::StateWriteFailed {
