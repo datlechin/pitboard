@@ -152,7 +152,8 @@ private func settingsHeight(_ tab: SettingsView.Tab, warming: Int = 0) -> CGFloa
     defaults.set(tab.rawValue, forKey: DefaultsKey.settingsTab)
     let accounts = (0..<warming).map {
         WarmAccountShown(
-            qualified: "claude/\($0)", title: "\($0) · Max 5x", on: false, standing: nil)
+            account: AccountKey(tool: .claude, label: "\($0)"), qualified: "claude/\($0)",
+            title: "\($0) · Max 5x", on: false, standing: nil)
     }
     let model = AppModel(model: StandInModel(snapshot(0, warming: accounts)))
     let settings = SettingsView(

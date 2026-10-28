@@ -4,14 +4,13 @@
 
 use super::{sign_ins, titled, typeset};
 use pitboard_core::host::Os;
-use pitboard_core::state::Key;
 use pitboard_core::words::listed;
 
 pub(crate) const NOT_KNOWN_HOW_IT_WENT: &str =
     "Pitboard stopped before it could say how this went. Refresh to see where things stand.";
 
-pub(crate) fn could_not_switch(qualified: &str) -> String {
-    format!("Couldn’t switch to {}", Key::parse(qualified).label)
+pub(crate) fn could_not_switch(label: &str) -> String {
+    format!("Couldn’t switch to {label}")
 }
 
 pub(crate) const COULD_NOT_CANCEL: &str = "Couldn’t cancel the switch";
@@ -24,8 +23,8 @@ pub(crate) fn could_not_sign_in(again: Option<&str>) -> String {
     }
 }
 
-pub(crate) fn could_not_remove(qualified: &str) -> String {
-    format!("Couldn’t remove {}", Key::parse(qualified).label)
+pub(crate) fn could_not_remove(label: &str) -> String {
+    format!("Couldn’t remove {label}")
 }
 
 pub(crate) fn could_not_rename(label: &str) -> String {
@@ -42,8 +41,8 @@ pub(crate) const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts
 
 pub(crate) const COULD_NOT_UNINSTALL: &str = "Couldn’t uninstall Pitboard";
 
-pub(crate) fn could_not_warm(qualified: &str) -> String {
-    format!("Couldn’t warm up {}", Key::parse(qualified).label)
+pub(crate) fn could_not_warm(label: &str) -> String {
+    format!("Couldn’t warm up {label}")
 }
 
 pub(crate) const COULD_NOT_READ_USAGE: &str = "Couldn’t read usage";
@@ -75,7 +74,7 @@ pub(crate) fn move_waits_too(tool: &str, program: &str) -> String {
 }
 
 // `moving`: each tool whose switch in its app waits, with its program.
-pub(crate) fn cancel_stuck(moving: &[(String, &str)]) -> String {
+pub(crate) fn cancel_stuck(moving: &[(&str, &str)]) -> String {
     if moving.is_empty() {
         return "Every sign-in is kept, and nothing is deleted.".into();
     }
@@ -164,11 +163,11 @@ mod tests {
             "Pitboard stopped before it could say how this went. Refresh to see where things \
              stand."
         );
-        assert_eq!(could_not_switch("claude/work"), "Couldn’t switch to work");
+        assert_eq!(could_not_switch("work"), "Couldn’t switch to work");
         assert_eq!(COULD_NOT_CANCEL, "Couldn’t cancel the switch");
         assert_eq!(could_not_sign_in(Some("work")), "Couldn’t sign in to work");
         assert_eq!(could_not_sign_in(None), "Couldn’t add the account");
-        assert_eq!(could_not_remove("claude/work"), "Couldn’t remove work");
+        assert_eq!(could_not_remove("work"), "Couldn’t remove work");
         assert_eq!(could_not_rename("work"), "Couldn’t rename work");
         assert_eq!(
             COULD_NOT_UPDATE_CONFIG,
@@ -180,7 +179,7 @@ mod tests {
             COULD_NOT_CHANGE_WARM,
             "Couldn’t change which accounts are warmed up"
         );
-        assert_eq!(could_not_warm("claude/work"), "Couldn’t warm up work");
+        assert_eq!(could_not_warm("work"), "Couldn’t warm up work");
         assert_eq!(COULD_NOT_READ_USAGE, "Couldn’t read usage");
         assert_eq!(
             LAST_MEASURED,

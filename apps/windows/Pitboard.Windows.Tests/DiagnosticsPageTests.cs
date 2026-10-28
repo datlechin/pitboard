@@ -21,7 +21,7 @@ public sealed class DiagnosticsPageTests
 
     private static readonly CheckLine SavedSignIns = new(
         2, "Saved sign-ins", Level.Warn, "Warning", "old’s expired on Oct 21.", Advice: null,
-        Action: new ItemOffer("Sign in…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "old")), Enabled: true, Confirm: null),
+        Action: new ItemOffer("Sign in…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "old"))), Enabled: true, Confirm: null),
         Learn: null);
 
     private static readonly ChecksShown TwoGroups = new(

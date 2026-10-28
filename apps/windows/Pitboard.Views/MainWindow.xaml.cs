@@ -203,6 +203,6 @@ public sealed partial class MainWindow : Window
     private void OnAddAccount(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         args.Handled = true;
-        _model.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)));
+        _model.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null)));
     }
 }

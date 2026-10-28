@@ -8,7 +8,7 @@ public sealed class WindowAlertTests
     private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.", null);
     private static readonly WindowQuestion QuitChatGPT = new(
         new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
-        Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+        Confirmed: new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")),
         Declined: new Intent.KeepAppOpen());
 
     private static AppModel Model(Snapshot snapshot) => new(snapshot);
@@ -27,7 +27,7 @@ public sealed class WindowAlertTests
         var model = Model(Snapshots.Read(1) with { QuitQuestion = QuitChatGPT });
         var alert = WindowAlert.Of(model)!;
 
-        CollectionAssert.AreEqual(new Intent[] { new Intent.QuitAndSwitch("codex/spare") }, alert.Answered(confirmed: true).ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")) }, alert.Answered(confirmed: true).ToArray());
         CollectionAssert.AreEqual(new Intent[] { new Intent.KeepAppOpen() }, alert.Answered(confirmed: false).ToArray());
     }
 
@@ -36,12 +36,12 @@ public sealed class WindowAlertTests
     {
         var replace = new WindowQuestion(
             new Question("Replace Claude Code’s login?", "Anthropic no longer accepts it.", "Replace", Destructive: false, ConfirmIsDefault: true),
-            Confirmed: new Intent.ReplaceAndSwitch("claude/work"),
+            Confirmed: new Intent.ReplaceAndSwitch(new AccountKey(Tool.Claude, "work")),
             Declined: new Intent.KeepLogin());
         var alert = WindowAlert.Of(Model(Snapshots.Read(1) with { ReplaceQuestion = replace }))!;
 
         Assert.AreEqual(new WindowAlert.Asking(replace.Question, replace.Confirmed, replace.Declined), alert);
-        CollectionAssert.AreEqual(new Intent[] { new Intent.ReplaceAndSwitch("claude/work") }, alert.Answered(confirmed: true).ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.ReplaceAndSwitch(new AccountKey(Tool.Claude, "work")) }, alert.Answered(confirmed: true).ToArray());
         CollectionAssert.AreEqual(new Intent[] { new Intent.KeepLogin() }, alert.Answered(confirmed: false).ToArray());
     }
 
@@ -55,7 +55,7 @@ public sealed class WindowAlertTests
     [TestMethod]
     public void AFailureWhoseNextStepIsAnActionTakesItOnceChosen()
     {
-        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "work")), Enabled: true);
+        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "work"))), Enabled: true);
         var failed = new WindowAlert.Failed(Failure with { Next = new NextStep.Act(signIn) });
 
         Assert.AreEqual(signIn, failed.Act);
@@ -86,6 +86,6 @@ public sealed class WindowAlertTests
     public void WhileASheetIsUpItsAlertIsSaidInTheSheet()
     {
         Assert.IsFalse(WindowAlert.InSheet(Model(Snapshots.Read(1))));
-        Assert.IsTrue(WindowAlert.InSheet(Model(Snapshots.Read(1) with { Sheet = new Sheet.Add(Provider: null) })));
+        Assert.IsTrue(WindowAlert.InSheet(Model(Snapshots.Read(1) with { Sheet = new Sheet.Add(Tool: null) })));
     }
 }

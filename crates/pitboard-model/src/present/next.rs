@@ -12,7 +12,7 @@ const ERRORS: &str = "https://docs.usepitboard.com/reference/errors";
 const CHECKS: &str = "https://docs.usepitboard.com/reference/maintenance-commands#doctor";
 
 // A failure's next step, by its code and the account it is about; with no code, it was lost.
-pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&str>) -> NextStep {
+pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> NextStep {
     let act = |title: String, intent: Intent| NextStep::Act {
         choice: Choice {
             title,
@@ -23,8 +23,7 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&str>) -> N
     let Some(code) = code else {
         return act(words::REFRESH.into(), Intent::Refresh { asked: true });
     };
-    let key = account.map(Key::parse);
-    match (code, key) {
+    match (code, account) {
         (
             "nothing_parked"
             | "parked_login_expired"
@@ -39,8 +38,7 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&str>) -> N
             words::sign_in_again(os, true),
             Intent::PresentSheet {
                 sheet: Sheet::SignInAgain {
-                    provider: key.provider.code().into(),
-                    label: key.label,
+                    account: key.clone().into(),
                 },
             },
         ),
@@ -48,21 +46,21 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&str>) -> N
             words::add_account(os, true),
             Intent::PresentSheet {
                 sheet: Sheet::Add {
-                    provider: key.map(|key| key.provider.code().into()),
+                    tool: key.map(|key| key.provider.into()),
                 },
             },
         ),
         ("live_account_not_enrolled", Some(key)) => act(
             words::add_account(os, true),
             Intent::Enrol {
-                provider: key.provider.code().into(),
+                tool: key.provider.into(),
             },
         ),
         // Pitboard asked ChatGPT to quit before a switch, and it stayed open.
         ("app_open", Some(key)) if key.provider != ProviderId::Desktop => act(
             words::try_again(os),
             Intent::SwitchTo {
-                qualified: key.qualified(),
+                account: key.clone().into(),
             },
         ),
         (
@@ -258,6 +256,8 @@ fn error_section(code: &str, desktop: bool) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AccountKey;
+    use crate::Tool;
 
     // As Mintlify anchors a heading.
     fn anchor(heading: &str) -> String {
@@ -316,16 +316,18 @@ mod tests {
 
     #[test]
     fn a_failure_the_app_can_do_something_about_offers_it() {
-        let act = |code, account| match of_failure(Os::MacOs, Some(code), account) {
+        let act = |code, account: Option<&Key>| match of_failure(Os::MacOs, Some(code), account) {
             NextStep::Act { choice } => Some(choice.intent),
             NextStep::Learn { .. } => None,
         };
         assert_eq!(
-            act("parked_login_expired", Some("codex/work")),
+            act(
+                "parked_login_expired",
+                Some(&Key::new(ProviderId::Codex, "work"))
+            ),
             Some(Intent::PresentSheet {
                 sheet: Sheet::SignInAgain {
-                    provider: "codex".into(),
-                    label: "work".into(),
+                    account: AccountKey::new(Tool::Codex, "work")
                 },
             })
         );
@@ -336,10 +338,11 @@ mod tests {
             })
         );
         assert_eq!(
-            act("live_account_not_enrolled", Some("claude/")),
-            Some(Intent::Enrol {
-                provider: "claude".into(),
-            })
+            act(
+                "live_account_not_enrolled",
+                Some(&Key::new(ProviderId::Claude, ""))
+            ),
+            Some(Intent::Enrol { tool: Tool::Claude })
         );
         assert_eq!(
             of_failure(Os::Windows, None, None),
@@ -352,7 +355,11 @@ mod tests {
             }
         );
         assert_eq!(
-            of_failure(Os::MacOs, Some("app_open"), Some("desktop/home")),
+            of_failure(
+                Os::MacOs,
+                Some("app_open"),
+                Some(&Key::new(ProviderId::Desktop, "home"))
+            ),
             NextStep::Learn {
                 link: SetupLink {
                     title: words::learn_more(Os::MacOs),
@@ -361,12 +368,16 @@ mod tests {
             }
         );
         assert_eq!(
-            of_failure(Os::Windows, Some("app_open"), Some("codex/work")),
+            of_failure(
+                Os::Windows,
+                Some("app_open"),
+                Some(&Key::new(ProviderId::Codex, "work"))
+            ),
             NextStep::Act {
                 choice: Choice {
                     title: words::try_again(Os::Windows),
                     intent: Intent::SwitchTo {
-                        qualified: "codex/work".into(),
+                        account: AccountKey::new(Tool::Codex, "work")
                     },
                     enabled: true,
                 },

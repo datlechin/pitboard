@@ -5,7 +5,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountsViewModelTests
 {
-    private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: null)), Enabled: true);
+    private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Tool: null)), Enabled: true);
 
     private static (AccountsViewModel Shown, StandInModel Model, AppModel App, List<string> Told) Over(
         Snapshot snapshot, Action<Uri>? open = null)
@@ -151,8 +151,8 @@ public sealed class AccountsViewModelTests
             Limits = [Items.Limit(42)],
             Actions =
             [
-                Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare")), Items.RenameAction("claude", "spare"),
-                Items.WindowAction(Items.Window("claude", "spare")), Items.RemoveAction("claude/spare"),
+                Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare"))), Items.RenameAction("claude", "spare"),
+                Items.WindowAction(Items.Window("claude", "spare")), Items.RemoveAction("claude", "spare"),
             ],
         };
         var first = Snapshots.Read(1) with { Sections = [Items.Section("claude", null, spare)] };
@@ -173,7 +173,7 @@ public sealed class AccountsViewModelTests
         app.Apply(first with
         {
             Revision = 3,
-            Sections = [Items.Section("claude", null, spare with { Actions = [.. spare.Actions.SkipLast(1), Items.RemoveAction("claude/spare", enabled: false)] })],
+            Sections = [Items.Section("claude", null, spare with { Actions = [.. spare.Actions.SkipLast(1), Items.RemoveAction("claude", "spare", enabled: false)] })],
         });
 
         Assert.IsFalse(row.Commands[^1].Action.Enabled);
@@ -199,7 +199,7 @@ public sealed class AccountsViewModelTests
 
         Assert.IsNull(shown.Setup);
 
-        app.Apply(Snapshots.Read(2) with { Setup = step, Footing = new Footing.OnlyOne(Provider: "claude", Label: "work") });
+        app.Apply(Snapshots.Read(2) with { Setup = step, Footing = new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")) });
 
         Assert.AreSame(step, shown.Setup);
         Assert.IsInstanceOfType<Footing.OnlyOne>(shown.SetupFooting);
@@ -217,7 +217,7 @@ public sealed class AccountsViewModelTests
         shown.Sections.Single()[1].Act();
         shown.Sections.Single()[0].Act();
 
-        Assert.AreEqual(new Intent.SwitchTo("claude/spare"), model.Sent.OfType<Intent.SwitchTo>().Single());
+        Assert.AreEqual(new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare")), model.Sent.OfType<Intent.SwitchTo>().Single());
     }
 
     // Unloaded, the page hears nothing; shown again, it is told everything at once.

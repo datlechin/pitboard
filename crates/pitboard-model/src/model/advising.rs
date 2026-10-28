@@ -10,9 +10,12 @@ use super::{
     AtLimit, Intent, NotificationButton, Place, RunOutNotice, SettingsSection, Sheet, WindowRequest,
 };
 use crate::Account;
+use crate::AccountKey;
+use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
 use pitboard_core::status::Standing;
 
 /// `work`, in use, its five-hour limit `percent` used until `resets`.
@@ -35,12 +38,12 @@ fn switches_to(model: &Hand) -> Vec<String> {
         .state
         .advice
         .iter()
-        .map(|advice| advice.switch_to.clone())
+        .map(|advice| advice.switch_to.qualified())
         .collect()
 }
 
 fn told_work() -> String {
-    Advice::key("claude", "work", &window("session", 100.0))
+    Advice::key(ProviderId::Claude, "work", &window("session", 100.0))
 }
 
 /// A session's status line records that the account in use has run out, and the menu bar
@@ -167,12 +170,12 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
             .limits(vec![window("session", percent).resets(Some(9_000))])
             .build()
     };
-    fn offered(model: &Hand) -> Vec<(&str, Option<i64>)> {
+    fn offered(model: &Hand) -> Vec<(String, Option<i64>)> {
         model
             .state
             .advice
             .iter()
-            .map(|advice| (advice.switch_to.as_str(), advice.left))
+            .map(|advice| (advice.switch_to.qualified(), advice.left))
             .collect()
     }
     let mut model = Hand::new();
@@ -183,7 +186,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
         other("extra", 50.0, true),
     ])));
     model.refresh(&mut machine);
-    assert_eq!(offered(&model), [("claude/personal", Some(90))]);
+    assert_eq!(offered(&model), [("claude/personal".into(), Some(90))]);
 
     machine.answer = Ok(status(vec![
         spent(),
@@ -194,7 +197,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     model.refresh(&mut machine);
     assert_eq!(
         offered(&model),
-        [("claude/personal", Some(70))],
+        [("claude/personal".into(), Some(70))],
         "what is left follows the numbers"
     );
 
@@ -206,7 +209,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     model.refresh(&mut machine);
     assert_eq!(
         offered(&model),
-        [("claude/side", Some(60))],
+        [("claude/side".into(), Some(60))],
         "personal was forgotten"
     );
 
@@ -218,7 +221,7 @@ fn advice_offers_what_can_still_be_used_after_every_read() {
     model.refresh(&mut machine);
     assert_eq!(
         offered(&model),
-        [("claude/extra", Some(50))],
+        [("claude/extra".into(), Some(50))],
         "side needs signing in again"
     );
 
@@ -252,12 +255,12 @@ fn a_switch_puts_away_the_advice_about_its_own_tool() {
         work(100.0, 7_200),
         personal(),
         account(Some("side"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .limits(vec![window("five_hour", 100.0).resets(Some(7_200))])
             .build(),
         account(Some("job"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .limits(vec![window("five_hour", 10.0).resets(Some(7_200))])
             .build(),
     ])));
@@ -266,8 +269,8 @@ fn a_switch_puts_away_the_advice_about_its_own_tool() {
 
     // The read after the switch fails, so what is said is what the switch left.
     machine.answer = Err(refusal("unreachable", "could not be reached", Vec::new()));
-    machine.switched = switched("codex", "codex/side", "codex/job", Vec::new());
-    switch(&mut model, &mut machine, "codex/job");
+    machine.switched = switched(ProviderId::Codex, "codex/side", "codex/job", Vec::new());
+    switch(&mut model, &mut machine, Tool::Codex, "job");
     assert_eq!(switches_to(&model), ["claude/personal"]);
 }
 
@@ -306,7 +309,10 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     let mut beside = Stub::reading(Ok(status(vec![
         work(100.0, 7_200),
         personal(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ])));
     both.refresh(&mut beside);
     assert_eq!(beside.posted[0].subtitle.as_deref(), Some("Claude Code"));
@@ -487,7 +493,7 @@ fn a_switch_to_the_account_in_use_keeps_the_advice_about_it() {
     assert_eq!(switches_to(&model), ["claude/personal"]);
 
     machine.switched = already_active("work", Vec::new());
-    switch(&mut model, &mut machine, "claude/work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     assert_eq!(switches_to(&model), ["claude/personal"]);
 }
 
@@ -557,7 +563,7 @@ fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
             "a switch needs no window"
         );
     }
-    machine.switched = switched("claude", "work", "personal", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
     model.send(Intent::NotificationClicked {
         argument: button.clicked,
     });
@@ -573,8 +579,7 @@ fn a_sign_in_again_button_puts_up_the_accounts_sheet() {
         assert_eq!(
             model.state.sheet,
             Some(Sheet::SignInAgain {
-                provider: "codex".into(),
-                label: "work".into(),
+                account: AccountKey::new(Tool::Codex, "work")
             })
         );
         assert_eq!(model.shown().window_request.place, Some(Place::Accounts));
@@ -770,7 +775,7 @@ fn do_nothing_notifies_nothing() {
 #[test]
 fn switch_notifies_of_codex_alone() {
     let codex = |label: &str, percent: f64, signed_in: bool| {
-        let made = account(Some(label)).of("codex").limits(vec![
+        let made = account(Some(label)).of(ProviderId::Codex).limits(vec![
             window("five_hour", percent)
                 .length(18_000)
                 .resets(Some(7_200)),
@@ -784,9 +789,9 @@ fn switch_notifies_of_codex_alone() {
         codex("job", 97.0, true),
         codex("side", 10.0, false),
     ])));
-    machine.look = Ok(crate::AutoLooked::Stands(
+    machine.look = Ok(crate::AutoLooked::Stands(Box::new(
         super::testing::records::watching("work"),
-    ));
+    )));
     chose(&mut model, &mut machine, AtLimit::Switch);
     model.refresh(&mut machine);
     let posted: Vec<(&str, Option<&str>)> = machine

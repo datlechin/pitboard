@@ -24,12 +24,13 @@ import Testing
 @MainActor
 @Test func theListStartsAfreshWhenAToolComesOrGoesAndOnlyThen() async throws {
     let model = AppModel(model: StandInModel(snapshot(0)))
-    let alone = [AccountSection(id: "claude", heading: nil, accounts: sample)]
+    let alone = [AccountSection(id: "claude", tool: .claude, heading: nil, accounts: sample)]
     model.apply(snapshot(1, sections: alone))
     let shown = await accountsWindow(showing: model)
     let first = try #require(listTable(in: shown.contentView))
 
-    let fewer = AccountSection(id: "claude", heading: nil, accounts: sample.dropLast())
+    let fewer = AccountSection(
+        id: "claude", tool: .claude, heading: nil, accounts: sample.dropLast())
     model.apply(snapshot(2, sections: [fewer]))
     await settle()
     #expect(listTable(in: shown.contentView) === first, "an account went, and the tools stayed")
@@ -82,8 +83,8 @@ private func twoTools(_ claude: [AccountItem]) -> [AccountSection] {
             actions: item.actions)
     }
     return [
-        AccountSection(id: "claude", heading: "Claude Code", accounts: claude),
-        AccountSection(id: "codex", heading: "Codex", accounts: codex),
+        AccountSection(id: "claude", tool: .claude, heading: "Claude Code", accounts: claude),
+        AccountSection(id: "codex", tool: .codex, heading: "Codex", accounts: codex),
     ]
 }
 
@@ -105,7 +106,9 @@ func accountsWindow(_ items: [AccountItem] = sample, notices: [PanelNotice] = []
     model.apply(
         snapshot(
             1, updated: "Updated 1:36 PM",
-            sections: [AccountSection(id: "claude", heading: nil, accounts: items)],
+            sections: [
+                AccountSection(id: "claude", tool: .claude, heading: nil, accounts: items)
+            ],
             notices: notices))
     return await accountsWindow(showing: model)
 }
@@ -173,18 +176,19 @@ func account(
 ) -> AccountItem {
     let inUse = standing == .inUse
     let qualified = "claude/\(label)"
+    let key = AccountKey(tool: .claude, label: label)
     let email = "dana@\(label).example"
-    let switchTo = Intent.switchTo(qualified: qualified)
+    let switchTo = Intent.switchTo(account: key)
     let actions = [
         AccountAction(
             kind: .switch, title: "Switch to \(label)", intent: switchTo, window: nil,
             enabled: !inUse, confirm: nil),
         AccountAction(
             kind: .rename, title: "Rename…",
-            intent: .presentSheet(sheet: .rename(provider: "claude", label: label)),
+            intent: .presentSheet(sheet: .rename(account: key)),
             window: nil, enabled: true, confirm: nil),
         AccountAction(
-            kind: .remove, title: "Remove Account…", intent: .forget(qualified: qualified),
+            kind: .remove, title: "Remove Account…", intent: .forget(account: key),
             window: nil, enabled: !inUse, confirm: nil),
     ]
     return AccountItem(

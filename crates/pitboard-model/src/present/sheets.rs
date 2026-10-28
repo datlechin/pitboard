@@ -22,19 +22,16 @@ use pitboard_core::switch::{Foreseen, WaitStep};
 /// picks one, or why what is typed cannot be a name. The model saves by the same rule, and it
 /// answers at once, so a view asks it as it is typed in. A sheet that signs in takes no name.
 #[uniffi::export]
-pub fn check_name(sheet: Sheet, tool: String, typed: String) -> NameCheck {
+pub fn check_name(sheet: Sheet, tool: Tool, typed: String) -> NameCheck {
     let sends = |intent| NameCheck {
         problem: None,
         intent,
     };
     match sheet {
-        Sheet::Add { .. } => sends(Some(Intent::SignIn {
-            provider: tool,
-            again: None,
-        })),
-        Sheet::SignInAgain { provider, label } => sends(Some(Intent::SignIn {
-            provider,
-            again: Some(label),
+        Sheet::Add { .. } => sends(Some(Intent::SignIn { tool, again: None })),
+        Sheet::SignInAgain { account } => sends(Some(Intent::SignIn {
+            tool: account.tool,
+            again: Some(account.label),
         })),
         Sheet::Stow => sends(None),
         Sheet::Name { .. } | Sheet::Rename { .. } => match saved_name(&sheet, &typed) {
@@ -54,66 +51,65 @@ pub fn check_name(sheet: Sheet, tool: String, typed: String) -> NameCheck {
 pub(crate) fn saved_name(sheet: &Sheet, typed: &str) -> Result<Option<String>, label::Unusable> {
     let name = trimmed(typed);
     match sheet {
-        Sheet::Rename { label, .. } | Sheet::Name { label, .. } if label == name => Ok(None),
+        Sheet::Rename { account } | Sheet::Name { account, .. } if account.label == name => {
+            Ok(None)
+        }
         _ => label::check(name).map(|()| Some(name.to_owned())),
     }
 }
 
 fn renames(sheet: Sheet, to: String) -> Option<Intent> {
     match sheet {
-        Sheet::Rename { provider, label }
-        | Sheet::Name {
-            provider, label, ..
-        } => Some(Intent::Rename {
-            provider,
-            label,
-            to,
-        }),
+        Sheet::Rename { account } | Sheet::Name { account, .. } => {
+            Some(Intent::Rename { account, to })
+        }
         _ => None,
     }
 }
 
 /// The tool the sheet for `sheet` starts on: the one it is about, and for a new account
 /// where nothing said which, the first Pitboard found.
-pub(crate) fn starts_on(seen: &Seen, sheet: &Sheet) -> String {
+pub(crate) fn starts_on(seen: &Seen, sheet: &Sheet) -> ProviderId {
     match sheet {
-        Sheet::Add { provider } => provider
-            .clone()
+        Sheet::Add { tool } => tool
+            .map(ProviderId::from)
             .or_else(|| {
                 (seen.tools.iter())
-                    .find(|tool| missing(seen, &tool.code).is_none())
+                    .find(|&&tool| missing(seen, tool).is_none())
                     .or(seen.tools.first())
-                    .map(|tool| tool.code.clone())
+                    .copied()
             })
-            .unwrap_or_else(|| ProviderId::Claude.code().to_owned()),
-        Sheet::SignInAgain { provider, .. }
-        | Sheet::Name { provider, .. }
-        | Sheet::Rename { provider, .. } => provider.clone(),
-        Sheet::Stow => ProviderId::Claude.code().to_owned(),
+            .unwrap_or(ProviderId::Claude),
+        Sheet::SignInAgain { account }
+        | Sheet::Name { account, .. }
+        | Sheet::Rename { account } => account.tool.into(),
+        Sheet::Stow => ProviderId::Claude,
     }
 }
 
 // Unknown until the model has asked which tools are here, and then said only of one not found.
-fn missing(seen: &Seen, tool: &str) -> Option<Missing> {
+fn missing(seen: &Seen, tool: ProviderId) -> Option<Missing> {
     let found = seen.state.installed.as_ref()?;
-    if found.iter().any(|here| here.code == tool) {
+    if found.contains(&tool) {
         return None;
     }
-    words::missing(seen.os, tool)
+    Some(words::missing(seen.os, tool))
 }
 
-fn nothing_to_park(seen: &Seen, provider: &str) -> bool {
+fn nothing_to_park(seen: &Seen, provider: ProviderId) -> bool {
     seen.in_use_of(provider).is_none()
-        || seen.state.warnings.iter().any(|warning| {
-            warning.code == "looks_signed_out" && warning.provider.as_deref() == Some(provider)
-        })
+        || seen
+            .state
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "looks_signed_out" && warning.provider == Some(provider))
         || seen.state.refused_by(provider) == Some("live_credential_absent")
 }
 
 // The message, the default button and the steps of the form for a tool that signs in inside
 // its app.
-fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String, Vec<String>) {
-    let app = seen.program_of(provider);
+fn in_app_form(seen: &Seen, sheet: &Sheet, provider: ProviderId) -> (String, String, Vec<String>) {
+    let app = provider.program();
     let park = seen
         .in_use_of(provider)
         .filter(|_| !nothing_to_park(seen, provider));
@@ -137,12 +133,12 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String, V
         )
     };
     match sheet {
-        Sheet::SignInAgain { label, .. } if current => (
-            words::add_shown(app, label),
-            words::add_as(label),
+        Sheet::SignInAgain { account } if current => (
+            words::add_shown(app, &account.label),
+            words::add_as(&account.label),
             Vec::new(),
         ),
-        Sheet::SignInAgain { label, .. } => signs_in(Some(label)),
+        Sheet::SignInAgain { account } => signs_in(Some(&account.label)),
         _ if current && first => (
             words::add_shown_first(app),
             words::add_account(seen.os, false),
@@ -161,29 +157,30 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: &str) -> (String, String, V
 }
 
 // What a sign-in sheet says, its button and its steps, with `tool` picked.
-fn form_words(seen: &Seen, sheet: &Sheet, tool: &str) -> (String, String, Vec<String>) {
+fn form_words(seen: &Seen, sheet: &Sheet, tool: ProviderId) -> (String, String, Vec<String>) {
     if in_its_app(tool) {
         return in_app_form(seen, sheet, tool);
     }
     let again = match sheet {
-        Sheet::SignInAgain { label, .. } => Some(label.as_str()),
+        Sheet::SignInAgain { account } => Some(account.label.as_str()),
         _ => None,
     };
     (
-        words::sign_in_message(&seen.tool_name(tool), again),
+        words::sign_in_message(tool.name(), again),
         words::sign_in_asking(seen.os),
         Vec::new(),
     )
 }
 
-fn sheet_tool(seen: &Seen, sheet: &Sheet, tool: &Tool) -> SheetTool {
-    let (message, confirm, steps) = form_words(seen, sheet, &tool.code);
+fn sheet_tool(seen: &Seen, sheet: &Sheet, tool: ProviderId) -> SheetTool {
+    let (message, confirm, steps) = form_words(seen, sheet, tool);
     SheetTool {
-        code: tool.code.clone(),
-        name: tool.name.clone(),
+        tool: tool.into(),
+        code: tool.code().into(),
+        name: tool.name().into(),
         message,
         confirm,
-        missing: missing(seen, &tool.code),
+        missing: missing(seen, tool),
         steps,
     }
 }
@@ -191,7 +188,7 @@ fn sheet_tool(seen: &Seen, sheet: &Sheet, tool: &Tool) -> SheetTool {
 // What the sheet says under its fields while it records the account an app shows.
 fn progress(seen: &Seen) -> Option<String> {
     let (tool, step) = seen.state.recording()?;
-    Some(words::recording(seen.program_of(tool), step))
+    Some(words::recording(tool.program(), step))
 }
 
 /// What the sheet over the main window says, while one is up that names an account. The
@@ -204,17 +201,15 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
     let progress = progress(seen);
     let text = match sheet {
         Sheet::Add { .. } => {
-            let (message, confirm, _) = form_words(seen, sheet, &tool);
+            let (message, confirm, _) = form_words(seen, sheet, tool);
             SheetText {
                 title: words::add_account(seen.os, false),
                 message,
-                tools: (seen.tools.iter())
-                    .filter(|offered| {
-                        offered.code == tool || missing(seen, &offered.code).is_none()
-                    })
+                tools: (seen.tools.iter().copied())
+                    .filter(|&offered| offered == tool || missing(seen, offered).is_none())
                     .map(|offered| sheet_tool(seen, sheet, offered))
                     .collect(),
-                tool,
+                tool: tool.into(),
                 account: None,
                 name: String::new(),
                 prompt: words::NAME_PROMPT.into(),
@@ -223,44 +218,44 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
                 progress,
             }
         }
-        Sheet::SignInAgain { label, .. } => {
-            let (message, confirm, _) = form_words(seen, sheet, &tool);
+        Sheet::SignInAgain { account } => {
+            let (message, confirm, _) = form_words(seen, sheet, tool);
             SheetText {
-                title: words::sign_in_to_again(seen.os, label, false),
+                title: words::sign_in_to_again(seen.os, &account.label, false),
                 message,
-                tools: (seen.tools.iter())
-                    .filter(|own| own.code == tool)
+                tools: (seen.tools.iter().copied())
+                    .filter(|&own| own == tool)
                     .map(|own| sheet_tool(seen, sheet, own))
                     .collect(),
-                tool,
-                account: Some(label.clone()),
-                name: label.clone(),
+                tool: tool.into(),
+                account: Some(account.label.clone()),
+                name: account.label.clone(),
                 prompt: words::NAME_PROMPT.into(),
                 confirm,
                 saving,
                 progress,
             }
         }
-        Sheet::Name { label, email, .. } => SheetText {
+        Sheet::Name { account, email } => SheetText {
             title: words::name_this_account(seen.os),
-            message: words::naming(email, &seen.tool_name(&tool)),
+            message: words::naming(email, tool.name()),
             tools: Vec::new(),
             account: None,
-            name: label.clone(),
-            tool,
+            name: account.label.clone(),
+            tool: tool.into(),
             prompt: words::NAME_PROMPT.into(),
             confirm: words::DONE.into(),
             saving,
             progress: None,
         },
-        Sheet::Rename { label, .. } => SheetText {
-            title: words::rename_title(label),
+        Sheet::Rename { account } => SheetText {
+            title: words::rename_title(&account.label),
             message: words::RENAMING.into(),
             tools: Vec::new(),
-            tool,
+            tool: tool.into(),
             account: None,
-            name: label.clone(),
-            prompt: label.clone(),
+            name: account.label.clone(),
+            prompt: account.label.clone(),
             confirm: words::rename(false).into(),
             saving,
             progress: None,
@@ -305,7 +300,7 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         return Some(in_app_signing_in_text(seen, signing));
     }
     let signing = seen.state.signing()?;
-    let tool = seen.tool_name(&signing.provider);
+    let tool = signing.tool.name();
     Some(SigningInText {
         waiting: words::WAITING_FOR_BROWSER.into(),
         offers_link: true,
@@ -318,17 +313,17 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         undo: None,
         announce: None,
         steps: Vec::new(),
-        title: words::signing_in_to(seen.os, &tool),
+        title: words::signing_in_to(seen.os, tool),
         message: words::finish_in_browser(signing.again.as_deref()),
-        code_note: words::code_note(&tool),
-        refused: signing.code_refused().then(|| words::code_refused(&tool)),
+        code_note: words::code_note(tool),
+        refused: signing.code_refused().then(|| words::code_refused(tool)),
     })
 }
 
 // It offers to put back the account the core parked for it, not the one last read in use.
 fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn) -> SigningInText {
-    let provider = &signing.provider;
-    let app = seen.program_of(provider);
+    let provider = signing.tool;
+    let app = provider.program();
     let (message, waiting) = if signing.quitting {
         words::quitting(app)
     } else if !signing.started {
@@ -345,7 +340,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
             words::waiting_to_quit(app),
         )
     };
-    let put_back = signing.put_back.as_deref().filter(|_| signing.started);
+    let put_back = signing.put_back.as_ref().filter(|_| signing.started);
     let asks_again = matches!(
         signing.step,
         Some(WaitStep::QuitSignedOut | WaitStep::QuitUnfinished)
@@ -372,12 +367,12 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
             enabled: !signing.quitting,
         },
         escape_cancels: signing.started && put_back.is_none(),
-        undo: put_back.map(|qualified| Choice {
-            title: words::switch_back_to(seen.os, &Key::parse(qualified).label),
+        undo: put_back.map(|account| Choice {
+            title: words::switch_back_to(seen.os, &account.label),
             intent: Intent::SwitchTo {
-                qualified: qualified.to_owned(),
+                account: account.clone().into(),
             },
-            enabled: seen.state.switch_under_way().is_none(),
+            enabled: !seen.state.switch_under_way(),
         }),
         announce,
         steps: words::in_app_steps(
@@ -388,18 +383,17 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
     }
 }
 
-/// What a switch to `qualified` asks before it puts that account's login in place of a login
+/// What a switch to `account` asks before it puts that account's login in place of a login
 /// its tool has in use, which its service refuses for good, for `why`.
-pub(crate) fn replace_question(seen: &Seen, qualified: &str, why: &str) -> WindowQuestion {
-    let tool = seen.tool_name(Key::parse(qualified).provider.code());
+pub(crate) fn replace_question(account: &Key, why: &str) -> WindowQuestion {
     WindowQuestion {
         question: Question::asking(
-            words::replace_title(&tool),
+            words::replace_title(account.provider.name()),
             why.to_owned(),
             words::REPLACE.into(),
         ),
         confirmed: Intent::ReplaceAndSwitch {
-            qualified: qualified.to_owned(),
+            account: account.clone().into(),
         },
         declined: Intent::KeepLogin,
     }
@@ -410,7 +404,7 @@ pub(crate) fn quit_question(seen: &Seen, question: &QuitQuestion, then: &After) 
     WindowQuestion {
         question: quit_asks(seen, question, then),
         confirmed: Intent::QuitAndSwitch {
-            qualified: question.qualified.clone(),
+            account: question.account.clone().into(),
         },
         declined: Intent::KeepAppOpen,
     }
@@ -418,8 +412,11 @@ pub(crate) fn quit_question(seen: &Seen, question: &QuitQuestion, then: &After) 
 
 fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     let name = &question.name;
-    let Key { provider, label } = Key::parse(&question.qualified);
-    let tool = provider.code();
+    let Key {
+        provider: tool,
+        label,
+    } = &question.account;
+    let tool = *tool;
     if !in_its_app(tool) {
         return Question::asking(
             words::quit_to_switch(name),
@@ -430,7 +427,7 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     match then {
         After::Switch => Question::asking(
             words::quit_to_switch(name),
-            words::quit_to_move(name, &label),
+            words::quit_to_move(name, label),
             words::quit_and_switch(seen.os, name),
         ),
         After::SignIn { again, .. } => {
@@ -491,17 +488,17 @@ pub(crate) fn failure_text(os: Os, failure: &Failure) -> FailureText {
 }
 
 fn next_of(os: Os, failure: &Failure) -> NextStep {
-    super::next::of_failure(os, failure.code.as_deref(), failure.account.as_deref())
+    super::next::of_failure(os, failure.code.as_deref(), failure.account.as_ref())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AccountKey;
 
     fn rename(label: &str) -> Sheet {
         Sheet::Rename {
-            provider: "claude".into(),
-            label: label.into(),
+            account: AccountKey::new(Tool::Claude, label),
         }
     }
 
@@ -510,13 +507,12 @@ mod tests {
     }
 
     fn problem(sheet: Sheet, typed: &str) -> Option<String> {
-        check_name(sheet, "claude".into(), typed.into()).problem
+        check_name(sheet, Tool::Claude, typed.into()).problem
     }
 
     fn named(label: &str) -> Sheet {
         Sheet::Name {
-            provider: "claude".into(),
-            label: label.into(),
+            account: AccountKey::new(Tool::Claude, label),
             email: "a@example.com".into(),
         }
     }
@@ -544,13 +540,12 @@ mod tests {
     // Neither app maps a sheet to an intent; naming an account just added renames it on a change.
     #[test]
     fn a_name_comes_with_what_its_sheet_sends() {
-        let sends = |sheet: Sheet, tool: &str, typed: &str| {
-            check_name(sheet, tool.into(), typed.into()).intent
-        };
+        let sends =
+            |sheet: Sheet, tool: Tool, typed: &str| check_name(sheet, tool, typed.into()).intent;
         assert_eq!(
-            sends(Sheet::Add { provider: None }, "codex", " travel"),
+            sends(Sheet::Add { tool: None }, Tool::Codex, " travel"),
             Some(Intent::SignIn {
-                provider: "codex".into(),
+                tool: Tool::Codex,
                 again: None,
             }),
             "the tool picked"
@@ -558,32 +553,34 @@ mod tests {
         assert_eq!(
             sends(
                 Sheet::SignInAgain {
-                    provider: "codex".into(),
-                    label: "my work".into()
+                    account: AccountKey::new(Tool::Codex, "my work")
                 },
-                "codex",
+                Tool::Codex,
                 ""
             ),
             Some(Intent::SignIn {
-                provider: "codex".into(),
+                tool: Tool::Codex,
                 again: Some("my work".into()),
             }),
             "the account's own name, whatever a new one may be"
         );
         let to_home = Some(Intent::Rename {
-            provider: "claude".into(),
-            label: "acme".into(),
+            account: AccountKey::new(Tool::Claude, "acme"),
             to: "home".into(),
         });
-        assert_eq!(sends(named("acme"), "claude", "home"), to_home);
+        assert_eq!(sends(named("acme"), Tool::Claude, "home"), to_home);
         assert_eq!(
-            sends(named("acme"), "claude", " acme"),
+            sends(named("acme"), Tool::Claude, " acme"),
             Some(Intent::CloseSheet)
         );
-        assert_eq!(sends(rename("acme"), "claude", "home"), to_home);
-        assert_eq!(sends(rename("acme"), "claude", "acme"), None, "unchanged");
-        assert_eq!(sends(named("acme"), "claude", "a/b"), None);
-        assert_eq!(sends(Sheet::Stow, "claude", "work"), None);
+        assert_eq!(sends(rename("acme"), Tool::Claude, "home"), to_home);
+        assert_eq!(
+            sends(rename("acme"), Tool::Claude, "acme"),
+            None,
+            "unchanged"
+        );
+        assert_eq!(sends(named("acme"), Tool::Claude, "a/b"), None);
+        assert_eq!(sends(Sheet::Stow, Tool::Claude, "work"), None);
     }
 
     #[test]
@@ -610,9 +607,9 @@ mod tests {
     };
     use pitboard_core::host::Os;
 
-    fn asked(qualified: &str, app_id: &str, name: &str) -> QuitQuestion {
+    fn asked(account: Key, app_id: &str, name: &str) -> QuitQuestion {
         QuitQuestion {
-            qualified: qualified.into(),
+            account,
             app_id: app_id.into(),
             name: name.into(),
         }
@@ -622,7 +619,7 @@ mod tests {
 
     fn add_desktop() -> Sheet {
         Sheet::Add {
-            provider: Some("desktop".into()),
+            tool: Some(Tool::Desktop),
         }
     }
 
@@ -655,7 +652,11 @@ mod tests {
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let asked = quit_asks(
             &seen,
-            &asked("codex/work", "com.openai.codex", "ChatGPT"),
+            &asked(
+                Key::new(ProviderId::Codex, "work"),
+                "com.openai.codex",
+                "ChatGPT",
+            ),
             &After::Switch,
         );
         assert_eq!(
@@ -676,7 +677,7 @@ mod tests {
                 .signed_in()
                 .build(),
         );
-        let text = form(Sheet::Add { provider: None }, accounts, Vec::new());
+        let text = form(Sheet::Add { tool: None }, accounts, Vec::new());
         let sign_in = words::sign_in_asking(Os::MacOs);
         assert_eq!(
             text.tools
@@ -695,14 +696,14 @@ mod tests {
     // install it where the sheet starts on it.
     #[test]
     fn the_add_sheet_offers_the_tools_found() {
-        let offered = |found: Vec<Tool>, sheet: Sheet| {
+        let offered = |found: Vec<ProviderId>, sheet: Sheet| {
             let mut state = read(status(Vec::new(), Vec::new()), found);
             let text = form_of(&mut state, sheet);
             (text.tools.into_iter())
                 .map(|tool| (tool.code, tool.missing.is_some()))
                 .collect::<Vec<_>>()
         };
-        let add = Sheet::Add { provider: None };
+        let add = Sheet::Add { tool: None };
         assert_eq!(
             offered(vec![claude_code()], add.clone()),
             [("claude".into(), false)]
@@ -720,7 +721,7 @@ mod tests {
             offered(
                 vec![claude_code()],
                 Sheet::Add {
-                    provider: Some("codex".into())
+                    tool: Some(Tool::Codex)
                 }
             ),
             [("claude".into(), false), ("codex".into(), true)],
@@ -824,9 +825,9 @@ mod tests {
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
             &seen,
-            &asked("desktop/", CLAUDE, "Claude"),
+            &asked(Key::new(ProviderId::Desktop, ""), CLAUDE, "Claude"),
             &After::SignIn {
-                provider: "desktop".into(),
+                tool: ProviderId::Desktop,
                 again: None,
                 from: Some(add_desktop()),
             },
@@ -841,8 +842,7 @@ mod tests {
     #[test]
     fn recording_from_sign_in_again_asks_to_record_the_account() {
         let again = Sheet::SignInAgain {
-            provider: "desktop".into(),
-            label: "home".into(),
+            account: AccountKey::new(Tool::Desktop, "home"),
         };
         let text = form(
             again.clone(),
@@ -854,9 +854,9 @@ mod tests {
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let question = quit_asks(
             &seen,
-            &asked("desktop/home", CLAUDE, "Claude"),
+            &asked(Key::new(ProviderId::Desktop, "home"), CLAUDE, "Claude"),
             &After::Enrol {
-                provider: "desktop".into(),
+                tool: ProviderId::Desktop,
                 again: Some("home".into()),
                 from: Some(again),
             },
@@ -878,11 +878,12 @@ mod tests {
             vec![claude_code(), claude_desktop()],
         );
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
-        let said = |qualified: &str, then: After| {
-            quit_asks(&seen, &asked(qualified, CLAUDE, "Claude"), &then)
+        let said = |label: &str, then: After| {
+            let account = Key::new(ProviderId::Desktop, label);
+            quit_asks(&seen, &asked(account, CLAUDE, "Claude"), &then)
         };
         assert_eq!(
-            said("desktop/home", After::Switch),
+            said("home", After::Switch),
             Question::asking(
                 words::quit_to_switch("Claude"),
                 words::quit_to_move("Claude", "home"),
@@ -898,9 +899,9 @@ mod tests {
         };
         assert_eq!(
             said(
-                "desktop/",
+                "",
                 After::SignIn {
-                    provider: "desktop".into(),
+                    tool: ProviderId::Desktop,
                     again: None,
                     from: Some(add_desktop()),
                 }
@@ -909,13 +910,12 @@ mod tests {
         );
         assert_eq!(
             said(
-                "desktop/home",
+                "home",
                 After::SignIn {
-                    provider: "desktop".into(),
+                    tool: ProviderId::Desktop,
                     again: Some("home".into()),
                     from: Some(Sheet::SignInAgain {
-                        provider: "desktop".into(),
-                        label: "home".into(),
+                        account: AccountKey::new(Tool::Desktop, "home")
                     }),
                 }
             ),
@@ -923,9 +923,9 @@ mod tests {
         );
         assert_eq!(
             said(
-                "desktop/",
+                "",
                 After::Enrol {
-                    provider: "desktop".into(),
+                    tool: ProviderId::Desktop,
                     again: None,
                     from: Some(add_desktop()),
                 }
@@ -974,24 +974,28 @@ mod tests {
         let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
         let quit = quit_question(
             &seen,
-            &asked("codex/work", "com.openai.codex", "ChatGPT"),
+            &asked(
+                Key::new(ProviderId::Codex, "work"),
+                "com.openai.codex",
+                "ChatGPT",
+            ),
             &After::Switch,
         );
         assert_eq!(
             (quit.confirmed, quit.declined),
             (
                 Intent::QuitAndSwitch {
-                    qualified: "codex/work".into()
+                    account: AccountKey::new(Tool::Codex, "work")
                 },
                 Intent::KeepAppOpen
             )
         );
-        let replace = replace_question(&seen, "claude/work", "why");
+        let replace = replace_question(&Key::new(ProviderId::Claude, "work"), "why");
         assert_eq!(
             (replace.confirmed, replace.declined),
             (
                 Intent::ReplaceAndSwitch {
-                    qualified: "claude/work".into()
+                    account: AccountKey::new(Tool::Claude, "work")
                 },
                 Intent::KeepLogin
             )
@@ -1000,14 +1004,7 @@ mod tests {
 
     #[test]
     fn the_replace_question_is_titled_as_each_system_titles_one() {
-        let state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
-        let titled = |os| {
-            replace_question(&Seen::new(&state, 0, &Utc, os), "work", "why")
-                .question
-                .title
-        };
-        for os in [Os::MacOs, Os::Windows] {
-            assert_eq!(titled(os), words::replace_title("Claude Code"));
-        }
+        let replace = replace_question(&Key::new(ProviderId::Claude, "work"), "why");
+        assert_eq!(replace.question.title, words::replace_title("Claude Code"));
     }
 }

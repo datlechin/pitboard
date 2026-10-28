@@ -5,12 +5,16 @@ use super::testing::machine::{Hand, Stub, any_read, desktop_machine};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CLAUDE, DANA, refusal, status};
 use super::{Intent, OutsideAnswer, OutsideAsk, Place};
+use crate::AccountKey;
+use crate::Tool;
 use crate::account_windows::records::{Entry, Records};
 use crate::account_windows::stores::derive;
 use crate::present::testing::{account, desktop_account};
 use crate::present::words;
 use crate::{Account, Choice, ItemOffer, Parked, Question, RemovalShown, Uninstalled};
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use std::time::Duration;
 
 fn two_accounts() -> Stub {
@@ -82,7 +86,7 @@ fn uninstall_waits_for_what_is_under_way_then_nothing_runs_again() {
     let mut machine = two_accounts();
     let mut model = started(&mut machine);
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     assert!(!model.shown().uninstall.enabled, "not while a switch runs");
     model.run(&mut machine);
@@ -102,7 +106,7 @@ fn uninstall_waits_for_what_is_under_way_then_nothing_runs_again() {
     model.tick();
     model.send(Intent::Refresh { asked: true });
     model.send(Intent::SwitchTo {
-        qualified: "claude/work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     assert_eq!(model.asked.len(), asked, "nothing more is asked");
     assert_eq!(model.count(uninstalling), 0, "until the read is over");
@@ -133,7 +137,7 @@ fn uninstall_quits_claude_first_where_it_holds_a_saved_sign_in_and_opens_it_afte
     assert_eq!(
         jobs,
         [Job::Holding {
-            qualified: "desktop/".into(),
+            account: Key::new(ProviderId::Desktop, ""),
             then: After::Uninstall,
         }]
     );

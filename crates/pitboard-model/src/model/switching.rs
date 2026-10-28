@@ -17,24 +17,29 @@ use super::testing::records::{
     desktop_warning, percent, refusal, status, still_running, switched, warned, warning,
 };
 use super::{Intent, LastSwitch, Place, QuitQuestion, RestartNeeded, Sheet, WindowRequest};
+use crate::AccountKey;
+use crate::Tool;
 use crate::present::words;
 use crate::{Abandoned, GaveUp};
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use std::time::Duration;
 
-/// Asks for a switch to `qualified` and answers everything it leads to, as the Swift
-/// model's tests awaited `use` or `switchAsked`.
-pub(super) fn switch(model: &mut Hand, machine: &mut Stub, qualified: &str) {
+/// Asks for a switch to the account `label` of `tool` and answers everything it leads to, as
+/// the Swift model's tests awaited `use` or `switchAsked`.
+pub(super) fn switch(model: &mut Hand, machine: &mut Stub, tool: Tool, label: &str) {
     model.send(Intent::SwitchTo {
-        qualified: qualified.into(),
+        account: AccountKey::new(tool, label),
     });
     model.run(machine);
 }
 
-/// The person's answer that Pitboard may quit the app for the switch to `qualified`.
-fn quit_and_switch(qualified: &str) -> Intent {
+/// The person's answer that Pitboard may quit the app for the switch to the account `label`
+/// of `tool`.
+fn quit_and_switch(tool: Tool, label: &str) -> Intent {
     Intent::QuitAndSwitch {
-        qualified: qualified.into(),
+        account: AccountKey::new(tool, label),
     }
 }
 
@@ -43,7 +48,7 @@ fn tos(model: &Hand) -> Vec<String> {
         .state
         .last_switches
         .iter()
-        .map(|last| last.to.clone())
+        .map(|last| last.to.typed())
         .collect()
 }
 
@@ -56,9 +61,9 @@ fn a_failed_switch_says_so_and_changes_nothing() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
-    switch(&mut model, &mut machine, "work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
 
-    assert_eq!(machine.switched_to, ["work"]);
+    assert_eq!(machine.switched_to, ["claude/work"]);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("the failure is said");
     assert_eq!(failure.title, words::could_not_switch("work"));
@@ -73,7 +78,7 @@ fn a_failed_switch_says_so_and_changes_nothing() {
             place: None,
         }
     );
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert_eq!(
         model.count(any_read),
         0,
@@ -89,8 +94,8 @@ fn a_switch_records_when_open_sessions_follow() {
         claude("work", true, 0.0),
         claude("personal", false, 0.0),
     ])));
-    machine.switched = switched("claude", "personal", "work", Vec::new());
-    switch(&mut model, &mut machine, "claude/work");
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     let last = model
         .state
         .last_switches
@@ -112,12 +117,12 @@ fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
         claude("personal", false, 0.0),
     ])));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
 
     let last = model
         .state
@@ -139,9 +144,7 @@ fn a_switch_that_needs_a_restart_says_so_and_counts_nothing_down() {
         "the read after it does not say it"
     );
 
-    model.send(Intent::DismissSwitch {
-        provider: "codex".into(),
-    });
+    model.send(Intent::DismissSwitch { tool: Tool::Codex });
     assert!(model.state.last_switches.is_empty());
 }
 
@@ -155,18 +158,23 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
         claude("b", true, 0.0),
         codex_account("b", true),
     ])));
-    machine.switched = switched("codex", "codex/a", "codex/b", vec![still_running()]);
-    switch(&mut model, &mut machine, "codex/b");
+    machine.switched = switched(
+        ProviderId::Codex,
+        "codex/a",
+        "codex/b",
+        vec![still_running()],
+    );
+    switch(&mut model, &mut machine, Tool::Codex, "b");
 
-    machine.switched = switched("claude", "a", "b", Vec::new());
-    switch(&mut model, &mut machine, "claude/b");
-    let providers: Vec<&str> = model
+    machine.switched = switched(ProviderId::Claude, "a", "b", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "b");
+    let providers: Vec<ProviderId> = model
         .state
         .last_switches
         .iter()
-        .map(|last| last.provider.as_str())
+        .map(|last| last.provider)
         .collect();
-    assert_eq!(providers, ["codex", "claude"]);
+    assert_eq!(providers, [ProviderId::Codex, ProviderId::Claude]);
     assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
     assert!(model.state.last_switches[1].follows_at.is_some());
 
@@ -174,8 +182,8 @@ fn each_tool_keeps_what_its_own_last_switch_said() {
         claude("b", true, 0.0),
         codex_account("c", true),
     ]));
-    machine.switched = switched("codex", "codex/b", "codex/c", Vec::new());
-    switch(&mut model, &mut machine, "codex/c");
+    machine.switched = switched(ProviderId::Codex, "codex/b", "codex/c", Vec::new());
+    switch(&mut model, &mut machine, Tool::Codex, "c");
     assert_eq!(tos(&model), ["codex/c", "b"]);
     assert!(
         model.state.last_switches[0].warnings.is_empty(),
@@ -192,9 +200,15 @@ fn a_switch_to_a_name_two_tools_share_outlives_the_read_after_it() {
         claude("personal", false, 0.0),
         codex_account("work", true),
     ])));
-    machine.switched = switched("claude", "personal", "claude/work", Vec::new());
-    switch(&mut model, &mut machine, "claude/work");
-    assert_eq!(tos(&model), ["claude/work"]);
+    machine.switched = switched(ProviderId::Claude, "personal", "claude/work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "work");
+    let to: Vec<&Key> = model
+        .state
+        .last_switches
+        .iter()
+        .map(|last| &last.to)
+        .collect();
+    assert_eq!(to, [&Key::new(ProviderId::Claude, "work")]);
 }
 
 /// Whatever else writes the account index leaves the sessions a switch described as they
@@ -210,12 +224,12 @@ fn only_a_switch_made_elsewhere_puts_away_what_a_switch_said() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(after.clone()));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
 
     machine.offline = Ok(after);
     machine.changed = 99;
@@ -268,12 +282,12 @@ fn a_failed_read_after_a_switch_does_not_put_away_what_it_said() {
     ));
     machine.offline = Ok(after.clone());
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     machine.changed = 7;
     model.notice(&mut machine);
 
@@ -295,12 +309,12 @@ fn a_failed_switch_leaves_what_the_last_switch_said() {
         codex_account("work", true),
     ])));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     let before = model.state.last_switches.clone();
 
     let overridden = warning("auth_overridden", "ANTHROPIC_API_KEY is set");
@@ -309,7 +323,7 @@ fn a_failed_switch_leaves_what_the_last_switch_said() {
         "spare's parked login has expired",
         vec![overridden.clone()],
     ));
-    switch(&mut model, &mut machine, "claude/spare");
+    switch(&mut model, &mut machine, Tool::Claude, "spare");
 
     assert_eq!(model.state.last_switches, before);
     let failure = model.state.presented.clone().expect("the failure is said");
@@ -332,21 +346,21 @@ fn a_switch_to_the_account_in_use_leaves_what_the_last_one_said() {
         claude("home", true, 0.0),
     ])));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     let before = model.state.last_switches.clone();
 
     machine.switched = already_active("codex/work", Vec::new());
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     assert_eq!(model.state.last_switches, before);
 
     // Nor does one of a tool with no last switch, which has nothing to say either.
     machine.switched = already_active("home", Vec::new());
-    switch(&mut model, &mut machine, "claude/home");
+    switch(&mut model, &mut machine, Tool::Claude, "home");
     assert_eq!(model.state.last_switches, before);
 }
 
@@ -361,15 +375,15 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
         codex_account("work", true),
     ])));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
 
     machine.switched = already_active("codex/work", vec![still_running(), overridden.clone()]);
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     assert_eq!(
         model.state.last_switches[0].warnings,
         [still_running(), overridden.clone()]
@@ -380,12 +394,12 @@ fn a_switch_to_the_account_in_use_says_what_it_warned_beside_the_last() {
     );
 
     machine.switched = already_active("home", vec![overridden.clone()]);
-    switch(&mut model, &mut machine, "claude/home");
+    switch(&mut model, &mut machine, Tool::Claude, "home");
     assert_eq!(
         model.state.last_switches[1],
         LastSwitch {
-            provider: "claude".into(),
-            to: "home".into(),
+            provider: ProviderId::Claude,
+            to: Key::new(ProviderId::Claude, "home"),
             follows_at: None,
             restart: None,
             said: None,
@@ -408,8 +422,8 @@ fn numbers_moving_leave_who_is_signed_in_and_what_a_switch_said() {
         claude("a", false, 10.0),
         claude("b", true, 10.0),
     ])));
-    machine.switched = switched("claude", "a", "b", vec![lagging.clone()]);
-    switch(&mut model, &mut machine, "claude/b");
+    machine.switched = switched(ProviderId::Claude, "a", "b", vec![lagging.clone()]);
+    switch(&mut model, &mut machine, Tool::Claude, "b");
     assert_eq!(
         model.state.last_switches[0].warnings,
         std::slice::from_ref(&lagging)
@@ -453,7 +467,7 @@ fn numbers_recorded_during_a_switch_are_taken_once_it_is_over() {
     model.notice(&mut machine);
 
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     model.run_but(&mut machine, a_switch);
     machine.offline = Ok(status(vec![claude("work", true, 22.0)]));
@@ -488,10 +502,15 @@ fn two_tools_work_accounts_are_switched_by_their_own_name() {
         .expect("accounts")
         .accounts
         .into_iter()
-        .find(|account| account.provider == "codex" && account.label.as_deref() == Some("work"))
-        .and_then(|account| account.qualified)
+        .find(|account| {
+            account.provider == ProviderId::Codex && account.label.as_deref() == Some("work")
+        })
+        .and_then(|account| account.key)
         .expect("Codex's work");
-    switch(&mut model, &mut machine, &codex_work);
+    model.send(Intent::SwitchTo {
+        account: codex_work.into(),
+    });
+    model.run(&mut machine);
     assert_eq!(machine.switched_to, ["codex/work"]);
 }
 
@@ -561,12 +580,12 @@ pub(super) fn a_read_that_started_before(change: impl FnOnce(&mut Hand, &mut Stu
 fn a_read_that_started_before_a_switch_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
         machine.switched = switched(
-            "codex",
+            ProviderId::Codex,
             "codex/personal",
             "codex/work",
             vec![still_running()],
         );
-        switch(model, machine, "codex/work");
+        switch(model, machine, Tool::Codex, "work");
         assert_eq!(tos(model), ["codex/work"]);
         assert_eq!(model.state.last_switches[0].warnings, [still_running()]);
     });
@@ -614,12 +633,12 @@ fn a_failed_read_that_started_before_a_switch_says_nothing_once_it_lands() {
     ]);
     machine.answer = Ok(after.clone());
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
 
     model.give(held);
     assert_eq!(model.state.failure, None);
@@ -669,7 +688,7 @@ fn a_change_the_poll_saw_during_a_switch_is_noticed_once_the_switch_is_over() {
     model.refresh(&mut machine);
 
     model.send(Intent::SwitchTo {
-        qualified: "claude/spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
     });
     model.run_but(&mut machine, a_switch);
     machine.changed += 1;
@@ -700,14 +719,14 @@ fn a_switch_asked_for_while_one_runs_does_nothing() {
         claude("work", false, 0.0),
         claude("spare", false, 0.0),
     ])));
-    machine.switched = switched("claude", "work", "personal", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     model.run_but(&mut machine, a_switch);
     assert_eq!(
         model.send(Intent::SwitchTo {
-            qualified: "claude/spare".into(),
+            account: AccountKey::new(Tool::Claude, "spare")
         }),
         []
     );
@@ -724,16 +743,19 @@ fn a_switch_asked_for_while_one_runs_does_nothing() {
 fn a_switch_is_claimed_before_anything_is_asked() {
     let mut model = Hand::new();
     let jobs = model.send(Intent::SwitchTo {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     assert_eq!(
         jobs,
         [Job::Holding {
-            qualified: "codex/work".into(),
+            account: Key::new(ProviderId::Codex, "work"),
             then: After::Switch,
         }]
     );
-    assert_eq!(model.state.switch_under_way(), Some("codex/work"));
+    assert_eq!(
+        model.state.switching_to(),
+        Some(&Key::new(ProviderId::Codex, "work"))
+    );
 }
 
 /// A switch is under way until the read after it has landed, as the Swift model's was until
@@ -746,15 +768,18 @@ fn a_switch_is_under_way_until_the_read_after_it_lands() {
         claude("work", true, 0.0),
         claude("personal", false, 0.0),
     ])));
-    machine.switched = switched("claude", "personal", "work", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
     model.refresh(&mut machine);
     model.send(Intent::SwitchTo {
-        qualified: "claude/work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     model.run_but(&mut machine, any_read);
     let read = model.take(any_read);
     let shown = model.shown();
-    assert_eq!(model.state.switch_under_way(), Some("claude/work"));
+    assert_eq!(
+        model.state.switching_to(),
+        Some(&Key::new(ProviderId::Claude, "work"))
+    );
     assert!(shown.reading);
     assert_eq!(
         model.state.updated_ms, None,
@@ -762,7 +787,7 @@ fn a_switch_is_under_way_until_the_read_after_it_lands() {
     );
     assert_eq!(
         model.send(Intent::SwitchTo {
-            qualified: "claude/personal".into(),
+            account: AccountKey::new(Tool::Claude, "personal")
         }),
         []
     );
@@ -771,7 +796,7 @@ fn a_switch_is_under_way_until_the_read_after_it_lands() {
     assert_eq!(model.count(offline_read), 0, "the switch's own change");
 
     model.give(machine.answer(read));
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert!(model.state.updated_ms.is_some());
     assert_eq!(machine.switched_to, ["claude/work"]);
 }
@@ -783,7 +808,7 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
-    switch(&mut model, &mut machine, "claude/spare");
+    switch(&mut model, &mut machine, Tool::Claude, "spare");
     assert_eq!(model.state.presented.clone().map(|f| f.id), Some(1));
     model.refresh(&mut machine);
     assert_eq!(
@@ -797,11 +822,11 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
         "no account is called x",
         Vec::new(),
     ));
-    switch(&mut model, &mut machine, "claude/x");
+    switch(&mut model, &mut machine, Tool::Claude, "x");
     let failure = model.state.presented.clone().expect("the newer failure");
     assert_eq!(
         (failure.id, failure.title.as_str()),
-        (2, words::could_not_switch("claude/x").as_str())
+        (2, words::could_not_switch("x").as_str())
     );
     assert_eq!(model.shown().window_request.serial, 2);
 }
@@ -811,8 +836,10 @@ fn each_failure_is_numbered_so_an_app_says_it_once() {
 /// A Codex machine with ChatGPT open and running Codex's login, about to switch to `spare`.
 fn chatgpt_open(quits: bool) -> (Hand, Stub) {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    machine.held.insert("codex".into(), vec![chatgpt_holding()]);
-    machine.switched = switched("codex", "codex/main", "codex/spare", Vec::new());
+    machine
+        .held
+        .insert(ProviderId::Codex, vec![chatgpt_holding()]);
+    machine.switched = switched(ProviderId::Codex, "codex/main", "codex/spare", Vec::new());
     machine.apps = StandInApps::new(&[CHATGPT], quits);
     (Hand::new(), machine)
 }
@@ -823,11 +850,11 @@ fn chatgpt_open(quits: bool) -> (Hand, Stub) {
 #[test]
 fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
     let (mut model, mut machine) = chatgpt_open(true);
-    switch(&mut model, &mut machine, "codex/spare");
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
     assert_eq!(
         model.state.asking(),
         Some(&QuitQuestion {
-            qualified: "codex/spare".into(),
+            account: Key::new(ProviderId::Codex, "spare"),
             app_id: CHATGPT.into(),
             name: "ChatGPT".into(),
         })
@@ -843,14 +870,17 @@ fn a_switch_waits_for_the_app_holding_the_login_to_be_quit() {
         Some(Place::Accounts),
         "asked in the window"
     );
-    assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
+    assert_eq!(
+        model.state.switching_to(),
+        Some(&Key::new(ProviderId::Codex, "spare"))
+    );
 }
 
 #[test]
 fn quitting_the_app_switches_and_opens_it_again() {
     let (mut model, mut machine) = chatgpt_open(true);
-    switch(&mut model, &mut machine, "codex/spare");
-    model.send(quit_and_switch("codex/spare"));
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     model.run(&mut machine);
     assert_eq!(
         machine.apps.asked(),
@@ -859,7 +889,7 @@ fn quitting_the_app_switches_and_opens_it_again() {
     assert_eq!(machine.switched_to, ["codex/spare"]);
     let shown = model.shown();
     assert_eq!(shown.quit_question, None);
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert_eq!(model.state.presented, None);
 }
 
@@ -869,8 +899,8 @@ fn quitting_the_app_switches_and_opens_it_again() {
 fn the_app_is_opened_again_before_the_read_after_the_switch() {
     let (mut model, mut machine) = chatgpt_open(true);
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "codex/spare");
-    model.send(quit_and_switch("codex/spare"));
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     let quit = model.next();
     let jobs = model.give(machine.answer(quit));
     let switch = model.take(a_switch);
@@ -886,7 +916,10 @@ fn the_app_is_opened_again_before_the_read_after_the_switch() {
         matches!(after[..], [Job::Open { .. }, Job::Read { .. }]),
         "{after:?}"
     );
-    assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
+    assert_eq!(
+        model.state.switching_to(),
+        Some(&Key::new(ProviderId::Codex, "spare"))
+    );
 }
 
 /// Pitboard closed it, so Pitboard opens it, whether or not the switch worked.
@@ -898,8 +931,8 @@ fn the_app_is_opened_again_when_the_switch_fails() {
         "spare's login has expired.",
         Vec::new(),
     ));
-    switch(&mut model, &mut machine, "codex/spare");
-    model.send(quit_and_switch("codex/spare"));
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     model.run(&mut machine);
     assert_eq!(
         machine.apps.asked(),
@@ -913,8 +946,8 @@ fn the_app_is_opened_again_when_the_switch_fails() {
 #[test]
 fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
     let (mut model, mut machine) = chatgpt_open(false);
-    switch(&mut model, &mut machine, "codex/spare");
-    model.send(quit_and_switch("codex/spare"));
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     model.run(&mut machine);
     assert_eq!(
         machine.apps.asked(),
@@ -922,9 +955,9 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
         "and it is not opened: it never closed"
     );
     assert!(machine.switched_to.is_empty());
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     let failure = model.state.presented.clone().expect("the failure is said");
-    assert_eq!(failure.title, words::could_not_switch("codex/spare"));
+    assert_eq!(failure.title, words::could_not_switch("spare"));
     assert_eq!(
         failure.message,
         words::still_open("ChatGPT", "switch again"),
@@ -938,7 +971,7 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
             choice: crate::Choice {
                 title: words::try_again(OS),
                 intent: Intent::SwitchTo {
-                    qualified: "codex/spare".into(),
+                    account: AccountKey::new(Tool::Codex, "spare")
                 },
                 enabled: true,
             },
@@ -949,11 +982,11 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
 #[test]
 fn keeping_the_app_open_switches_nothing() {
     let (mut model, mut machine) = chatgpt_open(true);
-    switch(&mut model, &mut machine, "codex/spare");
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
     assert_eq!(model.send(Intent::KeepAppOpen), []);
     let shown = model.shown();
     assert_eq!(shown.quit_question, None);
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert!(machine.switched_to.is_empty());
     assert!(machine.apps.asked().is_empty());
 }
@@ -966,18 +999,18 @@ fn keeping_the_app_open_switches_nothing() {
 /// switch is made either way.
 #[test]
 fn the_answer_to_quit_switches_whether_the_question_closed_before_or_after_it() {
-    let closed_first = [Intent::KeepAppOpen, quit_and_switch("codex/spare")];
-    let answered_first = [quit_and_switch("codex/spare"), Intent::KeepAppOpen];
+    let closed_first = [Intent::KeepAppOpen, quit_and_switch(Tool::Codex, "spare")];
+    let answered_first = [quit_and_switch(Tool::Codex, "spare"), Intent::KeepAppOpen];
     for answers in [closed_first, answered_first] {
         let (mut model, mut machine) = chatgpt_open(true);
-        switch(&mut model, &mut machine, "codex/spare");
+        switch(&mut model, &mut machine, Tool::Codex, "spare");
         for answer in answers.clone() {
             model.send(answer);
         }
         assert_eq!(model.shown().quit_question, None, "{answers:?}");
         assert_eq!(
-            model.state.switch_under_way(),
-            Some("codex/spare"),
+            model.state.switching_to(),
+            Some(&Key::new(ProviderId::Codex, "spare")),
             "{answers:?}"
         );
         model.run(&mut machine);
@@ -997,33 +1030,37 @@ fn the_answer_to_quit_switches_whether_the_question_closed_before_or_after_it() 
 #[test]
 fn an_answer_to_quit_is_taken_once_and_only_for_the_question_asked() {
     let (mut model, mut machine) = chatgpt_open(true);
-    switch(&mut model, &mut machine, "codex/spare");
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
     assert_eq!(
-        model.send(quit_and_switch("codex/main")),
+        model.send(quit_and_switch(Tool::Codex, "main")),
         [],
         "not the question asked"
     );
     assert!(model.shown().quit_question.is_some());
-    let quit = model.send(quit_and_switch("codex/spare"));
+    let quit = model.send(quit_and_switch(Tool::Codex, "spare"));
     assert!(matches!(quit[..], [Job::Quit { .. }]), "{quit:?}");
-    assert_eq!(model.send(quit_and_switch("codex/spare")), [], "taken once");
+    assert_eq!(
+        model.send(quit_and_switch(Tool::Codex, "spare")),
+        [],
+        "taken once"
+    );
     model.run(&mut machine);
     assert_eq!(machine.switched_to, ["codex/spare"]);
 
-    switch(&mut model, &mut machine, "codex/main");
+    switch(&mut model, &mut machine, Tool::Codex, "main");
     assert!(
         model.shown().quit_question.is_some(),
         "ChatGPT is open again"
     );
     model.send(Intent::KeepAppOpen);
     machine.switched = already_active("personal", Vec::new());
-    switch(&mut model, &mut machine, "claude/personal");
+    switch(&mut model, &mut machine, Tool::Claude, "personal");
     assert_eq!(
-        model.send(quit_and_switch("codex/main")),
+        model.send(quit_and_switch(Tool::Codex, "main")),
         [],
         "another switch was asked for in its place"
     );
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert_eq!(machine.switched_to, ["codex/spare", "claude/personal"]);
     assert_eq!(
         machine.apps.asked(),
@@ -1037,12 +1074,12 @@ fn an_answer_to_quit_is_taken_once_and_only_for_the_question_asked() {
 fn only_a_running_app_holding_the_tool_is_asked_about() {
     let (mut model, mut machine) = chatgpt_open(true);
     machine.apps.set_running(&[]);
-    switch(&mut model, &mut machine, "codex/spare");
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
     assert_eq!(model.shown().quit_question, None);
     assert_eq!(machine.switched_to, ["codex/spare"]);
 
     machine.apps.set_running(&[CHATGPT]);
-    switch(&mut model, &mut machine, "claude/personal");
+    switch(&mut model, &mut machine, Tool::Claude, "personal");
     assert_eq!(
         model.shown().quit_question,
         None,
@@ -1056,9 +1093,9 @@ fn only_a_running_app_holding_the_tool_is_asked_about() {
 #[test]
 fn an_app_already_gone_is_not_opened_again() {
     let (mut model, mut machine) = chatgpt_open(true);
-    switch(&mut model, &mut machine, "codex/spare");
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
     machine.apps.set_running(&[]);
-    model.send(quit_and_switch("codex/spare"));
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     model.run(&mut machine);
     assert!(machine.apps.asked().is_empty());
     assert_eq!(machine.switched_to, ["codex/spare"]);
@@ -1071,11 +1108,11 @@ fn an_app_already_gone_is_not_opened_again() {
 fn one_switch_at_a_time_while_the_app_question_waits() {
     let (mut model, mut machine) = chatgpt_open(true);
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     assert_eq!(
         model.send(Intent::SwitchTo {
-            qualified: "claude/personal".into(),
+            account: AccountKey::new(Tool::Claude, "personal")
         }),
         [],
         "the second waited for the first"
@@ -1084,11 +1121,14 @@ fn one_switch_at_a_time_while_the_app_question_waits() {
     assert!(machine.switched_to.is_empty());
 
     let shown = model.shown();
-    assert_eq!(model.state.switch_under_way(), Some("codex/spare"));
+    assert_eq!(
+        model.state.switching_to(),
+        Some(&Key::new(ProviderId::Codex, "spare"))
+    );
     let asked = shown.window_request.serial;
     assert_eq!(
         model.send(Intent::SwitchTo {
-            qualified: "claude/personal".into(),
+            account: AccountKey::new(Tool::Claude, "personal")
         }),
         []
     );
@@ -1110,16 +1150,16 @@ fn one_switch_at_a_time_while_the_app_question_waits() {
 #[test]
 fn a_switch_lost_to_a_panic_is_said_and_over() {
     let (mut model, mut machine) = chatgpt_open(true);
-    switch(&mut model, &mut machine, "codex/spare");
-    model.send(quit_and_switch("codex/spare"));
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     let quit = model.next();
     model.give(machine.answer(quit));
     let lost = model.take(a_switch);
     let jobs = model.give(Answer::Lost(lost));
     assert!(matches!(jobs[..], [Job::Open { .. }]), "{jobs:?}");
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     let failure = model.state.presented.clone().expect("said");
-    assert_eq!(failure.title, words::could_not_switch("codex/spare"));
+    assert_eq!(failure.title, words::could_not_switch("spare"));
     assert_eq!(failure.code, None);
 }
 
@@ -1131,7 +1171,7 @@ fn a_switch_lost_to_a_panic_is_said_and_over() {
 fn what_holds_a_login_lost_to_a_panic_holds_nothing_and_a_lost_quit_quit_nothing() {
     let (mut model, mut machine) = chatgpt_open(true);
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     let asked = model.take(holding_ask);
     let jobs = model.give(Answer::Lost(asked));
@@ -1139,12 +1179,12 @@ fn what_holds_a_login_lost_to_a_panic_holds_nothing_and_a_lost_quit_quit_nothing
     model.run(&mut machine);
     assert_eq!(machine.switched_to, ["codex/spare"]);
 
-    switch(&mut model, &mut machine, "codex/spare");
-    model.send(quit_and_switch("codex/spare"));
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
+    model.send(quit_and_switch(Tool::Codex, "spare"));
     let quit = model.next();
     assert_eq!(model.give(Answer::Lost(quit)), []);
     assert_eq!(machine.switched_to, ["codex/spare"]);
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert!(model.state.presented.is_some());
 }
 
@@ -1334,7 +1374,7 @@ fn giving_up_on_nothing_keeps_nothing_to_say() {
 
 fn add_sheet() -> Sheet {
     Sheet::Add {
-        provider: Some("desktop".into()),
+        tool: Some(Tool::Desktop),
     }
 }
 
@@ -1342,12 +1382,12 @@ fn add_sheet() -> Sheet {
 fn waiting_in_claude() -> (Hand, Stub, u64) {
     let mut model = Hand::new();
     let mut machine = desktop_machine(false);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.refresh(&mut machine);
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
     model.send(Intent::SignIn {
-        provider: "desktop".into(),
+        tool: Tool::Desktop,
         again: None,
     });
     model.run(&mut machine);
@@ -1357,7 +1397,12 @@ fn waiting_in_claude() -> (Hand, Stub, u64) {
 }
 
 fn desktop_switched() -> Result<crate::Switched, super::testing::records::Refusal> {
-    switched("desktop", "desktop/work", "desktop/home", Vec::new())
+    switched(
+        ProviderId::Desktop,
+        "desktop/work",
+        "desktop/home",
+        Vec::new(),
+    )
 }
 
 // What a notice's buttons send: the sheet that adds the account Claude shows, and giving up.
@@ -1384,16 +1429,16 @@ fn a_switch_reopens_the_app_behind_naming_its_tool() {
     let mut machine = desktop_machine(true);
     machine.switched = desktop_switched();
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     assert_eq!(
         model.state.asking().map(|asked| asked.name.as_str()),
         Some("Claude")
     );
-    model.send(quit_and_switch("desktop/home"));
+    model.send(quit_and_switch(Tool::Desktop, "home"));
     model.run(&mut machine);
     assert!(model.asked.contains(&Job::Open {
         location: StandInApps::copy_of(CLAUDE),
-        tool: "desktop".into(),
+        tool: ProviderId::Desktop,
         front: false,
     }));
     assert_eq!(
@@ -1415,12 +1460,12 @@ fn put_back_that_cannot_quit_claude_keeps_the_wait_and_says_why() {
         let (mut model, mut machine, id) = waiting_in_claude();
         machine.apps = StandInApps::new(&[CLAUDE], quits);
         machine.lingers = lingers;
-        switch(&mut model, &mut machine, "desktop/work");
-        model.send(quit_and_switch("desktop/work"));
+        switch(&mut model, &mut machine, Tool::Desktop, "work");
+        model.send(quit_and_switch(Tool::Desktop, "work"));
         model.run(&mut machine);
         let shown = model.on_a_mac();
         let alert = shown.failure_alert.expect("said in an alert");
-        assert_eq!(alert.title, words::could_not_switch("desktop/work"));
+        assert_eq!(alert.title, words::could_not_switch("work"));
         assert_eq!(alert.message, message);
         assert_eq!(shown.sheet, Some(add_sheet()), "{message}");
         assert_eq!(shown.signing_in.map(|signing| signing.id), Some(id));
@@ -1435,7 +1480,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     let mut machine = desktop_machine(false);
     machine.switched = Err(refusal("login_in_doubt", "in doubt", Vec::new()));
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     assert!(model.state.presented.is_some());
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
@@ -1445,7 +1490,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     );
     model.send(Intent::CloseSheet);
     machine.switched = desktop_switched();
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
     assert_eq!(
@@ -1461,8 +1506,8 @@ fn an_app_that_leaves_part_of_itself_running_changes_nothing_and_is_opened_again
     let mut machine = desktop_machine(true);
     machine.lingers = true;
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
-    model.send(quit_and_switch("desktop/home"));
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
+    model.send(quit_and_switch(Tool::Desktop, "home"));
     model.run(&mut machine);
     assert!(machine.switched_to.is_empty(), "nothing changed");
     assert_eq!(
@@ -1474,7 +1519,7 @@ fn an_app_that_leaves_part_of_itself_running_changes_nothing_and_is_opened_again
         failure.message,
         words::part_still_running(OS, "Claude", "switch again")
     );
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
 }
 
 #[test]
@@ -1482,18 +1527,18 @@ fn putting_the_parked_account_back_stops_the_wait_only_once_claude_has_quit() {
     let (mut model, mut machine, id) = waiting_in_claude();
     machine.switched = Ok(crate::Switched {
         outcome: crate::Switch::Installed {
-            provider: "desktop".into(),
-            to: "desktop/work".into(),
+            provider: ProviderId::Desktop,
+            to: Key::new(ProviderId::Desktop, "work"),
             adoption: crate::Adoption::NextOpen { app: "Claude" },
         },
         warnings: Vec::new(),
     });
-    switch(&mut model, &mut machine, "desktop/work");
+    switch(&mut model, &mut machine, Tool::Desktop, "work");
     let shown = model.shown();
     assert!(shown.quit_question.is_some());
     assert_eq!(shown.signing_in.map(|signing| signing.id), Some(id));
     assert!(!model.asked.contains(&Job::StopSignIn { id }));
-    model.send(quit_and_switch("desktop/work"));
+    model.send(quit_and_switch(Tool::Desktop, "work"));
     model.run(&mut machine);
     assert!(model.asked.contains(&Job::StopSignIn { id }));
     assert_eq!(machine.switched_to, ["desktop/work"]);
@@ -1505,7 +1550,7 @@ fn putting_the_parked_account_back_stops_the_wait_only_once_claude_has_quit() {
 #[test]
 fn keeping_claude_open_after_put_back_keeps_the_wait() {
     let (mut model, mut machine, id) = waiting_in_claude();
-    switch(&mut model, &mut machine, "desktop/work");
+    switch(&mut model, &mut machine, Tool::Desktop, "work");
     assert_eq!(model.send(Intent::KeepAppOpen), []);
     let shown = model.shown();
     assert_eq!(shown.signing_in.map(|signing| signing.id), Some(id));
@@ -1523,13 +1568,13 @@ fn a_switch_asked_while_claude_quits_for_a_sign_in_parks_nothing() {
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
     model.send(Intent::SignIn {
-        provider: "desktop".into(),
+        tool: Tool::Desktop,
         again: None,
     });
     model.run(&mut machine);
-    model.send(quit_and_switch("desktop/"));
+    model.send(quit_and_switch(Tool::Desktop, ""));
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     // The lane of processes quits Claude before it asks what holds the switch's login.
     let quit = model.take(|job| matches!(job, Job::Quit { .. }));
@@ -1540,7 +1585,7 @@ fn a_switch_asked_while_claude_quits_for_a_sign_in_parks_nothing() {
     assert_eq!(machine.switched_to, ["desktop/home"]);
     assert!(
         model.asked.contains(&Job::Switch {
-            qualified: "desktop/home".into(),
+            account: Key::new(ProviderId::Desktop, "home"),
             reopen: Some(StandInApps::copy_of(CLAUDE)),
         }),
         "Claude is opened again after the switch"
@@ -1574,13 +1619,13 @@ fn claude_left_partly_running_for_an_add_opens_only_after_a_switch_asked_meanwhi
         model.send(Intent::PresentSheet { sheet: add_sheet() });
         model.run(&mut machine);
         model.send(Intent::SignIn {
-            provider: "desktop".into(),
+            tool: Tool::Desktop,
             again: None,
         });
         model.run(&mut machine);
-        model.send(quit_and_switch("desktop/"));
+        model.send(quit_and_switch(Tool::Desktop, ""));
         model.send(Intent::SwitchTo {
-            qualified: "desktop/home".into(),
+            account: AccountKey::new(Tool::Desktop, "home"),
         });
         let quit = model.take(|job| matches!(job, Job::Quit { .. }));
         let answer = machine.answer(quit);
@@ -1595,7 +1640,7 @@ fn claude_left_partly_running_for_an_add_opens_only_after_a_switch_asked_meanwhi
         assert_eq!(
             switch,
             Job::Switch {
-                qualified: "desktop/home".into(),
+                account: Key::new(ProviderId::Desktop, "home"),
                 reopen: Some(StandInApps::copy_of(CLAUDE)),
             },
             "{recording}"
@@ -1618,17 +1663,17 @@ fn a_switch_asked_while_claude_parks_for_a_sign_in_waits_for_the_park() {
     for held_first in [true, false] {
         let mut model = Hand::new();
         let mut machine = desktop_machine(true);
-        machine.put_back = Some("desktop/work".into());
+        machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
         machine.switched = desktop_switched();
         model.refresh(&mut machine);
         model.send(Intent::PresentSheet { sheet: add_sheet() });
         model.run(&mut machine);
         model.send(Intent::SignIn {
-            provider: "desktop".into(),
+            tool: Tool::Desktop,
             again: None,
         });
         model.run(&mut machine);
-        model.send(quit_and_switch("desktop/"));
+        model.send(quit_and_switch(Tool::Desktop, ""));
         let quit = model.next();
         let answer = machine.answer(quit);
         model.give(answer);
@@ -1637,7 +1682,7 @@ fn a_switch_asked_while_claude_parks_for_a_sign_in_waits_for_the_park() {
             unreachable!("taken as a sign-in");
         };
         model.send(Intent::SwitchTo {
-            qualified: "desktop/home".into(),
+            account: AccountKey::new(Tool::Desktop, "home"),
         });
         if held_first {
             model.run(&mut machine);
@@ -1650,7 +1695,7 @@ fn a_switch_asked_while_claude_parks_for_a_sign_in_waits_for_the_park() {
         assert_eq!(
             switch,
             Job::Switch {
-                qualified: "desktop/home".into(),
+                account: Key::new(ProviderId::Desktop, "home"),
                 reopen: Some(StandInApps::copy_of(CLAUDE)),
             },
             "{held_first}"
@@ -1687,13 +1732,13 @@ fn claude_kept_for_a_switch_is_never_opened_by_another_tools_switch() {
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
     model.send(Intent::SignIn {
-        provider: "desktop".into(),
+        tool: Tool::Desktop,
         again: None,
     });
     model.run(&mut machine);
-    model.send(quit_and_switch("desktop/"));
+    model.send(quit_and_switch(Tool::Desktop, ""));
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     let quit = model.take(|job| matches!(job, Job::Quit { .. }));
     let answer = machine.answer(quit);
@@ -1703,16 +1748,16 @@ fn claude_kept_for_a_switch_is_never_opened_by_another_tools_switch() {
     model.run(&mut machine);
     assert!(model.shown().quit_question.is_some());
     model.send(Intent::KeepAppOpen);
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     assert!(model.asked.contains(&Job::Switch {
-        qualified: "codex/work".into(),
+        account: Key::new(ProviderId::Codex, "work"),
         reopen: None,
     }));
     assert!(
         !model
             .asked
             .iter()
-            .any(|job| matches!(job, Job::Open { tool, .. } if tool == "codex")),
+            .any(|job| matches!(job, Job::Open { tool, .. } if *tool == ProviderId::Codex)),
         "{:?}",
         model.asked
     );
@@ -1726,23 +1771,23 @@ fn a_question_for_a_sign_in_holds_back_no_switch() {
     model.send(Intent::PresentSheet { sheet: add_sheet() });
     model.run(&mut machine);
     model.send(Intent::SignIn {
-        provider: "desktop".into(),
+        tool: Tool::Desktop,
         again: None,
     });
     model.run(&mut machine);
     let shown = model.shown();
     assert!(shown.quit_question.is_some());
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert!(
         rows_enabled(&model),
         "the rows do not hold back for a sign-in's question"
     );
     assert_eq!(
         model.send(Intent::SwitchTo {
-            qualified: "desktop/home".into(),
+            account: AccountKey::new(Tool::Desktop, "home")
         }),
         [Job::Holding {
-            qualified: "desktop/home".into(),
+            account: Key::new(ProviderId::Desktop, "home"),
             then: After::Switch,
         }]
     );
@@ -1768,13 +1813,13 @@ fn a_switch_left_signed_out_does_not_reopen_claude() {
     ));
     machine.whole = false;
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
-    model.send(quit_and_switch("desktop/home"));
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
+    model.send(quit_and_switch(Tool::Desktop, "home"));
     model.run(&mut machine);
     assert!(
         model.asked.contains(&Job::Open {
             location: StandInApps::copy_of(CLAUDE),
-            tool: "desktop".into(),
+            tool: ProviderId::Desktop,
             front: false,
         }),
         "behind, which the lane opens only where its folder is whole"
@@ -1803,7 +1848,7 @@ fn a_stopped_claude_desktop_move_offers_give_up_and_the_account_claude_shows() {
     ));
     machine.switched = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     let shown = model.on_a_mac();
     let notice = shown
         .notices
@@ -1844,7 +1889,7 @@ fn a_waiting_move_offers_no_give_up_before_a_change_has_tried_to_settle_it() {
         [add_shown()]
     );
     machine.switched = Err(refusal("app_open", "Claude is open.", Vec::new()));
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
         [add_shown()]
@@ -1865,12 +1910,12 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     machine.forgetting = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
     model.send(Intent::Forget {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     model.run(&mut machine);
     assert_eq!(
         model.state.presented.clone().expect("said").title,
-        words::could_not_remove("desktop/home")
+        words::could_not_remove("home")
     );
     assert_eq!(
         notice_actions(&model, "warning/move_waiting/"),
@@ -1878,7 +1923,7 @@ fn a_forget_refused_while_a_move_waits_offers_to_give_it_up() {
     );
     machine.forgetting = Ok(());
     model.send(Intent::Forget {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     model.run(&mut machine);
     assert_eq!(
@@ -1901,7 +1946,7 @@ fn giving_up_gives_up_a_waiting_move_too() {
     ));
     machine.switched = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     let given = "Pitboard gave up the move of work's login and kept every folder: 1 parked, 1 set \
                  aside.";
     machine.abandoned = Ok(GaveUp {
@@ -1947,7 +1992,7 @@ fn a_move_the_give_up_settles_is_said_beside_the_read_after_it() {
     ));
     machine.switched = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     machine.abandoned = Ok(GaveUp {
         warnings: vec![desktop_warning(
             "interrupted_move_finished",
@@ -1992,7 +2037,7 @@ fn a_move_the_give_up_left_waiting_is_still_offered_to_give_up() {
     ));
     machine.switched = Err(refusal("recovery_undetermined", "undetermined", Vec::new()));
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
     machine.abandoned = Ok(GaveUp {
         switch: Some(Abandoned {
             from: "personal".into(),
@@ -2055,7 +2100,7 @@ fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
-    switch(&mut model, &mut machine, "work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
 
     let shown = model.shown();
     assert_eq!(model.state.presented, None, "asked, not failed");
@@ -2063,12 +2108,15 @@ fn a_switch_from_a_login_refused_for_good_asks_to_replace_it() {
     assert_eq!(
         asked.confirmed,
         Intent::ReplaceAndSwitch {
-            qualified: "work".into()
+            account: AccountKey::new(Tool::Claude, "work"),
         }
     );
     assert_eq!(asked.question.message, REFUSED_FOR_GOOD);
     assert_eq!(asked.question.confirm, words::REPLACE);
-    assert_eq!(model.state.switch_under_way(), Some("work"));
+    assert_eq!(
+        model.state.switching_to(),
+        Some(&Key::new(ProviderId::Claude, "work"))
+    );
     assert!(machine.replaced_with.is_empty());
 }
 
@@ -2078,18 +2126,18 @@ fn an_agreed_replacement_is_made_once() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
-    switch(&mut model, &mut machine, "work");
-    machine.switched = switched("claude", "personal", "work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "work");
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
 
     model.send(Intent::ReplaceAndSwitch {
-        qualified: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     model.send(Intent::ReplaceAndSwitch {
-        qualified: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     model.run(&mut machine);
 
-    assert_eq!(machine.replaced_with, ["work"]);
+    assert_eq!(machine.replaced_with, ["claude/work"]);
     let shown = model.shown();
     assert_eq!(shown.replace_question, None);
     assert_eq!(model.state.presented, None);
@@ -2102,29 +2150,29 @@ fn a_replacement_answered_after_the_question_closed_is_made() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
-    switch(&mut model, &mut machine, "work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
 
     model.send(Intent::KeepLogin);
     model.run(&mut machine);
     assert_eq!(model.shown().replace_question, None, "closed");
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert!(
         machine.replaced_with.is_empty(),
         "nothing replaced on a close"
     );
 
-    machine.switched = switched("claude", "personal", "work", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
     model.send(Intent::ReplaceAndSwitch {
-        qualified: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     model.run(&mut machine);
-    assert_eq!(machine.replaced_with, ["work"]);
+    assert_eq!(machine.replaced_with, ["claude/work"]);
 
     model.send(Intent::ReplaceAndSwitch {
-        qualified: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     model.run(&mut machine);
-    assert_eq!(machine.replaced_with, ["work"], "taken once");
+    assert_eq!(machine.replaced_with, ["claude/work"], "taken once");
 }
 
 /// Another switch asked for in its place takes the question away.
@@ -2133,13 +2181,13 @@ fn another_switch_takes_the_replace_question_away() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
-    switch(&mut model, &mut machine, "work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     model.send(Intent::KeepLogin);
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
-    switch(&mut model, &mut machine, "spare");
+    switch(&mut model, &mut machine, Tool::Claude, "spare");
 
     model.send(Intent::ReplaceAndSwitch {
-        qualified: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     model.run(&mut machine);
     assert!(machine.replaced_with.is_empty());
@@ -2152,13 +2200,17 @@ fn a_switch_asked_for_meanwhile_brings_the_replace_question_back() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("live_login_refused", REFUSED_FOR_GOOD, Vec::new()));
-    switch(&mut model, &mut machine, "work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     let serial = model.shown().window_request.serial;
 
-    switch(&mut model, &mut machine, "spare");
+    switch(&mut model, &mut machine, Tool::Claude, "spare");
 
     let shown = model.shown();
-    assert_eq!(machine.switched_to, ["work"], "nothing else is switched");
+    assert_eq!(
+        machine.switched_to,
+        ["claude/work"],
+        "nothing else is switched"
+    );
     assert!(shown.replace_question.is_some());
     assert!(
         shown.window_request.serial > serial,

@@ -18,7 +18,7 @@ internal static class Snapshots
             AccountMenu: new AccountMenuShown(Offers: ["Switch", "Sign in again…", "Rename…"], Forget: "Remove account…"),
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], SignIns: [], Others: null),
-            Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
+            Footing: new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 12:00", UpdatedWindow: "Updated 12:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,

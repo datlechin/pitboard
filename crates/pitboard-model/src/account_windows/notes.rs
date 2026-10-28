@@ -87,15 +87,16 @@ fn remove_data_alert_on(os: Os, account: &WindowAccount) -> Question {
 mod tests {
     use super::super::accounts::{tests::account, window_accounts};
     use super::*;
+    use pitboard_core::provider::ProviderId;
 
-    fn window(label: &str, provider: &str) -> WindowAccount {
+    fn window(label: &str, provider: ProviderId) -> WindowAccount {
         let mut found = window_accounts(&[account(Some(label), provider, "dana")]);
         found.pop().expect("a window")
     }
 
     #[test]
     fn a_note_says_what_happened_to_whom() {
-        let main = window("main", "codex");
+        let main = window("main", ProviderId::Codex);
         let steps = &main.site.sign_in_steps;
         assert_eq!(
             window_note(WindowNoteKind::SignIn, main.clone()),
@@ -127,7 +128,7 @@ mod tests {
             ),
             "This window doesn’t open links to other apps, such as this vscode: link."
         );
-        let work = window("work", "claude");
+        let work = window("work", ProviderId::Claude);
         assert_eq!(
             window_note(WindowNoteKind::SignIn, work),
             "Sign in to claude.ai as work@example.com. Google’s sign-in doesn’t work inside \
@@ -139,7 +140,10 @@ mod tests {
     #[test]
     fn a_window_whose_old_store_is_held_says_when_it_opens() {
         assert_eq!(
-            window_note(WindowNoteKind::StoreHeld, window("work", "claude")),
+            window_note(
+                WindowNoteKind::StoreHeld,
+                window("work", ProviderId::Claude)
+            ),
             "What this window kept before is deleted once every account window has closed. It \
              opens after that."
         );
@@ -154,7 +158,7 @@ mod tests {
 
     #[test]
     fn removing_a_windows_data_says_the_site_is_not_told() {
-        let work = window("work", "claude");
+        let work = window("work", ProviderId::Claude);
         let mac = remove_data_alert_on(Os::MacOs, &work);
         assert_eq!(mac.title, "Remove claude.ai data for “work”?");
         assert_eq!(

@@ -21,7 +21,7 @@ public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccou
                 model.Send(new Intent.Outside(request, new OutsideAsk.Switch(switching.Account)));
                 break;
             case JumpAsk.AddAccount:
-                model.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)));
+                model.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null)));
                 break;
             case JumpAsk.OpenWindow window:
                 _windows.Add(window.Store);

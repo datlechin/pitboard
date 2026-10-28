@@ -13,10 +13,13 @@ use super::{
     AppControl, Intent, LocalTime, ModelListener, PitboardModel, Platform, PlatformError, Sheet,
     Snapshot,
 };
+use crate::AccountKey;
 use crate::AppCore;
+use crate::Tool;
 use crate::present::testing::Utc;
 use crate::present::{AccountItem, PanelNotice, words};
 use pitboard_core::host::OS;
+use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::testing::{Asked, live_service};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -195,7 +198,7 @@ fn after_uninstall_nothing_writes_pitboards_directory_again() {
         Intent::Woke,
         Intent::Glanced,
         Intent::SwitchTo {
-            qualified: "claude/spare".into(),
+            account: AccountKey::new(Tool::Claude, "spare"),
         },
     ] {
         model.send(intent);
@@ -506,14 +509,14 @@ fn dropping_the_model_waits_for_nothing() {
     });
 }
 
-/// The account `provider`'s tool has signed in, by its label.
-fn signed_in(snapshot: &Snapshot, provider: &str) -> Option<String> {
-    rows(snapshot)
+/// The account `tool` has signed in, by its label.
+fn signed_in(snapshot: &Snapshot, tool: Tool) -> Option<String> {
+    (snapshot.sections.iter())
+        .filter(|section| section.tool == tool)
+        .flat_map(|section| &section.accounts)
         .filter(|row| row.in_use)
-        .filter_map(|row| row.qualified.as_deref())
-        .map(Key::parse)
-        .find(|key| key.provider.code() == provider)
-        .map(|key| key.label)
+        .find_map(|row| row.qualified.as_deref())
+        .map(|qualified| Key::parse(qualified).label)
 }
 
 /// Codex with `personal` signed in and `work` parked, as a terminal leaves two accounts.
@@ -527,17 +530,17 @@ fn two_codex_accounts(name: &str) -> World {
 /// A read that has landed and is over, with `label` signed in to Codex and no switch under
 /// way.
 fn codex_shows(label: &str) -> impl Fn(&[Snapshot]) -> bool + '_ {
-    in_use("codex", label)
+    in_use(Tool::Codex, label)
 }
 
-/// A read that has landed and is over, with `label` signed in to `provider`'s tool and no
-/// switch under way.
-fn in_use<'a>(provider: &'a str, label: &'a str) -> impl Fn(&[Snapshot]) -> bool + 'a {
+/// A read that has landed and is over, with `label` signed in to `tool` and no switch under
+/// way.
+fn in_use(tool: Tool, label: &str) -> impl Fn(&[Snapshot]) -> bool + '_ {
     move |told| {
         told.last().is_some_and(|last| {
             !last.reading
                 && switching(last).is_none()
-                && signed_in(last, provider).as_deref() == Some(label)
+                && signed_in(last, tool).as_deref() == Some(label)
         })
     }
 }
@@ -556,7 +559,7 @@ fn a_codex_switchs_warning_reaches_the_snapshot() {
     told.until("the accounts read", codex_shows("personal"));
 
     model.send(Intent::SwitchTo {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     let snapshots = told.until("the switch and the read after it", codex_shows("work"));
     assert!(in_order(&snapshots), "{snapshots:#?}");
@@ -606,7 +609,7 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
     told.until("the accounts read", codex_shows("personal"));
 
     model.send(Intent::SwitchTo {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     let asked = told.until("the quit question", |told| {
         told.last().is_some_and(|last| last.quit_question.is_some())
@@ -620,10 +623,10 @@ fn quitting_the_app_holding_the_login_switches_and_opens_it_again() {
         apps.asked().is_empty(),
         "nothing is quit before the person says so"
     );
-    assert_eq!(signed_in(asked, "codex").as_deref(), Some("personal"));
+    assert_eq!(signed_in(asked, Tool::Codex).as_deref(), Some("personal"));
 
     model.send(Intent::QuitAndSwitch {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     let snapshots = told.until("the switch", codex_shows("work"));
     let last = snapshots.last().expect("a snapshot");
@@ -663,7 +666,7 @@ fn a_switch_on_a_process_list_nobody_could_read_says_so_and_asks_nothing() {
     told.until("the accounts read", codex_shows("personal"));
 
     model.send(Intent::SwitchTo {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     let snapshots = told.until("the switch and the read after it", codex_shows("work"));
     assert!(
@@ -712,7 +715,7 @@ fn a_read_answers_while_a_switch_waits() {
 
     let (arrivals, release) = apps.hold_running();
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     arrivals
         .recv_timeout(PATIENCE)
@@ -754,7 +757,7 @@ fn a_read_answers_while_the_core_switches() {
     let told = Arc::new(Told::default());
     let model = model(&world.core(), &told);
     model.send(Intent::Start);
-    told.until("the accounts read", in_use("claude", "work"));
+    told.until("the accounts read", in_use(Tool::Claude, "work"));
 
     // The switch asks Anthropic whose the login going in is just before it takes Claude
     // Code's lock, as enrolling it asked before.
@@ -769,7 +772,7 @@ fn a_read_answers_while_the_core_switches() {
     let asked_before = whose();
     let writing = world.claude_code_writing();
     model.send(Intent::SwitchTo {
-        qualified: "claude/spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
     });
     eventually("the switch at Claude Code's lock", || {
         whose() > asked_before
@@ -786,10 +789,10 @@ fn a_read_answers_while_the_core_switches() {
         "the switch is still waiting"
     );
     assert_eq!(meanwhile.failure_alert, None);
-    assert_eq!(signed_in(&meanwhile, "claude").as_deref(), Some("work"));
+    assert_eq!(signed_in(&meanwhile, Tool::Claude).as_deref(), Some("work"));
 
     drop(writing);
-    let snapshots = told.until("the switch", in_use("claude", "spare"));
+    let snapshots = told.until("the switch", in_use(Tool::Claude, "spare"));
     let last = snapshots.last().expect("a snapshot");
     assert_eq!(last.failure_alert, None);
     assert!(
@@ -865,7 +868,7 @@ fn signed_in_as<'a>(
 // An add of a Claude Code account, which the core names from its email.
 fn sign_in() -> Intent {
     Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     }
 }
@@ -874,7 +877,7 @@ fn sign_in() -> Intent {
 fn naming(label: &str) -> impl Fn(&[Snapshot]) -> bool + '_ {
     move |told| {
         told.last().is_some_and(
-            |last| matches!(&last.sheet, Some(Sheet::Name { label: named, .. }) if named == label),
+            |last| matches!(&last.sheet, Some(Sheet::Name { account, .. }) if account.label == label),
         )
     }
 }
@@ -889,7 +892,7 @@ fn paste(code: &str) -> Intent {
 fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
     let at = signing_in_world("paste-again");
     at.model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
@@ -928,7 +931,7 @@ fn a_code_claude_code_refused_is_typed_again_into_the_same_sign_in() {
         "{travel:?}"
     );
     assert_eq!(
-        signed_in(last, "claude").as_deref(),
+        signed_in(last, Tool::Claude).as_deref(),
         Some("work"),
         "beside the one in use"
     );
@@ -943,12 +946,11 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
     let at = signing_in_world("sign-in-again");
     at.model.send(Intent::PresentSheet {
         sheet: Sheet::SignInAgain {
-            provider: "claude".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Claude, "work"),
         },
     });
     at.model.send(Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: Some("work".into()),
     });
     at.told.until("a code asked for", signing(|s| s.wants_code));
@@ -963,7 +965,7 @@ fn signing_in_again_to_the_account_in_use_puts_its_new_login_in_use() {
     let last = told.last().expect("a snapshot");
     let said = notice(last, "switch/claude").expect("the sign-in's notice");
     assert_eq!(said.lines, [words::signed_in_now("work", true, None)]);
-    assert_eq!(signed_in(last, "claude").as_deref(), Some("work"));
+    assert_eq!(signed_in(last, Tool::Claude).as_deref(), Some("work"));
     assert_eq!(last.sheet, None);
     assert!(
         at.world.claude_code_uses("access-here-again"),
@@ -1122,7 +1124,7 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
     model.send(Intent::Start);
     told.until("the account read", shows("work"));
     model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     let missing = |told: &[Snapshot]| {
         told.last()
@@ -1139,7 +1141,7 @@ fn a_tool_the_core_cannot_find_is_said_missing_in_its_sheet() {
     });
     let last = told.last().expect("a snapshot");
     assert_eq!(last.sheet_failure, None, "said under the tool");
-    assert_eq!(last.sheet, Some(Sheet::Add { provider: None }));
+    assert_eq!(last.sheet, Some(Sheet::Add { tool: None }));
     assert_eq!(last.failure_alert, None);
     model.shutdown();
 }
@@ -1160,7 +1162,7 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
     });
     model.send(Intent::PresentSheet {
         sheet: Sheet::Add {
-            provider: Some("codex".into()),
+            tool: Some(Tool::Codex),
         },
     });
     let told = told.until("the sheet", |told| {
@@ -1172,15 +1174,15 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
         .last()
         .and_then(|last| last.sheet_text.clone())
         .expect("the sheet");
-    assert_eq!(text.tool, "codex");
+    assert_eq!(text.tool, Tool::Codex);
     let codex = text
         .tools
         .iter()
-        .find(|tool| tool.code == "codex")
+        .find(|tool| tool.tool == Tool::Codex)
         .expect("codex offered");
     assert_eq!(
         codex.missing,
-        words::missing(OS, "codex"),
+        Some(words::missing(OS, ProviderId::Codex)),
         "its CLI is not here"
     );
     model.shutdown();
@@ -1319,13 +1321,12 @@ fn renaming_and_forgetting_reach_the_core() {
     told.until("both accounts read", has(&["work", "spare"]));
 
     model.send(Intent::Rename {
-        provider: "claude".into(),
-        label: "spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
         to: "home".into(),
     });
     told.until("the rename", has(&["work", "home"]));
     model.send(Intent::Forget {
-        qualified: "claude/home".into(),
+        account: AccountKey::new(Tool::Claude, "home"),
     });
     told.until("the account forgotten", has(&["work"]));
     let last = model.snapshot();
@@ -1389,9 +1390,7 @@ fn adding_the_login_signed_in_now_enrols_it_and_names_it_after() {
         told.last()
             .is_some_and(|last| !last.reading && !last.sections.is_empty())
     });
-    model.send(Intent::Enrol {
-        provider: "claude".into(),
-    });
+    model.send(Intent::Enrol { tool: Tool::Claude });
     // The read after it lists the account: the poll leaves the account index alone
     // meanwhile, the enrolment being the app's own.
     let enrolled = told.until("the login enrolled", |told| {
@@ -1401,7 +1400,7 @@ fn adding_the_login_signed_in_now_enrols_it_and_names_it_after() {
     assert_eq!(last.sheet_failure, None);
     assert_eq!(last.failure_alert, None);
     let sheet = last.sheet.clone().expect("the name");
-    let to = crate::present::check_name(sheet, "claude".into(), "work".into())
+    let to = crate::present::check_name(sheet, Tool::Claude, "work".into())
         .intent
         .expect("a rename");
     model.send(to);
@@ -1417,7 +1416,7 @@ fn adding_the_login_signed_in_now_enrols_it_and_names_it_after() {
 fn quitting_before_the_name_is_saved_keeps_the_account() {
     let at = signing_in_world("quit-before-naming");
     at.model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     at.model.send(sign_in());
     at.told.until("a code asked for", signing(|s| s.wants_code));
@@ -1484,8 +1483,7 @@ fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
     told.until("the account read", read_after(&["work"]));
     renaming.send(Intent::PresentSheet {
         sheet: Sheet::Rename {
-            provider: "claude".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Claude, "work"),
         },
     });
     told.until("the sheet up", |told| {
@@ -1493,8 +1491,7 @@ fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
     });
     let rename = || {
         renaming.send(Intent::Rename {
-            provider: "claude".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Claude, "work"),
             to: "office".into(),
         });
     };
@@ -1516,9 +1513,7 @@ fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() 
             .is_some_and(|last| read_in(last) && !last.sections.is_empty())
     });
     let enrol = || {
-        adding.send(Intent::Enrol {
-            provider: "claude".into(),
-        });
+        adding.send(Intent::Enrol { tool: Tool::Claude });
     };
     with_a_look_held(&adding, &told, enrol, naming("example"));
     told.until("the read after adding it", read_after(&["example"]));
@@ -1667,7 +1662,7 @@ fn an_account_at_its_share_is_switched_from_by_itself_on_the_real_core() {
     let posted = Arc::new(Posted::default());
     let model = model_posting(&core, &told, &posted);
     model.send(Intent::Start);
-    told.until("spare in use", in_use("claude", "spare"));
+    told.until("spare in use", in_use(Tool::Claude, "spare"));
     eventually("the switch said", || !posted.posted().is_empty());
     let notice = posted.posted().remove(0);
     assert_eq!(notice.title, words::switched_to(None, "spare"));
@@ -1746,9 +1741,7 @@ fn the_apps_preferences_follow_its_pitboard_directory() {
         last.window_request.serial, 1,
         "the first launch opens the window"
     );
-    first_model.send(Intent::DeclineSecondAccount {
-        provider: "claude".into(),
-    });
+    first_model.send(Intent::DeclineSecondAccount { tool: Tool::Claude });
     told.until("the nudge declined", |told| {
         told.last().is_some_and(|last| last.setup.is_none())
     });

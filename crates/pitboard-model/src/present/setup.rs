@@ -5,9 +5,11 @@ use super::accounts::in_order;
 use super::notices::INSTALL_CLAUDE_CODE;
 use super::words;
 use super::{AccountsShown, Choice, Footing, Seen, SetupStep};
+use crate::Tool;
 use crate::model::state::in_its_app;
 use crate::model::{Intent, Sheet, Tip};
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 
 /// How far along setting Pitboard up this machine is, worked out across every tool.
 pub(crate) fn footing(seen: &Seen) -> Footing {
@@ -41,10 +43,9 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
         return Footing::Ready;
     }
     // Per tool: an account can only be switched to another account of its own tool.
-    let providers: Vec<&str> = accounts.iter().map(|a| a.provider.as_str()).collect();
-    let declined = &seen.state.preferences.second_account_declined;
+    let providers: Vec<ProviderId> = accounts.iter().map(|a| a.provider).collect();
     for provider in in_order(&providers, &seen.tools) {
-        if declined.contains(&provider) {
+        if seen.state.preferences.declined_second_account(provider) {
             continue;
         }
         let enrolled: Vec<_> = accounts
@@ -56,8 +57,7 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
             && let Some(label) = &only.label
         {
             return Footing::OnlyOne {
-                provider,
-                label: label.clone(),
+                account: Key::new(provider, label).into(),
             };
         }
     }
@@ -67,7 +67,7 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
     let preferences = &seen.state.preferences;
     let switching = accounts
         .iter()
-        .filter(|account| account.provider == ProviderId::Claude.code() && account.label.is_some())
+        .filter(|account| account.provider == ProviderId::Claude && account.label.is_some())
         .count();
     if switching > 1 && !preferences.at_limit_chosen() && !preferences.declined(Tip::AtLimit) {
         return Footing::AtLimitUnchosen;
@@ -76,41 +76,40 @@ pub(crate) fn footing(seen: &Seen) -> Footing {
 }
 
 fn found(seen: &Seen, tool: ProviderId) -> bool {
-    (seen.state.installed.as_ref())
-        .is_some_and(|found| found.iter().any(|here| here.code == tool.code()))
+    (seen.state.installed.as_ref()).is_some_and(|found| found.contains(&tool))
 }
 
 // Whose login Codex stores is read only once the tip is taken up.
 fn codex_unused(seen: &Seen) -> bool {
-    let codex = ProviderId::Codex.code();
     !seen.state.reading_preferences()
         && !seen.state.preferences.declined(Tip::UseCodex)
         && found(seen, ProviderId::Codex)
         && !(seen.accounts().iter())
-            .any(|account| account.provider == codex && account.label.is_some())
+            .any(|account| account.provider == ProviderId::Codex && account.label.is_some())
 }
 
 /// The one next thing to do on a machine that is not set up yet. Somebody who opens the app
 /// has usually never run a command and may never want to.
 pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
     match footing {
-        Footing::OnlyOne { provider, label } => {
-            let in_its_app = in_its_app(provider);
+        Footing::OnlyOne { account } => {
+            let tool = ProviderId::from(account.tool);
+            let in_its_app = in_its_app(tool);
             let named = if in_its_app {
-                Some(seen.tool_name(provider))
+                Some(tool.name())
             } else {
-                seen.tool_if_shown(provider)
+                seen.tool_if_shown(tool)
             };
-            let app = in_its_app.then(|| seen.program_of(provider));
+            let app = in_its_app.then(|| tool.program());
             Some(SetupStep {
-                title: words::add_a_second(named.as_deref()),
-                detail: words::only_one(label, named.as_deref(), app),
+                title: words::add_a_second(named),
+                detail: words::only_one(&account.label, named, app),
                 actions: vec![
                     Choice {
                         title: words::add_account(seen.os, true),
                         intent: Intent::PresentSheet {
                             sheet: Sheet::Add {
-                                provider: Some(provider.clone()),
+                                tool: Some(account.tool),
                             },
                         },
                         enabled: true,
@@ -119,9 +118,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                     // nudge can be declined, for its tool alone.
                     Choice {
                         title: words::not_now(seen.os),
-                        intent: Intent::DeclineSecondAccount {
-                            provider: provider.clone(),
-                        },
+                        intent: Intent::DeclineSecondAccount { tool: account.tool },
                         enabled: true,
                     },
                 ],
@@ -133,9 +130,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             actions: vec![
                 Choice {
                     title: words::add_codex_account(seen.os),
-                    intent: Intent::Enrol {
-                        provider: ProviderId::Codex.code().into(),
-                    },
+                    intent: Intent::Enrol { tool: Tool::Codex },
                     enabled: true,
                 },
                 not_now(seen, Tip::UseCodex),
@@ -168,7 +163,7 @@ fn not_now(seen: &Seen, tip: Tip) -> Choice {
 
 // Nothing to list says why and what to do next, never an empty list or a spinner that never stops.
 pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
-    let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name.as_str()).collect();
+    let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name()).collect();
     let names = pitboard_core::words::listed(&names);
     match footing {
         Footing::NoClaudeCode => AccountsShown::NoTool {
@@ -195,7 +190,7 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
                 add: Choice {
                     title: words::add_account(seen.os, true),
                     intent: Intent::PresentSheet {
-                        sheet: Sheet::Add { provider: None },
+                        sheet: Sheet::Add { tool: None },
                     },
                     enabled: true,
                 },

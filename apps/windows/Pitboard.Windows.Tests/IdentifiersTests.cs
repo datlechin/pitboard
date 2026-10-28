@@ -9,10 +9,10 @@ public sealed class IdentifiersTests
     [TestMethod]
     public void AControlIsFoundByTheModelsCaseItShowsOrSends()
     {
-        Assert.AreEqual("switchTo", Identifiers.Of(new Intent.SwitchTo("claude/spare")));
+        Assert.AreEqual("switchTo", Identifiers.Of(new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare"))));
         Assert.AreEqual("abandonStuckSwitch", Identifiers.Of(new Intent.AbandonStuckSwitch()));
-        Assert.AreEqual("rename", Identifiers.Of(new Intent.PresentSheet(new Sheet.Rename("claude", "work"))));
-        Assert.AreEqual("onlyOne", Identifiers.Of(new Footing.OnlyOne("claude", "work")));
+        Assert.AreEqual("rename", Identifiers.Of(new Intent.PresentSheet(new Sheet.Rename(new AccountKey(Tool.Claude, "work")))));
+        Assert.AreEqual("onlyOne", Identifiers.Of(new Footing.OnlyOne(new AccountKey(Tool.Claude, "work"))));
         Assert.AreEqual("notify", Identifiers.Of(AtLimit.Notify));
     }
 }

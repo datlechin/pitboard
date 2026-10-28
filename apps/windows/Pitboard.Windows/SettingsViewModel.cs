@@ -289,7 +289,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     {
         if (Warm.Accounts.FirstOrDefault(account => account.Qualified == qualified) is { } account && account.On != on)
         {
-            _model.Send(new Intent.SetWarm(qualified, on));
+            _model.Send(new Intent.SetWarm(account.Account, on));
         }
     }
 

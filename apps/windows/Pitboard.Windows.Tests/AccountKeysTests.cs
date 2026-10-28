@@ -7,18 +7,18 @@ namespace Pitboard.Windows.Tests;
 public sealed class AccountKeysTests
 {
     private static AccountItem Spare(params AccountAction[] actions) =>
-        Items.Account("claude", "spare") with { Actions = [.. actions, Items.RemoveAction("claude/spare")] };
+        Items.Account("claude", "spare") with { Actions = [.. actions, Items.RemoveAction("claude", "spare")] };
 
     [TestMethod]
     public void EnterDoesWhatTheRowsButtonDoes()
     {
-        Assert.AreEqual((null, new Intent.SwitchTo("claude/spare")), AccountKeys.Pressed(VirtualKey.Enter, Spare()));
+        Assert.AreEqual((null, new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare"))), AccountKeys.Pressed(VirtualKey.Enter, Spare()));
     }
 
     [TestMethod]
     public void DeleteAsksBeforeItRemoves()
     {
-        var remove = Items.RemoveAction("claude/spare");
+        var remove = Items.RemoveAction("claude", "spare");
 
         Assert.AreEqual((remove.Confirm, remove.Intent!), AccountKeys.Pressed(VirtualKey.Delete, Spare()));
         Assert.IsNull(AccountKeys.Pressed(VirtualKey.Delete, Spare() with { Actions = [remove with { Enabled = false }] }), "the account in use");

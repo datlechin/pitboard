@@ -57,11 +57,13 @@ import Testing
 // The inspector's buttons are what the shortcut menu shows.
 @Test func aShortcutMenuHidesWhatCannotBeChosenAndTheMenuBarDimsIt() {
     let now = AccountAction(
-        kind: .warmUpNow, title: "Warm Up Now", intent: .warmNow(qualified: "claude/work"),
+        kind: .warmUpNow, title: "Warm Up Now",
+        intent: .warmNow(account: AccountKey(tool: .claude, label: "work")),
         window: nil, enabled: false, confirm: nil)
     let rename = AccountAction(
         kind: .rename, title: "Rename…",
-        intent: .presentSheet(sheet: .rename(provider: "claude", label: "work")), window: nil,
+        intent: .presentSheet(
+            sheet: .rename(account: AccountKey(tool: .claude, label: "work"))), window: nil,
         enabled: true, confirm: nil)
     #expect(AccountMenuItems.shown([rename, now], in: .shortcutMenu) == [rename])
     #expect(AccountMenuItems.shown([rename, now], in: .menuBar) == [rename, now])
@@ -69,13 +71,21 @@ import Testing
 
 /// The UI tests find a control by the model's case it shows or sends, whatever it carries.
 @Test func aCaseIsNamedWithoutWhatItCarries() {
-    #expect(caseName(Intent.switchTo(qualified: "codex/spare")) == "switchTo")
+    #expect(
+        caseName(Intent.switchTo(account: AccountKey(tool: .codex, label: "spare")))
+            == "switchTo")
     #expect(caseName(Intent.abandonStuckSwitch) == "abandonStuckSwitch")
     #expect(
-        caseName(Intent.presentSheet(sheet: .rename(provider: "claude", label: "work")))
+        caseName(
+            Intent.presentSheet(
+                sheet: .rename(account: AccountKey(tool: .claude, label: "work"))))
             == "rename")
-    #expect(caseName(Footing.onlyOne(provider: "claude", label: "work")) == "onlyOne")
-    #expect(caseName(Sheet.signInAgain(provider: "claude", label: "old")) == "signInAgain")
+    #expect(
+        caseName(Footing.onlyOne(account: AccountKey(tool: .claude, label: "work")))
+            == "onlyOne")
+    #expect(
+        caseName(Sheet.signInAgain(account: AccountKey(tool: .claude, label: "old")))
+            == "signInAgain")
     #expect(caseName(WindowNoteKind.otherApp(scheme: "vscode")) == "otherApp")
 }
 
@@ -83,17 +93,17 @@ import Testing
 /// afresh.
 @Test func eachSheetIsToldApart() {
     let sheets: [Sheet] = [
-        .add(provider: nil), .add(provider: "codex"),
-        .signInAgain(provider: "claude", label: "old"),
-        .name(provider: "claude", label: "work", email: "dana@work.example"),
-        .rename(provider: "claude", label: "personal"),
-        .rename(provider: "codex", label: "personal"),
+        .add(tool: nil), .add(tool: .codex),
+        .signInAgain(account: AccountKey(tool: .claude, label: "old")),
+        .name(account: AccountKey(tool: .claude, label: "work"), email: "dana@work.example"),
+        .rename(account: AccountKey(tool: .claude, label: "personal")),
+        .rename(account: AccountKey(tool: .codex, label: "personal")),
         .stow,
     ]
     #expect(Set(sheets.map(\.id)).count == sheets.count)
     #expect(
-        Sheet.rename(provider: "claude", label: "personal").id
-            == Sheet.rename(provider: "claude", label: "personal").id)
+        Sheet.rename(account: AccountKey(tool: .claude, label: "personal")).id
+            == Sheet.rename(account: AccountKey(tool: .claude, label: "personal")).id)
 }
 
 /// The sign-in page's link is copied in place of whatever was there, as an address for an

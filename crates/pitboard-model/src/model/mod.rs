@@ -86,8 +86,10 @@ use crate::present::{
     ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, RemovalShown,
     SetupStep, SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
 };
-use crate::{AppCore, Warning};
+use crate::{AccountKey, AppCore, Tool, Warning};
 use lanes::Lanes;
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use state::{Cadence, Msg, Now, State};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -214,12 +216,11 @@ pub enum Intent {
     /// than something producing it, and has each tool's service asked about every account
     /// whatever it was asked moments ago.
     Refresh { asked: bool },
-    /// Switch to the account `qualified` names, its label with its tool as
-    /// `Account::qualified` gives it, from the window, the menu or a notification. One switch
-    /// at a time: asked for while another is under way, it does nothing, beyond bringing a
-    /// question about quitting an app back to the front. Where an app keeps the tool's login
-    /// in memory, as ChatGPT keeps Codex's, the switch waits on `Snapshot::quit_question`.
-    SwitchTo { qualified: String },
+    /// Switch to `account`, from the window, the menu or a notification. One switch at a
+    /// time: asked for while another is under way, it does nothing, beyond bringing a question
+    /// about quitting an app back to the front. Where an app keeps the tool's login in memory,
+    /// as ChatGPT keeps Codex's, the switch waits on `Snapshot::quit_question`.
+    SwitchTo { account: AccountKey },
     /// The person let Pitboard quit the app the quit question last asked names, whatever it
     /// asked for: a switch, a sign-in, recording an account. It is asked to quit the way a
     /// person quits it, what was asked for is done once it has, and the copy that was running
@@ -231,35 +232,31 @@ pub enum Intent {
     /// an alert can say it closed before its button acts: it is taken before or after
     /// `KeepAppOpen` closed that question, and does nothing once taken, or once another
     /// switch has been asked for in that question's place.
-    QuitAndSwitch { qualified: String },
+    QuitAndSwitch { account: AccountKey },
     /// From the notification or notice of a switch by itself, which left `from` for `to`.
-    SwitchBack { from: String, to: String },
+    SwitchBack { from: AccountKey, to: AccountKey },
     /// The person kept the app open, or the question was closed some other way: the quit
     /// question goes, and nothing is switched.
     KeepAppOpen,
-    /// The person agreed to put the account `qualified` names in place of a login in use its
-    /// service refuses for good, which the switch to it asked about. It names the question
-    /// it answers, and is taken before or after `KeepLogin` closed that question, as
-    /// `QuitAndSwitch` is.
-    ReplaceAndSwitch { qualified: String },
+    /// The person agreed to put `account` in place of a login in use its service refuses for
+    /// good, which the switch to it asked about. It names the question it answers, and is
+    /// taken before or after `KeepLogin` closed that question, as `QuitAndSwitch` is.
+    ReplaceAndSwitch { account: AccountKey },
     /// The person kept the login in use, or the question was closed some other way: the
     /// question goes, and nothing is switched.
     KeepLogin,
-    /// Somebody has read what `provider`'s tool's last switch said, and put it away.
-    DismissSwitch { provider: String },
-    /// Somebody keeps one account of `provider`'s tool on purpose: "Not Now" to the nudge to
-    /// add a second. Per tool, since that says nothing about another, and kept in the app's
+    /// Somebody has read what `tool`'s last switch said, and put it away.
+    DismissSwitch { tool: Tool },
+    /// Somebody keeps one account of `tool` on purpose: "Not Now" to the nudge to add a
+    /// second. Per tool, since that says nothing about another, and kept in the app's
     /// preferences in Pitboard's directory.
-    DeclineSecondAccount { provider: String },
+    DeclineSecondAccount { tool: Tool },
     /// Give up on an interrupted switch nothing can finish, keeping every login it names.
     AbandonStuckSwitch,
     /// Somebody has read what giving up on an interrupted switch kept, and put it away.
     DismissAbandoned,
     /// A new account is added under a name from its email, which `Sheet::Name` offers to change.
-    SignIn {
-        provider: String,
-        again: Option<String>,
-    },
+    SignIn { tool: Tool, again: Option<String> },
     /// Type back the code the browser showed, to the sign-in under way, once its tool asks
     /// for one: `RunningSignIn::wants_code`. Taken without the white space around it, and one
     /// with nothing else in it is not typed. A code is asked for once, and again once Claude
@@ -290,27 +287,23 @@ pub enum Intent {
     DismissSheetFailure,
     /// Look again which tools are installed, while a sheet that signs in is up.
     LookForTools,
-    /// Add the login `provider`'s tool has signed in now, with no browser, as `SignIn` adds a
-    /// new one; where the tool stores none, its sign-in is offered instead.
-    Enrol { provider: String },
-    /// Give the account `label` of `provider`'s tool the name `to`, inside its own tool: the
-    /// Rename sheet's Save, by the same rules, and a name it has already saves nothing. What
-    /// was said about the account is said about it under its new name.
-    Rename {
-        provider: String,
-        label: String,
-        to: String,
-    },
-    /// Drop the account `qualified` names, and the login parked for it, once somebody has
-    /// answered the question its row asks first. What goes wrong is said in the window.
-    Forget { qualified: String },
-    /// Write the account `qualified` names, the one in use, into its tool's config where that
-    /// names another account, as `pitboard use` with it does: the button on the notice that
-    /// says Claude Code's config names another account. A change like a rename and not a
-    /// switch, so nothing said about a switch or the account in use goes. Refused, writing
-    /// nothing, where another account is in use by then. What it warned of is said beside
-    /// the read after it, and what stopped it in the window.
-    UpdateConfig { qualified: String },
+    /// Add the login `tool` has signed in now, with no browser, as `SignIn` adds a new one;
+    /// where the tool stores none, its sign-in is offered instead.
+    Enrol { tool: Tool },
+    /// Give `account` the name `to`, inside its own tool: the Rename sheet's Save, by the same
+    /// rules, and a name it has already saves nothing. What was said about the account is said
+    /// about it under its new name.
+    Rename { account: AccountKey, to: String },
+    /// Drop `account`, and the login parked for it, once somebody has answered the question
+    /// its row asks first. What goes wrong is said in the window.
+    Forget { account: AccountKey },
+    /// Write `account`, the one in use, into its tool's config where that names another
+    /// account, as `pitboard use` with it does: the button on the notice that says Claude
+    /// Code's config names another account. A change like a rename and not a switch, so
+    /// nothing said about a switch or the account in use goes. Refused, writing nothing, where
+    /// another account is in use by then. What it warned of is said beside the read after it,
+    /// and what stopped it in the window.
+    UpdateConfig { account: AccountKey },
     /// Put away the login left in the file behind Claude Code's store, as the sheet for it
     /// says, `Sheet::Stow`: once that sheet has looked, and only while the file still holds
     /// what it looked at. Not where the login is of an account nobody enrolled, which the sheet
@@ -348,14 +341,14 @@ pub enum Intent {
     /// The settings, on what happens at a limit, from the tip that asks, which it ends.
     ShowLimits,
     /// Turned on, an account due is warmed up at once.
-    SetWarm { qualified: String, on: bool },
+    SetWarm { account: AccountKey, on: bool },
     /// Warm up accounts only from `from` to `to`, in minutes of the day, `to` up to 24 hours;
     /// a `from` later than `to` runs past midnight.
     SetWarmRange { from: u16, to: u16 },
-    /// Warm up the account `qualified` names now, whatever the span of the day: its own menu's
-    /// **Warm Up Now**. One warm-up at a time: asked for while one is under way, it does
-    /// nothing. What goes wrong is said in the window.
-    WarmNow { qualified: String },
+    /// Warm up `account` now, whatever the span of the day: its own menu's **Warm Up Now**.
+    /// One warm-up at a time: asked for while one is under way, it does nothing. What goes
+    /// wrong is said in the window.
+    WarmNow { account: AccountKey },
     /// Look for the `pitboard` a terminal would run, as the settings do when they show it, and
     /// as an app does once it has linked its own onto the `PATH`.
     LookForCommandLine,
@@ -454,19 +447,15 @@ pub enum AtLimit {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Sheet {
     /// A new account, which means the tool's own sign-in in a browser. The tool it starts on,
-    /// as a `Tool`'s code, when something already said which.
-    Add { provider: Option<String> },
+    /// when something already said which.
+    Add { tool: Option<Tool> },
     /// An enrolled account whose parked login can no longer be used, signed in to again
     /// through the same sign-in as a new one.
-    SignInAgain { provider: String, label: String },
-    /// The account just added under `label`, which the core picked, to be given a name.
-    Name {
-        provider: String,
-        label: String,
-        email: String,
-    },
+    SignInAgain { account: AccountKey },
+    /// The account just added, under a label the core picked, to be given a name.
+    Name { account: AccountKey, email: String },
     /// A new name for an enrolled account.
-    Rename { provider: String, label: String },
+    Rename { account: AccountKey },
     /// Putting away the login Claude Code left in a file behind the keychain: put up, it
     /// looks at the file, and says whose the login is once that is known, before anything is
     /// changed. `Snapshot::stow_text` is what it says.
@@ -488,10 +477,10 @@ pub struct RunningSignIn {
     pub wants_code: bool,
 }
 
-// The app a quit question asks to quit, for the account `qualified` names.
+// The app a quit question asks to quit, for `account`: of an empty label before it has a name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct QuitQuestion {
-    pub(crate) qualified: String,
+    pub(crate) account: Key,
     // as the core's holder detection names it and `AppControl` takes it: on macOS its bundle
     // id, on Windows its Application User Model ID
     pub(crate) app_id: String,
@@ -512,9 +501,8 @@ pub(crate) struct RestartNeeded {
 // longer has that account signed in or somebody puts it away.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LastSwitch {
-    pub provider: String,
-    // as the core types it: bare for Claude Code, `codex/work` for any other tool
-    pub to: String,
+    pub provider: ProviderId,
+    pub to: Key,
     // when sessions already open will have picked it up, for a tool that follows by itself
     pub follows_at: Option<i64>,
     pub restart: Option<RestartNeeded>,
@@ -530,7 +518,7 @@ pub(crate) struct LastSwitch {
 // The account a switch by itself left, which Switch Back puts back in use.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Back {
-    pub from: String,
+    pub from: Key,
     // when the limit it left resets
     pub resets_at: Option<i64>,
 }
@@ -544,8 +532,8 @@ pub(crate) struct Failure {
     pub message: String,
     pub code: Option<String>,
     pub warnings: Vec<Warning>,
-    // the account its next step is for, by its label with its tool
-    pub account: Option<String>,
+    // the account its next step is for
+    pub account: Option<Key>,
 }
 
 // What the model reads afresh each time an app shows it.

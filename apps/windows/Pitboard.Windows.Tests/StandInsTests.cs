@@ -15,7 +15,7 @@ public sealed partial class StandInsTests
         object[] standIns =
         [
             Snapshots.Read(1), Snapshots.Terms, Items.Account("claude", "work", inUse: true), Items.Account("claude", "spare"),
-            Items.Limit(42), Items.RenameAction("claude", "work"), Items.RemoveAction("claude/spare"),
+            Items.Limit(42), Items.RenameAction("claude", "work"), Items.RemoveAction("claude", "spare"),
             Items.WindowAction(Items.Window("claude", "work")), Items.Notice("switched", Items.Dismiss("codex")), Items.LearnMore,
             Items.Tool("codex", "Codex"), Items.CodexCliMissing(), Items.AddAccount(), Items.Rename("work"),
             Items.SigningIn("Codex"), Items.Stow(),

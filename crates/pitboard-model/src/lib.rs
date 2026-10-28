@@ -21,7 +21,9 @@
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
+use pitboard_core::usage;
 use pitboard_core::words;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -88,15 +90,70 @@ pub(crate) use launch::{
 #[cfg(any(test, feature = "fixture"))]
 pub(crate) use launch::{ASK_AGAIN_AFTER, Made};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Tool {
-    // what a label's prefix and every `provider` field say: `claude`, `codex`
-    pub code: String,
-    // as its own documentation names it: `Claude Code`, `Codex`
-    pub name: String,
-    pub program: String,
-    // the company asked about its accounts
-    pub service: String,
+/// A tool whose accounts Pitboard switches, as the apps name it: the model's own, as `sites.rs`
+/// declares `Site`, since the C# generator cannot use a type from another crate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum Tool {
+    Claude,
+    Codex,
+    Desktop,
+}
+
+impl From<Tool> for ProviderId {
+    fn from(tool: Tool) -> ProviderId {
+        match tool {
+            Tool::Claude => ProviderId::Claude,
+            Tool::Codex => ProviderId::Codex,
+            Tool::Desktop => ProviderId::Desktop,
+        }
+    }
+}
+
+impl From<ProviderId> for Tool {
+    fn from(tool: ProviderId) -> Tool {
+        match tool {
+            ProviderId::Claude => Tool::Claude,
+            ProviderId::Codex => Tool::Codex,
+            ProviderId::Desktop => Tool::Desktop,
+            // The model's only arm for a tool it does not know: the core's `ProviderId` is
+            // `non_exhaustive`, and one it adds is given a `Tool` before an app is shown it, as
+            // `every_tool_the_core_knows_is_one_the_apps_name` holds.
+            _ => unreachable!("{tool} is a tool the apps do not name"),
+        }
+    }
+}
+
+/// An account, as an app names it back to the model: its tool, and its label there, since two
+/// tools' accounts can share a label.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
+pub struct AccountKey {
+    pub tool: Tool,
+    pub label: String,
+}
+
+#[cfg(test)]
+impl AccountKey {
+    pub(crate) fn new(tool: Tool, label: &str) -> AccountKey {
+        AccountKey {
+            tool,
+            label: label.into(),
+        }
+    }
+}
+
+impl From<Key> for AccountKey {
+    fn from(key: Key) -> AccountKey {
+        AccountKey {
+            tool: key.provider.into(),
+            label: key.label,
+        }
+    }
+}
+
+impl From<AccountKey> for Key {
+    fn from(account: AccountKey) -> Key {
+        Key::new(account.tool.into(), account.label)
+    }
 }
 
 // The tools the app lists on `os`, in the order a listing shows them.
@@ -107,22 +164,13 @@ pub(crate) fn listed(os: Os) -> impl Iterator<Item = ProviderId> {
         .filter(move |tool| tool.supported_on(os))
 }
 
-pub(crate) fn tools_on(os: Os) -> Vec<Tool> {
-    listed(os).map(tool).collect()
+pub(crate) fn tools_on(os: Os) -> Vec<ProviderId> {
+    listed(os).collect()
 }
 
 #[cfg(test)]
-pub(crate) fn tools() -> Vec<Tool> {
+pub(crate) fn tools() -> Vec<ProviderId> {
     tools_on(pitboard_core::host::OS)
-}
-
-fn tool(tool: ProviderId) -> Tool {
-    Tool {
-        code: tool.code().into(),
-        name: tool.name().into(),
-        program: tool.program().into(),
-        service: tool.service().into(),
-    }
 }
 
 /// The `pitboard` a terminal would run.
@@ -221,8 +269,8 @@ pub(crate) struct Warning {
     pub account: Option<String>,
     // what the file a `fallback_login` warning is about holds, so whether it can be put away
     pub held: Option<Held>,
-    // the tool it is about, as a `Tool`'s code, where it names one
-    pub provider: Option<String>,
+    // the tool it is about, where it names one
+    pub provider: Option<ProviderId>,
 }
 
 // What a file behind a tool's store holds, as far as Pitboard can read it.
@@ -256,23 +304,9 @@ pub(crate) enum Schedule {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Limit {
-    // `session`, `weekly_all`, `weekly_scoped`, or another limit's name, such as `1_day`
-    pub kind: String,
-    pub length_seconds: Option<i64>,
-    // the model a scoped limit applies to
-    pub scope: Option<String>,
-    // past 100 once exceeded
-    pub percent: f64,
-    pub resets_at: Option<i64>,
-    pub severity: Option<String>,
-    pub is_active: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Usage {
     pub observed_at: Option<i64>,
-    pub windows: Vec<Limit>,
+    pub windows: Vec<usage::Window>,
     // a limit `windows` leaves out is one the account does not have
     pub lists_every_limit: bool,
 }
@@ -288,12 +322,11 @@ pub(crate) struct Parked {
 pub(crate) struct Account {
     // the tool and the account, since two tools' accounts can share a label
     pub id: String,
-    // a `Tool`'s code
-    pub provider: String,
+    pub provider: ProviderId,
     // `None` for an account signed in but not enrolled
     pub label: Option<String>,
-    // `claude/work`: what a switch, a forget or a rename names it by
-    pub qualified: Option<String>,
+    // what a switch, a forget or a rename names it by: `None` where `label` is
+    pub key: Option<Key>,
     // a login of the tool that belongs to no account Pitboard can name
     pub unplaced: bool,
     pub email: String,
@@ -322,10 +355,10 @@ pub(crate) struct Status {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Awaiting {
-    pub provider: String,
+    pub provider: ProviderId,
     pub label: String,
-    // the account parked for it, as SwitchTo takes it: desktop/work
-    pub put_back: String,
+    // the account parked for it, as SwitchTo takes it
+    pub put_back: Key,
     // a Sign In Again of `label`, not an add
     pub again: bool,
 }
@@ -351,7 +384,7 @@ pub enum UsageLevel {
     Out,
 }
 
-/// The step a limit is at, from a `Limit`'s `percent`, which passes 100 when a service
+/// The step a limit is at, from its `percent`, which passes 100 when a service
 /// reports more used than the limit.
 pub(crate) fn usage_level(percent: f64) -> UsageLevel {
     match words::usage_level(percent) {
@@ -469,6 +502,16 @@ mod tests {
         let app = scratch.join("Pitboard").to_string_lossy().into_owned();
         assert!(!unschedule_app(environment, app));
         assert!(!scratch.exists(), "nothing is made");
+    }
+
+    // So no tool the core adds reaches the one arm that is not one of the apps' tools.
+    #[test]
+    fn every_tool_the_core_knows_is_one_the_apps_name() {
+        for &tool in ProviderId::ALL {
+            assert_eq!(ProviderId::from(Tool::from(tool)), tool);
+        }
+        let key = Key::new(ProviderId::Codex, "team/a");
+        assert_eq!(Key::from(AccountKey::from(key.clone())), key);
     }
 
     #[test]

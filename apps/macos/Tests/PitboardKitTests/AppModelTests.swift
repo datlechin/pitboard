@@ -114,7 +114,7 @@ private final class Told: @unchecked Sendable {
     let codex = WelcomeTool(
         code: "codex", name: "Codex", account: nil,
         step: .add(
-            choice: Choice(title: "Add", intent: .enrol(provider: "codex"), enabled: true)))
+            choice: Choice(title: "Add", intent: .enrol(tool: .codex), enabled: true)))
     #expect(
         model.apply(snapshot(1, removal: .removing(title: "Uninstalling Pitboard…")))
             == [\.revision, \.removal])
@@ -129,9 +129,12 @@ private final class Told: @unchecked Sendable {
 @Test func whatIsAskedReachesTheModelAsItWasAsked() {
     let standIn = StandInModel(snapshot(0))
     let model = AppModel(model: standIn)
-    model.send(.switchTo(qualified: "codex/spare"))
+    model.send(.switchTo(account: AccountKey(tool: .codex, label: "spare")))
     model.send(.closeSheet)
-    #expect(standIn.sent == [.switchTo(qualified: "codex/spare"), .closeSheet])
+    #expect(
+        standIn.sent == [
+            .switchTo(account: AccountKey(tool: .codex, label: "spare")), .closeSheet,
+        ])
     model.shutdown()
     #expect(standIn.stopped == 1)
 }

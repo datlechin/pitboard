@@ -5,9 +5,10 @@ use super::{Seen, words};
 use crate::model::AtLimit;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
-use crate::{AutoSwitched, FoundCommandLine, Schedule};
+use crate::{AccountKey, AutoSwitched, FoundCommandLine, Schedule};
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::host::Os;
+use pitboard_core::state::Key;
 
 /// What the app shows of this machine rather than its accounts. Not called `Machine`, the
 /// name the model's tests give the core they script.
@@ -51,7 +52,9 @@ pub struct WarmShown {
 /// One Claude Code account, as the settings' warm-up lists it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct WarmAccountShown {
-    /// Its label with its tool, which `Intent::SetWarm` takes back.
+    /// What `Intent::SetWarm` takes back.
+    pub account: AccountKey,
+    /// Its label with its tool, `claude/work`, which its toggle is known by.
     pub qualified: String,
     pub title: String,
     /// Whether it is warmed up.
@@ -204,6 +207,7 @@ fn warm(seen: &Seen) -> WarmShown {
                 .accounts
                 .iter()
                 .map(|choice| WarmAccountShown {
+                    account: Key::parse(&choice.qualified).into(),
                     qualified: choice.qualified.clone(),
                     title: choice.account.clone(),
                     on: choice.on,
@@ -387,7 +391,7 @@ fn schedule(seen: &Seen) -> ScheduleShown {
             seen.os,
             seen.accounts()
                 .iter()
-                .any(|account| crate::model::state::in_its_app(&account.provider)),
+                .any(|account| crate::model::state::in_its_app(account.provider)),
         ),
     }
 }

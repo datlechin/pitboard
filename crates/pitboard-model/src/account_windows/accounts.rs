@@ -54,7 +54,7 @@ pub(crate) fn window_accounts(accounts: &[Account]) -> Vec<WindowAccount> {
         .filter(|account| !account.unplaced && !account.account_id.is_empty())
         .filter_map(|account| Some((account, account.label.as_deref()?)))
         .flat_map(|(account, label)| {
-            pitboard_sites::Site::of_provider(&account.provider)
+            pitboard_sites::Site::of_provider(account.provider.code())
                 .map(move |site| (site, account, label))
         })
         .collect();
@@ -87,7 +87,7 @@ pub(crate) fn windows_of_account(account: &Account, accounts: &[Account]) -> Vec
     window_accounts(accounts)
         .into_iter()
         .filter(|window| {
-            pitboard_sites::Site::of_provider(&account.provider).any(|site| {
+            pitboard_sites::Site::of_provider(account.provider.code()).any(|site| {
                 site.host == window.site.host
                     && stores::same(
                         &window.store,
@@ -130,9 +130,8 @@ pub(crate) fn site_menus(accounts: &[Account]) -> Vec<SiteMenu> {
 
 // What Remove Account… asks, which names what the account's windows keep too.
 pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account]) -> String {
-    if crate::model::state::in_its_app(&account.provider) {
-        let app = pitboard_core::provider::ProviderId::parse(&account.provider)
-            .map_or(account.provider.as_str(), |tool| tool.program());
+    if crate::model::state::in_its_app(account.provider) {
+        let app = account.provider.program();
         return format!(
             "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again \
              needs a sign-in in {app}."
@@ -159,16 +158,18 @@ pub(crate) fn forget_message_on(os: Os, account: &Account, accounts: &[Account])
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use pitboard_core::provider::ProviderId;
+    use pitboard_core::state::Key;
     use pitboard_core::status::Standing;
 
     /// An account as the core reports one, as the Swift tests made them. `label` `None` is a
     /// login signed in and not enrolled.
-    pub(crate) fn account(label: Option<&str>, provider: &str, uuid: &str) -> Account {
+    pub(crate) fn account(label: Option<&str>, provider: ProviderId, uuid: &str) -> Account {
         Account {
             id: format!("{provider}:{uuid}"),
-            provider: provider.into(),
+            provider,
             label: label.map(str::to_owned),
-            qualified: label.map(|label| format!("{provider}/{label}")),
+            key: label.map(|label| Key::new(provider, label)),
             unplaced: false,
             email: format!("{}@example.com", label.unwrap_or(uuid)),
             account_id: uuid.into(),
@@ -189,11 +190,11 @@ pub(crate) mod tests {
 
     /// A tool's login that belongs to no account Pitboard can name: no label, no email and no
     /// account id.
-    fn unplaced(provider: &str) -> Account {
+    fn unplaced(provider: ProviderId) -> Account {
         Account {
             id: format!("{provider}:login"),
             label: None,
-            qualified: None,
+            key: None,
             unplaced: true,
             email: String::new(),
             account_id: String::new(),
@@ -210,40 +211,41 @@ pub(crate) mod tests {
     fn an_enrolled_account_has_a_window_on_its_tools_site() {
         let work = only(account(
             Some("work"),
-            "claude",
+            ProviderId::Claude,
             "4f3c2a10-8b7e-4d2a-9c1e-5a6b7c8d9e0f",
         ))
         .expect("a window");
         assert_eq!(work.store, "7e15c34f-69ec-55b4-9542-f1c1fe3d7085");
         assert_eq!(work.site.host, "claude.ai");
         assert_eq!(work.email, "work@example.com");
-        let main = only(account(Some("main"), "codex", "team_user-1")).expect("a window");
+        let main = only(account(Some("main"), ProviderId::Codex, "team_user-1")).expect("a window");
         assert_eq!(main.site.host, "chatgpt.com");
         assert_eq!(main.label, "main");
         assert_eq!(main.store, "8ff9e0e6-a7e2-53e2-a594-6e53ddadd38a");
         let in_use = only(Account {
             signed_in: true,
-            ..account(Some("home"), "claude", "h")
+            ..account(Some("home"), ProviderId::Claude, "h")
         });
         assert!(in_use.expect("a window").in_use);
     }
 
     #[test]
     fn a_rename_keeps_the_store() {
-        let before = only(account(Some("work"), "claude", "4f3c2a10")).expect("a window");
-        let after = only(account(Some("office"), "claude", "4f3c2a10")).expect("a window");
+        let before = only(account(Some("work"), ProviderId::Claude, "4f3c2a10")).expect("a window");
+        let after =
+            only(account(Some("office"), ProviderId::Claude, "4f3c2a10")).expect("a window");
         assert_eq!(before.store, after.store);
     }
 
     #[test]
-    fn unnamed_unplaced_and_unknown_tools_have_no_window() {
-        assert_eq!(only(account(None, "claude", "dana")), None);
-        assert_eq!(only(account(None, "codex", "dana")), None);
-        assert_eq!(only(unplaced("claude")), None);
-        assert_eq!(only(unplaced("codex")), None, "an API key login");
-        assert_eq!(only(account(Some("work"), "claude", "")), None);
+    fn unnamed_unplaced_and_siteless_tools_have_no_window() {
+        assert_eq!(only(account(None, ProviderId::Claude, "dana")), None);
+        assert_eq!(only(account(None, ProviderId::Codex, "dana")), None);
+        assert_eq!(only(unplaced(ProviderId::Claude)), None);
+        assert_eq!(only(unplaced(ProviderId::Codex)), None, "an API key login");
+        assert_eq!(only(account(Some("work"), ProviderId::Claude, "")), None);
         assert_eq!(
-            only(account(Some("x"), "gemini", "x")),
+            only(account(Some("x"), ProviderId::Desktop, "x")),
             None,
             "a tool with no site"
         );
@@ -254,9 +256,9 @@ pub(crate) mod tests {
     #[test]
     fn a_label_on_two_sites_says_which_site_in_the_title() {
         let windows = window_accounts(&[
-            account(Some("work"), "claude", "a"),
-            account(Some("work"), "codex", "b"),
-            account(Some("home"), "claude", "c"),
+            account(Some("work"), ProviderId::Claude, "a"),
+            account(Some("work"), ProviderId::Codex, "b"),
+            account(Some("home"), ProviderId::Claude, "c"),
         ]);
         let titles: Vec<&str> = windows.iter().map(|w| w.title.as_str()).collect();
         assert_eq!(
@@ -274,10 +276,10 @@ pub(crate) mod tests {
     #[test]
     fn a_site_with_one_account_is_one_item_and_with_several_a_submenu() {
         let menus = site_menus(&[
-            account(Some("work"), "claude", "a"),
-            account(Some("main"), "codex", "b"),
-            account(Some("spare"), "codex", "c"),
-            account(None, "claude", "d"),
+            account(Some("work"), ProviderId::Claude, "a"),
+            account(Some("main"), ProviderId::Codex, "b"),
+            account(Some("spare"), ProviderId::Codex, "c"),
+            account(None, ProviderId::Claude, "d"),
         ]);
         let [
             SiteMenu::One { title, window },
@@ -296,7 +298,7 @@ pub(crate) mod tests {
         assert_eq!(site.host, "chatgpt.com");
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
         assert_eq!(labels, ["main", "spare"]);
-        assert!(site_menus(&[account(None, "claude", "d")]).is_empty());
+        assert!(site_menus(&[account(None, ProviderId::Claude, "d")]).is_empty());
     }
 
     /// An account's own windows, not another tool's account with the same account id.
@@ -304,24 +306,24 @@ pub(crate) mod tests {
     fn an_accounts_windows_are_its_own() {
         let all = || {
             vec![
-                account(Some("work"), "claude", "same"),
-                account(Some("main"), "codex", "same"),
+                account(Some("work"), ProviderId::Claude, "same"),
+                account(Some("main"), ProviderId::Codex, "same"),
             ]
         };
-        let claude = windows_of_account(&account(Some("work"), "claude", "same"), &all());
+        let claude = windows_of_account(&account(Some("work"), ProviderId::Claude, "same"), &all());
         assert_eq!(claude.len(), 1);
         assert_eq!(claude[0].site.host, "claude.ai");
-        let codex = windows_of_account(&account(Some("main"), "codex", "same"), &all());
+        let codex = windows_of_account(&account(Some("main"), ProviderId::Codex, "same"), &all());
         assert_eq!(codex.len(), 1);
         assert_eq!(codex[0].site.host, "chatgpt.com");
-        assert!(windows_of_account(&unplaced("codex"), &all()).is_empty());
+        assert!(windows_of_account(&unplaced(ProviderId::Codex), &all()).is_empty());
     }
 
     /// Removing an account that has a window deletes what that window keeps too, and a
     /// person deciding should know.
     #[test]
     fn the_remove_alert_names_the_windows_data() {
-        let work = || account(Some("work"), "claude", "a");
+        let work = || account(Some("work"), ProviderId::Claude, "a");
         assert_eq!(
             forget_message_on(Os::MacOs, &work(), &[work()]),
             "Pitboard deletes its saved sign-in and what its claude.ai window keeps on this Mac, \
@@ -337,7 +339,7 @@ pub(crate) mod tests {
             "Pitboard deletes its saved sign-in and what its claude.ai window keeps on this PC, \
              so using it again needs a sign-in in your browser."
         );
-        let api = || unplaced("codex");
+        let api = || unplaced(ProviderId::Codex);
         let said = "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your \
                     browser.";
         for os in [Os::MacOs, Os::Linux, Os::Windows] {
@@ -347,7 +349,7 @@ pub(crate) mod tests {
 
     #[test]
     fn removing_a_claude_desktop_account_says_it_needs_a_sign_in_in_claude() {
-        let home = account(Some("home"), "desktop", "5b1e");
+        let home = account(Some("home"), ProviderId::Desktop, "5b1e");
         assert_eq!(
             forget_message_on(Os::MacOs, &home, std::slice::from_ref(&home)),
             "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again \

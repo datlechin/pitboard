@@ -99,9 +99,9 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
 
 test("the Rename sheet and the one naming an account added say what present/sheets.rs gives them", () => {
   const sheets = present("sheets.rs");
-  assert.ok(sheets.includes("title: words::rename_title(label),"));
+  assert.ok(sheets.includes("title: words::rename_title(&account.label),"));
   assert.ok(sheets.includes("title: words::name_this_account(seen.os),"));
-  assert.ok(sheets.includes("message: words::naming(email, &seen.tool_name(&tool)),"));
+  assert.ok(sheets.includes("message: words::naming(email, tool.name()),"));
   assert.ok(sheets.includes("confirm: words::DONE.into(),"));
   assert.ok(pinned(w.renameTitle("work")));
   assert.ok(pinned(w.RENAMING));
@@ -166,7 +166,7 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
   assert.ok(appWords.includes(`copy_link: titled(os, "${w.copyLink("macos")}", `));
   assert.ok(appWords.includes("open: words::OPEN.into(),"));
   assert.ok(words.includes(`pub(crate) const OPEN: &str = "${w.OPEN}";`));
-  assert.ok(sheet.includes("Picker(words.sheet.tool, selection: $provider)"));
+  assert.ok(sheet.includes("Picker(words.sheet.tool, selection: $tool)"));
   assert.ok(appWords.includes(`tool: "${w.TOOL}".into(),`));
   assert.ok(sheet.includes("LabeledContent(words.sheet.account, value: account)"));
   // the sheet that adds an account asks for no name: one is picked once the sign-in adds it
@@ -200,9 +200,9 @@ test("a switch's notice and the setup step say what present/notices.rs and setup
   assert.equal(w.CLAUDE_OPENS, "Claude opens signed in to it.");
   const notices = present("notices.rs");
   assert.ok(notices.includes("title: words::switch_back(seen.os),"));
-  assert.ok(notices.includes("words::signed_in_to(tool.as_deref(), &label)"));
+  assert.ok(notices.includes("words::signed_in_to(tool, label)"));
   const setup = present("setup.rs");
-  assert.ok(setup.includes("detail: words::only_one(label, named.as_deref(), app),"));
+  assert.ok(setup.includes("detail: words::only_one(&account.label, named, app),"));
   assert.ok(setup.includes("title: words::add_account(seen.os, true),"));
   assert.ok(setup.includes("title: words::not_now(seen.os),"));
   assert.ok(words.includes('titled(os, "Not Now", "Not now")'));

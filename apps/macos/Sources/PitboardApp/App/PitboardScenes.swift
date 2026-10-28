@@ -53,7 +53,7 @@ public struct PitboardScenes: Scene {
             // Nothing here makes a document: what is new here is an account, from any window.
             CommandGroup(replacing: .newItem) {
                 Button(words.menu.addAccount) {
-                    model.send(.presentSheet(sheet: .add(provider: nil)))
+                    model.send(.presentSheet(sheet: .add(tool: nil)))
                 }
                 .keyboardShortcut("n")
             }

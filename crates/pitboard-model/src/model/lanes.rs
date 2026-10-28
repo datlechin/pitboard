@@ -36,6 +36,7 @@ use super::{
 use crate::account_windows::records::{self, Records};
 use crate::{AppCore, Holding, Remedy, SignInSession};
 use pitboard_core::app::AppFile;
+use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::Naming;
 use std::collections::HashMap;
@@ -240,11 +241,7 @@ impl Lanes {
     /// Starts a sign-in on a thread of its own, or tells one whether to enrol.
     fn sign_in(&self, job: Job) {
         match job {
-            Job::SignIn {
-                id,
-                provider,
-                again,
-            } => self.start_sign_in(id, provider, again, |run| {
+            Job::SignIn { id, tool, again } => self.start_sign_in(id, tool, again, |run| {
                 std::thread::Builder::new()
                     .name("pitboard-sign-in".into())
                     .spawn(run)
@@ -262,7 +259,7 @@ impl Lanes {
     fn start_sign_in(
         &self,
         id: u64,
-        provider: String,
+        tool: ProviderId,
         again: Option<String>,
         spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
     ) {
@@ -272,11 +269,11 @@ impl Lanes {
         let answers = self.answers.clone();
         let lost = Job::SignIn {
             id,
-            provider: provider.clone(),
+            tool,
             again: again.clone(),
         };
         let started = spawn(Box::new(move || {
-            signing_in(&worker, &answers, id, provider, again, &told);
+            signing_in(&worker, &answers, id, tool, again, &told);
         }));
         if started.is_err() {
             self.worker.sign_ins.end(id);
@@ -331,13 +328,13 @@ fn signing_in(
     worker: &Worker,
     answers: &Sender<Msg>,
     id: u64,
-    provider: String,
+    tool: ProviderId,
     again: Option<String>,
     told: &Receiver<bool>,
 ) {
     let tell = |answer| answers.send(Msg::Done(answer)).is_ok();
     let started = catch_unwind(AssertUnwindSafe(|| {
-        worker.core.sign_in(&provider, again.clone())
+        worker.core.sign_in(tool, again.clone())
     }));
     let session = match started {
         Ok(Ok(session)) => session,
@@ -350,11 +347,7 @@ fn signing_in(
             return worker.sign_ins.end(id);
         }
         Err(_) => {
-            tell(Answer::Lost(Job::SignIn {
-                id,
-                provider,
-                again,
-            }));
+            tell(Answer::Lost(Job::SignIn { id, tool, again }));
             return worker.sign_ins.end(id);
         }
     };
@@ -614,11 +607,11 @@ impl Worker {
             Job::AskInstalled => Answer::Installed {
                 tools: core.installed(),
             },
-            Job::Holding { qualified, then } => {
-                let holdings = core.holding(Key::parse(&qualified).provider.code());
+            Job::Holding { account, then } => {
+                let holdings = core.holding(account.provider);
                 Answer::Held {
-                    question: holder(&holdings, self.apps.as_ref(), &qualified),
-                    qualified,
+                    question: holder(&holdings, self.apps.as_ref(), &account),
+                    account,
                     then,
                 }
             }
@@ -628,25 +621,20 @@ impl Worker {
                     &question.app_id,
                     self.quit_within,
                     self.quit_checked_every,
-                    || {
-                        core.holds_app(
-                            Key::parse(&question.qualified).provider.code(),
-                            &question.app_id,
-                        )
-                    },
+                    || core.holds_app(question.account.provider, &question.app_id),
                     pitboard_core::host::awake,
                 ),
                 question,
                 then,
             },
-            Job::Switch { qualified, reopen } => Answer::Switched {
-                done: core.switch_to(&qualified),
-                qualified,
+            Job::Switch { account, reopen } => Answer::Switched {
+                done: core.switch_to(&account),
+                account,
                 reopen,
             },
-            Job::Replace { qualified } => Answer::Switched {
-                done: core.replace_with(&qualified),
-                qualified,
+            Job::Replace { account } => Answer::Switched {
+                done: core.replace_with(&account),
+                account,
                 reopen: None,
             },
             Job::AutoLook { at } => Answer::AutoLooked {
@@ -659,13 +647,13 @@ impl Worker {
                 asked: None,
                 done: core.warm_up(),
             },
-            Job::WarmNow { qualified } => Answer::WarmedUp {
-                done: core.warm_now(&qualified),
-                asked: Some(qualified),
+            Job::WarmNow { account } => Answer::WarmedUp {
+                done: core.warm_now(&account),
+                asked: Some(account),
             },
-            Job::SetWarm { qualified, on } => Answer::WarmSet {
+            Job::SetWarm { account, on } => Answer::WarmSet {
                 done: core
-                    .warm_turn(&qualified, on)
+                    .warm_turn(&account, on)
                     .and_then(|()| core.warm_overview()),
             },
             Job::SetWarmRange { from, to } => Answer::WarmSet {
@@ -680,9 +668,9 @@ impl Worker {
                 front,
             } => {
                 let may = if front {
-                    !core.moving(&tool)
+                    !core.moving(tool)
                 } else {
-                    core.whole(&tool)
+                    core.whole(tool)
                 };
                 let opened = may && self.apps.reopen(location, front).is_ok();
                 Answer::Opened {
@@ -693,39 +681,29 @@ impl Worker {
             }
             Job::Abandon => Answer::Abandoned(core.abandon_recovery()),
             Job::Enrol {
-                provider,
+                tool,
                 again,
                 from,
                 reopen,
             } => Answer::Enrolled {
-                done: core.enroll_current(
-                    &provider,
-                    again.clone().map_or(Naming::FromEmail, Naming::As),
-                ),
-                provider,
+                done: core
+                    .enroll_current(tool, again.clone().map_or(Naming::FromEmail, Naming::As)),
+                tool,
                 again,
                 from,
                 reopen,
             },
-            Job::Rename {
-                provider,
-                label,
-                to,
-                from,
-            } => Answer::Renamed {
-                done: core.rename(&format!("{provider}/{label}"), &to),
-                provider,
-                label,
+            Job::Rename { account, to, from } => Answer::Renamed {
+                done: core.rename(&account, &to),
+                account,
                 to,
                 from,
             },
-            Job::Forget { qualified } => Answer::Forgot {
-                done: core.forget(&qualified),
-                qualified,
+            Job::Forget { account } => Answer::Forgot {
+                done: core.forget(&account),
+                account,
             },
-            Job::UpdateConfig { qualified } => {
-                Answer::ConfigUpdated(core.update_config(&qualified))
-            }
+            Job::UpdateConfig { account } => Answer::ConfigUpdated(core.update_config(&account)),
             Job::LookLeft => Answer::LookedLeft(core.left_login()),
             Job::Stow { seen, from } => Answer::Stowed {
                 done: core.stow(&seen),
@@ -897,21 +875,21 @@ pub(crate) fn set_schedule(
     }
 }
 
-/// An app on this machine running the tool `qualified` is of with its login in memory, that
-/// Pitboard may quit and open again, as the question to ask about it. Asked of the core,
+/// An app on this machine running `account`'s tool with its login in memory, that Pitboard may
+/// quit and open again, as the question to ask about it. Asked of the core,
 /// which read the process list into `holdings`, and only taken where the app is running:
 /// what is left of one that has gone cannot be quit. An app whose own code cannot say
 /// whether it runs is asked about, since the process list says it does.
 pub(crate) fn holder(
     holdings: &[Holding],
     apps: &dyn AppControl,
-    qualified: &str,
+    account: &Key,
 ) -> Option<QuitQuestion> {
     holdings.iter().find_map(|held| match &held.remedy {
         Remedy::ReopenApp { app_id, name } => {
             let running = !matches!(apps.running(app_id.clone()), Ok(None));
             running.then(|| QuitQuestion {
-                qualified: qualified.to_owned(),
+                account: account.clone(),
                 app_id: app_id.clone(),
                 name: name.clone(),
             })
@@ -1101,41 +1079,40 @@ mod tests {
     #[test]
     fn a_switch_runs_on_a_lane_of_its_own() {
         let question = QuitQuestion {
-            qualified: "codex/work".into(),
+            account: Key::new(ProviderId::Codex, "work"),
             app_id: CHATGPT.into(),
             name: "ChatGPT".into(),
         };
         let switch = Job::Switch {
-            qualified: "codex/work".into(),
+            account: Key::new(ProviderId::Codex, "work"),
             reopen: None,
         };
         assert_eq!(switch.lane(), Lane::Changes);
         assert_eq!(Job::Abandon.lane(), Lane::Changes);
         for change in [
             Job::Enrol {
-                provider: "codex".into(),
+                tool: ProviderId::Codex,
                 again: None,
                 from: None,
                 reopen: None,
             },
             Job::Rename {
-                provider: "claude".into(),
-                label: "work".into(),
+                account: Key::new(ProviderId::Claude, "work"),
                 to: "office".into(),
                 from: None,
             },
             Job::Forget {
-                qualified: "claude/spare".into(),
+                account: Key::new(ProviderId::Claude, "spare"),
             },
             Job::UpdateConfig {
-                qualified: "claude/work".into(),
+                account: Key::new(ProviderId::Claude, "work"),
             },
         ] {
             assert_eq!(change.lane(), Lane::Changes, "{change:?}");
         }
         for job in [
             Job::Holding {
-                qualified: "codex/work".into(),
+                account: Key::new(ProviderId::Codex, "work"),
                 then: After::Switch,
             },
             Job::Quit {
@@ -1144,7 +1121,7 @@ mod tests {
             },
             Job::Open {
                 location: "/Applications/ChatGPT.app".into(),
-                tool: "codex".into(),
+                tool: ProviderId::Codex,
                 front: false,
             },
         ] {
@@ -1174,26 +1151,33 @@ mod tests {
         let apps = StandInApps::new(&[CHATGPT], true);
         let worker = worker(world.core(), Arc::clone(&apps));
 
-        let held = |qualified: &str| match worker.work(Job::Holding {
-            qualified: qualified.into(),
+        let held = |account: Key| match worker.work(Job::Holding {
+            account,
             then: After::Switch,
         }) {
             Answer::Held { question, .. } => question,
             other => panic!("not what holds the login: {other:?}"),
         };
         assert_eq!(
-            held("codex/spare"),
+            held(Key::new(ProviderId::Codex, "spare")),
             Some(QuitQuestion {
-                qualified: "codex/spare".into(),
+                account: Key::new(ProviderId::Codex, "spare"),
                 app_id: CHATGPT.into(),
                 name: "ChatGPT".into(),
             })
         );
-        assert_eq!(held("claude/personal"), None, "not Claude Code's login");
-        assert_eq!(held("personal"), None, "a bare label is Claude Code's");
+        assert_eq!(
+            held(Key::new(ProviderId::Claude, "personal")),
+            None,
+            "not Claude Code's login"
+        );
 
         apps.set_running(&[]);
-        assert_eq!(held("codex/spare"), None, "gone, so nothing to quit");
+        assert_eq!(
+            held(Key::new(ProviderId::Codex, "spare")),
+            None,
+            "gone, so nothing to quit"
+        );
         assert!(apps.asked().is_empty(), "and nothing was asked to quit");
     }
 
@@ -1216,8 +1200,19 @@ mod tests {
                 command: "codex app-server daemon restart".into(),
             },
         };
-        assert_eq!(holder(&[sessions, daemon], apps.as_ref(), "codex/w"), None);
-        let found = holder(&[chatgpt_holding()], apps.as_ref(), "codex/w");
+        assert_eq!(
+            holder(
+                &[sessions, daemon],
+                apps.as_ref(),
+                &Key::new(ProviderId::Codex, "w")
+            ),
+            None
+        );
+        let found = holder(
+            &[chatgpt_holding()],
+            apps.as_ref(),
+            &Key::new(ProviderId::Codex, "w"),
+        );
         assert_eq!(found.map(|q| q.name), Some("ChatGPT".into()));
     }
 
@@ -1227,7 +1222,11 @@ mod tests {
     fn an_app_nobody_can_see_is_taken_as_running() {
         let apps = StandInApps::new(&[], true);
         apps.fail_running(true);
-        let found = holder(&[chatgpt_holding()], apps.as_ref(), "codex/w");
+        let found = holder(
+            &[chatgpt_holding()],
+            apps.as_ref(),
+            &Key::new(ProviderId::Codex, "w"),
+        );
         assert_eq!(found.map(|q| q.app_id), Some(CHATGPT.into()));
     }
 
@@ -1359,7 +1358,7 @@ mod tests {
         for job in [
             Job::SignIn {
                 id: 1,
-                provider: "claude".into(),
+                tool: ProviderId::Claude,
                 again: None,
             },
             Job::SignInOver { id: 1, enrol: true },
@@ -1395,7 +1394,9 @@ mod tests {
         let core = world.core();
         let (tell, told) = channel();
         sign_ins.begin(2, tell);
-        let session = core.sign_in("claude", None).expect("the stand-in starts");
+        let session = core
+            .sign_in(ProviderId::Claude, None)
+            .expect("the stand-in starts");
         // Once it has written its process id, so that it stopping below is not taken from
         // one stopped before it wrote it.
         assert!(claude.is_running(), "the stand-in started");
@@ -1437,7 +1438,9 @@ mod tests {
         let core = world.core();
         let (tell, _told) = channel();
         sign_ins.begin(1, tell);
-        let session = core.sign_in("claude", None).expect("the stand-in starts");
+        let session = core
+            .sign_in(ProviderId::Claude, None)
+            .expect("the stand-in starts");
         assert!(sign_ins.started(1, &session));
         let (tell, _told_starting) = channel();
         sign_ins.begin(2, tell);
@@ -1494,7 +1497,7 @@ mod tests {
             &answers,
         );
         let refused = catch_unwind(AssertUnwindSafe(|| {
-            lanes.start_sign_in(1, "claude".into(), None, |_| {
+            lanes.start_sign_in(1, ProviderId::Claude, None, |_| {
                 Err(std::io::Error::other("no thread left"))
             });
         }));
@@ -1505,8 +1508,8 @@ mod tests {
         assert!(
             matches!(
                 &answer,
-                Msg::Done(Answer::Lost(Job::SignIn { id: 1, provider, again: None }))
-                    if provider == "claude"
+                Msg::Done(Answer::Lost(Job::SignIn { id: 1, tool, again: None }))
+                    if *tool == ProviderId::Claude
             ),
             "{answer:?}"
         );
@@ -1535,7 +1538,9 @@ mod tests {
         };
         assert!(matches!(worker.work(paste.clone()), Answer::Pasted));
 
-        let session = core.sign_in("claude", None).expect("the stand-in starts");
+        let session = core
+            .sign_in(ProviderId::Claude, None)
+            .expect("the stand-in starts");
         assert!(worker.sign_ins.started(1, &session));
         let mut said = String::new();
         while !said.contains("Paste code") {
@@ -1561,7 +1566,7 @@ mod tests {
         // In the same home, at once: the cancel has let go of the core's one sign-in at a
         // time by the time it returns, whatever processes other tests start meanwhile.
         let session = core
-            .sign_in("claude", None)
+            .sign_in(ProviderId::Claude, None)
             .expect("the stand-in starts again");
         assert!(worker.sign_ins.started(1, &session));
         // It writes its process id before it says anything.
@@ -1573,7 +1578,7 @@ mod tests {
         );
         assert!(!claude.is_running(), "stopped and waited for as it answers");
         assert!(
-            core.sign_in("claude", None)
+            core.sign_in(ProviderId::Claude, None)
                 .expect("the one sign-in at a time let go of")
                 .cancel(),
             "the next stopped too"
@@ -1850,7 +1855,7 @@ mod tests {
         let worker = worker(world.core(), Arc::clone(&apps));
         let open = || Job::Open {
             location: StandInApps::copy_of(CHATGPT),
-            tool: "codex".into(),
+            tool: ProviderId::Codex,
             front: false,
         };
         let answer = worker.work(open());
@@ -1928,7 +1933,7 @@ mod tests {
     fn open_claude(front: bool) -> Job {
         Job::Open {
             location: StandInApps::copy_of(CLAUDE),
-            tool: "desktop".into(),
+            tool: ProviderId::Desktop,
             front,
         }
     }
@@ -1975,8 +1980,11 @@ mod tests {
             .forget("desktop/work")
             .expect("work signed out in Claude, forgotten");
         let core = world.core();
-        assert!(!core.whole("desktop"), "nobody in use, home parked");
-        assert!(!core.moving("desktop"));
+        assert!(
+            !core.whole(ProviderId::Desktop),
+            "nobody in use, home parked"
+        );
+        assert!(!core.moving(ProviderId::Desktop));
         let apps = StandInApps::new(&[], true);
         let worker = worker(core, Arc::clone(&apps));
         assert!(
@@ -2021,7 +2029,7 @@ mod tests {
             let worker = worker(world.core(), Arc::clone(&apps));
             match worker.work(Job::Quit {
                 question: QuitQuestion {
-                    qualified: "codex/work".into(),
+                    account: Key::new(ProviderId::Codex, "work"),
                     app_id: CHATGPT.into(),
                     name: "ChatGPT".into(),
                 },

@@ -9,13 +9,15 @@ use super::{
     MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail,
 };
 use crate::account_windows::{forget_message_on, windows_of_account};
-use crate::model::advice::window;
 use crate::model::{Intent, Place, SettingsSection, Sheet};
-use crate::{Account, Limit, Tool};
+use crate::{Account, AccountKey};
 use pitboard_core::duty::warm;
 use pitboard_core::host::Os;
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::status::{self, Stale};
 use pitboard_core::time::{HOUR, WEEK};
+use pitboard_core::usage::Window;
 use pitboard_core::words as said;
 use std::cmp::Ordering;
 
@@ -23,14 +25,14 @@ use std::cmp::Ordering;
 /// model, and one the account is working against when the service says which. A scoped row
 /// at 98% would otherwise read as though everything had stopped. The fullest of those, and
 /// the first of them where two are as full, as Swift's `max(by:)` keeps the first.
-pub(crate) fn headline(windows: &[Limit]) -> Option<&Limit> {
-    let own: Vec<&Limit> = windows.iter().filter(|w| w.scope.is_none()).collect();
-    let candidates: Vec<&Limit> = if own.is_empty() {
+pub(crate) fn headline(windows: &[Window]) -> Option<&Window> {
+    let own: Vec<&Window> = windows.iter().filter(|w| w.scope.is_none()).collect();
+    let candidates: Vec<&Window> = if own.is_empty() {
         windows.iter().collect()
     } else {
         own
     };
-    let active: Vec<&Limit> = candidates.iter().copied().filter(|w| w.is_active).collect();
+    let active: Vec<&Window> = candidates.iter().copied().filter(|w| w.is_active).collect();
     let pool = if active.is_empty() {
         candidates
     } else {
@@ -39,7 +41,7 @@ pub(crate) fn headline(windows: &[Limit]) -> Option<&Limit> {
     // A later limit takes the place only of one less full than it, as `max(by:)` keeps its
     // result unless the next is in increasing order after it.
     pool.into_iter()
-        .fold(None, |best: Option<&Limit>, limit| match best {
+        .fold(None, |best: Option<&Window>, limit| match best {
             Some(best) if best.percent.partial_cmp(&limit.percent) != Some(Ordering::Less) => {
                 Some(best)
             }
@@ -47,32 +49,28 @@ pub(crate) fn headline(windows: &[Limit]) -> Option<&Limit> {
         })
 }
 
-/// Tool codes without repeats, in the order `tools` lists them, and any it does not list
-/// after those in the order they came. The core already lists rows this way; this keeps a
+/// The tools of `read` without repeats, in the order `tools` lists them, and any it does not
+/// list after those in the order they came. The core already lists rows this way; this keeps a
 /// view from depending on it.
-pub(crate) fn in_order(codes: &[&str], tools: &[Tool]) -> Vec<String> {
-    let mut seen: Vec<String> = Vec::new();
-    let listed = tools.iter().map(|tool| tool.code.as_str());
-    for code in listed.chain(codes.iter().copied()) {
-        if codes.contains(&code) && !seen.iter().any(|kept| kept == code) {
-            seen.push(code.to_owned());
+pub(crate) fn in_order(read: &[ProviderId], tools: &[ProviderId]) -> Vec<ProviderId> {
+    let mut seen: Vec<ProviderId> = Vec::new();
+    for &tool in tools.iter().chain(read) {
+        if read.contains(&tool) && !seen.contains(&tool) {
+            seen.push(tool);
         }
     }
     seen
 }
 
-fn providers(accounts: &[Account]) -> Vec<&str> {
-    accounts
-        .iter()
-        .map(|account| account.provider.as_str())
-        .collect()
+fn providers(accounts: &[Account]) -> Vec<ProviderId> {
+    accounts.iter().map(|account| account.provider).collect()
 }
 
 /// The account the menu bar is about. With more than one tool there is an account in use in
 /// each, and one bar: it follows the enrolled one whose headline limit is most used, so what
 /// it shows is the account closest to running out, and a tie goes to the tool `tools` lists
 /// first. Nobody enrolled signed in anywhere, it says what is signed in, as one tool would.
-pub(crate) fn titled<'a>(accounts: &'a [Account], tools: &[Tool]) -> Option<&'a Account> {
+pub(crate) fn titled<'a>(accounts: &'a [Account], tools: &[ProviderId]) -> Option<&'a Account> {
     let providers = in_order(&providers(accounts), tools);
     if providers.len() <= 1 {
         return accounts.iter().find(|account| account.signed_in);
@@ -82,9 +80,9 @@ pub(crate) fn titled<'a>(accounts: &'a [Account], tools: &[Tool]) -> Option<&'a 
             .map_or(-1.0, |limit| limit.percent)
     };
     let mut closest: Option<&Account> = None;
-    for provider in &providers {
+    for &provider in &providers {
         let in_use = accounts.iter().find(|account| {
-            &account.provider == provider && account.signed_in && account.label.is_some()
+            account.provider == provider && account.signed_in && account.label.is_some()
         });
         if let Some(in_use) = in_use
             && closest.is_none_or(|closest| used(in_use) > used(closest))
@@ -100,7 +98,7 @@ pub(crate) fn titled<'a>(accounts: &'a [Account], tools: &[Tool]) -> Option<&'a 
 /// but not enrolled has no name, so it is called unnamed, which says what it is and fits
 /// where an address would not. Long labels are cut, because the bar is shared with
 /// everything else running.
-pub(crate) fn bar_title(accounts: &[Account], tools: &[Tool], usage_only: bool) -> String {
+pub(crate) fn bar_title(accounts: &[Account], tools: &[ProviderId], usage_only: bool) -> String {
     let Some(account) = titled(accounts, tools) else {
         return String::new();
     };
@@ -127,10 +125,10 @@ pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
     // The bar follows the account closest to running out, and two tools can each have a `work`.
     let tool = titled
         .filter(|_| seen.shows_tools())
-        .and_then(|account| seen.tool(&account.provider));
+        .map(|account| account.provider.name());
     let spoken = words::bar_spoken(
         (!name_and_usage.is_empty()).then_some(name_and_usage.as_str()),
-        tool.map(|tool| tool.name.as_str()),
+        tool,
         attention,
     );
     let tip = words::bar_tip(
@@ -154,16 +152,17 @@ pub(crate) fn menu_bar(seen: &Seen, notices: &MenuNotices) -> MenuBarText {
 
 /// The accounts a section per tool, in the order the tools are listed. One section, unheaded
 /// and in the order given, when they are all one tool's, so a machine with one tool looks
-/// exactly as it always did. A tool Pitboard does not list still gets a section, after the
-/// ones it lists, headed by its code, rather than its accounts going missing.
+/// exactly as it always did. A tool Pitboard does not list here still gets a section, after
+/// the ones it lists, rather than its accounts going missing.
 pub(crate) fn sections(seen: &Seen) -> Vec<AccountSection> {
     let accounts = seen.accounts();
     let providers = in_order(&providers(accounts), &seen.tools);
     if providers.len() <= 1 {
         return providers
             .into_iter()
-            .map(|id| AccountSection {
-                id,
+            .map(|tool| AccountSection {
+                id: tool.code().into(),
+                tool: tool.into(),
                 heading: None,
                 accounts: accounts.iter().map(|account| item(seen, account)).collect(),
             })
@@ -171,14 +170,15 @@ pub(crate) fn sections(seen: &Seen) -> Vec<AccountSection> {
     }
     providers
         .into_iter()
-        .map(|code| AccountSection {
-            heading: Some(seen.tool_name(&code)),
+        .map(|tool| AccountSection {
+            id: tool.code().into(),
+            tool: tool.into(),
+            heading: Some(tool.name().into()),
             accounts: accounts
                 .iter()
-                .filter(|account| account.provider == code)
+                .filter(|account| account.provider == tool)
                 .map(|account| item(seen, account))
                 .collect(),
-            id: code,
         })
         .collect()
 }
@@ -187,11 +187,10 @@ pub(crate) fn sections(seen: &Seen) -> Vec<AccountSection> {
 /// under way: the account a switch is running for, and whether a sign-in is.
 pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let state = seen.state;
-    let switching_for = state.switch_under_way();
     let busy = state.sign_in_under_way();
     let in_use = account.signed_in;
     let needs_sign_in = needs_sign_in(account);
-    let switching = account.qualified.is_some() && account.qualified.as_deref() == switching_for;
+    let switching = account.key.is_some() && account.key.as_ref() == state.switching_to();
     let title = if account.unplaced {
         // Any other was read, and not one Anthropic or OpenAI named, whether or not it was asked.
         words::nameless_login(matches!(
@@ -209,7 +208,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let action = action(
         seen.os,
         account,
-        switching_for.is_some(),
+        state.switch_under_way(),
         busy,
         &spoken_name,
     );
@@ -219,11 +218,11 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         None
     };
     // No usage is read for an app's login: the menu's line says so once.
-    let in_its_app = crate::model::state::in_its_app(&account.provider);
+    let in_its_app = crate::model::state::in_its_app(account.provider);
     let read_ago = account
         .read_at
         .filter(|_| in_its_app)
-        .map(|read_at| words::read_ago(seen.now - read_at, seen.program_of(&account.provider)));
+        .map(|read_at| words::read_ago(seen.now - read_at, account.provider.program()));
     let stale = if problem.is_some() || account.stale == Some(Stale::NoUsage) {
         None
     } else {
@@ -348,7 +347,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     };
     AccountItem {
         id: account.id.clone(),
-        qualified: account.qualified.clone(),
+        qualified: account.key.as_ref().map(Key::qualified),
         summary: summary(seen, account),
         title,
         email: account.email.clone(),
@@ -431,17 +430,16 @@ fn actions(
     let named = account
         .label
         .as_deref()
-        .zip(account.qualified.as_ref())
+        .zip(account.key.as_ref())
         .filter(|_| !account.unplaced)
-        .map(|(label, qualified)| {
-            let provider = account.provider.clone();
-            let label = label.to_owned();
+        .map(|(label, key)| {
+            let named = AccountKey::from(Key::new(account.provider, label));
             [
                 does(
                     ActionKind::Switch,
-                    words::switch_account(Some(&label)),
+                    words::switch_account(Some(label)),
                     Intent::SwitchTo {
-                        qualified: qualified.clone(),
+                        account: key.clone().into(),
                     },
                     switches,
                 ),
@@ -450,8 +448,7 @@ fn actions(
                     words::sign_in_again(seen.os, true),
                     Intent::PresentSheet {
                         sheet: Sheet::SignInAgain {
-                            provider: provider.clone(),
-                            label: label.clone(),
+                            account: named.clone(),
                         },
                     },
                     !busy,
@@ -460,7 +457,7 @@ fn actions(
                     ActionKind::Rename,
                     words::rename(true).into(),
                     Intent::PresentSheet {
-                        sheet: Sheet::Rename { provider, label },
+                        sheet: Sheet::Rename { account: named },
                     },
                     true,
                 ),
@@ -487,7 +484,7 @@ fn actions(
 /// What warming up an account is, as the core's last word on it says, where it can be warmed
 /// up: a Claude Code account enrolled under a name.
 fn warm_choice<'a>(seen: &'a Seen, account: &Account) -> Option<&'a warm::Choice> {
-    let qualified = account.qualified.as_deref()?;
+    let qualified = account.key.as_ref()?.qualified();
     seen.state
         .warm
         .overview
@@ -500,6 +497,7 @@ fn warm_choice<'a>(seen: &'a Seen, account: &Account) -> Option<&'a warm::Choice
 // Turning warm-ups on and off is Settings' alone, where the hours and every account show.
 fn warm_up_now(seen: &Seen, account: &Account) -> Option<AccountAction> {
     let choice = warm_choice(seen, account)?;
+    let key = account.key.clone()?;
     let warm = &seen.state.warm;
     let halted = warm
         .overview
@@ -509,7 +507,7 @@ fn warm_up_now(seen: &Seen, account: &Account) -> Option<AccountAction> {
         kind: ActionKind::WarmUpNow,
         title: words::warm_up_now(seen.os),
         intent: Some(Intent::WarmNow {
-            qualified: choice.qualified.clone(),
+            account: key.into(),
         }),
         window: None,
         enabled: !halted && warm.running.is_none() && choice.now == warm::Standing::Due,
@@ -522,7 +520,7 @@ fn warm_up_now(seen: &Seen, account: &Account) -> Option<AccountAction> {
 fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
     let choice = warm_choice(seen, account)?;
     let warming = match seen.state.warm.running.as_ref() {
-        Some(Some(asked)) => *asked == choice.qualified,
+        Some(Some(asked)) => asked.qualified() == choice.qualified,
         Some(None) => choice.standing == Some(warm::Standing::Due),
         None => false,
     };
@@ -564,15 +562,12 @@ fn warm_detail(os: Os, choice: &warm::Choice, note: Option<String>) -> WarmDetai
 
 // The question names it, and says what forgetting it deletes in the account windows' words.
 fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAction> {
-    let qualified = account
-        .qualified
-        .as_ref()
-        .filter(|_| account.label.is_some())?;
+    let key = account.key.as_ref().filter(|_| account.label.is_some())?;
     Some(AccountAction {
         kind: ActionKind::Remove,
         title: words::remove_account(seen.os),
         intent: Some(Intent::Forget {
-            qualified: qualified.clone(),
+            account: key.clone().into(),
         }),
         window: None,
         // The core refuses it.
@@ -618,7 +613,7 @@ fn action(
             title: words::add_account_signed_in(None),
             spoken: words::add_account_signed_in(Some(spoken)),
             intent: Intent::Enrol {
-                provider: account.provider.clone(),
+                tool: account.provider.into(),
             },
         });
     };
@@ -626,13 +621,13 @@ fn action(
         return None;
     }
     if account.standing.switchable()
-        && let Some(qualified) = &account.qualified
+        && let Some(key) = &account.key
     {
         return Some(ItemAction {
             title: words::switch_account(None),
             spoken: words::switch_account(Some(spoken)),
             intent: Intent::SwitchTo {
-                qualified: qualified.clone(),
+                account: key.clone().into(),
             },
         });
     }
@@ -641,8 +636,7 @@ fn action(
         spoken: words::sign_in_to_again(os, spoken, true),
         intent: Intent::PresentSheet {
             sheet: Sheet::SignInAgain {
-                provider: account.provider.clone(),
-                label: label.to_owned(),
+                account: Key::new(account.provider, label).into(),
             },
         },
     })
@@ -658,8 +652,7 @@ fn summary(seen: &Seen, account: &Account) -> String {
 }
 
 fn in_place_of_limits(seen: &Seen, account: &Account) -> Option<String> {
-    if account.qualified.is_some() && account.qualified.as_deref() == seen.state.switch_under_way()
-    {
+    if account.key.is_some() && account.key.as_ref() == seen.state.switching_to() {
         return Some(words::SWITCHING_NOW.into());
     }
     if account.unplaced || account.standing == status::Standing::LoginUnread {
@@ -687,17 +680,17 @@ pub(crate) fn limits_said(seen: &Seen, account: &Account) -> String {
     let windows = account.usage.as_ref().map_or(&[][..], |u| &u.windows);
     // Nothing else of the account matters until the last limit it reached resets.
     let reached = (windows.iter())
-        .filter(|limit| window(limit).used_up(seen.now))
+        .filter(|limit| limit.used_up(seen.now))
         .max_by_key(|limit| limit.resets_at.unwrap_or(i64::MAX));
     if let Some(limit) = reached {
-        let title = words::limit_title(&said::limit_name(&window(limit)), limit.scope.as_deref());
+        let title = words::limit_title(&said::limit_name(limit), limit.scope.as_deref());
         let clock = limit.resets_at.map(|at| seen.clock(at));
         return words::limit_reached(&title, clock.as_deref());
     }
     let limits: Vec<(String, String)> = windows
         .iter()
         .map(|limit| {
-            let name = said::limit_name(&window(limit));
+            let name = said::limit_name(limit);
             let short = words::limit_short(&name, limit.scope.as_deref());
             (short, said::figure(limit.percent))
         })
@@ -705,9 +698,9 @@ pub(crate) fn limits_said(seen: &Seen, account: &Account) -> String {
     words::limits_line(seen.os, &limits)
 }
 
-fn kind_of(limit: &Limit) -> LimitKind {
+fn kind_of(limit: &Window) -> LimitKind {
     const FIVE_HOURS: i64 = 5 * HOUR;
-    match (window(limit).length(), &limit.scope) {
+    match (limit.length(), &limit.scope) {
         (Some(FIVE_HOURS), None) => LimitKind::FiveHour,
         (Some(WEEK), None) => LimitKind::Weekly,
         (Some(WEEK), Some(model)) => LimitKind::WeeklyModel {
@@ -717,8 +710,8 @@ fn kind_of(limit: &Limit) -> LimitKind {
     }
 }
 
-pub(crate) fn limit_row(seen: &Seen, limit: &Limit) -> LimitRow {
-    let name = said::limit_name(&window(limit));
+pub(crate) fn limit_row(seen: &Seen, limit: &Window) -> LimitRow {
+    let name = said::limit_name(limit);
     let model = limit.scope.as_deref();
     let title = words::limit_title(&name, model);
     let figure = said::figure(limit.percent);
@@ -748,7 +741,9 @@ pub(crate) fn limit_row(seen: &Seen, limit: &Limit) -> LimitRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::present::testing::{LimitExt, account, both_tools, claude_code, codex, window};
+    use crate::present::testing::{
+        LimitExt, account, both_tools, claude_code, claude_desktop, codex, window,
+    };
 
     fn title(accounts: &[Account]) -> String {
         bar_title(accounts, &[], false)
@@ -915,12 +910,12 @@ mod tests {
                 .limits(vec![window("session", 40.0)])
                 .build(),
             account(Some("job"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", 71.0).length(18_000)])
                 .build(),
             account(Some("spare"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .limits(vec![window("five_hour", 99.0).length(18_000)])
                 .build(),
         ];
@@ -937,7 +932,7 @@ mod tests {
                 ])
                 .build(),
             account(Some("job"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", 50.0)])
                 .build(),
@@ -959,7 +954,7 @@ mod tests {
     fn a_tie_goes_to_the_tool_listed_first_and_not_the_row_that_came_first() {
         let tied = [
             account(Some("job"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", 50.0)])
                 .build(),
@@ -968,7 +963,7 @@ mod tests {
                 .limits(vec![window("session", 50.0)])
                 .build(),
         ];
-        let label = |tools: &[Tool]| titled(&tied, tools).and_then(|a| a.label.clone());
+        let label = |tools: &[ProviderId]| titled(&tied, tools).and_then(|a| a.label.clone());
         assert_eq!(label(&[claude_code(), codex()]).as_deref(), Some("work"));
         assert_eq!(label(&[codex(), claude_code()]).as_deref(), Some("job"));
         assert_eq!(
@@ -982,7 +977,7 @@ mod tests {
                 .limits(vec![window("session", 10.0)])
                 .build(),
             account(None)
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .uuid("c")
                 .limits(vec![window("five_hour", 99.0)])
@@ -1000,7 +995,7 @@ mod tests {
         let read = [
             account(Some("work")).signed_in().build(),
             account(Some("job"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", 0.0)])
                 .build(),
@@ -1018,7 +1013,7 @@ mod tests {
         let login_only = [
             account(Some("work")).build(),
             account(None)
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .uuid("c")
                 .limits(vec![window("five_hour", 3.0)])
@@ -1036,7 +1031,7 @@ mod tests {
             titled(
                 &[
                     account(Some("work")).build(),
-                    account(Some("job")).of("codex").build()
+                    account(Some("job")).of(ProviderId::Codex).build()
                 ],
                 &both_tools()
             ),
@@ -1130,7 +1125,7 @@ mod tests {
                 .limits(vec![window("session", 12.0), window("weekly_all", 64.4)])
                 .build(),
             account(Some("job"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", 71.0).length(18_000)])
                 .build(),
@@ -1199,19 +1194,20 @@ mod tests {
     }
 
     /// Sections come in the order the tools are listed, each once, whatever order the rows
-    /// came in, and a code the listing does not know follows in the order it first appeared.
+    /// came in, and a tool the listing leaves out follows in the order it first appeared.
     #[test]
-    fn tool_codes_follow_the_listing_each_once() {
+    fn tools_follow_the_listing_each_once() {
+        let (claude, codex, desktop) = (claude_code(), codex(), claude_desktop());
         assert_eq!(
-            in_order(&["x", "codex", "claude", "codex", "y", "x"], &both_tools()),
-            ["claude", "codex", "x", "y"]
+            in_order(&[desktop, codex, claude, codex, desktop], &both_tools()),
+            [claude, codex, desktop]
         );
         assert_eq!(
-            in_order(&["codex"], &both_tools()),
-            ["codex"],
+            in_order(&[codex], &both_tools()),
+            [codex],
             "a listed tool with no rows is left out"
         );
-        assert_eq!(in_order(&["b", "a", "b"], &[]), ["b", "a"]);
+        assert_eq!(in_order(&[codex, claude, codex], &[]), [codex, claude]);
         assert!(in_order(&[], &both_tools()).is_empty());
     }
 
@@ -1249,7 +1245,7 @@ mod tests {
     }
 
     use crate::present::present_on;
-    use crate::present::testing::{Utc, claude_desktop, desktop_account, read, status};
+    use crate::present::testing::{Utc, desktop_account, read, status};
     use pitboard_core::host::Os;
 
     const NOW: i64 = 1_800_000_000;

@@ -5,7 +5,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class SheetPageTests
 {
-    private static readonly Sheet Add = new Sheet.Add(Provider: null);
+    private static readonly Sheet Add = new Sheet.Add(Tool: null);
 
     private static SheetPage? Shown(Snapshot snapshot, SheetPage? before = null) =>
         SheetPage.Of(new AppModel(snapshot), before);
@@ -16,9 +16,9 @@ public sealed class SheetPageTests
         var text = Items.AddAccount(Items.Tool("claude", "Claude Code"), Items.Tool("codex", "Codex"));
         var form = (SheetPage.Form)Shown(Snapshots.Read(1) with { Sheet = Add, SheetText = text })!;
 
-        Assert.AreEqual("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", form.Message("codex"));
-        Assert.AreEqual("Sign in…", form.Confirm("codex"));
-        Assert.AreEqual(text.Message, form.Message("desktop"), "a tool the picker does not offer");
+        Assert.AreEqual("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", form.Message(Tool.Codex));
+        Assert.AreEqual("Sign in…", form.Confirm(Tool.Codex));
+        Assert.AreEqual(text.Message, form.Message(Tool.Desktop), "a tool the picker does not offer");
     }
 
     // A new account is named once it is added, so all Sign in waits for is no other sign-in or save.
@@ -27,9 +27,9 @@ public sealed class SheetPageTests
     {
         var form = new SheetPage.Form(Add, Items.AddAccount(), Running: false);
 
-        Assert.AreEqual(new Intent.SignIn("codex", null), form.Start("codex"));
-        Assert.IsNull((form with { Running = true }).Start("claude"), "a second sign-in");
-        Assert.IsNull((form with { Text = form.Text with { Saving = true } }).Start("claude"), "while saving");
+        Assert.AreEqual(new Intent.SignIn(Tool.Codex, null), form.Start(Tool.Codex));
+        Assert.IsNull((form with { Running = true }).Start(Tool.Claude), "a second sign-in");
+        Assert.IsNull((form with { Text = form.Text with { Saving = true } }).Start(Tool.Claude), "while saving");
     }
 
     [TestMethod]
@@ -39,10 +39,10 @@ public sealed class SheetPageTests
         var form = new SheetPage.Form(
             Add, Items.AddAccount(Items.Tool("claude", "Claude Code"), Items.Tool("codex", "Codex", missing)), Running: false);
 
-        Assert.AreEqual(missing, form.NotFound("codex"));
-        Assert.IsNull(form.NotFound("claude"));
-        Assert.IsNull(form.Start("codex"), "a tool Pitboard did not find");
-        Assert.AreEqual(new Intent.SignIn("claude", null), form.Start("claude"));
+        Assert.AreEqual(missing, form.NotFound(Tool.Codex));
+        Assert.IsNull(form.NotFound(Tool.Claude));
+        Assert.IsNull(form.Start(Tool.Codex), "a tool Pitboard did not find");
+        Assert.AreEqual(new Intent.SignIn(Tool.Claude, null), form.Start(Tool.Claude));
     }
 
     // Plan 4.4: the account a sign-in added is already saved under the name its step starts on, so that step has Done
@@ -50,8 +50,8 @@ public sealed class SheetPageTests
     [TestMethod]
     public void OnlyTheNameStepAfterASignInHasNoCancel()
     {
-        Assert.IsNull(new SheetPage.Naming(new Sheet.Name("claude", "work", "dana@work.example"), Items.Rename("work")).CloseTitle);
-        Assert.AreEqual("Cancel", new SheetPage.Naming(new Sheet.Rename("claude", "work"), Items.Rename("work")).CloseTitle);
+        Assert.IsNull(new SheetPage.Naming(new Sheet.Name(new AccountKey(Tool.Claude, "work"), "dana@work.example"), Items.Rename("work")).CloseTitle);
+        Assert.AreEqual("Cancel", new SheetPage.Naming(new Sheet.Rename(new AccountKey(Tool.Claude, "work")), Items.Rename("work")).CloseTitle);
         Assert.AreEqual("Cancel", new SheetPage.Form(Add, Items.AddAccount(), Running: false).CloseTitle);
     }
 
@@ -59,7 +59,7 @@ public sealed class SheetPageTests
     [TestMethod]
     public void TheNameFieldSaysTheButtonWaitsForAName()
     {
-        var rename = new SheetPage.Naming(new Sheet.Rename("claude", "personal"), Items.Rename("personal"));
+        var rename = new SheetPage.Naming(new Sheet.Rename(new AccountKey(Tool.Claude, "personal")), Items.Rename("personal"));
 
         Assert.AreEqual("Type a name for this account.", rename.Problem(""));
         Assert.AreEqual("Type a name for this account.", rename.Problem(" \t"));
@@ -71,9 +71,9 @@ public sealed class SheetPageTests
     [TestMethod]
     public void SigningInAgainIsAsTheAccountItself()
     {
-        var again = new SheetPage.Form(new Sheet.SignInAgain("claude", "work"), Items.AddAccount() with { Account = "work" }, Running: false);
+        var again = new SheetPage.Form(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "work")), Items.AddAccount() with { Account = "work" }, Running: false);
 
-        Assert.AreEqual(new Intent.SignIn("claude", "work"), again.Start("claude"));
+        Assert.AreEqual(new Intent.SignIn(Tool.Claude, "work"), again.Start(Tool.Claude));
     }
 
     // The account is added under the name it shows already, so Save renames it only where the name changed.
@@ -81,14 +81,14 @@ public sealed class SheetPageTests
     public void NamingTheAccountJustAddedRenamesItAndRenamingRenames()
     {
         var name = new SheetPage.Naming(
-            new Sheet.Name("claude", "work", "dana@work.example"), Items.Rename("work") with { Confirm = "Save" });
-        var rename = new SheetPage.Naming(new Sheet.Rename("claude", "personal"), Items.Rename("personal"));
+            new Sheet.Name(new AccountKey(Tool.Claude, "work"), "dana@work.example"), Items.Rename("work") with { Confirm = "Save" });
+        var rename = new SheetPage.Naming(new Sheet.Rename(new AccountKey(Tool.Claude, "personal")), Items.Rename("personal"));
 
-        Assert.AreEqual(new Intent.Rename("claude", "work", "office"), name.Save(" office "));
+        Assert.AreEqual(new Intent.Rename(new AccountKey(Tool.Claude, "work"), "office"), name.Save(" office "));
         Assert.AreEqual(new Intent.CloseSheet(), name.Save("work"), "kept as it is");
         Assert.IsNull(name.Save(""));
         Assert.IsNull(rename.Save("personal "), "the name it has");
-        Assert.AreEqual(new Intent.Rename("claude", "personal", "home"), rename.Save("home"));
+        Assert.AreEqual(new Intent.Rename(new AccountKey(Tool.Claude, "personal"), "home"), rename.Save("home"));
         Assert.IsNull((rename with { Text = rename.Text with { Saving = true } }).Save("home"), "a second save");
     }
 
@@ -136,9 +136,9 @@ public sealed class SheetPageTests
     public void TheSheetsThatNameShowTheirNameField()
     {
         Assert.IsInstanceOfType<SheetPage.Naming>(
-            Shown(Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "work"), SheetText = Items.Rename("work") }));
+            Shown(Snapshots.Read(1) with { Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "work")), SheetText = Items.Rename("work") }));
         Assert.IsInstanceOfType<SheetPage.Naming>(
-            Shown(Snapshots.Read(1) with { Sheet = new Sheet.Name("claude", "work", "dana@work.example"), SheetText = Items.Rename("work") }));
+            Shown(Snapshots.Read(1) with { Sheet = new Sheet.Name(new AccountKey(Tool.Claude, "work"), "dana@work.example"), SheetText = Items.Rename("work") }));
     }
 
     [TestMethod]

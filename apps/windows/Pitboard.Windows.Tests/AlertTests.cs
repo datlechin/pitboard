@@ -12,7 +12,7 @@ public sealed class AlertTests
     private static readonly AlertText Failure = new("Couldn’t switch to spare", "Claude Code is signing in.", null);
     private static readonly WindowQuestion QuitChatGPT = new(
         new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
-        Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+        Confirmed: new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")),
         Declined: new Intent.KeepAppOpen());
 
     // The window's content, so a dialog has somewhere to show.
@@ -40,7 +40,7 @@ public sealed class AlertTests
     [UITestMethod]
     public async Task AFailureOffersItsNextStepAsItsButton()
     {
-        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "work")), Enabled: true);
+        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "work"))), Enabled: true);
         var model = new StandInModel(Snapshots.Read(1) with { FailureAlert = Failure with { Next = new NextStep.Act(signIn) } });
         var app = new AppModel(model);
         var dialogs = await Window();
@@ -81,7 +81,7 @@ public sealed class AlertTests
     [UITestMethod]
     public async Task AnAlertDuringASheetOpensNoSecondDialog()
     {
-        var sheet = Snapshots.Read(1) with { Sheet = new Sheet.Add(Provider: null), FailureAlert = Failure };
+        var sheet = Snapshots.Read(1) with { Sheet = new Sheet.Add(Tool: null), FailureAlert = Failure };
         var app = new AppModel(new StandInModel(sheet));
         var dialogs = await Window();
         using var alerts = new WindowAlerts(app, dialogs, _ => { });

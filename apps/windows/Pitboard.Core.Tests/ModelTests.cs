@@ -116,7 +116,7 @@ public sealed class ModelTests
             Sections: [], AccountMenu: new AccountMenuShown(Offers: ["Use", "Sign in again…", "Rename…"], Forget: "Forget…"),
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], SignIns: [], Others: null),
-            Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
+            Footing: new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 08:00", UpdatedWindow: "Updated 08:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
@@ -219,8 +219,8 @@ public sealed class ModelTests
         // calls are registered, before it answers. Saying what a sheet sends reads only what
         // it is given, so it answers at once.
         Assert.AreEqual(
-            new Intent.Rename("claude", "acme", "home"),
-            PitboardModelMethods.CheckName(new Sheet.Name("claude", "acme", "a@example.com"), "claude", " home ").Intent);
+            new Intent.Rename(new AccountKey(Tool.Claude, "acme"), "home"),
+            PitboardModelMethods.CheckName(new Sheet.Name(new AccountKey(Tool.Claude, "acme"), "a@example.com"), Tool.Claude, " home ").Intent);
     }
 
     // Never started, so nothing on this machine is read.
@@ -286,17 +286,17 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.SwitchTo(Qualified: "codex/work"), new Intent.QuitAndSwitch(Qualified: "codex/work"),
-            new Intent.KeepAppOpen(), new Intent.DismissSwitch(Provider: "codex"), new Intent.AbandonStuckSwitch(),
+            new Intent.SwitchTo(Account: new AccountKey(Tool.Codex, "work")), new Intent.QuitAndSwitch(Account: new AccountKey(Tool.Codex, "work")),
+            new Intent.KeepAppOpen(), new Intent.DismissSwitch(Tool: Tool.Codex), new Intent.AbandonStuckSwitch(),
             new Intent.DismissAbandoned(),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.SwitchTo("codex/work"), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.SwitchTo("claude/work"), intents[0]);
-        Assert.AreEqual("codex", intents.OfType<Intent.DismissSwitch>().Single().Provider);
-        Assert.AreEqual("codex/work", intents.OfType<Intent.QuitAndSwitch>().Single().Qualified);
-        Assert.AreNotEqual<Intent>(new Intent.QuitAndSwitch("codex/spare"), intents[1]);
-        Assert.AreNotEqual<Intent>(new Intent.SwitchTo("codex/work"), intents[1]);
+        Assert.AreEqual<Intent>(new Intent.SwitchTo(new AccountKey(Tool.Codex, "work")), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.SwitchTo(new AccountKey(Tool.Claude, "work")), intents[0]);
+        Assert.AreEqual(Tool.Codex, intents.OfType<Intent.DismissSwitch>().Single().Tool);
+        Assert.AreEqual(new AccountKey(Tool.Codex, "work"), intents.OfType<Intent.QuitAndSwitch>().Single().Account);
+        Assert.AreNotEqual<Intent>(new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")), intents[1]);
+        Assert.AreNotEqual<Intent>(new Intent.SwitchTo(new AccountKey(Tool.Codex, "work")), intents[1]);
         Assert.AreNotEqual<Intent>(new Intent.KeepAppOpen(), intents[1]);
     }
 
@@ -307,7 +307,7 @@ public sealed class ModelTests
         {
             QuitQuestion = new WindowQuestion(
                 new Question("Quit ChatGPT to switch?", "ChatGPT signs in again.", "Quit ChatGPT and switch", Destructive: false, ConfirmIsDefault: true),
-                Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+                Confirmed: new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")),
                 Declined: new Intent.KeepAppOpen()),
             FailureAlert = new AlertText(
                 Title: "Couldn’t switch to spare", Message: "ChatGPT is still open, so nothing has changed.",
@@ -315,7 +315,7 @@ public sealed class ModelTests
             WindowRequest = new WindowRequest(Serial: 3, Place: new Place.Accounts()),
         };
 
-        Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), snapshot.QuitQuestion?.Confirmed);
+        Assert.AreEqual(new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")), snapshot.QuitQuestion?.Confirmed);
         Assert.AreEqual("Couldn’t switch to spare", snapshot.FailureAlert?.Title);
         Assert.IsInstanceOfType<Place.Accounts>(snapshot.WindowRequest.Place);
         Assert.AreEqual(new WindowRequest(3, new Place.Accounts()), snapshot.WindowRequest);
@@ -326,18 +326,18 @@ public sealed class ModelTests
     {
         Intent[] intents =
         [
-            new Intent.SignIn(Provider: "claude", Again: "work"), new Intent.PasteCode(Code: "the-code#the-state"),
-            new Intent.CancelSignIn(), new Intent.PresentSheet(Sheet: new Sheet.Add(Provider: null)),
-            new Intent.CloseSheet(), new Intent.SignIn(Provider: "codex", Again: null),
+            new Intent.SignIn(Tool: Tool.Claude, Again: "work"), new Intent.PasteCode(Code: "the-code#the-state"),
+            new Intent.CancelSignIn(), new Intent.PresentSheet(Sheet: new Sheet.Add(Tool: null)),
+            new Intent.CloseSheet(), new Intent.SignIn(Tool: Tool.Codex, Again: null),
         ];
 
-        Assert.AreEqual<Intent>(new Intent.SignIn("claude", "work"), intents[0]);
-        Assert.AreNotEqual<Intent>(new Intent.SignIn("claude", null), intents[0]);
+        Assert.AreEqual<Intent>(new Intent.SignIn(Tool.Claude, "work"), intents[0]);
+        Assert.AreNotEqual<Intent>(new Intent.SignIn(Tool.Claude, null), intents[0]);
         Assert.AreEqual("work", intents.OfType<Intent.SignIn>().First().Again);
         Assert.IsNull(intents.OfType<Intent.SignIn>().Last().Again, "a new account, named once it is added");
         Assert.AreEqual("the-code#the-state", intents.OfType<Intent.PasteCode>().Single().Code);
         Assert.AreEqual<Intent>(new Intent.PresentSheet(new Sheet.Add(null)), intents[3]);
-        Assert.AreNotEqual<Intent>(new Intent.PresentSheet(new Sheet.Add("codex")), intents[3]);
+        Assert.AreNotEqual<Intent>(new Intent.PresentSheet(new Sheet.Add(Tool.Codex)), intents[3]);
         Assert.AreEqual(1, intents.OfType<Intent.CancelSignIn>().Count());
     }
 
@@ -431,17 +431,17 @@ public sealed class ModelTests
     {
         Sheet[] sheets =
         [
-            new Sheet.Add(Provider: "codex"), new Sheet.SignInAgain(Provider: "claude", Label: "work"),
-            new Sheet.Name(Provider: "codex", Label: "acme", Email: "c@example.com"),
-            new Sheet.Rename(Provider: "claude", Label: "home"),
+            new Sheet.Add(Tool: Tool.Codex), new Sheet.SignInAgain(Account: new AccountKey(Tool.Claude, "work")),
+            new Sheet.Name(Account: new AccountKey(Tool.Codex, "acme"), Email: "c@example.com"),
+            new Sheet.Rename(Account: new AccountKey(Tool.Claude, "home")),
         ];
 
-        Assert.AreEqual<Sheet>(new Sheet.Add("codex"), sheets[0]);
+        Assert.AreEqual<Sheet>(new Sheet.Add(Tool.Codex), sheets[0]);
         Assert.AreNotEqual<Sheet>(new Sheet.Add(null), sheets[0]);
-        Assert.AreEqual("work", sheets.OfType<Sheet.SignInAgain>().Single().Label);
+        Assert.AreEqual("work", sheets.OfType<Sheet.SignInAgain>().Single().Account.Label);
         Assert.AreEqual("c@example.com", sheets.OfType<Sheet.Name>().Single().Email);
-        Assert.AreEqual("acme", sheets.OfType<Sheet.Name>().Single().Label);
-        Assert.AreNotEqual<Sheet>(new Sheet.Rename("claude", "work"), sheets[3]);
+        Assert.AreEqual("acme", sheets.OfType<Sheet.Name>().Single().Account.Label);
+        Assert.AreNotEqual<Sheet>(new Sheet.Rename(new AccountKey(Tool.Claude, "work")), sheets[3]);
     }
 
     [TestMethod]
@@ -451,7 +451,7 @@ public sealed class ModelTests
         var snapshot = Read(5) with
         {
             SigningIn = running,
-            Sheet = new Sheet.SignInAgain(Provider: "claude", Label: "work"),
+            Sheet = new Sheet.SignInAgain(Account: new AccountKey(Tool.Claude, "work")),
             SheetFailure = new FailureText(
                 Id: 4, Title: "Couldn’t sign in to work", Message: "`claude` is not on this machine",
                 Warnings: ["The account in use is unchanged."],
@@ -462,7 +462,7 @@ public sealed class ModelTests
         Assert.IsTrue(snapshot.SigningIn?.WantsCode);
         Assert.AreEqual("https://claude.com/cai/oauth/authorize?code=true", snapshot.SigningIn?.Url);
         Assert.AreEqual(running, snapshot.SigningIn);
-        Assert.AreEqual<Sheet?>(new Sheet.SignInAgain("claude", "work"), snapshot.Sheet);
+        Assert.AreEqual<Sheet?>(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "work")), snapshot.Sheet);
         Assert.AreEqual("The account in use is unchanged.", snapshot.SheetFailure?.Warnings.Single());
         Assert.IsNull(Read(5).SigningIn);
     }
@@ -511,19 +511,19 @@ public sealed class ModelTests
         Intent[] intents =
         [
             new Intent.Show(Place: new Place.Checks()), new Intent.Show(Place: null), new Intent.DismissFailure(),
-            new Intent.Enrol(Provider: "codex"),
-            new Intent.Rename(Provider: "claude", Label: "work", To: "office"),
-            new Intent.Forget(Qualified: "claude/spare"), new Intent.DeclineSecondAccount(Provider: "codex"),
+            new Intent.Enrol(Tool: Tool.Codex),
+            new Intent.Rename(Account: new AccountKey(Tool.Claude, "work"), To: "office"),
+            new Intent.Forget(Account: new AccountKey(Tool.Claude, "spare")), new Intent.DeclineSecondAccount(Tool: Tool.Codex),
         ];
 
         Assert.AreEqual<Intent>(new Intent.Show(new Place.Checks()), intents[0]);
         Assert.AreNotEqual<Intent>(new Intent.Show(null), intents[0]);
         Assert.IsNull(((Intent.Show)intents[1]).Place);
-        Assert.AreEqual("codex", intents.OfType<Intent.Enrol>().Single().Provider);
+        Assert.AreEqual(Tool.Codex, intents.OfType<Intent.Enrol>().Single().Tool);
         Assert.AreEqual("office", intents.OfType<Intent.Rename>().Single().To);
-        Assert.AreEqual("claude/spare", intents.OfType<Intent.Forget>().Single().Qualified);
+        Assert.AreEqual(new AccountKey(Tool.Claude, "spare"), intents.OfType<Intent.Forget>().Single().Account);
         Assert.AreEqual(1, intents.OfType<Intent.DismissFailure>().Count());
-        Assert.AreEqual("codex", intents.OfType<Intent.DeclineSecondAccount>().Single().Provider);
+        Assert.AreEqual(Tool.Codex, intents.OfType<Intent.DeclineSecondAccount>().Single().Tool);
     }
 
     [TestMethod]
@@ -533,7 +533,7 @@ public sealed class ModelTests
             Kind: new LimitKind.FiveHour(), Name: "5-hour limit", Short: "5-hour", Percent: 72.4, Figure: "72%",
             Used: "72% used", Level: UsageLevel.Low, ResetsAt: 1_800_003_900, Resets: "Resets 09:05",
             ResetsIn: "in 1 hr 5 min", Spoken: "5-hour limit, 72 percent used, resets 09:05");
-        var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo("codex/spare"));
+        var use = new ItemAction(Title: "Use", Spoken: "Use spare (Codex)", Intent: new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
         var window = new WindowAccount(
             Sites.ChatGpt, Label: "spare", Email: "spare@example.com", Store: "5d3a8c72-9e1b-5f4a-8c2d-3e6f7a8b9c40",
             InUse: false, Title: "spare");
@@ -561,13 +561,13 @@ public sealed class ModelTests
                     Confirm: null),
                 new AccountAction(
                     Kind: ActionKind.SignInAgain, Title: "Sign In Again…",
-                    Intent: new Intent.PresentSheet(new Sheet.SignInAgain("codex", "spare")), Window: null,
+                    Intent: new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Codex, "spare"))), Window: null,
                     Enabled: false, Confirm: null),
                 new AccountAction(
                     Kind: ActionKind.OpenWindow, Title: "Open chatgpt.com", Intent: null, Window: window, Enabled: true,
                     Confirm: null),
                 new AccountAction(
-                    Kind: ActionKind.Remove, Title: "Forget…", Intent: new Intent.Forget("codex/spare"), Window: null,
+                    Kind: ActionKind.Remove, Title: "Forget…", Intent: new Intent.Forget(new AccountKey(Tool.Codex, "spare")), Window: null,
                     Enabled: true,
                     Confirm: new Question(
                         Title: "Forget “spare (Codex)”?",
@@ -589,19 +589,19 @@ public sealed class ModelTests
             Intent: new Intent.Show(new Place.Accounts()), Link: null, Enabled: true);
         var snapshot = Read(6) with
         {
-            Sections = [new AccountSection(Id: "codex", Heading: "Codex", Accounts: [spare])],
+            Sections = [new AccountSection(Id: "codex", Tool: Tool.Codex, Heading: "Codex", Accounts: [spare])],
             Notices = [stuck],
             MenuNotices = new MenuNotices(Install: null, Switches: [], SignIns: [], Others: others),
             Setup = new SetupStep(
                 Title: "Add a second Codex account", Detail: "job is the only Codex account Pitboard knows.",
-                Actions: [new Choice("Add Account…", new Intent.PresentSheet(new Sheet.Add("codex")), Enabled: true)]),
+                Actions: [new Choice("Add Account…", new Intent.PresentSheet(new Sheet.Add(Tool.Codex)), Enabled: true)]),
             AccountsShown = new AccountsShown.ReadFailed(
                 Title: "Couldn’t Read Accounts", Detail: "OpenAI could not be reached",
                 Retry: new Choice("Try Again", new Intent.Refresh(true), Enabled: false)),
         };
 
         var row = snapshot.Sections[0].Accounts[0];
-        Assert.AreEqual<Intent>(new Intent.SwitchTo("codex/spare"), row.Action?.Intent);
+        Assert.AreEqual<Intent>(new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")), row.Action?.Intent);
         Assert.AreEqual(UsageLevel.Low, row.Limits[0].Level);
         Assert.IsInstanceOfType<LimitKind.FiveHour>(row.Limits[0].Kind);
         Assert.AreEqual(1_800_003_900L, row.Limits[0].ResetsAt);
@@ -611,7 +611,7 @@ public sealed class ModelTests
         Assert.IsFalse(row.Actions[1].Enabled);
         Assert.AreEqual(ActionKind.OpenWindow, row.Actions[2].Kind);
         Assert.AreEqual("chatgpt.com", row.Actions[2].Window?.Site.Host);
-        Assert.AreEqual<Intent?>(new Intent.Forget("codex/spare"), row.Actions[3].Intent);
+        Assert.AreEqual<Intent?>(new Intent.Forget(new AccountKey(Tool.Codex, "spare")), row.Actions[3].Intent);
         Assert.AreEqual("Forget", row.Actions[3].Confirm?.Confirm);
         Assert.AreEqual(1_800_000_000L, snapshot.UpdatedAt);
         Assert.IsFalse(((AccountsShown.ReadFailed)snapshot.AccountsShown).Retry.Enabled);
@@ -619,7 +619,7 @@ public sealed class ModelTests
         Assert.AreEqual<Intent>(new Intent.AbandonStuckSwitch(), snapshot.Notices[0].Actions[0].Intent);
         Assert.AreEqual("Give Up", snapshot.Notices[0].Actions[0].Confirm?.Confirm);
         Assert.AreEqual<Intent?>(new Intent.Show(new Place.Accounts()), snapshot.MenuNotices.Others?.Intent);
-        Assert.AreEqual(new Footing.OnlyOne("claude", "work"), snapshot.Footing);
+        Assert.AreEqual(new Footing.OnlyOne(new AccountKey(Tool.Claude, "work")), snapshot.Footing);
         Assert.IsInstanceOfType<Intent.PresentSheet>(snapshot.Setup?.Actions[0].Intent);
         Assert.AreEqual("Try Again", ((AccountsShown.ReadFailed)snapshot.AccountsShown).Retry.Title);
         Assert.AreEqual("work 42%", snapshot.MenuBar.NameAndUsage);
@@ -692,21 +692,21 @@ public sealed class ModelTests
     [TestMethod]
     public void ANameComesWithWhatItsSheetSends()
     {
-        var named = new Sheet.Name("claude", "acme", "a@example.com");
+        var named = new Sheet.Name(new AccountKey(Tool.Claude, "acme"), "a@example.com");
         Assert.AreEqual(
-            new NameCheck(null, new Intent.Rename("claude", "acme", "home")), PitboardModelMethods.CheckName(named, "claude", "  home "));
-        Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardModelMethods.CheckName(named, "claude", " acme"));
-        Assert.AreEqual(new NameCheck("Type a name for this account.", null), PitboardModelMethods.CheckName(named, "claude", " \n"));
-        Assert.IsNull(PitboardModelMethods.CheckName(new Sheet.Rename("claude", "work"), "claude", " work ").Intent);
+            new NameCheck(null, new Intent.Rename(new AccountKey(Tool.Claude, "acme"), "home")), PitboardModelMethods.CheckName(named, Tool.Claude, "  home "));
+        Assert.AreEqual(new NameCheck(null, new Intent.CloseSheet()), PitboardModelMethods.CheckName(named, Tool.Claude, " acme"));
+        Assert.AreEqual(new NameCheck("Type a name for this account.", null), PitboardModelMethods.CheckName(named, Tool.Claude, " \n"));
+        Assert.IsNull(PitboardModelMethods.CheckName(new Sheet.Rename(new AccountKey(Tool.Claude, "work")), Tool.Claude, " work ").Intent);
         Assert.AreEqual(
-            new Intent.SignIn("codex", "work"),
-            PitboardModelMethods.CheckName(new Sheet.SignInAgain("codex", "work"), "codex", "").Intent);
+            new Intent.SignIn(Tool.Codex, "work"),
+            PitboardModelMethods.CheckName(new Sheet.SignInAgain(new AccountKey(Tool.Codex, "work")), Tool.Codex, "").Intent);
         Assert.AreEqual(
-            new NameCheck(null, new Intent.SignIn("codex", null)),
-            PitboardModelMethods.CheckName(new Sheet.Add("codex"), "codex", "codex/phu"),
+            new NameCheck(null, new Intent.SignIn(Tool.Codex, null)),
+            PitboardModelMethods.CheckName(new Sheet.Add(Tool.Codex), Tool.Codex, "codex/phu"),
             "a new account is named once it is added");
         Assert.AreEqual(
-            new NameCheck("A name can’t contain “/”.", null), PitboardModelMethods.CheckName(named, "claude", "codex/phu"));
+            new NameCheck("A name can’t contain “/”.", null), PitboardModelMethods.CheckName(named, Tool.Claude, "codex/phu"));
     }
 
     private sealed class Waiting : ModelListener
@@ -871,10 +871,10 @@ public sealed class ModelTests
         using var model = PitboardModel.FixtureIn("chatGPTOpen", _own, waiting, apps, new Posting(), new InUtc());
         Start(model, waiting);
 
-        model.Send(new Intent.SwitchTo("codex/spare"));
+        model.Send(new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
         var asked = waiting.Until(snapshot => snapshot.QuitQuestion is not null, Patience);
         Assert.IsNotNull(asked, "never asked about quitting ChatGPT");
-        Assert.AreEqual(new Intent.QuitAndSwitch("codex/spare"), asked.QuitQuestion?.Confirmed);
+        Assert.AreEqual(new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")), asked.QuitQuestion?.Confirmed);
         model.Send(asked.QuitQuestion!.Confirmed);
         var switched = waiting.Until(snapshot => Uses(snapshot, "codex/spare"), Patience);
         var calls = apps.Asked.Until(5, Patience);
@@ -898,9 +898,9 @@ public sealed class ModelTests
         using var model = PitboardModel.FixtureIn("chatGPTOpen", _own, waiting, apps, new Posting(), new InUtc());
         Start(model, waiting);
 
-        model.Send(new Intent.SwitchTo("codex/spare"));
+        model.Send(new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
         Assert.IsNotNull(waiting.Until(snapshot => snapshot.QuitQuestion is not null, Patience));
-        model.Send(new Intent.QuitAndSwitch("codex/spare"));
+        model.Send(new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")));
         var stopped = waiting.Until(snapshot => snapshot.FailureAlert is not null, Patience);
         model.Shutdown();
 
@@ -923,7 +923,7 @@ public sealed class ModelTests
         using var model = PitboardModel.FixtureIn("oneTool", _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
 
-        model.Send(new Intent.SwitchTo("claude/personal"));
+        model.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")));
         var switched = waiting.Until(snapshot => Uses(snapshot, "claude/personal"), Patience);
         var posted = posting.Posted.Until(1, Patience);
         model.Shutdown();

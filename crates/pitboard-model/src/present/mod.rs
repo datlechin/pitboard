@@ -84,7 +84,7 @@ pub(crate) use notices::{
 use crate::account_windows::{AlertText, WindowAccount};
 use crate::model::state::State;
 use crate::model::{Intent, LocalTime, Snapshot};
-use crate::{Account, Tool, UsageLevel};
+use crate::{Account, AccountKey, Tool, UsageLevel};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 
@@ -131,8 +131,9 @@ pub enum NextStep {
 /// one tool's, so a machine with one tool looks as it always did.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct AccountSection {
-    /// The tool's code.
+    /// The tool's code, which a view knows the section by.
     pub id: String,
+    pub tool: Tool,
     /// The tool's name, once accounts of more than one tool are shown.
     pub heading: Option<String>,
     pub accounts: Vec<AccountItem>,
@@ -143,7 +144,8 @@ pub struct AccountSection {
 pub struct AccountItem {
     /// The account's `id`, unique among the accounts shown.
     pub id: String,
-    /// Its label with its tool, for what is asked of it. `None` for a login not enrolled.
+    /// Its label with its tool, `claude/work`, which a view's identifiers for it are made of.
+    /// `None` for a login not enrolled.
     pub qualified: Option<String>,
     /// Its name, or its email address while it has none, or what is wrong with a login
     /// Pitboard cannot use.
@@ -488,7 +490,7 @@ pub enum Footing {
     /// No tool has anybody signed in, and nothing is enrolled.
     NoOneSignedIn,
     /// A tool has one account, so there is nothing yet to switch to in it.
-    OnlyOne { provider: String, label: String },
+    OnlyOne { account: AccountKey },
     /// Codex is installed and nothing of it is enrolled, so nothing of it is read.
     CodexUnused,
     /// Claude Code has two accounts, and nobody chose what happens once a limit reaches the
@@ -563,8 +565,8 @@ pub struct SheetText {
     // not, and the account's own for signing in again: a picker shows them where there is
     // more than one.
     pub tools: Vec<SheetTool>,
-    /// The tool it starts on, as a `Tool`'s code.
-    pub tool: String,
+    /// The tool it starts on.
+    pub tool: Tool,
     /// The account it is about, where the name is not to be typed: signing in again.
     pub account: Option<String>,
     /// What the name field starts with.
@@ -605,6 +607,8 @@ pub struct StowText {
 /// A tool a sheet's picker offers, and what the sheet says once it is picked.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SheetTool {
+    pub tool: Tool,
+    // the tool's code, which the picker's identifiers are made of
     pub code: String,
     pub name: String,
     pub message: String,
@@ -662,7 +666,7 @@ pub(crate) struct Seen<'a> {
     pub(crate) state: &'a State,
     pub(crate) now: i64,
     local: &'a dyn LocalTime,
-    pub(crate) tools: Vec<Tool>,
+    pub(crate) tools: Vec<ProviderId>,
     pub(crate) os: Os,
 }
 
@@ -689,33 +693,19 @@ impl<'a> Seen<'a> {
     /// tool an account is for. A machine with one tool looks exactly as it did before there
     /// were two.
     pub(crate) fn shows_tools(&self) -> bool {
-        let mut providers: Vec<&str> = self
+        let mut providers: Vec<ProviderId> = self
             .accounts()
             .iter()
-            .map(|account| account.provider.as_str())
+            .map(|account| account.provider)
             .collect();
         providers.sort_unstable();
         providers.dedup();
         providers.len() > 1
     }
 
-    pub(crate) fn tool(&self, code: &str) -> Option<&Tool> {
-        self.tools.iter().find(|tool| tool.code == code)
-    }
-
-    /// A tool's name, or its code where Pitboard does not list it.
-    pub(crate) fn tool_name(&self, code: &str) -> String {
-        self.tool(code)
-            .map_or_else(|| code.to_owned(), |tool| tool.name.clone())
-    }
-
-    pub(crate) fn program_of<'s>(&'s self, code: &'s str) -> &'s str {
-        self.tool(code).map_or(code, |tool| tool.program.as_str())
-    }
-
     /// The tool's name where a sentence has to say which, once more than one is shown.
-    pub(crate) fn tool_if_shown(&self, code: &str) -> Option<String> {
-        self.shows_tools().then(|| self.tool_name(code))
+    pub(crate) fn tool_if_shown(&self, tool: ProviderId) -> Option<&'static str> {
+        self.shows_tools().then(|| tool.name())
     }
 
     /// Why the last read did not answer, in Pitboard's own words.
@@ -759,25 +749,25 @@ impl<'a> Seen<'a> {
     /// Not every tool then. A program the app did not find where it looks is almost never on
     /// the `PATH` of an app opened from Finder either, so that offered sign-ins that could
     /// not start, and it asked somebody who only ever had Claude Code about Codex too.
-    pub(crate) fn addable(&self) -> Vec<Tool> {
+    pub(crate) fn addable(&self) -> Vec<ProviderId> {
         let installed = self.state.installed.as_deref().unwrap_or_default();
-        let some: Vec<Tool> = self
+        let some: Vec<ProviderId> = self
             .tools
             .iter()
+            .copied()
             .filter(|tool| {
-                installed.iter().any(|found| found.code == tool.code)
+                installed.contains(tool)
                     || self
                         .accounts()
                         .iter()
-                        .any(|account| account.provider == tool.code)
+                        .any(|account| account.provider == *tool)
             })
-            .cloned()
             .collect();
         if some.is_empty() {
             self.tools
                 .iter()
-                .filter(|tool| tool.code == ProviderId::Claude.code())
-                .cloned()
+                .copied()
+                .filter(|&tool| tool == ProviderId::Claude)
                 .collect()
         } else {
             some
@@ -787,28 +777,29 @@ impl<'a> Seen<'a> {
     /// Who is asked about the accounts shown, as a sentence names them: "Anthropic", or
     /// "Anthropic or OpenAI". Where no account shown is of a tool that is asked, whoever could be.
     pub(crate) fn services(&self) -> String {
-        let asks =
-            |tool: &&Tool| ProviderId::parse(&tool.code).is_some_and(ProviderId::reads_usage);
-        let shown: Vec<&Tool> = self
+        let shown: Vec<ProviderId> = self
             .tools
             .iter()
-            .filter(asks)
+            .copied()
+            .filter(|tool| tool.reads_usage())
             .filter(|tool| {
                 self.accounts()
                     .iter()
-                    .any(|account| account.provider == tool.code)
+                    .any(|account| account.provider == *tool)
             })
             .collect();
-        let addable = self.addable();
         let asked = if shown.is_empty() {
-            addable.iter().filter(asks).collect()
+            self.addable()
+                .into_iter()
+                .filter(|tool| tool.reads_usage())
+                .collect()
         } else {
             shown
         };
         let mut services: Vec<&str> = Vec::new();
         for tool in &asked {
-            if !services.contains(&tool.service.as_str()) {
-                services.push(&tool.service);
+            if !services.contains(&tool.service()) {
+                services.push(tool.service());
             }
         }
         if services.is_empty() {
@@ -817,10 +808,10 @@ impl<'a> Seen<'a> {
         services.join(" or ")
     }
 
-    pub(crate) fn in_use_of(&self, provider: &str) -> Option<&str> {
+    pub(crate) fn in_use_of(&self, tool: ProviderId) -> Option<&str> {
         self.accounts()
             .iter()
-            .find(|account| account.provider == provider && account.signed_in)
+            .find(|account| account.provider == tool && account.signed_in)
             .and_then(|account| account.label.as_deref())
     }
 
@@ -829,7 +820,7 @@ impl<'a> Seen<'a> {
     pub(crate) fn name_of(&self, account: &Account) -> String {
         let label = account.label.as_deref().unwrap_or(&account.email);
         if self.shows_tools() {
-            words::named_with_tool(label, &self.tool_name(&account.provider))
+            words::named_with_tool(label, account.provider.name())
         } else {
             label.to_owned()
         }
@@ -876,7 +867,7 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
             .map(|(question, then)| sheets::quit_question(&seen, question, then)),
         replace_question: state
             .replace_asked()
-            .map(|(qualified, why)| sheets::replace_question(&seen, qualified, why)),
+            .map(|(account, why)| sheets::replace_question(account, why)),
         window_request: state.window,
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
@@ -926,6 +917,7 @@ mod tests {
     use super::*;
     use crate::model::state::{Cadence, State};
     use crate::present::testing::{Unreadable, Utc};
+    use pitboard_core::state::Key;
 
     /// 12:00 UTC on Wednesday 14 January 2026.
     const MIDDAY: i64 = 1_768_392_000;
@@ -943,7 +935,7 @@ mod tests {
         };
         use pitboard_core::status::Standing;
         let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
-        state.sheet = Some(Sheet::Add { provider: None });
+        state.sheet = Some(Sheet::Add { tool: None });
         let words = |os| {
             let shown = present_on(os, &state, MIDDAY, &Utc);
             let AccountsShown::NoAccounts { title, add, .. } = shown.accounts_shown else {
@@ -975,14 +967,18 @@ mod tests {
             account(Some("old"))
                 .standing(Standing::LoginExpired)
                 .build(),
-            account(None).of("codex").signed_in().uuid("u").build(),
+            account(None)
+                .of(ProviderId::Codex)
+                .signed_in()
+                .uuid("u")
+                .build(),
         ];
         accounts.push(desktop_account("home", false));
         let mut state = read(
             status(accounts, vec![warning("fallback_login", "")]),
             vec![claude_code(), codex(), claude_desktop()],
         );
-        state.sheet = Some(Sheet::Add { provider: None });
+        state.sheet = Some(Sheet::Add { tool: None });
         let names = [
             "Pitboard",
             "Claude",
@@ -1095,7 +1091,6 @@ mod tests {
         let mut state = read(status(accounts, Vec::new()), vec![claude_code()]);
         state.stuck = true;
         let shown = present_on(Os::MacOs, &state, MIDDAY, &Utc);
-        let seen = Seen::new(&state, MIDDAY, &Utc, Os::MacOs);
         let asked = |question: &Question| (question.destructive, question.confirm_is_default);
         let remove = (shown.sections[0].accounts[1].actions.iter())
             .find(|action| action.kind == ActionKind::Remove)
@@ -1107,7 +1102,10 @@ mod tests {
             .find_map(|action| action.confirm.clone())
             .expect("Cancel Switch asks");
         assert_eq!(asked(&cancel), (false, true));
-        let replace = sheets::replace_question(&seen, "claude/spare", "Anthropic refuses it.");
+        let replace = sheets::replace_question(
+            &Key::new(ProviderId::Claude, "spare"),
+            "Anthropic refuses it.",
+        );
         assert_eq!(asked(&replace.question), (false, true));
         let quit = downloads_quit_question(1).expect("a download runs");
         assert_eq!(asked(&quit), (false, true));
@@ -1136,7 +1134,10 @@ mod tests {
             status(
                 vec![
                     claude,
-                    account(Some("main")).of("codex").signed_in().build(),
+                    account(Some("main"))
+                        .of(ProviderId::Codex)
+                        .signed_in()
+                        .build(),
                     desktop_account("work", true),
                 ],
                 Vec::new(),
@@ -1150,7 +1151,10 @@ mod tests {
         let state = read(
             status(
                 vec![
-                    account(Some("main")).of("codex").signed_in().build(),
+                    account(Some("main"))
+                        .of(ProviderId::Codex)
+                        .signed_in()
+                        .build(),
                     desktop_account("work", true),
                 ],
                 Vec::new(),

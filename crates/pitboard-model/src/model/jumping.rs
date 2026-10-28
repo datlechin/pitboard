@@ -8,6 +8,7 @@ use crate::present::testing::account;
 use crate::present::{glance_id, jump_refused_on, words};
 use crate::{Account, JumpAsk, JumpTask, OutsideAnswer, RunOutNotice};
 use pitboard_core::host::Os;
+use pitboard_core::provider::ProviderId;
 use pitboard_core::status::Standing;
 
 fn accounts() -> Vec<Account> {
@@ -19,11 +20,14 @@ fn accounts() -> Vec<Account> {
             .standing(Standing::LoginExpired)
             .build(),
         account(Some("main"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .uuid("m")
             .build(),
-        account(Some("spare")).of("codex").uuid("s").build(),
+        account(Some("spare"))
+            .of(ProviderId::Codex)
+            .uuid("s")
+            .build(),
     ]
 }
 
@@ -91,7 +95,7 @@ fn the_jump_list_switches_to_each_account_then_adds_then_opens_each_window() {
 #[test]
 fn with_one_tool_a_switch_names_the_account_alone() {
     let claude_only: Vec<Account> = (accounts().into_iter())
-        .filter(|account| account.provider == "claude")
+        .filter(|account| account.provider == ProviderId::Claude)
         .collect();
     let tasks = read(claude_only).on_windows().jump_list.expect("read");
     assert_eq!(
@@ -116,9 +120,12 @@ fn the_jump_list_stays_the_same_across_a_switch() {
             .build(),
         account(Some("personal")).signed_in().uuid("p").build(),
         account(Some("old")).uuid("o").build(),
-        account(Some("main")).of("codex").uuid("m").build(),
+        account(Some("main"))
+            .of(ProviderId::Codex)
+            .uuid("m")
+            .build(),
         account(Some("spare"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .uuid("s")
             .build(),

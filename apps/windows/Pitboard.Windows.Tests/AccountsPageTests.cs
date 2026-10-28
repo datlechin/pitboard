@@ -16,7 +16,7 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountsPageTests
 {
-    private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: null)), Enabled: true);
+    private static readonly Choice Add = new("Add account…", new Intent.PresentSheet(new Sheet.Add(Tool: null)), Enabled: true);
 
     private static readonly string[] FiveHourDetail = ["5-hour limit", "100% used", "Resets 3:45 PM", "in 2 hr 9 min"];
 
@@ -57,8 +57,8 @@ public sealed class AccountsPageTests
                 ReadAt: null, Read: null, Notes: []),
             Actions =
             [
-                Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare")), Items.RenameAction("claude", "spare"),
-                Items.WindowAction(Items.Window("claude", "spare")), Items.RemoveAction("claude/spare"),
+                Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare"))), Items.RenameAction("claude", "spare"),
+                Items.WindowAction(Items.Window("claude", "spare")), Items.RemoveAction("claude", "spare"),
             ],
         };
 
@@ -83,12 +83,12 @@ public sealed class AccountsPageTests
         return found!;
     }
 
-    private static readonly Choice NotNow = new("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+    private static readonly Choice NotNow = new("Not now", new Intent.DeclineSecondAccount(Tool.Claude), Enabled: true);
 
     private static readonly SetupStep SecondAccount = new("Add a second account", "Pitboard switches once there are two.", [Add, NotNow]);
 
     private static Snapshot Tipped(params AccountItem[] accounts) =>
-        Listing(accounts) with { Setup = SecondAccount, Footing = new Footing.OnlyOne(Provider: "claude", Label: "work") };
+        Listing(accounts) with { Setup = SecondAccount, Footing = new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")) };
 
     // The buttons an opened row's last card holds, in their order.
     private static string Commands(SettingsExpander row) =>
@@ -215,7 +215,7 @@ public sealed class AccountsPageTests
         var use = Views.Element<Button>(spare, "account.action");
         Assert.AreEqual("Switch to spare", AutomationProperties.GetName(use));
         Views.Press(use);
-        Assert.Contains(new Intent.SwitchTo("claude/spare"), model.Sent);
+        Assert.Contains(new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare")), model.Sent);
     }
 
     // Plan 3: a note nothing in the app does anything about ends with the docs that say what to do.
@@ -317,7 +317,7 @@ public sealed class AccountsPageTests
         Assert.AreEqual("spare@example.com", copied.Single());
         Assert.IsTrue(Structural.Equal(Items.Window("claude", "spare"), opened.Single()), "another window opened");
         Assert.Contains(new Intent.Show(new Place.Settings(SettingsSection.WarmUp)), model.Sent);
-        Assert.Contains(new Intent.PresentSheet(new Sheet.Rename("claude", "spare")), model.Sent);
+        Assert.Contains(new Intent.PresentSheet(new Sheet.Rename(new AccountKey(Tool.Claude, "spare"))), model.Sent);
         Assert.AreEqual(
             "detail.window.claude.ai, detail.rename, detail.remove",
             string.Join(", ", Views.Visible<Button>(spare).Select(AutomationProperties.GetAutomationId).Where(id => id.StartsWith("detail.window", StringComparison.Ordinal) || id is "detail.rename" or "detail.remove")));
@@ -328,8 +328,8 @@ public sealed class AccountsPageTests
     [UITestMethod]
     public async Task AnOpenedRowOffersWhatItsShortcutMenuDoes()
     {
-        var signInAgain = Items.Action(ActionKind.SignInAgain, "Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")));
-        var warm = Items.Action(ActionKind.WarmUpNow, "Warm up now", new Intent.WarmNow("claude/spare"));
+        var signInAgain = Items.Action(ActionKind.SignInAgain, "Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "spare"))));
+        var warm = Items.Action(ActionKind.WarmUpNow, "Warm up now", new Intent.WarmNow(new AccountKey(Tool.Claude, "spare")));
         var actions = Spare().Actions;
         var expiring = Spare() with { Actions = [actions[0], signInAgain, actions[1], warm, actions[2], actions[3]] };
         var (page, model, app) = await Over(Listing(expiring));
@@ -412,7 +412,7 @@ public sealed class AccountsPageTests
     [UITestMethod]
     public async Task TheAccountInUseHasRemoveDimmed()
     {
-        var work = Work() with { Actions = [Items.RenameAction("claude", "work"), Items.RemoveAction("claude/work", enabled: false)] };
+        var work = Work() with { Actions = [Items.RenameAction("claude", "work"), Items.RemoveAction("claude", "work", enabled: false)] };
         var (page, _, _) = await Over(Listing(work));
         var row = Row(page, "claude/work");
         await Open(row, "Email");
@@ -521,12 +521,12 @@ public sealed class AccountsPageTests
     [UITestMethod]
     public async Task ASetupStepIsATipAtAddAccountWhoseCloseTurnsItDown()
     {
-        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount(Tool.Claude), Enabled: true);
         var step = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]);
         var (page, model, _) = await Over(Snapshots.Read(1) with
         {
             Setup = step,
-            Footing = new Footing.OnlyOne(Provider: "claude", Label: "work"),
+            Footing = new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")),
             Sections = [Items.Section("claude", null, Items.Account("claude", "work", inUse: true))],
         });
         var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
@@ -624,11 +624,11 @@ public sealed class AccountsPageTests
     [UITestMethod]
     public async Task TheTipGoesWithThePage()
     {
-        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount("claude"), Enabled: true);
+        var notNow = new Choice("Not now", new Intent.DeclineSecondAccount(Tool.Claude), Enabled: true);
         var (page, _, app) = await Over(Snapshots.Read(1) with
         {
             Setup = new SetupStep("Add a second account", "Pitboard switches once there are two.", [Add, notNow]),
-            Footing = new Footing.OnlyOne(Provider: "claude", Label: "work"),
+            Footing = new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")),
         });
         var tip = Views.Descendants(page).OfType<TeachingTip>().Single();
         await Views.Until(() => tip.IsOpen, "the tip did not open");

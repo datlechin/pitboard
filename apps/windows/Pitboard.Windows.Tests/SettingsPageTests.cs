@@ -24,8 +24,8 @@ public sealed class SettingsPageTests
         Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
-            new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
-            new WarmAccountShown("claude/work", "work", On: false, Standing: null),
+            new WarmAccountShown(new AccountKey(Tool.Claude, "personal"), "claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
+            new WarmAccountShown(new AccountKey(Tool.Claude, "work"), "claude/work", "work", On: false, Standing: null),
         ],
         NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
         Enabled: true);
@@ -397,7 +397,7 @@ public sealed class SettingsPageTests
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
 
         Views.Element<ToggleSwitch>(page, "settings.warm.claude/work").IsOn = true;
-        Assert.Contains(new Intent.SetWarm("claude/work", true), model.Sent);
+        Assert.Contains(new Intent.SetWarm(new AccountKey(Tool.Claude, "work"), true), model.Sent);
     }
 
     [UITestMethod]

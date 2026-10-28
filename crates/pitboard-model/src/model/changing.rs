@@ -25,47 +25,46 @@ use crate::present::testing::account;
 use crate::present::words;
 use crate::{Account, EnrolledAs};
 
+use crate::AccountKey;
+use crate::Tool;
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::switch::Foreseen;
 use std::time::Duration;
 
-fn enrol(provider: &str) -> Intent {
-    Intent::Enrol {
-        provider: provider.into(),
-    }
+fn enrol(tool: Tool) -> Intent {
+    Intent::Enrol { tool }
 }
 
-fn rename(provider: &str, label: &str, to: &str) -> Intent {
+fn rename(tool: Tool, label: &str, to: &str) -> Intent {
     Intent::Rename {
-        provider: provider.into(),
-        label: label.into(),
+        account: AccountKey::new(tool, label),
         to: to.into(),
     }
 }
 
-fn forget(qualified: &str) -> Intent {
+fn forget(tool: Tool, label: &str) -> Intent {
     Intent::Forget {
-        qualified: qualified.into(),
+        account: AccountKey::new(tool, label),
     }
 }
 
-fn update_config(qualified: &str) -> Intent {
+fn update_config(tool: Tool, label: &str) -> Intent {
     Intent::UpdateConfig {
-        qualified: qualified.into(),
+        account: AccountKey::new(tool, label),
     }
 }
 
-fn naming(provider: &str, label: &str) -> Sheet {
+fn naming(tool: Tool, label: &str) -> Sheet {
     Sheet::Name {
-        provider: provider.into(),
-        label: label.into(),
+        account: AccountKey::new(tool, label),
         email: "w@example.com".into(),
     }
 }
 
-fn renaming(provider: &str, label: &str) -> Sheet {
+fn renaming(tool: Tool, label: &str) -> Sheet {
     Sheet::Rename {
-        provider: provider.into(),
-        label: label.into(),
+        account: AccountKey::new(tool, label),
     }
 }
 
@@ -80,7 +79,7 @@ fn tos(model: &Hand) -> Vec<String> {
         .state
         .last_switches
         .iter()
-        .map(|last| last.to.clone())
+        .map(|last| last.to.typed())
         .collect()
 }
 
@@ -100,7 +99,7 @@ fn the_login_in_use_is_added_at_once_and_named_after() {
         "Anthropic couldn’t be reached.",
         vec![warning("auth_overridden", "ANTHROPIC_API_KEY is set")],
     ));
-    model.send(enrol("claude"));
+    model.send(enrol(Tool::Claude));
     model.run(&mut machine);
     let refused = model.state.presented.clone().expect("said in the window");
     assert_eq!(refused.title, words::could_not_sign_in(None));
@@ -109,10 +108,10 @@ fn the_login_in_use_is_added_at_once_and_named_after() {
     assert_eq!(model.shown().sheet, None);
 
     machine.enrolling_current = enrolled_as("acme", EnrolledAs::Current, Vec::new());
-    model.send(enrol("claude"));
+    model.send(enrol(Tool::Claude));
     model.run(&mut machine);
     assert_eq!(machine.enrolled, ["claude/", "claude/"]);
-    assert_eq!(model.shown().sheet, Some(naming("claude", "acme")));
+    assert_eq!(model.shown().sheet, Some(naming(Tool::Claude, "acme")));
 }
 
 // There is nothing to add without a browser.
@@ -126,12 +125,12 @@ fn a_tool_with_no_login_offers_its_sign_in_in_place_of_adding_it() {
         "Codex isn’t signed in.",
         Vec::new(),
     ));
-    model.send(enrol("codex"));
+    model.send(enrol(Tool::Codex));
     model.run(&mut machine);
     assert_eq!(
         model.shown().sheet,
         Some(Sheet::Add {
-            provider: Some("codex".into())
+            tool: Some(Tool::Codex)
         })
     );
     assert_eq!(model.state.presented, None, "nothing went wrong");
@@ -146,7 +145,7 @@ fn an_account_enrolled_already_is_not_named_again() {
         added: false,
         ..enrolled_as("work", EnrolledAs::Current, Vec::new()).expect("enrolled")
     });
-    model.send(enrol("claude"));
+    model.send(enrol(Tool::Claude));
     model.run(&mut machine);
     assert_eq!(model.shown().sheet, None);
 }
@@ -158,10 +157,14 @@ fn a_codex_login_is_enrolled_as_codexs() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![
         claude("work", true, 0.0),
-        account(None).of("codex").signed_in().uuid("c").build(),
+        account(None)
+            .of(ProviderId::Codex)
+            .signed_in()
+            .uuid("c")
+            .build(),
     ])));
     model.refresh(&mut machine);
-    model.send(enrol("codex"));
+    model.send(enrol(Tool::Codex));
     model.run(&mut machine);
     assert_eq!(machine.enrolled, ["codex/"]);
 }
@@ -172,7 +175,7 @@ fn a_codex_login_is_enrolled_as_codexs() {
 fn a_refused_forget_is_reported() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    model.send(forget("claude/alpha"));
+    model.send(forget(Tool::Claude, "alpha"));
     model.run(&mut machine);
     assert_eq!(model.state.presented, None);
 
@@ -181,11 +184,11 @@ fn a_refused_forget_is_reported() {
         "beta is the account in use, so it cannot be forgotten.",
         vec![warning("auth_overridden", "ANTHROPIC_API_KEY is set")],
     ));
-    model.send(forget("claude/beta"));
+    model.send(forget(Tool::Claude, "beta"));
     model.run(&mut machine);
     assert_eq!(machine.forgot, ["claude/alpha", "claude/beta"]);
     let refused = model.state.presented.clone().expect("said");
-    assert_eq!(refused.title, words::could_not_remove("claude/beta"));
+    assert_eq!(refused.title, words::could_not_remove("beta"));
     assert_eq!(
         refused.message,
         "beta is the account in use, so it cannot be forgotten."
@@ -213,8 +216,14 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
     let mut machine = Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().uuid("same").build(),
         account(Some("personal")).build(),
-        account(Some("work")).of("codex").uuid("same").build(),
-        account(Some("spare")).of("codex").signed_in().build(),
+        account(Some("work"))
+            .of(ProviderId::Codex)
+            .uuid("same")
+            .build(),
+        account(Some("spare"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ])));
     model.refresh(&mut machine);
     let rows: Vec<crate::AccountItem> = model
@@ -236,7 +245,11 @@ fn two_tools_work_accounts_are_forgotten_by_their_own_name() {
     assert_ne!(codex_work.id, claude_work.id);
 
     for row in [codex_work, claude_work] {
-        model.send(forget(row.qualified.as_deref().expect("enrolled")));
+        let remove = (row.actions.iter())
+            .find(|action| action.kind == crate::ActionKind::Remove)
+            .and_then(|action| action.intent.clone())
+            .expect("enrolled");
+        model.send(remove);
         model.run(&mut machine);
     }
     assert_eq!(machine.forgot, ["codex/work", "claude/work"]);
@@ -259,31 +272,31 @@ fn naming_and_renaming_close_only_their_own_sheet() {
     model.refresh(&mut machine);
 
     let others = [
-        Sheet::Add { provider: None },
-        naming("codex", "job"),
-        renaming("claude", "other"),
+        Sheet::Add { tool: None },
+        naming(Tool::Codex, "job"),
+        renaming(Tool::Claude, "other"),
     ];
     for other in &others {
         put_up(&mut model, &mut machine, other.clone());
-        model.send(enrol("claude"));
+        model.send(enrol(Tool::Claude));
         model.run(&mut machine);
         let shown = model.shown();
         assert_eq!(shown.sheet_failure, None);
         assert_eq!(shown.sheet.as_ref(), Some(other));
     }
     model.send(Intent::CloseSheet);
-    model.send(enrol("claude"));
+    model.send(enrol(Tool::Claude));
     model.run(&mut machine);
-    assert_eq!(model.shown().sheet, Some(naming("claude", "work")));
+    assert_eq!(model.shown().sheet, Some(naming(Tool::Claude, "work")));
 
-    for other in others.iter().chain([&renaming("codex", "personal")]) {
+    for other in others.iter().chain([&renaming(Tool::Codex, "personal")]) {
         put_up(&mut model, &mut machine, other.clone());
-        model.send(rename("claude", "personal", "home"));
+        model.send(rename(Tool::Claude, "personal", "home"));
         model.run(&mut machine);
         assert_eq!(model.shown().sheet.as_ref(), Some(other));
     }
-    put_up(&mut model, &mut machine, renaming("claude", "personal"));
-    model.send(rename("claude", "personal", "home"));
+    put_up(&mut model, &mut machine, renaming(Tool::Claude, "personal"));
+    model.send(rename(Tool::Claude, "personal", "home"));
     model.run(&mut machine);
     assert_eq!(model.shown().sheet, None);
     assert_eq!(
@@ -296,7 +309,7 @@ fn naming_and_renaming_close_only_their_own_sheet() {
 #[test]
 fn a_read_that_started_before_naming_an_account_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
-        model.send(enrol("codex"));
+        model.send(enrol(Tool::Codex));
         model.run(machine);
     });
 }
@@ -305,7 +318,7 @@ fn a_read_that_started_before_naming_an_account_is_dropped_when_it_lands() {
 #[test]
 fn a_read_that_started_before_a_rename_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
-        model.send(rename("codex", "spare", "home"));
+        model.send(rename(Tool::Codex, "spare", "home"));
         model.run(machine);
     });
 }
@@ -314,7 +327,7 @@ fn a_read_that_started_before_a_rename_is_dropped_when_it_lands() {
 #[test]
 fn a_read_that_started_before_forgetting_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
-        model.send(forget("codex/spare"));
+        model.send(forget(Tool::Codex, "spare"));
         model.run(machine);
     });
 }
@@ -394,7 +407,7 @@ fn a_look_landing_after_naming_an_account_leaves_the_read_after_it() {
         codex_account("job", false),
     ];
     a_look_landing_after(after, |model, machine| {
-        model.send(enrol("codex"));
+        model.send(enrol(Tool::Codex));
         model.run_but(machine, a_look_or_a_read);
     });
 }
@@ -406,7 +419,7 @@ fn a_look_landing_after_a_rename_leaves_the_read_after_it() {
         codex_account("home", false),
     ];
     a_look_landing_after(after, |model, machine| {
-        model.send(rename("codex", "spare", "home"));
+        model.send(rename(Tool::Codex, "spare", "home"));
         model.run_but(machine, a_look_or_a_read);
     });
 }
@@ -414,7 +427,7 @@ fn a_look_landing_after_a_rename_leaves_the_read_after_it() {
 #[test]
 fn a_look_landing_after_forgetting_leaves_the_read_after_it() {
     a_look_landing_after(vec![codex_account("personal", true)], |model, machine| {
-        model.send(forget("codex/spare"));
+        model.send(forget(Tool::Codex, "spare"));
         model.run_but(machine, a_look_or_a_read);
     });
 }
@@ -426,7 +439,7 @@ fn a_look_landing_after_updating_the_config_leaves_the_read_after_it() {
         codex_account("spare", false),
     ];
     a_look_landing_after(after, |model, machine| {
-        model.send(update_config("claude/work"));
+        model.send(update_config(Tool::Claude, "work"));
         model.run_but(machine, a_look_or_a_read);
     });
 }
@@ -445,14 +458,14 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             "a refused rename",
             Box::new(move |model, machine| {
                 machine.renaming = refused();
-                model.send(rename("codex", "spare", "home"));
+                model.send(rename(Tool::Codex, "spare", "home"));
                 model.run(machine);
             }),
         ),
         (
             "a forget that came to nothing",
             Box::new(|model, _| {
-                model.send(forget("codex/spare"));
+                model.send(forget(Tool::Codex, "spare"));
                 let forgetting = model.next();
                 model.give(Answer::Lost(forgetting));
             }),
@@ -461,14 +474,14 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             "a refused config update",
             Box::new(move |model, machine| {
                 machine.updating_config = Err(refusal("refused", "it was refused", Vec::new()));
-                model.send(update_config("claude/work"));
+                model.send(update_config(Tool::Claude, "work"));
                 model.run(machine);
             }),
         ),
         (
             "a config update that came to nothing",
             Box::new(|model, _| {
-                model.send(update_config("claude/work"));
+                model.send(update_config(Tool::Claude, "work"));
                 let updating = model.next();
                 model.give(Answer::Lost(updating));
             }),
@@ -477,7 +490,7 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             "a refused name",
             Box::new(move |model, machine| {
                 machine.enrolling_current = Err(refusal("refused", "refused", Vec::new()));
-                model.send(enrol("codex"));
+                model.send(enrol(Tool::Codex));
                 model.run(machine);
             }),
         ),
@@ -517,15 +530,15 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             "a rename whose read fails",
             Box::new(move |model, machine| {
                 machine.answer = Err(refusal("unreachable", "could not be reached", Vec::new()));
-                model.send(rename("codex", "spare", "home"));
+                model.send(rename(Tool::Codex, "spare", "home"));
                 model.run(machine);
             }),
         ),
         (
             "two changes, the first one's read dropped",
             Box::new(|model, machine| {
-                model.send(rename("codex", "spare", "home"));
-                model.send(forget("codex/home"));
+                model.send(rename(Tool::Codex, "spare", "home"));
+                model.send(forget(Tool::Codex, "home"));
                 model.run(machine);
             }),
         ),
@@ -534,7 +547,7 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             Box::new(move |model, machine| {
                 machine.enrolling = Err(refusal("refused", "refused", Vec::new()));
                 model.send(Intent::SignIn {
-                    provider: "codex".into(),
+                    tool: Tool::Codex,
                     again: None,
                 });
                 model.run(machine);
@@ -547,7 +560,7 @@ fn however_a_change_ends_it_gives_the_index_back_to_the_poll() {
             "a sign-in whose enrolment came to nothing",
             Box::new(|model, machine| {
                 model.send(Intent::SignIn {
-                    provider: "codex".into(),
+                    tool: Tool::Codex,
                     again: None,
                 });
                 model.run(machine);
@@ -590,8 +603,13 @@ fn a_look_while_a_rename_is_made_leaves_what_was_said_about_the_account() {
         claude("work", true, 100.0),
         claude("personal", false, 10.0),
     ])));
-    machine.switched = switched("claude", "personal", "work", vec![still_running()]);
-    switch(&mut model, &mut machine, "claude/work");
+    machine.switched = switched(
+        ProviderId::Claude,
+        "personal",
+        "work",
+        vec![still_running()],
+    );
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     model.notice(&mut machine);
     assert_eq!(tos(&model), ["work"]);
     assert_eq!(machine.posted.len(), 1, "told that work ran out");
@@ -600,7 +618,7 @@ fn a_look_while_a_rename_is_made_leaves_what_was_said_about_the_account() {
         claude("office", true, 100.0),
         claude("personal", false, 10.0),
     ]);
-    model.send(rename("claude", "work", "office"));
+    model.send(rename(Tool::Claude, "work", "office"));
     let renaming = model.take(|job| matches!(job, Job::Rename { .. }));
     machine.changed += 1;
     machine.answer = Ok(renamed.clone());
@@ -637,10 +655,15 @@ fn a_rename_carries_what_was_said_about_the_account() {
         codex_account("work", true),
         codex_account("personal", false),
     ])));
-    machine.switched = switched("claude", "personal", "work", Vec::new());
-    switch(&mut model, &mut machine, "claude/work");
-    machine.switched = switched("codex", "codex/personal", "codex/work", Vec::new());
-    switch(&mut model, &mut machine, "codex/work");
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "work");
+    machine.switched = switched(
+        ProviderId::Codex,
+        "codex/personal",
+        "codex/work",
+        Vec::new(),
+    );
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     assert_eq!(tos(&model), ["work", "codex/work"]);
     let from = |model: &Hand| {
         model.state.last_switches[1]
@@ -650,23 +673,26 @@ fn a_rename_carries_what_was_said_about_the_account() {
     };
     let advice = |model: &Hand| model.state.advice.first().cloned().expect("advice");
     assert_eq!(from(&model).as_deref(), Some("personal"));
-    assert_eq!(advice(&model).switch_to, "claude/personal");
+    assert_eq!(
+        advice(&model).switch_to,
+        Key::new(ProviderId::Claude, "personal")
+    );
 
     // Each read after a rename fails here, so what is said is what the rename carried.
     machine.answer = Err(refusal("unreachable", "could not be reached", Vec::new()));
 
-    model.send(rename("claude", "personal", "spare"));
+    model.send(rename(Tool::Claude, "personal", "spare"));
     model.run(&mut machine);
     assert_eq!(
         (advice(&model).instead, advice(&model).switch_to),
-        ("spare".into(), "claude/spare".into())
+        ("spare".into(), Key::new(ProviderId::Claude, "spare"))
     );
     assert_eq!(
         from(&model).as_deref(),
         Some("personal"),
         "Codex's is another account"
     );
-    model.send(rename("codex", "personal", "home"));
+    model.send(rename(Tool::Codex, "personal", "home"));
     model.run(&mut machine);
     assert_eq!(from(&model).as_deref(), Some("home"));
     assert_eq!(
@@ -674,11 +700,11 @@ fn a_rename_carries_what_was_said_about_the_account() {
         "spare",
         "Claude Code's is another account"
     );
-    model.send(rename("codex", "work", "job"));
+    model.send(rename(Tool::Codex, "work", "job"));
     model.run(&mut machine);
     assert_eq!(tos(&model), ["work", "codex/job"]);
     assert_eq!(advice(&model).ran, "work");
-    model.send(rename("claude", "work", "office"));
+    model.send(rename(Tool::Claude, "work", "office"));
     model.run(&mut machine);
     assert_eq!(tos(&model), ["office", "codex/job"]);
     assert_eq!(advice(&model).ran, "office");
@@ -712,7 +738,7 @@ fn a_rename_carries_what_was_said_about_the_account() {
         .state
         .advice
         .iter()
-        .map(|advice| advice.switch_to.clone())
+        .map(|advice| advice.switch_to.qualified())
         .collect();
     assert_eq!(offered, ["claude/spare"]);
     assert_eq!(model.state.told, told, "and not told again");
@@ -727,22 +753,21 @@ fn a_rename_carries_what_was_said_about_the_account() {
 #[test]
 fn a_name_is_saved_as_its_sheet_offers_it() {
     let mut model = Hand::new();
-    assert_eq!(model.send(rename("claude", "work", " \n")), []);
-    assert_eq!(model.send(rename("claude", "work", " work ")), []);
+    assert_eq!(model.send(rename(Tool::Claude, "work", " \n")), []);
+    assert_eq!(model.send(rename(Tool::Claude, "work", " work ")), []);
     assert_eq!(
-        model.send(enrol("codex")),
+        model.send(enrol(Tool::Codex)),
         [Job::Enrol {
-            provider: "codex".into(),
+            tool: ProviderId::Codex,
             again: None,
             from: None,
             reopen: None,
         }]
     );
     assert_eq!(
-        model.send(rename("claude", "work", " office ")),
+        model.send(rename(Tool::Claude, "work", " office ")),
         [Job::Rename {
-            provider: "claude".into(),
-            label: "work".into(),
+            account: Key::new(ProviderId::Claude, "work"),
             to: "office".into(),
             from: None,
         }]
@@ -756,11 +781,11 @@ fn a_name_is_saved_as_its_sheet_offers_it() {
 fn a_sheet_saving_a_name_holds_back_until_it_answers() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, naming("claude", "acme"));
-    let jobs = model.send(rename("claude", "acme", "work"));
+    put_up(&mut model, &mut machine, naming(Tool::Claude, "acme"));
+    let jobs = model.send(rename(Tool::Claude, "acme", "work"));
     assert_eq!(jobs.len(), 1);
     assert!(model.shown().sheet_text.expect("the sheet").saving);
-    assert_eq!(model.send(rename("claude", "acme", "work")), [], "once");
+    assert_eq!(model.send(rename(Tool::Claude, "acme", "work")), [], "once");
 
     machine.renaming = Err(refusal("label_taken", "Taken.", Vec::new()));
     let job = model.next();
@@ -770,7 +795,7 @@ fn a_sheet_saving_a_name_holds_back_until_it_answers() {
     assert!(!shown.sheet_text.expect("the sheet").saving);
     assert!(shown.sheet_failure.is_some());
     assert_eq!(
-        model.send(rename("claude", "acme", "work")).len(),
+        model.send(rename(Tool::Claude, "acme", "work")).len(),
         1,
         "and again"
     );
@@ -780,8 +805,8 @@ fn a_sheet_saving_a_name_holds_back_until_it_answers() {
 fn a_new_name_for_the_account_just_added_is_a_rename() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, naming("claude", "acme"));
-    let to = crate::present::check_name(naming("claude", "acme"), "claude".into(), "work".into())
+    put_up(&mut model, &mut machine, naming(Tool::Claude, "acme"));
+    let to = crate::present::check_name(naming(Tool::Claude, "acme"), Tool::Claude, "work".into())
         .intent
         .expect("a rename");
     model.send(to);
@@ -797,9 +822,9 @@ fn a_new_name_for_the_account_just_added_is_a_rename() {
 fn saving_the_name_unchanged_renames_nothing() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, naming("claude", "acme"));
+    put_up(&mut model, &mut machine, naming(Tool::Claude, "acme"));
     let unchanged =
-        crate::present::check_name(naming("claude", "acme"), "claude".into(), " acme".into())
+        crate::present::check_name(naming(Tool::Claude, "acme"), Tool::Claude, " acme".into())
             .intent
             .expect("the sheet's button");
     assert_eq!(model.send(unchanged), []);
@@ -813,9 +838,9 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.renaming = Err(refusal("label_taken", "Taken too.", Vec::new()));
 
-    put_up(&mut model, &mut machine, renaming("claude", "work"));
-    model.send(rename("claude", "work", "office"));
-    put_up(&mut model, &mut machine, Sheet::Add { provider: None });
+    put_up(&mut model, &mut machine, renaming(Tool::Claude, "work"));
+    model.send(rename(Tool::Claude, "work", "office"));
+    put_up(&mut model, &mut machine, Sheet::Add { tool: None });
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None, "not in another sheet");
     assert_eq!(
@@ -829,8 +854,8 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
 fn a_save_that_came_to_nothing_says_so() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, renaming("claude", "work"));
-    let jobs = model.send(rename("claude", "work", "office"));
+    put_up(&mut model, &mut machine, renaming(Tool::Claude, "work"));
+    let jobs = model.send(rename(Tool::Claude, "work", "office"));
     let job = jobs.into_iter().next().expect("the rename");
     model.give(Answer::Lost(job));
     let shown = model.shown();
@@ -896,7 +921,7 @@ fn updating_claude_codes_config_is_no_switch() {
 
     model.send(the_update(&model));
     let shown = model.shown();
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     let rows: Vec<(String, bool)> = shown
         .sections
         .into_iter()
@@ -966,7 +991,7 @@ fn a_config_update_refused_is_said_in_the_window() {
         "`work` is not signed in now, so Pitboard left Claude Code's config as it is.",
         Vec::new(),
     ));
-    model.send(update_config("claude/work"));
+    model.send(update_config(Tool::Claude, "work"));
     model.run(&mut machine);
     let refused = model.state.presented.clone().expect("said");
     assert_eq!(refused.title, words::COULD_NOT_UPDATE_CONFIG);
@@ -978,7 +1003,7 @@ fn a_config_update_refused_is_said_in_the_window() {
 // Recording the account an app shows, which reads its data folder only while it is closed.
 fn recording(model: &mut Hand, machine: &mut Stub) {
     model.refresh(machine);
-    model.send(enrol("desktop"));
+    model.send(enrol(Tool::Desktop));
     model.run(machine);
     let question = model.shown().quit_question.expect("asked first");
     model.send(question.confirmed);
@@ -990,13 +1015,13 @@ fn recording_the_account_an_app_shows_asks_before_it_quits_the_app() {
     let mut model = Hand::new();
     let mut machine = desktop_machine(true);
     model.refresh(&mut machine);
-    let jobs = model.send(enrol("desktop"));
+    let jobs = model.send(enrol(Tool::Desktop));
     assert_eq!(
         jobs,
         [Job::Holding {
-            qualified: "desktop/".into(),
+            account: Key::new(ProviderId::Desktop, ""),
             then: After::Enrol {
-                provider: "desktop".into(),
+                tool: ProviderId::Desktop,
                 again: None,
                 from: None,
             },
@@ -1020,7 +1045,7 @@ fn recording_the_account_an_app_shows_asks_before_it_quits_the_app() {
     recording(&mut model, &mut machine);
     assert_eq!(machine.enrolled, ["desktop/"]);
     assert!(model.asked.contains(&Job::Enrol {
-        provider: "desktop".into(),
+        tool: ProviderId::Desktop,
         again: None,
         from: None,
         reopen: Some(StandInApps::copy_of(CLAUDE)),
@@ -1030,7 +1055,7 @@ fn recording_the_account_an_app_shows_asks_before_it_quits_the_app() {
 #[test]
 fn a_recording_whose_app_does_not_quit_reads_nothing_and_lets_its_sheet_go() {
     let adding = Sheet::Add {
-        provider: Some("desktop".into()),
+        tool: Some(Tool::Desktop),
     };
     for (quits, lingers, lost, message, asked) in quits_failed() {
         let mut model = Hand::new();
@@ -1041,7 +1066,7 @@ fn a_recording_whose_app_does_not_quit_reads_nothing_and_lets_its_sheet_go() {
         model.refresh(&mut machine);
         put_up(&mut model, &mut machine, adding.clone());
         model.send(Intent::SignIn {
-            provider: "desktop".into(),
+            tool: Tool::Desktop,
             again: None,
         });
         model.run(&mut machine);
@@ -1074,9 +1099,14 @@ fn a_recording_whose_app_does_not_quit_reads_nothing_and_lets_its_sheet_go() {
 fn the_app_quit_to_record_an_account_is_opened_only_after_a_switch_asked_meanwhile() {
     let mut model = Hand::new();
     let mut machine = desktop_machine(true);
-    machine.switched = switched("desktop", "desktop/work", "desktop/home", Vec::new());
+    machine.switched = switched(
+        ProviderId::Desktop,
+        "desktop/work",
+        "desktop/home",
+        Vec::new(),
+    );
     model.refresh(&mut machine);
-    model.send(enrol("desktop"));
+    model.send(enrol(Tool::Desktop));
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked first");
     model.send(question.confirmed);
@@ -1084,7 +1114,7 @@ fn the_app_quit_to_record_an_account_is_opened_only_after_a_switch_asked_meanwhi
     let answer = machine.answer(quit);
     model.give(answer);
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     model.run_but(&mut machine, a_switch);
     assert_eq!(machine.enrolled, ["desktop/"]);

@@ -6,7 +6,7 @@ import SwiftUI
 struct SignInSheet: View {
     let model: AppModel
     let sheet: Sheet
-    @State private var provider: String
+    @State private var tool: Tool?
     @State private var code = ""
     // Kept while the sheet closes after the sign-in, so the form does not flash on the way out.
     @State private var shown: (signIn: RunningSignIn, text: SigningInText)?
@@ -18,7 +18,7 @@ struct SignInSheet: View {
         self.model = model
         self.sheet = sheet
         // A picker drawn with a selection none of its items has can draw with none selected.
-        _provider = State(initialValue: model.sheetText?.tool ?? "")
+        _tool = State(initialValue: model.sheetText?.tool)
     }
 
     var body: some View {
@@ -50,15 +50,15 @@ struct SignInSheet: View {
     @ViewBuilder private var form: some View {
         let text = model.sheetText
         let tools = text?.tools ?? []
-        let chosen = tools.first { $0.code == provider }
+        let chosen = tools.first { $0.tool == tool }
         let busy = text?.saving ?? false
-        let start = checkName(sheet: sheet, tool: provider, typed: "").intent
+        let start = tool.flatMap { checkName(sheet: sheet, tool: $0, typed: "").intent }
         Form {
             Section {
                 if tools.count > 1 {
-                    Picker(words.sheet.tool, selection: $provider) {
-                        ForEach(tools, id: \.code) { tool in
-                            Text(tool.name).tag(tool.code)
+                    Picker(words.sheet.tool, selection: $tool) {
+                        ForEach(tools, id: \.code) { offered in
+                            Text(offered.name).tag(Optional(offered.tool))
                         }
                     }
                     .accessibilityIdentifier("sheet.tool")
@@ -101,7 +101,7 @@ struct SignInSheet: View {
                     .accessibilityIdentifier("sheet.confirm")
             }
         }
-        .onChange(of: provider) { edited() }
+        .onChange(of: tool) { edited() }
         // Back from installing a tool Pitboard said it could not find.
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -114,8 +114,8 @@ struct SignInSheet: View {
     }
 
     private func signIn() {
-        let chosen = model.sheetText?.tools.first { $0.code == provider }
-        guard let intent = checkName(sheet: sheet, tool: provider, typed: "").intent,
+        let chosen = model.sheetText?.tools.first { $0.tool == tool }
+        guard let tool, let intent = checkName(sheet: sheet, tool: tool, typed: "").intent,
             chosen?.missing == nil, model.signingIn == nil, shown == nil,
             model.sheetText?.saving != true
         else { return }

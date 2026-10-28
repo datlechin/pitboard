@@ -30,13 +30,10 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
         return None;
     }
     let accounts = seen.accounts();
-    let tools: Vec<&str> = accounts
-        .iter()
-        .map(|account| account.provider.as_str())
-        .collect();
+    let tools: Vec<_> = accounts.iter().map(|account| account.provider).collect();
     let switches = in_order(&tools, &seen.tools).into_iter().flat_map(|tool| {
         accounts.iter().filter(move |account| {
-            account.provider == tool && account.qualified.is_some() && !account.unplaced
+            account.provider == tool && account.key.is_some() && !account.unplaced
         })
     });
     let mut tasks: Vec<JumpTask> = switches

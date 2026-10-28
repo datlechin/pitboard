@@ -11,9 +11,12 @@ use super::testing::records::{
     account, claude, claude_code, codex, codex_account, percent, refusal, status, warned, warning,
 };
 use super::{Intent, NotificationButton, ReadFailure, RunOutNotice, Sheet};
+use crate::AccountKey;
+use crate::Tool;
 use crate::present::words;
 use crate::{Account, Warning};
 use pitboard_core::host::OS;
+use pitboard_core::provider::ProviderId;
 use pitboard_core::status::{Stale, Standing};
 use std::time::Duration;
 
@@ -330,8 +333,7 @@ fn a_login_replaced_outside_offers_to_sign_in_again() {
             words::sign_in_again(OS, true),
             Intent::PresentSheet {
                 sheet: Sheet::SignInAgain {
-                    provider: "claude".into(),
-                    label: "work".into(),
+                    account: AccountKey::new(Tool::Claude, "work")
                 },
             }
         )]
@@ -482,8 +484,7 @@ fn a_refused_parked_login_needs_signing_in_again() {
         row.action.map(|action| action.intent),
         Some(Intent::PresentSheet {
             sheet: Sheet::SignInAgain {
-                provider: "claude".into(),
-                label: "work".into(),
+                account: AccountKey::new(Tool::Claude, "work")
             },
         })
     );
@@ -613,7 +614,7 @@ fn a_login_replaced_a_refused_switch_says_is_posted() {
         vec![replaced.clone()],
     ));
 
-    switch(&mut model, &mut machine, "claude/work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
 
     assert_eq!(model.state.warnings, std::slice::from_ref(&replaced));
     assert_eq!(bodies(&machine), [replaced.message.as_str()]);
@@ -839,7 +840,7 @@ fn a_change_noticed_keeps_the_plan_shown_for_a_login_nobody_enrolled() {
         plan: plan.map(str::to_owned),
         ..account
     };
-    let stranger = || account(None, "claude", true, Vec::new());
+    let stranger = || account(None, ProviderId::Claude, true, Vec::new());
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![
         with(Some("Pro"), stranger()),

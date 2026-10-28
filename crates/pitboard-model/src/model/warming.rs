@@ -8,12 +8,16 @@ use super::testing::machine::{Hand, Stub};
 use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Intent, RunOutNotice};
+use crate::AccountKey;
+use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::{ActionKind, WarmDetail, words};
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
 use pitboard_core::host::OS;
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::switch::warm::{Apart, WarmUp, told_apart};
 use pitboard_core::testing::{Ran, Started, WarmScript};
 use std::sync::Arc;
@@ -171,7 +175,7 @@ fn one_warm_up_runs_at_a_time() {
     assert!(
         model
             .send(Intent::WarmNow {
-                qualified: "claude/personal".into()
+                account: AccountKey::new(Tool::Claude, "personal")
             })
             .is_empty(),
         "nor is one asked for now"
@@ -264,7 +268,7 @@ fn a_failure_in_other_words_is_notified_once() {
     let core = world.core();
     let refused = || {
         let refused = core
-            .warm_now("claude/personal")
+            .warm_now(&Key::new(ProviderId::Claude, "personal"))
             .expect_err("came to nothing");
         let PitboardError::Failed {
             code,
@@ -322,13 +326,13 @@ fn asked_for_now_what_went_wrong_is_said_in_the_window() {
     machine.warming = Err(came_to_nothing());
     let mut model = started(&mut machine);
     model.send(Intent::WarmNow {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     model.run(&mut machine);
     assert_eq!(machine.warmed, [Some("claude/personal".to_owned())]);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said");
-    assert_eq!(failure.title, words::could_not_warm("claude/personal"));
+    assert_eq!(failure.title, words::could_not_warm("personal"));
     assert_eq!(failure.code.as_deref(), Some("warm_up_not_started"));
     assert!(machine.posted.is_empty());
     assert_eq!(
@@ -397,7 +401,7 @@ fn a_setting_that_cannot_be_read_is_said_and_a_change_to_it_refused() {
         Some(pitboard_core::words::capitalised(message))
     );
     model.send(Intent::SetWarm {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
         on: true,
     });
     model.run(&mut machine);
@@ -413,7 +417,7 @@ fn turning_an_account_on_warms_it_up_where_it_is_due() {
     let mut model = started(&mut machine);
     assert!(machine.warmed.is_empty());
     model.send(Intent::SetWarm {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
         on: true,
     });
     model.run(&mut machine);

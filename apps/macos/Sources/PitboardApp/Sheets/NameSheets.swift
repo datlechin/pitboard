@@ -19,7 +19,7 @@ struct NameSheet: View {
         let text = model.sheetText
         // A name being saved cannot be withdrawn.
         let busy = text?.saving ?? false
-        let check = checkName(sheet: sheet, tool: text?.tool ?? "", typed: name)
+        let check = text.map { checkName(sheet: sheet, tool: $0.tool, typed: name) }
         Form {
             Section {
                 TextField(words.sheet.name, text: $name, prompt: Text(text?.prompt ?? ""))
@@ -29,7 +29,7 @@ struct NameSheet: View {
             } header: {
                 SheetHeader(title: text?.title ?? "", message: text?.message ?? "")
             } footer: {
-                if let problem = check.problem {
+                if let problem = check?.problem {
                     NameProblem(problem: problem)
                 }
             }
@@ -48,7 +48,7 @@ struct NameSheet: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button(text?.confirm ?? "", action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(check.intent == nil || busy)
+                    .disabled(check?.intent == nil || busy)
                     .accessibilityIdentifier("sheet.confirm")
             }
         }

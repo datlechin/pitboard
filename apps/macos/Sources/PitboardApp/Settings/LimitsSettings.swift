@@ -85,7 +85,7 @@ struct LimitsSettings: View {
                     Toggle(
                         isOn: Binding(
                             get: { account.on },
-                            set: { model.send(.setWarm(qualified: account.qualified, on: $0)) })
+                            set: { model.send(.setWarm(account: account.account, on: $0)) })
                     ) {
                         Text(account.title)
                         if let standing = account.standing {

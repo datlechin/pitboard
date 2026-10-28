@@ -261,7 +261,7 @@ public sealed class WindowsNotificationsTests
 
         model.Send(new Intent.Start());
         Assert.IsNotNull(told.Until(snapshot => snapshot is { Reading: false, UpdatedWindow.Length: > 0, Sections.Length: > 0 }), "no accounts were read");
-        model.Send(new Intent.SwitchTo("claude/personal"));
+        model.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")));
         var shown = system.Shown.TryTake(out var notification, Patience);
         model.Shutdown();
 

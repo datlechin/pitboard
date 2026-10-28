@@ -2,7 +2,9 @@
 //! didn't find, and what stands in for a list with nothing in it yet.
 
 use super::{CONTINUE, add_account, this_machine, titled};
+use crate::Tool;
 use pitboard_core::host::Os;
+use pitboard_core::provider::ProviderId;
 
 // `tool`: the tool named, where the account's is not the only one shown.
 pub(crate) fn add_a_second(tool: Option<&str>) -> String {
@@ -129,17 +131,17 @@ pub(crate) fn no_tool(tools: &str) -> String {
 }
 
 // What Pitboard needs of `tool` to sign in to it, where it did not find that.
-pub(crate) fn missing(os: Os, tool: &str) -> Option<crate::present::Missing> {
+pub(crate) fn missing(os: Os, tool: ProviderId) -> crate::present::Missing {
     let here = this_machine(os);
-    let (title, detail, link_title, link) = match tool {
-        "claude" => (
+    let (title, detail, link_title, link) = match Tool::from(tool) {
+        Tool::Claude => (
             format!("Pitboard can’t find Claude Code on {here}."),
             "Adding a Claude Code account runs Claude Code’s own sign-in. Install it, then come \
              back to this window.",
             how_to_install_claude_code(os),
             crate::present::notices::INSTALL_CLAUDE_CODE,
         ),
-        "codex" => (
+        Tool::Codex => (
             format!("Pitboard can’t find the Codex CLI on {here}."),
             "Adding a Codex account runs the Codex CLI’s sign-in, not the copy inside the ChatGPT \
              app. Install the CLI, then come back to this window.",
@@ -150,21 +152,20 @@ pub(crate) fn missing(os: Os, tool: &str) -> Option<crate::present::Missing> {
             ),
             INSTALL_CODEX_CLI,
         ),
-        "desktop" => (
+        Tool::Desktop => (
             format!("Pitboard can’t find Claude Desktop on {here}."),
             "Pitboard finds Claude Desktop by the data it keeps once it has been opened. Open \
              Claude, sign in, then come back to this window.",
             "Download Claude".to_owned(),
             DOWNLOAD_CLAUDE,
         ),
-        _ => return None,
     };
-    Some(crate::present::Missing {
+    crate::present::Missing {
         title,
         detail: detail.into(),
         link_title,
         link: link.into(),
-    })
+    }
 }
 
 // OpenAI's page for the Codex CLI, whose install section names each way to install it.
@@ -211,7 +212,7 @@ mod tests {
     // Each tool not found says what Pitboard needs of it, on each system in its own name.
     #[test]
     fn a_tool_not_found_says_what_to_install() {
-        let codex = missing(Os::Windows, "codex").expect("codex");
+        let codex = missing(Os::Windows, ProviderId::Codex);
         assert_eq!(codex.title, "Pitboard can’t find the Codex CLI on this PC.");
         assert_eq!(codex.link_title, "How to install the Codex CLI");
         assert_eq!(
@@ -220,9 +221,9 @@ mod tests {
              app. Install the CLI, then come back to this window."
         );
         assert_eq!(codex.link, "https://developers.openai.com/codex/cli");
-        let codex = missing(Os::MacOs, "codex").expect("codex");
+        let codex = missing(Os::MacOs, ProviderId::Codex);
         assert_eq!(codex.link_title, "How to Install the Codex CLI");
-        let claude = missing(Os::MacOs, "claude").expect("claude");
+        let claude = missing(Os::MacOs, ProviderId::Claude);
         assert_eq!(claude.title, "Pitboard can’t find Claude Code on this Mac.");
         assert_eq!(
             claude.detail,
@@ -230,7 +231,7 @@ mod tests {
              come back to this window."
         );
         assert_eq!(claude.link_title, "How to Install Claude Code");
-        let desktop = missing(Os::MacOs, "desktop").expect("desktop");
+        let desktop = missing(Os::MacOs, ProviderId::Desktop);
         assert_eq!(
             desktop.title,
             "Pitboard can’t find Claude Desktop on this Mac."
@@ -240,7 +241,6 @@ mod tests {
             "Pitboard finds Claude Desktop by the data it keeps once it has been opened. Open \
              Claude, sign in, then come back to this window."
         );
-        assert_eq!(missing(Os::MacOs, "nobody"), None);
     }
 
     // What the window and the menu say until the accounts are set up, pinned once.

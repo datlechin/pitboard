@@ -98,6 +98,15 @@ impl Preferences {
         self.at_limit.is_some() || self.auto_switch
     }
 
+    pub(crate) fn declined_second_account(&self, tool: ProviderId) -> bool {
+        self.second_account_declined.contains(tool.code())
+    }
+
+    // Whether it was not declined already.
+    pub(crate) fn decline_second_account(&mut self, tool: ProviderId) -> bool {
+        self.second_account_declined.insert(tool.code().to_owned())
+    }
+
     pub(crate) fn declined(&self, tip: Tip) -> bool {
         self.tips_declined.contains(tip_code(tip))
     }

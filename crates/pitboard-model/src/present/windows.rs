@@ -317,7 +317,7 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
                     title: words::add_account(seen.os, true),
                     intent: Intent::PresentSheet {
                         sheet: Sheet::Add {
-                            provider: Some(link.site.provider.clone()),
+                            tool: Some(link.site.tool),
                         },
                     },
                     enabled: true,

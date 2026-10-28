@@ -12,9 +12,10 @@ use crate::model::state::{Answer, Cadence, Job, Msg, Now, State};
 use crate::model::{AppControl, Intent, RunOutNotice, Snapshot};
 use crate::{
     AutoLooked, AutoSwitched, Change, Check, Doctored, Enrolled, EnrolledAs, FoundCommandLine,
-    GaveUp, Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Tool, Uninstalled,
+    GaveUp, Holding, OwnCommandLine, PitboardError, Schedule, Status, Switched, Uninstalled,
     WarmRefused, Warning,
 };
+use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::warm::Apart;
 use pitboard_core::switch::{Left, Stowed};
@@ -31,7 +32,7 @@ pub(crate) fn desktop_machine(open: bool) -> Stub {
     machine.found = vec![claude_code(), claude_desktop()];
     machine
         .held
-        .insert("desktop".into(), vec![claude_holding()]);
+        .insert(ProviderId::Desktop, vec![claude_holding()]);
     machine.apps = StandInApps::new(if open { &[CLAUDE] } else { &[] }, true);
     machine
 }
@@ -55,7 +56,7 @@ pub(crate) struct Stub {
     /// it measured is recorded.
     pub readings: i64,
     /// The tools whose program the app found.
-    pub found: Vec<Tool>,
+    pub found: Vec<ProviderId>,
     /// What a switch gives.
     pub switched: Result<Switched, Refusal>,
     /// Every account switched to, as the model named it.
@@ -70,9 +71,9 @@ pub(crate) struct Stub {
     pub auto: Result<AutoSwitched, Refusal>,
     /// The share each switch by itself was asked at, in order.
     pub auto_at: Vec<u8>,
-    /// What runs each tool with its login in memory, by the tool's code, as the core's
-    /// holder detection finds it in the process list.
-    pub held: HashMap<String, Vec<Holding>>,
+    /// What runs each tool with its login in memory, as the core's holder detection finds it
+    /// in the process list.
+    pub held: HashMap<ProviderId, Vec<Holding>>,
     /// The other apps on this machine.
     pub apps: Arc<StandInApps>,
     /// What giving up on an interrupted switch gives.
@@ -80,7 +81,7 @@ pub(crate) struct Stub {
     /// What starting a sign-in's tool gives.
     pub starting: Result<(), Refusal>,
     // the account the core parked for a sign-in inside an app, as SwitchTo takes it
-    pub put_back: Option<String>,
+    pub put_back: Option<Key>,
     // whether, after an app has quit, the core still finds part of it running
     pub lingers: bool,
     // what the core says of an app's data folder: whole, and a move of its login waiting
@@ -213,7 +214,7 @@ impl Stub {
             switched: already_active("work", Vec::new()),
             switched_to: Vec::new(),
             replaced_with: Vec::new(),
-            look: Ok(AutoLooked::Stands(watching("work"))),
+            look: Ok(AutoLooked::Stands(Box::new(watching("work")))),
             looked_at: Vec::new(),
             auto: Ok(watching("work")),
             auto_at: Vec::new(),
@@ -365,14 +366,15 @@ impl Stub {
                 }
                 Answer::WarmedUp { asked: None, done }
             }
-            Job::WarmNow { qualified } => {
-                self.warmed.push(Some(qualified.clone()));
+            Job::WarmNow { account } => {
+                self.warmed.push(Some(account.qualified()));
                 Answer::WarmedUp {
-                    asked: Some(qualified),
+                    asked: Some(account),
                     done: self.warming.clone().map_err(warm_refused),
                 }
             }
-            Job::SetWarm { qualified, on } => {
+            Job::SetWarm { account, on } => {
+                let qualified = account.qualified();
                 self.warm_turned.push((qualified.clone(), on));
                 if let Some(overview) = &mut self.warm {
                     for choice in &mut overview.accounts {
@@ -404,12 +406,11 @@ impl Stub {
             // What holds the login, and quitting an app, by the lanes' own rules over what
             // the test says runs, with no time given to quit: an app quits when asked, or
             // is still running.
-            Job::Holding { qualified, then } => {
-                let provider = Key::parse(&qualified).provider.code();
-                let holdings = self.held.get(provider).map_or(&[][..], Vec::as_slice);
+            Job::Holding { account, then } => {
+                let holdings = (self.held.get(&account.provider)).map_or(&[][..], Vec::as_slice);
                 Answer::Held {
-                    question: lanes::holder(holdings, self.apps.as_ref(), &qualified),
-                    qualified,
+                    question: lanes::holder(holdings, self.apps.as_ref(), &account),
+                    account,
                     then,
                 }
             }
@@ -425,18 +426,18 @@ impl Stub {
                 question,
                 then,
             },
-            Job::Switch { qualified, reopen } => {
-                self.switched_to.push(qualified.clone());
+            Job::Switch { account, reopen } => {
+                self.switched_to.push(account.qualified());
                 Answer::Switched {
-                    qualified,
+                    account,
                     reopen,
                     done: self.switched.clone().map_err(|refused| refused.error()),
                 }
             }
-            Job::Replace { qualified } => {
-                self.replaced_with.push(qualified.clone());
+            Job::Replace { account } => {
+                self.replaced_with.push(account.qualified());
                 Answer::Switched {
-                    qualified,
+                    account,
                     reopen: None,
                     done: self.switched.clone().map_err(|refused| refused.error()),
                 }
@@ -472,13 +473,9 @@ impl Stub {
             }
             // A sign-in's thread answers once its tool has started, as here, then with what
             // the tool says, which a test hands on itself, and once it has stopped.
-            Job::SignIn {
-                id,
-                provider,
-                again,
-            } => {
+            Job::SignIn { id, tool, again } => {
                 self.signed_in
-                    .push(format!("{provider}/{}", again.unwrap_or_default()));
+                    .push(Key::new(tool, again.unwrap_or_default()).qualified());
                 Answer::SignInStarted {
                     id,
                     started: self.starting.clone().map_err(|refused| refused.error()),
@@ -497,17 +494,15 @@ impl Stub {
                 Answer::Stopped
             }
             Job::Enrol {
-                provider,
+                tool,
                 again,
                 from,
                 reopen,
             } => {
-                self.enrolled.push(format!(
-                    "{provider}/{}",
-                    again.as_deref().unwrap_or_default()
-                ));
+                self.enrolled
+                    .push(Key::new(tool, again.as_deref().unwrap_or_default()).qualified());
                 Answer::Enrolled {
-                    provider,
+                    tool,
                     again,
                     from,
                     reopen,
@@ -517,26 +512,19 @@ impl Stub {
                         .map_err(|refused| refused.error()),
                 }
             }
-            Job::Rename {
-                provider,
-                label,
-                to,
-                from,
-            } => {
-                self.renamed
-                    .push((format!("{provider}/{label}"), to.clone()));
+            Job::Rename { account, to, from } => {
+                self.renamed.push((account.qualified(), to.clone()));
                 Answer::Renamed {
-                    provider,
-                    label,
+                    account,
                     to,
                     from,
                     done: self.renaming.clone().map_err(|refused| refused.error()),
                 }
             }
-            Job::Forget { qualified } => {
-                self.forgot.push(qualified.clone());
+            Job::Forget { account } => {
+                self.forgot.push(account.qualified());
                 Answer::Forgot {
-                    qualified,
+                    account,
                     done: self.forgetting.clone().map_err(|refused| refused.error()),
                 }
             }
@@ -554,8 +542,8 @@ impl Stub {
                         .map_err(|refused| refused.error()),
                 }
             }
-            Job::UpdateConfig { qualified } => {
-                self.configs_updated.push(qualified);
+            Job::UpdateConfig { account } => {
+                self.configs_updated.push(account.qualified());
                 Answer::ConfigUpdated(
                     self.updating_config
                         .clone()

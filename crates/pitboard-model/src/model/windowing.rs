@@ -10,6 +10,7 @@ use super::testing::machine::{Hand, Stub};
 use super::testing::records::{DANA, refusal, status};
 use super::windows::{LINK_SCHEME, WEB_SCHEME};
 use super::{DownloadEnd, EarlierWindowRecords, Intent};
+use crate::Tool;
 use crate::account_windows::records::{Entry, Records};
 use crate::account_windows::{WindowNoteKind, stores::derive};
 use crate::present::testing::account;
@@ -19,6 +20,7 @@ use crate::{
     SiteMenu, WaitingShown, WindowWaiting, downloads_quit_question,
 };
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
 
@@ -33,11 +35,14 @@ fn two_tools() -> Vec<Account> {
         account(Some("work")).signed_in().uuid("w").build(),
         account(Some("personal")).uuid("p").build(),
         account(Some("main"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .uuid("m")
             .build(),
-        account(Some("spare")).of("codex").uuid("s").build(),
+        account(Some("spare"))
+            .of(ProviderId::Codex)
+            .uuid("s")
+            .build(),
     ]
 }
 
@@ -251,7 +256,7 @@ fn a_pitboard_link_never_switches_an_account() {
     armed(&mut model);
     choose(&mut model, &claude("p"));
     model.run(&mut machine);
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
     assert_eq!(
         model.count(|job| matches!(job, Job::Holding { .. } | Job::Switch { .. })),
         0
@@ -305,7 +310,9 @@ fn the_picker_says_what_stands_in_the_way() {
     assert_eq!(retry.title, words::try_again(OS));
     assert_eq!(retry.intent, Intent::Refresh { asked: true });
 
-    let mut codex_only = Stub::reading(Ok(status(vec![account(Some("main")).of("codex").build()])));
+    let mut codex_only = Stub::reading(Ok(status(vec![
+        account(Some("main")).of(ProviderId::Codex).build(),
+    ])));
     let mut model = started(&mut codex_only);
     model.send(shared("https://claude.ai/", "pitboard"));
     let PickerShown::NoAccount {
@@ -327,7 +334,7 @@ fn the_picker_says_what_stands_in_the_way() {
         add.intent,
         Intent::PresentSheet {
             sheet: super::Sheet::Add {
-                provider: Some("claude".into())
+                tool: Some(Tool::Claude)
             }
         }
     );

@@ -4,9 +4,11 @@
 use super::{AccountItem, RowEnd};
 use crate::model::state::{Cadence, State};
 use crate::model::{LocalTime, PlatformError};
-use crate::{Account, Awaiting, Limit, Parked, Status, Tool, Usage, Warning};
+use crate::{Account, Awaiting, Parked, Status, Usage, Warning};
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
+use pitboard_core::usage::Window;
 
 impl AccountItem {
     // A switch to it is under way, as its row's end shows.
@@ -15,24 +17,24 @@ impl AccountItem {
     }
 }
 
-pub(crate) fn claude_code() -> Tool {
-    crate::tool(ProviderId::Claude)
+pub(crate) fn claude_code() -> ProviderId {
+    ProviderId::Claude
 }
 
-pub(crate) fn codex() -> Tool {
-    crate::tool(ProviderId::Codex)
+pub(crate) fn codex() -> ProviderId {
+    ProviderId::Codex
 }
 
-pub(crate) fn both_tools() -> Vec<Tool> {
+pub(crate) fn both_tools() -> Vec<ProviderId> {
     vec![claude_code(), codex()]
 }
 
-pub(crate) fn claude_desktop() -> Tool {
-    crate::tool(ProviderId::Desktop)
+pub(crate) fn claude_desktop() -> ProviderId {
+    ProviderId::Desktop
 }
 
 // Every tool a Mac lists.
-pub(crate) fn desktop() -> Vec<Tool> {
+pub(crate) fn desktop() -> Vec<ProviderId> {
     vec![claude_code(), codex(), claude_desktop()]
 }
 
@@ -43,7 +45,7 @@ pub(crate) fn desktop_account(label: &str, signed_in: bool) -> Account {
         stale: Some(Stale::NoUsage),
         stale_explanation: Some("Pitboard reads no usage for Claude Desktop".into()),
         ..account(Some(label))
-            .of("desktop")
+            .of(ProviderId::Desktop)
             .unmeasured()
             .signed_in_if(signed_in)
             .build()
@@ -57,22 +59,22 @@ pub(crate) fn desktop_warning(code: &str, message: &str) -> Warning {
         message: message.into(),
         account: None,
         held: None,
-        provider: Some("desktop".into()),
+        provider: Some(ProviderId::Desktop),
     }
 }
 
 // An add or a Sign In Again inside Claude left halfway, `put_back` parked for it.
 pub(crate) fn awaiting(label: &str, put_back: &str, again: bool) -> Awaiting {
     Awaiting {
-        provider: "desktop".into(),
+        provider: ProviderId::Desktop,
         label: label.into(),
-        put_back: format!("desktop/{put_back}"),
+        put_back: Key::new(ProviderId::Desktop, put_back),
         again,
     }
 }
 
 // What a read of `status` leaves the model with, `found` installed.
-pub(crate) fn read(status: Status, found: Vec<Tool>) -> State {
+pub(crate) fn read(status: Status, found: Vec<ProviderId>) -> State {
     let mut state = State::new(Cadence::APP);
     state.warnings = status.warnings.clone();
     state.status = Some(status);
@@ -90,8 +92,8 @@ pub(crate) fn status(accounts: Vec<Account>, warnings: Vec<Warning>) -> Status {
 }
 
 /// A limit as the core reports one, resetting at 100 unless a test says otherwise.
-pub(crate) fn window(kind: &str, percent: f64) -> Limit {
-    Limit {
+pub(crate) fn window(kind: &str, percent: f64) -> Window {
+    Window {
         kind: kind.into(),
         length_seconds: None,
         scope: None,
@@ -104,36 +106,36 @@ pub(crate) fn window(kind: &str, percent: f64) -> Limit {
 
 /// What a test changes of a limit.
 pub(crate) trait LimitExt {
-    fn scope(self, scope: &str) -> Limit;
-    fn active(self, active: bool) -> Limit;
-    fn length(self, seconds: i64) -> Limit;
-    fn resets(self, at: Option<i64>) -> Limit;
+    fn scope(self, scope: &str) -> Window;
+    fn active(self, active: bool) -> Window;
+    fn length(self, seconds: i64) -> Window;
+    fn resets(self, at: Option<i64>) -> Window;
 }
 
-impl LimitExt for Limit {
-    fn scope(self, scope: &str) -> Limit {
-        Limit {
+impl LimitExt for Window {
+    fn scope(self, scope: &str) -> Window {
+        Window {
             scope: Some(scope.into()),
             ..self
         }
     }
 
-    fn active(self, active: bool) -> Limit {
-        Limit {
+    fn active(self, active: bool) -> Window {
+        Window {
             is_active: active,
             ..self
         }
     }
 
-    fn length(self, seconds: i64) -> Limit {
-        Limit {
+    fn length(self, seconds: i64) -> Window {
+        Window {
             length_seconds: Some(seconds),
             ..self
         }
     }
 
-    fn resets(self, at: Option<i64>) -> Limit {
-        Limit {
+    fn resets(self, at: Option<i64>) -> Window {
+        Window {
             resets_at: at,
             ..self
         }
@@ -157,7 +159,7 @@ pub(crate) fn standing_of(signed_in: bool, named: bool) -> Standing {
 pub(crate) fn account(label: Option<&str>) -> AccountMade {
     AccountMade {
         label: label.map(str::to_owned),
-        provider: "claude".into(),
+        provider: ProviderId::Claude,
         signed_in: false,
         standing: None,
         uuid: None,
@@ -172,11 +174,11 @@ pub(crate) fn account(label: Option<&str>) -> AccountMade {
 /// An account being made.
 pub(crate) struct AccountMade {
     label: Option<String>,
-    provider: String,
+    provider: ProviderId,
     signed_in: bool,
     standing: Option<Standing>,
     uuid: Option<String>,
-    windows: Vec<Limit>,
+    windows: Vec<Window>,
     measured: bool,
     /// When its numbers were read.
     read_at: i64,
@@ -185,11 +187,8 @@ pub(crate) struct AccountMade {
 }
 
 impl AccountMade {
-    pub(crate) fn of(self, provider: &str) -> AccountMade {
-        AccountMade {
-            provider: provider.into(),
-            ..self
-        }
+    pub(crate) fn of(self, provider: ProviderId) -> AccountMade {
+        AccountMade { provider, ..self }
     }
 
     pub(crate) fn signed_in(self) -> AccountMade {
@@ -217,7 +216,7 @@ impl AccountMade {
         }
     }
 
-    pub(crate) fn limits(self, windows: Vec<Limit>) -> AccountMade {
+    pub(crate) fn limits(self, windows: Vec<Window>) -> AccountMade {
         AccountMade { windows, ..self }
     }
 
@@ -263,10 +262,10 @@ impl AccountMade {
             .unwrap_or_else(|| "someone".into());
         Account {
             id: format!("{}:{uuid}", self.provider),
-            qualified: self
+            key: self
                 .label
                 .as_ref()
-                .map(|label| format!("{}/{label}", self.provider)),
+                .map(|label| Key::new(self.provider, label)),
             unplaced: false,
             email: format!("{}@example.com", self.label.as_deref().unwrap_or(&uuid)),
             account_id: uuid,
@@ -278,7 +277,7 @@ impl AccountMade {
             usage: self.measured.then_some(Usage {
                 observed_at: Some(self.read_at),
                 windows: self.windows,
-                lists_every_limit: self.provider == "claude",
+                lists_every_limit: self.provider == ProviderId::Claude,
             }),
             stale: None,
             stale_explanation: self.explanation,
@@ -292,12 +291,12 @@ impl AccountMade {
 
 /// A tool's login that belongs to no account Pitboard can name, as the core reports one: no
 /// label, no email, no account id, and what is wrong with it.
-pub(crate) fn unplaced(provider: &str, signed_in: bool) -> Account {
+pub(crate) fn unplaced(provider: ProviderId, signed_in: bool) -> Account {
     Account {
         id: format!("{provider}:login"),
-        provider: provider.into(),
+        provider,
         label: None,
-        qualified: None,
+        key: None,
         unplaced: true,
         email: String::new(),
         account_id: String::new(),

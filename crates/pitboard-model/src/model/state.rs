@@ -57,14 +57,13 @@ use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
     FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
-    Tool, Uninstalled, Usage, WarmRefused, Warning,
+    Uninstalled, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{
     DECIDE_EVERY_SECONDS, LOOK_EVERY_SECONDS, READ_EVERY_SECONDS, Refusals,
 };
 use pitboard_core::duty::warm::Overview;
-use pitboard_core::label::SEPARATOR;
 use pitboard_core::provider::{self, ProviderId, SignsIn};
 use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
@@ -166,19 +165,19 @@ pub(crate) enum Job {
     /// Which tools' programs were found. Its own lane, so it never waits behind a read on
     /// the network, and a read can wait for it.
     AskInstalled,
-    /// Whether a running app holds the login of the tool `qualified` is of, which the core
-    /// answers from the process list and the app from what is running.
-    Holding { qualified: String, then: After },
+    /// Whether a running app holds the login of `account`'s tool, which the core answers from
+    /// the process list and the app from what is running.
+    Holding { account: Key, then: After },
     /// Ask the app the question names to quit, and wait until it has, for as long as the
     /// cadence gives it.
     Quit { question: QuitQuestion, then: After },
     Switch {
-        qualified: String,
+        account: Key,
         reopen: Option<String>,
     },
-    /// Put the account `qualified` names in place of a login in use its service refuses for
-    /// good, as the person agreed to.
-    Replace { qualified: String },
+    /// Put `account` in place of a login in use its service refuses for good, as the person
+    /// agreed to.
+    Replace { account: Key },
     /// Ask the core's look whether to switch Claude Code by itself at `at`%, from its files
     /// alone: what stands, or that only a decision under its lock can say. It claims nothing.
     AutoLook { at: u8 },
@@ -190,26 +189,26 @@ pub(crate) enum Job {
     /// Warm up the first account turned on that is due, as the core decides, on a lane of its
     /// own: the core looks at its files first, and a warm-up runs Claude Code for seconds.
     WarmUp,
-    /// Warm up the account `qualified` names now, whatever the span of the day.
-    WarmNow { qualified: String },
-    /// Warm up the account `qualified` names from now on, or stop.
-    SetWarm { qualified: String, on: bool },
+    /// Warm up `account` now, whatever the span of the day.
+    WarmNow { account: Key },
+    /// Warm up `account` from now on, or stop.
+    SetWarm { account: Key, on: bool },
     /// Warm up accounts from `from` to `to`, minutes of the day.
     SetWarmRange { from: u16, to: u16 },
     /// Open the app at `location` again.
     Open {
         location: String,
-        tool: String,
+        tool: ProviderId,
         front: bool,
     },
     /// Give up on an interrupted switch, keeping every login it names.
     Abandon,
-    /// A sign-in, on a thread of its own: start `provider`'s own sign-in, again for the
-    /// account `again` names or for a new one, hand on everything the tool says until it
-    /// stops, then wait for `SignInOver`.
+    /// A sign-in, on a thread of its own: start `tool`'s own sign-in, again for the account
+    /// `again` names or for a new one, hand on everything the tool says until it stops, then
+    /// wait for `SignInOver`.
     SignIn {
         id: u64,
-        provider: String,
+        tool: ProviderId,
         again: Option<String>,
     },
     /// Type `code` back to the tool of the sign-in `id`.
@@ -220,27 +219,26 @@ pub(crate) enum Job {
     /// The tool of the sign-in `id` has stopped saying anything: enrol what it signed in to,
     /// or let it go.
     SignInOver { id: u64, enrol: bool },
-    /// Enrol the login signed in now to `provider`'s tool, with no browser: as the account
-    /// `again` names, or under a name the core picks. `from` is the sheet that was up when it
-    /// was asked for, where what goes wrong is said.
+    /// Enrol the login signed in now to `tool`, with no browser: as the account `again` names,
+    /// or under a name the core picks. `from` is the sheet that was up when it was asked for,
+    /// where what goes wrong is said.
     Enrol {
-        provider: String,
+        tool: ProviderId,
         again: Option<String>,
         from: Option<Sheet>,
         // where the app quit for it was opened from
         reopen: Option<String>,
     },
-    /// Give the account `label` of `provider`'s tool the name `to`, inside its own tool.
+    /// Give `account` the name `to`, inside its own tool.
     Rename {
-        provider: String,
-        label: String,
+        account: Key,
         to: String,
         from: Option<Sheet>,
     },
-    /// Drop the account `qualified` names, and the login parked for it.
-    Forget { qualified: String },
-    /// Write the account `qualified` names into its tool's config, while it is in use.
-    UpdateConfig { qualified: String },
+    /// Drop `account`, and the login parked for it.
+    Forget { account: Key },
+    /// Write `account` into its tool's config, while it is in use.
+    UpdateConfig { account: Key },
     /// Look at the file behind Claude Code's store: what it holds, and whose the login in it
     /// is, which may ask Anthropic with that login's own access token, and whose the login
     /// stored is, as a read asks it. It changes nothing.
@@ -352,12 +350,12 @@ pub(crate) enum After {
     Switch,
     // `again`: the account signed in to again, or none for a new one
     SignIn {
-        provider: String,
+        tool: ProviderId,
         again: Option<String>,
         from: Option<Sheet>,
     },
     Enrol {
-        provider: String,
+        tool: ProviderId,
         again: Option<String>,
         from: Option<Sheet>,
     },
@@ -405,11 +403,11 @@ pub(crate) enum Answer {
         measured: i64,
     },
     Installed {
-        tools: Vec<Tool>,
+        tools: Vec<ProviderId>,
     },
     /// The app holding the login, where one is running, as the question to ask about it.
     Held {
-        qualified: String,
+        account: Key,
         question: Option<QuitQuestion>,
         then: After,
     },
@@ -419,7 +417,7 @@ pub(crate) enum Answer {
         then: After,
     },
     Switched {
-        qualified: String,
+        account: Key,
         reopen: Option<String>,
         done: Result<Switched, PitboardError>,
     },
@@ -431,10 +429,10 @@ pub(crate) enum Answer {
     AutoSwitched {
         done: Result<AutoSwitched, PitboardError>,
     },
-    /// What a warm-up came to: one by itself, or of the account `asked` names, somebody asked
-    /// for now.
+    /// What a warm-up came to: one by itself, or of the account `asked`, somebody asked for
+    /// now.
     WarmedUp {
-        asked: Option<String>,
+        asked: Option<Key>,
         done: Result<WarmUp, WarmRefused>,
     },
     /// A change to which accounts are warmed up, or when, with each one's warm-up after it.
@@ -443,7 +441,7 @@ pub(crate) enum Answer {
     },
     // `opened` where the lane called `reopen` and it answered
     Opened {
-        tool: String,
+        tool: ProviderId,
         front: bool,
         opened: bool,
     },
@@ -453,7 +451,7 @@ pub(crate) enum Answer {
         id: u64,
         started: Result<(), PitboardError>,
         // the account the core parked for it, as `SwitchTo` takes it
-        put_back: Option<String>,
+        put_back: Option<Key>,
     },
     /// Something more the tool of the sign-in `id` said, as it came.
     SignInSaid {
@@ -481,23 +479,22 @@ pub(crate) enum Answer {
     },
     /// What enrolling the login signed in now came to.
     Enrolled {
-        provider: String,
+        tool: ProviderId,
         again: Option<String>,
         from: Option<Sheet>,
         reopen: Option<String>,
         done: Result<Enrolled, PitboardError>,
     },
-    /// What renaming the account `label` of `provider`'s tool to `to` came to.
+    /// What renaming `account` to `to` came to.
     Renamed {
-        provider: String,
-        label: String,
+        account: Key,
         to: String,
         from: Option<Sheet>,
         done: Result<(), PitboardError>,
     },
-    /// What forgetting the account `qualified` names came to.
+    /// What forgetting `account` came to.
     Forgot {
-        qualified: String,
+        account: Key,
         done: Result<(), PitboardError>,
     },
     /// What writing the account in use into its tool's config came to, with what its tool
@@ -642,10 +639,10 @@ pub(crate) enum Removing {
     // `app`: one holding a saved sign-in is quitting first; (tool, copy) of it opens after.
     Ending {
         app: bool,
-        reopen: Option<(String, String)>,
+        reopen: Option<(ProviderId, String)>,
     },
     Running {
-        reopen: Option<(String, String)>,
+        reopen: Option<(ProviderId, String)>,
     },
     // the account windows' stores go before it is said
     Clearing(Uninstalled),
@@ -657,7 +654,7 @@ pub(crate) enum Removing {
 // How a request from outside ended, which `present` words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Answered {
-    Switched { tool: String, label: String },
+    Switched { tool: ProviderId, label: String },
     InUse { label: String },
     Updated { at: i64 },
     Unknown,
@@ -715,9 +712,8 @@ pub(crate) struct Warming {
     /// Each Claude Code account, whether it is warmed up and where it stands, and the span of
     /// the day, as the last read or warm-up found them.
     pub(crate) overview: Option<Overview>,
-    /// A warm-up under way: of the account somebody asked for now, by its label with its
-    /// tool, or one by itself, `None`.
-    pub(crate) running: Option<Option<String>>,
+    /// A warm-up under way: of the account somebody asked for now, or one by itself, `None`.
+    pub(crate) running: Option<Option<Key>>,
     /// Warm-ups by itself refused in a row, and the wait after them.
     refusals: Refusals,
     told: pitboard_core::switch::warm::Told,
@@ -774,7 +770,7 @@ struct Refused {
     message: String,
     code: Option<String>,
     warnings: Vec<Warning>,
-    account: Option<String>,
+    account: Option<Key>,
 }
 
 impl Refused {
@@ -822,8 +818,8 @@ fn taken_while_removing(intent: &Intent) -> bool {
     )
 }
 
-pub(crate) fn in_its_app(provider: &str) -> bool {
-    ProviderId::parse(provider).is_some_and(|tool| tool.signs_in() == SignsIn::InItsApp)
+pub(crate) fn in_its_app(tool: ProviderId) -> bool {
+    tool.signs_in() == SignsIn::InItsApp
 }
 
 /// `typed` without the white space around it, as the Swift sheets took it away with
@@ -832,18 +828,27 @@ pub(crate) fn trimmed(typed: &str) -> &str {
     pitboard_sites::trimmed(typed)
 }
 
-// The account `name` of `provider`'s tool as the core types it.
-fn typed_as_core(provider: &str, name: &str) -> String {
-    Key::parse(&format!("{provider}{SEPARATOR}{name}")).typed()
+// What a quit question names an account of `tool` by before it has a name.
+fn new_account(tool: ProviderId) -> Key {
+    Key::new(tool, "")
 }
 
-// What a quit question names an account of `provider`'s tool by before it has a name.
-fn new_account(provider: &str) -> String {
-    format!("{provider}{SEPARATOR}")
+// A switch under way: to the account somebody chose, or of Claude Code by itself, to the one
+// the core chooses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Switching {
+    To(Key),
+    Automatically,
 }
 
-// What `switching` holds while Claude Code is switched by itself: the core chooses the account.
-const AUTOMATICALLY: &str = "claude";
+impl Switching {
+    fn of(&self) -> ProviderId {
+        match self {
+            Switching::To(account) => account.provider,
+            Switching::Automatically => ProviderId::Claude,
+        }
+    }
+}
 
 // Where what switching or warming up by itself came to is said.
 const LIMITS: Place = Place::Settings {
@@ -853,15 +858,14 @@ const LIMITS: Place = Place::Settings {
 // Until `until`, when the limit it reached resets, nothing says `from` was kept in use.
 #[derive(Debug)]
 struct SwitchedBack {
-    from: String,
+    from: Key,
     until: Option<i64>,
 }
 
 /// A rename, as its answer is taken in.
 #[derive(Clone, Copy)]
 struct Renaming<'a> {
-    provider: &'a str,
-    label: &'a str,
+    account: &'a Key,
     to: &'a str,
     /// The sheet it was asked from, where what goes wrong is said.
     from: Option<&'a Sheet>,
@@ -871,7 +875,7 @@ struct Renaming<'a> {
 #[derive(Debug)]
 struct Parking {
     id: u64,
-    tool: String,
+    tool: ProviderId,
     // where the app quit for it was opened from
     reopen: Option<String>,
 }
@@ -879,7 +883,7 @@ struct Parking {
 // An enrolment of the login an app or a tool holds now, as its answer is taken in.
 #[derive(Clone, Copy)]
 struct Enrolling<'a> {
-    provider: &'a str,
+    tool: ProviderId,
     again: Option<&'a str>,
     // the sheet it was asked from, where what goes wrong is said
     from: Option<&'a Sheet>,
@@ -902,7 +906,7 @@ struct Quitting {
 /// sends after closing it.
 #[derive(Debug)]
 struct Replacing {
-    qualified: String,
+    account: Key,
     /// Why, in the app's words, as the core's refusal said it.
     message: String,
     asked: bool,
@@ -916,8 +920,7 @@ struct Replacing {
 #[derive(Debug)]
 pub(crate) struct SigningIn {
     id: u64,
-    /// The tool, as a `Tool`'s code.
-    pub(crate) provider: String,
+    pub(crate) tool: ProviderId,
     // the account signed in to again, from its own sheet; none for a new one
     pub(crate) again: Option<String>,
     /// Everything the tool has said so far.
@@ -938,7 +941,7 @@ pub(crate) struct SigningIn {
     // `again` was the account in use as it was asked for
     in_use_before: bool,
     // the account the core parked for it, as SwitchTo takes it; None until the core says
-    pub(crate) put_back: Option<String>,
+    pub(crate) put_back: Option<Key>,
     pub(crate) step: Option<WaitStep>,
 }
 
@@ -947,13 +950,8 @@ impl SigningIn {
     /// was typed back is no longer one typed back: the tool reads another, so the field is
     /// offered again.
     fn shown(&self) -> RunningSignIn {
-        let view = match ProviderId::parse(&self.provider) {
-            Some(tool) => {
-                let pasted = self.pasted_at.is_some() && !self.code_refused();
-                provider::sign_in_view(tool, &self.said, pasted)
-            }
-            None => provider::SignInView::default(),
-        };
+        let pasted = self.pasted_at.is_some() && !self.code_refused();
+        let view = provider::sign_in_view(self.tool, &self.said, pasted);
         RunningSignIn {
             id: self.id,
             url: view.url,
@@ -963,10 +961,8 @@ impl SigningIn {
 
     // Whether the tool refused the last code typed back, and reads another in its place.
     pub(crate) fn code_refused(&self) -> bool {
-        ProviderId::parse(&self.provider).is_some_and(|tool| {
-            self.pasted_at.is_some_and(|at| {
-                provider::refused_code(tool, self.said.get(at..).unwrap_or_default())
-            })
+        self.pasted_at.is_some_and(|at| {
+            provider::refused_code(self.tool, self.said.get(at..).unwrap_or_default())
         })
     }
 }
@@ -1002,13 +998,13 @@ pub(crate) struct State {
     /// The tools whose program was found, once an answer has come. Asked by the first read,
     /// and by each read while none has been found: the core asks a login shell that was too
     /// slow to answer once more, and finding none is what says to install a tool.
-    pub(crate) installed: Option<Vec<Tool>>,
+    pub(crate) installed: Option<Vec<ProviderId>>,
     /// Whether that is being asked now. A read asked for meanwhile waits for the same answer
     /// rather than asking again.
     asking_installed: bool,
     // A tool the core found no program for since the ask under way began, which that ask's
     // answer may still name.
-    gone_since_asked: Option<String>,
+    gone_since_asked: Option<ProviderId>,
     /// Reads waiting for that answer, which go ahead once it comes.
     waiting: Vec<Asked>,
     /// When the account index was last written, as last seen. `None` until something has
@@ -1027,21 +1023,20 @@ pub(crate) struct State {
     /// Warming up accounts: which are turned on and where each stands, what is under way and
     /// what was said.
     pub(crate) warm: Warming,
-    /// The account a switch is running for, as its label with its tool: from the moment it
-    /// is asked for, through asking what holds its tool's login, quitting an app and the
-    /// switch itself, until the read after it lands.
-    switching: Option<String>,
+    /// The switch running: from the moment it is asked for, through asking what holds its
+    /// tool's login, quitting an app and the switch itself, until the read after it lands.
+    switching: Option<Switching>,
     changing: u32,
     // sign-ins inside an app whose park holds the index, until their start is answered
     parking: Vec<Parking>,
     // (tool, copy) of an app quit for another change of the tool, opened after its switch
-    reopen_after_switch: Option<(String, String)>,
+    reopen_after_switch: Option<(ProviderId, String)>,
     // (park, account) of a switch that goes on once that park of its tool has started
-    switch_after_park: Option<(u64, String)>,
+    switch_after_park: Option<(u64, Key)>,
     // (sheet, tool, step) of the sheet recording the account the tool's app shows
-    recording: Option<(Option<Sheet>, String, Recording)>,
-    // by provider, until a change of the tool lands: what the next add of its account opens on
-    refused_by: BTreeMap<String, String>,
+    recording: Option<(Option<Sheet>, ProviderId, Recording)>,
+    // by tool, until a change of the tool lands: what the next add of its account opens on
+    refused_by: BTreeMap<ProviderId, String>,
     // the moves of an app's login given up on, in the app's words, until somebody has read them
     moves_given_up: Vec<String>,
     quitting: Option<Quitting>,
@@ -1312,24 +1307,32 @@ impl State {
         self.signing_in.as_ref().map(SigningIn::shown)
     }
 
-    /// The account a switch is running for, or waiting on the quit question for.
-    pub(crate) fn switch_under_way(&self) -> Option<&str> {
-        self.switching
-            .as_deref()
-            .or(self
+    /// Whether a switch is running, or waiting on the quit question or the question before a
+    /// replacement.
+    pub(crate) fn switch_under_way(&self) -> bool {
+        self.switching.is_some() || self.switching_to().is_some()
+    }
+
+    /// The account such a switch is for, where somebody chose it.
+    pub(crate) fn switching_to(&self) -> Option<&Key> {
+        match &self.switching {
+            Some(Switching::To(account)) => Some(account),
+            Some(Switching::Automatically) => None,
+            None => self
                 .asking_for()
                 .filter(|(_, then)| **then == After::Switch)
-                .map(|(question, _)| question.qualified.as_str()))
-            .or(self.replace_asked().map(|(qualified, _)| qualified))
+                .map(|(question, _)| &question.account)
+                .or(self.replace_asked().map(|(account, _)| account)),
+        }
     }
 
     /// The account a switch asks to put in place of a login its service refuses for good,
     /// and why, while it asks.
-    pub(crate) fn replace_asked(&self) -> Option<(&str, &str)> {
+    pub(crate) fn replace_asked(&self) -> Option<(&Key, &str)> {
         self.replacing
             .as_ref()
             .filter(|replacing| replacing.asked)
-            .map(|replacing| (replacing.qualified.as_str(), replacing.message.as_str()))
+            .map(|replacing| (&replacing.account, replacing.message.as_str()))
     }
 
     /// Whether the app's preferences have been read, so that a change to them is kept.
@@ -1360,16 +1363,16 @@ impl State {
     }
 
     // The tool whose app's account the sheet up records, and what it waits for.
-    pub(crate) fn recording(&self) -> Option<(&str, Recording)> {
+    pub(crate) fn recording(&self) -> Option<(ProviderId, Recording)> {
         self.recording
             .as_ref()
             .filter(|(from, ..)| from.is_some() && *from == self.sheet)
-            .map(|(_, tool, step)| (tool.as_str(), *step))
+            .map(|(_, tool, step)| (*tool, *step))
     }
 
-    // What an add of `provider`'s account does, by the first rule that holds.
-    pub(crate) fn in_app_add(&self, provider: &str) -> InAppAdd {
-        let refused = self.refused_by.get(provider).map(String::as_str);
+    // What an add of `tool`'s account does, by the first rule that holds.
+    pub(crate) fn in_app_add(&self, tool: ProviderId) -> InAppAdd {
+        let refused = self.refused_by(tool);
         if refused == Some("live_credential_absent") {
             return InAppAdd::AfterSignIn;
         }
@@ -1377,18 +1380,17 @@ impl State {
             return InAppAdd::Current;
         };
         let warned = |code: &str| {
-            self.warnings.iter().any(|warning| {
-                warning.code == code && warning.provider.as_deref() == Some(provider)
-            })
+            (self.warnings.iter())
+                .any(|warning| warning.code == code && warning.provider == Some(tool))
         };
         if !status
             .accounts
             .iter()
-            .any(|account| account.provider == provider)
+            .any(|account| account.provider == tool)
             || status
                 .awaiting
                 .iter()
-                .any(|awaiting| awaiting.provider == provider)
+                .any(|awaiting| awaiting.provider == tool)
             || matches!(
                 refused,
                 Some(
@@ -1407,8 +1409,8 @@ impl State {
         }
     }
 
-    pub(crate) fn refused_by(&self, provider: &str) -> Option<&str> {
-        self.refused_by.get(provider).map(String::as_str)
+    pub(crate) fn refused_by(&self, tool: ProviderId) -> Option<&str> {
+        self.refused_by.get(&tool).map(String::as_str)
     }
 
     pub(crate) fn moves_given_up(&self) -> &[String] {
@@ -1438,10 +1440,12 @@ impl State {
                 now,
                 jobs,
             ),
-            Intent::SwitchTo { qualified } => self.switch_asked(qualified, jobs),
-            Intent::QuitAndSwitch { qualified } => self.quit_and_switch(&qualified, jobs),
-            Intent::SwitchBack { from, to } => self.switch_back(from, &to, jobs),
-            Intent::ReplaceAndSwitch { qualified } => self.replace_and_switch(qualified, jobs),
+            Intent::SwitchTo { account } => self.switch_asked(account.into(), jobs),
+            Intent::QuitAndSwitch { account } => self.quit_and_switch(&account.into(), jobs),
+            Intent::SwitchBack { from, to } => self.switch_back(from.into(), &to.into(), jobs),
+            Intent::ReplaceAndSwitch { account } => {
+                self.replace_and_switch(account.into(), jobs);
+            }
             Intent::KeepLogin => {
                 if let Some(replacing) = self.replacing.as_mut() {
                     replacing.asked = false;
@@ -1459,15 +1463,14 @@ impl State {
                     self.saved(from.as_ref());
                 }
             }
-            Intent::DismissSwitch { provider } => {
-                self.last_switches.retain(|last| last.provider != provider);
+            Intent::DismissSwitch { tool } => {
+                let tool = ProviderId::from(tool);
+                self.last_switches.retain(|last| last.provider != tool);
             }
-            Intent::DeclineSecondAccount { provider } => {
+            Intent::DeclineSecondAccount { tool } => {
                 // Kept once the preferences are read, with whatever they hold, and never over
                 // a file that could not be read: said meanwhile, it holds until the app quits.
-                if self.preferences.second_account_declined.insert(provider)
-                    && self.preferences_read
-                {
+                if self.preferences.decline_second_account(tool.into()) && self.preferences_read {
                     jobs.push(Job::KeepPreferences {
                         preferences: self.preferences.clone(),
                     });
@@ -1481,12 +1484,16 @@ impl State {
                 self.show(Some(LIMITS));
                 self.put_away(Tip::AtLimit, jobs);
             }
-            Intent::SetWarm { qualified, on } => jobs.push(Job::SetWarm { qualified, on }),
+            Intent::SetWarm { account, on } => jobs.push(Job::SetWarm {
+                account: account.into(),
+                on,
+            }),
             Intent::SetWarmRange { from, to } => jobs.push(Job::SetWarmRange { from, to }),
-            Intent::WarmNow { qualified } => {
+            Intent::WarmNow { account } => {
                 if self.warm.running.is_none() {
-                    self.warm.running = Some(Some(qualified.clone()));
-                    jobs.push(Job::WarmNow { qualified });
+                    let account = Key::from(account);
+                    self.warm.running = Some(Some(account.clone()));
+                    jobs.push(Job::WarmNow { account });
                 }
             }
             Intent::AbandonStuckSwitch => self.change(Job::Abandon, jobs),
@@ -1494,7 +1501,7 @@ impl State {
                 self.abandoned = None;
                 self.moves_given_up.clear();
             }
-            Intent::SignIn { provider, again } => self.sign_in(provider, again, jobs),
+            Intent::SignIn { tool, again } => self.sign_in(tool.into(), again, jobs),
             Intent::PasteCode { code } => self.paste(&code, jobs),
             // Its button holds back while an app is quit for it; one sent anyway parks nothing.
             Intent::CancelSignIn => {
@@ -1505,7 +1512,7 @@ impl State {
                         jobs.push(Job::StopSignIn { id: signing.id });
                     }
                     if let Some(location) = self.unpark(&signing) {
-                        self.open_again(signing.provider.clone(), location, false, jobs);
+                        self.open_again(signing.tool, location, false, jobs);
                     }
                     // What it left parked is the core's record, which the read says.
                     if signing.in_its_app && !signing.quitting {
@@ -1532,15 +1539,11 @@ impl State {
             Intent::NotificationClicked { argument } => match Clicked::read(&argument) {
                 Clicked::Accounts => self.show(Some(Place::Accounts)),
                 Clicked::Limits => self.show(Some(LIMITS)),
-                Clicked::Switch(qualified) => {
-                    self.intent(Intent::SwitchTo { qualified }, now, jobs);
-                }
+                Clicked::Switch(account) => self.switch_asked(account, jobs),
                 Clicked::SwitchBack { from, to } => self.switch_back(from, &to, jobs),
-                Clicked::SignInAgain(qualified) => {
-                    let key = Key::parse(&qualified);
+                Clicked::SignInAgain(account) => {
                     let sheet = Sheet::SignInAgain {
-                        provider: key.provider.code().to_owned(),
-                        label: key.label,
+                        account: account.into(),
                     };
                     self.present_sheet(sheet, jobs);
                 }
@@ -1555,50 +1558,51 @@ impl State {
                     self.ask_installed(jobs);
                 }
             }
-            Intent::Enrol { provider } => {
-                if in_its_app(&provider) {
-                    if self.switching_of(&provider) {
+            Intent::Enrol { tool } => {
+                let tool = ProviderId::from(tool);
+                if in_its_app(tool) {
+                    if self.switching_of(tool) {
                         return;
                     }
                     let then = After::Enrol {
-                        provider: provider.clone(),
+                        tool,
                         again: None,
                         from: None,
                     };
-                    self.ask_before(new_account(&provider), then, jobs);
+                    self.ask_before(new_account(tool), then, jobs);
                     return;
                 }
                 let enrol = Job::Enrol {
-                    provider,
+                    tool,
                     again: None,
                     from: None,
                     reopen: None,
                 };
                 self.change(enrol, jobs);
             }
-            Intent::Rename {
-                provider,
-                label,
-                to,
-            } => {
+            Intent::Rename { account, to } => {
                 let kind = Sheet::Rename {
-                    provider: provider.clone(),
-                    label: label.clone(),
+                    account: account.clone(),
                 };
                 if let Some(to) = self.saved_from(kind, &to) {
                     let from = self.saving_from();
                     let rename = Job::Rename {
-                        provider,
-                        label,
+                        account: account.into(),
                         to,
                         from,
                     };
                     self.change(rename, jobs);
                 }
             }
-            Intent::Forget { qualified } => self.change(Job::Forget { qualified }, jobs),
-            Intent::UpdateConfig { qualified } => {
-                self.change(Job::UpdateConfig { qualified }, jobs);
+            Intent::Forget { account } => self.change(
+                Job::Forget {
+                    account: account.into(),
+                },
+                jobs,
+            ),
+            Intent::UpdateConfig { account } => {
+                let account = account.into();
+                self.change(Job::UpdateConfig { account }, jobs);
             }
             Intent::Stow => self.stow(jobs),
             Intent::DismissStowed => self.stowed = None,
@@ -1704,19 +1708,17 @@ impl State {
         };
         let found = (read.accounts.iter())
             .find(|known| !known.unplaced && crate::present::glance_id(&known.id) == account);
-        let Some((found, qualified)) =
-            found.and_then(|found| Some((found, found.qualified.clone()?)))
-        else {
+        let Some((found, key)) = found.and_then(|found| Some((found, found.key.clone()?))) else {
             return self.answer_outside(request, Answered::Unknown);
         };
-        let label = Key::parse(&qualified).label;
+        let label = key.label.clone();
         let refused = if found.signed_in {
             Some(Answered::InUse { label })
         } else if crate::present::needs_sign_in(found) {
             Some(Answered::NeedsSignIn { label })
         } else if !found.standing.switchable() {
             Some(Answered::Unusable { label })
-        } else if self.switch_under_way().is_some() || self.sign_in_under_way() {
+        } else if self.switch_under_way() || self.sign_in_under_way() {
             Some(Answered::Busy)
         } else if self.quitting.is_some() {
             Some(Answered::Asking)
@@ -1726,7 +1728,7 @@ impl State {
         match refused {
             Some(answered) => self.answer_outside(request, answered),
             None => {
-                self.switch_asked(qualified, jobs);
+                self.switch_asked(key, jobs);
                 self.outside_switch = Some(OutsideSwitch { request, quit });
             }
         }
@@ -1764,10 +1766,7 @@ impl State {
             Some(Removing::Done(stayed)) => *stayed != Uninstalled::Removed,
             Some(_) => false,
         };
-        again
-            && self.signing_in.is_none()
-            && self.switch_under_way().is_none()
-            && self.changing == 0
+        again && self.signing_in.is_none() && !self.switch_under_way() && self.changing == 0
     }
 
     // Claude holding a saved sign-in quits first: the core deletes that only while it is closed.
@@ -1778,16 +1777,12 @@ impl State {
         let app = self.status.as_ref().and_then(|read| {
             read.accounts
                 .iter()
-                .find(|account| in_its_app(&account.provider) && account.parked.is_some())
-                .map(|account| account.provider.clone())
-                .or_else(|| {
-                    read.awaiting
-                        .first()
-                        .map(|awaiting| awaiting.provider.clone())
-                })
+                .find(|account| in_its_app(account.provider) && account.parked.is_some())
+                .map(|account| account.provider)
+                .or_else(|| read.awaiting.first().map(|awaiting| awaiting.provider))
         });
         match app {
-            Some(tool) => self.ask_before(new_account(&tool), After::Uninstall, jobs),
+            Some(tool) => self.ask_before(new_account(tool), After::Uninstall, jobs),
             None => self.end(false),
         }
     }
@@ -1951,7 +1946,7 @@ impl State {
 
     // One at a time: a second would take the place of the one on screen and leave the first
     // tool waiting on a browser with nothing to stop it.
-    fn sign_in(&mut self, provider: String, again: Option<String>, jobs: &mut Vec<Job>) {
+    fn sign_in(&mut self, tool: ProviderId, again: Option<String>, jobs: &mut Vec<Job>) {
         let held = self
             .sheet
             .as_ref()
@@ -1959,42 +1954,34 @@ impl State {
         if self.signing_in.is_some() || held {
             return;
         }
-        if in_its_app(&provider) {
-            if self.switching_of(&provider) {
+        if in_its_app(tool) {
+            if self.switching_of(tool) {
                 return;
             }
-            let qualified = match &again {
-                Some(label) => format!("{provider}{SEPARATOR}{label}"),
-                None => new_account(&provider),
+            let account = match &again {
+                Some(label) => Key::new(tool, label),
+                None => new_account(tool),
             };
             let from = self.sheet.clone();
-            let then = match self.in_app_add(&provider) {
-                InAppAdd::Current => After::Enrol {
-                    provider,
-                    again,
-                    from,
-                },
-                InAppAdd::AfterSignIn => After::SignIn {
-                    provider,
-                    again,
-                    from,
-                },
+            let then = match self.in_app_add(tool) {
+                InAppAdd::Current => After::Enrol { tool, again, from },
+                InAppAdd::AfterSignIn => After::SignIn { tool, again, from },
             };
-            self.ask_before(qualified, then, jobs);
+            self.ask_before(account, then, jobs);
             return;
         }
-        let signing = self.new_sign_in(provider, again);
+        let signing = self.new_sign_in(tool, again);
         self.signing_in = Some(signing);
         self.ask_for_sign_in(jobs);
     }
 
     // From the sheet that is up, which says nothing more of what went wrong the last time.
-    fn new_sign_in(&mut self, provider: String, again: Option<String>) -> SigningIn {
+    fn new_sign_in(&mut self, tool: ProviderId, again: Option<String>) -> SigningIn {
         self.sign_ins += 1;
         self.sheet_failure = None;
         let in_use_before = self.status.as_ref().is_some_and(|status| {
             status.accounts.iter().any(|account| {
-                account.provider == provider
+                account.provider == tool
                     && account.signed_in
                     && account.label.is_some()
                     && account.label == again
@@ -2003,9 +1990,9 @@ impl State {
         SigningIn {
             in_use_before,
             id: self.sign_ins,
-            in_its_app: in_its_app(&provider),
+            in_its_app: in_its_app(tool),
             again,
-            provider,
+            tool,
             said: String::new(),
             pasted_at: None,
             started: false,
@@ -2017,7 +2004,7 @@ impl State {
         }
     }
 
-    fn ask_before(&mut self, qualified: String, then: After, jobs: &mut Vec<Job>) {
+    fn ask_before(&mut self, account: Key, then: After, jobs: &mut Vec<Job>) {
         self.drop_question();
         if let After::SignIn {
             from: Some(from), ..
@@ -2028,7 +2015,7 @@ impl State {
         {
             self.saving.push(from.clone());
         }
-        jobs.push(Job::Holding { qualified, then });
+        jobs.push(Job::Holding { account, then });
     }
 
     fn drop_question(&mut self) {
@@ -2045,7 +2032,7 @@ impl State {
     // `quit`: Pitboard asked the app to quit, so its sign-in is the one made then.
     fn go_on(
         &mut self,
-        qualified: String,
+        account: Key,
         then: After,
         reopen: Option<String>,
         quit: bool,
@@ -2053,21 +2040,21 @@ impl State {
     ) {
         match then {
             After::Switch => {
-                let tool = Key::parse(&qualified).provider.code().to_owned();
+                let tool = account.provider;
                 let kept = self
                     .reopen_after_switch
                     .take_if(|(of, _)| *of == tool)
                     .map(|(_, copy)| copy);
                 let mut reopen = reopen.or(kept);
                 // Beside a park of its tool, one of the two would move the other's files.
-                if let Some(id) = self.park_under_way(&tool) {
+                if let Some(id) = self.park_under_way(tool) {
                     self.reopen_after_switch = reopen.map(|copy| (tool, copy));
-                    self.switch_after_park = Some((id, qualified));
+                    self.switch_after_park = Some((id, account));
                     return;
                 }
                 if let Some(signing) = self
                     .signing_in
-                    .take_if(|signing| signing.in_its_app && signing.provider == tool)
+                    .take_if(|signing| signing.in_its_app && signing.tool == tool)
                 {
                     if signing.started {
                         jobs.push(Job::StopSignIn { id: signing.id });
@@ -2076,18 +2063,14 @@ impl State {
                     self.sheet = None;
                     self.sheet_failure = None;
                 }
-                jobs.push(Job::Switch { qualified, reopen });
+                jobs.push(Job::Switch { account, reopen });
             }
-            After::SignIn {
-                provider,
-                again,
-                from,
-            } => {
+            After::SignIn { tool, again, from } => {
                 self.saved(from.as_ref());
                 let waiting = self.signing_in.as_ref().is_some_and(|signing| {
-                    signing.quitting && signing.provider == provider && signing.again == again
+                    signing.quitting && signing.tool == tool && signing.again == again
                 });
-                let switching = self.switching_of(&provider);
+                let switching = self.switching_of(tool);
                 if quit && (!waiting || switching) {
                     // A switch or a cancel took its place: nothing is parked.
                     if waiting {
@@ -2096,7 +2079,7 @@ impl State {
                         self.sheet_failure = None;
                     }
                     if let Some(location) = reopen {
-                        self.open_again(provider, location, false, jobs);
+                        self.open_again(tool, location, false, jobs);
                     }
                     return;
                 }
@@ -2105,7 +2088,7 @@ impl State {
                     if self.signing_in.is_some() || switching {
                         return;
                     }
-                    let signing = self.new_sign_in(provider.clone(), again);
+                    let signing = self.new_sign_in(tool, again);
                     self.signing_in = Some(signing);
                 }
                 let Some(signing) = self.signing_in.as_mut() else {
@@ -2116,14 +2099,10 @@ impl State {
                 // An earlier park of the tool, cancelled, leaves its copy to open after this one.
                 let reopen = reopen.or_else(|| {
                     (self.parking.iter_mut())
-                        .filter(|parking| parking.tool == provider)
+                        .filter(|parking| parking.tool == tool)
                         .find_map(|parking| parking.reopen.take())
                 });
-                self.parking.push(Parking {
-                    id,
-                    tool: provider,
-                    reopen,
-                });
+                self.parking.push(Parking { id, tool, reopen });
                 self.changing += 1;
                 self.ask_for_sign_in(jobs);
             }
@@ -2135,18 +2114,13 @@ impl State {
                 } else if let Some(Removing::Ending { app, reopen: kept }) = self.removing.as_mut()
                 {
                     *app = false;
-                    *kept = reopen
-                        .map(|copy| (Key::parse(&qualified).provider.code().to_owned(), copy));
+                    *kept = reopen.map(|copy| (account.provider, copy));
                 }
             }
-            After::Enrol {
-                provider,
-                again,
-                from,
-            } => {
-                self.recording = Some((from.clone(), provider.clone(), Recording::Reading));
+            After::Enrol { tool, again, from } => {
+                self.recording = Some((from.clone(), tool, Recording::Reading));
                 let enrol = Job::Enrol {
-                    provider,
+                    tool,
                     again,
                     from,
                     reopen,
@@ -2169,14 +2143,14 @@ impl State {
         self.parking.remove(at).reopen
     }
 
-    fn switching_of(&self, tool: &str) -> bool {
+    fn switching_of(&self, tool: ProviderId) -> bool {
         self.switching
-            .as_deref()
-            .is_some_and(|switching| Key::parse(switching).provider.code() == tool)
+            .as_ref()
+            .is_some_and(|switching| switching.of() == tool)
     }
 
     // A park of `tool` whose thread runs: one not yet asked for is still `signing_in`.
-    fn park_under_way(&self, tool: &str) -> Option<u64> {
+    fn park_under_way(&self, tool: ProviderId) -> Option<u64> {
         let unasked = self
             .signing_in
             .as_ref()
@@ -2189,8 +2163,8 @@ impl State {
     }
 
     // Opened while a switch of its tool runs, the app could land in the middle of its move.
-    fn open_again(&mut self, tool: String, location: String, front: bool, jobs: &mut Vec<Job>) {
-        if self.switching_of(&tool) {
+    fn open_again(&mut self, tool: ProviderId, location: String, front: bool, jobs: &mut Vec<Job>) {
+        if self.switching_of(tool) {
             self.reopen_after_switch = Some((tool, location));
         } else {
             jobs.push(Job::Open {
@@ -2206,8 +2180,7 @@ impl State {
         if signing.in_its_app
             && let Some(code) = &refused.code
         {
-            self.refused_by
-                .insert(signing.provider.clone(), code.clone());
+            self.refused_by.insert(signing.tool, code.clone());
         }
         self.keep(&refused.warnings, jobs);
         if self.sheet.is_some() {
@@ -2241,7 +2214,7 @@ impl State {
         self.sign_in_holding = Some(signing.id);
         jobs.push(Job::SignIn {
             id: signing.id,
-            provider: signing.provider.clone(),
+            tool: signing.tool,
             again: signing.again.clone(),
         });
     }
@@ -2471,16 +2444,21 @@ impl State {
             .into_iter()
             .chain(self.advice.iter().filter_map(|advice| advice.renewed(read)))
             .collect();
-        let codes: Vec<&str> = standing.iter().map(|a| a.provider.as_str()).collect();
-        self.advice = crate::present::in_order(&codes, &tools)
+        let providers: Vec<ProviderId> = standing.iter().map(|a| a.provider).collect();
+        self.advice = crate::present::in_order(&providers, &tools)
             .iter()
-            .filter_map(|provider| standing.iter().find(|a| &a.provider == provider))
+            .filter_map(|&provider| standing.iter().find(|a| a.provider == provider))
             .cloned()
             .collect();
     }
 
     // Under Switch, Claude Code's own notices say what switching came to.
-    fn notify_at_limit(&mut self, read: &Status, tools: &[Tool], jobs: &mut Vec<Job>) -> bool {
+    fn notify_at_limit(
+        &mut self,
+        read: &Status,
+        tools: &[ProviderId],
+        jobs: &mut Vec<Job>,
+    ) -> bool {
         let choice = self.preferences.at_limit();
         if choice == AtLimit::Nothing {
             return false;
@@ -2488,7 +2466,7 @@ impl State {
         let at = self.preferences.threshold().percent();
         let mut kept = false;
         for heads_up in HeadsUp::about(read, tools, &self.told, at) {
-            if choice == AtLimit::Switch && heads_up.provider == ProviderId::Claude.code() {
+            if choice == AtLimit::Switch && heads_up.provider == ProviderId::Claude {
                 continue;
             }
             self.told
@@ -2601,7 +2579,7 @@ impl State {
             return;
         }
         match looked {
-            Ok(AutoLooked::Stands(outcome)) => self.auto_stands(outcome, now, jobs),
+            Ok(AutoLooked::Stands(outcome)) => self.auto_stands(*outcome, now, jobs),
             Ok(AutoLooked::Act) => self.auto_act(now, jobs),
             Err(PitboardError::Failed { message, .. }) => {
                 self.auto_standing = Some(AutoStanding::Stopped {
@@ -2619,13 +2597,10 @@ impl State {
     /// holding every switch somebody asks for, nor while a refusal's wait runs: a later look
     /// asks again.
     fn auto_act(&mut self, now: Now, jobs: &mut Vec<Job>) {
-        if self.switch_under_way().is_some()
-            || self.changing > 0
-            || self.auto_refusals.waits(now.running)
-        {
+        if self.switch_under_way() || self.changing > 0 || self.auto_refusals.waits(now.running) {
             return;
         }
-        self.switching = Some(AUTOMATICALLY.to_owned());
+        self.switching = Some(Switching::Automatically);
         jobs.push(Job::AutoSwitch {
             at: self.preferences.threshold().percent(),
         });
@@ -2642,6 +2617,7 @@ impl State {
             Ok(AutoSwitched::Switched {
                 from,
                 to,
+                accounts,
                 adoption,
                 warnings,
                 used,
@@ -2651,6 +2627,7 @@ impl State {
                     notice: crate::present::auto_switched_notice(
                         &from,
                         &to,
+                        &accounts,
                         &used,
                         &adoption,
                         now.epoch(),
@@ -2659,16 +2636,16 @@ impl State {
                 self.auto_told.clear();
                 self.switched_back = None;
                 self.auto_refusals.ended();
-                let qualified = Key::parse(&to).qualified();
+                let (left, put) = accounts.clone();
                 let back = Back {
-                    from: Key::parse(&from).qualified(),
+                    from: left.clone(),
                     resets_at,
                 };
                 let switched = Switched {
                     outcome: Switch::Switched {
-                        provider: ProviderId::Claude.code().into(),
-                        from: from.clone(),
-                        to: to.clone(),
+                        provider: ProviderId::Claude,
+                        from: left.label,
+                        to: put.clone(),
                         adoption: adoption.clone(),
                     },
                     warnings: warnings.clone(),
@@ -2676,14 +2653,15 @@ impl State {
                 self.auto_standing = Some(AutoStanding::Came(AutoSwitched::Switched {
                     from,
                     to,
+                    accounts,
                     adoption,
                     warnings,
                     used,
                     resets_at,
                 }));
-                self.switched(&qualified, None, Ok(switched), now, jobs);
-                if let Some(last) = (self.last_switches.iter_mut())
-                    .find(|last| last.provider == ProviderId::Claude.code())
+                self.switched(&put, None, Ok(switched), now, jobs);
+                if let Some(last) =
+                    (self.last_switches.iter_mut()).find(|last| last.provider == ProviderId::Claude)
                 {
                     last.back = Some(back);
                 }
@@ -2717,7 +2695,8 @@ impl State {
         let told = match &outcome {
             AutoSwitched::Skipped { from, code, .. }
                 if matches!(*code, "already_switched" | "settling")
-                    && (self.switched_back.as_ref()).is_some_and(|back| back.from == *from) =>
+                    && (self.switched_back.as_ref())
+                        .is_some_and(|back| back.from.typed() == *from) =>
             {
                 None
             }
@@ -2803,7 +2782,7 @@ impl State {
     /// waits after as many attempts.
     fn warmed_up(
         &mut self,
-        asked: Option<String>,
+        asked: Option<Key>,
         done: Result<WarmUp, WarmRefused>,
         now: Now,
         jobs: &mut Vec<Job>,
@@ -2830,8 +2809,8 @@ impl State {
             Err(WarmRefused { told_apart, error }) => {
                 let PitboardError::Failed { message, .. } = &*error;
                 match asked {
-                    Some(qualified) => {
-                        self.present(Refused::of(could_not_warm(&qualified), *error));
+                    Some(account) => {
+                        self.present(Refused::of(could_not_warm(&account.label), *error));
                     }
                     None => {
                         self.warm.failed = Some(message.clone());
@@ -2967,8 +2946,8 @@ impl State {
             Answer::Looked { changed, measured } => self.looked(changed, measured, now, jobs),
             Answer::Installed { mut tools } => {
                 let gone = self.gone_since_asked.take();
-                if let Some(gone) = &gone {
-                    tools.retain(|tool| &tool.code != gone);
+                if let Some(gone) = gone {
+                    tools.retain(|&tool| tool != gone);
                 }
                 self.installed = Some(tools);
                 self.installed_over(now, jobs);
@@ -2977,20 +2956,20 @@ impl State {
                 }
             }
             Answer::Held {
-                qualified,
+                account,
                 question,
                 then,
-            } => self.held(qualified, question, then, jobs),
+            } => self.held(account, question, then, jobs),
             Answer::Quit {
                 question,
                 outcome,
                 then,
             } => self.quit_over(question, outcome, then, now, jobs),
             Answer::Switched {
-                qualified,
+                account,
                 reopen,
                 done,
-            } => self.switched(&qualified, reopen, done.map_err(Some), now, jobs),
+            } => self.switched(&account, reopen, done.map_err(Some), now, jobs),
             Answer::AutoLooked { looked } => self.auto_looked(looked, now, jobs),
             Answer::AutoSwitched { done } => self.auto_switched(done, now, jobs),
             // The page says Pitboard opened the app only where it did.
@@ -3002,7 +2981,7 @@ impl State {
                 if let Some(signing) = self
                     .signing_in
                     .as_mut()
-                    .filter(|signing| signing.in_its_app && signing.provider == tool)
+                    .filter(|signing| signing.in_its_app && signing.tool == tool)
                 {
                     signing.opened_for_it = opened;
                 }
@@ -3024,36 +3003,34 @@ impl State {
                 self.windows.shared(stores, shared, jobs);
             }
             Answer::Enrolled {
-                provider,
+                tool,
                 again,
                 from,
                 reopen,
                 done,
             } => {
                 let enrolling = Enrolling {
-                    provider: &provider,
+                    tool,
                     again: again.as_deref(),
                     from: from.as_ref(),
                 };
                 self.enrolled_now(&enrolling, reopen, done.map_err(Some), now, jobs);
             }
             Answer::Renamed {
-                provider,
-                label,
+                account,
                 to,
                 from,
                 done,
             } => {
                 let renaming = Renaming {
-                    provider: &provider,
-                    label: &label,
+                    account: &account,
                     to: &to,
                     from: from.as_ref(),
                 };
                 self.renamed(&renaming, done.map_err(Some), now, jobs);
             }
-            Answer::Forgot { qualified, done } => {
-                self.forgot(&qualified, done.map_err(Some), now, jobs);
+            Answer::Forgot { account, done } => {
+                self.forgot(&account, done.map_err(Some), now, jobs);
             }
             Answer::ConfigUpdated(done) => self.config_updated(done.map_err(Some), now, jobs),
             Answer::LookedLeft(found) => self.looked_left(found.map_err(Some)),
@@ -3132,16 +3109,16 @@ impl State {
                 Job::Look => self.look_over(now),
                 Job::AskInstalled => self.installed_over(now, jobs),
                 // As the Swift model took a holding it could not read: nothing holds it.
-                Job::Holding { qualified, then } => self.held(qualified, None, then, jobs),
+                Job::Holding { account, then } => self.held(account, None, then, jobs),
                 // Nothing is switched under an app nobody saw go.
                 Job::Quit { question, then } => {
                     self.quit_over(question, QuitOutcome::StillRunning, then, now, jobs);
                 }
-                Job::Switch { qualified, reopen } => {
-                    self.switched(&qualified, reopen, Err(None), now, jobs);
+                Job::Switch { account, reopen } => {
+                    self.switched(&account, reopen, Err(None), now, jobs);
                 }
-                Job::Replace { qualified } => {
-                    self.switched(&qualified, None, Err(None), now, jobs);
+                Job::Replace { account } => {
+                    self.switched(&account, None, Err(None), now, jobs);
                 }
                 // Nothing is said of a look that came to nothing: the next is at its time.
                 Job::AutoLook { .. } => self.decide_later(now),
@@ -3178,33 +3155,27 @@ impl State {
                 // let go of the core's one sign-in at a time.
                 Job::PasteCode { .. } | Job::StopSignIn { .. } => {}
                 Job::Enrol {
-                    provider,
+                    tool,
                     again,
                     from,
                     reopen,
                 } => {
                     let enrolling = Enrolling {
-                        provider: &provider,
+                        tool,
                         again: again.as_deref(),
                         from: from.as_ref(),
                     };
                     self.enrolled_now(&enrolling, reopen, Err(None), now, jobs);
                 }
-                Job::Rename {
-                    provider,
-                    label,
-                    to,
-                    from,
-                } => {
+                Job::Rename { account, to, from } => {
                     let renaming = Renaming {
-                        provider: &provider,
-                        label: &label,
+                        account: &account,
                         to: &to,
                         from: from.as_ref(),
                     };
                     self.renamed(&renaming, Err(None), now, jobs);
                 }
-                Job::Forget { qualified } => self.forgot(&qualified, Err(None), now, jobs),
+                Job::Forget { account } => self.forgot(&account, Err(None), now, jobs),
                 Job::UpdateConfig { .. } => self.config_updated(Err(None), now, jobs),
                 Job::LookLeft => self.looked_left(Err(None)),
                 Job::Stow { from, .. } => self.stowed(from.as_ref(), Err(None), now, jobs),
@@ -3240,7 +3211,7 @@ impl State {
         &mut self,
         id: u64,
         started: Result<(), Option<PitboardError>>,
-        put_back: Option<String>,
+        put_back: Option<Key>,
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
@@ -3253,10 +3224,10 @@ impl State {
         let switch = self
             .switch_after_park
             .take_if(|(park, _)| *park == id)
-            .map(|(_, qualified)| qualified);
+            .map(|(_, account)| account);
         let reopen = parked
             .as_ref()
-            .and_then(|parked| Some((parked.tool.clone(), parked.reopen.clone()?)));
+            .and_then(|parked| Some((parked.tool, parked.reopen.clone()?)));
         match started {
             Ok(()) => {
                 match self.signing_in.as_mut().filter(|_| current) {
@@ -3291,9 +3262,9 @@ impl State {
                 }
             }
         }
-        if let Some(qualified) = switch {
+        if let Some(account) = switch {
             jobs.push(Job::Holding {
-                qualified,
+                account,
                 then: After::Switch,
             });
         }
@@ -3320,7 +3291,7 @@ impl State {
         match (done, signing) {
             (Ok(done), signing) => {
                 if let Some(signing) = &signing {
-                    self.refused_by.remove(&signing.provider);
+                    self.refused_by.remove(&signing.tool);
                 }
                 self.changes_seen += 1;
                 self.updated_ms = None;
@@ -3332,7 +3303,7 @@ impl State {
                     // The sheet it was started from, if it is still up, gives way to the name.
                     self.sheet_failure = None;
                     if self.sheet.take().is_some() {
-                        self.name_next(&signing.provider, &done, jobs);
+                        self.name_next(signing.tool, &done, jobs);
                     }
                     let said = self.enrolled(&signing, done);
                     asked.saying = self.say_after_read(said);
@@ -3357,12 +3328,13 @@ impl State {
             Some(error) => Refused::of(title, error),
             None => Refused::lost(title),
         };
-        if refused.code.as_deref() == Some(&format!("{}_program_missing", signing.provider)) {
+        let missing_code = format!("{}_program_missing", signing.tool.code());
+        if refused.code.as_deref() == Some(missing_code.as_str()) {
             if let Some(tools) = self.installed.as_mut() {
-                tools.retain(|tool| tool.code != signing.provider);
+                tools.retain(|&tool| tool != signing.tool);
             }
             if self.asking_installed {
-                self.gone_since_asked = Some(signing.provider.clone());
+                self.gone_since_asked = Some(signing.tool);
             } else {
                 self.ask_installed(jobs);
             }
@@ -3370,11 +3342,8 @@ impl State {
                 self.keep(&refused.warnings, jobs);
                 return;
             }
-            if let Some(missing) =
-                crate::present::words::missing(pitboard_core::host::OS, &signing.provider)
-            {
-                refused.message = format!("{} {}", missing.title, missing.detail);
-            }
+            let missing = crate::present::words::missing(pitboard_core::host::OS, signing.tool);
+            refused.message = format!("{} {}", missing.title, missing.detail);
         }
         self.sign_in_refused(signing, refused, jobs);
     }
@@ -3393,15 +3362,15 @@ impl State {
         let EnrolledAs::InUse { again } = done.outcome else {
             return done.warnings;
         };
-        let provider = signing.provider.as_str();
-        let to = typed_as_core(provider, &done.label);
+        let provider = signing.tool;
+        let to = Key::new(provider, &done.label);
         let mut said = self
             .last_switches
             .iter()
             .find(|last| last.provider == provider && last.to == to)
             .cloned()
             .unwrap_or_else(|| LastSwitch {
-                provider: provider.to_owned(),
+                provider,
                 to,
                 follows_at: None,
                 restart: None,
@@ -3410,9 +3379,7 @@ impl State {
                 opens: None,
                 back: None,
             });
-        let app = ProviderId::parse(provider)
-            .filter(|_| signing.in_its_app)
-            .map(ProviderId::program);
+        let app = signing.in_its_app.then(|| provider.program());
         let sentence = signed_in_now(&done.label, again, app);
         // An account an app had not in use before is said as a switch to it.
         if signing.in_its_app && !signing.in_use_before {
@@ -3553,7 +3520,7 @@ impl State {
                 let again = accounts
                     .iter()
                     .find(|enrolled| enrolled.id == account)
-                    .and_then(|enrolled| enrolled.qualified.as_deref());
+                    .and_then(|enrolled| enrolled.key.as_ref());
                 jobs.push(Job::Post {
                     notice: crate::present::standing_notice(warning, again),
                 });
@@ -3573,8 +3540,7 @@ impl State {
             .warnings
             .iter()
             .find(|warning| {
-                warning.code == "in_use_unconfirmed"
-                    && !warning.provider.as_deref().is_some_and(in_its_app)
+                warning.code == "in_use_unconfirmed" && !warning.provider.is_some_and(in_its_app)
             })
             .map(|warning| warning.message.clone());
         let new = said.is_some() && said != self.unconfirmed_asked;
@@ -3689,15 +3655,12 @@ impl State {
     }
 
     // Once `to` is no longer in use somebody switched since.
-    fn switch_back(&mut self, from: String, to: &str, jobs: &mut Vec<Job>) {
+    fn switch_back(&mut self, from: Key, to: &Key, jobs: &mut Vec<Job>) {
         let in_use = self.status.as_ref().is_some_and(|read| {
-            read.accounts.iter().any(|account| {
-                account.signed_in
-                    && (account.qualified.as_deref())
-                        .is_some_and(|qualified| Key::parse(qualified) == Key::parse(to))
-            })
+            (read.accounts.iter())
+                .any(|account| account.signed_in && account.key.as_ref() == Some(to))
         });
-        if !in_use || self.switch_under_way().is_some() {
+        if !in_use || self.switch_under_way() {
             self.show(Some(Place::Accounts));
             return;
         }
@@ -3706,7 +3669,7 @@ impl State {
             .find(|back| back.from == from)
             .and_then(|back| back.resets_at);
         self.switched_back = Some(SwitchedBack {
-            from: Key::parse(&from).typed(),
+            from: from.clone(),
             until,
         });
         self.switch_asked(from, jobs);
@@ -3718,11 +3681,11 @@ impl State {
     /// waits for the person to let Pitboard quit it first: switched under it, the app would go
     /// on with the account left behind, and its own sign-out would revoke the login Pitboard
     /// has just parked.
-    fn switch_asked(&mut self, qualified: String, jobs: &mut Vec<Job>) {
+    fn switch_asked(&mut self, account: Key, jobs: &mut Vec<Job>) {
         // One switch at a time: the second would wait behind the first anyway, and its
         // choice was made from a menu that did not yet show the first. A question waiting to
         // be answered comes back to the front rather than being left behind unseen.
-        if self.switch_under_way().is_some() {
+        if self.switch_under_way() {
             if self.asking().is_some() || self.replace_asked().is_some() {
                 self.show_over(Some(Place::Accounts));
             }
@@ -3733,9 +3696,9 @@ impl State {
         // sign-in inside the app waiting meanwhile stays until the switch goes on.
         self.drop_question();
         self.replacing = None;
-        self.switching = Some(qualified.clone());
+        self.switching = Some(Switching::To(account.clone()));
         jobs.push(Job::Holding {
-            qualified,
+            account,
             then: After::Switch,
         });
     }
@@ -3743,23 +3706,23 @@ impl State {
     /// The answer to the question a switch asked about replacing a login its service refuses
     /// for good: taken once, for the account it asked about, whether or not the app closed
     /// the question first.
-    fn replace_and_switch(&mut self, qualified: String, jobs: &mut Vec<Job>) {
+    fn replace_and_switch(&mut self, account: Key, jobs: &mut Vec<Job>) {
         if self.switching.is_some()
             || !self
                 .replacing
                 .as_ref()
-                .is_some_and(|replacing| replacing.qualified == qualified)
+                .is_some_and(|replacing| replacing.account == account)
         {
             return;
         }
         self.replacing = None;
-        self.switching = Some(qualified.clone());
-        jobs.push(Job::Replace { qualified });
+        self.switching = Some(Switching::To(account.clone()));
+        jobs.push(Job::Replace { account });
     }
 
     fn held(
         &mut self,
-        qualified: String,
+        account: Key,
         question: Option<QuitQuestion>,
         then: After,
         jobs: &mut Vec<Job>,
@@ -3790,37 +3753,33 @@ impl State {
                 });
                 self.show_over(Some(Place::Accounts));
             }
-            None => self.go_on(qualified, then, None, false, jobs),
+            None => self.go_on(account, then, None, false, jobs),
         }
     }
 
-    fn quit_and_switch(&mut self, qualified: &str, jobs: &mut Vec<Job>) {
+    fn quit_and_switch(&mut self, account: &Key, jobs: &mut Vec<Job>) {
         let Some(Quitting { question, then, .. }) = self
             .quitting
-            .take_if(|quitting| quitting.question.qualified == qualified)
+            .take_if(|quitting| quitting.question.account == *account)
         else {
             return;
         };
         match &then {
-            After::Switch => self.switching = Some(question.qualified.clone()),
-            After::SignIn {
-                provider,
-                again,
-                from,
-            } => {
+            After::Switch => self.switching = Some(Switching::To(question.account.clone())),
+            After::SignIn { tool, again, from } => {
                 // One sign-in at a time: another started from a sheet put up once the question
                 // was closed, which let this one's sheet go.
                 if self.signing_in.is_some() {
                     return;
                 }
                 self.hold(from.as_ref());
-                let mut signing = self.new_sign_in(provider.clone(), again.clone());
+                let mut signing = self.new_sign_in(*tool, again.clone());
                 signing.quitting = true;
                 self.signing_in = Some(signing);
             }
-            After::Enrol { provider, from, .. } => {
+            After::Enrol { tool, from, .. } => {
                 self.hold(from.as_ref());
-                self.recording = Some((from.clone(), provider.clone(), Recording::Quitting));
+                self.recording = Some((from.clone(), *tool, Recording::Quitting));
             }
             After::Uninstall => {
                 if !self.may_uninstall() {
@@ -3850,9 +3809,7 @@ impl State {
         jobs: &mut Vec<Job>,
     ) {
         let QuitQuestion {
-            qualified,
-            name: app,
-            ..
+            account, name: app, ..
         } = question;
         let message = |again: &str| match &outcome {
             QuitOutcome::Lingering { .. } => {
@@ -3866,13 +3823,13 @@ impl State {
             message,
             code: Some("app_open".into()),
             warnings: Vec::new(),
-            account: Some(qualified.clone()),
+            account: Some(account.clone()),
         };
         let lingering = match outcome {
             QuitOutcome::Quit { copy } => {
-                return self.go_on(qualified, then, Some(copy), true, jobs);
+                return self.go_on(account, then, Some(copy), true, jobs);
             }
-            QuitOutcome::NotRunning => return self.go_on(qualified, then, None, true, jobs),
+            QuitOutcome::NotRunning => return self.go_on(account, then, None, true, jobs),
             QuitOutcome::StillRunning => None,
             QuitOutcome::Lingering { copy } => Some(copy),
         };
@@ -3880,7 +3837,7 @@ impl State {
             After::Switch => {
                 self.switching = None;
                 self.reopen_after_switch = None;
-                let title = could_not_switch(&qualified);
+                let title = could_not_switch(&account.label);
                 match self.outside_switch.take() {
                     Some(OutsideSwitch { request, .. }) => {
                         self.answer_outside(request, Answered::Failed { title });
@@ -3908,12 +3865,7 @@ impl State {
         }
         // Here, once a switch this quit was for has let go: one asked meanwhile holds it back.
         if let Some(copy) = lingering {
-            self.open_again(
-                Key::parse(&qualified).provider.code().to_owned(),
-                copy,
-                false,
-                jobs,
-            );
+            self.open_again(account.provider, copy, false, jobs);
         }
     }
 
@@ -3927,7 +3879,7 @@ impl State {
     /// the switch's warning about the file that holds it back says the rest.
     fn switched(
         &mut self,
-        qualified: &str,
+        account: &Key,
         reopen: Option<String>,
         done: Result<Switched, Option<PitboardError>>,
         now: Now,
@@ -3936,31 +3888,27 @@ impl State {
         // Pitboard closed it, so Pitboard opens it, whether or not the switch worked, where its
         // folder is whole: as soon as the switch is made, and not after the read that follows
         // it, which can wait on the network.
-        let tool = Key::parse(qualified).provider.code();
+        let tool = account.provider;
         let kept = self
             .reopen_after_switch
             .take()
-            .filter(|(of, _)| of == tool)
+            .filter(|(of, _)| *of == tool)
             .map(|(_, copy)| copy);
         if let Some(location) = reopen.or(kept) {
             jobs.push(Job::Open {
                 location,
-                tool: tool.to_owned(),
+                tool,
                 front: false,
             });
         }
         let outside = self.outside_switch.take().map(|outside| outside.request);
-        let label = Key::parse(qualified).label;
+        let label = account.label.clone();
         match done {
             Ok(done) => {
                 if let Some(request) = outside {
-                    let answered = Answered::Switched {
-                        tool: tool.to_owned(),
-                        label,
-                    };
-                    self.answer_outside(request, answered);
+                    self.answer_outside(request, Answered::Switched { tool, label });
                 }
-                self.refused_by.remove(tool);
+                self.refused_by.remove(&tool);
                 self.changes_seen += 1;
                 // Advice about this tool is about the account it has just left. Another
                 // tool's stays: it is as true as it was, and it is never told again. Nothing
@@ -3970,10 +3918,9 @@ impl State {
                     done.outcome,
                     Switch::Switched { .. } | Switch::Installed { .. }
                 ) {
-                    let provider = Key::parse(qualified).provider.code();
-                    self.advice.retain(|advice| advice.provider != provider);
+                    self.advice.retain(|advice| advice.provider != tool);
                 }
-                self.said(qualified, done, now);
+                self.said(account, done, now);
                 self.updated_ms = None;
                 self.refresh(
                     Asked {
@@ -3996,7 +3943,7 @@ impl State {
                     return self.answer_outside(request, Answered::Replace { label });
                 }
                 self.replacing = Some(Replacing {
-                    qualified: qualified.to_owned(),
+                    account: account.clone(),
                     message,
                     asked: true,
                 });
@@ -4004,7 +3951,7 @@ impl State {
             }
             Err(error) => {
                 self.switching = None;
-                let title = could_not_switch(qualified);
+                let title = could_not_switch(&account.label);
                 let refused = match error {
                     Some(error) => Refused::of(title, error),
                     None => Refused::lost(title),
@@ -4024,17 +3971,17 @@ impl State {
     }
 
     // Kept for the next add of `tool`'s account, where it signs in inside its app.
-    fn refused(&mut self, tool: &str, refused: &Refused) {
+    fn refused(&mut self, tool: ProviderId, refused: &Refused) {
         if in_its_app(tool)
             && let Some(code) = &refused.code
         {
-            self.refused_by.insert(tool.to_owned(), code.clone());
+            self.refused_by.insert(tool, code.clone());
         }
     }
 
     /// Keeps what a switch that worked said, in place of what its own tool's last switch
     /// said and beside what every other tool's did.
-    fn said(&mut self, qualified: &str, done: Switched, now: Now) {
+    fn said(&mut self, account: &Key, done: Switched, now: Now) {
         // With no account before it where the tool held nobody's login.
         let (provider, from, to, adoption) = match done.outcome {
             Switch::Switched {
@@ -4048,21 +3995,21 @@ impl State {
                 to,
                 adoption,
             } => (provider, None, to, adoption),
-            Switch::AlreadyActive { label } => {
+            Switch::AlreadyActive { account: to } => {
                 // Nothing moved, so what this tool's last switch said still stands, and
                 // anything this one warned about is said beside it.
                 if done.warnings.is_empty() {
                     return;
                 }
-                let provider = Key::parse(qualified).provider.code();
+                let provider = account.provider;
                 let mut said = self
                     .last_switches
                     .iter()
-                    .find(|last| last.provider == provider && last.to == label)
+                    .find(|last| last.provider == provider && last.to == to)
                     .cloned()
                     .unwrap_or_else(|| LastSwitch {
-                        provider: provider.to_owned(),
-                        to: label,
+                        provider,
+                        to,
                         follows_at: None,
                         restart: None,
                         said: None,
@@ -4090,7 +4037,7 @@ impl State {
                 None,
                 from.map(|from| RestartNeeded {
                     program: program.to_owned(),
-                    from: Key::parse(&from).label,
+                    from,
                 }),
             ),
         };
@@ -4128,10 +4075,7 @@ impl State {
             read.accounts.iter().any(|account| {
                 account.provider == last.provider
                     && account.signed_in
-                    && account
-                        .qualified
-                        .as_deref()
-                        .is_some_and(|qualified| Key::parse(qualified) == Key::parse(&last.to))
+                    && account.key.as_ref() == Some(&last.to)
             })
         });
     }
@@ -4146,11 +4090,7 @@ impl State {
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        let Enrolling {
-            provider,
-            again,
-            from,
-        } = *enrolling;
+        let Enrolling { tool, again, from } = *enrolling;
         self.saved(from);
         if self
             .recording
@@ -4160,19 +4100,19 @@ impl State {
             self.recording = None;
         }
         if let Some(location) = reopen {
-            self.open_again(provider.to_owned(), location, false, jobs);
+            self.open_again(tool, location, false, jobs);
         }
         match done {
             Ok(done) => {
                 self.changes_seen += 1;
-                self.refused_by.remove(provider);
+                self.refused_by.remove(&tool);
                 let its_own = from.is_some() && self.sheet.as_ref() == from;
                 if its_own {
                     self.sheet = None;
                     self.sheet_failure = None;
                 }
                 if its_own || from.is_none() {
-                    self.name_next(provider, &done, jobs);
+                    self.name_next(tool, &done, jobs);
                 }
                 self.updated_ms = None;
                 self.read_after_change(now, jobs);
@@ -4184,11 +4124,11 @@ impl State {
                     Some(error) => Refused::of(title, error),
                     None => Refused::lost(title),
                 };
-                self.refused(provider, &refused);
+                self.refused(tool, &refused);
                 let none_stored = refused.code.as_deref() == Some("live_credential_absent");
                 if from.is_none() && none_stored {
                     let add = Sheet::Add {
-                        provider: Some(provider.to_owned()),
+                        tool: Some(tool.into()),
                     };
                     self.present_sheet(add, jobs);
                     return;
@@ -4199,11 +4139,10 @@ impl State {
     }
 
     // Where no other sheet is up, which would be somebody else's.
-    fn name_next(&mut self, provider: &str, done: &Enrolled, jobs: &mut Vec<Job>) {
+    fn name_next(&mut self, tool: ProviderId, done: &Enrolled, jobs: &mut Vec<Job>) {
         if done.added && self.sheet.is_none() {
             let name = Sheet::Name {
-                provider: provider.to_owned(),
-                label: done.label.clone(),
+                account: Key::new(tool, &done.label).into(),
                 email: done.email.clone(),
             };
             self.present_sheet(name, jobs);
@@ -4223,27 +4162,16 @@ impl State {
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        let Renaming {
-            provider,
-            label,
-            to,
-            from,
-        } = *renaming;
+        let Renaming { account, to, from } = *renaming;
         self.saved(from);
         match done {
             Ok(()) => {
                 self.changes_seen += 1;
-                self.carry(provider, label, to, jobs);
+                self.carry(account, to, jobs);
                 let own = |sheet: &Sheet| match sheet {
-                    Sheet::Rename {
-                        provider: of,
-                        label: was,
+                    Sheet::Rename { account: of } | Sheet::Name { account: of, .. } => {
+                        Key::from(of.clone()) == *account
                     }
-                    | Sheet::Name {
-                        provider: of,
-                        label: was,
-                        ..
-                    } => of == provider && was == label,
                     _ => false,
                 };
                 if self.sheet.as_ref().is_some_and(own) {
@@ -4255,7 +4183,7 @@ impl State {
             }
             Err(error) => {
                 self.change_over();
-                let title = could_not_rename(label);
+                let title = could_not_rename(&account.label);
                 let refused = match error {
                     Some(error) => Refused::of(title, error),
                     None => Refused::lost(title),
@@ -4265,58 +4193,58 @@ impl State {
         }
     }
 
-    /// What was said about the account `label` of `provider`'s tool, said about it as `to`:
-    /// what its tool's last switch said, advice about it, and what was told about it.
-    fn carry(&mut self, provider: &str, label: &str, to: &str, jobs: &mut Vec<Job>) {
+    /// What was said about `account`, said about it as `to`: what its tool's last switch said,
+    /// advice about it, and what was told about it.
+    fn carry(&mut self, account: &Key, to: &str, jobs: &mut Vec<Job>) {
+        let Key { provider, label } = account;
         for advice in &mut self.advice {
-            if advice.provider == provider {
+            if advice.provider == *provider {
                 *advice = advice.renaming(label, to);
             }
         }
-        rename_told(&mut self.told_this_launch, provider, label, to);
+        rename_told(&mut self.told_this_launch, *provider, label, to);
         let before = self.told.clone();
-        rename_told(&mut self.told, provider, label, to);
+        rename_told(&mut self.told, *provider, label, to);
         if self.told != before {
             jobs.push(Job::KeepTold {
                 told: self.told.clone(),
             });
         }
-        let (old, new) = (typed_as_core(provider, label), typed_as_core(provider, to));
         for last in &mut self.last_switches {
-            if last.provider != provider {
+            if last.provider != *provider {
                 continue;
             }
-            if last.to == old {
-                last.to.clone_from(&new);
+            if last.to == *account {
+                last.to = Key::new(*provider, to);
             }
             if let Some(restart) = &mut last.restart
-                && restart.from == label
+                && restart.from == *label
             {
                 restart.from = to.to_owned();
             }
         }
     }
 
-    /// The account `qualified` names has been forgotten, and the login parked for it, or it
-    /// could not be, which is said in the window it was asked from.
+    /// `account` has been forgotten, and the login parked for it, or it could not be, which is
+    /// said in the window it was asked from.
     fn forgot(
         &mut self,
-        qualified: &str,
+        account: &Key,
         done: Result<(), Option<PitboardError>>,
         now: Now,
         jobs: &mut Vec<Job>,
     ) {
-        let tool = Key::parse(qualified).provider.code();
+        let tool = account.provider;
         match done {
             Ok(()) => {
                 self.changes_seen += 1;
-                self.refused_by.remove(tool);
+                self.refused_by.remove(&tool);
                 self.updated_ms = None;
                 self.read_after_change(now, jobs);
             }
             Err(error) => {
                 self.change_over();
-                let title = could_not_remove(qualified);
+                let title = could_not_remove(&account.label);
                 let refused = match error {
                     Some(error) => Refused::of(title, error),
                     None => Refused::lost(title),
@@ -4464,10 +4392,10 @@ impl State {
                 self.abandoned = gave_up.switch;
                 let settled = (gave_up.warnings.iter())
                     .filter(|warning| warning.code != "move_not_given_up")
-                    .any(|warning| warning.provider.as_deref().is_some_and(in_its_app));
+                    .any(|warning| warning.provider.is_some_and(in_its_app));
                 // A move given up or settled is no longer what refused the last change.
                 if !gave_up.moves.is_empty() || settled {
-                    self.refused_by.retain(|provider, _| !in_its_app(provider));
+                    self.refused_by.retain(|&tool, _| !in_its_app(tool));
                 }
                 self.moves_given_up = gave_up.moves;
                 self.changes_seen += 1;

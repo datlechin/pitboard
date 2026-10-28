@@ -7,29 +7,32 @@ use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::status;
 use super::{AtLimit, EarlierPreferences, Intent, Place, SettingsSection, Tip, WindowRequest};
+use crate::AccountKey;
 use crate::Footing;
+use crate::Tool;
 use crate::present::testing::account;
+use pitboard_core::provider::ProviderId;
 use std::collections::BTreeSet;
 
 /// Both tools with one account each, each in use.
 fn one_of_each() -> Stub {
     Stub::reading(Ok(status(vec![
         account(Some("work")).signed_in().build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ])))
 }
 
-fn only_one(provider: &str, label: &str) -> Footing {
+fn only_one(tool: Tool, label: &str) -> Footing {
     Footing::OnlyOne {
-        provider: provider.into(),
-        label: label.into(),
+        account: AccountKey::new(tool, label),
     }
 }
 
-fn decline(provider: &str) -> Intent {
-    Intent::DeclineSecondAccount {
-        provider: provider.into(),
-    }
+fn decline(tool: Tool) -> Intent {
+    Intent::DeclineSecondAccount { tool }
 }
 
 /// A model as the app starts it, what it keeps read from `machine` and its first read in.
@@ -55,21 +58,21 @@ fn declined(preferences: &Preferences) -> Vec<&str> {
 fn a_second_account_is_declined_per_tool() {
     let mut machine = one_of_each();
     let mut model = started(&mut machine);
-    assert_eq!(model.shown().footing, only_one("claude", "work"));
+    assert_eq!(model.shown().footing, only_one(Tool::Claude, "work"));
 
-    model.send(decline("claude"));
+    model.send(decline(Tool::Claude));
     model.run(&mut machine);
-    assert_eq!(model.shown().footing, only_one("codex", "job"));
+    assert_eq!(model.shown().footing, only_one(Tool::Codex, "job"));
     let kept = machine.kept_preferences.last().expect("kept");
     assert_eq!(declined(kept), ["claude"]);
 
     let mut later = started(&mut machine);
     assert_eq!(
         later.shown().footing,
-        only_one("codex", "job"),
+        only_one(Tool::Codex, "job"),
         "and it is remembered"
     );
-    later.send(decline("codex"));
+    later.send(decline(Tool::Codex));
     later.run(&mut machine);
     assert_eq!(later.shown().footing, Footing::Ready);
 }
@@ -155,7 +158,7 @@ fn a_nudge_declined_before_codex_was_about_claude_code() {
         second_account_nudge_hidden: true,
     });
     let model = started(&mut machine);
-    assert_eq!(model.shown().footing, only_one("codex", "job"));
+    assert_eq!(model.shown().footing, only_one(Tool::Codex, "job"));
     assert_eq!(declined(&model.state.preferences), ["claude"]);
     assert_eq!(
         machine
@@ -280,7 +283,11 @@ fn a_not_now_said_while_the_preferences_are_read_is_kept_with_them() {
     let mut model = Hand::new();
     model.send(Intent::Start);
     let kept = model.take(|job| matches!(job, Job::LoadKept));
-    assert_eq!(model.send(decline("claude")), [], "kept once they are in");
+    assert_eq!(
+        model.send(decline(Tool::Claude)),
+        [],
+        "kept once they are in"
+    );
     let answer = machine.answer(kept);
     model.give(answer);
     model.run(&mut machine);
@@ -311,11 +318,11 @@ fn preferences_that_came_to_nothing_are_left_as_they_are() {
     assert_eq!(model.shown().window_request.serial, 0);
 
     assert_eq!(
-        model.send(decline("claude")),
+        model.send(decline(Tool::Claude)),
         [],
         "nothing written over them"
     );
-    assert_eq!(model.shown().footing, only_one("codex", "job"));
+    assert_eq!(model.shown().footing, only_one(Tool::Codex, "job"));
 }
 
 /// An `app.json` that is there and cannot be read, because it is not this user's, a disk
@@ -343,10 +350,10 @@ fn preferences_that_cannot_be_read_are_left_as_they_are() {
         "not opened as if new"
     );
 
-    model.send(decline("claude"));
+    model.send(decline(Tool::Claude));
     model.run(&mut machine);
     assert!(machine.kept_preferences.is_empty(), "nor over them later");
-    assert_eq!(model.shown().footing, only_one("codex", "job"));
+    assert_eq!(model.shown().footing, only_one(Tool::Codex, "job"));
 }
 
 /// No tool is nudged toward a second account while the preferences are still being read:
@@ -373,7 +380,7 @@ fn no_tool_is_nudged_while_the_preferences_are_read() {
     );
     assert_eq!(model.shown().setup, None);
     model.run(&mut machine);
-    assert_eq!(model.shown().footing, only_one("codex", "job"));
+    assert_eq!(model.shown().footing, only_one(Tool::Codex, "job"));
 }
 
 /// A tool declined twice is kept once.
@@ -382,8 +389,8 @@ fn a_tool_declined_twice_is_kept_once() {
     let mut machine = one_of_each();
     let mut model = started(&mut machine);
     let before = machine.kept_preferences.len();
-    model.send(decline("claude"));
+    model.send(decline(Tool::Claude));
     model.run(&mut machine);
-    assert_eq!(model.send(decline("claude")), []);
+    assert_eq!(model.send(decline(Tool::Claude)), []);
     assert_eq!(machine.kept_preferences.len(), before + 1);
 }

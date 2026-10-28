@@ -116,8 +116,8 @@ The other crates:
   example `stand-in` the program every test starts in place of a tool.
 - `crates/pitboard-model`: the model both apps run on, over the core, and what their UniFFI
   bindings export.
-  - `lib.rs`: what the bindings export beside the model, and the free functions an app calls
-    as it starts.
+  - `lib.rs`: what the bindings export beside the model, `Tool` and `AccountKey` among them,
+    and the free functions an app calls as it starts.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
@@ -449,6 +449,12 @@ keeps it is in the header of the module named.
   read. One that would quit an app answers with the quit question and quits it only when asked
   again with `QuitAndSwitch`, and one that needs another question only the app asks is
   refused in words (`model/glancing.rs`).
+- The model names a tool and an account by type: the core's `ProviderId` and `Key` inside, and
+  its own `Tool` and `AccountKey` to an app. What crosses a process stays text: a
+  notification's `clicked` argument, read back as the core reads an account typed, and the ids
+  of the glance and of a request from outside. The one conversion out of the core's
+  `non_exhaustive` `ProviderId`, into `Tool`, is the model's only arm for a tool it does not
+  know (`every_tool_the_core_knows_is_one_the_apps_name`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).

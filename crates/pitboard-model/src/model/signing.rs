@@ -18,9 +18,13 @@ use super::testing::records::{
     desktop_warning, enrolled_as, refusal, status, still_running, switched, warning,
 };
 use super::{Intent, Place, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
+use crate::AccountKey;
 use crate::EnrolledAs;
+use crate::Tool;
 use crate::present::words;
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::switch::WaitStep;
 
 // `claude auth login`'s prompt for a code (`sign_in_output`).
@@ -32,10 +36,10 @@ const REFUSED: &str = "Invalid code. Please make sure the full code was copied.\
 /// An address Codex prints for a person to open.
 const CODEX_ADDRESS: &str = "https://auth.openai.com/oauth/authorize?state=x\n";
 
-// A sign-in of `provider`'s tool, again to the account `again` names or to a new one.
-fn sign_in(provider: &str, again: Option<&str>) -> Intent {
+// A sign-in of `tool`, again to the account `again` names or to a new one.
+fn sign_in(tool: Tool, again: Option<&str>) -> Intent {
     Intent::SignIn {
-        provider: provider.into(),
+        tool,
         again: again.map(str::to_owned),
     }
 }
@@ -48,10 +52,8 @@ fn present(sheet: Sheet) -> Intent {
     Intent::PresentSheet { sheet }
 }
 
-pub(super) fn add(provider: Option<&str>) -> Sheet {
-    Sheet::Add {
-        provider: provider.map(str::to_owned),
-    }
+pub(super) fn add(tool: Option<Tool>) -> Sheet {
+    Sheet::Add { tool }
 }
 
 /// Puts `sheet` up and answers what that asks.
@@ -62,8 +64,8 @@ fn put_up(model: &mut Hand, machine: &mut Stub, sheet: Sheet) {
 
 /// Asks for a sign-in of `provider`'s tool, again for `again`, and answers its start: the id
 /// it was given.
-fn starts(model: &mut Hand, machine: &mut Stub, provider: &str, again: Option<&str>) -> u64 {
-    let jobs = model.send(sign_in(provider, again));
+fn starts(model: &mut Hand, machine: &mut Stub, tool: Tool, again: Option<&str>) -> u64 {
+    let jobs = model.send(sign_in(tool, again));
     let [Job::SignIn { id, .. }] = &jobs[..] else {
         panic!("one sign-in asked for: {jobs:?}");
     };
@@ -100,11 +102,11 @@ fn ends(model: &mut Hand, machine: &mut Stub, id: u64) {
 pub(super) fn signs_in(
     model: &mut Hand,
     machine: &mut Stub,
-    provider: &str,
+    tool: Tool,
     again: Option<&str>,
     said: &[&str],
 ) {
-    let id = starts(model, machine, provider, again);
+    let id = starts(model, machine, tool, again);
     for text in said {
         says(model, id, text);
     }
@@ -127,7 +129,7 @@ fn a_sign_in_that_cannot_start_is_reported() {
         Vec::new(),
     ));
     put_up(&mut model, &mut machine, add(None));
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
 
     let shown = model.shown();
     assert_eq!(machine.signed_in, ["claude/"]);
@@ -151,7 +153,7 @@ fn a_sign_in_whose_program_has_gone_says_so_under_its_tool() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = vec![claude_code(), codex()];
-    put_up(&mut model, &mut machine, add(Some("codex")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
     let recovered = warning(
         "interrupted_switch_undone",
         "an earlier switch was interrupted",
@@ -163,7 +165,7 @@ fn a_sign_in_whose_program_has_gone_says_so_under_its_tool() {
     ));
     machine.found = vec![claude_code()];
     let asked = model.count(installed_ask);
-    starts(&mut model, &mut machine, "codex", None);
+    starts(&mut model, &mut machine, Tool::Codex, None);
 
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None, "said under the tool instead");
@@ -189,7 +191,7 @@ fn a_look_under_way_when_a_program_goes_leaves_it_missing() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = vec![claude_code(), codex()];
-    put_up(&mut model, &mut machine, add(Some("codex")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
     model.send(Intent::LookForTools);
     let look = model.take(installed_ask);
     let before = machine.answer(look);
@@ -199,7 +201,7 @@ fn a_look_under_way_when_a_program_goes_leaves_it_missing() {
         Vec::new(),
     ));
     machine.found = vec![claude_code()];
-    model.send(sign_in("codex", None));
+    model.send(sign_in(Tool::Codex, None));
     model.run_but(&mut machine, installed_ask);
 
     model.give(before);
@@ -226,7 +228,7 @@ fn a_failure_goes_once_the_form_changes() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.starting = Err(refusal("sign_in_not_isolated", "not here", Vec::new()));
     put_up(&mut model, &mut machine, add(None));
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
     assert!(model.shown().sheet_failure.is_some());
 
     model.send(Intent::DismissSheetFailure);
@@ -244,7 +246,7 @@ fn a_sheet_that_signs_in_looks_for_tools_again_when_asked() {
     model.refresh(&mut machine);
     assert_eq!(model.send(Intent::LookForTools), [], "no sheet");
 
-    put_up(&mut model, &mut machine, add(Some("codex")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
     machine.found = vec![claude_code(), codex()];
     assert_eq!(model.send(Intent::LookForTools), [Job::AskInstalled]);
     model.run(&mut machine);
@@ -255,8 +257,7 @@ fn a_sheet_that_signs_in_looks_for_tools_again_when_asked() {
         &mut model,
         &mut machine,
         Sheet::Rename {
-            provider: "claude".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Claude, "work"),
         },
     );
     assert_eq!(
@@ -272,8 +273,14 @@ fn a_sheet_that_signs_in_looks_for_tools_again_when_asked() {
 fn a_codex_sign_in_is_for_codex() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, add(Some("codex")));
-    signs_in(&mut model, &mut machine, "codex", None, &[CODEX_ADDRESS]);
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
+    signs_in(
+        &mut model,
+        &mut machine,
+        Tool::Codex,
+        None,
+        &[CODEX_ADDRESS],
+    );
     assert_eq!(machine.signed_in, ["codex/"]);
     assert_eq!(machine.over, [(1, true)], "finished and enrolled");
     assert_eq!(model.shown().signing_in, None);
@@ -284,15 +291,15 @@ fn a_codex_sign_in_is_for_codex() {
 fn adding_starts_a_sign_in_before_any_name() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, add(Some("codex")));
-    let start = crate::present::check_name(add(Some("codex")), "codex".into(), String::new())
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
+    let start = crate::present::check_name(add(Some(Tool::Codex)), Tool::Codex, String::new())
         .intent
         .expect("Sign In");
     assert_eq!(
         model.send(start),
         [Job::SignIn {
             id: 1,
-            provider: "codex".into(),
+            tool: ProviderId::Codex,
             again: None,
         }]
     );
@@ -302,16 +309,21 @@ fn adding_starts_a_sign_in_before_any_name() {
 fn once_enrolled_the_name_sheet_starts_on_the_name_the_core_picked() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, add(Some("codex")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
     machine.enrolling = enrolled_as("acme", EnrolledAs::SignedIn, Vec::new());
-    signs_in(&mut model, &mut machine, "codex", None, &[CODEX_ADDRESS]);
+    signs_in(
+        &mut model,
+        &mut machine,
+        Tool::Codex,
+        None,
+        &[CODEX_ADDRESS],
+    );
     let shown = model.shown();
     assert_eq!(
         shown.sheet,
         Some(Sheet::Name {
-            provider: "codex".into(),
-            label: "acme".into(),
-            email: "w@example.com".into(),
+            account: AccountKey::new(Tool::Codex, "acme"),
+            email: "w@example.com".into()
         })
     );
     let text = shown.sheet_text.expect("the name");
@@ -326,17 +338,22 @@ fn a_sign_in_to_an_account_enrolled_already_asks_for_no_name() {
         (
             Some("work"),
             Sheet::SignInAgain {
-                provider: "codex".into(),
-                label: "work".into(),
+                account: AccountKey::new(Tool::Codex, "work"),
             },
         ),
-        (None, add(Some("codex"))),
+        (None, add(Some(Tool::Codex))),
     ] {
         let mut model = Hand::new();
         let mut machine = Stub::reading(Ok(status(vec![codex_account("work", false)])));
         put_up(&mut model, &mut machine, sheet);
         machine.enrolling = enrolled_as("work", EnrolledAs::Renewed, Vec::new());
-        signs_in(&mut model, &mut machine, "codex", again, &[CODEX_ADDRESS]);
+        signs_in(
+            &mut model,
+            &mut machine,
+            Tool::Codex,
+            again,
+            &[CODEX_ADDRESS],
+        );
         assert_eq!(model.shown().sheet, None, "{again:?}");
     }
 }
@@ -362,7 +379,7 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
     signs_in(
         &mut model,
         &mut machine,
-        "codex",
+        Tool::Codex,
         Some("work"),
         &[CODEX_ADDRESS],
     );
@@ -371,8 +388,8 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
         panic!("what the sign-in said: {:#?}", model.state.last_switches);
     };
     assert_eq!(
-        (last.provider.as_str(), last.to.as_str()),
-        ("codex", "codex/work")
+        (last.provider, &last.to),
+        (ProviderId::Codex, &Key::new(ProviderId::Codex, "work"))
     );
     assert_eq!(
         last.said.as_deref(),
@@ -394,7 +411,7 @@ fn a_first_sign_in_to_the_account_in_use_says_it_was_enrolled() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![codex_account("work", true)])));
     machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: false }, Vec::new());
-    signs_in(&mut model, &mut machine, "codex", None, &[]);
+    signs_in(&mut model, &mut machine, Tool::Codex, None, &[]);
     assert_eq!(
         model.state.last_switches[0].said.as_deref(),
         Some(words::signed_in_now("work", false, None).as_str())
@@ -413,13 +430,13 @@ fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
         claude("personal", false, 0.0),
     ])));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![still_running()],
     );
     model.send(Intent::SwitchTo {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     model.run(&mut machine);
 
@@ -430,7 +447,7 @@ fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
         EnrolledAs::InUse { again: true },
         vec![old_login, parked.clone()],
     );
-    signs_in(&mut model, &mut machine, "codex", Some("work"), &[]);
+    signs_in(&mut model, &mut machine, Tool::Codex, Some("work"), &[]);
 
     let [last] = &model.state.last_switches[..] else {
         panic!("one tool's: {:#?}", model.state.last_switches);
@@ -473,7 +490,7 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
         EnrolledAs::InUse { again: true },
         vec![sign_in_untold.clone()],
     );
-    signs_in(&mut model, &mut machine, "codex", Some("work"), &[]);
+    signs_in(&mut model, &mut machine, Tool::Codex, Some("work"), &[]);
     let [last] = &model.state.last_switches[..] else {
         panic!("what the sign-in said: {:#?}", model.state.last_switches);
     };
@@ -485,13 +502,13 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
         claude("personal", false, 0.0),
     ])));
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![switch_untold.clone()],
     );
     model.send(Intent::SwitchTo {
-        qualified: "codex/work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     model.run(&mut machine);
     machine.enrolling = enrolled_as(
@@ -499,7 +516,7 @@ fn a_sign_in_that_could_not_tell_what_runs_says_it_once() {
         EnrolledAs::InUse { again: true },
         vec![sign_in_untold],
     );
-    signs_in(&mut model, &mut machine, "codex", Some("work"), &[]);
+    signs_in(&mut model, &mut machine, Tool::Codex, Some("work"), &[]);
 
     let shown = model.shown();
     let [last] = &model.state.last_switches[..] else {
@@ -532,7 +549,7 @@ fn a_sign_in_that_was_parked_says_what_it_warned_about() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![codex_account("work", true)])));
     machine.enrolling = enrolled_as("work", EnrolledAs::Renewed, vec![untold.clone()]);
-    let id = starts(&mut model, &mut machine, "codex", Some("work"));
+    let id = starts(&mut model, &mut machine, Tool::Codex, Some("work"));
     model.give(Answer::SignInQuiet { id });
     model.run_but(&mut machine, any_read);
     assert!(model.state.warnings.is_empty(), "not before the read lands");
@@ -561,7 +578,7 @@ fn a_refused_sign_in_says_what_it_found_on_the_way() {
         vec![recovered.clone()],
     ));
     put_up(&mut model, &mut machine, add(None));
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
@@ -578,7 +595,13 @@ fn a_refused_sign_in_says_what_it_found_on_the_way() {
 fn a_sign_in_of_another_account_says_nothing_more() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![codex_account("work", true)])));
-    signs_in(&mut model, &mut machine, "codex", None, &[CODEX_ADDRESS]);
+    signs_in(
+        &mut model,
+        &mut machine,
+        Tool::Codex,
+        None,
+        &[CODEX_ADDRESS],
+    );
     let shown = model.shown();
     assert!(model.state.last_switches.is_empty());
     assert!(model.state.warnings.is_empty());
@@ -591,12 +614,12 @@ fn a_sign_in_of_another_account_says_nothing_more() {
 /// apart from the actor and from the sign-in's own thread, which waits on the browser.
 #[test]
 fn a_code_is_asked_for_only_where_the_tool_takes_one() {
-    for (provider, takes) in [("claude", true), ("codex", false)] {
+    for (tool, takes) in [(Tool::Claude, true), (Tool::Codex, false)] {
         let mut model = Hand::new();
         let mut machine = Stub::reading(Ok(status(Vec::new())));
-        let id = starts(&mut model, &mut machine, provider, None);
+        let id = starts(&mut model, &mut machine, tool, None);
         says(&mut model, id, PROMPT);
-        assert_eq!(running(&model).wants_code, takes, "{provider}");
+        assert_eq!(running(&model).wants_code, takes, "{tool:?}");
 
         let typed = model.send(paste("abc"));
         if takes {
@@ -624,7 +647,7 @@ fn a_code_is_asked_for_only_where_the_tool_takes_one() {
 fn a_cancelled_sign_in_stops_the_tool_and_reports_nothing() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    let id = starts(&mut model, &mut machine, "codex", None);
+    let id = starts(&mut model, &mut machine, Tool::Codex, None);
     says(&mut model, id, CODEX_ADDRESS);
     assert!(running(&model).url.is_some());
 
@@ -661,19 +684,18 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again() {
     ])));
     model.refresh(&mut machine);
     let again = Sheet::SignInAgain {
-        provider: "codex".into(),
-        label: "work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     };
     put_up(&mut model, &mut machine, again);
     machine.enrolling = enrolled_as("work", EnrolledAs::Renewed, Vec::new());
-    let id = starts(&mut model, &mut machine, "codex", Some("work"));
+    let id = starts(&mut model, &mut machine, Tool::Codex, Some("work"));
     says(&mut model, id, CODEX_ADDRESS);
     let shown = running(&model);
     assert_eq!(machine.signed_in, ["codex/work"]);
     let signing = model.state.signing().expect("a sign-in");
     assert_eq!(
-        (signing.provider.as_str(), signing.again.as_deref()),
-        ("codex", Some("work"))
+        (signing.tool, signing.again.as_deref()),
+        (ProviderId::Codex, Some("work"))
     );
     assert!(shown.url.is_some());
     ends(&mut model, &mut machine, id);
@@ -682,11 +704,10 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again() {
     assert_eq!(model.shown().sheet, None);
 
     let spare = Sheet::SignInAgain {
-        provider: "claude".into(),
-        label: "spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
     };
     put_up(&mut model, &mut machine, spare);
-    signs_in(&mut model, &mut machine, "claude", Some("spare"), &[]);
+    signs_in(&mut model, &mut machine, Tool::Claude, Some("spare"), &[]);
     assert_eq!(machine.signed_in, ["codex/work", "claude/spare"]);
 }
 
@@ -696,10 +717,10 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again() {
 fn a_second_sign_in_while_one_runs_starts_nothing() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    let first = starts(&mut model, &mut machine, "codex", None);
+    let first = starts(&mut model, &mut machine, Tool::Codex, None);
     says(&mut model, first, CODEX_ADDRESS);
 
-    assert_eq!(model.send(sign_in("codex", Some("home"))), []);
+    assert_eq!(model.send(sign_in(Tool::Codex, Some("home"))), []);
     let shown = running(&model);
     assert_eq!(
         (shown.id, model.state.signing().map(|s| s.again.as_deref())),
@@ -716,7 +737,7 @@ fn a_second_sign_in_while_one_runs_starts_nothing() {
 fn a_sign_in_cancelled_while_it_starts_stops_what_started() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    model.send(sign_in("codex", None));
+    model.send(sign_in(Tool::Codex, None));
     let start = model.next();
     let Job::SignIn { id, .. } = start else {
         panic!("the sign-in asked for: {start:?}");
@@ -763,7 +784,7 @@ fn a_sign_in_asked_for_after_a_cancel_starts_once_the_cancelled_one_has_stopped(
         let mut model = Hand::new();
         let mut machine = Stub::reading(Ok(status(Vec::new())));
         put_up(&mut model, &mut machine, add(None));
-        let first = starts(&mut model, &mut machine, "claude", None);
+        let first = starts(&mut model, &mut machine, Tool::Claude, None);
         says(&mut model, first, PROMPT);
 
         assert_eq!(
@@ -772,7 +793,7 @@ fn a_sign_in_asked_for_after_a_cancel_starts_once_the_cancelled_one_has_stopped(
             "{case}"
         );
         assert_eq!(
-            model.send(sign_in("claude", None)),
+            model.send(sign_in(Tool::Claude, None)),
             [],
             "{case}: nothing asked for while the first is stopping"
         );
@@ -794,7 +815,7 @@ fn a_sign_in_asked_for_after_a_cancel_starts_once_the_cancelled_one_has_stopped(
         assert_eq!(stop, Job::StopSignIn { id: first }, "{case}");
         let asked_for = Job::SignIn {
             id: waiting.id,
-            provider: "claude".into(),
+            tool: ProviderId::Claude,
             again: None,
         };
         if stops_its_tool {
@@ -913,7 +934,7 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
         ("its start lost", |model, _, id| {
             model.give(Answer::Lost(Job::SignIn {
                 id,
-                provider: "claude".into(),
+                tool: ProviderId::Claude,
                 again: None,
             }));
         }),
@@ -941,12 +962,12 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
     for (case, ends) in cases {
         let mut model = Hand::new();
         let mut machine = Stub::reading(Ok(status(Vec::new())));
-        model.send(sign_in("claude", None));
+        model.send(sign_in(Tool::Claude, None));
         let Job::SignIn { id: first, .. } = model.next() else {
             panic!("{case}: the first sign-in asked for");
         };
         model.send(Intent::CancelSignIn);
-        assert_eq!(model.send(sign_in("claude", None)), [], "{case}");
+        assert_eq!(model.send(sign_in(Tool::Claude, None)), [], "{case}");
         let second = running(&model).id;
         ends(&mut model, &mut machine, first);
         let asked: Vec<&Job> = model.asked.iter().filter(|job| a_sign_in(job)).collect();
@@ -955,12 +976,12 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
             [
                 &Job::SignIn {
                     id: first,
-                    provider: "claude".into(),
+                    tool: ProviderId::Claude,
                     again: None,
                 },
                 &Job::SignIn {
                     id: second,
-                    provider: "claude".into(),
+                    tool: ProviderId::Claude,
                     again: None,
                 }
             ],
@@ -975,15 +996,15 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
 
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    let first = starts(&mut model, &mut machine, "claude", None);
+    let first = starts(&mut model, &mut machine, Tool::Claude, None);
     model.send(Intent::CancelSignIn);
-    model.send(sign_in("claude", None));
+    model.send(sign_in(Tool::Claude, None));
     model.send(Intent::CancelSignIn);
     assert_eq!(model.shown().signing_in, None);
     model.run(&mut machine);
     ends(&mut model, &mut machine, first);
     assert_eq!(model.count(a_sign_in), 1, "the second was never asked for");
-    assert_eq!(model.send(sign_in("claude", None)).len(), 1, "at once");
+    assert_eq!(model.send(sign_in(Tool::Claude, None)).len(), 1, "at once");
 }
 
 /// A sign-in that finishes closes the sheet it was started from. A sheet up by then would be
@@ -994,17 +1015,16 @@ fn a_sign_in_waiting_on_a_cancelled_one_starts_once_that_one_has_let_go() {
 #[test]
 fn a_finished_sign_in_closes_only_the_sheet_it_started_from() {
     let rename = Sheet::Rename {
-        provider: "claude".into(),
-        label: "home".into(),
+        account: AccountKey::new(Tool::Claude, "home"),
     };
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, add(Some("codex")));
-    let id = starts(&mut model, &mut machine, "codex", None);
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
+    let id = starts(&mut model, &mut machine, Tool::Codex, None);
     says(&mut model, id, CODEX_ADDRESS);
 
     put_up(&mut model, &mut machine, rename.clone());
-    assert_eq!(model.shown().sheet, Some(add(Some("codex"))));
+    assert_eq!(model.shown().sheet, Some(add(Some(Tool::Codex))));
     model.send(Intent::CloseSheet);
     put_up(&mut model, &mut machine, rename.clone());
     assert_eq!(model.shown().sheet, None);
@@ -1028,8 +1048,8 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
         let travel = codex_account("travel", false);
         let mut model = Hand::new();
         let mut machine = Stub::reading(Ok(status(vec![codex_account("work", true)])));
-        put_up(&mut model, &mut machine, add(Some("codex")));
-        let late = starts(&mut model, &mut machine, "codex", None);
+        put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
+        let late = starts(&mut model, &mut machine, Tool::Codex, None);
         model.give(Answer::SignInQuiet { id: late });
         let finishing = model.take(sign_in_over);
         assert_eq!(
@@ -1045,9 +1065,9 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
         );
         model.run(&mut machine);
 
-        put_up(&mut model, &mut machine, add(Some("claude")));
+        put_up(&mut model, &mut machine, add(Some(Tool::Claude)));
         assert_eq!(
-            model.send(sign_in("claude", None)),
+            model.send(sign_in(Tool::Claude, None)),
             [],
             "not while the one finishing holds the core's one sign-in at a time"
         );
@@ -1076,7 +1096,11 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
 
         let shown = model.shown();
         assert_eq!(running(&model).id, next, "the sign-in started since");
-        assert_eq!(shown.sheet, Some(add(Some("claude"))), "{stopped_first}");
+        assert_eq!(
+            shown.sheet,
+            Some(add(Some(Tool::Claude))),
+            "{stopped_first}"
+        );
         assert!(model.state.warnings.is_empty(), "{stopped_first}");
         assert_eq!((&model.state.presented, shown.sheet_failure), (&None, None));
         if stopped_first {
@@ -1106,7 +1130,7 @@ fn a_sign_in_cancelled_while_it_finishes_leaves_what_came_after_it() {
 #[test]
 fn a_read_that_started_before_a_sign_in_is_dropped_when_it_lands() {
     a_read_that_started_before(|model, machine| {
-        signs_in(model, machine, "codex", None, &[]);
+        signs_in(model, machine, Tool::Codex, None, &[]);
         assert_eq!(machine.signed_in, ["codex/"]);
     });
 }
@@ -1123,7 +1147,7 @@ fn a_look_landing_after_a_sign_in_enrols_leaves_the_read_after_it() {
         codex_account("travel", false),
     ];
     a_look_landing_after(after, |model, machine| {
-        model.send(sign_in("codex", None));
+        model.send(sign_in(Tool::Codex, None));
         model.run_but(machine, a_look_or_a_read);
         let id = running(model).id;
         says(model, id, CODEX_ADDRESS);
@@ -1141,14 +1165,13 @@ fn a_look_landing_after_a_sign_in_enrols_leaves_the_read_after_it() {
 #[test]
 fn a_running_sign_in_keeps_its_sheet() {
     let rename = Sheet::Rename {
-        provider: "claude".into(),
-        label: "personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     };
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 0.0)])));
     model.refresh(&mut machine);
     put_up(&mut model, &mut machine, add(None));
-    let id = starts(&mut model, &mut machine, "claude", None);
+    let id = starts(&mut model, &mut machine, Tool::Claude, None);
     says(&mut model, id, PROMPT);
     assert!(running(&model).wants_code);
 
@@ -1157,8 +1180,7 @@ fn a_running_sign_in_keeps_its_sheet() {
         &mut model,
         &mut machine,
         Sheet::SignInAgain {
-            provider: "codex".into(),
-            label: "someone".into(),
+            account: AccountKey::new(Tool::Codex, "someone"),
         },
     );
     put_up(&mut model, &mut machine, rename.clone());
@@ -1191,7 +1213,7 @@ fn an_account_is_added_through_the_sheet_from_start_to_finish() {
     put_up(&mut model, &mut machine, add(None));
     assert_eq!(model.shown().window_request.serial, 1);
 
-    let id = starts(&mut model, &mut machine, "claude", None);
+    let id = starts(&mut model, &mut machine, Tool::Claude, None);
     says(
         &mut model,
         id,
@@ -1219,14 +1241,14 @@ fn an_account_is_added_through_the_sheet_from_start_to_finish() {
     let shown = model.shown();
     assert_eq!(shown.signing_in, None);
     assert!(
-        matches!(&shown.sheet, Some(Sheet::Name { label, .. }) if label == "travel"),
+        matches!(&shown.sheet, Some(Sheet::Name { account, .. }) if account.label == "travel"),
         "{:?}",
         shown.sheet
     );
     let accounts = model.state.status.clone().expect("accounts").accounts;
     let travel = accounts
         .iter()
-        .find(|account| account.qualified.as_deref() == Some("claude/travel"))
+        .find(|account| account.key == Some(Key::new(ProviderId::Claude, "travel")))
         .expect("travel enrolled");
     assert!(!travel.signed_in);
     assert!(travel.standing.switchable());
@@ -1241,12 +1263,11 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
     let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 0.0)])));
     model.refresh(&mut machine);
     let again = Sheet::SignInAgain {
-        provider: "claude".into(),
-        label: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     };
     put_up(&mut model, &mut machine, again);
     machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
-    let id = starts(&mut model, &mut machine, "claude", Some("work"));
+    let id = starts(&mut model, &mut machine, Tool::Claude, Some("work"));
     says(&mut model, id, PROMPT);
     model.send(paste("fixture-code"));
     model.run(&mut machine);
@@ -1260,8 +1281,8 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
         .first()
         .expect("what the sign-in said");
     assert_eq!(
-        (last.provider.as_str(), last.to.as_str()),
-        ("claude", "work")
+        (last.provider, &last.to),
+        (ProviderId::Claude, &Key::new(ProviderId::Claude, "work"))
     );
     assert_eq!(
         last.said.as_deref(),
@@ -1290,7 +1311,7 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     assert_eq!(model.state.installed, Some(vec![claude_code(), codex()]));
     assert_eq!(model.count(installed_ask), 2);
     assert_eq!(
-        model.send(present(add(Some("codex")))),
+        model.send(present(add(Some(Tool::Codex)))),
         [],
         "not for one put up in its place"
     );
@@ -1300,8 +1321,7 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
         &mut model,
         &mut machine,
         Sheet::Name {
-            provider: "claude".into(),
-            label: "acme".into(),
+            account: AccountKey::new(Tool::Claude, "acme"),
             email: "a@example.com".into(),
         },
     );
@@ -1314,8 +1334,7 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
 
     model.send(Intent::CloseSheet);
     let again = Sheet::SignInAgain {
-        provider: "codex".into(),
-        label: "work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     };
     assert_eq!(
         model.send(present(again)),
@@ -1329,8 +1348,7 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
 #[test]
 fn a_sheet_is_put_up_over_the_window() {
     let rename = Sheet::Rename {
-        provider: "claude".into(),
-        label: "personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     };
     let mut model = Hand::new();
     assert_eq!(model.shown().window_request.serial, 0);
@@ -1354,7 +1372,7 @@ fn a_sheet_is_put_up_over_the_window() {
 fn a_code_claude_code_refused_may_be_pasted_again() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    let id = starts(&mut model, &mut machine, "claude", None);
+    let id = starts(&mut model, &mut machine, Tool::Claude, None);
     says(&mut model, id, PROMPT);
     assert_eq!(
         model.send(paste("half")),
@@ -1398,7 +1416,7 @@ fn a_code_claude_code_refused_may_be_pasted_again() {
 fn only_what_the_tool_says_after_a_code_refuses_it() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    let id = starts(&mut model, &mut machine, "claude", None);
+    let id = starts(&mut model, &mut machine, Tool::Claude, None);
     says(&mut model, id, PROMPT);
     model.send(paste("one"));
     says(&mut model, id, "Invalid ");
@@ -1420,10 +1438,10 @@ fn a_code_is_trimmed_as_the_sheet_trimmed_it() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     assert_eq!(
-        model.send(sign_in("claude", None)),
+        model.send(sign_in(Tool::Claude, None)),
         [Job::SignIn {
             id: 1,
-            provider: "claude".into(),
+            tool: ProviderId::Claude,
             again: None,
         }]
     );
@@ -1446,7 +1464,7 @@ fn a_code_is_trimmed_as_the_sheet_trimmed_it() {
 fn a_code_is_typed_only_where_the_tool_asks_for_one() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    model.send(sign_in("claude", None));
+    model.send(sign_in(Tool::Claude, None));
     assert_eq!(model.send(paste("early")), [], "not started");
     model.run(&mut machine);
     assert_eq!(model.send(paste("early")), [], "not asked for yet");
@@ -1465,8 +1483,8 @@ fn a_code_is_typed_only_where_the_tool_asks_for_one() {
 fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    put_up(&mut model, &mut machine, add(Some("codex")));
-    let id = starts(&mut model, &mut machine, "codex", None);
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
+    let id = starts(&mut model, &mut machine, Tool::Codex, None);
     says(&mut model, id, CODEX_ADDRESS);
     model.send(Intent::CloseSheet);
     machine.enrolling = Err(refusal(
@@ -1491,7 +1509,7 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
     assert_eq!((shown.sheet, shown.sheet_failure), (None, None));
 
     machine.starting = Err(refusal("claude_program_missing", "no claude", Vec::new()));
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
     let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(
         (failure.id, failure.title.as_str()),
@@ -1512,12 +1530,18 @@ fn a_sign_in_that_does_not_finish_says_so_in_its_sheet() {
         "The sign-in did not finish.",
         vec![undone.clone()],
     ));
-    put_up(&mut model, &mut machine, add(Some("codex")));
-    signs_in(&mut model, &mut machine, "codex", None, &[CODEX_ADDRESS]);
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
+    signs_in(
+        &mut model,
+        &mut machine,
+        Tool::Codex,
+        None,
+        &[CODEX_ADDRESS],
+    );
 
     let shown = model.shown();
     assert_eq!(shown.signing_in, None);
-    assert_eq!(shown.sheet, Some(add(Some("codex"))));
+    assert_eq!(shown.sheet, Some(add(Some(Tool::Codex))));
     let failure = shown.sheet_failure.expect("said in the sheet");
     assert_eq!(failure.message, "The sign-in did not finish.");
     assert_eq!(model.state.warnings, [undone]);
@@ -1534,22 +1558,22 @@ fn what_went_wrong_in_a_sheet_goes_with_it() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.switched = Err(refusal("nothing_parked", "nothing parked", Vec::new()));
     model.send(Intent::SwitchTo {
-        qualified: "claude/spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
     });
     model.run(&mut machine);
     assert_eq!(model.state.presented.clone().map(|f| f.id), Some(1));
 
     machine.starting = Err(refusal("sign_in_not_isolated", "not here", Vec::new()));
     put_up(&mut model, &mut machine, add(None));
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
     assert_eq!(model.shown().sheet_failure.map(|f| f.id), Some(2));
     put_up(&mut model, &mut machine, add(None));
     assert!(model.shown().sheet_failure.is_some(), "the same sheet");
 
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
     assert_eq!(model.shown().sheet_failure.map(|f| f.id), Some(3));
     machine.starting = Ok(());
-    model.send(sign_in("claude", None));
+    model.send(sign_in(Tool::Claude, None));
     assert_eq!(model.shown().sheet_failure, None, "signed in from again");
     model.run(&mut machine);
     let id = running(&model).id;
@@ -1558,10 +1582,10 @@ fn what_went_wrong_in_a_sheet_goes_with_it() {
     ends(&mut model, &mut machine, id);
 
     machine.starting = Err(refusal("sign_in_not_isolated", "not here", Vec::new()));
-    starts(&mut model, &mut machine, "claude", None);
-    put_up(&mut model, &mut machine, add(Some("codex")));
+    starts(&mut model, &mut machine, Tool::Claude, None);
+    put_up(&mut model, &mut machine, add(Some(Tool::Codex)));
     assert_eq!(model.shown().sheet_failure, None, "another sheet");
-    starts(&mut model, &mut machine, "codex", None);
+    starts(&mut model, &mut machine, Tool::Codex, None);
     model.send(Intent::CloseSheet);
     let shown = model.shown();
     assert_eq!((shown.sheet, shown.sheet_failure), (None, None));
@@ -1574,7 +1598,7 @@ fn a_sign_in_lost_to_a_panic_is_said_and_over() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     put_up(&mut model, &mut machine, add(None));
-    model.send(sign_in("claude", None));
+    model.send(sign_in(Tool::Claude, None));
     let start = model.next();
     assert_eq!(model.give(Answer::Lost(start)), []);
     let shown = model.shown();
@@ -1583,7 +1607,7 @@ fn a_sign_in_lost_to_a_panic_is_said_and_over() {
     assert_eq!(failure.title, words::could_not_sign_in(None));
     assert_eq!(model.sheet_failure_code(), None);
 
-    let id = starts(&mut model, &mut machine, "claude", None);
+    let id = starts(&mut model, &mut machine, Tool::Claude, None);
     model.give(Answer::SignInQuiet { id });
     let over = model.take(sign_in_over);
     assert_eq!(model.give(Answer::Lost(over)), []);
@@ -1599,9 +1623,9 @@ fn a_sign_in_lost_to_a_panic_is_said_and_over() {
 fn each_sign_in_is_told_once_whether_to_enrol() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    let first = starts(&mut model, &mut machine, "claude", None);
+    let first = starts(&mut model, &mut machine, Tool::Claude, None);
     ends(&mut model, &mut machine, first);
-    let second = starts(&mut model, &mut machine, "claude", None);
+    let second = starts(&mut model, &mut machine, Tool::Claude, None);
     model.send(Intent::CancelSignIn);
     model.run(&mut machine);
     ends(&mut model, &mut machine, second);
@@ -1623,13 +1647,13 @@ pub(super) fn adding_in_claude(open: bool) -> (Hand, Stub) {
     let mut model = Hand::new();
     let mut machine = desktop_machine(open);
     model.refresh(&mut machine);
-    put_up(&mut model, &mut machine, add(Some("desktop")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     (model, machine)
 }
 
 // An add of an account of Claude Desktop's, which signs in inside Claude.
 pub(super) fn sign_in_to_claude() -> Intent {
-    sign_in("desktop", None)
+    sign_in(Tool::Desktop, None)
 }
 
 fn a_quit(job: &Job) -> bool {
@@ -1656,11 +1680,11 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
     assert_eq!(
         jobs,
         [Job::Holding {
-            qualified: "desktop/".into(),
+            account: Key::new(ProviderId::Desktop, ""),
             then: After::SignIn {
-                provider: "desktop".into(),
+                tool: ProviderId::Desktop,
                 again: None,
-                from: Some(add(Some("desktop"))),
+                from: Some(add(Some(Tool::Desktop))),
             },
         }]
     );
@@ -1669,7 +1693,7 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
     assert_eq!(
         model.state.asking(),
         Some(&QuitQuestion {
-            qualified: "desktop/".into(),
+            account: Key::new(ProviderId::Desktop, ""),
             app_id: CLAUDE.into(),
             name: "Claude".into(),
         })
@@ -1680,7 +1704,7 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
         words::quit_to_sign_in("Claude", None)
     );
     assert_eq!(shown.signing_in, None, "nothing parked before the answer");
-    assert_eq!(model.state.switch_under_way(), None);
+    assert!(!model.state.switch_under_way());
     assert!(machine.signed_in.is_empty());
     assert!(machine.apps.asked().is_empty());
 }
@@ -1688,7 +1712,7 @@ fn an_add_for_a_tool_that_signs_in_inside_its_app_asks_before_it_quits_the_app()
 #[test]
 fn the_app_is_opened_in_front_once_the_account_in_use_is_parked() {
     let (mut model, mut machine) = adding_in_claude(true);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     quit_for_it(&mut model, &mut machine);
     assert_eq!(machine.signed_in, ["desktop/"]);
     assert_eq!(
@@ -1698,7 +1722,7 @@ fn the_app_is_opened_in_front_once_the_account_in_use_is_parked() {
     assert!(model.asked.iter().any(|job| *job
         == Job::Open {
             location: StandInApps::copy_of(CLAUDE),
-            tool: "desktop".into(),
+            tool: ProviderId::Desktop,
             front: true,
         }));
     let page = page(&model);
@@ -1744,7 +1768,7 @@ fn a_park_refused_opens_the_app_again_behind() {
 #[test]
 fn cancelling_while_parking_stops_what_started_and_opens_claude_behind() {
     let (mut model, mut machine) = adding_in_claude(true);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.send(sign_in_to_claude());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
@@ -1759,13 +1783,13 @@ fn cancelling_while_parking_stops_what_started_and_opens_claude_behind() {
     let jobs = model.give(Answer::SignInStarted {
         id,
         started: Ok(()),
-        put_back: Some("desktop/work".into()),
+        put_back: Some(Key::new(ProviderId::Desktop, "work")),
     });
     assert!(jobs.contains(&Job::StopSignIn { id }), "{jobs:?}");
     assert!(
         jobs.iter().any(|job| matches!(
             job,
-            Job::Open { tool, front: false, .. } if tool == "desktop"
+            Job::Open { tool, front: false, .. } if *tool == ProviderId::Desktop
         )),
         "{jobs:?}"
     );
@@ -1783,7 +1807,7 @@ fn cancelling_while_parking_stops_what_started_and_opens_claude_behind() {
 #[test]
 fn an_add_cancelled_before_its_park_starts_lets_the_index_go_and_opens_claude_behind() {
     let (mut model, mut machine) = adding_in_claude(true);
-    let first = starts(&mut model, &mut machine, "claude", None);
+    let first = starts(&mut model, &mut machine, Tool::Claude, None);
     model.send(Intent::CancelSignIn);
     // Its stop unanswered, it holds the core's one sign-in at a time.
     model.take(|job| matches!(job, Job::StopSignIn { .. }));
@@ -1810,7 +1834,7 @@ fn an_add_cancelled_before_its_park_starts_lets_the_index_go_and_opens_claude_be
 fn a_park_cancelled_in_flight_and_asked_again_keeps_each_hold_its_own() {
     for open in [false, true] {
         let (mut model, mut machine) = adding_in_claude(open);
-        machine.put_back = Some("desktop/work".into());
+        machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
         model.send(sign_in_to_claude());
         if open {
             model.run(&mut machine);
@@ -1872,7 +1896,7 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
         let (mut model, mut machine) = adding_in_claude(true);
         machine.apps = StandInApps::new(&[CLAUDE], quits);
         machine.lingers = lingers;
-        machine.put_back = Some("desktop/work".into());
+        machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
         model.send(sign_in_to_claude());
         model.run(&mut machine);
         let question = model.shown().quit_question.expect("asked");
@@ -1885,7 +1909,7 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
         assert!(machine.signed_in.is_empty(), "{message}");
         let shown = model.on_a_mac();
         assert_eq!(shown.signing_in, None);
-        assert_eq!(shown.sheet, Some(add(Some("desktop"))));
+        assert_eq!(shown.sheet, Some(add(Some(Tool::Desktop))));
         let failure = shown.sheet_failure.expect("said in the sheet");
         assert_eq!(failure.title, words::could_not_sign_in(None));
         assert_eq!(failure.message, message);
@@ -1907,7 +1931,7 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
 fn no_park_starts_beside_a_switch_of_its_tool() {
     let (mut model, mut machine) = adding_in_claude(true);
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     assert_eq!(
         model.send(sign_in_to_claude()),
@@ -1920,7 +1944,7 @@ fn no_park_starts_beside_a_switch_of_its_tool() {
     let (mut model, mut machine) = adding_in_claude(false);
     model.send(sign_in_to_claude());
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     model.run(&mut machine);
     assert!(
@@ -1952,20 +1976,20 @@ fn a_first_account_of_such_a_tool_is_recorded_as_the_one_signed_in() {
     let mut machine = Stub::reading(Ok(status(vec![claude("work", true, 10.0)])));
     machine.found = vec![claude_code(), claude_desktop()];
     model.refresh(&mut machine);
-    put_up(&mut model, &mut machine, add(Some("desktop")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
         words::add_account(Os::MacOs, false)
     );
-    let jobs = model.send(sign_in("desktop", None));
+    let jobs = model.send(sign_in(Tool::Desktop, None));
     assert_eq!(
         jobs,
         [Job::Holding {
-            qualified: "desktop/".into(),
+            account: Key::new(ProviderId::Desktop, ""),
             then: After::Enrol {
-                provider: "desktop".into(),
+                tool: ProviderId::Desktop,
                 again: None,
-                from: Some(add(Some("desktop"))),
+                from: Some(add(Some(Tool::Desktop))),
             },
         }]
     );
@@ -1975,9 +1999,8 @@ fn a_first_account_of_such_a_tool_is_recorded_as_the_one_signed_in() {
     assert_eq!(
         model.shown().sheet,
         Some(Sheet::Name {
-            provider: "desktop".into(),
-            label: "work".into(),
-            email: "w@example.com".into(),
+            account: AccountKey::new(Tool::Desktop, "work"),
+            email: "w@example.com".into()
         }),
         "its sheet gives way to the name the core picked"
     );
@@ -1994,8 +2017,8 @@ fn a_first_account_refused_as_signed_out_offers_the_sign_in_next() {
         Vec::new(),
     ));
     model.refresh(&mut machine);
-    put_up(&mut model, &mut machine, add(Some("desktop")));
-    model.send(sign_in("desktop", None));
+    put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
+    model.send(sign_in(Tool::Desktop, None));
     model.run(&mut machine);
     let shown = model.on_a_mac();
     assert_eq!(
@@ -2003,7 +2026,7 @@ fn a_first_account_refused_as_signed_out_offers_the_sign_in_next() {
         words::could_not_sign_in(None)
     );
     assert_eq!(shown.sheet_text.expect("the form").confirm, words::CONTINUE);
-    let jobs = model.send(sign_in("desktop", None));
+    let jobs = model.send(sign_in(Tool::Desktop, None));
     assert!(
         matches!(
             &jobs[..],
@@ -2043,7 +2066,7 @@ fn an_add_that_met_a_login_pitboard_cannot_place_records_the_account_claude_show
 #[test]
 fn the_wait_says_each_step_it_meets() {
     let (mut model, mut machine) = adding_in_claude(false);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.send(sign_in_to_claude());
     model.run(&mut machine);
     let id = running(&model).id;
@@ -2087,7 +2110,7 @@ fn the_wait_says_each_step_it_meets() {
 #[test]
 fn later_stops_the_wait_and_reads_again() {
     let (mut model, mut machine) = adding_in_claude(false);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.send(sign_in_to_claude());
     model.run(&mut machine);
     let id = running(&model).id;
@@ -2125,14 +2148,12 @@ fn a_sheet_that_is_saving_does_not_close() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     let name = Sheet::Name {
-        provider: "claude".into(),
-        label: "acme".into(),
+        account: AccountKey::new(Tool::Claude, "acme"),
         email: "a@example.com".into(),
     };
     put_up(&mut model, &mut machine, name.clone());
     model.send(Intent::Rename {
-        provider: "claude".into(),
-        label: "acme".into(),
+        account: AccountKey::new(Tool::Claude, "acme"),
         to: "work".into(),
     });
     model.send(Intent::CloseSheet);
@@ -2147,7 +2168,7 @@ fn a_sheet_that_is_saving_does_not_close() {
     let (mut model, mut machine) = adding_in_claude(true);
     model.send(sign_in_to_claude());
     model.send(Intent::CloseSheet);
-    assert_eq!(model.shown().sheet, Some(add(Some("desktop"))));
+    assert_eq!(model.shown().sheet, Some(add(Some(Tool::Desktop))));
     model.run(&mut machine);
     model.send(Intent::KeepAppOpen);
     model.send(Intent::CloseSheet);
@@ -2157,17 +2178,15 @@ fn a_sheet_that_is_saving_does_not_close() {
 #[test]
 fn a_sheet_held_for_the_quit_question_stays_up_until_it_is_answered() {
     let name = Sheet::Rename {
-        provider: "claude".into(),
-        label: "acme".into(),
+        account: AccountKey::new(Tool::Claude, "acme"),
     };
     let held = [
-        (add(Some("desktop")), sign_in_to_claude()),
+        (add(Some(Tool::Desktop)), sign_in_to_claude()),
         (
             Sheet::SignInAgain {
-                provider: "desktop".into(),
-                label: "work".into(),
+                account: AccountKey::new(Tool::Desktop, "work"),
             },
-            sign_in("desktop", Some("work")),
+            sign_in(Tool::Desktop, Some("work")),
         ),
     ];
     let up = |sheet: &Sheet, starts_it: &Intent| {
@@ -2215,7 +2234,7 @@ fn a_sheet_held_for_the_quit_question_stays_up_until_it_is_answered() {
     model.send(question.confirmed);
     model.run(&mut machine);
     let shown = model.on_a_mac();
-    assert_eq!(shown.sheet, Some(add(Some("desktop"))));
+    assert_eq!(shown.sheet, Some(add(Some(Tool::Desktop))));
     assert!(shown.signing_in_text.is_some(), "the wait is on screen");
 }
 
@@ -2228,12 +2247,12 @@ fn a_late_answer_beside_another_sign_in_quits_nothing() {
     // Closed before the app sends its answer, which lets the sheet be replaced meanwhile.
     model.send(Intent::KeepAppOpen);
     put_up(&mut model, &mut machine, add(None));
-    starts(&mut model, &mut machine, "claude", None);
+    starts(&mut model, &mut machine, Tool::Claude, None);
     model.send(question.confirmed);
     model.send(Intent::CancelSignIn);
     model.run(&mut machine);
     assert_eq!(model.count(a_quit), 0);
-    put_up(&mut model, &mut machine, add(Some("desktop")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     assert!(!model.on_a_mac().sheet_text.expect("the form").saving);
     model.send(Intent::CloseSheet);
     assert_eq!(model.shown().sheet, None);
@@ -2242,7 +2261,7 @@ fn a_late_answer_beside_another_sign_in_quits_nothing() {
 #[test]
 fn parking_for_a_sign_in_holds_the_index_until_its_read_is_over() {
     let (mut model, mut machine) = adding_in_claude(false);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.send(sign_in_to_claude());
     let held = model.next();
     let answer = machine.answer(held);
@@ -2271,22 +2290,21 @@ fn parking_for_a_sign_in_holds_the_index_until_its_read_is_over() {
 fn a_sign_in_again_of_the_account_in_use_is_said_as_a_new_login() {
     let mut model = Hand::new();
     let mut machine = desktop_machine(false);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
     model.refresh(&mut machine);
     put_up(
         &mut model,
         &mut machine,
         Sheet::SignInAgain {
-            provider: "desktop".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Desktop, "work"),
         },
     );
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
         words::CONTINUE
     );
-    model.send(sign_in("desktop", Some("work")));
+    model.send(sign_in(Tool::Desktop, Some("work")));
     model.run(&mut machine);
     let id = running(&model).id;
     ends(&mut model, &mut machine, id);
@@ -2320,9 +2338,9 @@ fn a_resumed_add_offers_to_put_its_account_back() {
         "Claude isn’t signed in.",
         Vec::new(),
     ));
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.refresh(&mut machine);
-    put_up(&mut model, &mut machine, add(Some("desktop")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
         words::add_account_shown(Os::MacOs, "Claude", false)
@@ -2341,7 +2359,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
         Some((
             words::switch_back_to(Os::MacOs, "work"),
             Intent::SwitchTo {
-                qualified: "desktop/work".into(),
+                account: AccountKey::new(Tool::Desktop, "work")
             }
         ))
     );
@@ -2364,7 +2382,7 @@ fn nothing_parked_from_a_logged_out_claude_offers_no_put_back() {
         )],
     ));
     model.refresh(&mut machine);
-    put_up(&mut model, &mut machine, add(Some("desktop")));
+    put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
         words::CONTINUE
@@ -2381,7 +2399,7 @@ fn nothing_parked_from_a_logged_out_claude_offers_no_put_back() {
 #[test]
 fn no_undo_is_offered_before_the_core_says_what_it_parked() {
     let (mut model, mut machine) = adding_in_claude(false);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.send(sign_in_to_claude());
     let held = model.next();
     let answer = machine.answer(held);
@@ -2397,7 +2415,7 @@ fn no_undo_is_offered_before_the_core_says_what_it_parked() {
 fn the_page_says_pitboard_opened_claude_only_where_it_did() {
     for moving in [true, false] {
         let (mut model, mut machine) = adding_in_claude(true);
-        machine.put_back = Some("desktop/work".into());
+        machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
         machine.moving = moving;
         quit_for_it(&mut model, &mut machine);
         assert_eq!(

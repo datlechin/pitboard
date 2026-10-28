@@ -1,7 +1,9 @@
 // The sites' records, declared apart from pitboard-sites' own: the C# generator cannot use a
 // type from another crate.
 
+use crate::Tool;
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
 
 /// A website Pitboard opens in an account's window: whose accounts it serves, which hosts are
 /// its own, where its sign-in goes, and what its window says about signing in.
@@ -13,8 +15,8 @@ pub struct Site {
     /// The site as a sentence names it: its host, so a window on chatgpt.com is never
     /// confused with OpenAI's ChatGPT app.
     pub name: String,
-    /// The tool whose enrolled accounts get this site's windows, as a `Tool`'s `code`.
-    pub provider: String,
+    /// The tool whose enrolled accounts get this site's windows.
+    pub tool: Tool,
     /// Other hosts that send a browser to `host` with the path kept, taken as `host`. Each is
     /// matched exactly: a subdomain of one is not one.
     pub aliases: Vec<String>,
@@ -45,7 +47,9 @@ impl From<&pitboard_sites::Site> for Site {
         Site {
             host: site.host.into(),
             name: site.name().into(),
-            provider: site.provider.into(),
+            tool: ProviderId::parse(site.provider)
+                .expect("a tool the core knows, as every_site_serves_a_tool_the_core_knows holds")
+                .into(),
             aliases: owned(site.aliases),
             hosts: site.hosts().map(str::to_owned).collect(),
             sign_in_hosts: owned(site.sign_in_hosts),
@@ -96,15 +100,16 @@ impl From<pitboard_sites::SiteLink> for SiteLink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pitboard_core::provider::ProviderId;
 
-    /// Each site serves the accounts of a tool the core knows, by the code every `provider`
-    /// field names it with: pitboard-sites holds nothing of the core to check that itself.
+    /// Each site serves the accounts of a tool the core knows, by its code: pitboard-sites
+    /// holds nothing of the core to check that itself.
     #[test]
     fn every_site_serves_a_tool_the_core_knows() {
-        for site in pitboard_sites::ALL.map(Site::from) {
-            let tool = ProviderId::parse(&site.provider).expect("a tool the core knows");
-            assert_eq!(tool.code(), site.provider);
+        for site in pitboard_sites::ALL {
+            assert_eq!(
+                ProviderId::from(Site::from(site).tool).code(),
+                site.provider
+            );
         }
         assert_eq!(Site::from(&pitboard_sites::CLAUDE).name, "claude.ai");
         assert_eq!(

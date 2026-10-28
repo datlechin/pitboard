@@ -95,7 +95,7 @@ pub(crate) fn warning_heading(warning: &Warning) -> &'static str {
         "login_replaced" => "A sign-in was replaced outside Pitboard",
         "in_use_unconfirmed" => "The account in use isn’t confirmed",
         // `in_app_warning` words the two alike for an app.
-        "config_names_another" if warning.provider.as_deref().is_some_and(in_its_app) => {
+        "config_names_another" if warning.provider.is_some_and(in_its_app) => {
             "The account in use isn’t confirmed"
         }
         "config_names_another" => "Claude Code’s config names another account",
@@ -512,7 +512,7 @@ mod tests {
             "Every sign-in is kept, and nothing is deleted."
         );
         assert_eq!(
-            cancel_stuck(&[("Claude Desktop".into(), "Claude")]),
+            cancel_stuck(&[("Claude Desktop", "Claude")]),
             "Every sign-in is kept and nothing is deleted, and once Claude quits, its switch is \
              finished or cancelled too."
         );

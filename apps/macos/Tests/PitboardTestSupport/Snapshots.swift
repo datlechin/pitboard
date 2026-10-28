@@ -3,12 +3,12 @@ import PitboardKit
 extension Site {
     // pitboard-sites' sites, with the hosts and paths a snapshot carries.
     package static let claude = Site(
-        host: "claude.ai", name: "claude.ai", provider: "claude", aliases: [],
+        host: "claude.ai", name: "claude.ai", tool: .claude, aliases: [],
         hosts: ["claude.ai"], signInHosts: [], blockedHosts: ["accounts.google.com"],
         signInPaths: [["magic-link"]], storeName: "claude", signInSteps: "",
         blockedServices: "")
     package static let chatGPT = Site(
-        host: "chatgpt.com", name: "chatgpt.com", provider: "codex",
+        host: "chatgpt.com", name: "chatgpt.com", tool: .codex,
         aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
         hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
         signInHosts: [

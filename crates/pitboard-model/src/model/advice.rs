@@ -4,8 +4,10 @@
 //! Pure: what advice there is follows from a read, the tools in their order and what has been
 //! told, and the model's state keeps both and says what to post and what to keep.
 
-use crate::{Account, Limit, Status, Tool, Usage};
-use pitboard_core::usage::{self, same_reset, whole};
+use crate::{Account, Status};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
+use pitboard_core::usage::{self, Window, same_reset, whole};
 use std::collections::BTreeMap;
 
 /// The share, as drawn, an account to offer must be below in every limit: one the app draws
@@ -20,61 +22,46 @@ pub(crate) type Told = BTreeMap<String, i64>;
 /// for a switch away from it.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Advice {
-    /// The tool both accounts are for, as a `Tool`'s code.
-    pub(crate) provider: String,
+    /// The tool both accounts are for.
+    pub(crate) provider: ProviderId,
     /// The tool's name, when accounts of more than one tool were read and a sentence has to
     /// say which it is about. `None` otherwise, so a machine with one tool reads as before.
     pub(crate) tool: Option<String>,
     /// The account that ran out, and the limit it ran out of.
     pub(crate) ran: String,
-    pub(crate) window: Limit,
+    pub(crate) window: Window,
     /// The account offered instead, and what it has left of the same kind of limit: `None`
     /// where it has no such limit.
     pub(crate) instead: String,
     pub(crate) left: Option<i64>,
-    /// What to switch to: `instead` with its tool, which names one account whatever else is
-    /// enrolled.
-    pub(crate) switch_to: String,
-}
-
-pub(crate) fn window(limit: &Limit) -> usage::Window {
-    usage::Window {
-        kind: limit.kind.as_str().into(),
-        scope: limit.scope.clone(),
-        percent: limit.percent,
-        resets_at: limit.resets_at,
-        is_active: limit.is_active,
-        severity: limit.severity.clone(),
-        length_seconds: limit.length_seconds,
-    }
-}
-
-fn windows_of(measured: &Usage) -> Vec<usage::Window> {
-    measured.windows.iter().map(window).collect()
+    /// What to switch to: `instead`, which names one account whatever else is enrolled.
+    pub(crate) switch_to: Key,
 }
 
 /// The account of the same tool that can be switched to at `now` for a switch away from
 /// `ran` of `current`, by the rule the automatic switch keeps at `share`, and what it has left
 /// of that kind of limit: none when none has room.
 fn spare(
-    ran: &Limit,
+    ran: &Window,
     current: &Account,
     mine: &[&Account],
     share: u8,
     now: i64,
-) -> Option<(String, Option<i64>, String)> {
-    let ran = window(ran);
-    let in_use = current.usage.as_ref().map(windows_of).unwrap_or_default();
+) -> Option<(String, Option<i64>, Key)> {
+    let in_use = current
+        .usage
+        .as_ref()
+        .map_or(&[][..], |usage| &usage.windows);
     let (spare, room) = usage::preferred(
         mine.iter()
-            .filter(|account| account.standing.switchable() && account.qualified.is_some())
+            .filter(|account| account.standing.switchable() && account.key.is_some())
             .filter_map(|account| {
                 let theirs = account.usage.as_ref()?;
                 let room = usage::room(
-                    &windows_of(theirs),
+                    &theirs.windows,
                     theirs.lists_every_limit,
-                    &in_use,
-                    &ran,
+                    in_use,
+                    ran,
                     share,
                     now,
                 )?;
@@ -84,16 +71,16 @@ fn spare(
     Some((
         spare.label.clone()?,
         room.used.map(|used| 100 - whole(used)),
-        spare.qualified.clone()?,
+        spare.key.clone()?,
     ))
 }
 
 impl Advice {
     /// What has been told is kept under the tool, the account and the limit. Keyed by the
     /// limit alone, one tool's exhausted five hours would silence another's.
-    pub(crate) fn key(provider: &str, label: &str, window: &Limit) -> String {
+    pub(crate) fn key(provider: ProviderId, label: &str, window: &Window) -> String {
         [
-            provider,
+            provider.code(),
             label,
             window.kind.as_str(),
             window.scope.as_deref().unwrap_or_default(),
@@ -102,7 +89,7 @@ impl Advice {
     }
 
     pub(crate) fn key_of(&self) -> String {
-        Advice::key(&self.provider, &self.ran, &self.window)
+        Advice::key(self.provider, &self.ran, &self.window)
     }
 
     /// Nothing to say unless an account in use has exhausted a limit not yet told about, and
@@ -113,13 +100,13 @@ impl Advice {
     /// Claude Code account has run out, and a switch between them is not a switch at all.
     /// A limit told about at a reset one minute from this one's, by the core's rule for one
     /// reset, has been told.
-    pub(crate) fn about(status: &Status, tools: &[Tool], told: &Told) -> Vec<Advice> {
+    pub(crate) fn about(status: &Status, tools: &[ProviderId], told: &Told) -> Vec<Advice> {
         in_use(status, tools)
             .into_iter()
             .filter_map(|found| {
                 let ran = found.current.label.as_deref()?;
                 let windows = found.current.usage.iter().flat_map(|usage| &usage.windows);
-                for limit in windows.filter(|limit| window(limit).used_up(status.now)) {
+                for limit in windows.filter(|limit| limit.used_up(status.now)) {
                     if told_at_its_reset(told, found.provider, ran, limit) {
                         continue;
                     }
@@ -129,7 +116,7 @@ impl Advice {
                         continue;
                     };
                     return Some(Advice {
-                        provider: found.provider.to_owned(),
+                        provider: found.provider,
                         tool: found.tool,
                         ran: ran.to_owned(),
                         window: limit.clone(),
@@ -173,7 +160,7 @@ impl Advice {
                 && account.usage.iter().flat_map(|u| &u.windows).any(|limit| {
                     limit.kind == self.window.kind
                         && limit.scope == self.window.scope
-                        && window(limit).used_up(status.now)
+                        && limit.used_up(status.now)
                         && same_reset(
                             limit.resets_at.unwrap_or(0),
                             self.window.resets_at.unwrap_or(0),
@@ -192,12 +179,11 @@ impl Advice {
                 name.clone()
             }
         };
-        let old = format!("{}/{label}", self.provider);
         Advice {
             ran: rename(&self.ran),
             instead: rename(&self.instead),
-            switch_to: if self.switch_to == old {
-                format!("{}/{to}", self.provider)
+            switch_to: if self.switch_to == Key::new(self.provider, label) {
+                Key::new(self.provider, to)
             } else {
                 self.switch_to.clone()
             },
@@ -210,21 +196,26 @@ impl Advice {
 // tool there is room on for a switch away from it, where there is one.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct HeadsUp {
-    pub(crate) provider: String,
+    pub(crate) provider: ProviderId,
     pub(crate) tool: Option<String>,
     pub(crate) ran: String,
-    pub(crate) window: Limit,
+    pub(crate) window: Window,
     // the account offered, what it has left of that kind of limit, and what to switch to
-    pub(crate) instead: Option<(String, Option<i64>, String)>,
+    pub(crate) instead: Option<(String, Option<i64>, Key)>,
 }
 
 impl HeadsUp {
     pub(crate) fn key_of(&self) -> String {
-        Advice::key(&self.provider, &self.ran, &self.window)
+        Advice::key(self.provider, &self.ran, &self.window)
     }
 
     // At most one for each tool, of a limit not told about at its reset, as `Advice::about`.
-    pub(crate) fn about(status: &Status, tools: &[Tool], told: &Told, at: u8) -> Vec<HeadsUp> {
+    pub(crate) fn about(
+        status: &Status,
+        tools: &[ProviderId],
+        told: &Told,
+        at: u8,
+    ) -> Vec<HeadsUp> {
         in_use(status, tools)
             .into_iter()
             .filter_map(|found| {
@@ -234,10 +225,10 @@ impl HeadsUp {
                     .usage
                     .iter()
                     .flat_map(|usage| &usage.windows)
-                    .filter(|limit| window(limit).reached(at, status.now))
+                    .filter(|limit| limit.reached(at, status.now))
                     .find(|limit| !told_at_its_reset(told, found.provider, ran, limit))?;
                 Some(HeadsUp {
-                    provider: found.provider.to_owned(),
+                    provider: found.provider,
                     tool: found.tool,
                     ran: ran.to_owned(),
                     window: limit.clone(),
@@ -249,7 +240,7 @@ impl HeadsUp {
 }
 
 struct InUse<'a> {
-    provider: &'a str,
+    provider: ProviderId,
     // where accounts of more than one tool were read and a sentence has to say which
     tool: Option<String>,
     current: &'a Account,
@@ -258,33 +249,27 @@ struct InUse<'a> {
 
 // Each tool's account in use under a name, with every account of that tool, in the order
 // `tools` lists them.
-fn in_use<'a>(status: &'a Status, tools: &[Tool]) -> Vec<InUse<'a>> {
-    let codes: Vec<&str> = status
+fn in_use<'a>(status: &'a Status, tools: &[ProviderId]) -> Vec<InUse<'a>> {
+    let read: Vec<ProviderId> = status
         .accounts
         .iter()
-        .map(|account| account.provider.as_str())
+        .map(|account| account.provider)
         .collect();
-    let providers = crate::present::in_order(&codes, tools);
+    let providers = crate::present::in_order(&read, tools);
     providers
         .iter()
-        .filter_map(|provider| {
+        .filter_map(|&provider| {
             let mine: Vec<&Account> = status
                 .accounts
                 .iter()
-                .filter(|account| &account.provider == provider)
+                .filter(|account| account.provider == provider)
                 .collect();
             let current = *mine
                 .iter()
                 .find(|account| account.signed_in && account.label.is_some())?;
-            let provider = current.provider.as_str();
             Some(InUse {
                 provider,
-                tool: (providers.len() > 1).then(|| {
-                    tools
-                        .iter()
-                        .find(|tool| tool.code == provider)
-                        .map_or_else(|| provider.to_owned(), |tool| tool.name.clone())
-                }),
+                tool: (providers.len() > 1).then(|| provider.name().to_owned()),
                 current,
                 mine,
             })
@@ -293,7 +278,7 @@ fn in_use<'a>(status: &'a Status, tools: &[Tool]) -> Vec<InUse<'a>> {
 }
 
 // By the core's rule for one reset.
-fn told_at_its_reset(told: &Told, provider: &str, label: &str, window: &Limit) -> bool {
+fn told_at_its_reset(told: &Told, provider: ProviderId, label: &str, window: &Window) -> bool {
     told.get(&Advice::key(provider, label, window))
         .is_some_and(|&at| same_reset(at, window.resets_at.unwrap_or(0)))
 }
@@ -302,7 +287,8 @@ fn told_at_its_reset(told: &Told, provider: &str, label: &str, window: &Limit) -
 /// `to`, so a rename does not make an account that ran out read as one that has just run out.
 /// That account alone: not the same name in another tool, and not a name that only starts
 /// with it.
-pub(crate) fn rename_told(told: &mut Told, provider: &str, label: &str, to: &str) {
+pub(crate) fn rename_told(told: &mut Told, provider: ProviderId, label: &str, to: &str) {
+    let provider = provider.code();
     let old = format!("{provider}/{label}/");
     let moved: Vec<(String, i64)> = told
         .iter()
@@ -353,7 +339,8 @@ mod tests {
         assert_eq!(advice.instead, "fresh");
         assert_eq!(advice.left, Some(95));
         assert_eq!(
-            advice.switch_to, "claude/fresh",
+            advice.switch_to.qualified(),
+            "claude/fresh",
             "the switch names the account with its tool"
         );
         assert_eq!(advice.tool, None, "one tool, so nothing says which");
@@ -455,7 +442,7 @@ mod tests {
     #[test]
     fn one_exhausted_window_is_mentioned_once() {
         let read = spent_at(42);
-        let told = Advice::key("claude", "work", &window("session", 100.0));
+        let told = Advice::key(ProviderId::Claude, "work", &window("session", 100.0));
         assert!(about(&read, &Told::from([(told.clone(), 42)])).is_empty());
         assert_eq!(
             about(&read, &Told::from([(told, 42 - 18_000)]))
@@ -470,7 +457,7 @@ mod tests {
     /// it. The core counts resets a minute apart as one, and so does what is told.
     #[test]
     fn a_window_told_about_is_not_told_again_with_its_reset_rounded_otherwise() {
-        let told = Advice::key("claude", "work", &window("session", 100.0));
+        let told = Advice::key(ProviderId::Claude, "work", &window("session", 100.0));
         assert!(about(&spent_at(43), &Told::from([(told, 42)])).is_empty());
     }
 
@@ -532,9 +519,14 @@ mod tests {
     fn a_codex_account_is_offered_by_the_same_rule() {
         let five_hours = |percent| window("five_hour", percent).length(18_000);
         let week = |percent| window("seven_day", percent).length(604_800);
-        let codex = |label, limits| account(Some(label)).of("codex").limits(limits).build();
+        let codex = |label, limits| {
+            account(Some(label))
+                .of(ProviderId::Codex)
+                .limits(limits)
+                .build()
+        };
         let work = account(Some("work"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .limits(vec![five_hours(100.0), week(30.0)])
             .build();
@@ -553,8 +545,8 @@ mod tests {
         assert_eq!(
             advice
                 .first()
-                .map(|advice| (advice.switch_to.as_str(), advice.left)),
-            Some(("codex/spare", Some(60)))
+                .map(|advice| (advice.switch_to.clone(), advice.left)),
+            Some((Key::new(ProviderId::Codex, "spare"), Some(60)))
         );
     }
 
@@ -573,7 +565,7 @@ mod tests {
                 .build(),
         ]);
         let advice = about(&read, &Told::new()).remove(0);
-        assert_eq!(advice.window.kind, "weekly_all");
+        assert_eq!(advice.window.kind.as_str(), "weekly_all");
         assert_eq!(advice.instead, "spare");
     }
 
@@ -634,12 +626,12 @@ mod tests {
                 .limits(vec![window("session", 100.0)])
                 .build(),
             account(Some("job"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", 10.0).length(18_000)])
                 .build(),
             account(Some("spare"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .limits(vec![window("five_hour", 0.0).length(18_000)])
                 .build(),
         ]);
@@ -660,17 +652,17 @@ mod tests {
                 .limits(vec![window("session", 30.0)])
                 .build(),
             account(Some("work"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("seven_day", 100.0).length(604_800)])
                 .build(),
             account(Some("spare"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .limits(vec![window("seven_day", 60.0).length(604_800)])
                 .build(),
         ]);
         let advice = Advice::about(&read, &both_tools(), &Told::new());
-        let to: Vec<&str> = advice.iter().map(|a| a.switch_to.as_str()).collect();
+        let to: Vec<String> = advice.iter().map(|a| a.switch_to.qualified()).collect();
         assert_eq!(to, ["claude/personal", "codex/spare"]);
         let tools: Vec<Option<&str>> = advice.iter().map(|a| a.tool.as_deref()).collect();
         assert_eq!(tools, [Some("Claude Code"), Some("Codex")]);
@@ -683,21 +675,21 @@ mod tests {
         let exhausted = window("session", 100.0).resets(Some(7));
         let read = status(vec![
             account(Some("work"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![exhausted.clone()])
                 .build(),
             account(Some("spare"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .limits(vec![window("session", 0.0)])
                 .build(),
         ]);
-        let claude = Told::from([(Advice::key("claude", "work", &exhausted), 7)]);
+        let claude = Told::from([(Advice::key(ProviderId::Claude, "work", &exhausted), 7)]);
         assert_eq!(
-            about(&read, &claude).first().map(|a| a.switch_to.as_str()),
-            Some("codex/spare")
+            about(&read, &claude).first().map(|a| a.switch_to.clone()),
+            Some(Key::new(ProviderId::Codex, "spare"))
         );
-        let codex = Told::from([(Advice::key("codex", "work", &exhausted), 7)]);
+        let codex = Told::from([(Advice::key(ProviderId::Codex, "work", &exhausted), 7)]);
         assert!(about(&read, &codex).is_empty());
     }
 
@@ -712,7 +704,7 @@ mod tests {
             ("codex/work/primary/".to_owned(), 3),
             ("claude/workshop/session/".to_owned(), 4),
         ]);
-        rename_told(&mut told, "claude", "work", "office");
+        rename_told(&mut told, ProviderId::Claude, "work", "office");
         assert_eq!(
             told,
             Told::from([
@@ -730,8 +722,8 @@ mod tests {
         let advice = about(&spent_at(7_200), &Told::new()).remove(0);
         let spare = advice.renaming("spare", "home");
         assert_eq!(
-            (spare.instead.as_str(), spare.switch_to.as_str()),
-            ("home", "claude/home")
+            (spare.instead.as_str(), spare.switch_to),
+            ("home", Key::new(ProviderId::Claude, "home"))
         );
         let work = advice.renaming("work", "office");
         assert_eq!(work.ran, "office");

@@ -9,10 +9,14 @@ use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub, any_read, offline_read};
 use super::testing::records::{Refusal, refusal, status, switched, watching};
 use super::{AtLimit, Intent, NotificationButton, Place, RunOutNotice};
+use crate::AccountKey;
+use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::words as said;
 use std::time::Duration;
 
@@ -64,6 +68,10 @@ fn switched_work_to_personal() -> Result<AutoSwitched, Refusal> {
     Ok(AutoSwitched::Switched {
         from: "work".into(),
         to: "personal".into(),
+        accounts: (
+            Key::new(ProviderId::Claude, "work"),
+            Key::new(ProviderId::Claude, "personal"),
+        ),
         adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
         used: "97% of its 5-hour limit".into(),
@@ -175,7 +183,7 @@ fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwh
         0,
         "below the share the look stands"
     );
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
 
     machine.answer = Ok(status(vec![work(95.0), personal()]));
     machine.look = Ok(AutoLooked::Act);
@@ -183,22 +191,19 @@ fn a_limit_at_the_share_asks_the_core_to_switch_and_nothing_else_switches_meanwh
     model.run_but(&mut machine, auto_switch);
     assert_eq!(model.count(auto_switch), 1);
     assert!(
-        model.state.switch_under_way().is_some(),
+        model.state.switch_under_way(),
         "claimed, so a switch asked for meanwhile waits and the poll takes the change for this app's own"
     );
     assert_eq!(
         model.send(Intent::SwitchTo {
-            qualified: "claude/personal".into()
+            account: AccountKey::new(Tool::Claude, "personal")
         }),
         [],
         "one switch at a time"
     );
     model.run(&mut machine);
     assert_eq!(machine.auto_at, [95]);
-    assert!(
-        model.state.switch_under_way().is_none(),
-        "nothing to do lets go"
-    );
+    assert!(!model.state.switch_under_way(), "nothing to do lets go");
     assert!(machine.posted.is_empty(), "and says nothing");
 }
 
@@ -233,12 +238,12 @@ fn the_settings_say_which_account_it_watches_and_how_old_its_reading_is() {
     turned_on(&mut model, &mut machine);
     let now = model.now.epoch();
     let watching = |held_until| {
-        Ok(AutoLooked::Stands(AutoSwitched::Watching {
+        Ok(AutoLooked::Stands(Box::new(AutoSwitched::Watching {
             account: "work".into(),
             used: Some("62% of its 5-hour limit".into()),
             as_of: Some(now - 20 * 60),
             held_until,
-        }))
+        })))
     };
     machine.look = watching(None);
     model.refresh(&mut machine);
@@ -278,12 +283,12 @@ fn the_settings_name_the_account_as_it_was_typed() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
-    machine.look = Ok(AutoLooked::Stands(AutoSwitched::Watching {
+    machine.look = Ok(AutoLooked::Stands(Box::new(AutoSwitched::Watching {
         account: "dana's".into(),
         used: None,
         as_of: None,
         held_until: None,
-    }));
+    })));
     model.refresh(&mut machine);
     let said = standing(&model).expect("something said");
     assert!(said.contains("dana's"), "{said}");
@@ -298,7 +303,7 @@ fn the_settings_say_why_it_is_not_switching() {
     turned_on(&mut model, &mut machine);
     let now = model.now.epoch();
     let says = |model: &mut Hand, machine: &mut Stub, looked: AutoSwitched| {
-        machine.look = Ok(AutoLooked::Stands(looked));
+        machine.look = Ok(AutoLooked::Stands(Box::new(looked)));
         model.refresh(machine);
         standing(model).expect("something said")
     };
@@ -362,6 +367,10 @@ fn the_settings_say_why_it_is_not_switching() {
             AutoSwitched::Switched {
                 from: "work".into(),
                 to: "personal".into(),
+                accounts: (
+                    Key::new(ProviderId::Claude, "work"),
+                    Key::new(ProviderId::Claude, "personal"),
+                ),
                 adoption: Adoption::PollingWithin(33),
                 warnings: Vec::new(),
                 used: "97% of its 5-hour limit".into(),
@@ -413,7 +422,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
     model.send(Intent::Refresh { asked: false });
     model.run_but(&mut machine, auto_switch);
     machine.answer = Ok(personal_in_use());
-    machine.look = Ok(AutoLooked::Stands(watching("personal")));
+    machine.look = Ok(AutoLooked::Stands(Box::new(watching("personal"))));
     model.run(&mut machine);
 
     assert_eq!(
@@ -437,15 +446,12 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
     let last = &model.state.last_switches;
     assert_eq!(
         last.iter()
-            .map(|s| (s.provider.as_str(), s.to.as_str()))
+            .map(|s| (s.provider, s.to.clone()))
             .collect::<Vec<_>>(),
-        [("claude", "personal")],
+        [(ProviderId::Claude, Key::new(ProviderId::Claude, "personal"))],
         "the window says it as it says a switch somebody asked for"
     );
-    assert!(
-        model.state.switch_under_way().is_none(),
-        "over once read after"
-    );
+    assert!(!model.state.switch_under_way(), "over once read after");
     assert_eq!(
         machine.auto_at.len(),
         1,
@@ -466,6 +472,10 @@ fn switched_by_itself(model: &mut Hand, machine: &mut Stub) -> RunOutNotice {
     machine.auto = Ok(AutoSwitched::Switched {
         from: "work".into(),
         to: "personal".into(),
+        accounts: (
+            Key::new(ProviderId::Claude, "work"),
+            Key::new(ProviderId::Claude, "personal"),
+        ),
         adoption: Adoption::PollingWithin(33),
         warnings: Vec::new(),
         used: "97% of its 5-hour limit".into(),
@@ -474,7 +484,7 @@ fn switched_by_itself(model: &mut Hand, machine: &mut Stub) -> RunOutNotice {
     model.send(Intent::Refresh { asked: false });
     model.run_but(machine, auto_switch);
     machine.answer = Ok(personal_in_use());
-    machine.look = Ok(AutoLooked::Stands(watching("personal")));
+    machine.look = Ok(AutoLooked::Stands(Box::new(watching("personal"))));
     model.run(machine);
     machine.posted.pop().expect("the switch posted")
 }
@@ -490,8 +500,8 @@ fn work_in_use() -> Status {
 
 fn back_to_work() -> Intent {
     Intent::SwitchBack {
-        from: "claude/work".into(),
-        to: "claude/personal".into(),
+        from: AccountKey::new(Tool::Claude, "work"),
+        to: AccountKey::new(Tool::Claude, "personal"),
     }
 }
 
@@ -523,9 +533,9 @@ fn only_a_switch_by_itself_offers_switch_back_from_its_notification_and_its_noti
         (words::switch_back(OS).as_str(), &back_to_work(), true)
     );
 
-    machine.switched = switched("claude", "personal", "work", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
     model.send(Intent::SwitchTo {
-        qualified: "claude/work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     machine.answer = Ok(work_in_use());
     model.run(&mut machine);
@@ -545,7 +555,7 @@ fn switch_back_switches_to_the_account_left() {
         let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
         let posted = switched_by_itself(&mut model, &mut machine);
         let window = model.shown().window_request;
-        machine.switched = switched("claude", "personal", "work", Vec::new());
+        machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
         if click {
             model.send(Intent::NotificationClicked {
                 argument: posted.button.expect("Switch Back").clicked,
@@ -566,7 +576,7 @@ fn switch_back_after_another_switch_only_opens_the_accounts() {
     switched_by_itself(&mut model, &mut machine);
     let serial = model.shown().window_request.serial;
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     model.send(back_to_work());
     let shown = model.shown().window_request;
@@ -591,7 +601,7 @@ fn after_switch_back_nothing_says_claude_code_was_not_switched_until_the_limit_r
     let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     let resets = model.now.epoch() + 3_600;
     switched_by_itself(&mut model, &mut machine);
-    machine.switched = switched("claude", "personal", "work", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
     model.send(back_to_work());
     machine.answer = Ok(work_in_use());
     model.run(&mut machine);
@@ -604,7 +614,7 @@ fn after_switch_back_nothing_says_claude_code_was_not_switched_until_the_limit_r
         until: None,
     };
     for code in ["settling", "already_switched"] {
-        machine.look = Ok(AutoLooked::Stands(skipped(code, resets)));
+        machine.look = Ok(AutoLooked::Stands(Box::new(skipped(code, resets))));
         model.refresh(&mut machine);
     }
     assert!(machine.posted.is_empty(), "{:?}", machine.posted);
@@ -618,15 +628,15 @@ fn after_switch_back_nothing_says_claude_code_was_not_switched_until_the_limit_r
         ))),
         "the settings still say it"
     );
-    machine.look = Ok(AutoLooked::Stands(no_room(resets)));
+    machine.look = Ok(AutoLooked::Stands(Box::new(no_room(resets))));
     model.refresh(&mut machine);
     assert_eq!(machine.posted.len(), 1, "another reason");
 
     model.later(Duration::from_secs(3_600));
-    machine.look = Ok(AutoLooked::Stands(skipped(
+    machine.look = Ok(AutoLooked::Stands(Box::new(skipped(
         "already_switched",
         resets + 18_000,
-    )));
+    ))));
     model.refresh(&mut machine);
     assert_eq!(machine.posted.len(), 2, "once the limit has reset");
 }
@@ -699,7 +709,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
     machine.look = Ok(AutoLooked::Act);
     machine.auto = Ok(overridden(9_000));
     model.refresh(&mut machine);
-    machine.look = Ok(AutoLooked::Stands(overridden(9_000)));
+    machine.look = Ok(AutoLooked::Stands(Box::new(overridden(9_000))));
     model.refresh(&mut machine);
     assert_eq!(
         machine.auto_at.len(),
@@ -715,7 +725,7 @@ fn a_reason_it_did_not_switch_is_said_once() {
     assert_eq!(machine.posted[0].button, None);
     assert_eq!(machine.posted[0].clicked, "limits");
 
-    machine.look = Ok(AutoLooked::Stands(overridden(27_000)));
+    machine.look = Ok(AutoLooked::Stands(Box::new(overridden(27_000))));
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted.len(),
@@ -732,11 +742,11 @@ fn a_reason_it_is_not_watching_is_said_once() {
     let mut machine = Stub::reading(Ok(status(vec![work(97.0), personal()])));
     turned_on(&mut model, &mut machine);
     let why = "a switch was interrupted, and the next change you make finishes it";
-    machine.look = Ok(AutoLooked::Stands(AutoSwitched::NotWatching {
+    machine.look = Ok(AutoLooked::Stands(Box::new(AutoSwitched::NotWatching {
         key: "not-watching/switch_interrupted".into(),
         why: why.into(),
         until: None,
-    }));
+    })));
     model.refresh(&mut machine);
     model.refresh(&mut machine);
     assert!(machine.auto_at.is_empty());
@@ -751,14 +761,14 @@ fn a_reason_it_is_not_watching_is_said_once() {
             button: None,
         }]
     );
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
 
-    machine.look = Ok(AutoLooked::Stands(AutoSwitched::NotWatching {
+    machine.look = Ok(AutoLooked::Stands(Box::new(AutoSwitched::NotWatching {
         key: "not-watching/not_enrolled/me@example.com".into(),
         why: "Claude Code has me@example.com's login stored, and that account is not enrolled"
             .into(),
         until: None,
-    }));
+    })));
     model.refresh(&mut machine);
     assert_eq!(
         machine.posted.len(),
@@ -786,7 +796,7 @@ fn a_refusal_is_said_once_and_lets_go() {
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1);
     assert_eq!(machine.posted[0].title, words::could_not_switch_itself(OS));
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
     assert!(model.state.presented.is_none(), "nobody asked, so no alert");
 }
 
@@ -940,7 +950,7 @@ fn a_look_answered_after_it_was_turned_off_asks_for_no_switch() {
     model.run(&mut machine);
     assert_eq!(machine.looked_at.len(), 1);
     assert_eq!(model.count(auto_switch), 0);
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
 }
 
 /// A decision under way as the setting is turned off that comes to anything but a switch is
@@ -962,7 +972,7 @@ fn a_decision_answered_after_it_was_turned_off_says_nothing_and_holds_nothing_ba
         });
         model.run(&mut machine);
         assert!(machine.posted.is_empty(), "{:?}", machine.posted);
-        assert!(model.state.switch_under_way().is_none(), "let go");
+        assert!(!model.state.switch_under_way(), "let go");
 
         let asked = machine.auto_at.len();
         model.later(Duration::from_secs(5));
@@ -1007,11 +1017,11 @@ fn a_switch_made_as_it_was_turned_off_is_still_said() {
             .state
             .last_switches
             .iter()
-            .map(|s| s.to.as_str())
+            .map(|s| s.to.label.as_str())
             .collect::<Vec<_>>(),
         ["personal"]
     );
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
 }
 
 /// The first look of a launch follows its first read, which asks Anthropic for the reading
@@ -1022,17 +1032,17 @@ fn the_first_look_of_a_launch_follows_its_first_read() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(vec![work(40.0), personal()])));
     machine.preferences_file = Some(ON.into());
-    machine.look = Ok(AutoLooked::Stands(AutoSwitched::NotWatching {
+    machine.look = Ok(AutoLooked::Stands(Box::new(AutoSwitched::NotWatching {
         key: "not-watching/no_reading/work".into(),
         why: "there is no reading of work from Anthropic yet".into(),
         until: None,
-    }));
+    })));
     model.send(Intent::Start);
     model.run_but(&mut machine, any_read);
     assert!(machine.looked_at.is_empty(), "not before the read");
     assert_eq!(standing(&model), None);
 
-    machine.look = Ok(AutoLooked::Stands(watching("work")));
+    machine.look = Ok(AutoLooked::Stands(Box::new(watching("work"))));
     model.run(&mut machine);
     assert_eq!(machine.looked_at.len(), 1, "once it lands");
     assert!(machine.posted.is_empty(), "{:?}", machine.posted);
@@ -1106,7 +1116,7 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
         machine.posted[0].body,
         words::used_then("work", "97% of its 5-hour limit", &words::sentence(&why))
     );
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
 
     machine.auto = Ok(no_room(27_000));
     model.refresh(&mut machine);
@@ -1121,7 +1131,7 @@ fn not_while_another_switch_is_under_way() {
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     machine.answer = Ok(status(vec![work(97.0), personal()]));
     machine.look = Ok(AutoLooked::Act);
@@ -1142,7 +1152,7 @@ fn not_while_another_change_is_under_way() {
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     model.send(Intent::Forget {
-        qualified: "claude/spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
     });
     machine.answer = Ok(status(vec![work(97.0), personal()]));
     machine.look = Ok(AutoLooked::Act);

@@ -8,8 +8,8 @@ public sealed class BindingsTests
     public void TheBindingsLoadTheCoreAndAgreeWithIt()
     {
         Assert.AreEqual(
-            new Intent.Rename("claude", "home", "work"),
-            PitboardModelMethods.CheckName(new Sheet.Rename("claude", "home"), "claude", "work").Intent);
+            new Intent.Rename(new AccountKey(Tool.Claude, "home"), "work"),
+            PitboardModelMethods.CheckName(new Sheet.Rename(new AccountKey(Tool.Claude, "home")), Tool.Claude, "work").Intent);
     }
 
     [TestMethod]
@@ -26,7 +26,7 @@ public sealed class BindingsTests
             "Pitboard", "SignIn", "Settings", "PitboardException", "Cause", "Switched", "Switch",
             "Adoption", "Enrolled", "EnrolledAs", "Changed", "Holding", "Remedy", "Diagnosis", "Change",
             "SignInView", "Check", "Renewed", "LinkRefusal", "Status", "Account", "Usage", "Limit", "Parked",
-            "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Tool", "Failure", "Warning", "Held",
+            "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Failure", "Warning", "Held",
             "Schedule", "QuitQuestion", "ReplaceQuestion", "Conjunction",
         ];
         var stillOffered = exported.Select(type => type.Name).Intersect(older).Order(StringComparer.Ordinal);

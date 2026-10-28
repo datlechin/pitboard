@@ -13,6 +13,7 @@
 //! `dana@travel.example` for an add given no name, with a five-hour limit barely touched.
 
 use super::worlds::{Person, Stage};
+use crate::Tool;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::testing::{
     Ran, ScriptedSignIn, SignInScript, Started, WarmScript, service_for_dir,
@@ -157,21 +158,21 @@ fn play(
     say: &Sender<String>,
     hears: &Receiver<Told>,
 ) -> bool {
-    let printed = match person.tool {
-        ProviderId::Claude => vec![
+    let printed = match Tool::from(person.tool) {
+        Tool::Claude => vec![
             "Opening browser to sign in\u{2026}\n".to_owned(),
             format!("If the browser didn't open, visit: {CLAUDE_ADDRESS}\n"),
             "Paste code here if prompted > ".to_owned(),
         ],
-        ProviderId::Codex => vec![
+        Tool::Codex => vec![
             "Starting local login server on http://localhost:1455.\n".to_owned(),
             format!(
                 "If your browser did not open, navigate to this URL to authenticate:\n\n\
                  {CODEX_ADDRESS}\n"
             ),
         ],
-        // A tool the fixture has no sign-in of fails to start one.
-        _ => return false,
+        // Claude Desktop signs in inside its app, which has no program to start.
+        Tool::Desktop => return false,
     };
     // A line typed back before the tool reads one waits for it, as it would in its stdin.
     let mut typed = Vec::new();
@@ -184,10 +185,10 @@ fn play(
             return false;
         }
     }
-    let done = match person.tool {
+    let done = match Tool::from(person.tool) {
         // It reads the code the browser shows, however long that takes, and another in
         // place of each it refuses.
-        ProviderId::Claude => {
+        Tool::Claude => {
             let mut typed = typed.into_iter();
             loop {
                 let line = match typed.next() {
@@ -206,8 +207,8 @@ fn play(
             }
         }
         // It reads nothing typed back, and the browser comes back by itself.
-        ProviderId::Codex => !stopped_within(hears, BROWSER, &mut typed),
-        _ => false,
+        Tool::Codex => !stopped_within(hears, BROWSER, &mut typed),
+        Tool::Desktop => false,
     };
     if done {
         machine.signed_in_privately(person, dir);
@@ -260,16 +261,16 @@ impl Stage {
     fn signed_in_privately(&self, person: &Person, dir: &Path) {
         let now = self.now_on_its_clock();
         let login = self.login(person, now + 86_400, now + 30 * 86_400);
-        match person.tool {
-            ProviderId::Claude => self
+        match Tool::from(person.tool) {
+            Tool::Claude => self
                 .host
                 .live()
                 .plant(&service_for_dir(&dir.to_string_lossy()), &login.document),
-            ProviderId::Codex => self
+            Tool::Codex => self
                 .host
                 .file_at(PathBuf::from(dir).join("auth.json"))
                 .plant("auth.json", &login.document),
-            _ => {}
+            Tool::Desktop => {}
         }
     }
 }

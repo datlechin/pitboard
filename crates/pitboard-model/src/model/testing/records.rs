@@ -1,10 +1,12 @@
 use crate::model::Snapshot;
 use crate::present::testing::standing_of;
 use crate::{
-    Account, Adoption, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, Level, Limit,
-    PitboardError, Remedy, Status, Switch, Switched, Tool, Usage, Warning,
+    Account, Adoption, AutoSwitched, Change, Check, Enrolled, EnrolledAs, Holding, Level,
+    PitboardError, Remedy, Status, Switch, Switched, Usage, Warning,
 };
 use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
+use pitboard_core::usage::Window;
 
 /// The ChatGPT app's bundle id, which is how the core's holder detection names it.
 pub(crate) const CHATGPT: &str = "com.openai.codex";
@@ -14,16 +16,8 @@ pub(crate) const CHATGPT: &str = "com.openai.codex";
 pub(crate) const CHATGPT_CODEX: &str =
     "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
 
-pub(crate) fn claude_code() -> Tool {
-    crate::tool(ProviderId::Claude)
-}
-
-pub(crate) fn codex() -> Tool {
-    crate::tool(ProviderId::Codex)
-}
-
 pub(crate) use crate::present::testing::{
-    awaiting, claude_desktop, desktop_account, desktop_warning,
+    awaiting, claude_code, claude_desktop, codex, desktop_account, desktop_warning,
 };
 
 // Claude's bundle id, which is how the core's holder detection names it.
@@ -43,8 +37,8 @@ pub(crate) fn claude_holding() -> Holding {
 }
 
 /// A limit as the core reports one.
-pub(crate) fn window(kind: &str, percent: f64) -> Limit {
-    Limit {
+pub(crate) fn window(kind: &str, percent: f64) -> Window {
+    Window {
         kind: kind.into(),
         length_seconds: None,
         scope: None,
@@ -60,16 +54,16 @@ pub(crate) fn window(kind: &str, percent: f64) -> Limit {
 /// where its tool is Claude Code, as a real one is.
 pub(crate) fn account(
     label: Option<&str>,
-    provider: &str,
+    provider: ProviderId,
     signed_in: bool,
-    windows: Vec<Limit>,
+    windows: Vec<Window>,
 ) -> Account {
     let uuid = label.unwrap_or("someone");
     Account {
         id: format!("{provider}:{uuid}"),
-        provider: provider.into(),
+        provider,
         label: label.map(str::to_owned),
-        qualified: label.map(|label| format!("{provider}/{label}")),
+        key: label.map(|label| Key::new(provider, label)),
         unplaced: false,
         email: format!("{uuid}@example.com"),
         account_id: uuid.into(),
@@ -79,7 +73,7 @@ pub(crate) fn account(
         usage: Some(Usage {
             observed_at: Some(0),
             windows,
-            lists_every_limit: provider == "claude",
+            lists_every_limit: provider == ProviderId::Claude,
         }),
         stale: None,
         stale_explanation: None,
@@ -92,7 +86,7 @@ pub(crate) fn account(
 pub(crate) fn claude(label: &str, signed_in: bool, percent: f64) -> Account {
     account(
         Some(label),
-        "claude",
+        ProviderId::Claude,
         signed_in,
         vec![window("session", percent)],
     )
@@ -100,7 +94,7 @@ pub(crate) fn claude(label: &str, signed_in: bool, percent: f64) -> Account {
 
 /// A Codex account with no limits read.
 pub(crate) fn codex_account(label: &str, signed_in: bool) -> Account {
-    account(Some(label), "codex", signed_in, Vec::new())
+    account(Some(label), ProviderId::Codex, signed_in, Vec::new())
 }
 
 pub(crate) fn status(accounts: Vec<Account>) -> Status {
@@ -138,16 +132,16 @@ pub(crate) fn still_running() -> Warning {
     )
 }
 
-/// A switch of `provider`'s tool, as the core reports one: `from` and `to` typed the way
-/// the core types them, bare for Claude Code and with the tool for any other. Codex's open
-/// sessions never follow; Claude Code's follow within 33 seconds.
+/// A switch of `provider`'s tool, as the model takes one the core reports: `from` and `to`
+/// typed the way the core types them, bare for Claude Code and with the tool for any other.
+/// Codex's open sessions never follow; Claude Code's follow within 33 seconds.
 pub(crate) fn switched(
-    provider: &str,
+    provider: ProviderId,
     from: &str,
     to: &str,
     warnings: Vec<Warning>,
 ) -> Result<Switched, Refusal> {
-    let adoption = if provider == "codex" {
+    let adoption = if provider == ProviderId::Codex {
         Adoption::RestartRequired {
             program: "codex",
             holders: &[],
@@ -157,9 +151,9 @@ pub(crate) fn switched(
     };
     Ok(Switched {
         outcome: Switch::Switched {
-            provider: provider.into(),
-            from: from.into(),
-            to: to.into(),
+            provider,
+            from: Key::parse(from).label,
+            to: Key::parse(to),
             adoption,
         },
         warnings,
@@ -181,7 +175,7 @@ pub(crate) fn watching(account: &str) -> AutoSwitched {
 pub(crate) fn already_active(label: &str, warnings: Vec<Warning>) -> Result<Switched, Refusal> {
     Ok(Switched {
         outcome: Switch::AlreadyActive {
-            label: label.into(),
+            account: Key::parse(label),
         },
         warnings,
     })

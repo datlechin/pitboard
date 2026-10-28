@@ -160,8 +160,8 @@ public sealed class IconMenuFlyoutTests
         CollectionAssert.AreEqual(
             new IconCommand[]
             {
-                new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))),
-                new IconCommand.Send(new Intent.SwitchTo("claude/personal")),
+                new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null))),
+                new IconCommand.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal"))),
                 new IconCommand.Quit(),
             },
             chosen);

@@ -8,7 +8,6 @@ use crate::model::state::{After, Answered, State};
 use crate::model::{LocalTime, OutsideAnswer};
 use crate::{Account, UsageLevel};
 use pitboard_core::host::{OS, Os};
-use pitboard_core::state::Key;
 use pitboard_core::status::Stale;
 use pitboard_core::words::figure;
 use serde::Serialize;
@@ -121,7 +120,7 @@ pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) 
 
 // Only an account added under a name, which a switch from outside can name.
 fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
-    let label = Key::parse(account.qualified.as_deref()?).label;
+    let label = account.key.as_ref()?.label.clone();
     if account.unplaced {
         return None;
     }
@@ -145,8 +144,8 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
     };
     Some(GlanceAccount {
         id: id(&account.id),
-        tool: account.provider.clone(),
-        tool_name: seen.tool_name(&account.provider),
+        tool: account.provider.code().into(),
+        tool_name: account.provider.name().into(),
         name: label,
         in_use: account.signed_in,
         standing: match standing {
@@ -204,10 +203,7 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
             let (done, said) = match answered {
                 Answered::Switched { tool, label } => (
                     true,
-                    format!(
-                        "{}.",
-                        words::switched_to(Some(&seen.tool_name(tool)), label)
-                    ),
+                    format!("{}.", words::switched_to(Some(tool.name()), label)),
                 ),
                 Answered::InUse { label } => (true, words::already_in_use(label)),
                 Answered::Updated { at } => (true, words::updated(&seen.clock(*at))),

@@ -5,9 +5,13 @@ use super::testing::machine::{Hand, Stub, any_read};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CHATGPT, chatgpt_holding, codex, refusal, status, switched};
 use super::{Intent, OutsideAnswer, OutsideAsk};
+use crate::AccountKey;
+use crate::Tool;
 use crate::present::testing::{LimitExt, account, unplaced, window};
 use crate::present::{Question, glance_id, words};
 use crate::{Account, Status};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use std::time::Duration;
 
 const NOW: i64 = 1_800_000_000;
@@ -173,7 +177,7 @@ fn the_glance_holds_no_email_token_uuid_path_or_notice_line() {
             work(),
             personal(10.0),
             account(None).signed_in().uuid("dana-uuid").build(),
-            unplaced("codex", false),
+            unplaced(ProviderId::Codex, false),
         ],
         vec![super::testing::records::warning("fallback_login", line)],
     )));
@@ -207,7 +211,7 @@ fn a_glance_is_its_golden_file() {
     let main = Account {
         plan: Some("Plus".into()),
         ..account(Some("main"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .uuid("m")
             .limits(vec![
@@ -247,7 +251,7 @@ fn a_glance_id_is_the_accounts_own_and_never_changes() {
     );
     let renamed = Account {
         label: Some("office".into()),
-        qualified: Some("claude/office".into()),
+        key: Some(Key::new(ProviderId::Claude, "office")),
         ..work()
     };
     assert_eq!(renamed.id, work().id);
@@ -257,7 +261,7 @@ fn a_glance_id_is_the_accounts_own_and_never_changes() {
 fn a_switch_asked_from_outside_answers_its_request() {
     let mut machine = Stub::reading(Ok(two(10.0)));
     let mut model = glancing(&mut machine);
-    machine.switched = switched("claude", "work", "personal", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
     model.send(Intent::Outside {
         request: 7,
         ask: switch_to("claude:p"),
@@ -284,7 +288,7 @@ fn what_a_switch_from_outside_cannot_do_is_refused_in_words() {
         model.send(Intent::Outside { request, ask });
     }
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     model.send(Intent::Outside {
         request: 3,
@@ -320,14 +324,19 @@ fn what_a_switch_from_outside_cannot_do_is_refused_in_words() {
 fn chatgpt_open(quits: bool) -> (Hand, Stub) {
     let mut machine = Stub::reading(Ok(status(vec![
         account(Some("main"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .uuid("m")
             .build(),
-        account(Some("spare")).of("codex").uuid("s").build(),
+        account(Some("spare"))
+            .of(ProviderId::Codex)
+            .uuid("s")
+            .build(),
     ])));
     machine.found = vec![codex()];
-    machine.held.insert("codex".into(), vec![chatgpt_holding()]);
+    machine
+        .held
+        .insert(ProviderId::Codex, vec![chatgpt_holding()]);
     machine.apps = StandInApps::new(&[CHATGPT], quits);
     let model = glancing(&mut machine);
     (model, machine)
@@ -350,7 +359,7 @@ fn a_switch_from_outside_that_would_quit_an_app_quits_nothing_and_answers_with_t
     model.run(&mut machine);
     assert_eq!(model.shown().quit_question, None);
     assert!(machine.apps.asked().is_empty(), "nothing quit");
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
     assert_eq!(
         answers(&model),
         [OutsideAnswer {
@@ -369,7 +378,7 @@ fn a_switch_from_outside_that_would_quit_an_app_quits_nothing_and_answers_with_t
 #[test]
 fn a_switch_from_outside_let_quit_the_app_quits_it_switches_and_opens_it_again() {
     let (mut model, mut machine) = chatgpt_open(true);
-    machine.switched = switched("codex", "codex/main", "codex/spare", Vec::new());
+    machine.switched = switched(ProviderId::Codex, "codex/main", "codex/spare", Vec::new());
     model.send(Intent::Outside {
         request: 5,
         ask: quit_and_switch_to("codex:s"),
@@ -407,7 +416,7 @@ fn a_switch_from_outside_whose_app_stays_open_answers_that_it_failed_and_shows_n
     model.run(&mut machine);
     assert_eq!(machine.apps.asked(), [format!("quit {CHATGPT}")]);
     assert!(machine.switched_to.is_empty());
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
     assert_eq!(model.state.presented, None);
     assert_eq!(model.shown().failure_alert, None);
     assert_eq!(
@@ -415,7 +424,7 @@ fn a_switch_from_outside_whose_app_stays_open_answers_that_it_failed_and_shows_n
         [OutsideAnswer {
             request: 6,
             done: false,
-            said: words::failed_outside(&words::could_not_switch("codex/spare")),
+            said: words::failed_outside(&words::could_not_switch("spare")),
             question: None,
         }]
     );
@@ -427,7 +436,7 @@ fn a_switch_from_outside_let_quit_an_app_quits_nothing_that_holds_no_login() {
     let mut machine = Stub::reading(Ok(two(10.0)));
     let mut model = glancing(&mut machine);
     machine.apps = StandInApps::new(&[CHATGPT], true);
-    machine.switched = switched("claude", "work", "personal", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
     model.send(Intent::Outside {
         request: 7,
         ask: quit_and_switch_to("claude:p"),
@@ -454,7 +463,7 @@ fn a_switch_from_outside_the_core_refuses_says_only_that_it_failed_and_shows_no_
     });
     model.run(&mut machine);
     assert_eq!(model.shown().failure_alert, None);
-    let said = words::failed_outside(&words::could_not_switch("claude/personal"));
+    let said = words::failed_outside(&words::could_not_switch("personal"));
     assert!(!said.contains('@') && !said.contains('/'), "{said}");
     assert_eq!(
         answers(&model),
@@ -529,7 +538,7 @@ fn a_switch_from_outside_waits_behind_a_question_the_person_has_open() {
 #[test]
 fn a_switch_from_outside_before_the_first_read_waits_for_it() {
     let mut machine = Stub::reading(Ok(two(10.0)));
-    machine.switched = switched("claude", "work", "personal", Vec::new());
+    machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
     let mut model = Hand::new();
     model.state.glance_to_a_file();
     model.send(Intent::Outside {
@@ -648,7 +657,7 @@ fn a_switch_from_outside_needing_a_question_only_the_app_asks_says_to_open_it() 
     });
     model.run(&mut machine);
     assert_eq!(model.shown().replace_question, None);
-    assert!(model.state.switch_under_way().is_none());
+    assert!(!model.state.switch_under_way());
     assert_eq!(
         answers(&model),
         [

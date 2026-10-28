@@ -7,6 +7,8 @@ use super::apps::{CHATGPT, CLAUDE, chatgpt};
 use super::pages;
 use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
+use crate::AccountKey;
+use crate::Tool;
 use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
 use crate::model::testing::records::read_in;
 use crate::model::{
@@ -19,6 +21,7 @@ use crate::present::{AccountItem, AccountsShown, ActionKind, Footing, RowEnd};
 use crate::{AppCore, Enrolled, EnrolledAs, FoundCommandLine, PitboardError, Schedule, Status};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::{self, ProviderId};
+use pitboard_core::state::Key;
 use pitboard_core::status::Stale;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -41,9 +44,9 @@ fn described(status: &Status) -> Vec<String> {
         .iter()
         .map(|account| {
             let name = account
-                .qualified
-                .clone()
-                .unwrap_or_else(|| account.email.clone());
+                .key
+                .as_ref()
+                .map_or_else(|| account.email.clone(), Key::qualified);
             if account.signed_in {
                 format!("{name}, in use")
             } else if account.standing.switchable() {
@@ -66,7 +69,7 @@ fn who(status: &Status) -> Vec<(String, bool)> {
     status
         .accounts
         .iter()
-        .filter_map(|account| Some((account.qualified.clone()?, account.signed_in)))
+        .filter_map(|account| Some((account.key.as_ref()?.qualified(), account.signed_in)))
         .collect()
 }
 
@@ -183,12 +186,12 @@ fn each_fixture_starts_where_its_tests_expect() {
         };
         assert_eq!(
             crate::tools()
-                .iter()
-                .map(|tool| tool.code.as_str())
+                .into_iter()
+                .map(ProviderId::code)
                 .collect::<Vec<_>>(),
             listed
         );
-        let installed: Vec<String> = core.installed().into_iter().map(|tool| tool.code).collect();
+        let installed: Vec<&str> = core.installed().into_iter().map(ProviderId::code).collect();
         let expected: &[&str] = match world {
             World::NoClaudeCode => &[],
             World::ClaudeDesktop | World::ClaudeDesktopOpen => &["claude", "desktop"],
@@ -313,7 +316,7 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
 fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
     let launched = made(World::OneTool);
     let core = &launched.core;
-    let session = core.sign_in("claude", None).expect("started");
+    let session = core.sign_in(ProviderId::Claude, None).expect("started");
     let mut said = String::new();
     while let Some(line) = session.next_line() {
         said.push_str(&line);
@@ -366,7 +369,7 @@ fn a_claude_code_sign_in_waits_for_the_code_and_then_parks_the_account() {
 fn claude_code_refuses_a_code_without_both_halves_and_reads_another() {
     let launched = made(World::OneTool);
     let core = &launched.core;
-    let session = core.sign_in("claude", None).expect("started");
+    let session = core.sign_in(ProviderId::Claude, None).expect("started");
     session.paste("fixture-code").expect("typed back");
     let mut said = String::new();
     while let Some(line) = session.next_line() {
@@ -406,10 +409,10 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     model.send(Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     });
     told.last_where("the code asked for", |snapshot| {
@@ -448,7 +451,7 @@ fn a_refused_code_is_said_in_the_sheet_and_another_is_asked_for() {
 fn a_codex_sign_in_finishes_by_itself() {
     let launched = made(World::TwoTools);
     let core = &launched.core;
-    let session = core.sign_in("codex", None).expect("started");
+    let session = core.sign_in(ProviderId::Codex, None).expect("started");
     let mut said = String::new();
     while let Some(line) = session.next_line() {
         said.push_str(&line);
@@ -559,7 +562,8 @@ fn every_launch_starts_where_the_last_one_did() {
         );
         // What a launch leaves behind: a switch, what it told, preferences of its own, and
         // anything else in its folder.
-        core.switch_to("claude/personal").ok();
+        core.switch_to(&Key::new(ProviderId::Claude, "personal"))
+            .ok();
         core.keep_app_file(AppFile::Told, r#"{"claude/work/session/":7200}"#)
             .expect("told");
         core.keep_app_file(
@@ -690,7 +694,7 @@ fn the_chatgpt_fixture_is_the_app_the_core_finds_on_each_system() {
         chatgpt.opens(&launched.machine.host);
         let held: Vec<(String, Remedy)> = launched
             .core
-            .holding("codex")
+            .holding(ProviderId::Codex)
             .into_iter()
             .map(|held| (held.kind, held.remedy))
             .collect();
@@ -718,17 +722,17 @@ fn the_chatgpt_fixture_is_quit_for_a_codex_switch_and_opened_again() {
     let launched = made(World::ChatGptOpen);
     let core = &launched.core;
     assert_eq!(
-        core.holding("codex")
+        core.holding(ProviderId::Codex)
             .iter()
             .map(|held| held.kind.as_str())
             .collect::<Vec<_>>(),
         ["chatgpt_app"]
     );
-    assert!(core.holding("claude").is_empty());
+    assert!(core.holding(ProviderId::Claude).is_empty());
 
     let (model, told) = started(&launched);
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
@@ -756,7 +760,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
     let launched = made(World::ClaudeDesktopOpen);
     let core = &launched.core;
     assert_eq!(
-        core.holding("desktop")
+        core.holding(ProviderId::Desktop)
             .iter()
             .map(|held| held.kind.as_str())
             .collect::<Vec<_>>(),
@@ -764,7 +768,7 @@ fn claude_is_quit_for_a_switch_and_opened_again_behind() {
     );
     let (model, told) = started(&launched);
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
@@ -793,8 +797,13 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     // The steps, through the core's own wait, with the fixture's Claude played by hand.
     let launched = made(World::ClaudeDesktop);
     let (core, claude) = (&launched.core, &launched.machine.claude);
-    let session = core.sign_in("desktop", None).expect("work parked");
-    assert_eq!(session.put_back.as_deref(), Some("desktop/work"));
+    let session = core
+        .sign_in(ProviderId::Desktop, None)
+        .expect("work parked");
+    assert_eq!(
+        session.put_back,
+        Some(Key::new(ProviderId::Desktop, "work"))
+    );
     let reading = {
         let session = Arc::clone(&session);
         std::thread::spawn(move || {
@@ -840,11 +849,11 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     let (model, told) = started(&launched);
     model.send(Intent::PresentSheet {
         sheet: Sheet::Add {
-            provider: Some("desktop".into()),
+            tool: Some(Tool::Desktop),
         },
     });
     model.send(Intent::SignIn {
-        provider: "desktop".into(),
+        tool: Tool::Desktop,
         again: None,
     });
     let asked = told.last_where("the quit question", |snapshot| {
@@ -891,11 +900,11 @@ fn an_add_left_halfway_is_put_back_by_use() {
     let (model, told) = started(&launched);
     model.send(Intent::PresentSheet {
         sheet: Sheet::Add {
-            provider: Some("desktop".into()),
+            tool: Some(Tool::Desktop),
         },
     });
     model.send(Intent::SignIn {
-        provider: "desktop".into(),
+        tool: Tool::Desktop,
         again: None,
     });
     let waiting = told.last_where("work parked for the sign-in", |snapshot| {
@@ -953,7 +962,10 @@ fn a_claude_pitboard_quits_before_anybody_signs_in_writes_nothing_after() {
     let apps = &launched.apps;
     let copy = apps.running(CLAUDE.into()).expect("asked").expect("open");
     apps.request_quit(CLAUDE.into()).expect("asked to quit");
-    let session = launched.core.sign_in("desktop", None).expect("work parked");
+    let session = launched
+        .core
+        .sign_in(ProviderId::Desktop, None)
+        .expect("work parked");
     apps.reopen(copy, true).expect("opened for the sign-in");
     apps.request_quit(CLAUDE.into()).expect("asked to quit");
     apps.played();
@@ -987,7 +999,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
     pitboard_core::testing::desktop::leave_a_move_waiting(
         &machine.terminal(),
         &machine.host,
-        &pitboard_core::state::Key::new(ProviderId::Desktop, "work"),
+        &Key::new(ProviderId::Desktop, "work"),
     );
     // Opened, somebody signed in to a third account, quit: recovery cannot tell.
     machine.claude.opens();
@@ -1006,7 +1018,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
         "no change has tried to settle it yet"
     );
     model.send(Intent::SwitchTo {
-        qualified: "desktop/home".into(),
+        account: AccountKey::new(Tool::Desktop, "home"),
     });
     let refused = told.last_where("the switch refused", |snapshot| {
         actions_of(snapshot, "warning/move_waiting/").len() == 2
@@ -1021,12 +1033,12 @@ fn a_stopped_move_is_given_up_from_the_app() {
     assert_eq!(
         refused.failure_alert,
         Some(crate::account_windows::AlertText {
-            title: words::could_not_switch("desktop/home"),
+            title: words::could_not_switch("home"),
             message: words::in_app_refusal(OS, &undetermined).expect("the app's words"),
             next: Some(crate::present::next::of_failure(
                 OS,
                 Some("recovery_undetermined"),
-                Some("desktop/work")
+                Some(&Key::new(ProviderId::Desktop, "work"))
             )),
         })
     );
@@ -1063,7 +1075,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
             slot: None,
         })]
     );
-    assert!(!launched.core.moving("desktop"), "nothing waits");
+    assert!(!launched.core.moving(ProviderId::Desktop), "nothing waits");
 }
 
 #[test]
@@ -1077,7 +1089,7 @@ fn a_move_the_give_up_settles_is_said_as_finished() {
     pitboard_core::testing::desktop::leave_a_move_waiting(
         &machine.terminal(),
         &machine.host,
-        &pitboard_core::state::Key::new(ProviderId::Desktop, "work"),
+        &Key::new(ProviderId::Desktop, "work"),
     );
     let (model, told) = started(&launched);
     told.last_where("the move said waiting", |snapshot| {
@@ -1097,7 +1109,7 @@ fn a_move_the_give_up_settles_is_said_as_finished() {
             .any(|notice| notice.id == "moves_given_up"),
         "nothing given up"
     );
-    assert!(!launched.core.moving("desktop"), "nothing waits");
+    assert!(!launched.core.moving(ProviderId::Desktop), "nothing waits");
 }
 
 /// The fixture's ChatGPT leaves the process list as it quits and comes back as it is
@@ -1113,9 +1125,9 @@ fn chatgpt_leaves_the_process_list_as_it_quits() {
         .expect("running");
     apps.request_quit(CHATGPT.into()).expect("asked to quit");
     assert_eq!(apps.running(CHATGPT.into()).expect("asked"), None);
-    assert!(core.holding("codex").is_empty());
+    assert!(core.holding(ProviderId::Codex).is_empty());
     apps.reopen(copy, false).expect("opened");
-    assert_eq!(core.holding("codex").len(), 1);
+    assert_eq!(core.holding(ProviderId::Codex).len(), 1);
     assert!(
         !made(World::TwoTools).apps.is_running(CHATGPT),
         "only chatGPTOpen has it open"
@@ -1246,15 +1258,8 @@ fn the_login_in_use_is_offered_a_name() {
     let Some(RowEnd::Button { action }) = &shown.sections[0].accounts[0].end else {
         panic!("no button on the row");
     };
-    assert_eq!(
-        action.intent,
-        Intent::Enrol {
-            provider: "claude".into()
-        }
-    );
-    model.send(Intent::Enrol {
-        provider: "claude".into(),
-    });
+    assert_eq!(action.intent, Intent::Enrol { tool: Tool::Claude });
+    model.send(Intent::Enrol { tool: Tool::Claude });
     told.last_where("the account added", |snapshot| {
         read_in(snapshot)
             && lists(snapshot, "claude/work")
@@ -1313,9 +1318,7 @@ fn one_account_is_offered_a_second_until_not_now() {
         shown.setup.as_ref().map(|step| step.title.as_str()),
         Some(words::add_a_second(None).as_str())
     );
-    model.send(Intent::DeclineSecondAccount {
-        provider: "claude".into(),
-    });
+    model.send(Intent::DeclineSecondAccount { tool: Tool::Claude });
     told.last_where("the next tip, for Codex", |snapshot| {
         snapshot.setup.as_ref().map(|step| step.title.as_str()) == Some(words::USE_WITH_CODEX)
     });
@@ -1378,7 +1381,7 @@ fn a_codex_switch_says_sessions_keep_the_old_account() {
     let launched = made(World::TwoTools);
     let (model, told) = started(&launched);
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     let shown = told.last_where("what the switch said", |snapshot| {
         snapshot
@@ -1408,10 +1411,10 @@ fn accounts_are_added_through_each_tools_sign_in() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     model.send(Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     });
     let asking = told.last_where("the code asked for", |snapshot| {
@@ -1427,7 +1430,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
     model.send(Intent::CancelSignIn);
     told.last_where("the sign-in over", |snapshot| snapshot.signing_in.is_none());
     model.send(Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     });
     told.last_where("the code asked for", |snapshot| {
@@ -1445,7 +1448,7 @@ fn accounts_are_added_through_each_tools_sign_in() {
     let launched = made(World::TwoTools);
     let (model, told) = started(&launched);
     model.send(Intent::SignIn {
-        provider: "codex".into(),
+        tool: Tool::Codex,
         again: None,
     });
     told.last_where("the account listed", |snapshot| {
@@ -1465,10 +1468,10 @@ fn adding_codex_in_first_launch_reaches_its_sign_in() {
     );
     let (model, told) = started(&launched);
     model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     model.send(Intent::SignIn {
-        provider: "codex".into(),
+        tool: Tool::Codex,
         again: None,
     });
     let ended = told.last_where("the account listed or refused", |snapshot| {
@@ -1490,13 +1493,13 @@ fn a_sign_in_asked_for_at_once_after_a_cancel_asks_for_the_code() {
     let launched = made(World::OneTool);
     let (model, told) = started(&launched);
     let sign_in = || Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     };
     let refused =
         |snapshot: &Snapshot| snapshot.failure_alert.is_some() || snapshot.sheet_failure.is_some();
     model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     model.send(sign_in());
     let first = told.last_where("the code asked for", |snapshot| {
@@ -1574,13 +1577,11 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
 
     model.send(Intent::PresentSheet {
         sheet: Sheet::Rename {
-            provider: "claude".into(),
-            label: "personal".into(),
+            account: AccountKey::new(Tool::Claude, "personal"),
         },
     });
     model.send(Intent::Rename {
-        provider: "claude".into(),
-        label: "personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
         to: "work".into(),
     });
     let refused = told.last_where("the rename refused", |snapshot| {
@@ -1591,8 +1592,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
         Some(words::could_not_rename("personal"))
     );
     model.send(Intent::Rename {
-        provider: "claude".into(),
-        label: "personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
         to: "home".into(),
     });
     told.last_where("the account renamed", |snapshot| {
@@ -1601,7 +1601,7 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
             && lists(snapshot, "claude/home")
     });
     model.send(Intent::Forget {
-        qualified: "claude/home".into(),
+        account: AccountKey::new(Tool::Claude, "home"),
     });
     told.last_where("the account forgotten", |snapshot| {
         read_in(snapshot) && rows(snapshot).count() == 1
@@ -2325,7 +2325,7 @@ fn a_codex_switch_quits_and_reopens_chatgpt_through_the_apps_fixture_in_is_given
     );
 
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     let asked = told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
@@ -2336,7 +2336,7 @@ fn a_codex_switch_quits_and_reopens_chatgpt_through_the_apps_fixture_in_is_given
         (
             words::quit_to_switch("ChatGPT"),
             &Intent::QuitAndSwitch {
-                qualified: "codex/spare".into()
+                account: AccountKey::new(Tool::Codex, "spare")
             }
         )
     );
@@ -2367,19 +2367,19 @@ fn a_refusal_to_quit_from_the_apps_fixture_in_is_given_stops_the_switch() {
     );
 
     model.send(Intent::SwitchTo {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     told.last_where("the quit question", |snapshot| {
         snapshot.quit_question.is_some()
     });
     model.send(Intent::QuitAndSwitch {
-        qualified: "codex/spare".into(),
+        account: AccountKey::new(Tool::Codex, "spare"),
     });
     let refused = told.last_where("the switch stopped", |snapshot| {
         snapshot.failure_alert.is_some()
     });
     let failure = refused.failure_alert.as_ref().expect("stopped");
-    assert_eq!(failure.title, words::could_not_switch("codex/spare"));
+    assert_eq!(failure.title, words::could_not_switch("spare"));
     assert_eq!(
         failure.message,
         words::still_open("ChatGPT", "switch again")
@@ -2397,7 +2397,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
     let (model, told) = started_in(&own, World::OneTool, &StandInApps::new(&[], true), &posted);
 
     model.send(Intent::SwitchTo {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     told.last_where("the switch, read back", |snapshot| {
         uses(snapshot, "claude/personal")
@@ -2526,7 +2526,7 @@ fn no_word_on_screen_is_park_put_away_give_up_enrol_record_or_settle() {
             model.send(Intent::PaneShown { pane });
         }
         model.send(Intent::PresentSheet {
-            sheet: Sheet::Add { provider: None },
+            sheet: Sheet::Add { tool: None },
         });
         let shown = told.last_where("the checks, the activity and the sheet", |snapshot| {
             let machine = &snapshot.machine;

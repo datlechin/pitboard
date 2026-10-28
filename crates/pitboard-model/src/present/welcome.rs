@@ -45,7 +45,7 @@ pub struct WelcomeLogin {
 }
 
 pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
-    let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name.as_str()).collect();
+    let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name()).collect();
     let (title, note) = words::open_at_login(seen.os);
     WelcomeShown {
         title: words::WELCOME.into(),
@@ -78,31 +78,28 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
     let Some(found) = &seen.state.installed else {
         return Vec::new();
     };
-    let claude = ProviderId::Claude.code();
+    let claude = ProviderId::Claude;
     if found.is_empty() {
-        return words::missing(seen.os, claude)
-            .map(|missing| WelcomeTool {
-                code: claude.into(),
-                name: seen.tool_name(claude),
-                account: None,
-                step: WelcomeStep::Install {
-                    link: SetupLink {
-                        title: missing.link_title,
-                        link: missing.link,
-                    },
+        let missing = words::missing(seen.os, claude);
+        return vec![WelcomeTool {
+            code: claude.code().into(),
+            name: claude.name().into(),
+            account: None,
+            step: WelcomeStep::Install {
+                link: SetupLink {
+                    title: missing.link_title,
+                    link: missing.link,
                 },
-            })
-            .into_iter()
-            .collect();
+            },
+        }];
     }
-    (seen.tools.iter())
-        .filter(|tool| found.iter().any(|here| here.code == tool.code))
+    (seen.tools.iter().copied())
+        .filter(|tool| found.contains(tool))
         .map(|tool| {
-            let code = tool.code.as_str();
             let added = (seen.accounts().iter())
-                .filter(|account| account.provider == code && account.label.is_some())
+                .filter(|account| account.provider == tool && account.label.is_some())
                 .min_by_key(|account| !account.signed_in);
-            let signed_in = seen.unnamed().find(|account| account.provider == code);
+            let signed_in = seen.unnamed().find(|account| account.provider == tool);
             let (account, step) = match (added, signed_in) {
                 (Some(added), _) => (
                     Some(added.email.clone()).filter(|email| !email.is_empty()),
@@ -110,21 +107,21 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
                         said: words::added_as(added.label.as_deref().unwrap_or_default()),
                     },
                 ),
-                (None, Some(login)) if code == claude => (
+                (None, Some(login)) if tool == claude => (
                     Some(login.email.clone()),
-                    add(words::ADD_ASKING.into(), code),
+                    add(words::ADD_ASKING.into(), tool),
                 ),
-                (None, _) if code == claude => {
-                    (None, add_from_sheet(words::sign_in_asking(seen.os), code))
+                (None, _) if tool == claude => {
+                    (None, add_from_sheet(words::sign_in_asking(seen.os), tool))
                 }
-                (None, _) if code == ProviderId::Codex.code() => {
-                    (None, add(words::ADD_ASKING.into(), code))
+                (None, _) if tool == ProviderId::Codex => {
+                    (None, add(words::ADD_ASKING.into(), tool))
                 }
-                (None, _) => (None, add_from_sheet(words::ADD_ASKING.into(), code)),
+                (None, _) => (None, add_from_sheet(words::ADD_ASKING.into(), tool)),
             };
             WelcomeTool {
-                code: code.into(),
-                name: tool.name.clone(),
+                code: tool.code().into(),
+                name: tool.name().into(),
                 account,
                 step,
             }
@@ -133,25 +130,23 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
 }
 
 // The login the tool has now, read on the click, or its sign-in where it has none.
-fn add(title: String, code: &str) -> WelcomeStep {
+fn add(title: String, tool: ProviderId) -> WelcomeStep {
     WelcomeStep::Add {
         choice: Choice {
             title,
-            intent: Intent::Enrol {
-                provider: code.into(),
-            },
+            intent: Intent::Enrol { tool: tool.into() },
             enabled: true,
         },
     }
 }
 
-fn add_from_sheet(title: String, code: &str) -> WelcomeStep {
+fn add_from_sheet(title: String, tool: ProviderId) -> WelcomeStep {
     WelcomeStep::Add {
         choice: Choice {
             title,
             intent: Intent::PresentSheet {
                 sheet: Sheet::Add {
-                    provider: Some(code.into()),
+                    tool: Some(tool.into()),
                 },
             },
             enabled: true,

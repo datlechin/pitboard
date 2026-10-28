@@ -12,6 +12,8 @@ use super::testing::records::{
     enrolled_as, refusal, status, switched, warned, warning,
 };
 use super::{Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
+use crate::AccountKey;
+use crate::Tool;
 use crate::account_windows::WindowAccount;
 use crate::account_windows::forget_message_on;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
@@ -21,9 +23,12 @@ use crate::present::{
     ActionKind, Choice, Footing, ItemOffer, LimitKind, MenuEntry, NoteKind, NoticeAction,
     PanelNotice, Question, RowEnd, SetupStep, Severity, present,
 };
-use crate::{Abandoned, Account, EnrolledAs, GaveUp, Limit, Warning};
+use crate::{Abandoned, Account, EnrolledAs, GaveUp, Warning};
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
+use pitboard_core::usage::Window;
 use std::time::Duration;
 
 /// 12:00 UTC on Wednesday 14 January 2026, a day far from any change of clocks.
@@ -65,11 +70,12 @@ fn described_while(account: Account, under_way: impl FnOnce(&mut Hand)) -> Accou
     rows(&model).remove(0)
 }
 
-/// A switch to `qualified` under way, waiting on what holds its tool's login.
-fn switching(qualified: &str) -> impl FnOnce(&mut Hand) + '_ {
+/// A switch to the account `label` of `tool` under way, waiting on what holds its tool's
+/// login.
+fn switching(tool: Tool, label: &str) -> impl FnOnce(&mut Hand) + '_ {
     move |model| {
         model.send(Intent::SwitchTo {
-            qualified: qualified.into(),
+            account: AccountKey::new(tool, label),
         });
     }
 }
@@ -77,7 +83,7 @@ fn switching(qualified: &str) -> impl FnOnce(&mut Hand) + '_ {
 /// A sign-in under way, waiting on its tool to start.
 fn signing_in(model: &mut Hand) {
     model.send(Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     });
 }
@@ -130,23 +136,21 @@ fn noted(row: &AccountItem) -> Vec<String> {
     row.notes.iter().map(|note| note.text.clone()).collect()
 }
 
-fn switch_to(qualified: &str) -> Intent {
+fn switch_to(tool: Tool, label: &str) -> Intent {
     Intent::SwitchTo {
-        qualified: qualified.into(),
+        account: AccountKey::new(tool, label),
     }
 }
 
 fn sign_in_again(label: &str) -> Intent {
     present_sheet(Sheet::SignInAgain {
-        provider: "claude".into(),
-        label: label.into(),
+        account: AccountKey::new(Tool::Claude, label),
     })
 }
 
 fn rename(label: &str) -> Intent {
     present_sheet(Sheet::Rename {
-        provider: "claude".into(),
-        label: label.into(),
+        account: AccountKey::new(Tool::Claude, label),
     })
 }
 
@@ -232,7 +236,7 @@ fn an_account_is_called_by_its_name_or_its_address_or_what_is_wrong_with_it() {
         "u@example.com"
     );
     assert_eq!(
-        described(unplaced("codex", false)).title,
+        described(unplaced(ProviderId::Codex, false)).title,
         words::nameless_login(true)
     );
 }
@@ -276,7 +280,9 @@ fn a_row_carries_the_address_whether_it_is_in_use_and_every_limit() {
     assert_eq!(in_use.spoken, words::row_spoken("work", None, true, None));
     assert!(!described(account(Some("spare")).build()).in_use);
     assert!(
-        described(unplaced("codex", false)).limits.is_empty(),
+        described(unplaced(ProviderId::Codex, false))
+            .limits
+            .is_empty(),
         "nothing measured"
     );
 }
@@ -367,7 +373,10 @@ fn an_account_says_where_it_stands() {
         standing(account(None).signed_in().uuid("u").build()),
         AccountStanding::NotAdded
     );
-    assert_eq!(standing(unplaced("codex", true)), AccountStanding::Unusable);
+    assert_eq!(
+        standing(unplaced(ProviderId::Codex, true)),
+        AccountStanding::Unusable
+    );
     assert_eq!(
         standing(
             account(Some("beta"))
@@ -377,7 +386,11 @@ fn an_account_says_where_it_stands() {
         AccountStanding::Unusable
     );
     assert_eq!(
-        described_while(account(Some("spare")).build(), switching("claude/spare")).standing,
+        described_while(
+            account(Some("spare")).build(),
+            switching(Tool::Claude, "spare")
+        )
+        .standing,
         AccountStanding::Switching
     );
 }
@@ -418,7 +431,7 @@ fn a_row_notes_only_what_needs_doing_each_with_its_kind_and_action() {
             Some(ActionKind::SignInAgain)
         )]
     );
-    let login = unplaced("codex", false);
+    let login = unplaced(ProviderId::Codex, false);
     let why = login.stale_explanation.clone().expect("why");
     assert_eq!(notes(login), [(NoteKind::Problem, why, None)]);
     let due = NOON + 2 * DAY;
@@ -488,7 +501,10 @@ fn the_detail_notes_old_numbers_and_a_login_pitboard_cannot_use() {
         kinds(account(Some("spare")).explained(old_numbers).build()),
         [NoteKind::Stale]
     );
-    assert_eq!(kinds(unplaced("codex", false)), [NoteKind::Problem]);
+    assert_eq!(
+        kinds(unplaced(ProviderId::Codex, false)),
+        [NoteKind::Problem]
+    );
     assert!(
         kinds(
             account(Some("old"))
@@ -562,7 +578,7 @@ fn the_detail_carries_email_plan_and_sign_in_life() {
     );
     let unnamed = described(account(None).signed_in().uuid("u").build()).detail;
     assert_eq!(unnamed.sign_in.as_deref(), Some(words::NOT_ADDED_YET));
-    let codex = described(account(Some("main")).of("codex").build()).detail;
+    let codex = described(account(Some("main")).of(ProviderId::Codex).build()).detail;
     assert_eq!(codex.sign_in, None, "no expiry known");
 }
 
@@ -609,12 +625,12 @@ fn each_action_says_its_kind() {
     assert_eq!(
         sent,
         [
-            Some(switch_to("claude/spare")),
+            Some(switch_to(Tool::Claude, "spare")),
             Some(sign_in_again("spare")),
             Some(rename("spare")),
             None,
             Some(Intent::Forget {
-                qualified: "claude/spare".into()
+                account: AccountKey::new(Tool::Claude, "spare")
             })
         ]
     );
@@ -622,7 +638,11 @@ fn each_action_says_its_kind() {
         kinds(&described(account(None).signed_in().uuid("u").build())),
         [(ActionKind::Add, true)]
     );
-    assert!(described(unplaced("codex", true)).actions.is_empty());
+    assert!(
+        described(unplaced(ProviderId::Codex, true))
+            .actions
+            .is_empty()
+    );
 }
 
 /// Pressing an account in the menu or the window does the one thing its state allows,
@@ -631,7 +651,7 @@ fn each_action_says_its_kind() {
 #[test]
 fn pressing_an_account_does_the_one_thing_its_state_allows() {
     let spare = described(account(Some("spare")).build());
-    assert_eq!(sends(&spare), Some(switch_to("claude/spare")));
+    assert_eq!(sends(&spare), Some(switch_to(Tool::Claude, "spare")));
     let action = spare.action.as_ref().expect("an action");
     assert_eq!(
         (action.title.clone(), action.spoken.clone()),
@@ -646,9 +666,11 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         "as the account's own menu says it"
     );
     assert_eq!(
-        sends(&described(account(Some("spare")).of("codex").build())),
+        sends(&described(
+            account(Some("spare")).of(ProviderId::Codex).build()
+        )),
         Some(Intent::SwitchTo {
-            qualified: "codex/spare".into()
+            account: AccountKey::new(Tool::Codex, "spare")
         }),
         "by its label with its tool, since two tools can each have a spare"
     );
@@ -665,8 +687,7 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
     assert_eq!(
         sends(&stale),
         Some(present_sheet(Sheet::SignInAgain {
-            provider: "claude".into(),
-            label: "stale".into()
+            account: AccountKey::new(Tool::Claude, "stale")
         }))
     );
     assert_eq!(
@@ -677,13 +698,14 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         )),
         "plan 4.3's row button"
     );
-    let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
-    assert_eq!(
-        sends(&unnamed),
-        Some(Intent::Enrol {
-            provider: "codex".into(),
-        })
+    let unnamed = described(
+        account(None)
+            .of(ProviderId::Codex)
+            .signed_in()
+            .uuid("u")
+            .build(),
     );
+    assert_eq!(sends(&unnamed), Some(Intent::Enrol { tool: Tool::Codex }));
     assert_eq!(
         unnamed.end,
         unnamed
@@ -704,20 +726,20 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
         None,
         "only the login signed in now can be named"
     );
-    assert_eq!(sends(&described(unplaced("codex", false))), None);
-    assert_eq!(sends(&described(unplaced("codex", true))), None);
+    assert_eq!(sends(&described(unplaced(ProviderId::Codex, false))), None);
+    assert_eq!(sends(&described(unplaced(ProviderId::Codex, true))), None);
 }
 
 /// Each change waits for the one before, so while a switch runs nothing can be pressed, and
 /// only the account it is for says it is switching.
 #[test]
 fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
-    let running = "claude/spare";
+    let running = "spare";
     let spare = described_while(
         account(Some("spare"))
             .limits(vec![window("session", 5.0)])
             .build(),
-        switching(running),
+        switching(Tool::Claude, running),
     );
     assert!(spare.switching());
     assert_eq!(spare.summary, words::SWITCHING_NOW);
@@ -727,7 +749,7 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
         account(Some("other"))
             .limits(vec![window("session", 5.0)])
             .build(),
-        switching(running),
+        switching(Tool::Claude, running),
     );
     assert!(!other.switching());
     assert_eq!(
@@ -746,23 +768,26 @@ fn a_switch_running_holds_back_every_account_and_marks_only_its_own() {
     assert_eq!(
         offered(&other),
         [
-            (switch_to("claude/other"), false),
+            (switch_to(Tool::Claude, "other"), false),
             (sign_in_again("other"), true),
             (rename("other"), true)
         ]
     );
     assert!(removes(&other).is_some_and(|forget| forget.enabled));
     let unnamed = || account(None).signed_in().uuid("u").build();
-    assert_eq!(described_while(unnamed(), switching(running)).action, None);
+    assert_eq!(
+        described_while(unnamed(), switching(Tool::Claude, running)).action,
+        None
+    );
     assert!(
         !described_while(
-            account(Some("spare")).of("codex").build(),
-            switching(running)
+            account(Some("spare")).of(ProviderId::Codex).build(),
+            switching(Tool::Claude, running)
         )
         .switching(),
         "Codex's spare is another account"
     );
-    assert!(!described_while(unnamed(), switching(running)).switching());
+    assert!(!described_while(unnamed(), switching(Tool::Claude, running)).switching());
 }
 
 // At its far end a switch's spinner, the account in use, or its action's button.
@@ -779,7 +804,11 @@ fn a_row_says_what_ends_it() {
     let action = spare.action.clone().expect("it switches");
     assert_eq!(spare.end, Some(RowEnd::Button { action }));
     assert_eq!(
-        described_while(account(Some("spare")).build(), switching("claude/spare")).end,
+        described_while(
+            account(Some("spare")).build(),
+            switching(Tool::Claude, "spare")
+        )
+        .end,
         Some(RowEnd::Switching {
             spoken: words::SWITCHING.into()
         })
@@ -793,12 +822,12 @@ fn a_row_says_what_ends_it() {
 #[test]
 fn a_sign_in_running_holds_back_only_another_sign_in() {
     let spare = described_while(account(Some("spare")).build(), signing_in);
-    assert_eq!(sends(&spare), Some(switch_to("claude/spare")));
+    assert_eq!(sends(&spare), Some(switch_to(Tool::Claude, "spare")));
     // Its own menu shows signing in again, held back, beside what can still be done.
     assert_eq!(
         offered(&spare),
         [
-            (switch_to("claude/spare"), true),
+            (switch_to(Tool::Claude, "spare"), true),
             (sign_in_again("spare"), false),
             (rename("spare"), true)
         ]
@@ -809,9 +838,7 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
             account(None).signed_in().uuid("u").build(),
             signing_in
         )),
-        Some(Intent::Enrol {
-            provider: "claude".into(),
-        })
+        Some(Intent::Enrol { tool: Tool::Claude })
     );
     let stale = described_while(
         account(Some("stale"))
@@ -823,7 +850,7 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
     assert_eq!(
         offered(&stale),
         [
-            (switch_to("claude/stale"), false),
+            (switch_to(Tool::Claude, "stale"), false),
             (sign_in_again("stale"), false),
             (rename("stale"), true)
         ]
@@ -856,7 +883,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         enabled: false,
         ..offer(title, intent)
     };
-    let switch = |label: &str| switch_to(&format!("claude/{label}"));
+    let switch = |label: &str| switch_to(Tool::Claude, label);
     let switches = |label: &str| words::switch_account(Some(label));
     let spare = account(Some("spare")).build();
     let accounts = vec![
@@ -899,7 +926,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         Some(ItemOffer {
             title: words::remove_account(OS),
             intent: Intent::Forget {
-                qualified: "claude/spare".into()
+                account: AccountKey::new(Tool::Claude, "spare")
             },
             enabled: true,
             confirm: Some(Question {
@@ -924,14 +951,18 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     );
     assert!(removes(stale).is_some());
 
-    let unnamed = described(account(None).of("codex").signed_in().uuid("u").build());
+    let unnamed = described(
+        account(None)
+            .of(ProviderId::Codex)
+            .signed_in()
+            .uuid("u")
+            .build(),
+    );
     assert_eq!(
         menu(&unnamed),
         [offer(
             &words::add_account_signed_in(None),
-            Intent::Enrol {
-                provider: "codex".into(),
-            }
+            Intent::Enrol { tool: Tool::Codex }
         )]
     );
     assert_eq!(removes(&unnamed), None);
@@ -942,7 +973,11 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
         "a login not signed in has no name and cannot be named from here"
     );
     for signed_in in [false, true] {
-        assert!(described(unplaced("codex", signed_in)).actions.is_empty());
+        assert!(
+            described(unplaced(ProviderId::Codex, signed_in))
+                .actions
+                .is_empty()
+        );
     }
 }
 
@@ -980,7 +1015,7 @@ fn an_accounts_own_menu_opens_its_windows() {
     let accounts = vec![
         account(Some("work")).signed_in().uuid("same").build(),
         account(Some("main"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .uuid("same")
             .build(),
@@ -1032,7 +1067,7 @@ fn an_account_that_needs_signing_in_again_says_so_while_something_else_runs() {
     let expired = words::sign_in_standing(Standing::LoginExpired);
     assert_eq!(described(stale()).summary, expired);
     assert_eq!(described_while(stale(), signing_in).summary, expired);
-    let switch_elsewhere = described_while(stale(), switching("claude/spare"));
+    let switch_elsewhere = described_while(stale(), switching(Tool::Claude, "spare"));
     assert_eq!(switch_elsewhere.summary, expired);
     assert_eq!(
         switch_elsewhere.spoken,
@@ -1064,7 +1099,7 @@ fn an_account_whose_login_could_not_be_read_is_not_said_to_need_signing_in() {
 #[test]
 fn the_menu_says_what_stands_in_an_accounts_way_before_its_limits() {
     let limits = || vec![window("session", 12.0)];
-    let login = unplaced("codex", false);
+    let login = unplaced(ProviderId::Codex, false);
     assert_eq!(
         Some(described(login.clone()).summary),
         login.stale_explanation
@@ -1112,7 +1147,7 @@ fn at(name: &str, model: Option<&str>, figure: &str) -> (String, String) {
     (words::limit_short(name, model), figure.to_owned())
 }
 
-fn summaries(limits: Vec<Limit>) -> [String; 2] {
+fn summaries(limits: Vec<Window>) -> [String; 2] {
     let (model, _) = reading(vec![account(Some("work")).limits(limits).build()]);
     [model.on_a_mac(), model.on_windows()]
         .map(|shown| shown.sections[0].accounts[0].summary.clone())
@@ -1288,7 +1323,7 @@ fn why_an_account_cannot_be_used_or_its_numbers_are_old_is_said_once() {
         (noted(&item), item.help)
     };
     let told = |why: &str| (vec![why.to_owned()], Some(why.to_owned()));
-    let login = unplaced("codex", false);
+    let login = unplaced(ProviderId::Codex, false);
     let unusable = login.stale_explanation.clone().expect("why");
     assert_eq!(said(login), told(&unusable));
     let stale = || account(Some("stale")).standing(Standing::LoginExpired);
@@ -1359,7 +1394,7 @@ const DAY: i64 = 86_400;
 const WEEK: i64 = 7 * DAY;
 
 /// A five-hour limit four hours in at 30%, and a week ten hours in at 33%, as of `NOON`.
-fn busy_limits() -> Vec<Limit> {
+fn busy_limits() -> Vec<Window> {
     vec![
         window("session", 30.0)
             .length(5 * HOUR)
@@ -1421,19 +1456,21 @@ fn no_row_says_park_put_away_give_up_enrol_record_or_settle_on_either_system() {
         account(Some("gone"))
             .standing(Standing::NothingParked)
             .build(),
-        account(None).of("codex").signed_in().uuid("u").build(),
-        unplaced("codex", false),
+        account(None)
+            .of(ProviderId::Codex)
+            .signed_in()
+            .uuid("u")
+            .build(),
+        unplaced(ProviderId::Codex, false),
     ];
     let (mut model, mut machine) = reading(accounts);
     for sheet in [
-        Sheet::Add { provider: None },
+        Sheet::Add { tool: None },
         Sheet::SignInAgain {
-            provider: "claude".into(),
-            label: "old".into(),
+            account: AccountKey::new(Tool::Claude, "old"),
         },
         Sheet::Rename {
-            provider: "claude".into(),
-            label: "spare".into(),
+            account: AccountKey::new(Tool::Claude, "spare"),
         },
         Sheet::Stow,
     ] {
@@ -1471,7 +1508,7 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
     assert_eq!(
         forget.intent,
         Intent::Forget {
-            qualified: "claude/spare".into()
+            account: AccountKey::new(Tool::Claude, "spare")
         }
     );
     assert_eq!(
@@ -1488,7 +1525,10 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
         removes(&described(account(None).signed_in().uuid("u").build())),
         None
     );
-    assert_eq!(removes(&described(unplaced("codex", false))), None);
+    assert_eq!(
+        removes(&described(unplaced(ProviderId::Codex, false))),
+        None
+    );
 }
 
 /// An enrolled account that cannot be switched to is signed in to again from its row, in its
@@ -1496,9 +1536,12 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
 #[test]
 fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() {
     let (model, _) = reading(vec![
-        account(Some("personal")).of("codex").signed_in().build(),
+        account(Some("personal"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
         account(Some("work"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .standing(Standing::LoginExpired)
             .build(),
         account(Some("spare"))
@@ -1506,17 +1549,20 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() 
             .build(),
     ]);
     let shown = rows(&model);
-    let again = |provider: &str, label: &str| {
+    let again = |tool: Tool, label: &str| {
         Some(present_sheet(Sheet::SignInAgain {
-            provider: provider.into(),
-            label: label.into(),
+            account: AccountKey::new(tool, label),
         }))
     };
     // A section per tool, Claude Code's first.
     let actions: Vec<Option<Intent>> = shown.iter().map(sends).collect();
     assert_eq!(
         actions,
-        [again("claude", "spare"), None, again("codex", "work")]
+        [
+            again(Tool::Claude, "spare"),
+            None,
+            again(Tool::Codex, "work")
+        ]
     );
     assert_eq!(
         shown[2].action.as_ref().map(|action| action.spoken.clone()),
@@ -1531,22 +1577,24 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() 
 
 // Sections.
 
-/// A tool Pitboard does not list yet still gets a section, after the ones it lists, headed by
-/// its code, rather than its accounts going missing.
+/// A tool this system does not list still gets a section, after the ones it lists, rather
+/// than its accounts going missing.
 #[test]
-fn a_tool_nobody_lists_is_grouped_last_under_its_code() {
+fn a_tool_this_system_does_not_list_is_grouped_last() {
     let (model, _) = reading(vec![
-        account(Some("g")).of("gemini").build(),
-        account(Some("job")).of("codex").build(),
+        account(Some("g")).of(ProviderId::Desktop).build(),
+        account(Some("job")).of(ProviderId::Codex).build(),
         account(Some("work")).build(),
     ]);
-    let sections = model.shown().sections;
+    let sections = model.on_windows().sections;
     let ids: Vec<&str> = sections.iter().map(|s| s.id.as_str()).collect();
-    assert_eq!(ids, ["claude", "codex", "gemini"]);
+    assert_eq!(ids, ["claude", "codex", "desktop"]);
+    let tools: Vec<Tool> = sections.iter().map(|s| s.tool).collect();
+    assert_eq!(tools, [Tool::Claude, Tool::Codex, Tool::Desktop]);
     let headings: Vec<Option<&str>> = sections.iter().map(|s| s.heading.as_deref()).collect();
     assert_eq!(
         headings,
-        [Some("Claude Code"), Some("Codex"), Some("gemini")]
+        [Some("Claude Code"), Some("Codex"), Some("Claude Desktop")]
     );
     let titles: Vec<Vec<&str>> = sections
         .iter()
@@ -1560,8 +1608,11 @@ fn a_tool_nobody_lists_is_grouped_last_under_its_code() {
 #[test]
 fn one_tools_accounts_are_one_section_known_by_its_code() {
     let (model, _) = reading(vec![
-        account(Some("spare")).of("codex").build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("spare")).of(ProviderId::Codex).build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]);
     let sections = model.shown().sections;
     assert_eq!(sections.len(), 1);
@@ -1576,7 +1627,7 @@ fn one_tools_accounts_are_one_section_known_by_its_code() {
 /// yet is called unnamed there, which says what it is and fits where an address would not.
 #[test]
 fn one_tool_looks_as_it_always_did() {
-    for tool in ["claude", "codex"] {
+    for tool in [ProviderId::Claude, ProviderId::Codex] {
         let (model, _) = reading(vec![
             account(None)
                 .of(tool)
@@ -1606,9 +1657,12 @@ fn one_tool_looks_as_it_always_did() {
 #[test]
 fn accounts_of_two_tools_are_grouped_by_tool() {
     let (model, _) = reading(vec![
-        account(Some("job")).of("codex").build(),
+        account(Some("job")).of(ProviderId::Codex).build(),
         account(Some("work")).signed_in().build(),
-        account(Some("side")).of("codex").signed_in().build(),
+        account(Some("side"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]);
     let shown = model.shown();
     let headings: Vec<Option<&str>> = shown
@@ -1668,7 +1722,7 @@ fn the_menu_bar_says_which_tool_it_is_about_once_there_are_two() {
             .limits(vec![window("session", 60.0)])
             .build(),
         account(Some("work"))
-            .of("codex")
+            .of(ProviderId::Codex)
             .signed_in()
             .limits(vec![window("five_hour", 80.0).resets(None)])
             .build(),
@@ -1707,7 +1761,10 @@ fn an_interrupted_switch_is_said_first_with_the_way_out_and_only_once() {
     let mut machine = Stub::reading(Ok(warned(
         vec![
             account(Some("work")).signed_in().build(),
-            account(Some("job")).of("codex").signed_in().build(),
+            account(Some("job"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build(),
         ],
         vec![interrupted(), overridden()],
     )));
@@ -1961,7 +2018,10 @@ fn a_machine_without_claude_code_is_not_told_its_read_failed() {
     let mut with_codex = at_noon();
     let mut machine = missing();
     machine.offline = Ok(status(vec![
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]));
     with_codex.refresh(&mut machine);
     assert_eq!(ids(&with_codex.shown()), ["read"]);
@@ -1976,8 +2036,8 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ]);
-    machine.switched = switched("claude", "personal", "work", Vec::new());
-    switch(&mut model, &mut machine, "claude/work");
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     let follows = NOON + 33;
 
     let counting = PanelNotice {
@@ -1988,9 +2048,7 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
             Severity::Info,
             &words::switched_to(None, "work"),
             &[],
-            vec![dismiss(Intent::DismissSwitch {
-                provider: "claude".into(),
-            })],
+            vec![dismiss(Intent::DismissSwitch { tool: Tool::Claude })],
         )
     };
     model.later(Duration::from_secs(23));
@@ -2007,11 +2065,9 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
         "the switch is still kept"
     );
 
-    switch(&mut model, &mut machine, "claude/work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     assert_eq!(ids(&model.shown()), ["switch/claude"]);
-    model.send(Intent::DismissSwitch {
-        provider: "claude".into(),
-    });
+    model.send(Intent::DismissSwitch { tool: Tool::Claude });
     assert!(model.shown().notices.is_empty());
 }
 
@@ -2021,10 +2077,13 @@ fn a_switch_counts_down_only_until_open_sessions_have_followed() {
 fn a_switch_names_its_tool_only_beside_another() {
     let (mut model, mut machine) = reading(vec![
         account(Some("work")).signed_in().build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]);
-    machine.switched = switched("claude", "personal", "work", Vec::new());
-    switch(&mut model, &mut machine, "claude/work");
+    machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     let notice = model.shown().notices.remove(0);
     assert_eq!(
         notice.title,
@@ -2059,14 +2118,14 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     model.refresh(&mut machine);
     machine.switched = Ok(crate::Switched {
         outcome: crate::Switch::Switched {
-            provider: "claude".into(),
+            provider: ProviderId::Claude,
             from: "personal".into(),
-            to: "work".into(),
+            to: Key::new(ProviderId::Claude, "work"),
             adoption: crate::Adoption::AtRenewal { file: path.into() },
         },
         warnings: vec![left.clone()],
     });
-    switch(&mut model, &mut machine, "claude/work");
+    switch(&mut model, &mut machine, Tool::Claude, "work");
 
     let shown = model.shown();
     assert_eq!(model.state.last_switches[0].follows_at, None);
@@ -2086,6 +2145,10 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
         crate::present::auto_switched_notice(
             "personal",
             "work",
+            &(
+                Key::new(ProviderId::Claude, "personal"),
+                Key::new(ProviderId::Claude, "work")
+            ),
             "96% of its 5-hour limit",
             &at_renewal,
             NOON,
@@ -2105,11 +2168,19 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
 #[test]
 fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
     let (mut model, mut machine) = reading(vec![
-        account(Some("work")).of("codex").signed_in().build(),
-        account(Some("personal")).of("codex").build(),
+        account(Some("work"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+        account(Some("personal")).of(ProviderId::Codex).build(),
     ]);
-    machine.switched = switched("codex", "codex/personal", "codex/work", Vec::new());
-    switch(&mut model, &mut machine, "codex/work");
+    machine.switched = switched(
+        ProviderId::Codex,
+        "codex/personal",
+        "codex/work",
+        Vec::new(),
+    );
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     assert_eq!(
         model.shown().notices,
         [PanelNotice {
@@ -2119,9 +2190,7 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
                 Severity::Warning,
                 &words::switched_to(None, "work"),
                 &[&words::restart_notice("codex", "personal")],
-                vec![dismiss(Intent::DismissSwitch {
-                    provider: "codex".into()
-                })],
+                vec![dismiss(Intent::DismissSwitch { tool: Tool::Codex })],
             )
         }]
     );
@@ -2131,12 +2200,12 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
         "2 `codex` sessions started before this switch are still running.",
     );
     machine.switched = switched(
-        "codex",
+        ProviderId::Codex,
         "codex/personal",
         "codex/work",
         vec![counted.clone()],
     );
-    switch(&mut model, &mut machine, "codex/work");
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     let notices = model.shown().notices;
     let severities: Vec<Severity> = notices.iter().map(|n| n.severity).collect();
     assert_eq!(severities, [Severity::Warning]);
@@ -2148,10 +2217,19 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
 /// said of any session rather than of ones that may not exist.
 #[test]
 fn a_restart_is_explained_when_no_sessions_were_counted() {
-    let (mut model, mut machine) =
-        reading(vec![account(Some("work")).of("codex").signed_in().build()]);
-    machine.switched = switched("codex", "codex/personal", "codex/work", Vec::new());
-    switch(&mut model, &mut machine, "codex/work");
+    let (mut model, mut machine) = reading(vec![
+        account(Some("work"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+    ]);
+    machine.switched = switched(
+        ProviderId::Codex,
+        "codex/personal",
+        "codex/work",
+        Vec::new(),
+    );
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     assert_eq!(
         model.shown().notices[0].lines,
         [words::restart_notice("codex", "personal")]
@@ -2169,8 +2247,8 @@ fn a_switch_warning_the_read_repeats_is_said_once() {
         vec![account(Some("b")).signed_in().build()],
         vec![overridden()],
     )));
-    machine.switched = switched("claude", "a", "b", vec![overridden()]);
-    switch(&mut model, &mut machine, "claude/b");
+    machine.switched = switched(ProviderId::Claude, "a", "b", vec![overridden()]);
+    switch(&mut model, &mut machine, Tool::Claude, "b");
     let shown = model.shown();
     assert_eq!(model.state.warnings, [overridden()]);
     let switched_notice = shown
@@ -2192,8 +2270,8 @@ fn a_switch_warning_the_read_repeats_is_said_once() {
 #[test]
 fn a_warning_the_last_switch_carried_is_said_with_it_and_nowhere_else() {
     let (mut model, mut machine) = reading(vec![account(Some("work")).signed_in().build()]);
-    machine.switched = switched("claude", "personal", "work", vec![overridden()]);
-    switch(&mut model, &mut machine, "claude/work");
+    machine.switched = switched(ProviderId::Claude, "personal", "work", vec![overridden()]);
+    switch(&mut model, &mut machine, Tool::Claude, "work");
     let shown = model.shown();
     assert_eq!(ids(&shown), ["switch/claude"]);
     assert_eq!(shown.notices[0].severity, Severity::Warning);
@@ -2207,7 +2285,7 @@ fn a_warning_the_last_switch_carried_is_said_with_it_and_nowhere_else() {
 fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
     let (mut model, mut machine) = reading(vec![account(Some("work")).signed_in().build()]);
     machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
-    signs_in(&mut model, &mut machine, "claude", Some("work"), &[]);
+    signs_in(&mut model, &mut machine, Tool::Claude, Some("work"), &[]);
     assert_eq!(
         model.shown().notices,
         [notice(
@@ -2215,9 +2293,7 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
             Severity::Info,
             &words::signed_in_to(None, "work"),
             &[&words::signed_in_now("work", true, None)],
-            vec![dismiss(Intent::DismissSwitch {
-                provider: "claude".into()
-            })],
+            vec![dismiss(Intent::DismissSwitch { tool: Tool::Claude })],
         )]
     );
 
@@ -2225,14 +2301,18 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
         "sessions_keep_old_login",
         "2 `codex` sessions are still using `codex/work`'s old login.",
     );
-    let (mut model, mut machine) =
-        reading(vec![account(Some("work")).of("codex").signed_in().build()]);
+    let (mut model, mut machine) = reading(vec![
+        account(Some("work"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+    ]);
     machine.enrolling = enrolled_as(
         "work",
         EnrolledAs::InUse { again: false },
         vec![old_login.clone()],
     );
-    signs_in(&mut model, &mut machine, "codex", None, &[]);
+    signs_in(&mut model, &mut machine, Tool::Codex, None, &[]);
     assert_eq!(
         model.shown().notices,
         [PanelNotice {
@@ -2245,9 +2325,7 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
                     &words::signed_in_now("work", false, None),
                     &old_login.message,
                 ],
-                vec![dismiss(Intent::DismissSwitch {
-                    provider: "codex".into()
-                })],
+                vec![dismiss(Intent::DismissSwitch { tool: Tool::Codex })],
             )
         }]
     );
@@ -2259,10 +2337,13 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
 fn a_sign_in_notice_names_its_tool_beside_another() {
     let (mut model, mut machine) = reading(vec![
         account(Some("work")).signed_in().build(),
-        account(Some("work")).of("codex").signed_in().build(),
+        account(Some("work"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]);
     machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: true }, Vec::new());
-    signs_in(&mut model, &mut machine, "codex", Some("work"), &[]);
+    signs_in(&mut model, &mut machine, Tool::Codex, Some("work"), &[]);
     let notice = model.shown().notices.remove(0);
     assert_eq!(notice.id, "switch/codex");
     assert_eq!(notice.title, words::signed_in_to(Some("Codex"), "work"));
@@ -2425,7 +2506,10 @@ fn notices_come_the_most_pressing_first() {
             account(Some("spare"))
                 .limits(vec![window("session", 20.0)])
                 .build(),
-            account(Some("job")).of("codex").signed_in().build(),
+            account(Some("job"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build(),
         ]
     };
     let mut model = at_noon();
@@ -2444,8 +2528,8 @@ fn notices_come_the_most_pressing_first() {
     model.send(Intent::AbandonStuckSwitch);
     model.run(&mut machine);
 
-    machine.switched = switched("codex", "codex/side", "codex/job", Vec::new());
-    switch(&mut model, &mut machine, "codex/job");
+    machine.switched = switched(ProviderId::Codex, "codex/side", "codex/job", Vec::new());
+    switch(&mut model, &mut machine, Tool::Codex, "job");
 
     machine.answer = Ok(status(vec![
         account(Some("work"))
@@ -2455,7 +2539,10 @@ fn notices_come_the_most_pressing_first() {
         account(Some("spare"))
             .limits(vec![window("session", 20.0)])
             .build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]));
     model.refresh(&mut machine);
 
@@ -2512,7 +2599,7 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
             vec![NoticeAction {
                 title: words::switch_to("spare"),
                 intent: Intent::SwitchTo {
-                    qualified: "claude/spare".into()
+                    account: AccountKey::new(Tool::Claude, "spare")
                 },
                 dismisses: false,
                 switches: true,
@@ -2523,7 +2610,12 @@ fn advice_offers_the_account_with_room_and_names_its_tool_only_beside_another() 
     );
 
     let mut beside = spent();
-    beside.push(account(Some("job")).of("codex").signed_in().build());
+    beside.push(
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+    );
     let (beside, _) = reading(beside);
     let titles: Vec<String> = beside
         .shown()
@@ -2578,19 +2670,25 @@ fn advice_about_one_tool_outlives_a_switch_of_another() {
     let (mut model, mut machine) = reading(vec![
         spent(),
         spare(),
-        account(Some("side")).of("codex").signed_in().build(),
-        account(Some("job")).of("codex").build(),
+        account(Some("side"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+        account(Some("job")).of(ProviderId::Codex).build(),
     ]);
     assert_eq!(ids(&model.shown()), ["advice/claude/work/session/"]);
 
     machine.answer = Ok(status(vec![
         spent(),
         spare(),
-        account(Some("side")).of("codex").build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("side")).of(ProviderId::Codex).build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]));
-    machine.switched = switched("codex", "codex/side", "codex/job", Vec::new());
-    switch(&mut model, &mut machine, "codex/job");
+    machine.switched = switched(ProviderId::Codex, "codex/side", "codex/job", Vec::new());
+    switch(&mut model, &mut machine, Tool::Codex, "job");
     assert_eq!(
         ids(&model.shown()),
         ["advice/claude/work/session/", "switch/codex"]
@@ -2619,7 +2717,7 @@ fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
             help: None,
             severity: None,
             intent: Some(Intent::SwitchTo {
-                qualified: "claude/spare".into()
+                account: AccountKey::new(Tool::Claude, "spare")
             }),
             link: None,
             enabled: true,
@@ -2631,7 +2729,7 @@ fn a_notice_offers_an_account_only_when_it_can_switch_to_one() {
     );
 
     model.send(Intent::SwitchTo {
-        qualified: "claude/spare".into(),
+        account: AccountKey::new(Tool::Claude, "spare"),
     });
     let shown = model.shown();
     assert!(!shown.menu_notices.switches[0].enabled);
@@ -2652,7 +2750,10 @@ fn the_config_names_another_notice_offers_to_update_it() {
         vec![
             in_use,
             account(Some("spare")).build(),
-            account(Some("main")).of("codex").signed_in().build(),
+            account(Some("main"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build(),
         ]
     };
     let mut model = at_noon();
@@ -2668,7 +2769,7 @@ fn the_config_names_another_notice_offers_to_update_it() {
         [NoticeAction {
             title: words::update_config(OS),
             intent: Intent::UpdateConfig {
-                qualified: "claude/work".into()
+                account: AccountKey::new(Tool::Claude, "work")
             },
             dismisses: false,
             switches: false,
@@ -2693,12 +2794,12 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
     let accounts = |percent: f64| {
         vec![
             account(Some("work"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .signed_in()
                 .limits(vec![window("five_hour", percent)])
                 .build(),
             account(Some("spare"))
-                .of("codex")
+                .of(ProviderId::Codex)
                 .limits(vec![window("five_hour", 20.0)])
                 .build(),
         ]
@@ -2706,8 +2807,8 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
     let mut model = at_noon();
     let mut machine = Stub::reading(Ok(warned(accounts(10.0), vec![interrupted()])));
     model.refresh(&mut machine);
-    machine.switched = switched("codex", "codex/side", "codex/work", Vec::new());
-    switch(&mut model, &mut machine, "codex/work");
+    machine.switched = switched(ProviderId::Codex, "codex/side", "codex/work", Vec::new());
+    switch(&mut model, &mut machine, Tool::Codex, "work");
     machine.abandoned = Ok(GaveUp {
         switch: Some(Abandoned {
             from: "personal".into(),
@@ -2832,8 +2933,7 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
         help: None,
         severity: None,
         intent: Some(present_sheet(Sheet::SignInAgain {
-            provider: "claude".into(),
-            label: label.into(),
+            account: AccountKey::new(Tool::Claude, label),
         })),
         link: None,
         enabled: true,
@@ -2856,7 +2956,10 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
         account(Some("old"))
             .standing(Standing::LoginExpired)
             .build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]);
     let [old] = &both.shown().menu_notices.sign_ins[..] else {
         panic!("one sign-in");
@@ -2960,7 +3063,7 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
             detail: words::no_accounts(OS).1.into(),
             add: Choice {
                 title: words::add_account(OS, true),
-                intent: present_sheet(Sheet::Add { provider: None }),
+                intent: present_sheet(Sheet::Add { tool: None }),
                 enabled: true,
             },
         }
@@ -3031,7 +3134,10 @@ fn a_tool_found_or_signed_in_is_not_a_machine_without_one() {
 
     let mut unfound = Hand::new();
     let mut signed_in = Stub::reading(Ok(status(vec![
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ])));
     signed_in.found = Vec::new();
     unfound.refresh(&mut signed_in);
@@ -3070,9 +3176,7 @@ fn an_account_signed_in_without_a_name_is_added_from_its_row() {
     );
     assert_eq!(
         row.action.as_ref().map(|action| &action.intent),
-        Some(&Intent::Enrol {
-            provider: "claude".into()
-        })
+        Some(&Intent::Enrol { tool: Tool::Claude })
     );
 }
 
@@ -3090,8 +3194,7 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
     assert_eq!(
         shown.footing,
         Footing::OnlyOne {
-            provider: "claude".into(),
-            label: "work".into()
+            account: AccountKey::new(Tool::Claude, "work")
         }
     );
     assert_eq!(
@@ -3103,15 +3206,13 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
                 Choice {
                     title: words::add_account(OS, true),
                     intent: present_sheet(Sheet::Add {
-                        provider: Some("claude".into())
+                        tool: Some(Tool::Claude)
                     }),
                     enabled: true,
                 },
                 Choice {
                     title: words::not_now(OS),
-                    intent: Intent::DeclineSecondAccount {
-                        provider: "claude".into()
-                    },
+                    intent: Intent::DeclineSecondAccount { tool: Tool::Claude },
                     enabled: true,
                 },
             ],
@@ -3168,8 +3269,11 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
     chose.state.preferences.choose(super::AtLimit::Switch);
     assert_eq!(chose.shown().footing, Footing::Ready);
     let codex_pair = footing(vec![
-        account(Some("job")).of("codex").signed_in().build(),
-        account(Some("side")).of("codex").build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+        account(Some("side")).of(ProviderId::Codex).build(),
     ]);
     assert_eq!(
         codex_pair,
@@ -3205,9 +3309,7 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
             actions: vec![
                 Choice {
                     title: words::add_codex_account(Os::MacOs),
-                    intent: Intent::Enrol {
-                        provider: "codex".into()
-                    },
+                    intent: Intent::Enrol { tool: Tool::Codex },
                     enabled: true,
                 },
                 Choice {
@@ -3241,8 +3343,11 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
     let (enrolled, _) = reading_with_codex(vec![
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
-        account(Some("job")).of("codex").signed_in().build(),
-        account(Some("side")).of("codex").build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
+        account(Some("side")).of(ProviderId::Codex).build(),
     ]);
     assert_eq!(enrolled.shown().footing, Footing::AtLimitUnchosen);
 }
@@ -3260,18 +3365,15 @@ fn using_codex_adds_the_login_it_stores_read_only_once_asked() {
         "nothing read of Codex before the click"
     );
     machine.enrolling_current = enrolled_as("acme", EnrolledAs::Current, Vec::new());
-    let jobs = model.send(Intent::Enrol {
-        provider: "codex".into(),
-    });
+    let jobs = model.send(Intent::Enrol { tool: Tool::Codex });
     assert!(jobs.iter().any(enrols), "{jobs:?}");
     model.run(&mut machine);
     let shown = model.shown();
     assert_eq!(
         shown.sheet,
         Some(Sheet::Name {
-            provider: "codex".into(),
-            label: "acme".into(),
-            email: "w@example.com".into(),
+            account: AccountKey::new(Tool::Codex, "acme"),
+            email: "w@example.com".into()
         })
     );
     assert_eq!(shown.sheet_text.expect("the sheet").name, "acme");
@@ -3300,10 +3402,14 @@ fn enrolled_accounts_with_nobody_signed_in_are_not_asked_to_start_over() {
 #[test]
 fn a_codex_login_is_not_an_empty_machine() {
     assert_eq!(
-        footing(vec![account(Some("work")).of("codex").signed_in().build()]),
+        footing(vec![
+            account(Some("work"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build()
+        ]),
         Footing::OnlyOne {
-            provider: "codex".into(),
-            label: "work".into()
+            account: AccountKey::new(Tool::Codex, "work")
         }
     );
 }
@@ -3316,14 +3422,16 @@ fn only_one_account_is_counted_per_tool() {
     let (model, _) = reading(vec![
         account(Some("work")).signed_in().build(),
         account(Some("spare")).build(),
-        account(Some("job")).of("codex").signed_in().build(),
+        account(Some("job"))
+            .of(ProviderId::Codex)
+            .signed_in()
+            .build(),
     ]);
     let shown = model.shown();
     assert_eq!(
         shown.footing,
         Footing::OnlyOne {
-            provider: "codex".into(),
-            label: "job".into()
+            account: AccountKey::new(Tool::Codex, "job")
         }
     );
     let step = shown.setup.expect("a step");
@@ -3335,12 +3443,15 @@ fn only_one_account_is_counted_per_tool() {
 /// name it would enrol something that can never be switched to.
 #[test]
 fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
-    for row in [unplaced("codex", false), unplaced("codex", true)] {
+    for row in [
+        unplaced(ProviderId::Codex, false),
+        unplaced(ProviderId::Codex, true),
+    ] {
         let (model, _) = reading(vec![
             account(Some("work")).signed_in().build(),
             account(Some("spare")).build(),
-            account(Some("job")).of("codex").build(),
-            account(Some("side")).of("codex").build(),
+            account(Some("job")).of(ProviderId::Codex).build(),
+            account(Some("side")).of(ProviderId::Codex).build(),
             row,
         ]);
         let shown = model.shown();
@@ -3359,7 +3470,7 @@ fn an_unplaced_login_is_neither_unenrolled_nor_offered_a_name() {
 /// not name. The window said "No accounts"; it shows the login and why.
 #[test]
 fn a_login_whose_account_cannot_be_told_is_shown_from_the_first_run() {
-    let mut untold = unplaced("claude", false);
+    let mut untold = unplaced(ProviderId::Claude, false);
     untold.stale = Some(Stale::Refused);
     untold.stale_explanation = Some(
         "Pitboard could not tell which account Claude Code's login is (Anthropic answered 400)"
@@ -3384,12 +3495,12 @@ fn a_login_whose_account_cannot_be_told_is_shown_from_the_first_run() {
 
 /// The model with the sheet for a new account up, on a machine where `found` were found and
 /// `accounts` are shown, as a Mac's app has it.
-fn adding(found: Vec<crate::Tool>, accounts: Vec<Account>) -> Snapshot {
+fn adding(found: Vec<ProviderId>, accounts: Vec<Account>) -> Snapshot {
     let mut model = at_noon();
     let mut machine = Stub::reading(Ok(status(accounts)));
     machine.found = found;
     model.refresh(&mut machine);
-    model.send(present_sheet(Sheet::Add { provider: None }));
+    model.send(present_sheet(Sheet::Add { tool: None }));
     model.run(&mut machine);
     model.on_a_mac()
 }
@@ -3412,17 +3523,22 @@ fn tools_and_missing(sheet: &crate::present::SheetText) -> (Vec<&str>, Vec<&str>
 fn only_the_tools_found_are_offered() {
     let codex_known = adding(
         vec![claude_code()],
-        vec![account(Some("work")).of("codex").signed_in().build()],
+        vec![
+            account(Some("work"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build(),
+        ],
     )
     .sheet_text
     .expect("the sheet");
     assert_eq!(tools_and_missing(&codex_known), (vec!["claude"], vec![]));
-    assert_eq!(codex_known.tool, "claude");
+    assert_eq!(codex_known.tool, Tool::Claude);
 
     let codex_only = adding(vec![codex()], Vec::new())
         .sheet_text
         .expect("the sheet");
-    assert_eq!(codex_only.tool, "codex", "the first tool found");
+    assert_eq!(codex_only.tool, Tool::Codex, "the first tool found");
     assert_eq!(tools_and_missing(&codex_only), (vec!["codex"], vec![]));
     assert_eq!(codex_only.message, words::sign_in_message("Codex", None));
 }
@@ -3433,7 +3549,7 @@ fn nothing_found_starts_on_claude_code_and_says_none_is_here() {
     let sheet = adding(Vec::new(), Vec::new())
         .sheet_text
         .expect("the sheet");
-    assert_eq!(sheet.tool, "claude");
+    assert_eq!(sheet.tool, Tool::Claude);
     assert_eq!(tools_and_missing(&sheet), (vec!["claude"], vec!["claude"]));
     assert_eq!(
         sheet.tools[0].missing.as_ref().map(|m| m.link.as_str()),
@@ -3457,7 +3573,7 @@ fn what_is_installed_is_asked_once() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = vec![claude_code(), codex()];
     model.refresh(&mut machine);
-    model.send(present_sheet(Sheet::Add { provider: None }));
+    model.send(present_sheet(Sheet::Add { tool: None }));
     model.run(&mut machine);
     let sheet = model.on_a_mac().sheet_text.expect("the sheet");
     assert_eq!(tools_and_missing(&sheet).0, ["claude", "codex"]);
@@ -3470,7 +3586,7 @@ fn what_is_installed_is_asked_again_when_the_form_for_another_account_opens() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.refresh(&mut machine);
     machine.found = vec![claude_code(), codex()];
-    model.send(present_sheet(Sheet::Add { provider: None }));
+    model.send(present_sheet(Sheet::Add { tool: None }));
     assert_eq!(
         tools_and_missing(&model.on_a_mac().sheet_text.expect("the sheet")).0,
         ["claude"],
@@ -3491,34 +3607,31 @@ fn the_form_starts_on_the_tool_it_is_about() {
         model.send(present_sheet(sheet));
         model.shown().sheet_text.expect("the sheet").tool
     };
-    assert_eq!(starts(Sheet::Add { provider: None }), "claude");
+    assert_eq!(starts(Sheet::Add { tool: None }), Tool::Claude);
     assert_eq!(
         starts(Sheet::Add {
-            provider: Some("codex".into())
+            tool: Some(Tool::Codex)
         }),
-        "codex"
+        Tool::Codex
     );
     assert_eq!(
         starts(Sheet::Name {
-            provider: "codex".into(),
-            label: "acme".into(),
+            account: AccountKey::new(Tool::Codex, "acme"),
             email: "c@example.com".into()
         }),
-        "codex"
+        Tool::Codex
     );
     assert_eq!(
         starts(Sheet::SignInAgain {
-            provider: "codex".into(),
-            label: "work".into()
+            account: AccountKey::new(Tool::Codex, "work")
         }),
-        "codex"
+        Tool::Codex
     );
     assert_eq!(
         starts(Sheet::Rename {
-            provider: "codex".into(),
-            label: "work".into()
+            account: AccountKey::new(Tool::Codex, "work")
         }),
-        "codex"
+        Tool::Codex
     );
 }
 
@@ -3534,23 +3647,21 @@ fn each_sheet_says_what_it_is_for() {
         model.send(present_sheet(sheet));
         model.shown().sheet_text.expect("the sheet")
     };
-    let add = shown(Sheet::Add { provider: None });
+    let add = shown(Sheet::Add { tool: None });
     assert_eq!(add.title, words::add_account(OS, false));
     assert_eq!(add.message, words::sign_in_message("Claude Code", None));
     assert_eq!(add.name, "", "a sign-in takes no name");
     assert_eq!(add.account, None);
 
     let again = shown(Sheet::SignInAgain {
-        provider: "codex".into(),
-        label: "work".into(),
+        account: AccountKey::new(Tool::Codex, "work"),
     });
     assert_eq!(again.title, words::sign_in_to_again(OS, "work", false));
     assert_eq!(again.message, words::sign_in_message("Codex", Some("work")));
     assert_eq!(again.account.as_deref(), Some("work"));
 
     let name = shown(Sheet::Name {
-        provider: "codex".into(),
-        label: "acme".into(),
+        account: AccountKey::new(Tool::Codex, "acme"),
         email: "c@example.com".into(),
     });
     assert_eq!(name.title, words::name_this_account(OS));
@@ -3562,8 +3673,7 @@ fn each_sheet_says_what_it_is_for() {
     );
 
     let rename = shown(Sheet::Rename {
-        provider: "claude".into(),
-        label: "work".into(),
+        account: AccountKey::new(Tool::Claude, "work"),
     });
     assert_eq!(rename.title, words::rename_title("work"));
     assert_eq!(rename.message, words::RENAMING);
@@ -3588,26 +3698,23 @@ fn each_sheets_default_button_says_what_it_does() {
         model.shown().sheet_text.expect("the sheet").confirm
     };
     let sign_in = words::sign_in_asking(OS);
-    assert_eq!(confirm(Sheet::Add { provider: None }), sign_in);
+    assert_eq!(confirm(Sheet::Add { tool: None }), sign_in);
     assert_eq!(
         confirm(Sheet::SignInAgain {
-            provider: "codex".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Codex, "work")
         }),
         sign_in
     );
     assert_eq!(
         confirm(Sheet::Name {
-            provider: "codex".into(),
-            label: "acme".into(),
-            email: "c@example.com".into(),
+            account: AccountKey::new(Tool::Codex, "acme"),
+            email: "c@example.com".into()
         }),
         words::DONE
     );
     assert_eq!(
         confirm(Sheet::Rename {
-            provider: "claude".into(),
-            label: "work".into(),
+            account: AccountKey::new(Tool::Claude, "work")
         }),
         words::rename(false)
     );
@@ -3622,7 +3729,7 @@ fn each_sheets_default_button_says_what_it_does() {
 fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
     let mut model = Hand::new();
     let jobs = model.send(Intent::SignIn {
-        provider: "claude".into(),
+        tool: Tool::Claude,
         again: None,
     });
     let [Job::SignIn { id, .. }] = jobs[..] else {
@@ -3667,9 +3774,11 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
 fn the_question_about_quitting_an_app_is_asked_in_its_name() {
     let mut model = at_noon();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
-    machine.held.insert("codex".into(), vec![chatgpt_holding()]);
+    machine
+        .held
+        .insert(ProviderId::Codex, vec![chatgpt_holding()]);
     machine.apps = StandInApps::new(&[CHATGPT], true);
-    switch(&mut model, &mut machine, "codex/spare");
+    switch(&mut model, &mut machine, Tool::Codex, "spare");
     let asked = model.shown().quit_question.expect("the question");
     assert_eq!(asked.question.title, words::quit_to_switch("ChatGPT"));
     assert_eq!(
@@ -3690,8 +3799,7 @@ fn the_question_about_quitting_an_app_is_asked_in_its_name() {
 #[test]
 fn opening_the_window_by_itself_leaves_the_sheet_up() {
     let rename = Sheet::Rename {
-        provider: "claude".into(),
-        label: "personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     };
     let mut model = Hand::new();
     model.send(present_sheet(rename.clone()));
@@ -3737,7 +3845,7 @@ fn a_request_can_ask_for_a_place() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.forgetting = Err(refusal("account_unknown", "Nothing is parked.", Vec::new()));
     model.send(Intent::Forget {
-        qualified: "claude/personal".into(),
+        account: AccountKey::new(Tool::Claude, "personal"),
     });
     model.run(&mut machine);
     assert_eq!(
@@ -3758,7 +3866,7 @@ fn a_failure_away_from_the_window_is_said_in_it() {
     let mut model = Hand::new();
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     model.send(Intent::Forget {
-        qualified: "claude/alpha".into(),
+        account: AccountKey::new(Tool::Claude, "alpha"),
     });
     model.run(&mut machine);
     let shown = model.shown();
@@ -3772,13 +3880,13 @@ fn a_failure_away_from_the_window_is_said_in_it() {
         vec![overridden()],
     ));
     model.send(Intent::Forget {
-        qualified: "claude/beta".into(),
+        account: AccountKey::new(Tool::Claude, "beta"),
     });
     model.run(&mut machine);
     let shown = model.shown();
     assert_eq!(shown.window_request.serial, 1);
     let alert = shown.failure_alert.expect("an alert");
-    assert_eq!(alert.title, words::could_not_remove("claude/beta"));
+    assert_eq!(alert.title, words::could_not_remove("beta"));
     assert_eq!(
         alert.message,
         "beta is the account in use, so it cannot be forgotten.\n\nANTHROPIC_API_KEY is set"
@@ -3803,8 +3911,8 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
         account(Some("work")).signed_in().build(),
         account(Some("personal")).build(),
     ]);
-    machine.switched = switched("claude", "work", "personal", Vec::new());
-    switch(&mut model, &mut machine, "claude/personal");
+    machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
+    switch(&mut model, &mut machine, Tool::Claude, "personal");
     let shown = model.shown();
     assert_eq!(model.state.presented, None);
     assert_eq!(shown.window_request.serial, 0);
@@ -3814,10 +3922,10 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
         "There is no account called claude/nobody.",
         Vec::new(),
     ));
-    switch(&mut model, &mut machine, "claude/nobody");
+    switch(&mut model, &mut machine, Tool::Claude, "nobody");
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said in the window");
-    assert_eq!(failure.title, words::could_not_switch("claude/nobody"));
+    assert_eq!(failure.title, words::could_not_switch("nobody"));
     assert_eq!(failure.message, "There is no account called claude/nobody.");
     assert_eq!(shown.window_request.serial, 1);
 }
@@ -3845,7 +3953,7 @@ fn every_failure_the_apps_show_ends_with_an_action_or_a_link() {
         account(Some("old"))
             .standing(Standing::LoginExpired)
             .build(),
-        unplaced("codex", false),
+        unplaced(ProviderId::Codex, false),
     ];
     let mut model = at_noon();
     let mut machine = Stub::reading(Ok(warned(
@@ -3860,7 +3968,7 @@ fn every_failure_the_apps_show_ends_with_an_action_or_a_link() {
     ));
     model.refresh(&mut machine);
     machine.switched = Err(refusal("nothing_parked", "Nothing is saved.", Vec::new()));
-    switch(&mut model, &mut machine, "claude/old");
+    switch(&mut model, &mut machine, Tool::Claude, "old");
     for shown in [model.on_a_mac(), model.on_windows()] {
         assert!(shown.notices.iter().any(|notice| notice.id == "read"));
         for notice in shown
@@ -3938,7 +4046,10 @@ fn the_service_asked_is_named_for_the_tools_shown() {
     machine.answer = Ok(warned(
         vec![
             account(Some("work")).signed_in().build(),
-            account(Some("job")).of("codex").signed_in().build(),
+            account(Some("job"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build(),
         ],
         vec![interrupted()],
     ));
@@ -3959,7 +4070,7 @@ fn the_quit_question_is_carried_with_the_sheet_it_was_asked_from() {
     model.send(sign_in_to_claude());
     model.run(&mut machine);
     let shown = model.on_a_mac();
-    assert_eq!(shown.sheet, Some(add(Some("desktop"))));
+    assert_eq!(shown.sheet, Some(add(Some(Tool::Desktop))));
     assert_eq!(
         shown.quit_question.expect("asked").question.confirm,
         words::quit_and_continue(Os::MacOs, "Claude")
@@ -3980,8 +4091,8 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
         Vec::new(),
     ));
     model.refresh(&mut machine);
-    switch(&mut model, &mut machine, "desktop/home");
-    model.send(present_sheet(add(Some("desktop"))));
+    switch(&mut model, &mut machine, Tool::Desktop, "home");
+    model.send(present_sheet(add(Some(Tool::Desktop))));
     model.run(&mut machine);
     let form = model.on_a_mac().sheet_text.expect("the form");
     assert_eq!(
@@ -3994,7 +4105,7 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
 #[test]
 fn escape_never_leaves_an_add_with_its_account_parked() {
     let (mut model, mut machine) = adding_in_claude(true);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     model.send(sign_in_to_claude());
     model.run(&mut machine);
     let question = model.shown().quit_question.expect("asked");
@@ -4016,7 +4127,7 @@ fn escape_never_leaves_an_add_with_its_account_parked() {
 #[test]
 fn the_sheet_says_claude_is_quitting_and_its_account_is_read() {
     // `None` is what each Add Account in the app opens, on Claude Code here.
-    for opened_on in [Some("desktop"), None] {
+    for opened_on in [Some(Tool::Desktop), None] {
         let mut model = at_noon();
         let mut machine = desktop_machine(true);
         machine.answer = Ok(warned(
@@ -4071,7 +4182,7 @@ fn an_add_this_app_waits_for_is_not_a_notice_too() {
     };
     let mut machine = desktop_machine(false);
     machine.answer = Ok(read);
-    machine.put_back = Some("desktop/work".into());
+    machine.put_back = Some(Key::new(ProviderId::Desktop, "work"));
     machine.enrolling_current = Err(refusal(
         "live_credential_absent",
         "Claude isn’t signed in.",
@@ -4079,7 +4190,7 @@ fn an_add_this_app_waits_for_is_not_a_notice_too() {
     ));
     model.refresh(&mut machine);
     assert!(ids(&model.on_a_mac()).contains(&"awaiting/desktop".into()));
-    model.send(present_sheet(add(Some("desktop"))));
+    model.send(present_sheet(add(Some(Tool::Desktop))));
     model.run(&mut machine);
     model.send(sign_in_to_claude());
     model.run(&mut machine);

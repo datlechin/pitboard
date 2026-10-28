@@ -15,6 +15,8 @@ use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, present_on, words};
 use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
 use pitboard_core::host::Os;
+use pitboard_core::provider::ProviderId;
+use pitboard_core::state::Key;
 use std::time::Duration;
 
 /// What a Mac's app shows of this machine now.
@@ -529,13 +531,13 @@ fn copy_report_copies_doctors_own_report() {
 fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
     let mut model = Hand::new();
     let mut machine = machine();
-    let of = |account: &str, check| crate::Check {
-        account: Some(account.into()),
+    let of = |account: Key, check| crate::Check {
+        account: Some(account),
         ..check
     };
     machine.checks = vec![
         of(
-            "claude/work",
+            Key::new(ProviderId::Claude, "work"),
             check(
                 "parked_login",
                 "account work",
@@ -545,7 +547,7 @@ fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
             ),
         ),
         of(
-            "claude/personal",
+            Key::new(ProviderId::Claude, "personal"),
             check(
                 "parked_login",
                 "account personal",
@@ -555,7 +557,7 @@ fn each_check_is_a_line_of_its_own_though_two_share_a_code() {
             ),
         ),
         of(
-            "codex/main",
+            Key::new(ProviderId::Codex, "main"),
             check(
                 "codex_parked_login",
                 "account codex/main",

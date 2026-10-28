@@ -4,9 +4,8 @@
 use super::accounts::{item, offer_of};
 use super::{ActionKind, ItemOffer, Seen, SetupLink, next, words};
 use crate::model::{Intent, Place, SettingsSection, Sheet};
-use crate::{Check, Held, Level};
+use crate::{Check, Held, Level, Tool};
 use pitboard_core::provider::ProviderId;
-use pitboard_core::state::Key;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ChecksShown {
@@ -83,7 +82,8 @@ pub(crate) fn checks(seen: &Seen) -> ChecksShown {
             account: None,
         });
     let checks: Vec<Check> = machine.checks.iter().cloned().chain(refused).collect();
-    let mut groups: Vec<CheckGroup> = Vec::new();
+    // Pitboard's own checks, then each tool's in the order the tools are listed.
+    let mut groups: Vec<(Option<ProviderId>, CheckGroup)> = Vec::new();
     for (id, check) in (0..).zip(&checks) {
         if check.level == Level::Ok
             && check.account.is_none()
@@ -92,28 +92,27 @@ pub(crate) fn checks(seen: &Seen) -> ChecksShown {
             continue;
         }
         let tool = tool_of(check);
-        let group = tool.map_or("pitboard", ProviderId::code);
         let line = line(seen, id, check);
-        match groups.iter_mut().find(|shown| shown.id == group) {
-            Some(shown) => shown.lines.push(line),
-            None => groups.push(CheckGroup {
-                id: group.into(),
-                heading: tool.map_or_else(
-                    || words::PITBOARD.into(),
-                    |tool| seen.tool_name(tool.code()),
-                ),
-                lines: vec![line],
-            }),
+        match groups.iter_mut().find(|(of, _)| *of == tool) {
+            Some((_, shown)) => shown.lines.push(line),
+            None => groups.push((
+                tool,
+                CheckGroup {
+                    id: tool.map_or("pitboard", ProviderId::code).into(),
+                    heading: tool.map_or_else(|| words::PITBOARD.into(), |tool| tool.name().into()),
+                    lines: vec![line],
+                },
+            )),
         }
     }
-    let place = |group: &CheckGroup| {
-        (group.id != "pitboard").then(|| {
+    groups.sort_by_key(|(tool, _)| {
+        tool.map(|tool| {
             (seen.tools.iter())
-                .position(|tool| tool.code == group.id)
+                .position(|listed| *listed == tool)
                 .unwrap_or(usize::MAX)
         })
-    };
-    groups.sort_by_key(place);
+    });
+    let groups: Vec<CheckGroup> = groups.into_iter().map(|(_, group)| group).collect();
     let issues = checks
         .iter()
         .filter(|check| check.level != Level::Ok)
@@ -140,7 +139,7 @@ pub(crate) fn checks(seen: &Seen) -> ChecksShown {
 // An account's check is in its tool's group.
 fn tool_of(check: &Check) -> Option<ProviderId> {
     match &check.account {
-        Some(qualified) => Some(Key::parse(qualified).provider),
+        Some(account) => Some(account.provider),
         None => pitboard_core::doctor::tool_of(&check.code),
     }
 }
@@ -154,8 +153,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
         Some(words::check_text(&check.advice)).filter(|said| !passed && !said.is_empty());
     let mut action = None;
     let signed_in = |tool: ProviderId| {
-        (seen.accounts().iter())
-            .find(|account| account.provider == tool.code() && account.signed_in)
+        (seen.accounts().iter()).find(|account| account.provider == tool && account.signed_in)
     };
     let in_use_of = |tool: ProviderId| match signed_in(tool) {
         Some(account) => words::signed_in_as(account.label.as_deref(), &account.email),
@@ -169,13 +167,12 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
         enabled: true,
         confirm: None,
     };
-    if let Some(qualified) = &check.account {
-        let key = Key::parse(qualified);
+    if let Some(key) = &check.account {
         let found = (seen.accounts().iter())
-            .find(|account| account.qualified.as_deref() == Some(qualified.as_str()))
+            .find(|account| account.key.as_ref() == Some(key))
             .map(|account| item(seen, account));
         let dormant = check.code.ends_with("dormant_account");
-        name = key.label;
+        name = key.label.clone();
         detail = if dormant {
             words::NOT_SWITCHED_TO_IN_A_MONTH.into()
         } else {
@@ -226,7 +223,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
                     title: words::add_account(os, true),
                     intent: Intent::PresentSheet {
                         sheet: Sheet::Add {
-                            provider: Some(ProviderId::Claude.code().into()),
+                            tool: Some(Tool::Claude),
                         },
                     },
                     enabled: !seen.state.sign_in_under_way(),
@@ -259,7 +256,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
                 });
             }
             ("desktop_login", _) => {
-                detail = words::not_sure_who(seen.program_of(ProviderId::Desktop.code()));
+                detail = words::not_sure_who(ProviderId::Desktop.program());
                 advice = Some(words::READ_AT_THE_NEXT_SWITCH.into());
             }
             ("codex_login", _) => {
@@ -350,6 +347,7 @@ impl ChecksShown {
 #[cfg(test)]
 mod tests {
     use super::{ChecksShown, words};
+    use crate::Tool;
     use crate::launch::Check;
     use crate::model::state::State;
     use crate::model::{Intent, Place, SettingsSection, Sheet};
@@ -359,6 +357,8 @@ mod tests {
     use crate::present::{ItemOffer, present_on};
     use crate::{Account, Level};
     use pitboard_core::host::Os;
+    use pitboard_core::provider::ProviderId;
+    use pitboard_core::state::Key;
     use pitboard_core::status::Standing;
 
     const OS: Os = Os::MacOs;
@@ -374,9 +374,9 @@ mod tests {
         }
     }
 
-    fn of(account: &str, check: Check) -> Check {
+    fn of(account: Key, check: Check) -> Check {
         Check {
-            account: Some(account.into()),
+            account: Some(account),
             ..check
         }
     }
@@ -433,7 +433,10 @@ mod tests {
         let shown = shown(
             vec![
                 account(Some("work")).signed_in().build(),
-                account(Some("main")).of("codex").signed_in().build(),
+                account(Some("main"))
+                    .of(ProviderId::Codex)
+                    .signed_in()
+                    .build(),
             ],
             vec![
                 check("in_use", Level::Ok, "work, as Anthropic said 15:24", ""),
@@ -444,7 +447,7 @@ mod tests {
                     "",
                 ),
                 of(
-                    "claude/work",
+                    Key::new(ProviderId::Claude, "work"),
                     check("parked_login", Level::Ok, "parked", ""),
                 ),
                 check(
@@ -502,19 +505,19 @@ mod tests {
             accounts,
             vec![
                 of(
-                    "claude/work",
+                    Key::new(ProviderId::Claude, "work"),
                     check("parked_login", Level::Ok, "signed in", ""),
                 ),
                 of(
-                    "claude/old",
+                    Key::new(ProviderId::Claude, "old"),
                     check("parked_login", Level::Warn, "expired", "Run `x`."),
                 ),
                 of(
-                    "claude/spare",
+                    Key::new(ProviderId::Claude, "spare"),
                     check("parked_login", Level::Ok, "parked", ""),
                 ),
                 of(
-                    "claude/spare",
+                    Key::new(ProviderId::Claude, "spare"),
                     check("dormant_account", Level::Warn, "not switched to", "forget"),
                 ),
             ],
@@ -640,7 +643,7 @@ mod tests {
                 line.action.map(|add| add.intent),
                 Some(Intent::PresentSheet {
                     sheet: Sheet::Add {
-                        provider: Some("claude".into())
+                        tool: Some(Tool::Claude)
                     }
                 })
             );
@@ -675,7 +678,10 @@ mod tests {
     fn no_check_says_park_enrol_or_a_command() {
         let accounts = vec![
             account(Some("work")).signed_in().build(),
-            account(Some("main")).of("codex").signed_in().build(),
+            account(Some("main"))
+                .of(ProviderId::Codex)
+                .signed_in()
+                .build(),
         ];
         let shown = shown(
             accounts,

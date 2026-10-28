@@ -2,6 +2,7 @@
 //! command or says to run it again, which an app can't.
 
 use super::{awaiting_lines, quoted, sign_in_to_keep, typeset};
+use crate::Tool;
 use crate::model::state::in_its_app;
 use pitboard_core::error::{Cause, Error, LoginDoubt, Then, Unidentified};
 use pitboard_core::host::{Os, Private};
@@ -33,8 +34,8 @@ fn add_what_it_shows(app: &str) -> String {
 pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
     let desktop = ProviderId::Desktop;
     let app = desktop.program();
-    let inside = |tool: &ProviderId| in_its_app(tool.code());
-    let inside_label = |label: &str| in_its_app(Key::parse(label).provider.code());
+    let inside = |tool: &ProviderId| in_its_app(*tool);
+    let inside_label = |label: &str| in_its_app(Key::parse(label).provider);
     let said = match error {
         Error::AppOpen { app, still } if still.is_empty() => format!(
             "{app} is open, and Pitboard changes its sign-in only while it is closed. Quit {app}, \
@@ -402,24 +403,22 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
                 bare(label)
             )
         }
-        Error::SwitchDidNotHold { tool, to, .. } => match tool {
-            ProviderId::Claude => format!(
+        Error::SwitchDidNotHold { tool, to, .. } => match Tool::from(*tool) {
+            Tool::Claude => format!(
                 "A /logout in Claude Code removed {to}’s sign-in before the switch finished. \
                  Both sign-ins are saved: sign in to any account you’ve added in Claude Code, \
                  then switch to {to}.",
                 to = bare(to)
             ),
-            ProviderId::Codex => format!(
+            Tool::Codex => format!(
                 "A codex session still running rewrote Codex’s sign-in during the switch, and \
                  {}’s is still saved. Quit every running codex before you sign in or out of \
                  Codex: either ends the sign-in it finds.",
                 bare(to)
             ),
-            ProviderId::Desktop => "Claude was opened before the switch finished and wrote its \
-                                    own sign-in back. Quit Claude, then check which account it \
-                                    shows."
+            Tool::Desktop => "Claude was opened before the switch finished and wrote its own \
+                              sign-in back. Quit Claude, then check which account it shows."
                 .into(),
-            _ => return None,
         },
         Error::SignInInProgress => "Another sign-in is already waiting in a terminal. Finish or \
                                     cancel it there first."
@@ -543,7 +542,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
     if let Some(said) = in_app_any_warning(os, warning) {
         return Some(typeset(&said));
     }
-    let tool = warning.tool().filter(|tool| in_its_app(tool.code()))?;
+    let tool = warning.tool().filter(|&tool| in_its_app(tool))?;
     let app = tool.program();
     let add_what_it_shows = format!(
         "Open {app}, check which account it shows, quit it, then choose Add the Account {app} \
@@ -679,7 +678,7 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
 fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
     use pitboard_core::holder;
     use pitboard_core::provider::Held;
-    let inside = |tool: &ProviderId| in_its_app(tool.code());
+    let inside = |tool: &ProviderId| in_its_app(*tool);
     Some(match warning {
         CoreWarning::Recovered(recovered) => {
             let from = if recovered.from.is_empty() {

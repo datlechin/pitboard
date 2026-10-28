@@ -4,10 +4,12 @@ use super::state::Job;
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{claude_code, codex, refusal, status};
 use super::{Intent, Place, Sheet};
+use crate::Tool;
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{Choice, SetupLink, WelcomeLogin, WelcomeStep, WelcomeTool};
 use pitboard_core::host::Os;
+use pitboard_core::provider::ProviderId;
 
 fn welcomed(machine: &mut Stub) -> Hand {
     let mut model = Hand::new();
@@ -44,31 +46,19 @@ fn the_welcome_lists_each_tool_found_and_reads_no_codex_login_before_its_click()
                 code: "claude".into(),
                 name: "Claude Code".into(),
                 account: Some("dana@example.com".into()),
-                step: adds(
-                    words::ADD_ASKING,
-                    Intent::Enrol {
-                        provider: "claude".into()
-                    }
-                ),
+                step: adds(words::ADD_ASKING, Intent::Enrol { tool: Tool::Claude }),
             },
             WelcomeTool {
                 code: "codex".into(),
                 name: "Codex".into(),
                 account: None,
-                step: adds(
-                    words::ADD_ASKING,
-                    Intent::Enrol {
-                        provider: "codex".into()
-                    }
-                ),
+                step: adds(words::ADD_ASKING, Intent::Enrol { tool: Tool::Codex }),
             },
         ]
     );
     assert_eq!(model.count(enrols), 0, "nothing read of a login yet");
 
-    model.send(Intent::Enrol {
-        provider: "codex".into(),
-    });
+    model.send(Intent::Enrol { tool: Tool::Codex });
     assert_eq!(model.count(enrols), 1, "the click reads it");
 }
 
@@ -103,7 +93,7 @@ fn claude_code_signed_in_to_nobody_offers_its_sign_in() {
             &words::sign_in_asking(Os::MacOs),
             Intent::PresentSheet {
                 sheet: Sheet::Add {
-                    provider: Some("claude".into())
+                    tool: Some(Tool::Claude)
                 }
             }
         )
@@ -115,7 +105,7 @@ fn a_machine_with_no_tool_is_shown_where_to_install_claude_code() {
     let mut machine = Stub::reading(Ok(status(Vec::new())));
     machine.found = Vec::new();
     let model = welcomed(&mut machine);
-    let missing = words::missing(Os::MacOs, "claude").expect("Claude Code's");
+    let missing = words::missing(Os::MacOs, ProviderId::Claude);
     let [claude] = model.on_a_mac().welcome.tools.try_into().expect("one tool");
     assert_eq!(
         claude.step,
@@ -201,9 +191,7 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
     let mut model = welcomed(&mut machine);
     let asked = model.shown().window_request;
     assert_eq!(asked.place, Some(Place::Welcome));
-    model.send(Intent::Enrol {
-        provider: "claude".into(),
-    });
+    model.send(Intent::Enrol { tool: Tool::Claude });
     model.run(&mut machine);
     let named = model.shown();
     assert!(
@@ -223,9 +211,7 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
         "The keychain is locked.",
         Vec::new(),
     ));
-    model.send(Intent::Enrol {
-        provider: "claude".into(),
-    });
+    model.send(Intent::Enrol { tool: Tool::Claude });
     model.run(&mut machine);
     let failed = model.shown();
     assert!(failed.failure_alert.is_some());
@@ -234,7 +220,7 @@ fn what_the_welcomes_add_starts_comes_up_over_the_welcome() {
     model.send(Intent::DismissFailure);
     model.send(model.shown().welcome.done.intent);
     model.send(Intent::PresentSheet {
-        sheet: Sheet::Add { provider: None },
+        sheet: Sheet::Add { tool: None },
     });
     assert_eq!(
         model.shown().window_request.place,

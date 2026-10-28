@@ -76,7 +76,7 @@ public static class IconMenu
             ],
             Accounts(model.Sections),
             [
-                new IconMenuEntry.Command(words.AddAccount, new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))))
+                new IconMenuEntry.Command(words.AddAccount, new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null))))
                 {
                     Id = "menu.addAccount",
                 },

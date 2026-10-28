@@ -11,8 +11,8 @@
 use crate::model::state::in_its_app;
 use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence, typeset};
 use crate::{
-    Abandoned, Account, Awaiting, FoundCommandLine, Level, Limit, Parked, Schedule, Status, Tool,
-    Usage, Warning, found_command_line, tool,
+    Abandoned, Account, Awaiting, FoundCommandLine, Level, Parked, Schedule, Status, Usage,
+    Warning, found_command_line,
 };
 use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
@@ -20,6 +20,7 @@ use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
 use pitboard_core::duty::warm::{Overview, Range};
 use pitboard_core::provider::{self, ProviderId};
 use pitboard_core::service::{self, Changing};
+use pitboard_core::state::Key;
 use pitboard_core::switch::warm::WarmUp;
 use pitboard_core::switch::{Left, Stowed};
 use pitboard_core::{doctor, status, switch, words};
@@ -31,13 +32,13 @@ use std::time::{Duration, Instant};
 /// Why something the core was asked to do did not happen.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PitboardError {
-    // `account`: the one it is about, by its label with its tool, for its next step
+    // `account`: the one it is about, for its next step
     #[error("{message}")]
     Failed {
         code: String,
         message: String,
         warnings: Vec<Warning>,
-        account: Option<String>,
+        account: Option<Key>,
     },
 }
 
@@ -65,12 +66,10 @@ impl From<service::Failed> for PitboardError {
     }
 }
 
-// The account a refusal is about, for its next step.
-fn account_of(error: &pitboard_core::error::Error) -> Option<String> {
+// The account a refusal is about, for its next step, from its label as the core typed it.
+fn account_of(error: &pitboard_core::error::Error) -> Option<Key> {
     use pitboard_core::error::{Error, Unidentified};
-    use pitboard_core::state::Key;
-    let of_tool =
-        |tool: ProviderId, label: &str| Key::new(tool, Key::parse(label).label).qualified();
+    let of_tool = |tool: ProviderId, label: &str| Key::new(tool, Key::parse(label).label);
     match error {
         Error::NothingParked { tool, label }
         | Error::ParkedLoginRefused { tool, label }
@@ -79,7 +78,7 @@ fn account_of(error: &pitboard_core::error::Error) -> Option<String> {
         | Error::ParkedCredentialMissing { label }
         | Error::ParkedCredentialCorrupt { label, .. }
         | Error::ParkedLoginBelongsElsewhere { label, .. }
-        | Error::AccountUnknown { label, .. } => Some(Key::parse(label).qualified()),
+        | Error::AccountUnknown { label, .. } => Some(Key::parse(label)),
         Error::IdentityUnverifiable {
             tool,
             login: Unidentified::Parked { label } | Unidentified::SignIn { label },
@@ -89,7 +88,7 @@ fn account_of(error: &pitboard_core::error::Error) -> Option<String> {
         Error::RecoveryUndetermined { tool, to, .. }
         | Error::RecoveryElsewhere { tool, to, .. } => Some(of_tool(*tool, to)),
         Error::LiveAccountNotEnrolled { tool, .. } | Error::LiveCredentialAbsent { tool, .. } => {
-            Some(Key::new(*tool, "").qualified())
+            Some(Key::new(*tool, ""))
         }
         _ => None,
     }
@@ -118,7 +117,7 @@ fn warnings(found: &[service::Warning]) -> Vec<Warning> {
             code: w.code().to_string(),
             message: in_app_warning(pitboard_core::host::OS, w)
                 .unwrap_or_else(|| sentence(&w.to_string())),
-            provider: w.tool().map(|tool| tool.code().into()),
+            provider: w.tool(),
             account: match w {
                 service::Warning::LoginReplaced { tool, id, .. } => Some(account_id(*tool, id)),
                 _ => None,
@@ -231,19 +230,20 @@ impl From<pitboard_core::holder::Holding> for Holding {
 pub(crate) enum Switch {
     Switched {
         /// Which tool's login moved.
-        provider: String,
+        provider: ProviderId,
+        // the account it left, by its label, or what the tool held in place of one
         from: String,
-        to: String,
+        to: Key,
         adoption: Adoption,
     },
     // Put in use where the tool held nobody's login: no account was parked for it.
     Installed {
-        provider: String,
-        to: String,
+        provider: ProviderId,
+        to: Key,
         adoption: Adoption,
     },
     AlreadyActive {
-        label: String,
+        account: Key,
     },
 }
 
@@ -276,10 +276,12 @@ pub(crate) enum AutoSwitched {
     },
     /// Claude Code was switched from `from` to `to`, which running sessions take as `adoption`
     /// says, with what the switch warned of, and how much the account it left has used: "96%
-    /// of its 5-hour limit".
+    /// of its 5-hour limit". `from` and `to` as the core types them, and `accounts` the two
+    /// they name.
     Switched {
         from: String,
         to: String,
+        accounts: (Key, Key),
         adoption: Adoption,
         warnings: Vec<Warning>,
         used: String,
@@ -313,7 +315,7 @@ pub(crate) enum AutoSwitched {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AutoLooked {
     /// This stands, and nothing is to be decided under the core's lock.
-    Stands(AutoSwitched),
+    Stands(Box<AutoSwitched>),
     /// A switch may be due, or whose login Claude Code has stored is in doubt: only a
     /// decision under the core's lock can say.
     Act,
@@ -380,8 +382,8 @@ pub(crate) struct Check {
     pub(crate) detail: String,
     /// Empty when there is nothing to do.
     pub(crate) advice: String,
-    // `claude/work`, for a check of one account
-    pub(crate) account: Option<String>,
+    // for a check of one account
+    pub(crate) account: Option<Key>,
 }
 
 // Doctor's checks, and its report as `pitboard doctor --json` gives it, for Copy Report.
@@ -407,26 +409,12 @@ fn enrolled(enrolment: switch::Enrolment, warnings: Vec<Warning>) -> Enrolled {
     }
 }
 
-// The tool a `Tool`'s code names.
-fn tool_of(provider: &str) -> Result<ProviderId, PitboardError> {
-    ProviderId::parse(provider).ok_or_else(|| {
-        PitboardError::from(pitboard_core::error::Error::ProviderUnknown {
-            typed: provider.to_owned(),
-            known: ProviderId::ALL
-                .iter()
-                .map(|known| known.code().to_owned())
-                .collect(),
-        })
-    })
-}
-
 fn account(row: status::Row, now: i64) -> Account {
-    let key = row.key();
     let unplaced = row.unplaced();
     Account {
         id: account_id(row.provider, &row.id),
-        provider: row.provider.code().into(),
-        qualified: key.map(|k| k.qualified()),
+        provider: row.provider,
+        key: row.key(),
         unplaced,
         standing: row.standing(now),
         stale: row.stale,
@@ -442,19 +430,7 @@ fn account(row: status::Row, now: i64) -> Account {
         usage: row.usage.map(|u| Usage {
             observed_at: u.observed_at,
             lists_every_limit: u.lists_every_limit,
-            windows: u
-                .windows
-                .into_iter()
-                .map(|w| Limit {
-                    length_seconds: w.length_seconds,
-                    kind: w.kind.into(),
-                    scope: w.scope,
-                    percent: w.percent,
-                    resets_at: w.resets_at,
-                    severity: w.severity,
-                    is_active: w.is_active,
-                })
-                .collect(),
+            windows: u.windows,
         }),
         label: row.label,
         email: row.email,
@@ -473,9 +449,9 @@ fn switched(changing: Changing<switch::Outcome>) -> Result<Switched, PitboardErr
                 adoption,
                 ..
             } => Switch::Switched {
-                provider: provider.code().into(),
-                from,
-                to,
+                provider,
+                from: Key::parse(&from).label,
+                to: Key::parse(&to),
                 adoption,
             },
             switch::Outcome::Installed {
@@ -483,11 +459,13 @@ fn switched(changing: Changing<switch::Outcome>) -> Result<Switched, PitboardErr
                 to,
                 adoption,
             } => Switch::Installed {
-                provider: provider.code().into(),
-                to,
+                provider,
+                to: Key::parse(&to),
                 adoption,
             },
-            switch::Outcome::AlreadyActive { label, .. } => Switch::AlreadyActive { label },
+            switch::Outcome::AlreadyActive { label, .. } => Switch::AlreadyActive {
+                account: Key::parse(&label),
+            },
         },
         warnings,
     })
@@ -502,8 +480,8 @@ fn status_of(done: service::Done<status::Report>) -> Status {
             .awaiting
             .into_iter()
             .map(|awaited| Awaiting {
-                provider: awaited.provider.code().into(),
-                put_back: awaited.put_back.qualified(),
+                provider: awaited.provider,
+                put_back: awaited.put_back,
                 label: awaited.label.label,
                 again: awaited.again,
             })
@@ -544,6 +522,7 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
             limit,
             adoption,
         } => AutoSwitched::Switched {
+            accounts: (Key::parse(&from), Key::parse(&to)),
             from,
             to,
             adoption,
@@ -586,7 +565,7 @@ pub(crate) struct SignInSession {
     // where the core's wait for an app to quit signed in is, apart from `watched` as `said` is
     steps: switch::Steps,
     // the account the core parked for it, as `SwitchTo` takes it
-    pub(crate) put_back: Option<String>,
+    pub(crate) put_back: Option<Key>,
     /// Apart from `watched`: reading waits on the tool, and Codex says nothing between its
     /// address and the browser coming back, so a read that held `watched` kept a cancel or
     /// a paste waiting until then.
@@ -946,14 +925,13 @@ impl AppCore {
 
     // Looked for each time it is asked, so a tool installed since the app started is found.
     // None where nothing may be read here, where nothing could be enrolled either.
-    pub(crate) fn installed(&self) -> Vec<Tool> {
+    pub(crate) fn installed(&self) -> Vec<ProviderId> {
         let Ok(made) = self.readable_asking_again() else {
             return Vec::new();
         };
         let here = made.core.installed();
         crate::listed(pitboard_core::host::OS)
             .filter(|tool| here.contains(tool))
-            .map(tool)
             .collect()
     }
 
@@ -968,23 +946,23 @@ impl AppCore {
         Ok(status_of(self.readable()?.core.status(fresh)?))
     }
 
-    pub(crate) fn switch_to(&self, label: &str) -> Result<Switched, PitboardError> {
-        switched(self.core().core.switch_to(label))
+    pub(crate) fn switch_to(&self, account: &Key) -> Result<Switched, PitboardError> {
+        switched(self.core().core.switch_to(&account.qualified()))
     }
 
-    /// What `switch_to` does once somebody has agreed to put `label`'s login in place of a
+    /// What `switch_to` does once somebody has agreed to put `account`'s login in place of a
     /// login in use its service refuses for good.
-    pub(crate) fn replace_with(&self, label: &str) -> Result<Switched, PitboardError> {
-        switched(self.core().core.replace_with(label))
+    pub(crate) fn replace_with(&self, account: &Key) -> Result<Switched, PitboardError> {
+        switched(self.core().core.replace_with(&account.qualified()))
     }
 
-    /// Writes the account `label` names into its tool's config where that names another
-    /// account, while it is in use, and refuses where it no longer is. Gives what it warned
-    /// of.
-    pub(crate) fn update_config(&self, label: &str) -> Result<Vec<Warning>, PitboardError> {
-        changed(self.core().core.update_config(label), |_, warnings| {
-            warnings
-        })
+    /// Writes `account` into its tool's config where that names another account, while it is
+    /// in use, and refuses where it no longer is. Gives what it warned of.
+    pub(crate) fn update_config(&self, account: &Key) -> Result<Vec<Warning>, PitboardError> {
+        changed(
+            self.core().core.update_config(&account.qualified()),
+            |_, warnings| warnings,
+        )
     }
 
     /// What is left in the file behind Claude Code's store, and what putting it away would do
@@ -1019,7 +997,9 @@ impl AppCore {
     pub(crate) fn auto_look(&self, at: u8) -> Result<AutoLooked, PitboardError> {
         let threshold = Threshold::clamped(i64::from(at));
         Ok(match self.readable()?.core.auto_look(threshold)? {
-            Look::Stands(auto) => AutoLooked::Stands(auto_switched(*auto, Vec::new(), threshold)),
+            Look::Stands(auto) => {
+                AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), threshold)))
+            }
             Look::Act => AutoLooked::Act,
         })
     }
@@ -1036,14 +1016,17 @@ impl AppCore {
         Ok(self.core().core.warm_up()?.value)
     }
 
-    /// Warms up the account `qualified` names now, whatever the span of the day.
-    pub(crate) fn warm_now(&self, qualified: &str) -> Result<WarmUp, WarmRefused> {
-        Ok(self.core().core.warm_now(qualified)?.value)
+    /// Warms up `account` now, whatever the span of the day.
+    pub(crate) fn warm_now(&self, account: &Key) -> Result<WarmUp, WarmRefused> {
+        Ok(self.core().core.warm_now(&account.qualified())?.value)
     }
 
-    /// Warms up the account `qualified` names from now on, or stops.
-    pub(crate) fn warm_turn(&self, qualified: &str, on: bool) -> Result<(), PitboardError> {
-        changed(self.core().core.warm_turn(qualified, on), |_, _| ())
+    /// Warms up `account` from now on, or stops.
+    pub(crate) fn warm_turn(&self, account: &Key, on: bool) -> Result<(), PitboardError> {
+        changed(
+            self.core().core.warm_turn(&account.qualified(), on),
+            |_, _| (),
+        )
     }
 
     /// Warms up from `from` to `to`, in minutes of the day, `to` up to 24:00. A span that
@@ -1070,17 +1053,16 @@ impl AppCore {
         })
     }
 
-    /// Enroll the account `provider`'s tool has signed in now, under `naming`.
+    /// Enroll the account `tool` has signed in now, under `naming`.
     pub(crate) fn enroll_current(
         &self,
-        provider: &str,
+        tool: ProviderId,
         naming: switch::Naming,
     ) -> Result<Enrolled, PitboardError> {
-        let which = tool_of(provider)?;
-        changed(self.core().core.enroll_current_as(which, naming), enrolled)
+        changed(self.core().core.enroll_current_as(tool, naming), enrolled)
     }
 
-    /// Starts `provider`'s own sign-in, watched rather than inherited, again for the account
+    /// Starts `tool`'s own sign-in, watched rather than inherited, again for the account
     /// `again` names or for a new one. The model hands on what the tool says, can paste a
     /// fallback code, and finishes it.
     ///
@@ -1088,38 +1070,37 @@ impl AppCore {
     /// the first, late, ask could not find is needed.
     pub(crate) fn sign_in(
         &self,
-        provider: &str,
+        tool: ProviderId,
         again: Option<String>,
     ) -> Result<Arc<SignInSession>, PitboardError> {
-        let which = tool_of(provider)?;
         let made = self.made.value_asking_again();
         let (watched, naming) = match again {
             Some(label) => (
                 made.core
-                    .sign_in_watched(&pitboard_core::state::Key::new(which, &label).qualified())?,
+                    .sign_in_watched(&Key::new(tool, &label).qualified())?,
                 switch::Naming::As(label),
             ),
             None => (
-                made.core.sign_in_watched_for(which)?,
+                made.core.sign_in_watched_for(tool)?,
                 switch::Naming::FromEmail,
             ),
         };
         Ok(Arc::new(SignInSession {
             said: watched.said(),
             steps: watched.steps(),
-            put_back: watched.put_back().map(|key| key.qualified()),
+            put_back: watched.put_back(),
             watched: Mutex::new(Some(watched)),
             naming,
             made,
         }))
     }
 
-    pub(crate) fn forget(&self, label: &str) -> Result<(), PitboardError> {
-        changed(self.core().core.forget(label), |_, _| ())
+    pub(crate) fn forget(&self, account: &Key) -> Result<(), PitboardError> {
+        changed(self.core().core.forget(&account.qualified()), |_, _| ())
     }
 
-    pub(crate) fn rename(&self, from: &str, to: &str) -> Result<(), PitboardError> {
-        changed(self.core().core.rename(from, to), |_, _| ())
+    pub(crate) fn rename(&self, account: &Key, to: &str) -> Result<(), PitboardError> {
+        changed(self.core().core.rename(&account.qualified(), to), |_, _| ())
     }
 
     /// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
@@ -1172,25 +1153,25 @@ impl AppCore {
     }
 
     // An app whose login is its files stays closed on an index nobody can read.
-    pub(crate) fn whole(&self, provider: &str) -> bool {
-        let Some(which) = ProviderId::parse(provider).filter(|_| in_its_app(provider)) else {
+    pub(crate) fn whole(&self, tool: ProviderId) -> bool {
+        if !in_its_app(tool) {
             return true;
-        };
+        }
         self.readable_asking_again()
-            .is_ok_and(|made| made.core.whole(which))
+            .is_ok_and(|made| made.core.whole(tool))
     }
 
-    pub(crate) fn moving(&self, provider: &str) -> bool {
-        let Some(which) = ProviderId::parse(provider).filter(|_| in_its_app(provider)) else {
+    pub(crate) fn moving(&self, tool: ProviderId) -> bool {
+        if !in_its_app(tool) {
             return false;
-        };
+        }
         self.readable_asking_again()
-            .map_or(true, |made| made.core.moving(which))
+            .map_or(true, |made| made.core.moving(tool))
     }
 
     // Only what quitting that app puts right: a `codex` in a terminal is not waited for.
-    pub(crate) fn holds_app(&self, provider: &str, app_id: &str) -> bool {
-        self.holding(provider).iter().any(
+    pub(crate) fn holds_app(&self, tool: ProviderId, app_id: &str) -> bool {
+        self.holding(tool).iter().any(
             |held| matches!(&held.remedy, Remedy::ReopenApp { app_id: app, .. } if app == app_id),
         )
     }
@@ -1261,24 +1242,19 @@ impl AppCore {
         Ok(self.core().core.schedule_repair()?)
     }
 
-    /// What is running `provider`'s tool with a login a switch would leave it on, by kind,
-    /// for the model to say so or to offer to quit an app first. Empty where nothing is, for
-    /// a tool that follows a switch by itself, for a provider code nobody knows, and where
-    /// nothing may be read here, where no switch is made either. Reads the process list and
-    /// nothing else, so it answers at once.
-    pub(crate) fn holding(&self, provider: &str) -> Vec<Holding> {
+    /// What is running `tool` with a login a switch would leave it on, by kind, for the model
+    /// to say so or to offer to quit an app first. Empty where nothing is, for a tool that
+    /// follows a switch by itself, and where nothing may be read here, where no switch is made
+    /// either. Reads the process list and nothing else, so it answers at once.
+    pub(crate) fn holding(&self, tool: ProviderId) -> Vec<Holding> {
         let Ok(made) = self.readable() else {
             return Vec::new();
         };
-        ProviderId::parse(provider)
-            .map(|which| {
-                made.core
-                    .holding(which)
-                    .into_iter()
-                    .map(Holding::from)
-                    .collect()
-            })
-            .unwrap_or_default()
+        made.core
+            .holding(tool)
+            .into_iter()
+            .map(Holding::from)
+            .collect()
     }
 
     /// Every check `pitboard doctor` makes, each moment one names on the person's clock as
@@ -1306,7 +1282,7 @@ impl AppCore {
                 },
                 detail: c.detail,
                 advice: c.advice,
-                account: c.account,
+                account: c.account.as_deref().map(Key::parse),
             })
             .collect();
         Some(Doctored { checks, report })
@@ -1366,8 +1342,8 @@ mod tests {
             .collect()
     }
 
-    fn installed(core: &AppCore) -> Vec<String> {
-        core.installed().into_iter().map(|tool| tool.code).collect()
+    fn installed(core: &AppCore) -> Vec<&'static str> {
+        core.installed().into_iter().map(ProviderId::code).collect()
     }
 
     /// The environment of an app whose home is `home`, whose login shell cannot be run, so
@@ -1837,13 +1813,12 @@ mod tests {
             assert_eq!((core.changed_at(), core.readings_changed_at()), (0, 0));
             assert!(core.log(500).is_empty());
             assert_eq!(core.schedule(), None, "not a schedule that is absent");
-            assert!(core.holding("codex").is_empty());
+            assert!(core.holding(ProviderId::Codex).is_empty());
             assert!(
-                !core.whole("desktop") && core.moving("desktop"),
+                !core.whole(ProviderId::Desktop) && core.moving(ProviderId::Desktop),
                 "{variable}"
             );
-            assert!(core.whole("codex") && !core.moving("codex"));
-            assert!(core.whole("nobody") && !core.moving("nobody"));
+            assert!(core.whole(ProviderId::Codex) && !core.moving(ProviderId::Codex));
             assert!(installed(&core).is_empty(), "{variable}");
             assert_eq!(core.command_line(), FoundCommandLine::Nowhere);
             let Doctored { checks, report } = core
@@ -1909,8 +1884,7 @@ mod tests {
         };
         assert_eq!(tools().len(), listed, "listing the tools asks nothing");
         assert_eq!(asks.count(), 0, "and nor does making the core");
-        assert!(core.whole("codex") && !core.moving("codex"));
-        assert!(core.whole("nobody") && !core.moving("nobody"));
+        assert!(core.whole(ProviderId::Codex) && !core.moving(ProviderId::Codex));
         assert_eq!(
             asks.count(),
             0,
@@ -2051,7 +2025,7 @@ mod tests {
         );
         assert_eq!(core.core().search_path, None, "the shell could not be run");
         let Err(PitboardError::Failed { code, .. }) =
-            core.enroll_current("claude", switch::Naming::FromEmail)
+            core.enroll_current(ProviderId::Claude, switch::Naming::FromEmail)
         else {
             panic!("a Claude Code account was enrolled under a custom OAuth endpoint");
         };

@@ -3,6 +3,7 @@
 use super::SetupLink;
 use super::words::{self, titled};
 use pitboard_core::host::{OS, Os};
+use pitboard_core::provider::ProviderId;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AppWords {
@@ -459,12 +460,10 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             }),
             troubleshoot: windows("Troubleshoot"),
             diagnostics_about: (os == Os::Windows).then(|| {
-                let names = crate::tools_on(os).into_iter().map(|tool| tool.name);
+                let names = crate::tools_on(os).into_iter().map(ProviderId::name);
                 format!(
                     "Check how {} are set up on this PC.",
-                    pitboard_core::words::listed(
-                        std::iter::once(words::PITBOARD.into()).chain(names)
-                    )
+                    pitboard_core::words::listed(std::iter::once(words::PITBOARD).chain(names))
                 )
             }),
             activity_about: windows("Every switch and change Pitboard made."),
