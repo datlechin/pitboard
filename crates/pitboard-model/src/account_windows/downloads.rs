@@ -1,7 +1,8 @@
 //! What a download is called, where it comes from, and what asking before one says.
 
 use crate::present::{Question, words};
-use pitboard_core::host::{OS, Os};
+use crate::{Engine, Front};
+use pitboard_core::host::Os;
 use pitboard_sites::WebAddress;
 use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
@@ -12,51 +13,61 @@ use unicode_normalization::UnicodeNormalization;
 // (docs/facts/webkit.md). A path in `reserved` may come in another Unicode form: the macOS app
 // keeps each as a `URL`, whose `path` Foundation gives decomposed (docs/facts/foundation-urls.md).
 #[uniffi::export]
-pub fn download_destination(folder: String, suggested: String, reserved: Vec<String>) -> String {
+pub fn download_destination(
+    front: Front,
+    folder: String,
+    suggested: String,
+    reserved: Vec<String>,
+) -> String {
     let taken = |candidate: &Path| {
         reserved
             .iter()
-            .any(|path| same_file(OS, Path::new(path), candidate))
+            .any(|path| same_file(front.os(), Path::new(path), candidate))
             || candidate.exists()
     };
-    destination(OS, Path::new(&folder), &suggested, taken)
+    destination(front.engine(), Path::new(&folder), &suggested, taken)
         .to_string_lossy()
         .into_owned()
 }
 
-/// Where a download suggested as `suggested` goes in `folder` on `os`: the first name
+/// Where a download `engine` suggested as `suggested` goes in `folder`: the first name
 /// `taken` does not say is taken.
-fn destination(os: Os, folder: &Path, suggested: &str, taken: impl Fn(&Path) -> bool) -> PathBuf {
+fn destination(
+    engine: Engine,
+    folder: &Path,
+    suggested: &str,
+    taken: impl Fn(&Path) -> bool,
+) -> PathBuf {
     let name = match last_component(suggested) {
         "" | "/" => "Download",
         name => name,
     };
-    let (base, extension) = match os {
-        Os::MacOs | Os::Linux => split_extension(name),
-        Os::Windows => split_as_chromium(name),
+    let (base, extension) = match engine {
+        Engine::WebKit | Engine::WebKitGtk => split_extension(name),
+        Engine::WebView2 => split_as_chromium(name),
     };
     (1u64..)
-        .map(|nth| folder.join(numbered(os, name, base, extension, nth)))
+        .map(|nth| folder.join(numbered(engine, name, base, extension, nth)))
         .find(|candidate| !taken(candidate))
         .unwrap_or_else(|| folder.join(name))
 }
 
 /// The `nth` file named `name` in one folder, `base` and `extension` being its parts: the
-/// name itself first, then the name as `os` numbers a copy of a file.
-fn numbered(os: Os, name: &str, base: &str, extension: Option<&str>, nth: u64) -> String {
+/// name itself first, then as a copy of it is numbered in an app whose pages `engine` loads.
+fn numbered(engine: Engine, name: &str, base: &str, extension: Option<&str>, nth: u64) -> String {
     if nth == 1 {
         return name.to_owned();
     }
-    match os {
+    match engine {
         // As Finder numbers one: `report 2.pdf`, then `report 3.pdf`. No app runs on Linux,
         // and it numbers as the Mac does.
-        Os::MacOs | Os::Linux => match extension {
+        Engine::WebKit | Engine::WebKitGtk => match extension {
             Some(extension) => format!("{base} {nth}.{extension}"),
             None => format!("{base} {nth}"),
         },
         // In brackets from one, as the owner decided: `report (1).pdf`, then `report (2).pdf`,
         // and `archive (1).tar.gz`, as WebView2 numbers a download.
-        Os::Windows => {
+        Engine::WebView2 => {
             let copy = nth - 1;
             match extension {
                 Some(extension) => format!("{base} ({copy}).{extension}"),
@@ -167,9 +178,12 @@ mod tests {
 
     fn on_a_mac(suggested: &str, taken: &[&str]) -> String {
         let taken: HashSet<String> = taken.iter().map(|name| downloads(name)).collect();
-        destination(Os::MacOs, Path::new("/Downloads"), suggested, |candidate| {
-            taken.contains(candidate.to_str().expect("UTF-8"))
-        })
+        destination(
+            Engine::WebKit,
+            Path::new("/Downloads"),
+            suggested,
+            |candidate| taken.contains(candidate.to_str().expect("UTF-8")),
+        )
         .to_string_lossy()
         .into_owned()
     }
@@ -239,9 +253,12 @@ mod tests {
     /// No app runs on Linux, which numbers a copy as the Mac does.
     #[test]
     fn linux_numbers_a_copy_as_the_mac_does() {
-        let name = destination(Os::Linux, Path::new("/d"), "report.pdf", |candidate| {
-            candidate == Path::new("/d/report.pdf")
-        });
+        let name = destination(
+            Engine::WebKitGtk,
+            Path::new("/d"),
+            "report.pdf",
+            |candidate| candidate == Path::new("/d/report.pdf"),
+        );
         assert_eq!(name, Path::new("/d/report 2.pdf"));
     }
 
@@ -250,7 +267,7 @@ mod tests {
     #[test]
     fn windows_numbers_a_copy_in_brackets_from_one() {
         let on_windows = |suggested: &str, taken: &[&str]| {
-            destination(Os::Windows, Path::new("/d"), suggested, |candidate| {
+            destination(Engine::WebView2, Path::new("/d"), suggested, |candidate| {
                 taken
                     .iter()
                     .any(|name| Path::new("/d").join(name) == candidate)
@@ -290,7 +307,7 @@ mod tests {
             (".hidden", " (1).hidden"),
             ("..", ".. (1)"),
         ] {
-            let name = destination(Os::Windows, Path::new("/d"), suggested, |candidate| {
+            let name = destination(Engine::WebView2, Path::new("/d"), suggested, |candidate| {
                 candidate == Path::new("/d").join(suggested)
             });
             assert_eq!(name, Path::new("/d").join(second), "{suggested:?}");
@@ -311,9 +328,12 @@ mod tests {
             "/d/Ba\u{301}o ca\u{301}o.pdf"
         ));
         assert!(!same("/d/report.pdf", "/d/report (1).pdf"));
-        let name = destination(Os::Windows, Path::new("/d"), "report.pdf", |candidate| {
-            same_file(Os::Windows, Path::new("/d/Report.PDF"), candidate)
-        });
+        let name = destination(
+            Engine::WebView2,
+            Path::new("/d"),
+            "report.pdf",
+            |candidate| same_file(Os::Windows, Path::new("/d/Report.PDF"), candidate),
+        );
         assert_eq!(name, Path::new("/d/report (1).pdf"));
     }
 
@@ -323,17 +343,25 @@ mod tests {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let folder = scratch.path();
         std::fs::write(folder.join("report.pdf"), b"").expect("a file");
-        let reserved = folder.join("report 2.pdf").to_string_lossy().into_owned();
-        let chosen = download_destination(
-            folder.to_string_lossy().into_owned(),
-            "report.pdf".into(),
-            vec![reserved],
-        );
-        let expected = destination(OS, folder, "report.pdf", |candidate| {
-            candidate == folder.join("report.pdf") || candidate == folder.join("report 2.pdf")
-        });
-        assert_eq!(chosen, expected.to_string_lossy());
-        assert_ne!(Path::new(&chosen), folder.join("report.pdf"));
+        for (front, reserved, chosen) in [
+            (Front::MacMenuBar, "report 2.pdf", "report 3.pdf"),
+            (
+                Front::WindowsNotificationArea,
+                "report (1).pdf",
+                "report (2).pdf",
+            ),
+        ] {
+            assert_eq!(
+                download_destination(
+                    front,
+                    folder.to_string_lossy().into_owned(),
+                    "report.pdf".into(),
+                    vec![folder.join(reserved).to_string_lossy().into_owned()],
+                ),
+                folder.join(chosen).to_string_lossy(),
+                "{front:?}"
+            );
+        }
     }
 
     /// A name given to a download still running is taken whatever Unicode form the app hands
@@ -344,38 +372,41 @@ mod tests {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let folder = scratch.path().join("not-made");
         let at = |name: &str| folder.join(name).to_string_lossy().into_owned();
-        let choose = |suggested: &str, reserved: &[&str]| {
-            download_destination(
-                folder.to_string_lossy().into_owned(),
-                suggested.into(),
-                reserved.iter().map(|path| (*path).to_owned()).collect(),
-            )
-        };
         let precomposed = "B\u{e1}o c\u{e1}o.pdf";
         let decomposed = "Ba\u{301}o ca\u{301}o.pdf";
-        let first = choose(precomposed, &[]);
-        assert_eq!(first, at(precomposed));
-        // On Windows the other Unicode form is another name, so it is free (`same_file`).
-        let copy = |name: &str, of: &str| match OS {
-            Os::MacOs | Os::Linux => at(name),
-            Os::Windows => at(of),
-        };
-        assert_eq!(
-            choose(precomposed, &[&at(decomposed)]),
-            copy("B\u{e1}o c\u{e1}o 2.pdf", precomposed),
-            "reserved as Foundation gives its path"
-        );
-        assert_eq!(
-            choose(precomposed, &[&first]),
-            match OS {
-                Os::MacOs | Os::Linux => at("B\u{e1}o c\u{e1}o 2.pdf"),
-                Os::Windows => at("B\u{e1}o c\u{e1}o (1).pdf"),
-            }
-        );
-        assert_eq!(
-            choose(decomposed, &[&first]),
-            copy("Ba\u{301}o ca\u{301}o 2.pdf", decomposed)
-        );
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+            let choose = |suggested: &str, reserved: &[&str]| {
+                download_destination(
+                    front,
+                    folder.to_string_lossy().into_owned(),
+                    suggested.into(),
+                    reserved.iter().map(|path| (*path).to_owned()).collect(),
+                )
+            };
+            let first = choose(precomposed, &[]);
+            assert_eq!(first, at(precomposed));
+            // On Windows the other Unicode form is another name, so it is free (`same_file`).
+            let copy = |name: &str, of: &str| match front {
+                Front::MacMenuBar | Front::Gnome => at(name),
+                Front::WindowsNotificationArea => at(of),
+            };
+            assert_eq!(
+                choose(precomposed, &[&at(decomposed)]),
+                copy("B\u{e1}o c\u{e1}o 2.pdf", precomposed),
+                "reserved as Foundation gives its path"
+            );
+            assert_eq!(
+                choose(precomposed, &[&first]),
+                match front {
+                    Front::MacMenuBar | Front::Gnome => at("B\u{e1}o c\u{e1}o 2.pdf"),
+                    Front::WindowsNotificationArea => at("B\u{e1}o c\u{e1}o (1).pdf"),
+                }
+            );
+            assert_eq!(
+                choose(decomposed, &[&first]),
+                copy("Ba\u{301}o ca\u{301}o 2.pdf", decomposed)
+            );
+        }
         assert!(!folder.exists());
     }
 
@@ -405,7 +436,7 @@ mod tests {
         ));
         let reserved = ["/d/Ba\u{301}o ca\u{301}o.pdf"];
         let name = destination(
-            Os::MacOs,
+            Engine::WebKit,
             Path::new("/d"),
             "B\u{e1}o c\u{e1}o.pdf",
             |candidate| {

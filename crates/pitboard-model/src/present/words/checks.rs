@@ -2,17 +2,17 @@
 //! apps' words, and when the checks were made.
 
 use super::{issues, prose_capitalised, this_machine, titled, typeset, without_commands};
+use crate::Front;
 use crate::Level;
-use pitboard_core::host::Os;
 use pitboard_core::words::capitalised;
 
-pub(crate) fn show_diagnostics(os: Os) -> String {
-    titled(os, "Show Diagnostics", "Show diagnostics")
+pub(crate) fn show_diagnostics(front: Front) -> String {
+    titled(front, "Show Diagnostics", "Show diagnostics")
 }
 
 /// What stands in for doctor's checks before there are any: "Checking this Mac…".
-pub(crate) fn checking(os: Os) -> String {
-    format!("Checking {}…", this_machine(os))
+pub(crate) fn checking(front: Front) -> String {
+    format!("Checking {}…", this_machine(front))
 }
 
 /// When the checks shown were made, at a clock time the person's clock says: "Checked at
@@ -22,11 +22,11 @@ pub(crate) fn checked_at(clock: &str) -> String {
 }
 
 // The line over Diagnostics: "2 Issues", and under it what the rest come to.
-pub(crate) fn check_issues(os: Os, count: usize) -> String {
+pub(crate) fn check_issues(front: Front, count: usize) -> String {
     if count == 0 {
-        titled(os, "No Issues", "No issues")
+        titled(front, "No Issues", "No issues")
     } else {
-        issues(os, count)
+        issues(front, count)
     }
 }
 
@@ -52,7 +52,7 @@ pub(crate) fn spoken_level(level: Level) -> &'static str {
 
 // Diagnostics names a check under its tool's heading; the command line keeps doctor's names,
 // which maintenance-commands.mdx documents.
-pub(crate) fn check_name(os: Os, code: &str, name: &str) -> String {
+pub(crate) fn check_name(front: Front, code: &str, name: &str) -> String {
     let (title, sentence) = match code {
         "system_too_old" => ("Windows Version", "Windows version"),
         "elevated" => ("Permissions", "Permissions"),
@@ -85,7 +85,7 @@ pub(crate) fn check_name(os: Os, code: &str, name: &str) -> String {
             "Saved Sign-Ins Being Deleted",
             "Saved sign-ins being deleted",
         ),
-        "schedule" => return keep_saved_sign_ins_fresh(os),
+        "schedule" => return keep_saved_sign_ins_fresh(front),
         "watch_service" => ("Watch Service", "Watch service"),
         "schedule_proxy" => ("Proxy for Fresh Sign-Ins", "Proxy for fresh sign-ins"),
         "claude_version" | "codex_version" | "desktop_build" => ("Version", "Version"),
@@ -110,11 +110,15 @@ pub(crate) fn check_name(os: Os, code: &str, name: &str) -> String {
         "notification_not_posted" => (NOTIFICATIONS, NOTIFICATIONS),
         _ => return typeset(&capitalised(name)),
     };
-    titled(os, title, sentence)
+    titled(front, title, sentence)
 }
 
-pub(crate) fn keep_saved_sign_ins_fresh(os: Os) -> String {
-    titled(os, "Keep Saved Sign-Ins Fresh", "Keep saved sign-ins fresh")
+pub(crate) fn keep_saved_sign_ins_fresh(front: Front) -> String {
+    titled(
+        front,
+        "Keep Saved Sign-Ins Fresh",
+        "Keep saved sign-ins fresh",
+    )
 }
 
 // The check the app adds after doctor's for a notification its system refused.
@@ -127,30 +131,32 @@ pub(crate) fn not_posted(title: &str, clock: &str, reason: &str) -> String {
 // Diagnostics' words where doctor's say what only the command line names, or a path.
 pub(crate) const KEYCHAIN_READY: &str = "Ready";
 
-pub(crate) fn folder_private(os: Os) -> &'static str {
-    match os {
-        Os::Windows => "Only your Windows account can open it",
-        Os::MacOs | Os::Linux => "Only you can read it",
+pub(crate) fn folder_private(front: Front) -> &'static str {
+    match front {
+        Front::WindowsNotificationArea => "Only your Windows account can open it",
+        Front::MacMenuBar | Front::Gnome => "Only you can read it",
     }
 }
 
-pub(crate) fn folder_shared(os: Os) -> String {
-    match os {
-        Os::Windows => "Other accounts on this PC can open it.".into(),
-        Os::MacOs | Os::Linux => format!("Other people on {} can read it.", this_machine(os)),
+pub(crate) fn folder_shared(front: Front) -> String {
+    match front {
+        Front::WindowsNotificationArea => "Other accounts on this PC can open it.".into(),
+        Front::MacMenuBar | Front::Gnome => {
+            format!("Other people on {} can read it.", this_machine(front))
+        }
     }
 }
 
 pub(crate) const FOLDER_NAMES_ACCOUNTS: &str = "It names your accounts, so only you should.";
 
-pub(crate) fn sign_in_files_shared(os: Os) -> String {
-    match os {
-        Os::Windows => {
+pub(crate) fn sign_in_files_shared(front: Front) -> String {
+    match front {
+        Front::WindowsNotificationArea => {
             "Other accounts on this PC can read or change a file that holds a sign-in.".into()
         }
-        Os::MacOs | Os::Linux => format!(
+        Front::MacMenuBar | Front::Gnome => format!(
             "Other people on {} can read a file that holds a sign-in.",
-            this_machine(os)
+            this_machine(front)
         ),
     }
 }
@@ -198,12 +204,14 @@ pub(crate) const SIGN_IN_TO_CODEX_WITH_CHATGPT: &str = "Sign in to Codex with a 
 pub(crate) const CODEX_STORE_UNSWITCHABLE: &str =
     "Codex keeps its sign-in where Pitboard can’t switch it.";
 
-pub(crate) fn codex_file_shared(os: Os) -> String {
-    match os {
-        Os::Windows => "Other accounts on this PC can read Codex’s sign-in file.".into(),
-        Os::MacOs | Os::Linux => format!(
+pub(crate) fn codex_file_shared(front: Front) -> String {
+    match front {
+        Front::WindowsNotificationArea => {
+            "Other accounts on this PC can read Codex’s sign-in file.".into()
+        }
+        Front::MacMenuBar | Front::Gnome => format!(
             "Other people on {} can read Codex’s sign-in file.",
-            this_machine(os)
+            this_machine(front)
         ),
     }
 }
@@ -294,7 +302,7 @@ mod tests {
     // Doctor names a check for a terminal's table: "account personal", "config file".
     #[test]
     fn each_check_is_named_for_diagnostics_in_each_systems_case() {
-        let named = |os| -> Vec<String> {
+        let named = |front| -> Vec<String> {
             [
                 ("config_file", "config file"),
                 ("in_use", "in use"),
@@ -305,11 +313,11 @@ mod tests {
                 ("a_new_check", "a new check"),
             ]
             .into_iter()
-            .map(|(code, name)| check_name(os, code, name))
+            .map(|(code, name)| check_name(front, code, name))
             .collect()
         };
         assert_eq!(
-            named(Os::MacOs),
+            named(Front::MacMenuBar),
             [
                 "Config File",
                 "Signed-In Account",
@@ -321,7 +329,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            named(Os::Windows),
+            named(Front::WindowsNotificationArea),
             [
                 "Config file",
                 "Signed-in account",
@@ -339,22 +347,25 @@ mod tests {
     #[test]
     fn diagnostics_says_what_doctor_found_in_the_apps_words() {
         assert_eq!(
-            (folder_private(Os::MacOs), folder_private(Os::Windows)),
+            (
+                folder_private(Front::MacMenuBar),
+                folder_private(Front::WindowsNotificationArea)
+            ),
             (
                 "Only you can read it",
                 "Only your Windows account can open it"
             )
         );
         assert_eq!(
-            folder_shared(Os::MacOs),
+            folder_shared(Front::MacMenuBar),
             "Other people on this Mac can read it."
         );
         assert_eq!(
-            sign_in_files_shared(Os::Linux),
+            sign_in_files_shared(Front::Gnome),
             "Other people on this computer can read a file that holds a sign-in."
         );
         assert_eq!(
-            codex_file_shared(Os::Windows),
+            codex_file_shared(Front::WindowsNotificationArea),
             "Other accounts on this PC can read Codex’s sign-in file."
         );
         assert_eq!(
@@ -397,7 +408,10 @@ mod tests {
             ]
         );
         assert_eq!(
-            (check_issues(Os::MacOs, 1), check_issues(Os::Windows, 0)),
+            (
+                check_issues(Front::MacMenuBar, 1),
+                check_issues(Front::WindowsNotificationArea, 0)
+            ),
             ("1 Issue".into(), "No issues".into())
         );
     }

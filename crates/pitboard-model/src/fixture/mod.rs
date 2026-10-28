@@ -19,6 +19,7 @@
 //! world is compiled at all, and each refuses, naming the feature, or answers that there is
 //! none.
 
+use crate::Front;
 use crate::model::{AppControl, LocalTime, ModelListener, Notifications, PitboardModel};
 use std::sync::Arc;
 
@@ -86,8 +87,9 @@ pub fn fixture_page(url: String) -> Result<String, FixtureError> {
 
 #[uniffi::export]
 impl PitboardModel {
-    /// The model of the fixture called `name`, one of `fixture_names`, in place of the one
-    /// `new` makes over this machine: the same model over the real core, on the fixture's own
+    /// The model of the fixture called `name`, one of `fixture_names`, for the app `front`
+    /// names, in place of the one `new` makes over this machine: the same model over the real
+    /// core, on the fixture's own
     /// machine, which it empties and makes again, so every launch starts where the last one
     /// did. Its preferences and what it has told are that machine's too, and empty at each
     /// launch; only `firstLaunch` is a machine whose app has never been seen. Other apps are
@@ -105,6 +107,7 @@ impl PitboardModel {
     #[uniffi::constructor]
     pub fn fixture(
         name: String,
+        front: Front,
         listener: Arc<dyn ModelListener>,
         local_time: Arc<dyn LocalTime>,
     ) -> Result<Arc<Self>, FixtureError> {
@@ -112,12 +115,12 @@ impl PitboardModel {
         {
             let world = worlds::World::named(&name)?;
             let folder = worlds::Folder::shared().map_err(failed)?;
-            let launched = worlds::make(world, folder).map_err(failed)?;
+            let launched = worlds::make(world, folder, front).map_err(failed)?;
             Ok(launched.model(listener, local_time))
         }
         #[cfg(not(feature = "fixture"))]
         {
-            let _ = (name, listener, local_time);
+            let _ = (name, front, listener, local_time);
             Err(unavailable())
         }
     }
@@ -134,6 +137,7 @@ impl PitboardModel {
     #[uniffi::constructor]
     pub fn fixture_in(
         name: String,
+        front: Front,
         temporary_directory: String,
         listener: Arc<dyn ModelListener>,
         apps: Arc<dyn AppControl>,
@@ -145,7 +149,7 @@ impl PitboardModel {
             let world = worlds::World::named(&name)?;
             let folder = worlds::Folder::within(std::path::Path::new(&temporary_directory))
                 .map_err(failed)?;
-            let launched = worlds::make(world, folder).map_err(failed)?;
+            let launched = worlds::make(world, folder, front).map_err(failed)?;
             let apps = launched.apps.following(apps);
             Ok(launched.model_over(listener, apps, notifications, local_time))
         }
@@ -153,6 +157,7 @@ impl PitboardModel {
         {
             let _ = (
                 name,
+                front,
                 temporary_directory,
                 listener,
                 apps,
@@ -207,6 +212,7 @@ mod without {
         assert!(fixture_names().is_empty());
         let refused = PitboardModel::fixture(
             "twoTools".into(),
+            Front::MacMenuBar,
             Arc::new(Unheard),
             Arc::new(crate::present::testing::Utc),
         );
@@ -223,6 +229,7 @@ mod without {
         let directory = scratch.path().join("fixture");
         let refused_in = PitboardModel::fixture_in(
             "twoTools".into(),
+            Front::WindowsNotificationArea,
             directory.to_string_lossy().into_owned(),
             Arc::new(Unheard),
             StandInApps::new(&[], true),

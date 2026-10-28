@@ -6,8 +6,7 @@ use super::{AccountStanding, LimitKind, Seen, words};
 use crate::account_windows::stores::derive;
 use crate::model::state::{After, Answered, State};
 use crate::model::{LocalTime, OutsideAnswer};
-use crate::{Account, UsageLevel};
-use pitboard_core::host::{OS, Os};
+use crate::{Account, Front, UsageLevel};
 use pitboard_core::status::Stale;
 use pitboard_core::words::figure;
 use serde::Serialize;
@@ -87,11 +86,16 @@ pub(crate) struct GlanceText {
 }
 
 pub(crate) fn glance(state: &State, now: i64, local: &dyn LocalTime) -> GlanceText {
-    glance_on(OS, state, now, local)
+    glance_on(state.front, state, now, local)
 }
 
-pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) -> GlanceText {
-    let seen = Seen::new(state, now, local, os);
+pub(crate) fn glance_on(
+    front: Front,
+    state: &State,
+    now: i64,
+    local: &dyn LocalTime,
+) -> GlanceText {
+    let seen = Seen::new(state, now, local, front);
     let accounts: Vec<GlanceAccount> = (seen.accounts().iter())
         .filter_map(|account| glanced(&seen, account))
         .collect();
@@ -101,11 +105,11 @@ pub(crate) fn glance_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) 
         schema: SCHEMA,
         read_at,
         words: GlanceWords {
-            in_use: words::in_use(os),
+            in_use: words::in_use(front),
             resets_in: words::RESETS_IN,
             resetting_now: words::RESETTING_NOW,
             updated: read_at.map(|at| words::updated(&seen.clock(at))),
-            no_accounts: words::no_accounts(os).0,
+            no_accounts: words::no_accounts(front).0,
             none_in_use: words::NONE_IN_USE,
             switch_button: words::SWITCH,
             open_to_switch: words::OPEN_TO_SWITCH,
@@ -138,7 +142,7 @@ fn glanced(seen: &Seen, account: &Account) -> Option<GlanceAccount> {
         _ => limits_said(seen, account),
     };
     let value = match headline(windows) {
-        _ if account.signed_in => words::in_use(seen.os),
+        _ if account.signed_in => words::in_use(seen.front),
         Some(tightest) => figure(tightest.percent),
         None => said.clone(),
     };

@@ -17,7 +17,7 @@ use crate::model::{
     AppControl, AtLimit, LocalTime, ModelListener, Notifications, PitboardModel, Platform,
     WindowsLaunch, WindowsPlace,
 };
-use crate::{AppCore, Made};
+use crate::{AppCore, Front, Made};
 use pitboard_core::app::AppFile;
 use pitboard_core::context::Context;
 use pitboard_core::host::{OS, Os};
@@ -728,6 +728,7 @@ fn codex_spare() -> Person {
 
 /// A world made, and what the app's model is made over.
 pub(crate) struct Launched {
+    pub(crate) front: Front,
     pub(crate) core: Arc<AppCore>,
     pub(crate) apps: Arc<FixtureApps>,
     /// Where the account windows' records are kept: in the fixture's own folder, made again
@@ -766,6 +767,7 @@ impl Launched {
             Arc::clone(&self.core),
             listener,
             Platform {
+                front: self.front,
                 apps,
                 notifications,
                 local_time,
@@ -781,8 +783,8 @@ impl Launched {
     }
 }
 
-/// `world`, made in `folder`, and the app's core over it.
-pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
+/// `world`, made in `folder`, and the app's core over it, for the app `front` names.
+pub(crate) fn make(world: World, folder: Folder, front: Front) -> Result<Launched, Unmade> {
     // Seeding passes the release gate before the AppCore below names the version.
     pitboard_core::release::set_version(env!("CARGO_PKG_VERSION"));
     let machine = Arc::new(Stage::new(folder)?);
@@ -818,6 +820,7 @@ pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
     );
     let (helper, places) = (machine.helper(), vec![machine.bin()]);
     let core = Arc::new(AppCore::asking(
+        front,
         move || {
             let made = Made {
                 core: service::Pitboard::new(ctx.clone()),
@@ -839,6 +842,7 @@ pub(crate) fn make(world: World, folder: Folder) -> Result<Launched, Unmade> {
         earlier: None,
     };
     Ok(Launched {
+        front,
         core,
         apps,
         windows,

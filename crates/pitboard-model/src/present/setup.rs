@@ -106,7 +106,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                 detail: words::only_one(&account.label, named, app),
                 actions: vec![
                     Choice {
-                        title: words::add_account(seen.os, true),
+                        title: words::add_account(seen.front, true),
                         intent: Intent::PresentSheet {
                             sheet: Sheet::Add {
                                 tool: Some(account.tool),
@@ -117,7 +117,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
                     // Somebody may keep one account on purpose and watch its limits, so the
                     // nudge can be declined, for its tool alone.
                     Choice {
-                        title: words::not_now(seen.os),
+                        title: words::not_now(seen.front),
                         intent: Intent::DeclineSecondAccount { tool: account.tool },
                         enabled: true,
                     },
@@ -129,7 +129,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             detail: words::CODEX_UNUSED.into(),
             actions: vec![
                 Choice {
-                    title: words::add_codex_account(seen.os),
+                    title: words::add_codex_account(seen.front),
                     intent: Intent::Enrol { tool: Tool::Codex },
                     enabled: true,
                 },
@@ -142,7 +142,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
             // The settings say what the plans' terms may say of switching by itself.
             actions: vec![
                 Choice {
-                    title: words::open_settings(seen.os),
+                    title: words::open_settings(seen.front),
                     intent: Intent::ShowLimits,
                     enabled: true,
                 },
@@ -155,7 +155,7 @@ pub(crate) fn step(seen: &Seen, footing: &Footing) -> Option<SetupStep> {
 
 fn not_now(seen: &Seen, tip: Tip) -> Choice {
     Choice {
-        title: words::not_now(seen.os),
+        title: words::not_now(seen.front),
         intent: Intent::DeclineTip { tip },
         enabled: true,
     }
@@ -167,28 +167,28 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
     let names = pitboard_core::words::listed(&names);
     match footing {
         Footing::NoClaudeCode => AccountsShown::NoTool {
-            title: words::claude_code_not_installed(seen.os),
+            title: words::claude_code_not_installed(seen.front),
             detail: words::no_tool(&names),
-            link_title: words::how_to_install_claude_code(seen.os),
+            link_title: words::how_to_install_claude_code(seen.front),
             link: INSTALL_CLAUDE_CODE.into(),
         },
         _ if seen.problem().is_some() && seen.accounts().is_empty() => AccountsShown::ReadFailed {
-            title: words::could_not_read_accounts(seen.os),
+            title: words::could_not_read_accounts(seen.front),
             detail: seen.problem().unwrap_or_default().to_owned(),
             // Held back while the accounts are read again, as the toolbar's Refresh is, so
             // pressing it is seen to have done something; AccountsPane.swift held it back.
             retry: Choice {
-                title: words::try_again(seen.os),
+                title: words::try_again(seen.front),
                 intent: Intent::Refresh { asked: true },
                 enabled: seen.state.reads == 0,
             },
         },
         _ if seen.state.status.is_some() && seen.accounts().is_empty() => {
             AccountsShown::NoAccounts {
-                title: words::no_accounts(seen.os).0,
-                detail: words::no_accounts(seen.os).1.into(),
+                title: words::no_accounts(seen.front).0,
+                detail: words::no_accounts(seen.front).1.into(),
                 add: Choice {
-                    title: words::add_account(seen.os, true),
+                    title: words::add_account(seen.front, true),
                     intent: Intent::PresentSheet {
                         sheet: Sheet::Add { tool: None },
                     },
@@ -207,9 +207,9 @@ pub(crate) fn accounts_shown(seen: &Seen, footing: &Footing) -> AccountsShown {
 pub(crate) fn menu_accounts_note(seen: &Seen, footing: &Footing) -> Option<String> {
     match &seen.state.status {
         None if seen.problem().is_none() => Some(words::READING_ACCOUNTS.into()),
-        None => Some(words::no_accounts_to_show(seen.os)),
+        None => Some(words::no_accounts_to_show(seen.front)),
         Some(status) if status.accounts.is_empty() && *footing != Footing::NoClaudeCode => {
-            Some(words::no_accounts_yet(seen.os))
+            Some(words::no_accounts_yet(seen.front))
         }
         Some(_) => None,
     }
@@ -242,9 +242,9 @@ pub(crate) fn updated_window(seen: &Seen) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::Front;
     use crate::present::testing::{Utc, claude_desktop, desktop_account, read, status};
     use crate::present::{AccountsShown, present_on, words};
-    use pitboard_core::host::Os;
 
     #[test]
     fn one_claude_desktop_account_is_offered_a_second_in_its_own_words() {
@@ -252,7 +252,7 @@ mod tests {
             status(vec![desktop_account("work", true)], Vec::new()),
             vec![claude_desktop()],
         );
-        let step = present_on(Os::MacOs, &state, 0, &Utc)
+        let step = present_on(Front::MacMenuBar, &state, 0, &Utc)
             .setup
             .expect("a second account offered");
         assert_eq!(step.title, words::add_a_second(Some("Claude Desktop")));
@@ -266,7 +266,7 @@ mod tests {
     fn a_mac_with_no_tool_lists_every_tool() {
         let state = read(status(Vec::new(), Vec::new()), Vec::new());
         let AccountsShown::NoTool { detail, .. } =
-            present_on(Os::MacOs, &state, 0, &Utc).accounts_shown
+            present_on(Front::MacMenuBar, &state, 0, &Utc).accounts_shown
         else {
             panic!("no tool here");
         };

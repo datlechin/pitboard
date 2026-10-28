@@ -8,11 +8,11 @@ use super::{
     AccountStanding, ActionKind, Choice, ItemAction, ItemOffer, LimitKind, LimitRow, MenuBarText,
     MenuNotices, NoteKind, Question, RowEnd, Seen, WarmDetail,
 };
-use crate::account_windows::{forget_message_on, windows_of_account};
+use crate::Front;
+use crate::account_windows::{forget_message, windows_of_account};
 use crate::model::{Intent, Place, SettingsSection, Sheet};
 use crate::{Account, AccountKey};
 use pitboard_core::duty::warm;
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{self, Stale};
@@ -206,7 +206,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     };
     let spoken_name = seen.name_of(account);
     let action = action(
-        seen.os,
+        seen.front,
         account,
         state.switch_under_way(),
         busy,
@@ -260,7 +260,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     } else {
         None
     };
-    let menu_title = words::named_in_menu(seen.os, &title, why_not.or(figure.as_deref()));
+    let menu_title = words::named_in_menu(seen.front, &title, why_not.or(figure.as_deref()));
     let spoken = words::row_spoken(
         &spoken_name,
         account.plan.as_deref(),
@@ -273,7 +273,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         })
     } else if in_use && action.is_none() {
         Some(RowEnd::InUse {
-            title: words::in_use(seen.os),
+            title: words::in_use(seen.front),
         })
     } else {
         // The login in use has an action only while it has no name: Add.
@@ -286,7 +286,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
     let note = |kind, text, action: Option<AccountAction>| AccountNote {
         kind,
         text,
-        learn: action.is_none().then(|| super::next::of_stale(seen.os)),
+        learn: action.is_none().then(|| super::next::of_stale(seen.front)),
         action,
     };
     let problem_note = if needs_sign_in {
@@ -333,7 +333,7 @@ pub(crate) fn item(seen: &Seen, account: &Account) -> AccountItem {
         } else {
             life
         },
-        warm: warm_choice(seen, account).map(|choice| warm_detail(seen.os, choice, warm_note)),
+        warm: warm_choice(seen, account).map(|choice| warm_detail(seen.front, choice, warm_note)),
         read_at,
         read: read_ago,
         notes: (notes.iter())
@@ -445,7 +445,7 @@ fn actions(
                 ),
                 does(
                     ActionKind::SignInAgain,
-                    words::sign_in_again(seen.os, true),
+                    words::sign_in_again(seen.front, true),
                     Intent::PresentSheet {
                         sheet: Sheet::SignInAgain {
                             account: named.clone(),
@@ -505,7 +505,7 @@ fn warm_up_now(seen: &Seen, account: &Account) -> Option<AccountAction> {
         .is_some_and(|overview| overview.halted.is_some());
     Some(AccountAction {
         kind: ActionKind::WarmUpNow,
-        title: words::warm_up_now(seen.os),
+        title: words::warm_up_now(seen.front),
         intent: Some(Intent::WarmNow {
             account: key.into(),
         }),
@@ -535,7 +535,7 @@ fn warm_note(seen: &Seen, account: &Account) -> Option<String> {
 }
 
 // `note` is what its line says, where it says anything.
-fn warm_detail(os: Os, choice: &warm::Choice, note: Option<String>) -> WarmDetail {
+fn warm_detail(front: Front, choice: &warm::Choice, note: Option<String>) -> WarmDetail {
     let (next_at, running_until) = match &choice.standing {
         Some(warm::Standing::Running { until, next }) => (*next, Some(*until)),
         Some(warm::Standing::Resting { at }) => (Some(*at), None),
@@ -549,7 +549,7 @@ fn warm_detail(os: Os, choice: &warm::Choice, note: Option<String>) -> WarmDetai
         next_at,
         running_until,
         settings: Choice {
-            title: words::warm_up_settings(os),
+            title: words::warm_up_settings(front),
             intent: Intent::Show {
                 place: Some(Place::Settings {
                     section: SettingsSection::WarmUp,
@@ -565,7 +565,7 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
     let key = account.key.as_ref().filter(|_| account.label.is_some())?;
     Some(AccountAction {
         kind: ActionKind::Remove,
-        title: words::remove_account(seen.os),
+        title: words::remove_account(seen.front),
         intent: Some(Intent::Forget {
             account: key.clone().into(),
         }),
@@ -574,7 +574,7 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
         enabled: !account.signed_in,
         confirm: Some(Question {
             title: words::remove_title(spoken_name),
-            message: forget_message_on(seen.os, account, seen.accounts()),
+            message: forget_message(seen.front, account, seen.accounts()),
             confirm: words::REMOVE.into(),
             destructive: true,
             confirm_is_default: true,
@@ -582,14 +582,14 @@ fn forget(seen: &Seen, account: &Account, spoken_name: &str) -> Option<AccountAc
     })
 }
 
-pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
+pub(crate) fn account_menu(front: Front) -> AccountMenuShown {
     AccountMenuShown {
         offers: vec![
             words::switch_account(None),
-            words::sign_in_again(os, true),
+            words::sign_in_again(front, true),
             words::rename(true).into(),
         ],
-        forget: words::remove_account(os),
+        forget: words::remove_account(front),
     }
 }
 
@@ -599,7 +599,7 @@ pub(crate) fn account_menu(os: Os) -> AccountMenuShown {
 /// sign-in under way holds back only another sign-in: it waits on a person in a browser, and
 /// switching meanwhile is theirs to do.
 fn action(
-    os: Os,
+    front: Front,
     account: &Account,
     switching: bool,
     busy: bool,
@@ -632,8 +632,8 @@ fn action(
         });
     }
     (!busy).then(|| ItemAction {
-        title: words::sign_in_asking(os),
-        spoken: words::sign_in_to_again(os, spoken, true),
+        title: words::sign_in_asking(front),
+        spoken: words::sign_in_to_again(front, spoken, true),
         intent: Intent::PresentSheet {
             sheet: Sheet::SignInAgain {
                 account: Key::new(account.provider, label).into(),
@@ -695,7 +695,7 @@ pub(crate) fn limits_said(seen: &Seen, account: &Account) -> String {
             (short, said::figure(limit.percent))
         })
         .collect();
-    words::limits_line(seen.os, &limits)
+    words::limits_line(seen.front, &limits)
 }
 
 fn kind_of(limit: &Window) -> LimitKind {
@@ -1042,7 +1042,7 @@ mod tests {
 
     fn bar(accounts: Vec<Account>, warnings: Vec<crate::Warning>) -> MenuBarText {
         let state = read(status(accounts, warnings), both_tools());
-        present_on(Os::Windows, &state, 0, &Utc).menu_bar
+        present_on(Front::WindowsNotificationArea, &state, 0, &Utc).menu_bar
     }
 
     /// The step of the limit the bar names, which an icon can show where the bar has no
@@ -1109,7 +1109,7 @@ mod tests {
         assert_eq!(warned.spoken, words::bar_spoken(Some(&work_42), None, true));
 
         let state = read(status(Vec::new(), Vec::new()), Vec::new());
-        let bare = present_on(Os::Windows, &state, 0, &Utc).menu_bar;
+        let bare = present_on(Front::WindowsNotificationArea, &state, 0, &Utc).menu_bar;
         assert!(bare.attention, "no tool here");
         assert_eq!(bare.spoken, words::bar_spoken(None, None, true));
     }
@@ -1143,7 +1143,7 @@ mod tests {
             ),
             both_tools(),
         );
-        let shown = present_on(Os::Windows, &state, 0, &Utc);
+        let shown = present_on(Front::WindowsNotificationArea, &state, 0, &Utc);
         let line = |section: usize| shown.sections[section].accounts[0].summary.clone();
         assert_eq!(
             shown.menu_bar.tip,
@@ -1165,7 +1165,7 @@ mod tests {
         let one = bar(vec![work()], Vec::new());
         let work_line = || {
             words::limits_line(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 &[(words::limit_short("5-hour", None), "12%".into())],
             )
         };
@@ -1189,7 +1189,7 @@ mod tests {
             words::bar_tip(true, [("work".into(), work_line())])
         );
         let state = read(status(Vec::new(), Vec::new()), Vec::new());
-        let bare = present_on(Os::Windows, &state, 0, &Utc).menu_bar;
+        let bare = present_on(Front::WindowsNotificationArea, &state, 0, &Utc).menu_bar;
         assert_eq!(bare.tip, words::bar_tip(true, []), "no tool here");
     }
 
@@ -1215,8 +1215,8 @@ mod tests {
     fn a_limits_row_says_its_names_figure_step_and_reset() {
         use crate::model::state::{Cadence, State};
         let now = 1_800_000_000;
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, now, &Utc, Os::MacOs);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, now, &Utc, Front::MacMenuBar);
         let limit = window("weekly_scoped", 72.4)
             .scope("Fable")
             .length(604_800)
@@ -1244,9 +1244,9 @@ mod tests {
         assert_eq!(due.level, crate::UsageLevel::Out);
     }
 
+    use crate::Front;
     use crate::present::present_on;
     use crate::present::testing::{Utc, desktop_account, read, status};
-    use pitboard_core::host::Os;
 
     const NOW: i64 = 1_800_000_000;
 
@@ -1256,7 +1256,7 @@ mod tests {
 
     fn desktop_rows(accounts: Vec<Account>) -> Vec<AccountItem> {
         let state = read(status(accounts, Vec::new()), vec![claude_desktop()]);
-        present_on(Os::MacOs, &state, NOW, &Utc)
+        present_on(Front::MacMenuBar, &state, NOW, &Utc)
             .sections
             .into_iter()
             .flat_map(|section| section.accounts)
@@ -1299,7 +1299,7 @@ mod tests {
     fn a_row_says_to_sign_in_again_to_a_parked_login_due_to_expire() {
         let row = |account: Account| {
             let state = read(status(vec![account], Vec::new()), vec![claude_code()]);
-            present_on(Os::MacOs, &state, NOW, &Utc)
+            present_on(Front::MacMenuBar, &state, NOW, &Utc)
                 .sections
                 .into_iter()
                 .flat_map(|section| section.accounts)
@@ -1326,9 +1326,9 @@ mod tests {
         assert!(ready.notes.is_empty(), "nothing until three days are left");
     }
 
-    fn menu_titles(os: Os, accounts: Vec<Account>) -> Vec<String> {
+    fn menu_titles(front: Front, accounts: Vec<Account>) -> Vec<String> {
         let state = read(status(accounts, Vec::new()), vec![claude_code()]);
-        present_on(os, &state, NOW, &Utc)
+        present_on(front, &state, NOW, &Utc)
             .sections
             .into_iter()
             .flat_map(|section| section.accounts)
@@ -1355,9 +1355,9 @@ mod tests {
                 .limits(vec![window("session", 3.0)])
                 .build(),
         ];
-        let named = |name, aside| words::named_in_menu(Os::Windows, name, aside);
+        let named = |name, aside| words::named_in_menu(Front::WindowsNotificationArea, name, aside);
         assert_eq!(
-            menu_titles(Os::Windows, accounts.clone()),
+            menu_titles(Front::WindowsNotificationArea, accounts.clone()),
             [
                 named("work", Some("64%")),
                 named("personal", Some("100%")),
@@ -1367,7 +1367,7 @@ mod tests {
             "the reason in place of the figure"
         );
         assert_eq!(
-            menu_titles(Os::MacOs, accounts),
+            menu_titles(Front::MacMenuBar, accounts),
             ["work", "personal", "spare", "old"]
         );
     }

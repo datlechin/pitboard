@@ -19,7 +19,7 @@ use crate::{
     Account, Choice, DownloadState, JumpAsk, LinkPicker, OpenWindow, PickerShown, Question,
     SiteMenu, WaitingShown, WindowWaiting, downloads_quit_question,
 };
-use pitboard_core::host::{OS, Os};
+use crate::{Engine, Front};
 use pitboard_core::provider::ProviderId;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Duration;
@@ -85,15 +85,18 @@ fn started_on_stand_ins(machine: &mut Stub) -> Hand {
     model
         .state
         .windows
-        .on(Os::MacOs, "pitboard-debug", "pitboard-fixture");
+        .on(Engine::WebKit, "pitboard-debug", "pitboard-fixture");
     model.send(Intent::Start);
     model.run(machine);
     model
 }
 
-fn started_on(os: Os, machine: &mut Stub) -> Hand {
-    let mut model = Hand::new();
-    model.state.windows.on(os, LINK_SCHEME, WEB_SCHEME);
+fn started_on(front: Front, machine: &mut Stub) -> Hand {
+    let mut model = Hand::on(front);
+    model
+        .state
+        .windows
+        .on(front.engine(), LINK_SCHEME, WEB_SCHEME);
     model.send(Intent::Start);
     model.run(machine);
     model
@@ -277,7 +280,7 @@ fn the_picker_says_what_stands_in_the_way() {
     assert_eq!(
         picker(&model).shown,
         PickerShown::Refused {
-            title: words::cannot_open_link(OS),
+            title: words::cannot_open_link(Front::MacMenuBar),
             reason: "Pitboard opens claude.ai and chatgpt.com links only. This link is on \
                      example.com."
                 .into(),
@@ -305,9 +308,9 @@ fn the_picker_says_what_stands_in_the_way() {
     else {
         panic!("the read that failed");
     };
-    assert_eq!(title, words::could_not_read_accounts(OS));
+    assert_eq!(title, words::could_not_read_accounts(Front::MacMenuBar));
     assert_eq!(detail, "No network.");
-    assert_eq!(retry.title, words::try_again(OS));
+    assert_eq!(retry.title, words::try_again(Front::MacMenuBar));
     assert_eq!(retry.intent, Intent::Refresh { asked: true });
 
     let mut codex_only = Stub::reading(Ok(status(vec![
@@ -326,10 +329,13 @@ fn the_picker_says_what_stands_in_the_way() {
     else {
         panic!("no account");
     };
-    assert_eq!((title, detail), words::no_site_account(OS, "claude.ai"));
+    assert_eq!(
+        (title, detail),
+        words::no_site_account(Front::MacMenuBar, "claude.ai")
+    );
     assert_eq!(link_text, "claude.ai/");
-    assert_eq!(in_browser, words::open_in_browser(OS));
-    assert_eq!(add.title, words::add_account(OS, true));
+    assert_eq!(in_browser, words::open_in_browser(Front::MacMenuBar));
+    assert_eq!(add.title, words::add_account(Front::MacMenuBar, true));
     assert_eq!(
         add.intent,
         Intent::PresentSheet {
@@ -349,7 +355,7 @@ fn the_inbox_takes_pitboard_links_of_its_own_scheme() {
     let mut machine = machine();
     let mut model = started_on_stand_ins(&mut machine);
     assert_eq!(model.shown().account_windows.picker, None);
-    let (title, detail) = words::no_link(OS);
+    let (title, detail) = words::no_link(Front::MacMenuBar);
     assert_eq!(
         model.shown().account_windows.no_link,
         crate::present::EmptyList { title, detail },
@@ -369,7 +375,7 @@ fn the_inbox_takes_pitboard_links_of_its_own_scheme() {
     assert_eq!(
         second.shown,
         PickerShown::Refused {
-            title: words::cannot_open_link(OS),
+            title: words::cannot_open_link(Front::MacMenuBar),
             reason: pitboard_sites::LinkRefusal::Unreadable.to_string(),
         },
         "another build's scheme"
@@ -520,10 +526,10 @@ fn a_window_that_cannot_show_its_page_says_why_in_the_models_words() {
         WindowWaiting {
             window_title: words::ACCOUNT.into(),
             shown: WaitingShown::ReadFailed {
-                title: words::could_not_read_accounts(OS),
+                title: words::could_not_read_accounts(Front::MacMenuBar),
                 detail: "could not read Pitboard's account list".into(),
                 retry: Choice {
-                    title: words::try_again(OS),
+                    title: words::try_again(Front::MacMenuBar),
                     intent: Intent::Refresh { asked: true },
                     enabled: true,
                 },
@@ -1070,7 +1076,7 @@ fn a_window_waits_while_its_old_store_is_held() {
     let mut machine = machine();
     machine.windows_file = Some(file(&[(DANA, &[&personal])]));
     machine.answer = Ok(status(without("personal")));
-    let mut model = started_on(Os::Windows, &mut machine);
+    let mut model = started_on(Front::WindowsNotificationArea, &mut machine);
     assert_eq!(deleting(&model), vec![personal.clone()]);
     model.send(Intent::StoreHeld {
         store: personal.to_uppercase(),
@@ -1123,14 +1129,14 @@ fn a_held_store_is_still_held_after_a_restart() {
     let mut machine = machine();
     machine.windows_file = Some(file(&[(DANA, &[&personal])]));
     machine.answer = Ok(status(without("personal")));
-    let mut model = started_on(Os::Windows, &mut machine);
+    let mut model = started_on(Front::WindowsNotificationArea, &mut machine);
     model.send(Intent::StoreHeld {
         store: personal.clone(),
     });
     model.run(&mut machine);
 
     machine.answer = Ok(status(two_tools()));
-    let mut model = started_on(Os::Windows, &mut machine);
+    let mut model = started_on(Front::WindowsNotificationArea, &mut machine);
     assert_eq!(deleting(&model), vec![personal.clone()], "asked again");
     assert_eq!(model.shown().account_windows.held, vec![personal.clone()]);
     model.send(Intent::WindowOpened {
@@ -1154,7 +1160,7 @@ fn a_held_store_another_directory_recorded_meanwhile_is_still_deleted() {
     let mut machine = machine();
     machine.windows_file = Some(file(&[(DANA, &[&personal])]));
     machine.answer = Ok(status(without("personal")));
-    let mut model = started_on(Os::Windows, &mut machine);
+    let mut model = started_on(Front::WindowsNotificationArea, &mut machine);
     model.send(Intent::StoreHeld {
         store: personal.clone(),
     });
@@ -1195,7 +1201,7 @@ fn a_mac_keeps_a_held_store_whose_account_is_enrolled_again() {
     let mut machine = machine();
     machine.windows_file = Some(file(&[(DANA, &[&personal])]));
     machine.answer = Ok(status(without("personal")));
-    let mut model = started_on(Os::MacOs, &mut machine);
+    let mut model = started_on(Front::MacMenuBar, &mut machine);
     assert_eq!(deleting(&model), vec![personal.clone()]);
     model.send(Intent::StoreHeld {
         store: personal.to_uppercase(),
@@ -1575,11 +1581,13 @@ fn a_window_on_windows_offers_no_clear_of_its_downloads() {
 /// Swift tested nowhere.
 #[test]
 fn quitting_while_downloads_run_asks_first() {
-    let question = |running| {
-        let (title, message, confirm) = words::quit_with_downloads(OS, running);
-        Question::asking(title, message.into(), confirm.into())
-    };
-    assert_eq!(downloads_quit_question(0), None);
-    assert_eq!(downloads_quit_question(1), Some(question(1)));
-    assert_eq!(downloads_quit_question(2), Some(question(2)));
+    for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+        let question = |running| {
+            let (title, message, confirm) = words::quit_with_downloads(front, running);
+            Question::asking(title, message.into(), confirm.into())
+        };
+        assert_eq!(downloads_quit_question(front, 0), None);
+        assert_eq!(downloads_quit_question(front, 1), Some(question(1)));
+        assert_eq!(downloads_quit_question(front, 2), Some(question(2)));
+    }
 }

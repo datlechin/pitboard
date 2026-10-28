@@ -1,8 +1,8 @@
 // What to do about a failure, a notice or a note: an action in the app, or the docs about its code.
 
 use super::{Choice, NextStep, SetupLink, words};
+use crate::Front;
 use crate::model::{Intent, Place, Sheet};
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 
@@ -12,7 +12,7 @@ const ERRORS: &str = "https://docs.usepitboard.com/reference/errors";
 const CHECKS: &str = "https://docs.usepitboard.com/reference/maintenance-commands#doctor";
 
 // A failure's next step, by its code and the account it is about; with no code, it was lost.
-pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> NextStep {
+pub(crate) fn of_failure(front: Front, code: Option<&str>, account: Option<&Key>) -> NextStep {
     let act = |title: String, intent: Intent| NextStep::Act {
         choice: Choice {
             title,
@@ -35,7 +35,7 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> N
             | "sign_in_not_kept",
             Some(key),
         ) => act(
-            words::sign_in_again(os, true),
+            words::sign_in_again(front, true),
             Intent::PresentSheet {
                 sheet: Sheet::SignInAgain {
                     account: key.clone().into(),
@@ -43,7 +43,7 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> N
             },
         ),
         ("account_unknown", key) => act(
-            words::add_account(os, true),
+            words::add_account(front, true),
             Intent::PresentSheet {
                 sheet: Sheet::Add {
                     tool: key.map(|key| key.provider.into()),
@@ -51,14 +51,14 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> N
             },
         ),
         ("live_account_not_enrolled", Some(key)) => act(
-            words::add_account(os, true),
+            words::add_account(front, true),
             Intent::Enrol {
                 tool: key.provider.into(),
             },
         ),
         // Pitboard asked ChatGPT to quit before a switch, and it stayed open.
         ("app_open", Some(key)) if key.provider != ProviderId::Desktop => act(
-            words::try_again(os),
+            words::try_again(front),
             Intent::SwitchTo {
                 account: key.clone().into(),
             },
@@ -82,7 +82,7 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> N
             | "claude_config_not_json",
             _,
         ) => act(
-            words::show_diagnostics(os),
+            words::show_diagnostics(front),
             Intent::Show {
                 place: Some(Place::Checks),
             },
@@ -90,33 +90,33 @@ pub(crate) fn of_failure(os: Os, code: Option<&str>, account: Option<&Key>) -> N
         (code, key) => {
             let desktop = key.is_some_and(|key| key.provider == ProviderId::Desktop);
             NextStep::Learn {
-                link: learn_more(os, error_section(code, desktop)),
+                link: learn_more(front, error_section(code, desktop)),
             }
         }
     }
 }
 
 // The error page's part about a warning's code.
-pub(crate) fn of_warning(os: Os) -> SetupLink {
-    learn_more(os, Some("warning-codes"))
+pub(crate) fn of_warning(front: Front) -> SetupLink {
+    learn_more(front, Some("warning-codes"))
 }
 
 // The error page's part about why a row's numbers are old or its account can't be used.
-pub(crate) fn of_stale(os: Os) -> SetupLink {
-    learn_more(os, Some("stale-codes"))
+pub(crate) fn of_stale(front: Front) -> SetupLink {
+    learn_more(front, Some("stale-codes"))
 }
 
 // A check nothing in the app puts right.
-pub(crate) fn of_check(os: Os) -> SetupLink {
+pub(crate) fn of_check(front: Front) -> SetupLink {
     SetupLink {
-        title: words::learn_more(os),
+        title: words::learn_more(front),
         link: CHECKS.into(),
     }
 }
 
-fn learn_more(os: Os, section: Option<&str>) -> SetupLink {
+fn learn_more(front: Front, section: Option<&str>) -> SetupLink {
     SetupLink {
-        title: words::learn_more(os),
+        title: words::learn_more(front),
         link: section.map_or_else(|| ERRORS.into(), |section| format!("{ERRORS}#{section}")),
     }
 }
@@ -316,7 +316,11 @@ mod tests {
 
     #[test]
     fn a_failure_the_app_can_do_something_about_offers_it() {
-        let act = |code, account: Option<&Key>| match of_failure(Os::MacOs, Some(code), account) {
+        let act = |code, account: Option<&Key>| match of_failure(
+            Front::MacMenuBar,
+            Some(code),
+            account,
+        ) {
             NextStep::Act { choice } => Some(choice.intent),
             NextStep::Learn { .. } => None,
         };
@@ -345,7 +349,7 @@ mod tests {
             Some(Intent::Enrol { tool: Tool::Claude })
         );
         assert_eq!(
-            of_failure(Os::Windows, None, None),
+            of_failure(Front::WindowsNotificationArea, None, None),
             NextStep::Act {
                 choice: Choice {
                     title: words::REFRESH.into(),
@@ -356,26 +360,26 @@ mod tests {
         );
         assert_eq!(
             of_failure(
-                Os::MacOs,
+                Front::MacMenuBar,
                 Some("app_open"),
                 Some(&Key::new(ProviderId::Desktop, "home"))
             ),
             NextStep::Learn {
                 link: SetupLink {
-                    title: words::learn_more(Os::MacOs),
+                    title: words::learn_more(Front::MacMenuBar),
                     link: format!("{ERRORS}#claude-desktop"),
                 },
             }
         );
         assert_eq!(
             of_failure(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 Some("app_open"),
                 Some(&Key::new(ProviderId::Codex, "work"))
             ),
             NextStep::Act {
                 choice: Choice {
-                    title: words::try_again(Os::Windows),
+                    title: words::try_again(Front::WindowsNotificationArea),
                     intent: Intent::SwitchTo {
                         account: AccountKey::new(Tool::Codex, "work")
                     },
@@ -384,10 +388,10 @@ mod tests {
             }
         );
         assert_eq!(
-            of_failure(Os::Windows, Some("not_a_code_yet"), None),
+            of_failure(Front::WindowsNotificationArea, Some("not_a_code_yet"), None),
             NextStep::Learn {
                 link: SetupLink {
-                    title: words::learn_more(Os::Windows),
+                    title: words::learn_more(Front::WindowsNotificationArea),
                     link: ERRORS.into(),
                 },
             }

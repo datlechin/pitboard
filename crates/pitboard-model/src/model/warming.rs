@@ -9,13 +9,13 @@ use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
 use super::{Doing, Intent, RunOutNotice};
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::{ActionKind, WarmDetail, words};
 use crate::{Account, PitboardError};
 use pitboard_core::duty::warm::{Choice, Failure, Halt, Overview, Range, Standing};
 use pitboard_core::error::Error;
-use pitboard_core::host::OS;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::warm::{Apart, WarmUp, told_apart};
@@ -30,7 +30,7 @@ const UNTIL: i64 = 1_800_007_200;
 // Plan 4.3: the inspector's warm-up standing comes with Warm-Up Settings…, to its hours and toggles.
 fn to_its_settings() -> crate::present::Choice {
     crate::present::Choice {
-        title: words::warm_up_settings(OS),
+        title: words::warm_up_settings(Front::MacMenuBar),
         intent: Intent::Show {
             place: Some(super::Place::Settings {
                 section: super::SettingsSection::WarmUp,
@@ -195,7 +195,7 @@ fn a_warm_up_by_itself_that_came_to_nothing_is_notified_once_and_waits() {
         machine.posted,
         [RunOutNotice {
             id: "warm-failed/personal/warm_up_not_started".into(),
-            title: words::could_not_warm_itself(OS),
+            title: words::could_not_warm_itself(Front::MacMenuBar),
             subtitle: Some("Claude Code".into()),
             body: "`personal` was not warmed up: the request was answered, and Anthropic \
                    still has no period running."
@@ -492,7 +492,7 @@ fn a_row_says_where_its_warm_up_stands_and_its_menu_offers_warm_up_now() {
         warm,
         [(
             ActionKind::WarmUpNow,
-            words::warm_up_now(OS).as_str(),
+            words::warm_up_now(Front::MacMenuBar).as_str(),
             false
         )],
         "its period runs, so nothing to start now"

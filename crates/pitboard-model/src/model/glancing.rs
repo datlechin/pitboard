@@ -6,6 +6,7 @@ use super::testing::platform::StandInApps;
 use super::testing::records::{CHATGPT, chatgpt_holding, codex, refusal, status, switched};
 use super::{Doing, Intent, OutsideAnswer, OutsideAsk};
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::present::testing::{LimitExt, account, unplaced, window};
 use crate::present::{Question, glance_id, words};
@@ -224,7 +225,7 @@ fn a_glance_is_its_golden_file() {
     machine.found = vec![codex()];
     let model = glancing(&mut machine);
     let made = crate::present::glance_on(
-        pitboard_core::host::Os::MacOs,
+        Front::MacMenuBar,
         &model.state,
         model.now.epoch(),
         &crate::present::testing::Utc,
@@ -369,7 +370,7 @@ fn a_switch_from_outside_that_would_quit_an_app_quits_nothing_and_answers_with_t
             question: Some(Question::asking(
                 words::quit_to_switch("ChatGPT"),
                 words::quit_and_reopen("ChatGPT"),
-                words::quit_and_switch(pitboard_core::host::OS, "ChatGPT"),
+                words::quit_and_switch(Front::MacMenuBar, "ChatGPT"),
             )),
         }]
     );

@@ -27,7 +27,7 @@ struct AccountInspector: View {
             .formStyle(.grouped)
             .accessibilityIdentifier("inspector")
         } else {
-            ContentUnavailableView(words.window.noSelection ?? "", systemImage: Symbol.account)
+            ContentUnavailableView(macWords.noSelection, systemImage: Symbol.account)
                 .accessibilityIdentifier("inspector")
         }
     }

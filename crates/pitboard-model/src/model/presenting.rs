@@ -13,9 +13,10 @@ use super::testing::records::{
 };
 use super::{Cause, Doing, Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::account_windows::WindowAccount;
-use crate::account_windows::forget_message_on;
+use crate::account_windows::forget_message;
 use crate::present::testing::{LimitExt, Unreadable, account, unplaced, window};
 use crate::present::words;
 use crate::present::{
@@ -24,7 +25,6 @@ use crate::present::{
     PanelNotice, Question, RowEnd, SetupStep, Severity, present,
 };
 use crate::{Abandoned, Account, EnrolledAs, GaveUp, Warning};
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
@@ -179,7 +179,7 @@ fn ids(shown: &Snapshot) -> Vec<String> {
 
 fn cancel_switch() -> NoticeAction {
     NoticeAction {
-        title: words::cancel_switch(OS, true),
+        title: words::cancel_switch(Front::MacMenuBar, true),
         intent: Intent::AbandonStuckSwitch,
         dismisses: false,
         switches: false,
@@ -187,7 +187,7 @@ fn cancel_switch() -> NoticeAction {
         confirm: Some(Question::asking(
             words::CANCEL_SWITCH_QUESTION.into(),
             words::cancel_stuck(&[]),
-            words::cancel_switch(OS, false),
+            words::cancel_switch(Front::MacMenuBar, false),
         )),
     }
 }
@@ -693,8 +693,8 @@ fn pressing_an_account_does_the_one_thing_its_state_allows() {
     assert_eq!(
         stale.action.map(|action| (action.title, action.spoken)),
         Some((
-            words::sign_in_asking(OS),
-            words::sign_in_to_again(OS, "stale", true)
+            words::sign_in_asking(Front::MacMenuBar),
+            words::sign_in_to_again(Front::MacMenuBar, "stale", true)
         )),
         "plan 4.3's row button"
     );
@@ -797,7 +797,7 @@ fn a_row_says_what_ends_it() {
     assert_eq!(
         work.end,
         Some(RowEnd::InUse {
-            title: words::in_use(OS)
+            title: words::in_use(Front::MacMenuBar)
         })
     );
     let spare = described(account(Some("spare")).build());
@@ -871,7 +871,7 @@ fn a_sign_in_running_holds_back_only_another_sign_in() {
 #[test]
 fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     let again = sign_in_again;
-    let sign_in_again = words::sign_in_again(OS, true);
+    let sign_in_again = words::sign_in_again(Front::MacMenuBar, true);
     let renames = words::rename(true);
     let offer = |title: &str, intent: Intent| ItemOffer {
         title: title.into(),
@@ -924,7 +924,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
     assert_eq!(
         removes(spare_row),
         Some(ItemOffer {
-            title: words::remove_account(OS),
+            title: words::remove_account(Front::MacMenuBar),
             intent: Intent::Forget {
                 account: AccountKey::new(Tool::Claude, "spare")
             },
@@ -933,7 +933,7 @@ fn an_accounts_own_menu_offers_what_can_be_done_to_it() {
                 destructive: true,
                 ..Question::asking(
                     words::remove_title("spare"),
-                    forget_message_on(OS, &spare, &accounts),
+                    forget_message(Front::MacMenuBar, &spare, &accounts),
                     words::REMOVE.into(),
                 )
             }),
@@ -991,15 +991,15 @@ fn the_account_menu_with_nothing_selected_keeps_its_items() {
         AccountMenuShown {
             offers: vec![
                 words::switch_account(None),
-                words::sign_in_again(Os::MacOs, true),
+                words::sign_in_again(Front::MacMenuBar, true),
                 words::rename(true).into()
             ],
-            forget: words::remove_account(Os::MacOs),
+            forget: words::remove_account(Front::MacMenuBar),
         }
     );
     assert_eq!(
         model.on_windows().account_menu.offers[1],
-        words::sign_in_again(Os::Windows, true)
+        words::sign_in_again(Front::WindowsNotificationArea, true)
     );
 }
 
@@ -1158,8 +1158,8 @@ fn summaries(limits: Vec<Window>) -> [String; 2] {
 fn limits_are_said_in_one_line_the_first_saying_what_its_figure_is() {
     let lines = |limits: &[(String, String)]| {
         [
-            words::limits_line(Os::MacOs, limits),
-            words::limits_line(Os::Windows, limits),
+            words::limits_line(Front::MacMenuBar, limits),
+            words::limits_line(Front::WindowsNotificationArea, limits),
         ]
     };
     assert_eq!(
@@ -1200,7 +1200,7 @@ fn a_reached_limit_says_when_it_resets() {
     };
     let five_hour = words::limit_title("5-hour", None);
     let reached = |at: Option<&str>| words::limit_reached(&five_hour, at);
-    let full = words::limits_line(OS, &[at("5-hour", None, "100%")]);
+    let full = words::limits_line(Front::MacMenuBar, &[at("5-hour", None, "100%")]);
     assert_eq!(spent(100.0, Some(today)), reached(Some("14:00")));
     assert_eq!(spent(100.0, Some(later)), reached(Some("Fri 12:00")));
     assert_eq!(spent(100.0, None), reached(None));
@@ -1515,7 +1515,7 @@ fn only_an_enrolled_account_not_in_use_may_be_forgotten() {
         forget.confirm,
         Some(Question {
             title: words::remove_title("spare"),
-            message: forget_message_on(OS, &spare, &accounts),
+            message: forget_message(Front::MacMenuBar, &spare, &accounts),
             confirm: words::REMOVE.into(),
             destructive: true,
             confirm_is_default: true,
@@ -1567,7 +1567,7 @@ fn an_account_that_cannot_be_switched_to_is_signed_in_to_again_from_the_panel() 
     assert_eq!(
         shown[2].action.as_ref().map(|action| action.spoken.clone()),
         Some(words::sign_in_to_again(
-            OS,
+            Front::MacMenuBar,
             &words::named_with_tool("work", "Codex"),
             true
         )),
@@ -1854,7 +1854,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
             &words::could_not(&Doing::ReadUsage),
             &[reason, words::LAST_MEASURED],
             vec![NoticeAction {
-                title: words::try_again(OS),
+                title: words::try_again(Front::MacMenuBar),
                 intent: Intent::Refresh { asked: true },
                 dismisses: false,
                 switches: false,
@@ -1896,10 +1896,10 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     let reason = "/Users/dana/.pitboard/state.json was written on another Mac.";
     let failed = || Err(refusal("state_wrong_machine", reason, Vec::new()));
     let read_failed = AccountsShown::ReadFailed {
-        title: words::could_not_read_accounts(OS),
+        title: words::could_not_read_accounts(Front::MacMenuBar),
         detail: reason.into(),
         retry: Choice {
-            title: words::try_again(OS),
+            title: words::try_again(Front::MacMenuBar),
             intent: Intent::Refresh { asked: true },
             enabled: true,
         },
@@ -1986,7 +1986,7 @@ fn the_panes_try_again_is_held_back_while_the_accounts_are_read() {
     assert_eq!(
         retry(&model),
         Choice {
-            title: words::try_again(OS),
+            title: words::try_again(Front::MacMenuBar),
             intent: Intent::Refresh { asked: true },
             enabled: false,
         }
@@ -2143,6 +2143,7 @@ fn a_switch_that_sessions_take_at_renewal_counts_down_nothing() {
     let at_renewal = crate::Adoption::AtRenewal { file: path.into() };
     assert_eq!(
         crate::present::auto_switched_notice(
+            Front::MacMenuBar,
             "personal",
             "work",
             &(
@@ -2184,7 +2185,7 @@ fn a_switch_that_needs_a_restart_is_a_warning_without_a_countdown() {
     assert_eq!(
         model.shown().notices,
         [PanelNotice {
-            learn: Some(crate::present::next::of_warning(OS)),
+            learn: Some(crate::present::next::of_warning(Front::MacMenuBar)),
             ..notice(
                 "switch/codex",
                 Severity::Warning,
@@ -2316,7 +2317,7 @@ fn a_sign_in_that_put_a_new_login_in_use_says_the_account_has_one() {
     assert_eq!(
         model.shown().notices,
         [PanelNotice {
-            learn: Some(crate::present::next::of_warning(OS)),
+            learn: Some(crate::present::next::of_warning(Front::MacMenuBar)),
             ..notice(
                 "switch/codex",
                 Severity::Warning,
@@ -2767,7 +2768,7 @@ fn the_config_names_another_notice_offers_to_update_it() {
     assert_eq!(
         shown.notices[0].actions,
         [NoticeAction {
-            title: words::update_config(OS),
+            title: words::update_config(Front::MacMenuBar),
             intent: Intent::UpdateConfig {
                 account: AccountKey::new(Tool::Claude, "work")
             },
@@ -2832,7 +2833,7 @@ fn a_notices_action_is_either_a_button_or_what_puts_it_away() {
     assert_eq!(
         titles,
         [
-            words::cancel_switch(OS, true),
+            words::cancel_switch(Front::MacMenuBar, true),
             words::switch_to("spare"),
             words::DISMISS.into(),
             words::DISMISS.into()
@@ -2863,7 +2864,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     assert_eq!(
         menu.others,
         Some(MenuEntry {
-            title: words::issues(OS, 1),
+            title: words::issues(Front::MacMenuBar, 1),
             subtitle: Some(words::warning_heading(&overridden()).into()),
             help: Some("ANTHROPIC_API_KEY is set".into()),
             severity: Some(Severity::Warning),
@@ -2881,7 +2882,7 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     ));
     model.refresh(&mut machine);
     let others = model.shown().menu_notices.others.expect("one item");
-    assert_eq!(others.title, words::issues(OS, 2));
+    assert_eq!(others.title, words::issues(Front::MacMenuBar, 2));
     assert_eq!(others.subtitle.as_deref(), Some(words::SWITCH_WAITING));
     assert_eq!(others.help, None);
     assert_eq!(others.severity, Some(Severity::Error));
@@ -2906,7 +2907,10 @@ fn the_menu_says_what_needs_attention_in_one_item() {
     nothing.found = Vec::new();
     bare.refresh(&mut nothing);
     let install = bare.shown().menu_notices.install.expect("how to install");
-    assert_eq!(install.title, words::claude_code_not_installed(OS));
+    assert_eq!(
+        install.title,
+        words::claude_code_not_installed(Front::MacMenuBar)
+    );
     assert_eq!(install.subtitle.as_deref(), Some(words::LEARN_TO_INSTALL));
     assert_eq!(
         install.link.as_deref(),
@@ -2928,7 +2932,7 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
     ]);
     let shown = model.shown();
     let entry = |label: &str, standing| MenuEntry {
-        title: words::sign_in_to_again(OS, label, true),
+        title: words::sign_in_to_again(Front::MacMenuBar, label, true),
         subtitle: Some(words::sign_in_standing(standing).into()),
         help: None,
         severity: None,
@@ -2967,7 +2971,7 @@ fn the_menu_offers_each_sign_in_again_at_its_top() {
     assert_eq!(
         (old.title.as_str(), old.subtitle.as_deref()),
         (
-            words::sign_in_to_again(OS, "old", true).as_str(),
+            words::sign_in_to_again(Front::MacMenuBar, "old", true).as_str(),
             Some(
                 words::of_tool(
                     Some("Claude Code"),
@@ -3050,19 +3054,22 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     unknown.refresh(&mut machine);
     assert_eq!(
         unknown.shown().menu_accounts_note,
-        Some(words::no_accounts_to_show(OS))
+        Some(words::no_accounts_to_show(Front::MacMenuBar))
     );
 
     let (empty, _) = reading(Vec::new());
     let shown = empty.shown();
-    assert_eq!(shown.menu_accounts_note, Some(words::no_accounts_yet(OS)));
+    assert_eq!(
+        shown.menu_accounts_note,
+        Some(words::no_accounts_yet(Front::MacMenuBar))
+    );
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::NoAccounts {
-            title: words::no_accounts(OS).0,
-            detail: words::no_accounts(OS).1.into(),
+            title: words::no_accounts(Front::MacMenuBar).0,
+            detail: words::no_accounts(Front::MacMenuBar).1.into(),
             add: Choice {
-                title: words::add_account(OS, true),
+                title: words::add_account(Front::MacMenuBar, true),
                 intent: present_sheet(Sheet::Add { tool: None }),
                 enabled: true,
             },
@@ -3078,9 +3085,9 @@ fn where_there_are_no_accounts_the_menu_and_the_window_say_why() {
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::NoTool {
-            title: words::claude_code_not_installed(Os::MacOs),
+            title: words::claude_code_not_installed(Front::MacMenuBar),
             detail: words::no_tool("Claude Code, Codex and Claude Desktop"),
-            link_title: words::how_to_install_claude_code(Os::MacOs),
+            link_title: words::how_to_install_claude_code(Front::MacMenuBar),
             link: "https://docs.claude.com/en/docs/claude-code/setup".into(),
         }
     );
@@ -3204,14 +3211,14 @@ fn one_enrolled_account_is_told_there_is_nothing_to_switch_to() {
             detail: words::only_one("work", None, None),
             actions: vec![
                 Choice {
-                    title: words::add_account(OS, true),
+                    title: words::add_account(Front::MacMenuBar, true),
                     intent: present_sheet(Sheet::Add {
                         tool: Some(Tool::Claude)
                     }),
                     enabled: true,
                 },
                 Choice {
-                    title: words::not_now(OS),
+                    title: words::not_now(Front::MacMenuBar),
                     intent: Intent::DeclineSecondAccount { tool: Tool::Claude },
                     enabled: true,
                 },
@@ -3237,12 +3244,12 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
             detail: words::at_limit_tip(95),
             actions: vec![
                 Choice {
-                    title: words::open_settings(Os::MacOs),
+                    title: words::open_settings(Front::MacMenuBar),
                     intent: Intent::ShowLimits,
                     enabled: true,
                 },
                 Choice {
-                    title: words::not_now(Os::MacOs),
+                    title: words::not_now(Front::MacMenuBar),
                     intent: Intent::DeclineTip { tip: Tip::AtLimit },
                     enabled: true,
                 },
@@ -3257,8 +3264,8 @@ fn two_accounts_are_asked_what_happens_at_a_limit() {
             .map(|choice| choice.title.clone())
             .collect::<Vec<_>>(),
         [
-            words::open_settings(Os::Windows),
-            words::not_now(Os::Windows)
+            words::open_settings(Front::WindowsNotificationArea),
+            words::not_now(Front::WindowsNotificationArea)
         ]
     );
 
@@ -3308,12 +3315,12 @@ fn codex_found_with_nothing_of_it_enrolled_is_offered() {
             detail: words::CODEX_UNUSED.into(),
             actions: vec![
                 Choice {
-                    title: words::add_codex_account(Os::MacOs),
+                    title: words::add_codex_account(Front::MacMenuBar),
                     intent: Intent::Enrol { tool: Tool::Codex },
                     enabled: true,
                 },
                 Choice {
-                    title: words::not_now(Os::MacOs),
+                    title: words::not_now(Front::MacMenuBar),
                     intent: Intent::DeclineTip { tip: Tip::UseCodex },
                     enabled: true,
                 },
@@ -3648,7 +3655,7 @@ fn each_sheet_says_what_it_is_for() {
         model.shown().sheet_text.expect("the sheet")
     };
     let add = shown(Sheet::Add { tool: None });
-    assert_eq!(add.title, words::add_account(OS, false));
+    assert_eq!(add.title, words::add_account(Front::MacMenuBar, false));
     assert_eq!(add.message, words::sign_in_message("Claude Code", None));
     assert_eq!(add.name, "", "a sign-in takes no name");
     assert_eq!(add.account, None);
@@ -3656,7 +3663,10 @@ fn each_sheet_says_what_it_is_for() {
     let again = shown(Sheet::SignInAgain {
         account: AccountKey::new(Tool::Codex, "work"),
     });
-    assert_eq!(again.title, words::sign_in_to_again(OS, "work", false));
+    assert_eq!(
+        again.title,
+        words::sign_in_to_again(Front::MacMenuBar, "work", false)
+    );
     assert_eq!(again.message, words::sign_in_message("Codex", Some("work")));
     assert_eq!(again.account.as_deref(), Some("work"));
 
@@ -3664,7 +3674,7 @@ fn each_sheet_says_what_it_is_for() {
         account: AccountKey::new(Tool::Codex, "acme"),
         email: "c@example.com".into(),
     });
-    assert_eq!(name.title, words::name_this_account(OS));
+    assert_eq!(name.title, words::name_this_account(Front::MacMenuBar));
     assert_eq!(name.message, words::naming("c@example.com", "Codex"));
     assert_eq!(
         (name.name.as_str(), name.prompt.as_str()),
@@ -3697,7 +3707,7 @@ fn each_sheets_default_button_says_what_it_does() {
         model.send(present_sheet(sheet));
         model.shown().sheet_text.expect("the sheet").confirm
     };
-    let sign_in = words::sign_in_asking(OS);
+    let sign_in = words::sign_in_asking(Front::MacMenuBar);
     assert_eq!(confirm(Sheet::Add { tool: None }), sign_in);
     assert_eq!(
         confirm(Sheet::SignInAgain {
@@ -3741,7 +3751,10 @@ fn a_sign_in_under_way_says_what_to_do_in_the_browser() {
         put_back: None,
     });
     let text = model.shown().signing_in_text.expect("what it says");
-    assert_eq!(text.title, words::signing_in_to(OS, "Claude Code"));
+    assert_eq!(
+        text.title,
+        words::signing_in_to(Front::MacMenuBar, "Claude Code")
+    );
     assert!(text.offers_link, "a browser sign-in offers its page");
     assert_eq!(text.message, words::finish_in_browser(None));
     assert_eq!(text.code_note, words::code_note("Claude Code"));
@@ -3783,7 +3796,7 @@ fn the_question_about_quitting_an_app_is_asked_in_its_name() {
     assert_eq!(asked.question.title, words::quit_to_switch("ChatGPT"));
     assert_eq!(
         asked.question.confirm,
-        words::quit_and_switch(OS, "ChatGPT")
+        words::quit_and_switch(Front::MacMenuBar, "ChatGPT")
     );
     model.send(asked.declined);
     assert_eq!(model.shown().quit_question, None);
@@ -4088,7 +4101,7 @@ fn the_quit_question_is_carried_with_the_sheet_it_was_asked_from() {
     assert_eq!(shown.sheet, Some(add(Some(Tool::Desktop))));
     assert_eq!(
         shown.quit_question.expect("asked").question.confirm,
-        words::quit_and_continue(Os::MacOs, "Claude")
+        words::quit_and_continue(Front::MacMenuBar, "Claude")
     );
     assert!(
         shown.sheet_text.expect("the form").saving,
@@ -4112,7 +4125,7 @@ fn a_use_refused_in_doubt_opens_the_add_sheet_on_the_account_claude_shows() {
     let form = model.on_a_mac().sheet_text.expect("the form");
     assert_eq!(
         form.confirm,
-        words::add_account_shown(Os::MacOs, "Claude", false)
+        words::add_account_shown(Front::MacMenuBar, "Claude", false)
     );
     assert_eq!(form.message, words::add_unidentified("Claude"));
 }
@@ -4135,7 +4148,7 @@ fn escape_never_leaves_an_add_with_its_account_parked() {
     assert_eq!(waiting.cancel.title, words::LATER);
     assert_eq!(
         waiting.undo.map(|undo| undo.title),
-        Some(words::switch_back_to(Os::MacOs, "work"))
+        Some(words::switch_back_to(Front::MacMenuBar, "work"))
     );
 }
 

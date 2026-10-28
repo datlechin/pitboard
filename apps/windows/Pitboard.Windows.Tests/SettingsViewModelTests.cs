@@ -108,17 +108,17 @@ public sealed class SettingsViewModelTests
     {
         Assert.AreEqual(PitboardModelMethods.NoUpdateKey(), SettingsViewModel.UpdatesNotes(new NoUpdates(), "0.0.0").Single());
         CollectionAssert.AreEqual(
-            new[] { PitboardModelMethods.NoUpdateKey(), Words.Settings.BetaUpdates },
+            new[] { PitboardModelMethods.NoUpdateKey(), Words.Own.BetaUpdates },
             SettingsViewModel.UpdatesNotes(new NoUpdates(), "1.0.0-beta.1"));
         Assert.IsEmpty(SettingsViewModel.UpdatesNotes(new StandInUpdates(), "1.0.0"));
         Assert.AreEqual(
-            Words.Settings.UpdateKeyInvalid,
-            SettingsViewModel.UpdatesNotes(new NoUpdates(Words.Settings.UpdateKeyInvalid), "1.0.0").Single());
+            Words.Own.UpdateKeyInvalid,
+            SettingsViewModel.UpdatesNotes(new NoUpdates(Words.Own.UpdateKeyInvalid), "1.0.0").Single());
 
         var waiting = new StandInUpdates(beta: true);
         waiting.Feed(found: false);
         CollectionAssert.AreEqual(
-            new[] { Words.Settings.NoReleaseToUpdateTo, Words.Settings.BetaUpdates },
+            new[] { Words.Own.NoReleaseToUpdateTo, Words.Own.BetaUpdates },
             SettingsViewModel.UpdatesNotes(waiting, "1.0.0-beta.4"));
     }
 
@@ -300,7 +300,7 @@ public sealed class SettingsViewModelTests
         var (shown, _, _) = Over(Snapshots.Read(1), start);
 
         Assert.IsFalse(shown.CanStartAtSignIn);
-        Assert.AreEqual(Words.Settings.DebugNeverStarts, shown.StartupNote);
+        Assert.AreEqual(Words.Own.DebugNeverStarts, shown.StartupNote);
     }
 
     // As the welcome says under the same switch: what starting at sign-in is for, where nothing holds it back.
@@ -325,7 +325,7 @@ public sealed class SettingsViewModelTests
 
         Assert.IsFalse(shown.StartsAtSignIn);
         Assert.IsFalse(shown.CanStartAtSignIn);
-        Assert.AreEqual(Words.Settings.StartupTurnedOff, shown.StartupNote);
+        Assert.AreEqual(Words.Own.StartupTurnedOff, shown.StartupNote);
         Assert.IsTrue(shown.OffersStartupSettings);
     }
 
@@ -362,12 +362,12 @@ public sealed class SettingsViewModelTests
         on.Shown();
         Assert.IsFalse(on.HasNotificationsOff);
 
-        NotificationsBlocked? blocked = new(Words.Settings.NotificationsUnoffered!, InSettings: false);
+        NotificationsBlocked? blocked = new(Words.Own.NotificationsUnoffered, InSettings: false);
         var (off, _, _) = Over(Snapshots.Read(1), notifications: () => blocked);
         off.Shown();
 
         Assert.IsTrue(off.HasNotificationsOff);
-        Assert.AreEqual(Words.Settings.NotificationsUnoffered, off.NotificationsOff);
+        Assert.AreEqual(Words.Own.NotificationsUnoffered, off.NotificationsOff);
         Assert.IsFalse(off.OffersNotificationSettings, "a link to a switch that is not the person's");
 
         blocked = new(Words.Settings.NotificationsOff, InSettings: true);

@@ -2,8 +2,8 @@
 //! didn't find, and what stands in for a list with nothing in it yet.
 
 use super::{CONTINUE, add_account, this_machine, titled};
+use crate::Front;
 use crate::Tool;
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 
 // `tool`: the tool named, where the account's is not the only one shown.
@@ -24,8 +24,8 @@ pub(crate) fn only_one(label: &str, tool: Option<&str>, app: Option<&str>) -> St
     format!("{label} is your only {tool}account. {adding}")
 }
 
-pub(crate) fn not_now(os: Os) -> String {
-    titled(os, "Not Now", "Not now")
+pub(crate) fn not_now(front: Front) -> String {
+    titled(front, "Not Now", "Not now")
 }
 
 pub(crate) const USE_WITH_CODEX: &str = "Use Pitboard with Codex";
@@ -34,10 +34,10 @@ pub(crate) const CODEX_UNUSED: &str =
     "Codex is installed. Pitboard reads nothing of it until you add the account it’s signed in to.";
 
 // The Windows tip's title names Codex, and its half-width button has room for one line.
-pub(crate) fn add_codex_account(os: Os) -> String {
-    match os {
-        Os::Windows => add_account(os, true),
-        Os::MacOs | Os::Linux => "Add Codex Account…".into(),
+pub(crate) fn add_codex_account(front: Front) -> String {
+    match front {
+        Front::WindowsNotificationArea => add_account(front, true),
+        Front::MacMenuBar | Front::Gnome => "Add Codex Account…".into(),
     }
 }
 
@@ -50,8 +50,8 @@ pub(crate) fn at_limit_tip(at: u8) -> String {
     )
 }
 
-pub(crate) fn open_settings(os: Os) -> String {
-    titled(os, "Open Settings…", "Open settings")
+pub(crate) fn open_settings(front: Front) -> String {
+    titled(front, "Open Settings…", "Open settings")
 }
 
 pub(crate) const WELCOME: &str = "Welcome to Pitboard";
@@ -64,21 +64,23 @@ pub(crate) fn welcome_says(tools: &str) -> String {
     )
 }
 
-pub(crate) fn where_it_lives(os: Os) -> &'static str {
-    match os {
-        Os::Windows => "Pitboard’s icon is in the notification area. Select ^ to find it.",
-        Os::MacOs | Os::Linux => "Pitboard lives in the menu bar.",
+pub(crate) fn where_it_lives(front: Front) -> &'static str {
+    match front {
+        Front::WindowsNotificationArea => {
+            "Pitboard’s icon is in the notification area. Select ^ to find it."
+        }
+        Front::MacMenuBar | Front::Gnome => "Pitboard lives in the menu bar.",
     }
 }
 
 // The welcome's switch to open at login: its title, and what it says.
-pub(crate) fn open_at_login(os: Os) -> (&'static str, &'static str) {
-    match os {
-        Os::Windows => (
+pub(crate) fn open_at_login(front: Front) -> (&'static str, &'static str) {
+    match front {
+        Front::WindowsNotificationArea => (
             "Start when you sign in to Windows",
             "Pitboard watches your limits only while it’s running.",
         ),
-        Os::MacOs | Os::Linux => (
+        Front::MacMenuBar | Front::Gnome => (
             "Open Pitboard at Login",
             "Pitboard watches your limits only while it’s open.",
         ),
@@ -86,10 +88,10 @@ pub(crate) fn open_at_login(os: Os) -> (&'static str, &'static str) {
 }
 
 // Windows' welcome says what Microsoft's own first-run pages say.
-pub(crate) fn welcome_done(os: Os) -> String {
-    match os {
-        Os::Windows => "Get started",
-        Os::MacOs | Os::Linux => CONTINUE,
+pub(crate) fn welcome_done(front: Front) -> String {
+    match front {
+        Front::WindowsNotificationArea => "Get started",
+        Front::MacMenuBar | Front::Gnome => CONTINUE,
     }
     .into()
 }
@@ -103,23 +105,23 @@ pub(crate) const FOUND_ON_THIS_PC: &str = "Found on this PC";
 
 pub(crate) const ADD_ASKING: &str = "Add…";
 
-pub(crate) fn sign_in_asking(os: Os) -> String {
-    titled(os, "Sign In…", "Sign in…")
+pub(crate) fn sign_in_asking(front: Front) -> String {
+    titled(front, "Sign In…", "Sign in…")
 }
 
 pub(crate) const TASKBAR_SETTINGS: &str = "Taskbar settings";
 
 pub(crate) const CLAUDE_CODE_MISSING: &str = "Claude Code isn’t installed";
 
-pub(crate) fn claude_code_not_installed(os: Os) -> String {
-    titled(os, "Claude Code Isn’t Installed", CLAUDE_CODE_MISSING)
+pub(crate) fn claude_code_not_installed(front: Front) -> String {
+    titled(front, "Claude Code Isn’t Installed", CLAUDE_CODE_MISSING)
 }
 
 pub(crate) const LEARN_TO_INSTALL: &str = "Learn how to install it";
 
-pub(crate) fn how_to_install_claude_code(os: Os) -> String {
+pub(crate) fn how_to_install_claude_code(front: Front) -> String {
     titled(
-        os,
+        front,
         "How to Install Claude Code",
         "How to install Claude Code",
     )
@@ -131,14 +133,14 @@ pub(crate) fn no_tool(tools: &str) -> String {
 }
 
 // What Pitboard needs of `tool` to sign in to it, where it did not find that.
-pub(crate) fn missing(os: Os, tool: ProviderId) -> crate::present::Missing {
-    let here = this_machine(os);
+pub(crate) fn missing(front: Front, tool: ProviderId) -> crate::present::Missing {
+    let here = this_machine(front);
     let (title, detail, link_title, link) = match Tool::from(tool) {
         Tool::Claude => (
             format!("Pitboard can’t find Claude Code on {here}."),
             "Adding a Claude Code account runs Claude Code’s own sign-in. Install it, then come \
              back to this window.",
-            how_to_install_claude_code(os),
+            how_to_install_claude_code(front),
             crate::present::notices::INSTALL_CLAUDE_CODE,
         ),
         Tool::Codex => (
@@ -146,7 +148,7 @@ pub(crate) fn missing(os: Os, tool: ProviderId) -> crate::present::Missing {
             "Adding a Codex account runs the Codex CLI’s sign-in, not the copy inside the ChatGPT \
              app. Install the CLI, then come back to this window.",
             titled(
-                os,
+                front,
                 "How to Install the Codex CLI",
                 "How to install the Codex CLI",
             ),
@@ -174,9 +176,9 @@ const INSTALL_CODEX_CLI: &str = "https://developers.openai.com/codex/cli";
 const DOWNLOAD_CLAUDE: &str = "https://claude.ai/download";
 
 // What stands in for the accounts while nobody is signed in: its title, and why to add one.
-pub(crate) fn no_accounts(os: Os) -> (String, &'static str) {
+pub(crate) fn no_accounts(front: Front) -> (String, &'static str) {
     (
-        titled(os, "No Accounts", "No accounts"),
+        titled(front, "No Accounts", "No accounts"),
         "Add an account to start. Pitboard keeps each one signed in, so you can switch between \
          them.",
     )
@@ -185,24 +187,24 @@ pub(crate) fn no_accounts(os: Os) -> (String, &'static str) {
 pub(crate) const READING_ACCOUNTS: &str = "Reading accounts…";
 
 // The menu's item in place of its accounts.
-pub(crate) fn no_accounts_yet(os: Os) -> String {
-    titled(os, "No Accounts Yet", "No accounts yet")
+pub(crate) fn no_accounts_yet(front: Front) -> String {
+    titled(front, "No Accounts Yet", "No accounts yet")
 }
 
-pub(crate) fn no_accounts_to_show(os: Os) -> String {
-    titled(os, "No Accounts to Show", "No accounts to show")
+pub(crate) fn no_accounts_to_show(front: Front) -> String {
+    titled(front, "No Accounts to Show", "No accounts to show")
 }
 
 // What stands in for the activity list while it is empty: its title, and why.
-pub(crate) fn no_activity(os: Os) -> (String, &'static str) {
+pub(crate) fn no_activity(front: Front) -> (String, &'static str) {
     (
-        titled(os, "No Activity", "No activity"),
+        titled(front, "No Activity", "No activity"),
         "Pitboard lists every change it makes here.",
     )
 }
 
-pub(crate) fn could_not_read_accounts(os: Os) -> String {
-    titled(os, "Couldn’t Read Accounts", "Couldn’t read accounts")
+pub(crate) fn could_not_read_accounts(front: Front) -> String {
+    titled(front, "Couldn’t Read Accounts", "Couldn’t read accounts")
 }
 
 #[cfg(test)]
@@ -212,7 +214,7 @@ mod tests {
     // Each tool not found says what Pitboard needs of it, on each system in its own name.
     #[test]
     fn a_tool_not_found_says_what_to_install() {
-        let codex = missing(Os::Windows, ProviderId::Codex);
+        let codex = missing(Front::WindowsNotificationArea, ProviderId::Codex);
         assert_eq!(codex.title, "Pitboard can’t find the Codex CLI on this PC.");
         assert_eq!(codex.link_title, "How to install the Codex CLI");
         assert_eq!(
@@ -221,9 +223,9 @@ mod tests {
              app. Install the CLI, then come back to this window."
         );
         assert_eq!(codex.link, "https://developers.openai.com/codex/cli");
-        let codex = missing(Os::MacOs, ProviderId::Codex);
+        let codex = missing(Front::MacMenuBar, ProviderId::Codex);
         assert_eq!(codex.link_title, "How to Install the Codex CLI");
-        let claude = missing(Os::MacOs, ProviderId::Claude);
+        let claude = missing(Front::MacMenuBar, ProviderId::Claude);
         assert_eq!(claude.title, "Pitboard can’t find Claude Code on this Mac.");
         assert_eq!(
             claude.detail,
@@ -231,7 +233,7 @@ mod tests {
              come back to this window."
         );
         assert_eq!(claude.link_title, "How to Install Claude Code");
-        let desktop = missing(Os::MacOs, ProviderId::Desktop);
+        let desktop = missing(Front::MacMenuBar, ProviderId::Desktop);
         assert_eq!(
             desktop.title,
             "Pitboard can’t find Claude Desktop on this Mac."
@@ -246,7 +248,12 @@ mod tests {
     // What the window and the menu say until the accounts are set up, pinned once.
     #[test]
     fn setting_up_is_said_in_these_words() {
-        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let both = |said: &dyn Fn(Front) -> String| {
+            (
+                said(Front::MacMenuBar),
+                said(Front::WindowsNotificationArea),
+            )
+        };
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(
             only_one("work", None, None),
@@ -258,7 +265,7 @@ mod tests {
              you sign in to it."
         );
         assert_eq!(
-            both(&|os| add_account(os, true)),
+            both(&|front| add_account(front, true)),
             pair("Add Account…", "Add account…")
         );
         assert_eq!(both(&not_now), pair("Not Now", "Not now"));
@@ -273,14 +280,14 @@ mod tests {
             pair("Add Codex Account…", "Add account…")
         );
         assert_eq!(
-            open_at_login(Os::MacOs),
+            open_at_login(Front::MacMenuBar),
             (
                 "Open Pitboard at Login",
                 "Pitboard watches your limits only while it’s open."
             )
         );
         assert_eq!(
-            open_at_login(Os::Windows),
+            open_at_login(Front::WindowsNotificationArea),
             (
                 "Start when you sign in to Windows",
                 "Pitboard watches your limits only while it’s running."
@@ -293,7 +300,10 @@ mod tests {
              much of each limit you’ve used."
         );
         assert_eq!(
-            (where_it_lives(Os::MacOs), where_it_lives(Os::Windows)),
+            (
+                where_it_lives(Front::MacMenuBar),
+                where_it_lives(Front::WindowsNotificationArea)
+            ),
             (
                 "Pitboard lives in the menu bar.",
                 "Pitboard’s icon is in the notification area. Select ^ to find it."
@@ -331,14 +341,14 @@ mod tests {
             pair("How to Install Claude Code", "How to install Claude Code")
         );
         assert_eq!(
-            no_accounts(Os::MacOs),
+            no_accounts(Front::MacMenuBar),
             (
                 "No Accounts".into(),
                 "Add an account to start. Pitboard keeps each one signed in, so you can switch \
                  between them."
             )
         );
-        assert_eq!(no_accounts(Os::Windows).0, "No accounts");
+        assert_eq!(no_accounts(Front::WindowsNotificationArea).0, "No accounts");
         assert_eq!(READING_ACCOUNTS, "Reading accounts…");
         assert_eq!(
             both(&no_accounts_yet),
@@ -349,12 +359,12 @@ mod tests {
             pair("No Accounts to Show", "No accounts to show")
         );
         assert_eq!(
-            no_activity(Os::MacOs),
+            no_activity(Front::MacMenuBar),
             (
                 "No Activity".into(),
                 "Pitboard lists every change it makes here."
             )
         );
-        assert_eq!(no_activity(Os::Windows).0, "No activity");
+        assert_eq!(no_activity(Front::WindowsNotificationArea).0, "No activity");
     }
 }

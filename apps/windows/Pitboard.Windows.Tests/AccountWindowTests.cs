@@ -490,7 +490,7 @@ public sealed partial class AccountWindowTests
                     ClearDownloads: new Choice("Clear", new Intent.ClearDownloads(refused.Store), Enabled: false))));
 
             await Views.Until(
-                () => Views.Texts(window.Content).Contains(Words.AccountWindow.CouldNotOpen!), "the window did not say it could not open",
+                () => Views.Texts(window.Content).Contains(Words.Own.CouldNotOpen), "the window did not say it could not open",
                 Webs.Patience);
             Assert.DoesNotContain("Object reference not set to an instance of an object.", Views.Texts(window.Content));
         }
@@ -518,7 +518,7 @@ public sealed partial class AccountWindowTests
             window.Follow(Shown(new WaitingShown.Reading("Reading accounts…"), webs.Opened(Main, Home)));
 
             await Views.Until(
-                () => sent.Contains(new Intent.PageShown(store, Home)) || Views.Texts(window.Content).Contains(Words.AccountWindow.CouldNotOpen!),
+                () => sent.Contains(new Intent.PageShown(store, Home)) || Views.Texts(window.Content).Contains(Words.Own.CouldNotOpen),
                 "the window neither opened nor said why", Webs.Patience);
             Assert.Contains(new Intent.PageShown(store, Home), sent, string.Join(" ", Views.Texts(window.Content)));
             Assert.IsEmpty(await Page(window)!.CookieManager.GetCookiesAsync(site.Address("/")));

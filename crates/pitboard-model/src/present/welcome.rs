@@ -1,8 +1,8 @@
 //! What the welcome window shows at the first launch.
 
 use super::{Choice, Seen, SetupLink, words};
+use crate::Front;
 use crate::model::{Intent, Place, Sheet};
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -46,18 +46,24 @@ pub struct WelcomeLogin {
 
 pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
     let names: Vec<&str> = seen.tools.iter().map(|tool| tool.name()).collect();
-    let (title, note) = words::open_at_login(seen.os);
+    let (title, note) = words::open_at_login(seen.front);
     WelcomeShown {
         title: words::WELCOME.into(),
         lines: vec![
             words::welcome_says(&pitboard_core::words::listed(&names)),
-            words::where_it_lives(seen.os).into(),
+            words::where_it_lives(seen.front).into(),
         ],
-        icon_link: (seen.os == Os::Windows).then(|| SetupLink {
-            title: words::TASKBAR_SETTINGS.into(),
-            link: "ms-settings:taskbar".into(),
-        }),
-        tools_heading: (seen.os == Os::Windows).then(|| words::FOUND_ON_THIS_PC.into()),
+        icon_link: match seen.front {
+            Front::WindowsNotificationArea => Some(SetupLink {
+                title: words::TASKBAR_SETTINGS.into(),
+                link: "ms-settings:taskbar".into(),
+            }),
+            Front::MacMenuBar | Front::Gnome => None,
+        },
+        tools_heading: match seen.front {
+            Front::WindowsNotificationArea => Some(words::FOUND_ON_THIS_PC.into()),
+            Front::MacMenuBar | Front::Gnome => None,
+        },
         tools: tools(seen),
         open_at_login: WelcomeLogin {
             title: title.into(),
@@ -65,7 +71,7 @@ pub(crate) fn welcome(seen: &Seen) -> WelcomeShown {
             note: note.into(),
         },
         done: Choice {
-            title: words::welcome_done(seen.os),
+            title: words::welcome_done(seen.front),
             intent: Intent::Show {
                 place: Some(Place::Accounts),
             },
@@ -80,7 +86,7 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
     };
     let claude = ProviderId::Claude;
     if found.is_empty() {
-        let missing = words::missing(seen.os, claude);
+        let missing = words::missing(seen.front, claude);
         return vec![WelcomeTool {
             code: claude.code().into(),
             name: claude.name().into(),
@@ -111,9 +117,10 @@ fn tools(seen: &Seen) -> Vec<WelcomeTool> {
                     Some(login.email.clone()),
                     add(words::ADD_ASKING.into(), tool),
                 ),
-                (None, _) if tool == claude => {
-                    (None, add_from_sheet(words::sign_in_asking(seen.os), tool))
-                }
+                (None, _) if tool == claude => (
+                    None,
+                    add_from_sheet(words::sign_in_asking(seen.front), tool),
+                ),
                 (None, _) if tool == ProviderId::Codex => {
                     (None, add(words::ADD_ASKING.into(), tool))
                 }

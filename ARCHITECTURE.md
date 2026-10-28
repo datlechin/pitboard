@@ -118,6 +118,8 @@ The other crates:
   bindings export.
   - `lib.rs`: what the bindings export beside the model, `Tool` and `AccountKey` among them,
     and the free functions an app calls as it starts.
+  - `front.rs`: `Front`, the app a model serves, and what follows from it alone: its `Engine`,
+    its system, where a sheet comes up.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
@@ -126,7 +128,8 @@ The other crates:
     apps say and the command line does not, a catalogue with a file per surface: the status
     item, the accounts, notices, sheets, setting up, Settings and Activity (`machine.rs`),
     Diagnostics (`checks.rs`), the account windows, failures and the core's refusals, and in
-    `mod.rs` the tools every one words with.
+    `mod.rs` the tools every one words with. `app_words.rs` holds the controls every front
+    draws by itself, and each front's own catalogue of what it alone draws.
   - `account_windows/`: the rules of an account's window that each app's web code asks.
   - `sites.rs`: `pitboard-sites`' sites as records of this crate's own.
   - `fixture/`: the worlds a debug build of either app launches into, behind the `fixture`
@@ -457,8 +460,16 @@ keeps it is in the header of the module named.
   know (`every_tool_the_core_knows_is_one_the_apps_name`).
 - `State` words nothing itself and imports nothing of `present::words`: a failure is what was
   being done and why, and a switch's or a sign-in's notice what it did, which `present` words
-  for the system it shows on (`Failure`'s `Doing` and `Cause`, `LastSwitch`'s `SignedIn` and
+  for the front it shows on (`Failure`'s `Doing` and `Cause`, `LastSwitch`'s `SignedIn` and
   `Opens`). A refusal of the core's is worded once, where `launch.rs` takes it.
+- Which front the model serves is decided in `AppLaunch.front` alone, which each app names
+  once, and anything else that differs by front is a `match` on `Front`, on its engine or on
+  its system with no `_` arm, so a front added to `Front` does not compile until each is said
+  (`the_engine_is_the_fronts`). What the core decides of a system, such as the tools it
+  supports, is asked with the front's `os()`, and `host::OS` is read only by the fixtures, whose
+  machine is this one as the core sees it. What one front alone draws is in that front's own
+  catalogue, and both shipping fronts' words are tested on every system
+  (`each_shipping_fronts_catalogue_says_what_its_app_drew`).
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).

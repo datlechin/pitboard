@@ -40,16 +40,18 @@ test("the Limits settings say what machine.rs gives LimitsSettings.swift and Set
 });
 
 test("each choice is titled on macOS and in sentence case on Windows, in at_limit_choice's order", () => {
-  const listed = [...words.matchAll(/AtLimit::(\w+) => titled\(os, "([^"]+)", "([^"]+)"\),/g)].map(
-    ([, value, mac, win]) => [value.toLowerCase(), mac, win],
-  );
+  const listed = [
+    ...words.matchAll(/AtLimit::(\w+) => titled\(front, "([^"]+)", "([^"]+)"\),/g),
+  ].map(([, value, mac, win]) => [value.toLowerCase(), mac, win]);
   assert.deepEqual(
     listed,
     choices.map((c) => [c.value, c.mac, c.win]),
   );
   assert.ok(machine.includes("choices: [AtLimit::Nothing, AtLimit::Notify, AtLimit::Switch]"));
   assert.ok(
-    words.includes("Os::Windows => sentence_case,\n        Os::MacOs | Os::Linux => title_case,"),
+    words.includes(
+      "Front::WindowsNotificationArea => sentence_case,\n        Front::MacMenuBar | Front::Gnome => title_case,",
+    ),
   );
 });
 
@@ -62,8 +64,8 @@ test("the terms are the core's sentence, curled, and its link", () => {
 });
 
 test("Warm-Up is titled as machine.rs's `warm` titles it, its times as `clock` says them", () => {
-  assert.ok(machine.includes("title: words::warm_up(seen.os),"));
-  assert.ok(words.includes(`titled(os, "${warm.title.macos}", "${warm.title.windows}")`));
+  assert.ok(machine.includes("title: words::warm_up(seen.front),"));
+  assert.ok(words.includes(`titled(front, "${warm.title.macos}", "${warm.title.windows}")`));
   assert.ok(
     repo("crates/pitboard-core/src/duty/warm/mod.rs").includes(
       'format!("{:02}:{:02}", minutes / 60, minutes % 60)',

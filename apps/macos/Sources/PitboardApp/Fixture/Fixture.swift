@@ -29,7 +29,7 @@
             do {
                 model = try AppModel.listening { listener in
                     try PitboardModel.fixture(
-                        name: name, listener: listener, localTime: MacLocalTime())
+                        name: name, front: front, listener: listener, localTime: MacLocalTime())
                 }
             } catch let refused as FixtureError {
                 switch refused {

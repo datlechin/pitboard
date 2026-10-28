@@ -6,13 +6,13 @@ use super::testing::platform::StandInApps;
 use super::testing::records::{CLAUDE, DANA, refusal, status};
 use super::{Doing, Intent, OutsideAnswer, OutsideAsk, Place};
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::account_windows::records::{Entry, Records};
 use crate::account_windows::stores::derive;
 use crate::present::testing::{account, desktop_account};
 use crate::present::words;
 use crate::{Account, Choice, ItemOffer, Parked, Question, RemovalShown, Uninstalled};
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use std::time::Duration;
@@ -76,8 +76,11 @@ fn uninstall_asks_first() {
             )
         }),
     };
-    assert_eq!(model.on_a_mac().uninstall, offer(Os::MacOs));
-    assert_eq!(model.on_windows().uninstall, offer(Os::Windows));
+    assert_eq!(model.on_a_mac().uninstall, offer(Front::MacMenuBar));
+    assert_eq!(
+        model.on_windows().uninstall,
+        offer(Front::WindowsNotificationArea)
+    );
     assert_eq!(removal(&model), None);
 }
 
@@ -148,7 +151,7 @@ fn uninstall_quits_claude_first_where_it_holds_a_saved_sign_in_and_opens_it_afte
     assert_eq!(quit.question.message, words::quit_to_delete("Claude"));
     assert_eq!(
         quit.question.confirm,
-        words::quit_and_uninstall(Os::MacOs, "Claude")
+        words::quit_and_uninstall(Front::MacMenuBar, "Claude")
     );
 
     model.send(quit.confirmed);
@@ -254,7 +257,7 @@ fn a_partial_uninstall_says_what_stayed_and_tries_again() {
     model.send(Intent::Uninstall);
     model.run(&mut machine);
     let again = Choice {
-        title: words::try_again(OS),
+        title: words::try_again(Front::MacMenuBar),
         intent: Intent::Uninstall,
         enabled: true,
     };
@@ -365,7 +368,7 @@ fn an_uninstall_that_came_to_nothing_runs_nothing_more_and_offers_try_again() {
     let job = model.take(uninstalling);
     model.give(Answer::Lost(job));
     let again = Choice {
-        title: words::try_again(OS),
+        title: words::try_again(Front::MacMenuBar),
         intent: Intent::Uninstall,
         enabled: true,
     };

@@ -82,7 +82,7 @@ public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccou
 
             try
             {
-                post(PitboardModelMethods.JumpRefused(answer));
+                post(PitboardModelMethods.JumpRefused(Identity.Front, answer));
             }
             catch (PlatformException)
             {

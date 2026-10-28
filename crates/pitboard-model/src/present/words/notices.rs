@@ -2,10 +2,10 @@
 //! warnings by code, their buttons, and what switching by itself tells somebody.
 
 use super::{SWITCH, SWITCH_WAITING, limit_title, quoted, switch_to, titled, typeset};
+use crate::Front;
 use crate::Warning;
 use crate::model::state::in_its_app;
 use crate::present::Severity;
-use pitboard_core::host::Os;
 use pitboard_core::status::Standing;
 use pitboard_core::words::capitalised;
 
@@ -177,66 +177,70 @@ pub(crate) fn awaiting_lines(app: &str, label: &str, put_back: &str, again: bool
     ]
 }
 
-pub(crate) fn finish(os: Os, again: bool) -> String {
+pub(crate) fn finish(front: Front, again: bool) -> String {
     if again {
-        titled(os, "Finish Signing In…", "Finish signing in…")
+        titled(front, "Finish Signing In…", "Finish signing in…")
     } else {
-        titled(os, "Finish Adding…", "Finish adding…")
+        titled(front, "Finish Adding…", "Finish adding…")
     }
 }
 
-pub(crate) fn switch_back_to(os: Os, label: &str) -> String {
+pub(crate) fn switch_back_to(front: Front, label: &str) -> String {
     titled(
-        os,
+        front,
         &format!("Switch Back to {label}"),
         &format!("Switch back to {label}"),
     )
 }
 
-pub(crate) fn sign_in_again(os: Os, asks: bool) -> String {
+pub(crate) fn sign_in_again(front: Front, asks: bool) -> String {
     if asks {
-        titled(os, "Sign In Again…", "Sign in again…")
+        titled(front, "Sign In Again…", "Sign in again…")
     } else {
-        titled(os, "Sign In Again", "Sign in again")
+        titled(front, "Sign In Again", "Sign in again")
     }
 }
 
 // A notification's button, which opens the sign-in: Windows ends a command that asks for more
 // with an ellipsis, a toast's too, where a macOS action is a short term.
-pub(crate) fn sign_in_again_button(os: Os) -> String {
-    sign_in_again(os, matches!(os, Os::Windows))
+pub(crate) fn sign_in_again_button(front: Front) -> String {
+    let asks = match front {
+        Front::WindowsNotificationArea => true,
+        Front::MacMenuBar | Front::Gnome => false,
+    };
+    sign_in_again(front, asks)
 }
 
-pub(crate) fn add_account_shown(os: Os, app: &str, asks: bool) -> String {
+pub(crate) fn add_account_shown(front: Front, app: &str, asks: bool) -> String {
     let (title, sentence) = (
         format!("Add the Account {app} Shows"),
         format!("Add the account {app} shows"),
     );
     if asks {
-        titled(os, &format!("{title}…"), &format!("{sentence}…"))
+        titled(front, &format!("{title}…"), &format!("{sentence}…"))
     } else {
-        titled(os, &title, &sentence)
+        titled(front, &title, &sentence)
     }
 }
 
-pub(crate) fn update_config(os: Os) -> String {
+pub(crate) fn update_config(front: Front) -> String {
     titled(
-        os,
+        front,
         "Update Claude Code’s Config",
         "Update Claude Code’s config",
     )
 }
 
 // A notification's button: macOS draws the one its category registered, and a toast takes any.
-pub(crate) fn switch_button(os: Os, label: &str) -> String {
-    match os {
-        Os::Windows => switch_to(label),
-        Os::MacOs | Os::Linux => SWITCH.into(),
+pub(crate) fn switch_button(front: Front, label: &str) -> String {
+    match front {
+        Front::WindowsNotificationArea => switch_to(label),
+        Front::MacMenuBar | Front::Gnome => SWITCH.into(),
     }
 }
 
-pub(crate) fn switch_back(os: Os) -> String {
-    titled(os, "Switch Back", "Switch back")
+pub(crate) fn switch_back(front: Front) -> String {
+    titled(front, "Switch Back", "Switch back")
 }
 
 // "work has used 96% of its 5-hour limit".
@@ -277,7 +281,12 @@ pub(crate) fn has_used_share(account: &str, figure: &str) -> String {
 }
 
 // "5-Hour Limit Almost Reached", "Weekly Limit (Fable) Reached": `name` as a sentence says it.
-pub(crate) fn limit_notification(os: Os, name: &str, model: Option<&str>, reached: bool) -> String {
+pub(crate) fn limit_notification(
+    front: Front,
+    name: &str,
+    model: Option<&str>,
+    reached: bool,
+) -> String {
     let headed: Vec<String> = name.split('-').map(capitalised).collect();
     let (title, sentence) = (
         limit_title(&headed.join("-"), model).replacen(" limit", " Limit", 1),
@@ -285,13 +294,13 @@ pub(crate) fn limit_notification(os: Os, name: &str, model: Option<&str>, reache
     );
     if reached {
         titled(
-            os,
+            front,
             &format!("{title} Reached"),
             &format!("{sentence} reached"),
         )
     } else {
         titled(
-            os,
+            front,
             &format!("{title} Almost Reached"),
             &format!("{sentence} almost reached"),
         )
@@ -299,46 +308,50 @@ pub(crate) fn limit_notification(os: Os, name: &str, model: Option<&str>, reache
 }
 
 // Notification titles, under the tool they are about.
-pub(crate) fn not_switched(os: Os) -> String {
-    titled(os, "Automatic Switch Skipped", "Automatic switch skipped")
+pub(crate) fn not_switched(front: Front) -> String {
+    titled(
+        front,
+        "Automatic Switch Skipped",
+        "Automatic switch skipped",
+    )
 }
 
-pub(crate) fn not_switching(os: Os) -> String {
+pub(crate) fn not_switching(front: Front) -> String {
     titled(
-        os,
+        front,
         "Automatic Switching Paused",
         "Automatic switching paused",
     )
 }
 
-pub(crate) fn could_not_switch_itself(os: Os) -> String {
+pub(crate) fn could_not_switch_itself(front: Front) -> String {
     titled(
-        os,
+        front,
         "Couldn’t Switch Automatically",
         "Couldn’t switch automatically",
     )
 }
 
 // A Jump List task's switch refused, as a notification's title.
-pub(crate) fn could_not_switch_from_outside(os: Os) -> String {
-    titled(os, "Couldn’t Switch", "Couldn’t switch")
+pub(crate) fn could_not_switch_from_outside(front: Front) -> String {
+    titled(front, "Couldn’t Switch", "Couldn’t switch")
 }
 
-pub(crate) fn could_not_warm_itself(os: Os) -> String {
-    titled(os, "Warm-Up Didn’t Start", "Warm-up didn’t start")
+pub(crate) fn could_not_warm_itself(front: Front) -> String {
+    titled(front, "Warm-Up Didn’t Start", "Warm-up didn’t start")
 }
 
 // A notification's title for an account that needs signing in to again, by why.
-pub(crate) fn sign_in_title(os: Os, standing: Standing) -> String {
+pub(crate) fn sign_in_title(front: Front, standing: Standing) -> String {
     match standing {
-        Standing::LoginExpired => titled(os, "Sign-In Expired", "Sign-in expired"),
-        Standing::NothingParked => titled(os, "Not Signed In", "Not signed in"),
-        _ => titled(os, "Sign-In No Longer Works", "Sign-in no longer works"),
+        Standing::LoginExpired => titled(front, "Sign-In Expired", "Sign-in expired"),
+        Standing::NothingParked => titled(front, "Not Signed In", "Not signed in"),
+        _ => titled(front, "Sign-In No Longer Works", "Sign-in no longer works"),
     }
 }
 
-pub(crate) fn sign_in_replaced(os: Os) -> String {
-    titled(os, "Sign-In Replaced", "Sign-in replaced")
+pub(crate) fn sign_in_replaced(front: Front) -> String {
+    titled(front, "Sign-In Replaced", "Sign-in replaced")
 }
 
 pub(crate) fn sign_in_to_keep(label: &str) -> String {
@@ -357,7 +370,12 @@ mod tests {
     // The contractions the apps give the core's words.
     #[test]
     fn the_apps_own_words_on_switching_by_itself_take_their_contractions() {
-        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let both = |said: &dyn Fn(Front) -> String| {
+            (
+                said(Front::MacMenuBar),
+                said(Front::WindowsNotificationArea),
+            )
+        };
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(
             both(&not_switched),
@@ -505,7 +523,10 @@ mod tests {
             "Claude Code: work reached its 5-hour limit"
         );
         assert_eq!(
-            (issues(Os::MacOs, 2), issues(Os::Windows, 2)),
+            (
+                issues(Front::MacMenuBar, 2),
+                issues(Front::WindowsNotificationArea, 2)
+            ),
             ("2 Issues".into(), "2 issues".into())
         );
         assert_eq!(
@@ -571,29 +592,34 @@ mod tests {
     // A notification's title, in the case each system gives one.
     #[test]
     fn a_notification_is_titled_as_each_system_titles_one() {
-        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let both = |said: &dyn Fn(Front) -> String| {
+            (
+                said(Front::MacMenuBar),
+                said(Front::WindowsNotificationArea),
+            )
+        };
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(
-            both(&|os| limit_notification(os, "5-hour", None, false)),
+            both(&|front| limit_notification(front, "5-hour", None, false)),
             pair("5-Hour Limit Almost Reached", "5-hour limit almost reached")
         );
         assert_eq!(
-            both(&|os| limit_notification(os, "weekly", Some("Fable"), true)),
+            both(&|front| limit_notification(front, "weekly", Some("Fable"), true)),
             pair(
                 "Weekly Limit (Fable) Reached",
                 "Weekly limit (Fable) reached"
             )
         );
         assert_eq!(
-            both(&|os| sign_in_title(os, Standing::LoginExpired)),
+            both(&|front| sign_in_title(front, Standing::LoginExpired)),
             pair("Sign-In Expired", "Sign-in expired")
         );
         assert_eq!(
-            both(&|os| sign_in_title(os, Standing::LoginRefused)),
+            both(&|front| sign_in_title(front, Standing::LoginRefused)),
             pair("Sign-In No Longer Works", "Sign-in no longer works")
         );
         assert_eq!(
-            both(&|os| sign_in_title(os, Standing::NothingParked)),
+            both(&|front| sign_in_title(front, Standing::NothingParked)),
             pair("Not Signed In", "Not signed in")
         );
         assert_eq!(
@@ -640,42 +666,47 @@ mod tests {
     // A notice's and a notification's buttons, as each system titles a button.
     #[test]
     fn a_notice_offers_in_these_words() {
-        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let both = |said: &dyn Fn(Front) -> String| {
+            (
+                said(Front::MacMenuBar),
+                said(Front::WindowsNotificationArea),
+            )
+        };
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(
-            both(&|os| finish(os, false)),
+            both(&|front| finish(front, false)),
             pair("Finish Adding…", "Finish adding…")
         );
         assert_eq!(
-            both(&|os| finish(os, true)),
+            both(&|front| finish(front, true)),
             pair("Finish Signing In…", "Finish signing in…")
         );
         assert_eq!(
-            both(&|os| switch_back_to(os, "work")),
+            both(&|front| switch_back_to(front, "work")),
             pair("Switch Back to work", "Switch back to work")
         );
         assert_eq!(
-            both(&|os| cancel_switch(os, true)),
+            both(&|front| cancel_switch(front, true)),
             pair("Cancel Switch…", "Cancel switch…")
         );
         assert_eq!(
-            both(&|os| cancel_switch(os, false)),
+            both(&|front| cancel_switch(front, false)),
             pair("Cancel Switch", "Cancel switch")
         );
         assert_eq!(
-            both(&|os| clean_up(os, true)),
+            both(&|front| clean_up(front, true)),
             pair("Clean Up…", "Clean up…")
         );
         assert_eq!(
-            both(&|os| clean_up(os, false)),
+            both(&|front| clean_up(front, false)),
             pair("Clean Up", "Clean up")
         );
         assert_eq!(
-            both(&|os| sign_in_again(os, true)),
+            both(&|front| sign_in_again(front, true)),
             pair("Sign In Again…", "Sign in again…")
         );
         assert_eq!(
-            both(&|os| sign_in_again(os, false)),
+            both(&|front| sign_in_again(front, false)),
             pair("Sign In Again", "Sign in again")
         );
         assert_eq!(
@@ -683,14 +714,14 @@ mod tests {
             pair("Sign In Again", "Sign in again…")
         );
         assert_eq!(
-            both(&|os| add_account_shown(os, "Claude", true)),
+            both(&|front| add_account_shown(front, "Claude", true)),
             pair(
                 "Add the Account Claude Shows…",
                 "Add the account Claude shows…"
             )
         );
         assert_eq!(
-            both(&|os| add_account_shown(os, "Claude", false)),
+            both(&|front| add_account_shown(front, "Claude", false)),
             pair(
                 "Add the Account Claude Shows",
                 "Add the account Claude shows"

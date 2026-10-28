@@ -2,17 +2,17 @@
 //! at a limit, warm-ups, the command line, updates, uninstalling, and each change listed.
 
 use super::{sign_in_standing, this_machine, titled, typeset};
+use crate::Front;
 use crate::model::AtLimit;
-use pitboard_core::host::Os;
 use pitboard_core::status::Standing;
 use pitboard_core::words::capitalised;
 
 // What keeping saved sign-ins fresh does, under its switch, and that Claude Desktop's never is.
-pub(crate) fn renewal_about(os: Os, in_its_app: bool) -> String {
-    let machine = match os {
-        Os::MacOs => "Your Mac",
-        Os::Linux => "This computer",
-        Os::Windows => "Your PC",
+pub(crate) fn renewal_about(front: Front, in_its_app: bool) -> String {
+    let machine = match front {
+        Front::MacMenuBar => "Your Mac",
+        Front::Gnome => "This computer",
+        Front::WindowsNotificationArea => "Your PC",
     };
     if in_its_app {
         format!(
@@ -29,10 +29,10 @@ pub(crate) fn renewal_about(os: Os, in_its_app: bool) -> String {
 
 /// Said under the switch where the machine has no scheduler Pitboard writes to: "This Mac has
 /// no scheduler Pitboard knows how to write to."
-pub(crate) fn no_scheduler(os: Os) -> String {
+pub(crate) fn no_scheduler(front: Front) -> String {
     format!(
         "{} has no scheduler Pitboard knows how to write to.",
-        capitalised(this_machine(os))
+        capitalised(this_machine(front))
     )
 }
 
@@ -40,23 +40,27 @@ pub(crate) fn no_scheduler(os: Os) -> String {
 /// command line inside the app long after the app has quit, so it needs one that will still
 /// be there: a copy run from a temporary place is gone by then, and without one inside the
 /// app there is only the app itself to schedule, which renews nothing.
-pub(crate) fn cannot_schedule(os: Os, temporary: bool) -> String {
+pub(crate) fn cannot_schedule(front: Front, temporary: bool) -> String {
     if !temporary {
         return "This copy of Pitboard has no command line inside it to run on a schedule.".into();
     }
-    match os {
-        Os::MacOs => "Move Pitboard to your Applications folder first. Until then macOS runs it \
-                      from a temporary copy, which is gone once Pitboard quits."
-            .into(),
+    match front {
+        Front::MacMenuBar => {
+            "Move Pitboard to your Applications folder first. Until then macOS runs it \
+             from a temporary copy, which is gone once Pitboard quits."
+                .into()
+        }
         // No app runs on Linux.
-        Os::Linux => "First move Pitboard to a folder it will stay in. Until then it runs \
-                      from a temporary copy, which is gone once Pitboard quits."
+        Front::Gnome => "First move Pitboard to a folder it will stay in. Until then it runs \
+                         from a temporary copy, which is gone once Pitboard quits."
             .into(),
         // The Windows app is installed by its installer, and a copy run from anywhere else,
         // such as from inside a zip, is the one a person is told to install.
-        Os::Windows => "Install Pitboard first. Until then Windows runs it from a temporary \
-                        copy, which is gone once Pitboard quits."
-            .into(),
+        Front::WindowsNotificationArea => {
+            "Install Pitboard first. Until then Windows runs it from a temporary \
+             copy, which is gone once Pitboard quits."
+                .into()
+        }
     }
 }
 
@@ -76,18 +80,18 @@ pub(crate) fn at_limit_label(at: u8) -> String {
 // The share's field, beside "When a limit reaches".
 pub(crate) const AT: &str = "At";
 
-pub(crate) fn at_limit_choice(os: Os, choice: AtLimit) -> String {
+pub(crate) fn at_limit_choice(front: Front, choice: AtLimit) -> String {
     match choice {
-        AtLimit::Nothing => titled(os, "Do Nothing", "Do nothing"),
-        AtLimit::Notify => titled(os, "Notify Me", "Notify me"),
-        AtLimit::Switch => titled(os, "Switch Automatically", "Switch automatically"),
+        AtLimit::Nothing => titled(front, "Do Nothing", "Do nothing"),
+        AtLimit::Notify => titled(front, "Notify Me", "Notify me"),
+        AtLimit::Switch => titled(front, "Switch Automatically", "Switch automatically"),
     }
 }
 
 // Under the choice. Running sessions follow within `seconds` only while the last read found no
 // login file behind the store.
 pub(crate) fn at_limit_note(
-    os: Os,
+    front: Front,
     choice: AtLimit,
     at: u8,
     file_left: bool,
@@ -102,7 +106,7 @@ pub(crate) fn at_limit_note(
         AtLimit::Switch if file_left => Some(format!(
             "Pitboard switches Claude Code at {at}%, but its running sessions don’t follow while a \
              sign-in file is left behind {}.",
-            pitboard_core::words::store_in_front(os)
+            pitboard_core::words::store_in_front(front.os())
         )),
         AtLimit::Switch => Some(format!(
             "Pitboard switches Claude Code at {at}%, and its running sessions follow within about \
@@ -140,16 +144,16 @@ pub(crate) fn not_watching(why: &pitboard_core::duty::autoswitch::Blind) -> Stri
 const SWITCH_NOT_FINISHED: &str =
     "a switch didn’t finish, and the next change you make finishes it";
 
-pub(crate) fn warm_up(os: Os) -> String {
-    titled(os, "Warm-Up", "Warm-up")
+pub(crate) fn warm_up(front: Front) -> String {
+    titled(front, "Warm-Up", "Warm-up")
 }
 
-pub(crate) fn warm_up_settings(os: Os) -> String {
-    titled(os, "Warm-Up Settings…", "Warm-up settings")
+pub(crate) fn warm_up_settings(front: Front) -> String {
+    titled(front, "Warm-Up Settings…", "Warm-up settings")
 }
 
-pub(crate) fn warm_up_now(os: Os) -> String {
-    titled(os, "Warm Up Now", "Warm up now")
+pub(crate) fn warm_up_now(front: Front) -> String {
+    titled(front, "Warm Up Now", "Warm up now")
 }
 
 pub(crate) const WARMING_UP: &str = "Warming up…";
@@ -246,18 +250,22 @@ pub(crate) fn update_note(bundled: bool) -> &'static str {
 
 /// Why the command line inside a copy run from a temporary place is not offered for linking
 /// onto the `PATH`: a link to it would break once the app quits.
-pub(crate) fn cannot_link(os: Os) -> String {
-    match os {
-        Os::MacOs => "Move Pitboard to your Applications folder first. Until then macOS runs it \
-                      from a temporary copy, and a link to that would break."
-            .into(),
+pub(crate) fn cannot_link(front: Front) -> String {
+    match front {
+        Front::MacMenuBar => {
+            "Move Pitboard to your Applications folder first. Until then macOS runs it \
+             from a temporary copy, and a link to that would break."
+                .into()
+        }
         // No app runs on Linux.
-        Os::Linux => "First move Pitboard to a folder it will stay in. Until then it runs \
-                      from a temporary copy, and a link to that would break."
+        Front::Gnome => "First move Pitboard to a folder it will stay in. Until then it runs \
+                         from a temporary copy, and a link to that would break."
             .into(),
-        Os::Windows => "Install Pitboard first. Until then Windows runs it from a temporary \
-                        copy, and a link to that would break."
-            .into(),
+        Front::WindowsNotificationArea => {
+            "Install Pitboard first. Until then Windows runs it from a temporary \
+             copy, and a link to that would break."
+                .into()
+        }
     }
 }
 
@@ -267,10 +275,10 @@ pub(crate) const NO_UPDATE_KEY: &str = "This copy of Pitboard can’t update its
                                         release keeps itself up to date.";
 
 // Windows' button sits beside its card's "Uninstall Pitboard".
-pub(crate) fn uninstall_pitboard(os: Os) -> String {
-    match os {
-        Os::Windows => "Uninstall…",
-        Os::MacOs | Os::Linux => "Uninstall Pitboard…",
+pub(crate) fn uninstall_pitboard(front: Front) -> String {
+    match front {
+        Front::WindowsNotificationArea => "Uninstall…",
+        Front::MacMenuBar | Front::Gnome => "Uninstall Pitboard…",
     }
     .into()
 }
@@ -480,7 +488,10 @@ mod tests {
             "Open this chatgpt.com link as:"
         );
         assert_eq!(
-            (cannot_open_link(Os::MacOs), cannot_open_link(Os::Windows)),
+            (
+                cannot_open_link(Front::MacMenuBar),
+                cannot_open_link(Front::WindowsNotificationArea)
+            ),
             (
                 pitboard_sites::LinkRefusal::TITLE.into(),
                 "Can’t open this link".into()
@@ -488,8 +499,8 @@ mod tests {
         );
         assert_eq!(
             (
-                could_not_read_accounts(Os::MacOs),
-                could_not_read_accounts(Os::Windows)
+                could_not_read_accounts(Front::MacMenuBar),
+                could_not_read_accounts(Front::WindowsNotificationArea)
             ),
             (
                 "Couldn’t Read Accounts".into(),
@@ -497,17 +508,23 @@ mod tests {
             )
         );
         assert_eq!(
-            (try_again(Os::MacOs), try_again(Os::Windows)),
+            (
+                try_again(Front::MacMenuBar),
+                try_again(Front::WindowsNotificationArea)
+            ),
             ("Try Again".into(), "Try again".into())
         );
         assert_eq!(
-            (warm_up_now(Os::MacOs), warm_up_now(Os::Windows)),
+            (
+                warm_up_now(Front::MacMenuBar),
+                warm_up_now(Front::WindowsNotificationArea)
+            ),
             ("Warm Up Now".into(), "Warm up now".into())
         );
         assert_eq!(add_a_second(None), "Add a second account");
         assert_eq!(add_a_second(Some("Codex")), "Add a second Codex account");
         assert_eq!(
-            no_link(Os::MacOs),
+            no_link(Front::MacMenuBar),
             (
                 "No Link to Open".into(),
                 "Share a claude.ai or chatgpt.com page with Pitboard from your browser’s Share \
@@ -515,11 +532,11 @@ mod tests {
                     .into()
             )
         );
-        assert_eq!(no_link(Os::Windows).0, "No link to open");
+        assert_eq!(no_link(Front::WindowsNotificationArea).0, "No link to open");
         assert_eq!(window_open("a@example.com"), "a@example.com, window open");
         assert_eq!(OPEN, "Open");
         assert_eq!(
-            no_site_account(Os::MacOs, "chatgpt.com"),
+            no_site_account(Front::MacMenuBar, "chatgpt.com"),
             (
                 "No chatgpt.com Account".into(),
                 "None of the accounts Pitboard has opens chatgpt.com. Add one, and this link \
@@ -528,11 +545,14 @@ mod tests {
             )
         );
         assert_eq!(
-            no_site_account(Os::Windows, "chatgpt.com").0,
+            no_site_account(Front::WindowsNotificationArea, "chatgpt.com").0,
             "No chatgpt.com account"
         );
         assert_eq!(
-            (open_in_browser(Os::MacOs), open_in_browser(Os::Windows)),
+            (
+                open_in_browser(Front::MacMenuBar),
+                open_in_browser(Front::WindowsNotificationArea)
+            ),
             ("Open in Browser".into(), "Open in browser".into())
         );
         assert_eq!(ACCOUNT, "Account");
@@ -541,7 +561,7 @@ mod tests {
             ("Clear", "Downloaded", "Cancelled")
         );
         assert_eq!(
-            quit_with_downloads(Os::MacOs, 1),
+            quit_with_downloads(Front::MacMenuBar, 1),
             (
                 "A download is in progress. Quit anyway?".into(),
                 "Quitting Pitboard stops them, and they won’t resume.",
@@ -549,7 +569,7 @@ mod tests {
             )
         );
         assert_eq!(
-            quit_with_downloads(Os::Windows, 2),
+            quit_with_downloads(Front::WindowsNotificationArea, 2),
             (
                 "2 downloads are in progress. Exit anyway?".into(),
                 "Exiting Pitboard stops them, and they won’t resume.",
@@ -559,8 +579,8 @@ mod tests {
         );
         assert_eq!(
             (
-                switch_button(Os::MacOs, "personal"),
-                switch_button(Os::Windows, "personal")
+                switch_button(Front::MacMenuBar, "personal"),
+                switch_button(Front::WindowsNotificationArea, "personal")
             ),
             ("Switch".into(), "Switch to personal".into()),
             "the Mac's category registered Switch"
@@ -571,8 +591,8 @@ mod tests {
         assert_eq!(AT, "At");
         let both = |choice| {
             (
-                at_limit_choice(Os::MacOs, choice),
-                at_limit_choice(Os::Windows, choice),
+                at_limit_choice(Front::MacMenuBar, choice),
+                at_limit_choice(Front::WindowsNotificationArea, choice),
             )
         };
         assert_eq!(
@@ -588,32 +608,35 @@ mod tests {
             ("Switch Automatically".into(), "Switch automatically".into())
         );
         assert_eq!(
-            at_limit_note(Os::MacOs, AtLimit::Nothing, 95, false, 33),
+            at_limit_note(Front::MacMenuBar, AtLimit::Nothing, 95, false, 33),
             None
         );
         assert_eq!(
-            at_limit_note(Os::MacOs, AtLimit::Notify, 95, true, 33).as_deref(),
+            at_limit_note(Front::MacMenuBar, AtLimit::Notify, 95, true, 33).as_deref(),
             Some(
                 "Pitboard notifies you once a limit of the account in use reaches 95%, while the \
                  app is open."
             )
         );
         assert_eq!(
-            at_limit_note(Os::MacOs, AtLimit::Switch, 95, false, 33).as_deref(),
+            at_limit_note(Front::MacMenuBar, AtLimit::Switch, 95, false, 33).as_deref(),
             Some(
                 "Pitboard switches Claude Code at 95%, and its running sessions follow within \
                  about 33 seconds."
             )
         );
         assert_eq!(
-            at_limit_note(Os::MacOs, AtLimit::Switch, 95, true, 33).as_deref(),
+            at_limit_note(Front::MacMenuBar, AtLimit::Switch, 95, true, 33).as_deref(),
             Some(
                 "Pitboard switches Claude Code at 95%, but its running sessions don’t follow while \
                  a sign-in file is left behind the keychain."
             )
         );
         assert_eq!(
-            (warm_up(Os::MacOs), warm_up(Os::Windows)),
+            (
+                warm_up(Front::MacMenuBar),
+                warm_up(Front::WindowsNotificationArea)
+            ),
             ("Warm-Up".into(), "Warm-up".into())
         );
         assert_eq!(NONE_TO_WARM, "Add a Claude Code account to warm it up.");
@@ -639,8 +662,8 @@ mod tests {
     fn uninstalling_is_said_in_these_words() {
         assert_eq!(
             (
-                uninstall_pitboard(Os::MacOs),
-                uninstall_pitboard(Os::Windows)
+                uninstall_pitboard(Front::MacMenuBar),
+                uninstall_pitboard(Front::WindowsNotificationArea)
             ),
             ("Uninstall Pitboard…".into(), "Uninstall…".into()),
             "it asks before it acts"
@@ -710,61 +733,68 @@ mod tests {
     #[test]
     fn what_is_said_of_this_machine_names_it_as_its_system_does() {
         assert_eq!(
-            no_scheduler(Os::MacOs),
+            no_scheduler(Front::MacMenuBar),
             "This Mac has no scheduler Pitboard knows how to write to."
         );
         assert_eq!(
-            no_scheduler(Os::Linux),
+            no_scheduler(Front::Gnome),
             "This computer has no scheduler Pitboard knows how to write to."
         );
         assert_eq!(
-            no_scheduler(Os::Windows),
+            no_scheduler(Front::WindowsNotificationArea),
             "This PC has no scheduler Pitboard knows how to write to."
         );
-        assert_eq!(checking(Os::MacOs), "Checking this Mac…");
-        assert_eq!(checking(Os::Linux), "Checking this computer…");
-        assert_eq!(checking(Os::Windows), "Checking this PC…");
-        for os in [Os::MacOs, Os::Linux, Os::Windows] {
+        assert_eq!(checking(Front::MacMenuBar), "Checking this Mac…");
+        assert_eq!(checking(Front::Gnome), "Checking this computer…");
+        assert_eq!(
+            checking(Front::WindowsNotificationArea),
+            "Checking this PC…"
+        );
+        for front in [
+            Front::MacMenuBar,
+            Front::Gnome,
+            Front::WindowsNotificationArea,
+        ] {
             assert_eq!(
-                cannot_schedule(os, false),
+                cannot_schedule(front, false),
                 "This copy of Pitboard has no command line inside it to run on a schedule."
             );
         }
         assert_eq!(
-            cannot_schedule(Os::MacOs, true),
+            cannot_schedule(Front::MacMenuBar, true),
             "Move Pitboard to your Applications folder first. Until then macOS runs it from a \
              temporary copy, which is gone once Pitboard quits."
         );
         assert_eq!(
-            cannot_link(Os::MacOs),
+            cannot_link(Front::MacMenuBar),
             "Move Pitboard to your Applications folder first. Until then macOS runs it from a \
              temporary copy, and a link to that would break."
         );
         assert_eq!(
-            cannot_schedule(Os::Linux, true),
+            cannot_schedule(Front::Gnome, true),
             "First move Pitboard to a folder it will stay in. Until then it runs from a \
              temporary copy, which is gone once Pitboard quits."
         );
         assert_eq!(
-            cannot_link(Os::Linux),
+            cannot_link(Front::Gnome),
             "First move Pitboard to a folder it will stay in. Until then it runs from a \
              temporary copy, and a link to that would break."
         );
         assert_eq!(
-            cannot_schedule(Os::Windows, true),
+            cannot_schedule(Front::WindowsNotificationArea, true),
             "Install Pitboard first. Until then Windows runs it from a temporary copy, which is \
              gone once Pitboard quits."
         );
         assert_eq!(
-            cannot_link(Os::Windows),
+            cannot_link(Front::WindowsNotificationArea),
             "Install Pitboard first. Until then Windows runs it from a temporary copy, and a \
              link to that would break."
         );
         for said in [
-            cannot_schedule(Os::Linux, true),
-            cannot_link(Os::Linux),
-            cannot_schedule(Os::Windows, true),
-            cannot_link(Os::Windows),
+            cannot_schedule(Front::Gnome, true),
+            cannot_link(Front::Gnome),
+            cannot_schedule(Front::WindowsNotificationArea, true),
+            cannot_link(Front::WindowsNotificationArea),
         ] {
             assert!(
                 !said.contains("macOS") && !said.contains("Applications"),
@@ -809,17 +839,17 @@ mod tests {
     #[test]
     fn renewal_and_the_command_line_are_said_in_these_words() {
         assert_eq!(
-            renewal_about(Os::MacOs, false),
+            renewal_about(Front::MacMenuBar, false),
             "Your Mac refreshes your saved sign-ins once a day, so one you leave alone doesn’t \
              expire."
         );
         assert_eq!(
-            renewal_about(Os::MacOs, true),
+            renewal_about(Front::MacMenuBar, true),
             "Your Mac refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t \
              expire."
         );
         assert_eq!(
-            renewal_about(Os::Windows, false),
+            renewal_about(Front::WindowsNotificationArea, false),
             "Your PC refreshes your saved sign-ins once a day, so one you leave alone doesn’t \
              expire."
         );

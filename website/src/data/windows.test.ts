@@ -90,12 +90,12 @@ test("a beta's menu has no Check for updates, as IconMenu.cs offers it only besi
 test("the menu heads each tool's accounts with its name, one group of them, and names each account with how much it has used", () => {
   assert.ok(
     catalogue.includes(
-      '(Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),',
+      '(Front::WindowsNotificationArea, Some(aside)) => {\n            format!("{title} ({})", uncapitalised(aside))',
     ),
   );
   assert.ok(
     present("accounts.rs").includes(
-      "let menu_title = words::named_in_menu(seen.os, &title, why_not.or(figure.as_deref()));",
+      "let menu_title = words::named_in_menu(seen.front, &title, why_not.or(figure.as_deref()));",
     ),
   );
   assert.ok(present("accounts.rs").includes(".map(|limit| said::figure(limit.percent));"));
@@ -131,7 +131,11 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
     .filter((e) => "account" in e && e.label === "work");
   assert.ok(work && "tip" in work);
   // in sentence case, as the Windows app says each limit after the first
-  assert.ok(catalogue.includes('(_, Os::Windows) => format!("{} {figure}", uncapitalised(name)),'));
+  assert.ok(
+    catalogue.includes(
+      '(_, Front::WindowsNotificationArea) => format!("{} {figure}", uncapitalised(name)),',
+    ),
+  );
   assert.equal(work.tip, "5-hour 12% used, weekly 40%");
 });
 
@@ -220,15 +224,12 @@ test("the window and its places are named as MainWindow.xaml and SettingsPage.xa
   // Settings > Troubleshoot's cards open Diagnostics and Activity under Settings, with the title
   // bar's back button
   const settings = views("SettingsPage.xaml");
-  assert.ok(settings.includes('Text="{x:Bind shown:Words.Settings.Troubleshoot}"'));
+  assert.ok(settings.includes('Text="{x:Bind shown:Words.Own.Troubleshoot}"'));
   assert.ok(owned(TROUBLESHOOT));
   for (const [pane, title, , about] of subpages) {
     const field = pane === "machine" ? "Diagnostics" : "Activity";
     assert.ok(settings.includes(`Header="{x:Bind shown:Words.Window.${field}}"`), field);
-    assert.ok(
-      settings.includes(`Description="{x:Bind shown:Words.Settings.${field}About}"`),
-      field,
-    );
+    assert.ok(settings.includes(`Description="{x:Bind shown:Words.Own.${field}About}"`), field);
     assert.ok(owned(title), title);
     assert.ok(
       owned(about) || said.includes(about.replace("Pitboard, Claude Code and Codex", "{}")),
@@ -256,7 +257,7 @@ test("the Accounts page says what AccountsPage.xaml binds and the core says", ()
   for (const said of [page.title, ...page.commands]) assert.ok(owned(said), said);
   assert.ok(catalogue.includes('format!("Updated {clock}")'));
   assert.match(page.updated, /^Updated \d\d:\d\d$/);
-  assert.ok(catalogue.includes('titled(os, "In Use", IN_USE)'));
+  assert.ok(catalogue.includes('titled(front, "In Use", IN_USE)'));
   assert.deepEqual(
     page.sections.map((s) => s.name),
     ["Claude Code", "Codex"],
@@ -292,10 +293,10 @@ test("an opened row's cards say what AccountsPage.xaml binds from app_words() an
     );
     assert.ok(owned(words), words);
   }
-  assert.ok(xaml.includes('Content="{x:Bind shown:Words.Window.Copy}"'));
+  assert.ok(xaml.includes('Content="{x:Bind shown:Words.Own.Copy}"'));
   assert.ok(xaml.includes('AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"'));
   assert.ok(owned(detail.copy) && owned("Copy email address"));
-  assert.ok(catalogue.includes(`titled(os, "Warm-Up Settings…", "${detail.warmUpSettings}")`));
+  assert.ok(catalogue.includes(`titled(front, "Warm-Up Settings…", "${detail.warmUpSettings}")`));
   assert.ok(catalogue.includes('format!("Saved sign-in valid until {until}")'));
   assert.ok(catalogue.includes(`pub(crate) const WARM_UP_OFF: &str = "${detail.off}";`));
   // the day and month in the regional format's order, its month abbreviated
@@ -457,8 +458,8 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
   const w = settingsPage.warm;
   const xaml = views("SettingsPage.xaml");
   assert.ok(xaml.includes('Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"'));
-  assert.ok(present("machine.rs").includes("title: words::warm_up(seen.os),"));
-  assert.ok(catalogue.includes(`titled(os, "Warm-Up", "${w.header}")`));
+  assert.ok(present("machine.rs").includes("title: words::warm_up(seen.front),"));
+  assert.ok(catalogue.includes(`titled(front, "Warm-Up", "${w.header}")`));
   // what a warm-up does under its name, its hours beside it, and its icon, Brightness
   assert.ok(xaml.includes('<TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" />'));
   assert.ok(present("machine.rs").includes("note: words::WARM_UP_NOTE.into(),"));
@@ -519,9 +520,9 @@ test("the notification at the share says what WindowsNotifications.cs builds fro
   assert.ok(source.includes("new AppNotificationButton(button.Title)"));
   const words = joined(catalogue);
   // a toast takes any button, so it names the account it switches to
-  assert.ok(words.includes("Os::Windows => switch_to(label),"));
+  assert.ok(words.includes("Front::WindowsNotificationArea => switch_to(label),"));
   const notices = present("notices.rs");
-  assert.ok(notices.includes("words::switch_button(OS, instead),"));
+  assert.ok(notices.includes("words::switch_button(front, instead),"));
   // short of 100%, the title names the limit, and the body how much of it the account has used
   assert.ok(notices.includes("let title = words::limit_notification("));
   assert.ok(

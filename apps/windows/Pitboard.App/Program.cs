@@ -44,7 +44,7 @@ public static class Program
             args,
             Running,
             fixtureFolder,
-            () => refusal = PitboardModelMethods.LaunchRefusal(environment),
+            () => refusal = PitboardModelMethods.LaunchRefusal(Identity.Front, environment),
             () =>
             {
                 var holder = Launching.Holder<AppInstance>(
@@ -59,7 +59,7 @@ public static class Program
                 Shell.Refuse(refusal!.Message);
                 return 1;
             case Start.LinkRefused:
-                Shell.Refuse(Words.Window.DebugLinkRefused!);
+                Shell.Refuse(Words.Own.DebugLinkRefused);
                 return 1;
             case Start.Redirect:
                 Redirection.To(running!);

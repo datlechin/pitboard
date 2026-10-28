@@ -4,7 +4,7 @@
 use super::{AccountItem, RowEnd};
 use crate::model::state::{Cadence, State};
 use crate::model::{LocalTime, PlatformError};
-use crate::{Account, Awaiting, Parked, Status, Usage, Warning};
+use crate::{Account, Awaiting, Front, Parked, Status, Usage, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::status::{Stale, Standing};
@@ -75,7 +75,7 @@ pub(crate) fn awaiting(label: &str, put_back: &str, again: bool) -> Awaiting {
 
 // What a read of `status` leaves the model with, `found` installed.
 pub(crate) fn read(status: Status, found: Vec<ProviderId>) -> State {
-    let mut state = State::new(Cadence::APP);
+    let mut state = State::new(Front::MacMenuBar, Cadence::APP);
     state.warnings = status.warnings.clone();
     state.status = Some(status);
     state.installed = Some(found);

@@ -23,9 +23,9 @@ use super::{
 };
 use crate::AccountKey;
 use crate::EnrolledAs;
+use crate::Front;
 use crate::Tool;
 use crate::present::words;
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::WaitStep;
@@ -1778,7 +1778,7 @@ fn a_park_refused_opens_the_app_again_behind() {
     );
     assert_eq!(
         shown.sheet_text.expect("the form").confirm,
-        words::add_account_shown(Os::MacOs, "Claude", false)
+        words::add_account_shown(Front::MacMenuBar, "Claude", false)
     );
     machine.changed += 1;
     model.notice(&mut machine);
@@ -1905,7 +1905,7 @@ fn a_park_cancelled_in_flight_and_asked_again_keeps_each_hold_its_own() {
 // Claude's quit failing each way: (quits, lingers, lost, what is said, what the apps were asked).
 pub(super) fn quits_failed() -> [(bool, bool, bool, String, Vec<String>); 3] {
     let still_open = words::still_open("Claude", "try again");
-    let lingering = words::part_still_running(Os::MacOs, "Claude", "try again");
+    let lingering = words::part_still_running(Front::MacMenuBar, "Claude", "try again");
     let (quit, open) = (format!("quit {CLAUDE}"), format!("open {CLAUDE}"));
     [
         (false, false, false, still_open.clone(), vec![quit.clone()]),
@@ -2006,7 +2006,7 @@ fn a_first_account_of_such_a_tool_is_recorded_as_the_one_signed_in() {
     put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::add_account(Os::MacOs, false)
+        words::add_account(Front::MacMenuBar, false)
     );
     let jobs = model.send(sign_in(Tool::Desktop, None));
     assert_eq!(
@@ -2075,7 +2075,7 @@ fn an_add_that_met_a_login_pitboard_cannot_place_records_the_account_claude_show
     assert_eq!(machine.signed_in, ["desktop/"]);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::add_account_shown(Os::MacOs, "Claude", false)
+        words::add_account_shown(Front::MacMenuBar, "Claude", false)
     );
     let jobs = model.send(sign_in_to_claude());
     assert!(
@@ -2370,7 +2370,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     put_up(&mut model, &mut machine, add(Some(Tool::Desktop)));
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::add_account_shown(Os::MacOs, "Claude", false)
+        words::add_account_shown(Front::MacMenuBar, "Claude", false)
     );
     model.send(sign_in_to_claude());
     model.run(&mut machine);
@@ -2384,7 +2384,7 @@ fn a_resumed_add_offers_to_put_its_account_back() {
     assert_eq!(
         page.undo.map(|undo| (undo.title, undo.intent)),
         Some((
-            words::switch_back_to(Os::MacOs, "work"),
+            words::switch_back_to(Front::MacMenuBar, "work"),
             Intent::SwitchTo {
                 account: AccountKey::new(Tool::Desktop, "work")
             }

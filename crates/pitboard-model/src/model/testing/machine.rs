@@ -3,6 +3,7 @@ use super::records::{
     CLAUDE, DANA, PLIST, Refusal, already_active, claude_code, claude_desktop, claude_holding,
     desktop_account, enrolled_as, refusal, status, watching,
 };
+use crate::Front;
 use crate::account_windows::records::{self, Entry, Records};
 use crate::model::EarlierPreferences;
 use crate::model::advice::Told;
@@ -706,9 +707,14 @@ pub(crate) struct Hand {
 }
 
 impl Hand {
+    // The macOS app's, whichever system runs the test.
     pub(crate) fn new() -> Hand {
+        Hand::on(Front::MacMenuBar)
+    }
+
+    pub(crate) fn on(front: Front) -> Hand {
         Hand {
-            state: State::new(Cadence::APP),
+            state: State::new(front, Cadence::APP),
             now: Now {
                 running: Duration::ZERO,
                 epoch_ms: 1_800_000_000_000,
@@ -815,15 +821,15 @@ impl Hand {
         self.shown()
     }
 
-    /// What an app is shown now, its clock times read in UTC.
+    /// What the state's front is shown now, its clock times read in UTC.
     pub(crate) fn shown(&self) -> Snapshot {
         crate::present::present(&self.state, self.now.epoch(), &crate::present::testing::Utc)
     }
 
-    // What a Mac's app is shown now, whichever system runs the test.
+    // What the macOS app is shown now, whichever front the state is the model of.
     pub(crate) fn on_a_mac(&self) -> Snapshot {
         crate::present::present_on(
-            pitboard_core::host::Os::MacOs,
+            Front::MacMenuBar,
             &self.state,
             self.now.epoch(),
             &crate::present::testing::Utc,
@@ -832,7 +838,7 @@ impl Hand {
 
     pub(crate) fn on_windows(&self) -> Snapshot {
         crate::present::present_on(
-            pitboard_core::host::Os::Windows,
+            Front::WindowsNotificationArea,
             &self.state,
             self.now.epoch(),
             &crate::present::testing::Utc,

@@ -33,7 +33,7 @@ public sealed class AccountWindowsTests
             InUse: false, Title: "main");
 
         StringAssert.StartsWith(
-            PitboardModelMethods.WindowNote(new WindowNoteKind.SignIn(), main),
+            PitboardModelMethods.WindowNote(Front.WindowsNotificationArea, new WindowNoteKind.SignIn(), main),
             "Sign in to chatgpt.com as main@example.com.");
         Assert.AreEqual("chatgpt.com says", PitboardModelMethods.DialogTitle("chatgpt.com", true));
         Assert.AreEqual(

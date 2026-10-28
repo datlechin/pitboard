@@ -191,7 +191,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public static string[] UpdatesNotes(IUpdates updates, string version) =>
         [
             .. updates.Refusal is { } refusal ? new[] { refusal } : [],
-            .. Versions.IsBeta(version) && Words.Settings.BetaUpdates is { } beta ? new[] { beta } : [],
+            .. Versions.IsBeta(version) ? new[] { Words.Own.BetaUpdates } : [],
         ];
 
     // 24:00, the end of a day, shows as midnight, as the macOS pickers show it.

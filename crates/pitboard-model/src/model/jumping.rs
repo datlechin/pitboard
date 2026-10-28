@@ -5,9 +5,8 @@ use super::testing::records::{claude_code, codex, status};
 use super::{Intent, Place};
 use crate::account_windows::stores::derive;
 use crate::present::testing::account;
-use crate::present::{glance_id, jump_refused_on, words};
-use crate::{Account, JumpAsk, JumpTask, OutsideAnswer, RunOutNotice};
-use pitboard_core::host::Os;
+use crate::present::{glance_id, words};
+use crate::{Account, Front, JumpAsk, JumpTask, OutsideAnswer, RunOutNotice, jump_refused};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::Standing;
 
@@ -60,7 +59,7 @@ fn window(site: &pitboard_sites::Site, label: &str, uuid: &str) -> JumpTask {
 
 fn add() -> JumpTask {
     JumpTask {
-        title: words::add_account(Os::Windows, true),
+        title: words::add_account(Front::WindowsNotificationArea, true),
         ask: JumpAsk::AddAccount,
     }
 }
@@ -152,8 +151,8 @@ fn the_jump_list_stays_as_it_was_before_the_read_and_while_uninstalling() {
 #[test]
 fn a_task_refused_is_said_in_a_notification_that_opens_the_accounts() {
     let said = words::SWITCH_UNDER_WAY.to_owned();
-    let notice = jump_refused_on(
-        Os::Windows,
+    let notice = jump_refused(
+        Front::WindowsNotificationArea,
         OutsideAnswer {
             request: 3,
             done: false,
@@ -165,7 +164,7 @@ fn a_task_refused_is_said_in_a_notification_that_opens_the_accounts() {
         notice,
         RunOutNotice {
             id: "outside-3".into(),
-            title: words::could_not_switch_from_outside(Os::Windows),
+            title: words::could_not_switch_from_outside(Front::WindowsNotificationArea),
             subtitle: None,
             body: said,
             clicked: notice.clicked.clone(),

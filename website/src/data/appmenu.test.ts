@@ -62,18 +62,18 @@ test("each item is one the UI tests read, with its key, and dimmed where they re
 test("the app's own items say what PitboardScenes.swift and its commands give them", () => {
   const scenes = mac("App/PitboardScenes.swift");
   for (const [word, said] of [
-    ["menu.about", 'about: titled(os, "About Pitboard", "About Pitboard")'],
+    ["menu.about", 'about: titled(front, "About Pitboard", "About Pitboard")'],
     [
       "menu.checkForUpdates",
-      'check_for_updates: titled(os, "Check for Updates…", "Check for updates")',
+      'check_for_updates: titled(front, "Check for Updates…", "Check for updates")',
     ],
-    ["menu.addAccount", "add_account: words::add_account(os, true)"],
-    ["menu.help", 'help: titled(os, "Pitboard Help", "Pitboard help")'],
+    ["menu.addAccount", "add_account: words::add_account(front, true)"],
+    ["menu.help", 'help: titled(front, "Pitboard Help", "Pitboard help")'],
   ]) {
     assert.ok(scenes.includes(`(words.${word}`), word);
     assert.ok(appWords.includes(said), said);
   }
-  assert.ok(catalogue.includes('titled(os, "Add Account…", "Add account…")'));
+  assert.ok(catalogue.includes('titled(front, "Add Account…", "Add account…")'));
   assert.ok(scenes.includes('.keyboardShortcut("n")'));
   const windows = mac("AccountWindows/AccountWindowCommands.swift");
   for (const [word, title] of [
@@ -83,7 +83,7 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
     ["zoomOut", "Zoom Out"],
   ]) {
     assert.ok(windows.includes(`(words.accountWindow.${word})`), word);
-    assert.ok(appWords.includes(`titled(os, "${title}", `), title);
+    assert.ok(appWords.includes(`titled(front, "${title}", `), title);
   }
   for (const [word, title] of [
     ["back", "Back"],
@@ -109,7 +109,7 @@ test("the Account menu with nothing selected offers what the model says, each di
   const accounts = repo("crates/pitboard-model/src/present/accounts.rs");
   assert.ok(
     accounts.includes(
-      "offers: vec![\n            words::switch_account(None),\n            words::sign_in_again(os, true),\n            words::rename(true).into(),\n        ],\n        forget: words::remove_account(os),",
+      "offers: vec![\n            words::switch_account(None),\n            words::sign_in_again(front, true),\n            words::rename(true).into(),\n        ],\n        forget: words::remove_account(front),",
     ),
   );
   assert.ok(catalogue.includes(`None => SWITCH.into(),`));

@@ -11,8 +11,7 @@ use crate::model::advice::HeadsUp;
 use crate::model::state::in_its_app;
 use crate::model::{Doing, Intent, LastSwitch, Opens, Place, Sheet, SignedIn};
 use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
-use crate::{Account, Adoption, Held, Warning};
-use pitboard_core::host::OS;
+use crate::{Account, Adoption, Front, Held, Warning};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::words as said;
@@ -114,7 +113,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                 words::awaiting_lines(app, &awaiting.label, put_back, awaiting.again),
                 vec![
                     NoticeAction {
-                        title: words::finish(seen.os, awaiting.again),
+                        title: words::finish(seen.front, awaiting.again),
                         intent: Intent::PresentSheet { sheet },
                         dismisses: false,
                         switches: false,
@@ -122,7 +121,7 @@ fn awaiting(seen: &Seen) -> Vec<PanelNotice> {
                         confirm: None,
                     },
                     NoticeAction {
-                        title: words::switch_back_to(seen.os, put_back),
+                        title: words::switch_back_to(seen.front, put_back),
                         ..switch_action(seen, &awaiting.put_back, put_back)
                     },
                 ],
@@ -194,7 +193,7 @@ pub(crate) fn cancel_stuck_question(seen: &Seen) -> Question {
     Question::asking(
         words::CANCEL_SWITCH_QUESTION.into(),
         words::cancel_stuck(&moving(seen)),
-        words::cancel_switch(seen.os, false),
+        words::cancel_switch(seen.front, false),
     )
 }
 
@@ -221,7 +220,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             words::SWITCH_WAITING.into(),
             lines,
             vec![NoticeAction {
-                title: words::cancel_switch(seen.os, true),
+                title: words::cancel_switch(seen.front, true),
                 intent: Intent::AbandonStuckSwitch,
                 dismisses: false,
                 switches: false,
@@ -246,7 +245,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
             words::could_not(&Doing::ReadUsage),
             lines,
             vec![NoticeAction {
-                title: words::try_again(seen.os),
+                title: words::try_again(seen.front),
                 intent: Intent::Refresh { asked: true },
                 dismisses: false,
                 switches: false,
@@ -301,7 +300,9 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         ids.push(id.clone());
         let actions = warning_actions(seen, warning);
         said.push(PanelNotice {
-            learn: actions.is_empty().then(|| super::next::of_warning(seen.os)),
+            learn: actions
+                .is_empty()
+                .then(|| super::next::of_warning(seen.front)),
             ..notice(
                 id,
                 Severity::Warning,
@@ -353,7 +354,7 @@ fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
     // Doctor's checks list what was set aside.
     if warning.code == "set_aside" {
         return vec![NoticeAction {
-            title: words::show_diagnostics(seen.os),
+            title: words::show_diagnostics(seen.front),
             intent: Intent::Show {
                 place: Some(Place::Checks),
             },
@@ -370,7 +371,7 @@ fn warning_actions(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
         "config_names_another" => update_config_action(seen),
         "fallback_login" if warning.held != Some(Held::Unreadable) => {
             vec![NoticeAction {
-                title: words::clean_up(seen.os, true),
+                title: words::clean_up(seen.front, true),
                 intent: Intent::PresentSheet { sheet: Sheet::Stow },
                 dismisses: false,
                 switches: false,
@@ -389,7 +390,7 @@ fn sign_in_again_action(seen: &Seen, warning: &Warning) -> Vec<NoticeAction> {
         .find(|account| Some(account.id.as_str()) == warning.account.as_deref())
         .and_then(|account| Some(Key::new(account.provider, account.label.clone()?)))
         .map(|account| NoticeAction {
-            title: words::sign_in_again(seen.os, true),
+            title: words::sign_in_again(seen.front, true),
             intent: Intent::PresentSheet {
                 sheet: Sheet::SignInAgain {
                     account: account.into(),
@@ -414,7 +415,7 @@ fn in_app_actions(seen: &Seen, provider: ProviderId, code: &str) -> Vec<NoticeAc
     }
     let app = provider.program();
     let mut actions = vec![NoticeAction {
-        title: words::add_account_shown(seen.os, app, true),
+        title: words::add_account_shown(seen.front, app, true),
         intent: Intent::PresentSheet {
             sheet: Sheet::Add {
                 tool: Some(provider.into()),
@@ -431,7 +432,7 @@ fn in_app_actions(seen: &Seen, provider: ProviderId, code: &str) -> Vec<NoticeAc
     );
     if code == "move_waiting" && stopped {
         actions.push(NoticeAction {
-            title: words::cancel_switch(seen.os, true),
+            title: words::cancel_switch(seen.front, true),
             intent: Intent::AbandonStuckSwitch,
             dismisses: false,
             switches: false,
@@ -439,7 +440,7 @@ fn in_app_actions(seen: &Seen, provider: ProviderId, code: &str) -> Vec<NoticeAc
             confirm: Some(Question::asking(
                 words::CANCEL_MOVE_QUESTION.into(),
                 words::cancel_move(app),
-                words::cancel_switch(seen.os, false),
+                words::cancel_switch(seen.front, false),
             )),
         });
     }
@@ -454,7 +455,7 @@ fn update_config_action(seen: &Seen) -> Vec<NoticeAction> {
         .find(|account| account.provider == ProviderId::Claude && account.signed_in)
         .and_then(|account| account.key.clone())
         .map(|key| NoticeAction {
-            title: words::update_config(seen.os),
+            title: words::update_config(seen.front),
             intent: Intent::UpdateConfig {
                 account: key.into(),
             },
@@ -499,7 +500,7 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
     };
     let until = last.follows_at.filter(|at| *at > seen.now);
     let back = last.back.as_ref().map(|back| NoticeAction {
-        title: words::switch_back(seen.os),
+        title: words::switch_back(seen.front),
         intent: Intent::SwitchBack {
             from: back.from.clone().into(),
             to: last.to.clone().into(),
@@ -519,7 +520,7 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
         until_label: until.map(|_| words::sessions_follow_in(tool)),
         until,
         learn: (severity != Severity::Info && last.back.is_none())
-            .then(|| super::next::of_warning(seen.os)),
+            .then(|| super::next::of_warning(seen.front)),
         ..notice(
             format!("switch/{}", last.provider),
             severity,
@@ -618,7 +619,7 @@ fn button(title: String, clicked: &Clicked) -> Option<NotificationButton> {
 }
 
 // A switch asks for a window only where it ends in a question.
-pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
+pub(crate) fn notification_buttons(front: Front) -> Vec<NotificationButtonKind> {
     vec![
         NotificationButtonKind {
             title: words::SWITCH.into(),
@@ -626,12 +627,12 @@ pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
             symbol: "arrow.left.arrow.right".into(),
         },
         NotificationButtonKind {
-            title: words::switch_back(OS),
+            title: words::switch_back(front),
             opens_window: false,
             symbol: "arrow.uturn.backward".into(),
         },
         NotificationButtonKind {
-            title: words::sign_in_again_button(OS),
+            title: words::sign_in_again_button(front),
             opens_window: true,
             symbol: "person.crop.circle".into(),
         },
@@ -639,10 +640,10 @@ pub(crate) fn notification_buttons() -> Vec<NotificationButtonKind> {
 }
 
 // Its id names the account, the limit and the reset: one notification for each limit.
-pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
+pub(crate) fn at_limit_notice(front: Front, heads_up: &HeadsUp, now: i64) -> RunOutNotice {
     let limit = &heads_up.window;
     let title = words::limit_notification(
-        OS,
+        front,
         &said::limit_name(limit),
         heads_up.window.scope.as_deref(),
         limit.used_up(now),
@@ -659,7 +660,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
             .as_ref()
             .and_then(|(instead, _, switch_to)| {
                 button(
-                    words::switch_button(OS, instead),
+                    words::switch_button(front, instead),
                     &Clicked::Switch(switch_to.clone()),
                 )
             }),
@@ -675,6 +676,7 @@ pub(crate) fn at_limit_notice(heads_up: &HeadsUp, now: i64) -> RunOutNotice {
 
 // `from` and `to` as the core types them, and `accounts` the two they name.
 pub(crate) fn auto_switched_notice(
+    front: Front,
     from: &str,
     to: &str,
     accounts: &(Key, Key),
@@ -688,7 +690,7 @@ pub(crate) fn auto_switched_notice(
         to: put.clone(),
     };
     RunOutNotice {
-        button: button(words::switch_back(OS), &back),
+        button: button(words::switch_back(front), &back),
         ..posted(
             format!("auto/{from}/{to}/{at}"),
             words::switched_to(None, &put.label),
@@ -701,10 +703,16 @@ pub(crate) fn auto_switched_notice(
 
 /// Where Pitboard would have switched Claude Code by itself and did not: how much of which
 /// limit, and why, in the core's words. Identified by what tells the reason apart, `key`.
-pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) -> RunOutNotice {
+pub(crate) fn auto_skipped_notice(
+    front: Front,
+    key: &str,
+    from: &str,
+    used: &str,
+    why: &str,
+) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
-        words::not_switched(OS),
+        words::not_switched(front),
         Some(ProviderId::Claude),
         words::used_then(from, used, &words::sentence(why)),
         &Clicked::Limits,
@@ -713,10 +721,10 @@ pub(crate) fn auto_skipped_notice(key: &str, from: &str, used: &str, why: &str) 
 
 /// Where Pitboard cannot judge whether to switch Claude Code by itself: why, in the core's
 /// words. Identified by what tells the reason apart, `key`.
-pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
+pub(crate) fn auto_not_watching_notice(front: Front, key: &str, why: &str) -> RunOutNotice {
     posted(
         format!("auto-{key}"),
-        words::not_switching(OS),
+        words::not_switching(front),
         Some(ProviderId::Claude),
         words::sentence(why),
         &Clicked::Limits,
@@ -724,17 +732,21 @@ pub(crate) fn auto_not_watching_notice(key: &str, why: &str) -> RunOutNotice {
 }
 
 // A sign-in replaced outside Pitboard, posted once, with Sign In Again for `again` where added.
-pub(crate) fn standing_notice(warning: &Warning, again: Option<&Key>) -> RunOutNotice {
+pub(crate) fn standing_notice(
+    front: Front,
+    warning: &Warning,
+    again: Option<&Key>,
+) -> RunOutNotice {
     RunOutNotice {
         button: again.and_then(|account| {
             button(
-                words::sign_in_again_button(OS),
+                words::sign_in_again_button(front),
                 &Clicked::SignInAgain(account.clone()),
             )
         }),
         ..posted(
             warning_id(warning),
-            words::sign_in_replaced(OS),
+            words::sign_in_replaced(front),
             warning.provider,
             warning.message.clone(),
             &Clicked::Accounts,
@@ -743,18 +755,18 @@ pub(crate) fn standing_notice(warning: &Warning, again: Option<&Key>) -> RunOutN
 }
 
 // Titled as its row is marked.
-pub(crate) fn unusable_notice(account: &Account) -> RunOutNotice {
+pub(crate) fn unusable_notice(front: Front, account: &Account) -> RunOutNotice {
     let label = account.label.as_deref().unwrap_or_default();
     RunOutNotice {
         button: account.key.as_ref().and_then(|key| {
             button(
-                words::sign_in_again_button(OS),
+                words::sign_in_again_button(front),
                 &Clicked::SignInAgain(key.clone()),
             )
         }),
         ..posted(
             format!("{UNUSABLE}{}", account.id),
-            words::sign_in_title(OS, account.standing),
+            words::sign_in_title(front, account.standing),
             Some(account.provider),
             words::sign_in_to_keep(label),
             &Clicked::Accounts,
@@ -763,10 +775,10 @@ pub(crate) fn unusable_notice(account: &Account) -> RunOutNotice {
 }
 
 /// A switch Pitboard tried by itself and could not make, in the core's words.
-pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
+pub(crate) fn auto_refused_notice(front: Front, code: &str, message: &str) -> RunOutNotice {
     posted(
         format!("auto-refused/{code}"),
-        words::could_not_switch_itself(OS),
+        words::could_not_switch_itself(front),
         Some(ProviderId::Claude),
         message.into(),
         &Clicked::Limits,
@@ -774,10 +786,10 @@ pub(crate) fn auto_refused_notice(code: &str, message: &str) -> RunOutNotice {
 }
 
 // By what tells it apart, so one account's does not replace another's.
-pub(crate) fn warm_failed_notice(told_apart: &str, message: &str) -> RunOutNotice {
+pub(crate) fn warm_failed_notice(front: Front, told_apart: &str, message: &str) -> RunOutNotice {
     posted(
         format!("warm-failed/{told_apart}"),
-        words::could_not_warm_itself(OS),
+        words::could_not_warm_itself(front),
         Some(ProviderId::Claude),
         message.into(),
         &Clicked::Limits,
@@ -830,7 +842,7 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
     let others = others.first().map(|first| {
         let one = others.len() == 1;
         MenuEntry {
-            title: words::issues(seen.os, others.len()),
+            title: words::issues(seen.front, others.len()),
             subtitle: Some(first.title.clone()),
             help: one.then(|| first.lines.join(" ")),
             severity: Some(first.severity),
@@ -847,7 +859,7 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
             let label = account.label.clone()?;
             let standing = words::sign_in_standing(account.standing);
             Some(MenuEntry {
-                title: words::sign_in_to_again(seen.os, &label, true),
+                title: words::sign_in_to_again(seen.front, &label, true),
                 subtitle: Some(words::of_tool(
                     seen.tool_if_shown(account.provider),
                     standing,
@@ -867,7 +879,7 @@ pub(crate) fn menu_notices(seen: &Seen, footing: &Footing, notices: &[PanelNotic
     MenuNotices {
         sign_ins,
         install: (*footing == Footing::NoClaudeCode).then(|| MenuEntry {
-            title: words::claude_code_not_installed(seen.os),
+            title: words::claude_code_not_installed(seen.front),
             subtitle: Some(words::LEARN_TO_INSTALL.into()),
             help: None,
             severity: None,
@@ -918,13 +930,13 @@ mod tests {
         assert_eq!(sorted, severities);
     }
 
+    use crate::Front;
     use crate::model::LastSwitch;
     use crate::present::present_on;
     use crate::present::testing::{
         Utc, account, awaiting, claude_code, claude_desktop, desktop_account, desktop_warning,
         read, status,
     };
-    use pitboard_core::host::Os;
 
     fn parked_both() -> crate::Status {
         status(
@@ -938,7 +950,7 @@ mod tests {
 
     fn shown(status: crate::Status) -> crate::Snapshot {
         let state = read(status, vec![claude_code(), claude_desktop()]);
-        present_on(Os::MacOs, &state, 0, &Utc)
+        present_on(Front::MacMenuBar, &state, 0, &Utc)
     }
 
     fn awaiting_notice(shown: &crate::Snapshot) -> PanelNotice {
@@ -961,7 +973,7 @@ mod tests {
     // Doctor's checks list what was set aside, so its notice shows them rather than saying where.
     #[test]
     fn a_notice_about_what_was_set_aside_offers_show_diagnostics() {
-        for os in [Os::MacOs, Os::Windows] {
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
             for provider in [None, Some(ProviderId::Desktop)] {
                 let set_aside = Warning {
                     code: "set_aside".into(),
@@ -974,7 +986,7 @@ mod tests {
                     status(Vec::new(), vec![set_aside]),
                     vec![claude_code(), claude_desktop()],
                 );
-                let shown = present_on(os, &state, 0, &Utc);
+                let shown = present_on(front, &state, 0, &Utc);
                 let notice = shown
                     .notices
                     .iter()
@@ -983,7 +995,7 @@ mod tests {
                 assert_eq!(
                     notice.actions,
                     [NoticeAction {
-                        title: words::show_diagnostics(os),
+                        title: words::show_diagnostics(front),
                         intent: Intent::Show {
                             place: Some(Place::Checks)
                         },
@@ -992,7 +1004,7 @@ mod tests {
                         enabled: true,
                         confirm: None,
                     }],
-                    "{os:?} {provider:?}"
+                    "{front:?} {provider:?}"
                 );
             }
         }
@@ -1013,7 +1025,7 @@ mod tests {
             actions(&notice),
             [
                 (
-                    words::finish(Os::MacOs, false).as_str(),
+                    words::finish(Front::MacMenuBar, false).as_str(),
                     &Intent::PresentSheet {
                         sheet: Sheet::Add {
                             tool: Some(Tool::Desktop)
@@ -1021,7 +1033,7 @@ mod tests {
                     }
                 ),
                 (
-                    words::switch_back_to(Os::MacOs, "work").as_str(),
+                    words::switch_back_to(Front::MacMenuBar, "work").as_str(),
                     &Intent::SwitchTo {
                         account: AccountKey::new(Tool::Desktop, "work")
                     }
@@ -1046,7 +1058,7 @@ mod tests {
         assert_eq!(
             actions(&notice)[0],
             (
-                words::finish(Os::MacOs, true).as_str(),
+                words::finish(Front::MacMenuBar, true).as_str(),
                 &Intent::PresentSheet {
                     sheet: Sheet::SignInAgain {
                         account: AccountKey::new(Tool::Desktop, "home")
@@ -1099,7 +1111,7 @@ mod tests {
             assert_eq!(
                 actions(notice),
                 [(
-                    words::add_account_shown(Os::MacOs, "Claude", true).as_str(),
+                    words::add_account_shown(Front::MacMenuBar, "Claude", true).as_str(),
                     &Intent::PresentSheet {
                         sheet: Sheet::Add {
                             tool: Some(Tool::Desktop)
@@ -1126,7 +1138,7 @@ mod tests {
         );
         assert_eq!(
             shown.notices[0].actions[0].title,
-            words::update_config(Os::MacOs),
+            words::update_config(Front::MacMenuBar),
             "Claude Code's own stays"
         );
     }
@@ -1142,7 +1154,7 @@ mod tests {
         );
         let mut state = super::super::testing::read(read, vec![claude_code(), claude_desktop()]);
         state.stuck = true;
-        let shown = present_on(Os::MacOs, &state, 0, &Utc);
+        let shown = present_on(Front::MacMenuBar, &state, 0, &Utc);
         assert!(
             !shown
                 .notices
@@ -1201,8 +1213,8 @@ mod tests {
                 .map(|entry| entry.title.clone())
                 .collect::<Vec<_>>(),
             [
-                words::finish(Os::MacOs, false),
-                words::switch_back_to(Os::MacOs, "work")
+                words::finish(Front::MacMenuBar, false),
+                words::switch_back_to(Front::MacMenuBar, "work")
             ]
         );
         assert!(
@@ -1240,7 +1252,7 @@ mod tests {
             opens: Some(Opens::Switched { app: "Claude" }),
             back: None,
         }];
-        let shown = present_on(Os::MacOs, &state, 0, &Utc);
+        let shown = present_on(Front::MacMenuBar, &state, 0, &Utc);
         let notice = shown
             .notices
             .iter()

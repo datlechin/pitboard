@@ -48,17 +48,16 @@ pub(crate) mod words;
 pub(crate) mod testing;
 
 pub use app_words::{
-    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords,
-    ShortcutsWords, WindowWords, already_there, app_words, install_update, links_to, named_version,
-    path_too_long, ready_to_install, still_switching, trash_says, usage_of,
-    webview_runtime_too_old,
+    AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
+    SheetWords, WindowWords, WindowsNotificationAreaWords, already_there, app_words,
+    install_update, links_to, mac_menu_bar_words, named_version, path_too_long, ready_to_install,
+    still_switching, trash_says, usage_of, webview_runtime_too_old,
+    windows_notification_area_words,
 };
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]
 pub(crate) use glance::glance_on;
 pub(crate) use glance::{GlanceText, glance, id as glance_id};
-#[cfg(test)]
-pub(crate) use jump_list::jump_refused_on;
 pub use jump_list::{JumpAsk, JumpTask, jump_refused};
 pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
@@ -84,8 +83,7 @@ pub(crate) use notices::{
 use crate::account_windows::{AlertText, WindowAccount};
 use crate::model::state::State;
 use crate::model::{Intent, LocalTime, Snapshot};
-use crate::{Account, AccountKey, Tool, UsageLevel};
-use pitboard_core::host::{OS, Os};
+use crate::{Account, AccountKey, Front, Tool, UsageLevel};
 use pitboard_core::provider::ProviderId;
 
 // Not `MenuBar`, which WinUI 3 has a control of: a C# file using both namespaces would find it
@@ -667,17 +665,17 @@ pub(crate) struct Seen<'a> {
     pub(crate) now: i64,
     local: &'a dyn LocalTime,
     pub(crate) tools: Vec<ProviderId>,
-    pub(crate) os: Os,
+    pub(crate) front: Front,
 }
 
 impl<'a> Seen<'a> {
-    fn new(state: &'a State, now: i64, local: &'a dyn LocalTime, os: Os) -> Seen<'a> {
+    fn new(state: &'a State, now: i64, local: &'a dyn LocalTime, front: Front) -> Seen<'a> {
         Seen {
             state,
             now,
             local,
-            tools: crate::tools_on(os),
-            os,
+            tools: crate::tools_on(front.os()),
+            front,
         }
     }
 
@@ -847,13 +845,14 @@ pub(crate) fn clock_of(local: &dyn LocalTime, at: i64, now: i64) -> String {
 
 /// Everything the model has to show, as of `now` in epoch seconds, numbered 0: the actor
 /// numbers what it hands on. Asks `local` for each clock time, and nothing else of anyone.
+/// What differs by front is the state's front's.
 pub(crate) fn present(state: &State, now: i64, local: &dyn LocalTime) -> Snapshot {
-    present_on(OS, state, now, local)
+    present_on(state.front, state, now, local)
 }
 
-/// The same, as `os` says what differs by system.
-pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime) -> Snapshot {
-    let seen = Seen::new(state, now, local, os);
+/// The same, as `front` says what differs by front: a test's look at another front's.
+pub(crate) fn present_on(front: Front, state: &State, now: i64, local: &dyn LocalTime) -> Snapshot {
+    let seen = Seen::new(state, now, local, front);
     let footing = setup::footing(&seen);
     let notices = notices::notices(&seen, &footing);
     let menu_notices = notices::menu_notices(&seen, &footing, &notices);
@@ -872,10 +871,10 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         signing_in: state.shown_sign_in(),
         sheet: state.sheet.clone(),
         sheet_failure: (state.sheet_failure.as_ref())
-            .map(|failure| sheets::failure_text(os, failure)),
+            .map(|failure| sheets::failure_text(front, failure)),
         menu_bar: accounts::menu_bar(&seen, &menu_notices),
         sections: accounts::sections(&seen),
-        account_menu: accounts::account_menu(seen.os),
+        account_menu: accounts::account_menu(seen.front),
         menu_notices,
         notices,
         setup: setup::step(&seen, &footing),
@@ -888,7 +887,8 @@ pub(crate) fn present_on(os: Os, state: &State, now: i64, local: &dyn LocalTime)
         sheet_text: sheets::sheet_text(&seen),
         signing_in_text: sheets::signing_in_text(&seen),
         stow_text: sheets::stow_text(&seen),
-        failure_alert: (state.presented.as_ref()).map(|failure| sheets::failure_alert(os, failure)),
+        failure_alert: (state.presented.as_ref())
+            .map(|failure| sheets::failure_alert(front, failure)),
         machine: machine::machine(&seen),
         account_windows: windows::account_windows(&seen),
         uninstall: removal::uninstall(&seen),
@@ -936,8 +936,8 @@ mod tests {
         use pitboard_core::status::Standing;
         let mut state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
         state.sheet = Some(Sheet::Add { tool: None });
-        let words = |os| {
-            let shown = present_on(os, &state, MIDDAY, &Utc);
+        let words = |front| {
+            let shown = present_on(front, &state, MIDDAY, &Utc);
             let AccountsShown::NoAccounts { title, add, .. } = shown.accounts_shown else {
                 panic!("{:?}", shown.accounts_shown);
             };
@@ -945,21 +945,21 @@ mod tests {
             let empty = shown.machine.activity.empty.expect("no activity");
             [title, add.title, sheet.title, sheet.confirm, empty.title]
         };
-        for os in [Os::MacOs, Os::Windows] {
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
             assert_eq!(
-                words(os),
+                words(front),
                 [
-                    words::no_accounts(os).0,
-                    words::add_account(os, true),
-                    words::add_account(os, false),
-                    words::sign_in_asking(os),
-                    words::no_activity(os).0
+                    words::no_accounts(front).0,
+                    words::add_account(front, true),
+                    words::add_account(front, false),
+                    words::sign_in_asking(front),
+                    words::no_activity(front).0
                 ]
             );
         }
         assert_ne!(
-            words(Os::MacOs),
-            words(Os::Windows),
+            words(Front::MacMenuBar),
+            words(Front::WindowsNotificationArea),
             "each system its own case"
         );
         let mut accounts = vec![
@@ -1006,7 +1006,12 @@ mod tests {
             "Share",
         ];
         let mut found = Vec::new();
-        for said in strings_of(&present_on(Os::Windows, &state, MIDDAY, &Utc)) {
+        for said in strings_of(&present_on(
+            Front::WindowsNotificationArea,
+            &state,
+            MIDDAY,
+            &Utc,
+        )) {
             if !title_cased(&said, &names).is_empty() {
                 found.push(said);
             }
@@ -1021,8 +1026,8 @@ mod tests {
     /// The clock is read in UTC.
     #[test]
     fn a_clock_time_names_its_day_only_when_it_is_not_today() {
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, MIDDAY, &Utc, OS);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar);
         assert_eq!(seen.clock(MIDDAY + 6 * 3600), "18:00");
         assert_eq!(seen.clock(MIDDAY - 11 * 3600), "01:00");
         assert_eq!(seen.clock(MIDDAY + 6 * 3600 + 86_400), "Thu 18:00");
@@ -1034,8 +1039,8 @@ mod tests {
     /// nothing but the app's `LocalTime` reads that zone.
     #[test]
     fn a_clock_the_app_cannot_read_is_said_in_utc() {
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, MIDDAY, &Unreadable, OS);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, MIDDAY, &Unreadable, Front::MacMenuBar);
         assert_eq!(seen.clock(MIDDAY + 2 * 3600), "14:00 UTC");
         assert_eq!(seen.clock(MIDDAY + 3 * 86_400), "Sat 12:00 UTC");
     }
@@ -1043,11 +1048,14 @@ mod tests {
     // A day is the person's calendar's, and UTC's, named so, where the app's code can't say it.
     #[test]
     fn a_date_is_the_persons_or_utcs_named_so() {
-        let state = State::new(Cadence::APP);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
         let at = MIDDAY + 37 * 86_400;
-        assert_eq!(Seen::new(&state, MIDDAY, &Utc, OS).date_of(at), "Feb 20");
         assert_eq!(
-            Seen::new(&state, MIDDAY, &Unreadable, OS).date_of(at),
+            Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar).date_of(at),
+            "Feb 20"
+        );
+        assert_eq!(
+            Seen::new(&state, MIDDAY, &Unreadable, Front::MacMenuBar).date_of(at),
             "Feb 20 UTC"
         );
     }
@@ -1057,8 +1065,8 @@ mod tests {
     /// not a time is said as the log keeps it, as is a time the app's own code cannot say.
     #[test]
     fn a_changes_time_is_read_with_its_offset() {
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, MIDDAY, &Utc, OS);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar);
         let moment = Utc
             .date_and_time(1_790_492_709)
             .expect("the test's own clock");
@@ -1073,7 +1081,7 @@ mod tests {
         assert_eq!(seen.date_and_time("yesterday"), "yesterday");
         assert_eq!(seen.date_and_time(""), "");
 
-        let unreadable = Seen::new(&state, MIDDAY, &Unreadable, OS);
+        let unreadable = Seen::new(&state, MIDDAY, &Unreadable, Front::MacMenuBar);
         assert_eq!(
             unreadable.date_and_time("2026-09-27T14:05:09+07:00"),
             "2026-09-27T14:05:09+07:00"
@@ -1090,7 +1098,7 @@ mod tests {
         ];
         let mut state = read(status(accounts, Vec::new()), vec![claude_code()]);
         state.stuck = true;
-        let shown = present_on(Os::MacOs, &state, MIDDAY, &Utc);
+        let shown = present_on(Front::MacMenuBar, &state, MIDDAY, &Utc);
         let asked = |question: &Question| (question.destructive, question.confirm_is_default);
         let remove = (shown.sections[0].accounts[1].actions.iter())
             .find(|action| action.kind == ActionKind::Remove)
@@ -1107,7 +1115,7 @@ mod tests {
             "Anthropic refuses it.",
         );
         assert_eq!(asked(&replace.question), (false, true));
-        let quit = downloads_quit_question(1).expect("a download runs");
+        let quit = downloads_quit_question(Front::MacMenuBar, 1).expect("a download runs");
         assert_eq!(asked(&quit), (false, true));
         let uninstall = shown.uninstall.confirm.expect("Uninstall asks");
         assert_eq!(asked(&uninstall), (false, false));
@@ -1127,7 +1135,7 @@ mod tests {
             vec![claude_code(), claude_desktop()],
         );
         assert_eq!(
-            Seen::new(&state, MIDDAY, &Utc, Os::MacOs).services(),
+            Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar).services(),
             "Anthropic"
         );
         let state = read(
@@ -1145,7 +1153,7 @@ mod tests {
             desktop(),
         );
         assert_eq!(
-            Seen::new(&state, MIDDAY, &Utc, Os::MacOs).services(),
+            Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar).services(),
             "Anthropic or OpenAI"
         );
         let state = read(
@@ -1162,7 +1170,7 @@ mod tests {
             desktop(),
         );
         assert_eq!(
-            Seen::new(&state, MIDDAY, &Utc, Os::MacOs).services(),
+            Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar).services(),
             "OpenAI",
             "nobody is asked about a Claude Desktop login"
         );
@@ -1171,7 +1179,7 @@ mod tests {
             vec![codex(), claude_desktop()],
         );
         assert_eq!(
-            Seen::new(&state, MIDDAY, &Utc, Os::MacOs).services(),
+            Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar).services(),
             "OpenAI"
         );
         let state = read(
@@ -1179,7 +1187,7 @@ mod tests {
             vec![claude_desktop()],
         );
         assert_eq!(
-            Seen::new(&state, MIDDAY, &Utc, Os::MacOs).services(),
+            Seen::new(&state, MIDDAY, &Utc, Front::MacMenuBar).services(),
             "Anthropic",
             "never nobody"
         );

@@ -3,7 +3,7 @@
 //! asked for from outside the app.
 
 use super::{ADD_ASKING, SWITCH, titled, uncapitalised};
-use pitboard_core::host::Os;
+use crate::Front;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::Standing;
 use pitboard_core::time::{DAY, MINUTE};
@@ -37,8 +37,8 @@ pub(crate) fn saved_until(until: &str, lapses: bool) -> String {
 // What VoiceOver and Narrator call a switching row's spinner.
 pub(crate) const SWITCHING: &str = "Switching";
 
-pub(crate) fn in_use(os: Os) -> String {
-    titled(os, "In Use", IN_USE)
+pub(crate) fn in_use(front: Front) -> String {
+    titled(front, "In Use", IN_USE)
 }
 
 // The detail's sign-in line, a value among sentences.
@@ -50,11 +50,15 @@ pub(crate) fn switch_to(label: &str) -> String {
 }
 
 /// The menu's one item for everything else to know about, more than one of them.
-pub(crate) fn issues(os: Os, count: usize) -> String {
+pub(crate) fn issues(front: Front, count: usize) -> String {
     if count == 1 {
-        titled(os, "1 Issue", "1 issue")
+        titled(front, "1 Issue", "1 issue")
     } else {
-        titled(os, &format!("{count} Issues"), &format!("{count} issues"))
+        titled(
+            front,
+            &format!("{count} Issues"),
+            &format!("{count} issues"),
+        )
     }
 }
 
@@ -64,10 +68,14 @@ pub(crate) fn named_with_tool(label: &str, tool: &str) -> String {
 }
 
 // "work" on macOS, whose subtitle says the rest; "work (42%)", "old (sign-in expired)" on Windows.
-pub(crate) fn named_in_menu(os: Os, title: &str, aside: Option<&str>) -> String {
-    match (os, aside) {
-        (Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),
-        _ => title.to_owned(),
+pub(crate) fn named_in_menu(front: Front, title: &str, aside: Option<&str>) -> String {
+    match (front, aside) {
+        (Front::WindowsNotificationArea, Some(aside)) => {
+            format!("{title} ({})", uncapitalised(aside))
+        }
+        (Front::WindowsNotificationArea, None) | (Front::MacMenuBar | Front::Gnome, _) => {
+            title.to_owned()
+        }
     }
 }
 
@@ -133,8 +141,8 @@ pub(crate) fn rename(asks: bool) -> &'static str {
     if asks { "Rename…" } else { "Rename" }
 }
 
-pub(crate) fn remove_account(os: Os) -> String {
-    titled(os, "Remove Account…", "Remove account…")
+pub(crate) fn remove_account(front: Front) -> String {
+    titled(front, "Remove Account…", "Remove account…")
 }
 
 pub(crate) const REMOVE: &str = "Remove";
@@ -233,12 +241,12 @@ pub(crate) fn limit_reached(title: &str, clock: Option<&str>) -> String {
 
 // The menu's line: "5-hour 42% used, Weekly 12%", each limit by its name beside its bar, and
 // in sentence case on Windows.
-pub(crate) fn limits_line(os: Os, limits: &[(String, String)]) -> String {
+pub(crate) fn limits_line(front: Front, limits: &[(String, String)]) -> String {
     let said: Vec<String> = (limits.iter().enumerate())
-        .map(|(at, (name, figure))| match (at, os) {
+        .map(|(at, (name, figure))| match (at, front) {
             (0, _) => format!("{name} {}", used(figure)),
-            (_, Os::Windows) => format!("{} {figure}", uncapitalised(name)),
-            (_, Os::MacOs | Os::Linux) => format!("{name} {figure}"),
+            (_, Front::WindowsNotificationArea) => format!("{} {figure}", uncapitalised(name)),
+            (_, Front::MacMenuBar | Front::Gnome) => format!("{name} {figure}"),
         })
         .collect();
     said.join(", ")
@@ -468,7 +476,10 @@ mod tests {
         );
         assert_eq!((rename(true), rename(false)), ("Rename…", "Rename"));
         assert_eq!(
-            (remove_account(Os::MacOs), remove_account(Os::Windows)),
+            (
+                remove_account(Front::MacMenuBar),
+                remove_account(Front::WindowsNotificationArea)
+            ),
             ("Remove Account…".into(), "Remove account…".into())
         );
         assert_eq!(REMOVE, "Remove");
@@ -511,31 +522,47 @@ mod tests {
             ("Weekly (Fable)".to_owned(), "3%".to_owned()),
         ];
         assert_eq!(
-            limits_line(Os::MacOs, &limits),
+            limits_line(Front::MacMenuBar, &limits),
             "5-hour 42% used, Weekly 12%, Weekly (Fable) 3%"
         );
         assert_eq!(
-            limits_line(Os::Windows, &limits),
+            limits_line(Front::WindowsNotificationArea, &limits),
             "5-hour 42% used, weekly 12%, weekly (Fable) 3%"
         );
-        assert_eq!(limits_line(Os::Windows, &limits[1..2]), "Weekly 12% used");
         assert_eq!(
-            (in_use(Os::MacOs), in_use(Os::Windows)),
+            limits_line(Front::WindowsNotificationArea, &limits[1..2]),
+            "Weekly 12% used"
+        );
+        assert_eq!(
+            (
+                in_use(Front::MacMenuBar),
+                in_use(Front::WindowsNotificationArea)
+            ),
             ("In Use".into(), "In use".into())
         );
         assert_eq!(SWITCHING, "Switching");
         assert_eq!(named_with_tool("work", "Codex"), "work (Codex)");
         assert_eq!(named_with_tool("work", "claude.ai"), "work (claude.ai)");
-        assert_eq!(named_in_menu(Os::MacOs, "work", Some("64%")), "work");
         assert_eq!(
-            named_in_menu(Os::Windows, "work", Some("64%")),
+            named_in_menu(Front::MacMenuBar, "work", Some("64%")),
+            "work"
+        );
+        assert_eq!(
+            named_in_menu(Front::WindowsNotificationArea, "work", Some("64%")),
             "work (64%)"
         );
         assert_eq!(
-            named_in_menu(Os::Windows, "old", Some("sign-in expired")),
+            named_in_menu(
+                Front::WindowsNotificationArea,
+                "old",
+                Some("sign-in expired")
+            ),
             "old (sign-in expired)"
         );
-        assert_eq!(named_in_menu(Os::Windows, "spare", None), "spare");
+        assert_eq!(
+            named_in_menu(Front::WindowsNotificationArea, "spare", None),
+            "spare"
+        );
         assert_eq!(updated("12:00"), "Updated 12:00");
         assert_eq!(READING, "Reading…");
         assert_eq!(NOT_READ_YET, "Not read yet");
@@ -574,8 +601,8 @@ mod tests {
         );
         assert_eq!(
             (
-                could_not_switch_from_outside(Os::MacOs),
-                could_not_switch_from_outside(Os::Windows)
+                could_not_switch_from_outside(Front::MacMenuBar),
+                could_not_switch_from_outside(Front::WindowsNotificationArea)
             ),
             ("Couldn’t Switch".into(), "Couldn’t switch".into())
         );

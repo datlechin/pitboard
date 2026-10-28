@@ -11,17 +11,17 @@ use super::state::Job;
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{PLIST, change, check, claude, refusal, status, warned, warning};
 use super::{Intent, Pane};
+use crate::Front;
 use crate::present::testing::Utc;
 use crate::present::{CheckLine, MachineShown, present_on, words};
 use crate::{FoundCommandLine, Level, OwnCommandLine, Schedule, Warning};
-use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use std::time::Duration;
 
 /// What a Mac's app shows of this machine now.
 fn shown(model: &Hand) -> MachineShown {
-    present_on(Os::MacOs, &model.state, model.now.epoch(), &Utc).machine
+    present_on(Front::MacMenuBar, &model.state, model.now.epoch(), &Utc).machine
 }
 
 /// Whether the window says something went wrong: a read that did not answer, or something
@@ -57,15 +57,15 @@ const UNRUNNABLE: OwnCommandLine = OwnCommandLine {
 };
 
 fn no_command_line() -> String {
-    words::cannot_schedule(Os::MacOs, false)
+    words::cannot_schedule(Front::MacMenuBar, false)
 }
 
 fn move_it_first() -> String {
-    words::cannot_schedule(Os::MacOs, true)
+    words::cannot_schedule(Front::MacMenuBar, true)
 }
 
 fn one_issue() -> Option<String> {
-    Some(words::check_issues(Os::MacOs, 1))
+    Some(words::check_issues(Front::MacMenuBar, 1))
 }
 
 /// Daily renewal reads as on only while the scheduler has the job. A scheduler this Mac does
@@ -116,7 +116,7 @@ fn the_settings_say_where_no_scheduler_is() {
     model.send(Intent::ReadSchedule);
     model.run(&mut machine);
     let schedule = shown(&model).schedule;
-    assert_eq!(schedule.note, Some(words::no_scheduler(Os::MacOs)));
+    assert_eq!(schedule.note, Some(words::no_scheduler(Front::MacMenuBar)));
 }
 
 /// Turning daily renewal on or off changes the scheduler, and the switch then shows what the
@@ -436,7 +436,7 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
     ];
     let checks = shown(&model).checks;
     assert!(checks.lines().is_empty());
-    assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
+    assert_eq!(checks.waiting, Some(words::checking(Front::MacMenuBar)));
     assert_eq!((checks.summary, checks.checked), (None, None));
     assert_eq!(machine.doctor_asks, 0);
 
@@ -453,7 +453,7 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
         [
             CheckLine {
                 id: 0,
-                name: words::check_name(Os::MacOs, "network", "network"),
+                name: words::check_name(Front::MacMenuBar, "network", "network"),
                 level: Level::Ok,
                 spoken_level: words::spoken_level(Level::Ok).into(),
                 detail: words::check_text("direct"),
@@ -463,13 +463,13 @@ fn doctors_checks_are_shown_with_when_they_were_made() {
             },
             CheckLine {
                 id: 1,
-                name: words::check_name(Os::MacOs, "auth_source", ""),
+                name: words::check_name(Front::MacMenuBar, "auth_source", ""),
                 level: Level::Warn,
                 spoken_level: words::spoken_level(Level::Warn).into(),
                 detail: words::check_text("something else: ANTHROPIC_API_KEY"),
                 advice: Some(words::check_text("Remove it.")),
                 action: None,
-                learn: Some(crate::present::next::of_check(Os::MacOs)),
+                learn: Some(crate::present::next::of_check(Front::MacMenuBar)),
             },
         ]
     );
@@ -702,7 +702,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
         checks.lines().is_empty(),
         "said beside doctor's checks alone"
     );
-    assert_eq!(checks.waiting, Some(words::checking(Os::MacOs)));
+    assert_eq!(checks.waiting, Some(words::checking(Front::MacMenuBar)));
 
     model.send(Intent::PaneShown { pane: Pane::Checks });
     model.run(&mut machine);
@@ -715,13 +715,13 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks_until_one_is_p
             level: Level::Warn,
             spoken_level: words::spoken_level(Level::Warn).into(),
             detail: words::check_text(&words::not_posted(
-                &words::sign_in_replaced(pitboard_core::host::OS),
+                &words::sign_in_replaced(Front::MacMenuBar),
                 "08:00",
                 "COMException 0x80070490"
             )),
             advice: None,
             action: None,
-            learn: Some(crate::present::next::of_check(Os::MacOs)),
+            learn: Some(crate::present::next::of_check(Front::MacMenuBar)),
         }]
     );
     assert_eq!((checks.summary, checks.level), (one_issue(), Level::Warn));
@@ -792,7 +792,7 @@ fn changes_are_shown_newest_first() {
     let activity = shown(&model).activity;
     assert!(activity.lines.is_empty());
     let empty = activity.empty.expect("what stands in for the list");
-    let (title, detail) = words::no_activity(Os::MacOs);
+    let (title, detail) = words::no_activity(Front::MacMenuBar);
     assert_eq!((empty.title, empty.detail.as_str()), (title, detail));
 
     assert_eq!(
@@ -926,11 +926,16 @@ fn the_command_line_is_said_as_a_terminal_would_find_it() {
         "a Mac offers to link it instead"
     );
     assert_eq!(
-        present_on(Os::Windows, &model.state, model.now.epoch(), &Utc)
-            .machine
-            .command_line
-            .terminal_note
-            .as_deref(),
+        present_on(
+            Front::WindowsNotificationArea,
+            &model.state,
+            model.now.epoch(),
+            &Utc
+        )
+        .machine
+        .command_line
+        .terminal_note
+        .as_deref(),
         Some(words::NEW_TERMINALS),
         "Windows' installer puts it on the PATH"
     );
@@ -979,7 +984,7 @@ fn a_copy_run_from_a_temporary_place_is_told_why_it_cannot_link() {
     assert!(!command_line.offers_link);
     assert_eq!(
         command_line.cannot_link,
-        Some(words::cannot_link(Os::MacOs))
+        Some(words::cannot_link(Front::MacMenuBar))
     );
 
     for found in [

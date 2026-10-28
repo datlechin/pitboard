@@ -15,6 +15,7 @@ use super::{
 };
 use crate::AccountKey;
 use crate::AppCore;
+use crate::Front;
 use crate::Tool;
 use crate::present::testing::Utc;
 use crate::present::{AccountItem, PanelNotice, words};
@@ -90,6 +91,7 @@ fn in_order(told: &[Snapshot]) -> bool {
 /// The system as a test's model has it: `apps`, and a clock read in UTC.
 fn platform(apps: Arc<dyn AppControl>) -> Platform {
     Platform {
+        front: Front::MacMenuBar,
         apps,
         notifications: Arc::new(Posted::default()),
         local_time: Arc::new(Utc),
@@ -1182,7 +1184,7 @@ fn adding_codex_without_its_cli_says_so_before_sign_in() {
         .expect("codex offered");
     assert_eq!(
         codex.missing,
-        Some(words::missing(OS, ProviderId::Codex)),
+        Some(words::missing(Front::MacMenuBar, ProviderId::Codex)),
         "its CLI is not here"
     );
     model.shutdown();
@@ -1239,6 +1241,7 @@ fn model_telling_time(
         Arc::clone(core),
         Arc::clone(told) as Arc<dyn ModelListener>,
         Platform {
+            front: Front::MacMenuBar,
             apps: StandInApps::new(&[], true),
             notifications: Arc::new(Posted::default()),
             local_time: Arc::clone(clock) as Arc<dyn LocalTime>,
@@ -1552,6 +1555,7 @@ fn model_posting(
         Arc::clone(core),
         Arc::clone(told) as Arc<dyn ModelListener>,
         Platform {
+            front: Front::MacMenuBar,
             apps: StandInApps::new(&[], true),
             notifications: Arc::clone(posted) as Arc<dyn super::Notifications>,
             local_time: Arc::new(Utc),
@@ -1595,7 +1599,7 @@ fn a_run_out_is_notified_once_across_a_relaunch() {
     let notice = posted.posted().remove(0);
     assert_eq!(
         notice.title,
-        words::limit_notification(OS, "5-hour", None, true)
+        words::limit_notification(Front::MacMenuBar, "5-hour", None, true)
     );
     assert_eq!(
         notice.body,

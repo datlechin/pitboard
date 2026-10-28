@@ -25,7 +25,7 @@ public sealed class GateTests
             string[] homes = ["USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "PITBOARD_HOME"];
             var environment = homes.ToDictionary(home => home, home => Directory.CreateDirectory(Path.Combine(root, home)).FullName);
 
-            var refused = PitboardModelMethods.LaunchRefusal(environment);
+            var refused = PitboardModelMethods.LaunchRefusal(Front.WindowsNotificationArea, environment);
 
             if (Built.Major(Built.CargoVersion()) == 0)
             {

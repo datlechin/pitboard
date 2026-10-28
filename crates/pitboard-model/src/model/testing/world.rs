@@ -1,4 +1,4 @@
-use crate::{AppCore, Made};
+use crate::{AppCore, Front, Made};
 use pitboard_core::context::Context;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service;
@@ -137,6 +137,7 @@ impl World {
             self.cores.clone(),
         );
         Arc::new(AppCore::asking(
+            Front::MacMenuBar,
             move || {
                 let _alive = &alive;
                 let made = Made {

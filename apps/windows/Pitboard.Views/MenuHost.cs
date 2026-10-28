@@ -17,7 +17,7 @@ public sealed partial class MenuHost : Window
 
     public MenuHost()
     {
-        Title = Words.Menu.IconMenu!;
+        Title = Words.Own.IconMenu;
         Content = _root;
         var presenter = OverlappedPresenter.CreateForContextMenu();
         presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);

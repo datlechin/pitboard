@@ -50,9 +50,9 @@ struct AccountsWindow: View {
                     Button {
                         inspector.toggle()
                     } label: {
-                        Label(words.window.inspector ?? "", systemImage: Symbol.inspector)
+                        Label(macWords.inspector, systemImage: Symbol.inspector)
                     }
-                    .help(words.window.inspectorHelp ?? "")
+                    .help(macWords.inspectorHelp)
                     .disabled(!listed)
                     .accessibilityIdentifier("toolbar.inspector")
                 }

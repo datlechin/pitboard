@@ -6,14 +6,13 @@
 //! the question asked before quitting stops a download.
 
 use super::{Choice, EmptyList, Question, Seen, words};
-use crate::SiteLink;
 use crate::account_windows::records::store_key;
 use crate::account_windows::{
     SiteMenu, WindowAccount, WindowNoteKind, site_menus, window_accounts,
 };
 use crate::model::windows::{Download, Picking};
 use crate::model::{Intent, Sheet};
-use pitboard_core::host::{OS, Os};
+use crate::{Front, SiteLink};
 
 /// The account windows, as the model has them.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -224,16 +223,19 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
                 note,
                 // Held back until one of its own downloads has ended: before then it would
                 // clear nothing.
-                clear_downloads: (!matches!(seen.os, Os::Windows)).then(|| Choice {
-                    title: words::CLEAR.into(),
-                    intent: Intent::ClearDownloads {
-                        store: window.store.clone(),
-                    },
-                    enabled: windows
-                        .downloads
-                        .iter()
-                        .any(|download| download.store == window.store && !download.running()),
-                }),
+                clear_downloads: match seen.front {
+                    Front::MacMenuBar | Front::Gnome => Some(Choice {
+                        title: words::CLEAR.into(),
+                        intent: Intent::ClearDownloads {
+                            store: window.store.clone(),
+                        },
+                        enabled: windows
+                            .downloads
+                            .iter()
+                            .any(|download| download.store == window.store && !download.running()),
+                    }),
+                    Front::WindowsNotificationArea => None,
+                },
             })
         })
         .collect();
@@ -247,7 +249,7 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
         picker: picker(seen),
         downloads: windows.downloads.iter().rev().map(download).collect(),
         no_link: {
-            let (title, detail) = words::no_link(seen.os);
+            let (title, detail) = words::no_link(seen.front);
             EmptyList { title, detail }
         },
         held: windows.held(),
@@ -261,9 +263,9 @@ fn waiting(seen: &Seen) -> WindowWaiting {
         window_title: words::ACCOUNT.into(),
         shown: match (&seen.state.status, seen.problem()) {
             (None, Some(problem)) => WaitingShown::ReadFailed {
-                title: words::could_not_read_accounts(seen.os),
+                title: words::could_not_read_accounts(seen.front),
                 detail: problem.to_owned(),
-                retry: retry(seen.os),
+                retry: retry(seen.front),
             },
             _ => WaitingShown::Reading {
                 title: words::READING_ACCOUNTS.into(),
@@ -275,9 +277,9 @@ fn waiting(seen: &Seen) -> WindowWaiting {
 /// Reading the accounts again, as somebody asked. Offered while a read runs too, as
 /// AccountWindowView.swift and AccountPicker.swift offered it, where the accounts pane holds
 /// its own back.
-fn retry(os: Os) -> Choice {
+fn retry(front: Front) -> Choice {
     Choice {
-        title: words::try_again(os),
+        title: words::try_again(front),
         intent: Intent::Refresh { asked: true },
         enabled: true,
     }
@@ -298,23 +300,23 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             title: words::READING_ACCOUNTS.into(),
         },
         Picking::ReadFailed(problem) => PickerShown::ReadFailed {
-            title: words::could_not_read_accounts(seen.os),
+            title: words::could_not_read_accounts(seen.front),
             detail: problem,
-            retry: retry(seen.os),
+            retry: retry(seen.front),
         },
         Picking::Refused(refusal) => PickerShown::Refused {
-            title: words::cannot_open_link(seen.os),
+            title: words::cannot_open_link(seen.front),
             reason: refusal.to_string(),
         },
         Picking::NoAccount(link) => {
-            let (title, detail) = words::no_site_account(seen.os, &link.site.name);
+            let (title, detail) = words::no_site_account(seen.front, &link.site.name);
             PickerShown::NoAccount {
                 title,
                 link_text: link_text(&link.url),
                 detail,
-                in_browser: words::open_in_browser(seen.os),
+                in_browser: words::open_in_browser(seen.front),
                 add: Choice {
-                    title: words::add_account(seen.os, true),
+                    title: words::add_account(seen.front, true),
                     intent: Intent::PresentSheet {
                         sheet: Sheet::Add {
                             tool: Some(link.site.tool),
@@ -382,10 +384,10 @@ fn download(download: &Download) -> DownloadShown {
 /// from a snapshot: a download started a moment before Quit is under way before the snapshot
 /// that lists it, and Pitboard would quit without asking.
 #[uniffi::export]
-pub fn downloads_quit_question(running: u32) -> Option<Question> {
+pub fn downloads_quit_question(front: Front, running: u32) -> Option<Question> {
     if running == 0 {
         return None;
     }
-    let (title, message, confirm) = words::quit_with_downloads(OS, running);
+    let (title, message, confirm) = words::quit_with_downloads(front, running);
     Some(Question::asking(title, message.into(), confirm.into()))
 }

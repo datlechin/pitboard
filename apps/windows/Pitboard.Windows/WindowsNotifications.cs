@@ -128,9 +128,9 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     {
         AppNotificationSetting.Enabled => null,
         AppNotificationSetting.DisabledForApplication => new(Words.Settings.NotificationsOff, InSettings: true),
-        AppNotificationSetting.DisabledForUser => new(Words.Settings.NotificationsOffForEveryApp!, InSettings: true),
-        AppNotificationSetting.DisabledByGroupPolicy => new(Words.Settings.NotificationsOffByPolicy!, InSettings: false),
-        _ => new(Words.Settings.NotificationsUnoffered!, InSettings: false),
+        AppNotificationSetting.DisabledForUser => new(Words.Own.NotificationsOffForEveryApp, InSettings: true),
+        AppNotificationSetting.DisabledByGroupPolicy => new(Words.Own.NotificationsOffByPolicy, InSettings: false),
+        _ => new(Words.Own.NotificationsUnoffered, InSettings: false),
     };
 
     // Before Pitboard exits, so a later click starts it again.

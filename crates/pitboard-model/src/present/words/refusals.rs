@@ -2,10 +2,11 @@
 //! command or says to run it again, which an app can't.
 
 use super::{awaiting_lines, quoted, sign_in_to_keep, typeset};
+use crate::Front;
 use crate::Tool;
 use crate::model::state::in_its_app;
 use pitboard_core::error::{Cause, Error, LoginDoubt, Then, Unidentified};
-use pitboard_core::host::{Os, Private};
+use pitboard_core::host::Private;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::service::{Stored, Warning as CoreWarning};
 use pitboard_core::state::{Key, SetAside};
@@ -31,7 +32,7 @@ fn add_what_it_shows(app: &str) -> String {
 }
 
 // The core's sentence names a command or says to run this again, which the app cannot.
-pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
+pub(crate) fn in_app_refusal(front: Front, error: &Error) -> Option<String> {
     let desktop = ProviderId::Desktop;
     let app = desktop.program();
     let inside = |tool: &ProviderId| in_its_app(*tool);
@@ -45,7 +46,7 @@ pub(crate) fn in_app_refusal(os: Os, error: &Error) -> Option<String> {
             "{app} has quit, and {} from it is still running, and Pitboard changes {app}’s sign-in \
              only while all of it is closed. {} Nothing has changed.",
             listed(still),
-            pitboard_core::words::wait_for_still(os, "try again")
+            pitboard_core::words::wait_for_still(front.os(), "try again")
         ),
         Error::AppStateUnknown { app, why } => format!(
             "Pitboard couldn’t tell whether {app} is open ({why}), so nothing has changed. Try \
@@ -538,8 +539,8 @@ fn replaced(tool: ProviderId, label: &str, now: &Stored) -> String {
     )
 }
 
-pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
-    if let Some(said) = in_app_any_warning(os, warning) {
+pub(crate) fn in_app_warning(front: Front, warning: &CoreWarning) -> Option<String> {
+    if let Some(said) = in_app_any_warning(front, warning) {
         return Some(typeset(&said));
     }
     let tool = warning.tool().filter(|&tool| in_its_app(tool))?;
@@ -668,14 +669,16 @@ pub(crate) fn in_app_warning(os: Os, warning: &CoreWarning) -> Option<String> {
             again,
             ..
         } => awaiting_lines(app, &bare(label), &bare(put_back), *again).join(" "),
-        CoreWarning::MoveNotGivenUp { label, why, .. } => not_given_up(os, tool, &bare(label), why),
+        CoreWarning::MoveNotGivenUp { label, why, .. } => {
+            not_given_up(front, tool, &bare(label), why)
+        }
         _ => return None,
     };
     Some(typeset(&said))
 }
 
 // The app's words for a warning about Claude Code or Codex, or about any tool alike.
-fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
+fn in_app_any_warning(front: Front, warning: &CoreWarning) -> Option<String> {
     use pitboard_core::holder;
     use pitboard_core::provider::Held;
     let inside = |tool: &ProviderId| in_its_app(*tool);
@@ -773,13 +776,13 @@ fn in_app_any_warning(os: Os, warning: &CoreWarning) -> Option<String> {
         ),
         CoreWarning::RenewalFailed(error)
         | CoreWarning::ConfigNotUpdated(error)
-        | CoreWarning::SwitchStuck(error) => in_app_refusal(os, error)?,
+        | CoreWarning::SwitchStuck(error) => in_app_refusal(front, error)?,
         _ => return None,
     })
 }
 
 // After Cancel Switch cancelled a switch, so never that nothing has changed.
-fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
+fn not_given_up(front: Front, tool: ProviderId, label: &str, why: &Error) -> String {
     let app = tool.program();
     let settles = format!(
         "switch to any {} account: Pitboard finishes the earlier switch first",
@@ -815,7 +818,7 @@ fn not_given_up(os: Os, tool: ProviderId, label: &str, why: &Error) -> String {
     };
     let then = match why {
         Error::AppOpen { still, .. } if still.is_empty() => format!("Quit {app}, then {settles}."),
-        Error::AppOpen { .. } => pitboard_core::words::wait_for_still(os, &settles),
+        Error::AppOpen { .. } => pitboard_core::words::wait_for_still(front.os(), &settles),
         Error::LoginFolderBusy { .. } => format!("Once it has finished, {settles}."),
         Error::LoginFolderUnreadable { .. } => format!("Open {app}, quit it, then {settles}."),
         Error::AppOpenedMidway { .. } => format!("Nothing is lost. Quit {app}, then {settles}."),
@@ -880,7 +883,7 @@ mod tests {
     fn a_name_already_taken_is_refused_as_a_name() {
         let taken = |who: &str| {
             in_app_refusal(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 &Error::LabelTaken {
                     label: "claude/work".into(),
                     who: who.into(),
@@ -901,7 +904,7 @@ mod tests {
     #[test]
     fn a_label_keeps_every_letter_in_a_sentence() {
         let said = in_app_warning(
-            Os::MacOs,
+            Front::MacMenuBar,
             &CoreWarning::LooksSignedOut {
                 tool: ProviderId::Desktop,
                 label: "desktop/dana's".into(),
@@ -917,7 +920,7 @@ mod tests {
     fn a_saved_sign_in_refused_is_named_as_the_app_names_its_account() {
         assert_eq!(
             in_app_refusal(
-                Os::MacOs,
+                Front::MacMenuBar,
                 &Error::ParkedCredentialMissing {
                     label: "desktop/home".into(),
                 }
@@ -927,7 +930,7 @@ mod tests {
         );
         assert_eq!(
             in_app_refusal(
-                Os::MacOs,
+                Front::MacMenuBar,
                 &Error::ParkedCredentialCorrupt {
                     label: "desktop/home".into(),
                     detail: "it was parked on another Mac".into(),
@@ -941,7 +944,7 @@ mod tests {
         );
         assert_eq!(
             in_app_refusal(
-                Os::MacOs,
+                Front::MacMenuBar,
                 &Error::ParkedCredentialMissing {
                     label: "work".into(),
                 }
@@ -964,7 +967,7 @@ mod tests {
             spelling: pitboard_core::words::Spelling::Bare,
         };
         assert_eq!(
-            in_app_refusal(Os::MacOs, &untold(Cause::Refused)).as_deref(),
+            in_app_refusal(Front::MacMenuBar, &untold(Cause::Refused)).as_deref(),
             Some(
                 "Pitboard couldn’t confirm with Anthropic whose sign-in is saved for dtg \
                  (Anthropic answered 400), so nothing has changed."
@@ -972,7 +975,7 @@ mod tests {
             "the failure's Sign In Again is the way on"
         );
         assert_eq!(
-            in_app_refusal(Os::MacOs, &untold(Cause::Unreachable)).as_deref(),
+            in_app_refusal(Front::MacMenuBar, &untold(Cause::Unreachable)).as_deref(),
             Some(
                 "Pitboard couldn’t confirm with Anthropic whose sign-in is saved for dtg \
                  (Anthropic answered 400), so nothing has changed. Check the connection and try \
@@ -990,7 +993,7 @@ mod tests {
             detail: "its login has expired and cannot be renewed".into(),
         };
         assert_eq!(
-            in_app_refusal(Os::MacOs, &refused).as_deref(),
+            in_app_refusal(Front::MacMenuBar, &refused).as_deref(),
             Some(
                 "Anthropic no longer accepts Claude Code’s sign-in in use (its login has expired \
                  and can’t be renewed), so putting work’s sign-in in its place loses nothing."
@@ -1007,7 +1010,7 @@ mod tests {
             asked: false,
         };
         assert_eq!(
-            in_app_warning(Os::MacOs, &unconfirmed).as_deref(),
+            in_app_warning(Front::MacMenuBar, &unconfirmed).as_deref(),
             Some(
                 "Claude’s settings have named an account you haven’t added since Pitboard last \
                  read work in use, so Claude may hold another sign-in. Open Claude, check which \
@@ -1026,7 +1029,7 @@ mod tests {
                 "chrome_crashpad_handler (pid 814)".into(),
             ],
         };
-        let said = in_app_refusal(Os::MacOs, &still).expect("in the app's words");
+        let said = in_app_refusal(Front::MacMenuBar, &still).expect("in the app's words");
         assert!(
             said.contains(
                 "ShipIt (pid 812), Claude Helper (pid 813) and chrome_crashpad_handler (pid 814) \
@@ -1042,12 +1045,12 @@ mod tests {
             app,
             still: vec!["Helper (pid 812)".into()],
         };
-        for (os, monitor) in [
-            (Os::Windows, "Task Manager"),
-            (Os::MacOs, "Activity Monitor"),
+        for (front, monitor) in [
+            (Front::WindowsNotificationArea, "Task Manager"),
+            (Front::MacMenuBar, "Activity Monitor"),
         ] {
             assert_eq!(
-                in_app_refusal(os, &still("ChatGPT")).expect("the app's words"),
+                in_app_refusal(front, &still("ChatGPT")).expect("the app's words"),
                 format!(
                     "ChatGPT has quit, and Helper (pid 812) from it is still running, and \
                      Pitboard changes ChatGPT’s sign-in only while all of it is closed. Wait until \
@@ -1060,7 +1063,7 @@ mod tests {
                 why: still("Claude"),
             };
             assert_eq!(
-                in_app_warning(os, &not_given_up).expect("the app's words"),
+                in_app_warning(front, &not_given_up).expect("the app's words"),
                 format!(
                     "Pitboard didn’t cancel the switch to work that didn’t finish, because Helper \
                      (pid 812) from Claude is still running. Wait until it ends, or quit it in \
@@ -1080,7 +1083,7 @@ mod tests {
         );
         assert_eq!(
             in_app_warning(
-                Os::MacOs,
+                Front::MacMenuBar,
                 &CoreWarning::MoveNotGivenUp {
                     tool: ProviderId::Desktop,
                     label: "desktop/work".into(),
@@ -1127,7 +1130,7 @@ mod tests {
         let app = "Claude";
         let said = |why| {
             in_app_warning(
-                Os::MacOs,
+                Front::MacMenuBar,
                 &CoreWarning::MoveNotGivenUp {
                     tool,
                     label: "desktop/work".into(),
@@ -1174,7 +1177,7 @@ mod tests {
         };
         assert_eq!(
             in_app_warning(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 &replaced(
                     ProviderId::Claude,
                     Stored::Account(Key::new(ProviderId::Claude, "b").typed())
@@ -1187,7 +1190,11 @@ mod tests {
             )
         );
         assert_eq!(
-            in_app_warning(Os::MacOs, &replaced(ProviderId::Codex, Stored::Nothing)).as_deref(),
+            in_app_warning(
+                Front::MacMenuBar,
+                &replaced(ProviderId::Codex, Stored::Nothing)
+            )
+            .as_deref(),
             Some(
                 "a’s sign-in was replaced outside Pitboard: Codex is now signed out, and Pitboard \
                  has no sign-in saved for a."
@@ -1200,7 +1207,8 @@ mod tests {
                 Stored::Unknown,
                 Stored::Nothing,
             ] {
-                let said = in_app_warning(Os::Windows, &replaced(tool, now)).expect("the app's");
+                let said = in_app_warning(Front::WindowsNotificationArea, &replaced(tool, now))
+                    .expect("the app's");
                 assert!(!said.contains("pitboard "), "{said}");
                 assert!(!said.contains("Sign in again"), "{said}");
             }
@@ -1218,7 +1226,7 @@ mod tests {
             now: Stored::Nothing,
         };
         assert_eq!(
-            in_app_warning(Os::MacOs, &replaced).as_deref(),
+            in_app_warning(Front::MacMenuBar, &replaced).as_deref(),
             Some(
                 "team/a’s sign-in was replaced outside Pitboard: Claude Code is now signed out, and \
                  Pitboard has no sign-in saved for team/a."
@@ -1248,9 +1256,9 @@ mod tests {
             path: path.clone(),
             label: label.clone(),
         }));
-        for os in [Os::MacOs, Os::Windows] {
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
             for warning in &warnings {
-                let said = in_app_warning(os, warning).expect("Claude Desktop's words");
+                let said = in_app_warning(front, warning).expect("Claude Desktop's words");
                 assert!(said.ends_with("deleted nothing."), "{said}");
             }
         }
@@ -1578,14 +1586,17 @@ mod tests {
         };
         let mut said: Vec<String> = errors
             .iter()
-            .map(|error| in_app_refusal(Os::MacOs, error).unwrap_or_else(|| error.to_string()))
+            .map(|error| {
+                in_app_refusal(Front::MacMenuBar, error).unwrap_or_else(|| error.to_string())
+            })
             .collect();
         said.extend(
             warnings
                 .iter()
                 .inspect(|warning| assert_eq!(warning.tool(), Some(tool)))
                 .map(|warning| {
-                    in_app_warning(Os::MacOs, warning).unwrap_or_else(|| warning.to_string())
+                    in_app_warning(Front::MacMenuBar, warning)
+                        .unwrap_or_else(|| warning.to_string())
                 }),
         );
         said.push(in_app_given_up(&given_up(Vec::new(), None)));
@@ -1611,14 +1622,14 @@ mod tests {
             spelling: pitboard_core::words::Spelling::Bare,
         };
         assert_eq!(
-            in_app_refusal(Os::Windows, &untold(Cause::Refused)).as_deref(),
+            in_app_refusal(Front::WindowsNotificationArea, &untold(Cause::Refused)).as_deref(),
             Some(
                 "Pitboard couldn’t confirm with Anthropic whose account you signed in to \
                  (Anthropic answered 400), so nothing was added. Sign in again."
             )
         );
         assert_eq!(
-            in_app_refusal(Os::MacOs, &untold(Cause::RateLimited)).as_deref(),
+            in_app_refusal(Front::MacMenuBar, &untold(Cause::RateLimited)).as_deref(),
             Some(
                 "Pitboard couldn’t confirm with Anthropic whose account you signed in to \
                  (Anthropic answered 400), so nothing was added. Try again in a few minutes."
@@ -1630,7 +1641,7 @@ mod tests {
             link: None,
         };
         assert_eq!(
-            in_app_refusal(Os::MacOs, &held).as_deref(),
+            in_app_refusal(Front::MacMenuBar, &held).as_deref(),
             Some(
                 "OpenAI has put the account you signed in to on hold. Follow OpenAI’s \
                  instructions for it, then try again."
@@ -1649,7 +1660,8 @@ mod tests {
                 finished,
             })
         };
-        let said = |warning: &CoreWarning| in_app_warning(Os::MacOs, warning).expect("the app's");
+        let said =
+            |warning: &CoreWarning| in_app_warning(Front::MacMenuBar, warning).expect("the app's");
         assert_eq!(
             said(&recovered("work", true)),
             "The switch from work to home had finished after all, and nothing was lost."
@@ -1686,7 +1698,7 @@ mod tests {
     fn a_saved_sign_in_its_service_refuses_or_a_file_left_behind_says_what_to_do() {
         assert_eq!(
             in_app_warning(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 &CoreWarning::ParkedLoginRefused {
                     tool: ProviderId::Claude,
                     label: "work".into(),
@@ -1704,7 +1716,11 @@ mod tests {
             held,
         };
         assert_eq!(
-            in_app_warning(Os::Windows, &fallback(pitboard_core::provider::Held::Login)).as_deref(),
+            in_app_warning(
+                Front::WindowsNotificationArea,
+                &fallback(pitboard_core::provider::Held::Login)
+            )
+            .as_deref(),
             Some(
                 "/h/.claude/.credentials.json holds another Claude Code sign-in, which sessions \
                  already running keep after a switch."
@@ -1712,7 +1728,7 @@ mod tests {
         );
         assert_eq!(
             in_app_warning(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 &fallback(pitboard_core::provider::Held::NoLogin)
             )
             .as_deref(),
@@ -1723,7 +1739,7 @@ mod tests {
         );
         assert_eq!(
             in_app_warning(
-                Os::Windows,
+                Front::WindowsNotificationArea,
                 &fallback(pitboard_core::provider::Held::Unreadable)
             )
             .as_deref(),

@@ -11,10 +11,10 @@ use super::{
 };
 use crate::Account;
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::status::Standing;
 
@@ -287,7 +287,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
         machine.posted,
         [RunOutNotice {
             id: "claude/work/session/-7200".into(),
-            title: words::limit_notification(OS, "5-hour", None, true),
+            title: words::limit_notification(Front::MacMenuBar, "5-hour", None, true),
             subtitle: Some("Claude Code".into()),
             body: format!(
                 "{} {}",
@@ -296,7 +296,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::switch_button(OS, "personal"),
+                title: words::switch_button(Front::MacMenuBar, "personal"),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -318,7 +318,7 @@ fn a_run_out_is_notified_in_the_words_the_window_says_it() {
     assert_eq!(beside.posted[0].subtitle.as_deref(), Some("Claude Code"));
     assert_eq!(
         beside.posted[0].title,
-        words::limit_notification(OS, "5-hour", None, true)
+        words::limit_notification(Front::MacMenuBar, "5-hour", None, true)
     );
     assert_eq!(
         both.shown().notices[0].title,
@@ -553,16 +553,17 @@ fn a_run_outs_button_switches_and_a_click_on_it_opens_the_accounts() {
     );
 
     let button = posted.button.expect("a Switch button");
-    assert_eq!(button.title, words::switch_button(OS, "personal"));
+    assert_eq!(
+        button.title,
+        words::switch_button(Front::MacMenuBar, "personal")
+    );
     // macOS draws the button from the category registered under its title; a toast takes any.
-    if OS != Os::Windows {
-        assert!(
-            crate::notification_buttons()
-                .iter()
-                .any(|kind| kind.title == button.title && !kind.opens_window),
-            "a switch needs no window"
-        );
-    }
+    assert!(
+        crate::notification_buttons(Front::MacMenuBar)
+            .iter()
+            .any(|kind| kind.title == button.title && !kind.opens_window),
+        "a switch needs no window"
+    );
     machine.switched = switched(ProviderId::Claude, "work", "personal", Vec::new());
     model.send(Intent::NotificationClicked {
         argument: button.clicked,
@@ -591,8 +592,12 @@ fn a_sign_in_again_button_puts_up_the_accounts_sheet() {
 #[test]
 fn a_click_on_what_came_of_switching_or_warming_up_by_itself_opens_the_limits() {
     for notice in [
-        crate::present::auto_refused_notice("refused", "It was refused."),
-        crate::present::warm_failed_notice("warm_up_not_started", "It came to nothing."),
+        crate::present::auto_refused_notice(Front::MacMenuBar, "refused", "It was refused."),
+        crate::present::warm_failed_notice(
+            Front::MacMenuBar,
+            "warm_up_not_started",
+            "It came to nothing.",
+        ),
     ] {
         model_clicked(&notice.clicked, |model| {
             assert_eq!(
@@ -667,7 +672,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
         machine.posted,
         [RunOutNotice {
             id: "claude/work/session/-7200".into(),
-            title: words::limit_notification(OS, "5-hour", None, false),
+            title: words::limit_notification(Front::MacMenuBar, "5-hour", None, false),
             subtitle: Some("Claude Code".into()),
             body: format!(
                 "{} {}",
@@ -676,7 +681,7 @@ fn a_limit_at_the_share_is_notified_once_before_it_runs_out() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::switch_button(OS, "personal"),
+                title: words::switch_button(Front::MacMenuBar, "personal"),
                 clicked: "switch/claude/personal".into(),
             }),
         }]
@@ -722,7 +727,7 @@ fn a_limit_at_the_share_with_nowhere_to_go_says_when_it_resets() {
     let notice = machine.posted.first().expect("posted");
     assert_eq!(
         notice.title,
-        words::limit_notification(OS, "5-hour", None, false)
+        words::limit_notification(Front::MacMenuBar, "5-hour", None, false)
     );
     assert_eq!(
         notice.body,
@@ -802,7 +807,7 @@ fn switch_notifies_of_codex_alone() {
     assert_eq!(
         posted,
         [(
-            words::limit_notification(OS, "5-hour", None, false).as_str(),
+            words::limit_notification(Front::MacMenuBar, "5-hour", None, false).as_str(),
             Some("Codex")
         )]
     );
@@ -825,20 +830,20 @@ fn the_settings_offer_three_choices_and_the_terms_beside_them() {
     assert_eq!(
         titles,
         [AtLimit::Nothing, AtLimit::Notify, AtLimit::Switch]
-            .map(|choice| words::at_limit_choice(Os::MacOs, choice))
+            .map(|choice| words::at_limit_choice(Front::MacMenuBar, choice))
     );
     assert_eq!(
         model.on_windows().machine.at_limit.choices[1].title,
-        words::at_limit_choice(Os::Windows, AtLimit::Notify)
+        words::at_limit_choice(Front::WindowsNotificationArea, AtLimit::Notify)
     );
     assert_eq!(shown.at_limit.title, words::BEFORE_RUNNING_OUT);
-    assert_eq!(shown.warm.title, words::warm_up(Os::MacOs));
+    assert_eq!(shown.warm.title, words::warm_up(Front::MacMenuBar));
     // The field beside the heading shows the share, and the choice is named with it.
     assert_eq!(shown.at_limit.heading, words::AT_LIMIT);
     assert_eq!(shown.at_limit.at_label, words::at_limit_label(95));
     assert_eq!(
         shown.at_limit.note,
-        words::at_limit_note(Os::MacOs, AtLimit::Notify, 95, false, 33)
+        words::at_limit_note(Front::MacMenuBar, AtLimit::Notify, 95, false, 33)
     );
     assert!(shown.at_limit.share_enabled);
     assert_eq!(

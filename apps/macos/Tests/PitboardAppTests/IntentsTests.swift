@@ -176,13 +176,13 @@ private final class Asked: @unchecked Sendable {
     let app = AppModel(model: model)
     let (accounts, said) = try await Actions.usage(of: nil, with: app)
     #expect(accounts.isEmpty)
-    #expect(said == words.shortcuts.noneInUse)
+    #expect(said == macWords.noneInUse)
 }
 
 @MainActor
 @Test func usageBeforePitboardHasReadAnythingSaysSo() async throws {
     let app = AppModel(model: StandInModel(snapshot(0)))
-    await #expect(throws: Refused(said: words.shortcuts.notReadYet ?? "")) {
+    await #expect(throws: Refused(said: macWords.notReadYet)) {
         try await Actions.usage(of: nil, with: app, within: .milliseconds(10))
     }
 }

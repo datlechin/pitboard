@@ -3,8 +3,8 @@
 //! go on.
 
 use super::titled;
+use crate::Front;
 use crate::model::state::Recording;
-use pitboard_core::host::Os;
 use pitboard_core::label::Unusable;
 
 // What the sheet says under the steps while Pitboard waits for `app` to quit signed in, as the
@@ -66,18 +66,18 @@ pub(crate) fn sign_in_message(tool: &str, again: Option<&str>) -> String {
     }
 }
 
-pub(crate) fn add_account(os: Os, asks: bool) -> String {
+pub(crate) fn add_account(front: Front, asks: bool) -> String {
     if asks {
-        titled(os, "Add Account…", "Add account…")
+        titled(front, "Add Account…", "Add account…")
     } else {
-        titled(os, "Add Account", "Add account")
+        titled(front, "Add Account", "Add account")
     }
 }
 
-pub(crate) fn sign_in_to_again(os: Os, label: &str, asks: bool) -> String {
+pub(crate) fn sign_in_to_again(front: Front, label: &str, asks: bool) -> String {
     let more = if asks { "…" } else { "" };
     titled(
-        os,
+        front,
         &format!("Sign In to {label} Again{more}"),
         &format!("Sign in to {label} again{more}"),
     )
@@ -139,9 +139,9 @@ pub(crate) const WAITING_FOR_BROWSER: &str = "Waiting for your browser";
 // Said in place of Cancel where the sign-in goes on, an account parked for it.
 pub(crate) const LATER: &str = "Later";
 
-pub(crate) fn signing_in_to(os: Os, tool: &str) -> String {
+pub(crate) fn signing_in_to(front: Front, tool: &str) -> String {
     titled(
-        os,
+        front,
         &format!("Signing In to {tool}"),
         &format!("Signing in to {tool}"),
     )
@@ -199,8 +199,8 @@ pub(crate) const REPLACE: &str = "Replace";
 // What the name field shows while it is empty.
 pub(crate) const NAME_PROMPT: &str = "work";
 
-pub(crate) fn name_this_account(os: Os) -> String {
-    titled(os, "Name This Account", "Name this account")
+pub(crate) fn name_this_account(front: Front) -> String {
+    titled(front, "Name This Account", "Name this account")
 }
 
 // The account the sign-in or the one signed in now added, by its email where it has one.
@@ -230,38 +230,38 @@ pub(crate) fn rename_title(label: &str) -> String {
 
 pub(crate) const RENAMING: &str = "Only its name changes, here and in the command line.";
 
-pub(crate) fn clean_up(os: Os, asks: bool) -> String {
+pub(crate) fn clean_up(front: Front, asks: bool) -> String {
     if asks {
-        titled(os, "Clean Up…", "Clean up…")
+        titled(front, "Clean Up…", "Clean up…")
     } else {
-        titled(os, "Clean Up", "Clean up")
+        titled(front, "Clean Up", "Clean up")
     }
 }
 
 pub(crate) const FINDING_OUT_WHOSE: &str = "Finding out whose sign-in it is…";
 
-pub(crate) fn clean_up_title(os: Os) -> String {
+pub(crate) fn clean_up_title(front: Front) -> String {
     titled(
-        os,
+        front,
         "Clean Up the Leftover Sign-In File",
         "Clean up the leftover sign-in file",
     )
 }
 
 // What the Clean Up sheet says until it has looked.
-pub(crate) fn clean_up_message(os: Os) -> String {
+pub(crate) fn clean_up_message(front: Front) -> String {
     format!(
         "{} deletes the sign-in file Claude Code left behind {}, and keeps any sign-in an \
          account needs.",
-        clean_up(os, false),
-        pitboard_core::words::store_in_front(os)
+        clean_up(front, false),
+        pitboard_core::words::store_in_front(front.os())
     )
 }
 
 // The Clean Up sheet's one sentence once it has looked: what the file holds, and what Clean Up does.
-pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> String {
+pub(crate) fn clean_up_found(front: Front, left: &pitboard_core::switch::Left) -> String {
     use pitboard_core::switch::{Foreseen, Kept};
-    let button = clean_up(os, false);
+    let button = clean_up(front, false);
     let only = format!("so {button} only deletes");
     match &left.login {
         Foreseen::Kept(Kept::NoLogin) => format!("The file holds no sign-in, {only} it."),
@@ -297,14 +297,14 @@ pub(crate) fn clean_up_found(os: Os, left: &pitboard_core::switch::Left) -> Stri
             "The file’s sign-in has expired, so {button} renews it first and goes on only for an \
              account you’ve added."
         ),
-        _ => clean_up_message(os),
+        _ => clean_up_message(front),
     }
 }
 
-pub(crate) fn nothing_to_clean_up(os: Os) -> String {
+pub(crate) fn nothing_to_clean_up(front: Front) -> String {
     format!(
         "No sign-in file is left behind {}, so there’s nothing to clean up.",
-        pitboard_core::words::store_in_front(os)
+        pitboard_core::words::store_in_front(front.os())
     )
 }
 
@@ -331,8 +331,8 @@ pub(crate) fn quit_to_delete(name: &str) -> String {
     )
 }
 
-pub(crate) fn quit_and_uninstall(os: Os, name: &str) -> String {
-    quit_and(os, name, "Uninstall", "uninstall")
+pub(crate) fn quit_and_uninstall(front: Front, name: &str) -> String {
+    quit_and(front, name, "Uninstall", "uninstall")
 }
 
 // `label` was added already, and gets a new sign-in.
@@ -386,28 +386,28 @@ pub(crate) fn quit_to_read(name: &str, again: Option<&str>) -> String {
 }
 
 // What a quit question's button says: "Quit Claude and Switch".
-fn quit_and(os: Os, name: &str, then: &str, then_sentence: &str) -> String {
+fn quit_and(front: Front, name: &str, then: &str, then_sentence: &str) -> String {
     titled(
-        os,
+        front,
         &format!("Quit {name} and {then}"),
         &format!("Quit {name} and {then_sentence}"),
     )
 }
 
-pub(crate) fn quit_and_switch(os: Os, name: &str) -> String {
-    quit_and(os, name, "Switch", "switch")
+pub(crate) fn quit_and_switch(front: Front, name: &str) -> String {
+    quit_and(front, name, "Switch", "switch")
 }
 
-pub(crate) fn quit_and_continue(os: Os, name: &str) -> String {
-    quit_and(os, name, "Continue", "continue")
+pub(crate) fn quit_and_continue(front: Front, name: &str) -> String {
+    quit_and(front, name, "Continue", "continue")
 }
 
-pub(crate) fn quit_and_start_sign_in(os: Os, name: &str) -> String {
-    quit_and(os, name, "Start Sign-In", "start sign-in")
+pub(crate) fn quit_and_start_sign_in(front: Front, name: &str) -> String {
+    quit_and(front, name, "Start Sign-In", "start sign-in")
 }
 
-pub(crate) fn quit_and_add(os: Os, name: &str) -> String {
-    quit_and(os, name, "Add", "add")
+pub(crate) fn quit_and_add(front: Front, name: &str) -> String {
+    quit_and(front, name, "Add", "add")
 }
 
 #[cfg(test)]
@@ -502,7 +502,7 @@ mod tests {
             "Only its name changes, here and in the command line."
         );
         assert_eq!(
-            clean_up_message(Os::Windows),
+            clean_up_message(Front::WindowsNotificationArea),
             "Clean up deletes the sign-in file Claude Code left behind Credential Manager, and \
              keeps any sign-in an account needs."
         );
@@ -574,19 +574,24 @@ mod tests {
     // A sheet's titles and buttons, as each system titles them.
     #[test]
     fn a_sheet_is_titled_as_each_system_titles_one() {
-        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let both = |said: &dyn Fn(Front) -> String| {
+            (
+                said(Front::MacMenuBar),
+                said(Front::WindowsNotificationArea),
+            )
+        };
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(both(&sign_in_asking), pair("Sign In…", "Sign in…"));
         assert_eq!(
-            both(&|os| add_account(os, false)),
+            both(&|front| add_account(front, false)),
             pair("Add Account", "Add account")
         );
         assert_eq!(
-            both(&|os| sign_in_to_again(os, "work", false)),
+            both(&|front| sign_in_to_again(front, "work", false)),
             pair("Sign In to work Again", "Sign in to work again")
         );
         assert_eq!(
-            both(&|os| sign_in_to_again(os, "work", true)),
+            both(&|front| sign_in_to_again(front, "work", true)),
             pair("Sign In to work Again…", "Sign in to work again…")
         );
         assert_eq!(
@@ -601,7 +606,7 @@ mod tests {
             )
         );
         assert_eq!(
-            both(&|os| signing_in_to(os, "Codex")),
+            both(&|front| signing_in_to(front, "Codex")),
             pair("Signing In to Codex", "Signing in to Codex")
         );
     }
@@ -648,25 +653,30 @@ mod tests {
             "Pitboard reads which account Claude is signed in to only while Claude is closed. It \
              quits Claude, adds that account, and opens it again."
         );
-        let both = |said: &dyn Fn(Os) -> String| (said(Os::MacOs), said(Os::Windows));
+        let both = |said: &dyn Fn(Front) -> String| {
+            (
+                said(Front::MacMenuBar),
+                said(Front::WindowsNotificationArea),
+            )
+        };
         let pair = |mac: &str, windows: &str| (mac.to_owned(), windows.to_owned());
         assert_eq!(
-            both(&|os| quit_and_switch(os, "Claude")),
+            both(&|front| quit_and_switch(front, "Claude")),
             pair("Quit Claude and Switch", "Quit Claude and switch")
         );
         assert_eq!(
-            both(&|os| quit_and_continue(os, "Claude")),
+            both(&|front| quit_and_continue(front, "Claude")),
             pair("Quit Claude and Continue", "Quit Claude and continue")
         );
         assert_eq!(
-            both(&|os| quit_and_start_sign_in(os, "Claude")),
+            both(&|front| quit_and_start_sign_in(front, "Claude")),
             pair(
                 "Quit Claude and Start Sign-In",
                 "Quit Claude and start sign-in"
             )
         );
         assert_eq!(
-            both(&|os| quit_and_add(os, "Claude")),
+            both(&|front| quit_and_add(front, "Claude")),
             pair("Quit Claude and Add", "Quit Claude and add")
         );
         assert_eq!(
@@ -679,7 +689,7 @@ mod tests {
              quits Claude, uninstalls, and opens Claude again."
         );
         assert_eq!(
-            both(&|os| quit_and_uninstall(os, "Claude")),
+            both(&|front| quit_and_uninstall(front, "Claude")),
             pair("Quit Claude and Uninstall", "Quit Claude and uninstall")
         );
     }
@@ -759,17 +769,17 @@ mod tests {
         for (kept, said) in found {
             let windows = said.replace("Clean Up", "Clean up");
             assert_eq!(
-                clean_up_found(Os::MacOs, &left(Foreseen::Kept(kept.clone()))),
+                clean_up_found(Front::MacMenuBar, &left(Foreseen::Kept(kept.clone()))),
                 said
             );
             assert_eq!(
-                clean_up_found(Os::Windows, &left(Foreseen::Kept(kept))),
+                clean_up_found(Front::WindowsNotificationArea, &left(Foreseen::Kept(kept))),
                 windows
             );
         }
         assert_eq!(
             clean_up_found(
-                Os::MacOs,
+                Front::MacMenuBar,
                 &left(Foreseen::NotEnrolled(Owner {
                     account_uuid: "u".into(),
                     email: "dana@home.example".into(),
@@ -780,12 +790,12 @@ mod tests {
              it before you clean up."
         );
         assert_eq!(
-            clean_up_found(Os::MacOs, &left(Foreseen::Untold)),
+            clean_up_found(Front::MacMenuBar, &left(Foreseen::Untold)),
             "The file’s sign-in has expired, so Clean Up renews it first and goes on only for \
              an account you’ve added."
         );
         assert_eq!(
-            clean_up_found(Os::Windows, &left(Foreseen::Untold)),
+            clean_up_found(Front::WindowsNotificationArea, &left(Foreseen::Untold)),
             "The file’s sign-in has expired, so Clean up renews it first and goes on only for \
              an account you’ve added."
         );

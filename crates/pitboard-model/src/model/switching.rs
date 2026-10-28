@@ -20,10 +20,10 @@ use super::{
     Cause, Doing, Intent, LastSwitch, Place, QuitQuestion, RestartNeeded, Sheet, WindowRequest,
 };
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::present::words;
 use crate::{Abandoned, GaveUp};
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use std::time::Duration;
@@ -1000,7 +1000,7 @@ fn an_app_that_does_not_quit_stops_the_switch_before_anything_changes() {
         alert.next,
         Some(crate::NextStep::Act {
             choice: crate::Choice {
-                title: words::try_again(OS),
+                title: words::try_again(Front::MacMenuBar),
                 intent: Intent::SwitchTo {
                     account: AccountKey::new(Tool::Codex, "spare")
                 },
@@ -1498,7 +1498,7 @@ fn put_back_that_cannot_quit_claude_keeps_the_wait_and_says_why() {
         (
             true,
             true,
-            words::part_still_running(Os::MacOs, "Claude", "switch again"),
+            words::part_still_running(Front::MacMenuBar, "Claude", "switch again"),
         ),
     ] {
         let (mut model, mut machine, id) = waiting_in_claude();
@@ -1535,7 +1535,7 @@ fn a_use_refused_in_doubt_is_kept_for_the_add_sheet() {
     model.run(&mut machine);
     assert_eq!(
         model.on_a_mac().sheet_text.expect("the form").confirm,
-        words::add_account_shown(Os::MacOs, "Claude", false)
+        words::add_account_shown(Front::MacMenuBar, "Claude", false)
     );
     model.send(Intent::CloseSheet);
     machine.switched = desktop_switched();

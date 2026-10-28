@@ -86,7 +86,7 @@ use crate::present::{
     ItemOffer, MachineShown, MenuBarText, MenuNotices, PanelNotice, Question, RemovalShown,
     SetupStep, SheetText, SigningInText, StowText, WelcomeShown, WindowQuestion, present,
 };
-use crate::{AccountKey, AppCore, Tool, Warning};
+use crate::{AccountKey, AppCore, Front, Tool, Warning};
 use lanes::Lanes;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -110,6 +110,9 @@ pub struct AppLaunch {
     /// renewal schedule runs. `None` for anything that is not an app, such as a test or a
     /// build directory.
     pub app_location: Option<String>,
+    /// Which app this is, which says what differs by front: its words, its engine and where a
+    /// sheet comes up.
+    pub front: Front,
     /// The app's own preferences as its earlier store held them, before the model kept them
     /// in Pitboard's directory: on macOS what UserDefaults holds, for the model to take once.
     /// Where the model's own file is there it wins, and this is not read. `None` for an app
@@ -840,9 +843,10 @@ impl PitboardModel {
         local_time: Arc<dyn LocalTime>,
     ) -> Arc<Self> {
         PitboardModel::over(
-            AppCore::for_app(launch.environment, launch.app_location),
+            AppCore::for_app(launch.environment, launch.app_location, launch.front),
             listener,
             Platform {
+                front: launch.front,
                 apps,
                 notifications,
                 local_time,
@@ -908,6 +912,8 @@ const SIGN_INS_STOP_WITHIN: Duration = Duration::from_secs(10);
 
 /// What the model asks of the app's own system.
 pub(crate) struct Platform {
+    /// Which app this is.
+    pub(crate) front: Front,
     /// Other apps on this machine.
     pub(crate) apps: Arc<dyn AppControl>,
     /// The system's notifications.
@@ -937,13 +943,13 @@ impl PitboardModel {
         cadence: Cadence,
     ) -> Arc<PitboardModel> {
         let clock = Clock::starting();
-        let mut state = State::new(cadence);
+        let mut state = State::new(platform.front, cadence);
         if platform.glance.is_some() {
             state.glance_to_a_file();
         }
         if let Some(place) = &platform.windows {
             state.windows.on(
-                pitboard_core::host::OS,
+                platform.front.engine(),
                 &place.launch.link_scheme,
                 &place.web_scheme,
             );

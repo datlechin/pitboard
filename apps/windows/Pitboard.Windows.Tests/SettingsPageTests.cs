@@ -243,7 +243,7 @@ public sealed class SettingsPageTests
 
         Assert.IsFalse(toggle.IsOn);
         Assert.IsFalse(toggle.IsEnabled);
-        Assert.Contains(Words.Settings.StartupTurnedOff!, Views.Texts(page));
+        Assert.Contains(Words.Own.StartupTurnedOff, Views.Texts(page));
         Assert.AreSame(Card(toggle), Card(link));
         new HyperlinkButtonAutomationPeer(link).Invoke();
         Assert.AreEqual(new Uri("ms-settings:startupapps"), opened.Single());
@@ -263,7 +263,7 @@ public sealed class SettingsPageTests
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), start);
 
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn").IsEnabled);
-        Assert.Contains(Words.Settings.DebugNeverStarts!, Views.Texts(page));
+        Assert.Contains(Words.Own.DebugNeverStarts, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -534,7 +534,7 @@ public sealed class SettingsPageTests
 
         Assert.IsTrue(texts.Any(text => text.StartsWith("This copy of Pitboard can", StringComparison.Ordinal)));
         Assert.Contains("Pitboard 0.0.0", texts);
-        Assert.DoesNotContain(Words.Settings.BetaUpdates!, texts);
+        Assert.DoesNotContain(Words.Own.BetaUpdates, texts);
         Assert.IsFalse(Views.Element<Button>(page, "settings.checkNow").IsEnabled);
     }
 
@@ -575,7 +575,7 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), version: "1.0.0-beta.1");
 
-        Assert.Contains(Words.Settings.BetaUpdates!, Views.Texts(page));
+        Assert.Contains(Words.Own.BetaUpdates, Views.Texts(page));
     }
 
     // Before 1.0.0 the feed of full releases is GitHub's 404, which Check now showed as WinSparkle's error.
@@ -588,7 +588,7 @@ public sealed class SettingsPageTests
         var checkNow = Views.Element<Button>(page, "settings.checkNow");
 
         Assert.IsFalse(checkNow.IsEnabled);
-        Assert.Contains(Words.Settings.NoReleaseToUpdateTo!, Views.Texts(page));
+        Assert.Contains(Words.Own.NoReleaseToUpdateTo, Views.Texts(page));
         Assert.IsFalse(
             Views.Visible<ToggleSwitch>(page).Any(shown => AutomationProperties.GetAutomationId(shown) == "settings.checkAutomatically"),
             "automatic checks are offered");
@@ -598,10 +598,10 @@ public sealed class SettingsPageTests
 
         Assert.IsTrue(checkNow.IsEnabled);
         await Views.Until(
-            () => !Views.Texts(page).Contains(Words.Settings.NoReleaseToUpdateTo!)
+            () => !Views.Texts(page).Contains(Words.Own.NoReleaseToUpdateTo)
                 && Views.Visible<ToggleSwitch>(page).Any(shown => AutomationProperties.GetAutomationId(shown) == "settings.checkAutomatically"),
             "the page still holds checks back once a full release has a feed");
-        Assert.Contains(Words.Settings.BetaUpdates!, Views.Texts(page));
+        Assert.Contains(Words.Own.BetaUpdates, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -724,7 +724,7 @@ public sealed class SettingsPageTests
     [UITestMethod]
     public async Task AReleaseBuildWhoseNotificationsAreOffSaysWhy()
     {
-        var why = Words.Settings.NotificationsUnoffered!;
+        var why = Words.Own.NotificationsUnoffered;
         var off = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), notifications: () => new(why, InSettings: false));
 
         Assert.AreSame(Card(Said(off, why)), Views.Element<SettingsCard>(off, "settings.notifications"));

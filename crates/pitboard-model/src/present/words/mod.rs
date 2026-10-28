@@ -33,20 +33,20 @@ pub(crate) use sheets::*;
 pub(crate) use status_item::*;
 pub(crate) use windows::*;
 
-use pitboard_core::host::Os;
+use crate::Front;
 use pitboard_core::time::{DAY, HOUR, MINUTE};
 use pitboard_core::words::capitalised;
 use std::ops::Range;
 
 // macOS title-cases a control or a title, as Apple's guidelines do; Windows sentence-cases all.
-pub(crate) fn titled(os: Os, title_case: &str, sentence_case: &str) -> String {
+pub(crate) fn titled(front: Front, title_case: &str, sentence_case: &str) -> String {
     debug_assert!(
         cased_alike(title_case, sentence_case),
         "{title_case:?} and {sentence_case:?} differ in more than case"
     );
-    match os {
-        Os::Windows => sentence_case,
-        Os::MacOs | Os::Linux => title_case,
+    match front {
+        Front::WindowsNotificationArea => sentence_case,
+        Front::MacMenuBar | Front::Gnome => title_case,
     }
     .to_owned()
 }
@@ -109,8 +109,8 @@ pub(crate) fn utc_date(epoch: i64) -> String {
 }
 
 /// How a sentence names the machine the app runs on, as the account windows' alerts do.
-pub(crate) fn this_machine(os: Os) -> &'static str {
-    crate::account_windows::this_machine(os)
+pub(crate) fn this_machine(front: Front) -> &'static str {
+    crate::account_windows::this_machine(front)
 }
 
 // The core's words less each sentence, or clause, naming a pitboard command a terminal runs.
@@ -339,14 +339,14 @@ pub(crate) const PITBOARD: &str = "Pitboard";
 
 pub(crate) const CONTINUE: &str = "Continue";
 
-pub(crate) fn try_again(os: Os) -> String {
-    titled(os, "Try Again", "Try again")
+pub(crate) fn try_again(front: Front) -> String {
+    titled(front, "Try Again", "Try again")
 }
 
 pub(crate) const REFRESH: &str = "Refresh";
 
-pub(crate) fn learn_more(os: Os) -> String {
-    titled(os, "Learn More", "Learn more")
+pub(crate) fn learn_more(front: Front) -> String {
+    titled(front, "Learn More", "Learn more")
 }
 
 pub(crate) const CANCEL: &str = "Cancel";

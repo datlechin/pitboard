@@ -2,8 +2,8 @@
 //! finish: what it waits for, cancelling it, and what cancelling kept.
 
 use super::{missing, sign_ins, titled, typeset};
+use crate::Front;
 use crate::model::{Cause, Doing};
-use pitboard_core::host::Os;
 use pitboard_core::state::Key;
 use pitboard_core::words::listed;
 
@@ -38,7 +38,7 @@ pub(crate) fn could_not(doing: &Doing) -> String {
 }
 
 // Why `doing` didn't happen.
-pub(crate) fn why_not(os: Os, doing: &Doing, cause: &Cause) -> String {
+pub(crate) fn why_not(front: Front, doing: &Doing, cause: &Cause) -> String {
     // what to do once the app has quit
     let again = if matches!(doing, Doing::Switch { .. }) {
         "switch again"
@@ -48,9 +48,9 @@ pub(crate) fn why_not(os: Os, doing: &Doing, cause: &Cause) -> String {
     match cause {
         Cause::Refused { message } => message.clone(),
         Cause::StillOpen { app } => still_open(app, again),
-        Cause::PartStillRunning { app } => part_still_running(os, app, again),
+        Cause::PartStillRunning { app } => part_still_running(front, app, again),
         Cause::ProgramMissing { tool } => {
-            let missing = missing(os, *tool);
+            let missing = missing(front, *tool);
             format!("{} {}", missing.title, missing.detail)
         }
         Cause::NotKnownHowItWent => NOT_KNOWN_HOW_IT_WENT.into(),
@@ -64,10 +64,10 @@ pub(crate) fn still_open(app: &str, again: &str) -> String {
     format!("{app} is still open, so nothing has changed. Quit it, then {again}.")
 }
 
-pub(crate) fn part_still_running(os: Os, app: &str, again: &str) -> String {
+pub(crate) fn part_still_running(front: Front, app: &str, again: &str) -> String {
     format!(
         "Part of {app} is still running after it quit, so nothing has changed. {}",
-        typeset(&pitboard_core::words::wait_for_still(os, again))
+        typeset(&pitboard_core::words::wait_for_still(front.os(), again))
     )
 }
 
@@ -139,11 +139,11 @@ pub(crate) const MOVE_CANCELLED: &str = "Switch in Claude cancelled";
 
 // `asks`: the button opens a sheet or a question, and ends with an ellipsis; the one that
 // answers it does not.
-pub(crate) fn cancel_switch(os: Os, asks: bool) -> String {
+pub(crate) fn cancel_switch(front: Front, asks: bool) -> String {
     if asks {
-        titled(os, "Cancel Switch…", "Cancel switch…")
+        titled(front, "Cancel Switch…", "Cancel switch…")
     } else {
-        titled(os, "Cancel Switch", "Cancel switch")
+        titled(front, "Cancel Switch", "Cancel switch")
     }
 }
 
@@ -155,12 +155,12 @@ mod tests {
     #[test]
     fn what_is_left_of_an_app_that_quit_is_quit_in_task_manager_on_windows() {
         assert_eq!(
-            part_still_running(Os::Windows, "ChatGPT", "switch again"),
+            part_still_running(Front::WindowsNotificationArea, "ChatGPT", "switch again"),
             "Part of ChatGPT is still running after it quit, so nothing has changed. Wait until \
              it ends, or quit it in Task Manager, then switch again."
         );
         assert_eq!(
-            part_still_running(Os::MacOs, "ChatGPT", "switch again"),
+            part_still_running(Front::MacMenuBar, "ChatGPT", "switch again"),
             "Part of ChatGPT is still running after it quit, so nothing has changed. Wait until \
              it ends, or quit it in Activity Monitor, then switch again."
         );
@@ -244,7 +244,7 @@ mod tests {
                  things stand.",
             ),
         ] {
-            assert_eq!(why_not(Os::MacOs, doing, &cause), said, "{cause:?}");
+            assert_eq!(why_not(Front::MacMenuBar, doing, &cause), said, "{cause:?}");
         }
         assert_eq!(
             LAST_MEASURED,

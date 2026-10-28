@@ -1,10 +1,9 @@
 //! The Windows Jump List: a switch to each account, Add account, the windows.
 
 use super::{Clicked, Seen, glance, in_order, words};
-use crate::RunOutNotice;
 use crate::account_windows::window_accounts;
 use crate::model::OutsideAnswer;
-use pitboard_core::host::{OS, Os};
+use crate::{Front, RunOutNotice};
 
 // A task the taskbar and Start offer, which starts Pitboard.exe with what it asks.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -26,7 +25,11 @@ pub enum JumpAsk {
 // last one: before the accounts are read, and while uninstalling, whose MSI deletes it.
 pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
     let state = seen.state;
-    if seen.os != Os::Windows || state.status.is_none() || state.removing.is_some() {
+    let keeps = match seen.front {
+        Front::WindowsNotificationArea => true,
+        Front::MacMenuBar | Front::Gnome => false,
+    };
+    if !keeps || state.status.is_none() || state.removing.is_some() {
         return None;
     }
     let accounts = seen.accounts();
@@ -45,7 +48,7 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
         })
         .collect();
     tasks.push(JumpTask {
-        title: words::add_account(seen.os, true),
+        title: words::add_account(seen.front, true),
         ask: JumpAsk::AddAccount,
     });
     let windows = window_accounts(accounts);
@@ -66,14 +69,10 @@ pub(crate) fn jump_list(seen: &Seen) -> Option<Vec<JumpTask>> {
 
 // A task's switch that did not happen, said where nothing else would say it.
 #[uniffi::export]
-pub fn jump_refused(answer: OutsideAnswer) -> RunOutNotice {
-    jump_refused_on(OS, answer)
-}
-
-pub(crate) fn jump_refused_on(os: Os, answer: OutsideAnswer) -> RunOutNotice {
+pub fn jump_refused(front: Front, answer: OutsideAnswer) -> RunOutNotice {
     RunOutNotice {
         id: format!("outside-{}", answer.request),
-        title: words::could_not_switch_from_outside(os),
+        title: words::could_not_switch_from_outside(front),
         subtitle: None,
         body: answer.said,
         clicked: Clicked::Accounts.argument(),

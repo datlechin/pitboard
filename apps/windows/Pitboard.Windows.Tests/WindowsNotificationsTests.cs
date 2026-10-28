@@ -161,7 +161,7 @@ public sealed class WindowsNotificationsTests
 
         Assert.AreEqual("supported", string.Join(", ", system.Asked));
         Assert.IsTrue(notifications.Unoffered);
-        Assert.AreEqual(new NotificationsBlocked(Words.Settings.NotificationsUnoffered!, InSettings: false), notifications.Read());
+        Assert.AreEqual(new NotificationsBlocked(Words.Own.NotificationsUnoffered, InSettings: false), notifications.Read());
     }
 
     [TestMethod]
@@ -206,10 +206,10 @@ public sealed class WindowsNotificationsTests
         (AppNotificationSetting Setting, NotificationsBlocked Said)[] blocked =
         [
             (AppNotificationSetting.DisabledForApplication, new(Words.Settings.NotificationsOff, InSettings: true)),
-            (AppNotificationSetting.DisabledForUser, new(Words.Settings.NotificationsOffForEveryApp!, InSettings: true)),
-            (AppNotificationSetting.DisabledByGroupPolicy, new(Words.Settings.NotificationsOffByPolicy!, InSettings: false)),
-            (AppNotificationSetting.DisabledByManifest, new(Words.Settings.NotificationsUnoffered!, InSettings: false)),
-            (AppNotificationSetting.Unsupported, new(Words.Settings.NotificationsUnoffered!, InSettings: false)),
+            (AppNotificationSetting.DisabledForUser, new(Words.Own.NotificationsOffForEveryApp, InSettings: true)),
+            (AppNotificationSetting.DisabledByGroupPolicy, new(Words.Own.NotificationsOffByPolicy, InSettings: false)),
+            (AppNotificationSetting.DisabledByManifest, new(Words.Own.NotificationsUnoffered, InSettings: false)),
+            (AppNotificationSetting.Unsupported, new(Words.Own.NotificationsUnoffered, InSettings: false)),
         ];
         foreach (var (setting, said) in blocked)
         {
@@ -257,7 +257,7 @@ public sealed class WindowsNotificationsTests
         var notifications = new WindowsNotifications(Build.Release, () => system, Icon);
         notifications.Start(_ => Assert.Fail("a click"));
         var told = new Told();
-        using var model = PitboardModel.FixtureIn("oneTool", folder, told, new NoOtherApps(), notifications, new WindowsLocalTime());
+        using var model = PitboardModel.FixtureIn("oneTool", Identity.Front, folder, told, new NoOtherApps(), notifications, new WindowsLocalTime());
 
         model.Send(new Intent.Start());
         Assert.IsNotNull(told.Until(snapshot => snapshot is { Reading: false, UpdatedWindow.Length: > 0, Sections.Length: > 0 }), "no accounts were read");

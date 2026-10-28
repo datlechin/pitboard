@@ -33,10 +33,9 @@ import Testing
 // The raw values are the stored preference: changing one would reset what everybody chose.
 @Test func theMenuBarChoicesKeepTheirNamesAndTheirStoredValues() {
     #expect(MenuBarShows.allCases == [.nameAndUsage, .usage, .icon])
-    let said = words.settings
     #expect(
         MenuBarShows.allCases.map(\.title)
-            == [said.accountAndUsage, said.usageOnly, said.iconOnly].map { $0 ?? "-" })
+            == [macWords.accountAndUsage, macWords.usageOnly, macWords.iconOnly])
     #expect(MenuBarShows.allCases.map(\.rawValue) == ["nameAndUsage", "usage", "icon"])
     #expect(MenuBarShows.allCases.allSatisfy { $0.id == $0.rawValue })
     let bar = MenuBarText(

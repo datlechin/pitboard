@@ -30,7 +30,7 @@ struct Dependencies {
             defaults: defaults, environment: environment, windowsDirectory: records)
         let notifications = MacNotifications(delivering: bundle.pathExtension == "app")
         let launch = AppLaunch(
-            environment: environment, appLocation: bundle.path,
+            environment: environment, appLocation: bundle.path, front: front,
             earlierPreferences: earlier.handOver(),
             windows: WindowsLaunch(
                 directory: records.path,

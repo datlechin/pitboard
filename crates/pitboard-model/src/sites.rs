@@ -2,7 +2,6 @@
 // type from another crate.
 
 use crate::Tool;
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 
 /// A website Pitboard opens in an account's window: whose accounts it serves, which hosts are
@@ -34,8 +33,8 @@ pub struct Site {
     /// Hashed into the store id of each of the site's windows. It never changes once a site
     /// has shipped: a change would leave every window of the site without its data.
     pub store_name: String,
-    /// How to sign in to the site in a window, as the steps its sign-in page shows, and what
-    /// of them a window on this system cannot do.
+    /// How to sign in to the site in a window, as the steps its sign-in page shows. What of
+    /// them a front's engine cannot do, `window_note` says after them.
     pub sign_in_steps: String,
     /// What the blocked hosts leave unusable in the site's window.
     pub blocked_services: String,
@@ -56,27 +55,9 @@ impl From<&pitboard_sites::Site> for Site {
             blocked_hosts: owned(site.blocked_hosts),
             sign_in_paths: site.sign_in_paths.iter().map(|path| owned(path)).collect(),
             store_name: site.store_name.into(),
-            sign_in_steps: sign_in_steps(OS, site),
+            sign_in_steps: site.sign_in_steps.into(),
             blocked_services: site.blocked_services.into(),
         }
-    }
-}
-
-fn sign_in_steps(os: Os, site: &pitboard_sites::Site) -> String {
-    let passkeys = match os {
-        // WebKit gives a page a passkey only in an app macOS lets act as a browser, and
-        // Pitboard is not one.
-        Os::MacOs => false,
-        // No app runs on Linux, and nothing was measured there, so none is promised.
-        Os::Linux => false,
-        // Whether WebView2 gives a page in an app's window a passkey is the Windows app's to
-        // measure, and until it has, none is promised.
-        Os::Windows => false,
-    };
-    if site.passkeys && !passkeys {
-        format!("{} Passkeys don’t work in this window.", site.sign_in_steps)
-    } else {
-        site.sign_in_steps.to_owned()
     }
 }
 
@@ -120,29 +101,6 @@ mod tests {
                 "www.chatgpt.com",
                 "chat.com"
             ]
-        );
-    }
-
-    // Whether a passkey works is the system's to say, so pitboard-sites' steps leave it out.
-    #[test]
-    fn a_window_says_a_passkey_does_not_work_where_it_does_not() {
-        for os in [Os::MacOs, Os::Linux, Os::Windows] {
-            assert_eq!(
-                sign_in_steps(os, &pitboard_sites::CHATGPT),
-                "Enter your email address, then its password or the code chatgpt.com emails \
-                 you, or click Continue with Microsoft or Continue with Apple. Passkeys don’t \
-                 work in this window."
-            );
-            assert_eq!(
-                sign_in_steps(os, &pitboard_sites::CLAUDE),
-                "Click Continue with email, open the email on your phone, tap its link, then \
-                 enter here the code claude.ai shows there.",
-                "claude.ai's steps say nothing of a passkey"
-            );
-        }
-        assert_eq!(
-            Site::from(&pitboard_sites::CHATGPT).sign_in_steps,
-            sign_in_steps(OS, &pitboard_sites::CHATGPT)
         );
     }
 

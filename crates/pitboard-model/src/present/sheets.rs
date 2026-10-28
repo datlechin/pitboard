@@ -8,11 +8,11 @@ use super::{
     Choice, FailureText, Missing, NameCheck, NextStep, Question, Seen, SheetText, SheetTool,
     SigningInText, StowText, WindowQuestion, alert_of,
 };
+use crate::Front;
 use crate::Tool;
 use crate::account_windows::AlertText;
 use crate::model::state::{After, InAppAdd, Leftover, in_its_app, trimmed};
 use crate::model::{Failure, Intent, QuitQuestion, Sheet};
-use pitboard_core::host::Os;
 use pitboard_core::label;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
@@ -93,7 +93,7 @@ fn missing(seen: &Seen, tool: ProviderId) -> Option<Missing> {
     if found.contains(&tool) {
         return None;
     }
-    Some(words::missing(seen.os, tool))
+    Some(words::missing(seen.front, tool))
 }
 
 fn nothing_to_park(seen: &Seen, provider: ProviderId) -> bool {
@@ -141,7 +141,7 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: ProviderId) -> (String, Str
         Sheet::SignInAgain { account } => signs_in(Some(&account.label)),
         _ if current && first => (
             words::add_shown_first(app),
-            words::add_account(seen.os, false),
+            words::add_account(seen.front, false),
             Vec::new(),
         ),
         _ if current => (
@@ -149,7 +149,7 @@ fn in_app_form(seen: &Seen, sheet: &Sheet, provider: ProviderId) -> (String, Str
                 Some(_) => words::add_once_signed_in(app),
                 None => words::add_unidentified(app),
             },
-            words::add_account_shown(seen.os, app, false),
+            words::add_account_shown(seen.front, app, false),
             Vec::new(),
         ),
         _ => signs_in(None),
@@ -167,7 +167,7 @@ fn form_words(seen: &Seen, sheet: &Sheet, tool: ProviderId) -> (String, String, 
     };
     (
         words::sign_in_message(tool.name(), again),
-        words::sign_in_asking(seen.os),
+        words::sign_in_asking(seen.front),
         Vec::new(),
     )
 }
@@ -203,7 +203,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         Sheet::Add { .. } => {
             let (message, confirm, _) = form_words(seen, sheet, tool);
             SheetText {
-                title: words::add_account(seen.os, false),
+                title: words::add_account(seen.front, false),
                 message,
                 tools: (seen.tools.iter().copied())
                     .filter(|&offered| offered == tool || missing(seen, offered).is_none())
@@ -221,7 +221,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
         Sheet::SignInAgain { account } => {
             let (message, confirm, _) = form_words(seen, sheet, tool);
             SheetText {
-                title: words::sign_in_to_again(seen.os, &account.label, false),
+                title: words::sign_in_to_again(seen.front, &account.label, false),
                 message,
                 tools: (seen.tools.iter().copied())
                     .filter(|&own| own == tool)
@@ -237,7 +237,7 @@ pub(crate) fn sheet_text(seen: &Seen) -> Option<SheetText> {
             }
         }
         Sheet::Name { account, email } => SheetText {
-            title: words::name_this_account(seen.os),
+            title: words::name_this_account(seen.front),
             message: words::naming(email, tool.name()),
             tools: Vec::new(),
             account: None,
@@ -271,24 +271,24 @@ pub(crate) fn stow_text(seen: &Seen) -> Option<StowText> {
         return None;
     }
     let saving = state.saving.contains(&Sheet::Stow);
-    let unknown = || words::clean_up_message(seen.os);
+    let unknown = || words::clean_up_message(seen.front);
     let (message, looking, can_confirm) = match state.left.as_ref() {
         None | Some(Leftover::Looking) => {
             (unknown(), Some(words::FINDING_OUT_WHOSE.to_owned()), false)
         }
         Some(Leftover::Unknown) => (unknown(), None, false),
-        Some(Leftover::Found(None)) => (words::nothing_to_clean_up(seen.os), None, false),
+        Some(Leftover::Found(None)) => (words::nothing_to_clean_up(seen.front), None, false),
         Some(Leftover::Found(Some(left))) => (
-            words::clean_up_found(seen.os, left),
+            words::clean_up_found(seen.front, left),
             None,
             !saving && !matches!(left.login, Foreseen::NotEnrolled(_)),
         ),
     };
     Some(StowText {
-        title: words::clean_up_title(seen.os),
+        title: words::clean_up_title(seen.front),
         message,
         looking,
-        confirm: words::clean_up(seen.os, false),
+        confirm: words::clean_up(seen.front, false),
         can_confirm,
         saving,
     })
@@ -313,7 +313,7 @@ pub(crate) fn signing_in_text(seen: &Seen) -> Option<SigningInText> {
         undo: None,
         announce: None,
         steps: Vec::new(),
-        title: words::signing_in_to(seen.os, tool),
+        title: words::signing_in_to(seen.front, tool),
         message: words::finish_in_browser(signing.again.as_deref()),
         code_note: words::code_note(tool),
         refused: signing.code_refused().then(|| words::code_refused(tool)),
@@ -348,8 +348,8 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
     let announce = (signing.started && asks_again).then(|| message.clone());
     SigningInText {
         title: match &signing.again {
-            Some(label) => words::sign_in_to_again(seen.os, label, false),
-            None => words::add_account(seen.os, false),
+            Some(label) => words::sign_in_to_again(seen.front, label, false),
+            None => words::add_account(seen.front, false),
         },
         message,
         code_note: String::new(),
@@ -368,7 +368,7 @@ fn in_app_signing_in_text(seen: &Seen, signing: &crate::model::state::SigningIn)
         },
         escape_cancels: signing.started && put_back.is_none(),
         undo: put_back.map(|account| Choice {
-            title: words::switch_back_to(seen.os, &account.label),
+            title: words::switch_back_to(seen.front, &account.label),
             intent: Intent::SwitchTo {
                 account: account.clone().into(),
             },
@@ -421,14 +421,14 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
         return Question::asking(
             words::quit_to_switch(name),
             words::quit_and_reopen(name),
-            words::quit_and_switch(seen.os, name),
+            words::quit_and_switch(seen.front, name),
         );
     }
     match then {
         After::Switch => Question::asking(
             words::quit_to_switch(name),
             words::quit_to_move(name, label),
-            words::quit_and_switch(seen.os, name),
+            words::quit_and_switch(seen.front, name),
         ),
         After::SignIn { again, .. } => {
             let title = words::quit_to_sign_in(name, again.as_deref());
@@ -439,12 +439,12 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
                 Some(work) => Question::asking(
                     title,
                     words::quit_to_sign_out(name, work),
-                    words::quit_and_continue(seen.os, name),
+                    words::quit_and_continue(seen.front, name),
                 ),
                 None => Question::asking(
                     title,
                     words::quit_to_wait(name),
-                    words::quit_and_start_sign_in(seen.os, name),
+                    words::quit_and_start_sign_in(seen.front, name),
                 ),
             }
         }
@@ -454,45 +454,45 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
                 None => words::quit_to_sign_in(name, None),
             },
             words::quit_to_read(name, again.as_deref()),
-            words::quit_and_add(seen.os, name),
+            words::quit_and_add(seen.front, name),
         ),
         After::Uninstall => Question::asking(
             words::quit_to_uninstall(name),
             words::quit_to_delete(name),
-            words::quit_and_uninstall(seen.os, name),
+            words::quit_and_uninstall(seen.front, name),
         ),
     }
 }
 
 /// A failure's alert, gone once it is read: what was being done, why it didn't happen with
 /// everything else it warned about, and what to do.
-pub(crate) fn failure_alert(os: Os, failure: &Failure) -> AlertText {
+pub(crate) fn failure_alert(front: Front, failure: &Failure) -> AlertText {
     AlertText {
-        next: Some(next_of(os, failure)),
+        next: Some(next_of(front, failure)),
         ..alert_of(
             &words::could_not(&failure.doing),
-            &words::why_not(os, &failure.doing, &failure.cause),
+            &words::why_not(front, &failure.doing, &failure.cause),
             &failure.warnings,
         )
     }
 }
 
-pub(crate) fn failure_text(os: Os, failure: &Failure) -> FailureText {
+pub(crate) fn failure_text(front: Front, failure: &Failure) -> FailureText {
     FailureText {
         id: failure.id,
         title: words::could_not(&failure.doing),
-        message: words::why_not(os, &failure.doing, &failure.cause),
+        message: words::why_not(front, &failure.doing, &failure.cause),
         warnings: failure
             .warnings
             .iter()
             .map(|warning| warning.message.clone())
             .collect(),
-        next: next_of(os, failure),
+        next: next_of(front, failure),
     }
 }
 
-fn next_of(os: Os, failure: &Failure) -> NextStep {
-    super::next::of_failure(os, failure.code.as_deref(), failure.account.as_ref())
+fn next_of(front: Front, failure: &Failure) -> NextStep {
+    super::next::of_failure(front, failure.code.as_deref(), failure.account.as_ref())
 }
 
 #[cfg(test)]
@@ -606,11 +606,11 @@ mod tests {
     }
 
     use crate::Account;
+    use crate::Front;
     use crate::model::state::{Cadence, State};
     use crate::present::testing::{
         Utc, awaiting, claude_code, claude_desktop, desktop_account, desktop_warning, read, status,
     };
-    use pitboard_core::host::Os;
 
     fn asked(account: Key, app_id: &str, name: &str) -> QuitQuestion {
         QuitQuestion {
@@ -641,7 +641,7 @@ mod tests {
 
     fn form_of(state: &mut State, sheet: Sheet) -> SheetText {
         state.sheet = Some(sheet);
-        sheet_text(&Seen::new(state, 0, &Utc, Os::MacOs)).expect("a form")
+        sheet_text(&Seen::new(state, 0, &Utc, Front::MacMenuBar)).expect("a form")
     }
 
     fn work_and_home() -> Vec<Account> {
@@ -653,8 +653,8 @@ mod tests {
 
     #[test]
     fn chatgpt_is_asked_to_quit_in_its_own_words() {
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, 0, &Utc, Front::MacMenuBar);
         let asked = quit_asks(
             &seen,
             &asked(
@@ -669,7 +669,7 @@ mod tests {
             Question::asking(
                 words::quit_to_switch("ChatGPT"),
                 words::quit_and_reopen("ChatGPT"),
-                words::quit_and_switch(Os::MacOs, "ChatGPT")
+                words::quit_and_switch(Front::MacMenuBar, "ChatGPT")
             )
         );
     }
@@ -683,7 +683,7 @@ mod tests {
                 .build(),
         );
         let text = form(Sheet::Add { tool: None }, accounts, Vec::new());
-        let sign_in = words::sign_in_asking(Os::MacOs);
+        let sign_in = words::sign_in_asking(Front::MacMenuBar);
         assert_eq!(
             text.tools
                 .iter()
@@ -748,7 +748,7 @@ mod tests {
             case(Vec::new(), Vec::new()),
             (
                 words::add_shown_first("Claude"),
-                words::add_account(Os::MacOs, false),
+                words::add_account(Front::MacMenuBar, false),
                 Vec::new()
             )
         );
@@ -786,7 +786,7 @@ mod tests {
         );
         let doubt = (
             words::add_unidentified("Claude"),
-            words::add_account_shown(Os::MacOs, "Claude", false),
+            words::add_account_shown(Front::MacMenuBar, "Claude", false),
             Vec::new(),
         );
         for code in ["in_use_unconfirmed", "move_waiting"] {
@@ -810,7 +810,7 @@ mod tests {
             (text.message, text.confirm),
             (
                 words::add_once_signed_in("Claude"),
-                words::add_account_shown(Os::MacOs, "Claude", false),
+                words::add_account_shown(Front::MacMenuBar, "Claude", false),
             )
         );
         assert!(text.tools.iter().all(|tool| tool.steps.is_empty()));
@@ -827,7 +827,7 @@ mod tests {
             vec![claude_code(), claude_desktop()],
         );
         assert_eq!(form_of(&mut state, add_desktop()).confirm, words::CONTINUE);
-        let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
+        let seen = Seen::new(&state, 0, &Utc, Front::MacMenuBar);
         let question = quit_asks(
             &seen,
             &asked(Key::new(ProviderId::Desktop, ""), CLAUDE, "Claude"),
@@ -839,7 +839,7 @@ mod tests {
         );
         assert_eq!(
             question.confirm,
-            words::quit_and_start_sign_in(Os::MacOs, "Claude")
+            words::quit_and_start_sign_in(Front::MacMenuBar, "Claude")
         );
         assert_eq!(question.message, words::quit_to_wait("Claude"));
     }
@@ -855,8 +855,8 @@ mod tests {
             vec![desktop_warning("in_use_unconfirmed", "in doubt")],
         );
         assert_eq!(text.confirm, words::add_as("home"));
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, 0, &Utc, Front::MacMenuBar);
         let question = quit_asks(
             &seen,
             &asked(Key::new(ProviderId::Desktop, "home"), CLAUDE, "Claude"),
@@ -871,7 +871,7 @@ mod tests {
             Question::asking(
                 words::quit_to_add("Claude", "home"),
                 words::quit_to_read("Claude", Some("home")),
-                words::quit_and_add(Os::MacOs, "Claude")
+                words::quit_and_add(Front::MacMenuBar, "Claude")
             )
         );
     }
@@ -882,7 +882,7 @@ mod tests {
             status(work_and_home(), Vec::new()),
             vec![claude_code(), claude_desktop()],
         );
-        let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
+        let seen = Seen::new(&state, 0, &Utc, Front::MacMenuBar);
         let said = |label: &str, then: After| {
             let account = Key::new(ProviderId::Desktop, label);
             quit_asks(&seen, &asked(account, CLAUDE, "Claude"), &then)
@@ -892,14 +892,14 @@ mod tests {
             Question::asking(
                 words::quit_to_switch("Claude"),
                 words::quit_to_move("Claude", "home"),
-                words::quit_and_switch(Os::MacOs, "Claude")
+                words::quit_and_switch(Front::MacMenuBar, "Claude")
             )
         );
         let parks = |again| {
             Question::asking(
                 words::quit_to_sign_in("Claude", again),
                 words::quit_to_sign_out("Claude", "work"),
-                words::quit_and_continue(Os::MacOs, "Claude"),
+                words::quit_and_continue(Front::MacMenuBar, "Claude"),
             )
         };
         assert_eq!(
@@ -938,7 +938,7 @@ mod tests {
             Question::asking(
                 words::quit_to_sign_in("Claude", None),
                 words::quit_to_read("Claude", None),
-                words::quit_and_add(Os::MacOs, "Claude")
+                words::quit_and_add(Front::MacMenuBar, "Claude")
             )
         );
     }
@@ -948,7 +948,7 @@ mod tests {
     #[test]
     fn a_failures_alert_says_its_warnings_too() {
         let alert = failure_alert(
-            Os::MacOs,
+            Front::MacMenuBar,
             &Failure {
                 id: 1,
                 doing: Doing::Switch {
@@ -979,8 +979,8 @@ mod tests {
     // maps a button to an intent.
     #[test]
     fn the_windows_questions_come_with_their_answers() {
-        let state = State::new(Cadence::APP);
-        let seen = Seen::new(&state, 0, &Utc, Os::MacOs);
+        let state = State::new(Front::MacMenuBar, Cadence::APP);
+        let seen = Seen::new(&state, 0, &Utc, Front::MacMenuBar);
         let quit = quit_question(
             &seen,
             &asked(

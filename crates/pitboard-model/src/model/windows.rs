@@ -27,8 +27,7 @@ use crate::account_windows::{
     window_address, window_home,
 };
 use crate::present::{DownloadState, PageLoad, StoreDeletion};
-use crate::{SiteLink, Status};
-use pitboard_core::host::Os;
+use crate::{Engine, SiteLink, Status};
 use pitboard_sites::LinkRefusal;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
@@ -141,7 +140,7 @@ pub(crate) struct Windows {
     web_scheme: String,
     /// How long a link waits before it can be opened.
     arming_delay: Duration,
-    // On Windows, where WebView2 deletes a profile's folder only as its browser process exits.
+    // Where the engine deletes a store's folder only as its browser process exits.
     deletion_lingers: bool,
     kept: Kept,
     /// The stores of the accounts the last read that said who is enrolled found, while the
@@ -210,8 +209,14 @@ impl Windows {
         }
     }
 
-    pub(crate) fn on(&mut self, os: Os, link_scheme: &str, web_scheme: &str) {
-        self.deletion_lingers = os == Os::Windows;
+    pub(crate) fn on(&mut self, engine: Engine, link_scheme: &str, web_scheme: &str) {
+        self.deletion_lingers = match engine {
+            // WebView2 deletes a profile's folder only as its browser process exits.
+            Engine::WebView2 => true,
+            Engine::WebKit => false,
+            // No app runs on Linux, which answers as the Mac does.
+            Engine::WebKitGtk => false,
+        };
         link_scheme.clone_into(&mut self.link_scheme);
         web_scheme.clone_into(&mut self.web_scheme);
     }

@@ -41,27 +41,27 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
     // the Windows page binds the model's own words
     assert.ok(page.includes(`ToolTipService.ToolTip="{x:Bind shown:Words.Window.${field}}"`), help);
   }
-  assert.ok(words.includes('titled(os, "In Use", IN_USE)'));
+  assert.ok(words.includes('titled(front, "In Use", IN_USE)'));
   assert.equal(w.inUse("windows"), "In use");
   assert.ok(words.includes(`pub(crate) const SWITCH: &str = "${w.SWITCH}";`));
   assert.ok(words.includes('format!("Switch to {label}")'));
   assert.equal(w.switchOffer("personal"), "Switch to personal");
   assert.ok(words.includes(`if asks { "${w.RENAME_OFFER}" } else { "Rename" }`));
-  assert.ok(words.includes('titled(os, "Remove Account…", "Remove account…")'));
-  assert.ok(words.includes('titled(os, "Sign In Again…", "Sign in again…")'));
-  assert.ok(words.includes('titled(os, "Warm Up Now", "Warm up now")'));
+  assert.ok(words.includes('titled(front, "Remove Account…", "Remove account…")'));
+  assert.ok(words.includes('titled(front, "Sign In Again…", "Sign in again…")'));
+  assert.ok(words.includes('titled(front, "Warm Up Now", "Warm up now")'));
   assert.ok(
     repo("apps/macos/Sources/PitboardApp/Window/AccountCommands.swift").includes(
       "Button(words.menu.copyEmail)",
     ),
   );
-  assert.ok(appWords.includes(`copy_email: titled(os, "${w.copyEmail("macos")}", `));
+  assert.ok(appWords.includes(`copy_email: titled(front, "${w.copyEmail("macos")}", `));
   assert.ok(
     repo("apps/windows/Pitboard.Views/AccountMenu.cs").includes(
       'Text = Words.Menu.CopyEmail, AccessKey = "C", KeyboardAcceleratorTextOverride = "Ctrl+C"',
     ),
   );
-  assert.ok(appWords.includes(`titled(os, "Copy Email Address", "${w.copyEmail("windows")}")`));
+  assert.ok(appWords.includes(`titled(front, "Copy Email Address", "${w.copyEmail("windows")}")`));
 });
 
 test("Remove Account asks with the account's name and says what goes, on this Mac or this PC", () => {
@@ -88,7 +88,8 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
   );
   const machines = repo("crates/pitboard-model/src/account_windows/mod.rs");
   assert.ok(
-    machines.includes('Os::MacOs => "this Mac"') && machines.includes('Os::Windows => "this PC"'),
+    machines.includes('Front::MacMenuBar => "this Mac"') &&
+      machines.includes('Front::WindowsNotificationArea => "this PC"'),
   );
   assert.match(
     w.removeMessage(account("main", "codex"), "windows"),
@@ -100,7 +101,7 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
 test("the Rename sheet and the one naming an account added say what present/sheets.rs gives them", () => {
   const sheets = present("sheets.rs");
   assert.ok(sheets.includes("title: words::rename_title(&account.label),"));
-  assert.ok(sheets.includes("title: words::name_this_account(seen.os),"));
+  assert.ok(sheets.includes("title: words::name_this_account(seen.front),"));
   assert.ok(sheets.includes("message: words::naming(email, tool.name()),"));
   assert.ok(sheets.includes("confirm: words::DONE.into(),"));
   assert.ok(pinned(w.renameTitle("work")));
@@ -109,7 +110,7 @@ test("the Rename sheet and the one naming an account added say what present/shee
   assert.ok(pinned(w.naming("", "Claude Desktop")));
   assert.ok(words.includes(`pub(crate) const DONE: &str = "${w.DONE}";`));
   assert.ok(words.includes(`pub(crate) const NAME_PROMPT: &str = "${w.NAME_PROMPT}";`));
-  assert.ok(words.includes('titled(os, "Name This Account", "Name this account")'));
+  assert.ok(words.includes('titled(front, "Name This Account", "Name this account")'));
   assert.equal(w.nameThisAccount("windows"), "Name this account");
   assert.ok(words.includes('format!("Couldn’t rename {label}")'));
   for (const problem of ["empty", "not_one_word", "separator"] as const)
@@ -137,8 +138,8 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
   assert.deepEqual(w.signingOut("work"), ["Saving work.", "Saving work"]);
   assert.ok(words.includes('(format!("Saving {label}."), format!("Saving {label}"))'));
   for (const said of [
-    'titled(os, "Add Account", "Add account")',
-    'titled(os, "Sign In…", "Sign in…")',
+    'titled(front, "Add Account", "Add account")',
+    'titled(front, "Sign In…", "Sign in…")',
     '&format!("Sign In to {label} Again{more}"),',
     '&format!("Signing In to {tool}"),',
     '&format!("Switch Back to {label}"),',
@@ -159,11 +160,11 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
   ]);
   const sheet = repo("apps/macos/Sources/PitboardApp/Sheets/SignInSheet.swift");
   assert.ok(sheet.includes("LabeledContent(words.sheet.signInPage)"));
-  assert.ok(appWords.includes(`sign_in_page: titled(os, "${w.signInPage("macos")}", `));
+  assert.ok(appWords.includes(`sign_in_page: titled(front, "${w.signInPage("macos")}", `));
   assert.ok(
     sheet.includes("Button(words.sheet.copyLink)") && sheet.includes("Button(words.sheet.open)"),
   );
-  assert.ok(appWords.includes(`copy_link: titled(os, "${w.copyLink("macos")}", `));
+  assert.ok(appWords.includes(`copy_link: titled(front, "${w.copyLink("macos")}", `));
   assert.ok(appWords.includes("open: words::OPEN.into(),"));
   assert.ok(words.includes(`pub(crate) const OPEN: &str = "${w.OPEN}";`));
   assert.ok(sheet.includes("Picker(words.sheet.tool, selection: $tool)"));
@@ -194,18 +195,18 @@ test("a switch's notice and the setup step say what present/notices.rs and setup
     '(false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),',
     'Some(tool) => format!("Add a second {tool} account"),',
     'format!("{app} opens signed in to it.")',
-    'titled(os, "Switch Back", "Switch back")',
+    'titled(front, "Switch Back", "Switch back")',
   ])
     assert.ok(words.includes(said), said);
   assert.equal(w.CLAUDE_OPENS, "Claude opens signed in to it.");
   const notices = present("notices.rs");
-  assert.ok(notices.includes("title: words::switch_back(seen.os),"));
+  assert.ok(notices.includes("title: words::switch_back(seen.front),"));
   assert.ok(notices.includes("words::signed_in_to(tool, label)"));
   const setup = present("setup.rs");
   assert.ok(setup.includes("detail: words::only_one(&account.label, named, app),"));
-  assert.ok(setup.includes("title: words::add_account(seen.os, true),"));
-  assert.ok(setup.includes("title: words::not_now(seen.os),"));
-  assert.ok(words.includes('titled(os, "Not Now", "Not now")'));
+  assert.ok(setup.includes("title: words::add_account(seen.front, true),"));
+  assert.ok(setup.includes("title: words::not_now(seen.front),"));
+  assert.ok(words.includes('titled(front, "Not Now", "Not now")'));
   assert.ok(notices.includes("spoken_severity: words::spoken_severity(severity).into(),"));
   assert.ok(words.includes('Severity::Info => "Note",'));
 });

@@ -6,10 +6,10 @@ use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{claude, refusal, warned, warning};
 use super::{Doing, Intent, Sheet};
+use crate::Front;
 use crate::Held;
 use crate::present::Severity;
 use crate::present::words;
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::Owner;
 use pitboard_core::switch::{Foreseen, Kept, Left, Stowed};
 use std::path::PathBuf;
@@ -95,7 +95,10 @@ fn the_notice_of_a_login_left_in_a_file_offers_to_put_it_away() {
             continue;
         }
         assert_eq!(notice.actions.len(), 1, "{held:?}: {:?}", notice.actions);
-        assert_eq!(notice.actions[0].title, words::clean_up(OS, true));
+        assert_eq!(
+            notice.actions[0].title,
+            words::clean_up(Front::MacMenuBar, true)
+        );
         assert_eq!(notice.actions[0].intent, stow_sheet());
         assert!(notice.actions[0].enabled);
         assert_eq!(notice.actions[0].confirm, None, "the sheet asks");
@@ -115,21 +118,21 @@ fn the_sheet_says_whose_the_login_is_once_it_is_known() {
     assert_eq!(model.count(a_look_left), 1);
     let looking = model.shown().stow_text.expect("the sheet's words");
     assert_eq!(looking.looking.as_deref(), Some(words::FINDING_OUT_WHOSE));
-    assert_eq!(looking.message, words::clean_up_message(OS));
+    assert_eq!(looking.message, words::clean_up_message(Front::MacMenuBar));
     assert!(!looking.can_confirm);
 
     model.run(&mut machine);
 
     let text = model.on_a_mac().stow_text.expect("the sheet's words");
-    assert_eq!(text.title, words::clean_up_title(Os::MacOs));
-    assert_eq!(text.confirm, words::clean_up(Os::MacOs, false));
+    assert_eq!(text.title, words::clean_up_title(Front::MacMenuBar));
+    assert_eq!(text.confirm, words::clean_up(Front::MacMenuBar, false));
     assert_eq!(text.looking, None);
     assert!(text.can_confirm);
     assert!(!text.saving);
     let found = |os| words::clean_up_found(os, &left(Foreseen::Kept(parked_now("work"))));
-    assert_eq!(text.message, found(Os::MacOs));
+    assert_eq!(text.message, found(Front::MacMenuBar));
     let text = model.on_windows().stow_text.expect("the sheet's words");
-    assert_eq!(text.message, found(Os::Windows));
+    assert_eq!(text.message, found(Front::WindowsNotificationArea));
 }
 
 /// Put Away sends what the sheet showed, which is put away only while the file still holds

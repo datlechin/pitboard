@@ -8,6 +8,7 @@ use super::pages;
 use super::tools::{CLAUDE_ADDRESS, CLAUDE_REFUSES, CODEX_ADDRESS};
 use super::worlds::{Folder, Launched, World, make, out_of_reach};
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
 use crate::model::testing::records::read_in;
@@ -30,9 +31,12 @@ use std::time::{Duration, Instant};
 /// what a UI test types.
 const CODE: &str = "fixture-code#state";
 
+// The macOS app's, whichever system runs the tests.
+const FRONT: Front = Front::MacMenuBar;
+
 /// `world`, made in a folder of this test's own.
 fn made(world: World) -> Launched {
-    make(world, Folder::own(world.name()).expect("a folder"))
+    make(world, Folder::own(world.name()).expect("a folder"), FRONT)
         .unwrap_or_else(|unmade| panic!("{}: {unmade}", world.name()))
 }
 
@@ -185,7 +189,7 @@ fn each_fixture_starts_where_its_tests_expect() {
             Os::Linux | Os::Windows => &["claude", "codex"],
         };
         assert_eq!(
-            crate::tools()
+            crate::tools_on(OS)
                 .into_iter()
                 .map(ProviderId::code)
                 .collect::<Vec<_>>(),
@@ -255,7 +259,7 @@ fn an_account_at_its_limit_is_switched_away_from_as_the_app_starts() {
         .find(|notice| notice.id == "switch/claude")
         .expect("the switch's notice");
     assert_eq!(notice.title, words::switched_to(None, "personal"));
-    assert_eq!(notice.actions[0].title, words::switch_back(OS));
+    assert_eq!(notice.actions[0].title, words::switch_back(FRONT));
     model.shutdown();
 }
 
@@ -862,7 +866,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     let question = asked.quit_question.expect("asked");
     assert_eq!(
         question.question.confirm,
-        words::quit_and_continue(OS, "Claude")
+        words::quit_and_continue(FRONT, "Claude")
     );
     model.send(question.confirmed);
     let waiting = told.last_where("the wait, with Claude opened for it", |snapshot| {
@@ -875,7 +879,7 @@ fn an_add_in_claude_desktop_parks_waits_and_enrols_with_claude_in_front() {
     assert_eq!(text.waiting, words::waiting_to_quit("Claude"));
     assert_eq!(
         text.undo.map(|undo| undo.title),
-        Some(words::switch_back_to(OS, "work"))
+        Some(words::switch_back_to(FRONT, "work"))
     );
     told.last_where("travel added, in use and named next", |snapshot| {
         snapshot.signing_in.is_none()
@@ -937,7 +941,10 @@ fn an_add_left_halfway_is_put_back_by_use() {
             .iter()
             .map(|action| action.title.clone())
             .collect::<Vec<_>>(),
-        [words::finish(OS, false), words::switch_back_to(OS, "work")]
+        [
+            words::finish(FRONT, false),
+            words::switch_back_to(FRONT, "work")
+        ]
     );
     model.send(notice.actions[1].intent.clone());
     told.last_where("work back in use", |snapshot| {
@@ -1014,7 +1021,7 @@ fn a_stopped_move_is_given_up_from_the_app() {
     });
     assert_eq!(
         actions_of(&waiting, "warning/move_waiting/"),
-        [words::add_account_shown(OS, "Claude", true)],
+        [words::add_account_shown(FRONT, "Claude", true)],
         "no change has tried to settle it yet"
     );
     model.send(Intent::SwitchTo {
@@ -1036,9 +1043,9 @@ fn a_stopped_move_is_given_up_from_the_app() {
             title: words::could_not(&Doing::Switch {
                 account: Key::new(ProviderId::Desktop, "home")
             }),
-            message: words::in_app_refusal(OS, &undetermined).expect("the app's words"),
+            message: words::in_app_refusal(FRONT, &undetermined).expect("the app's words"),
             next: Some(crate::present::next::of_failure(
-                OS,
+                FRONT,
                 Some("recovery_undetermined"),
                 Some(&Key::new(ProviderId::Desktop, "work"))
             )),
@@ -1050,8 +1057,8 @@ fn a_stopped_move_is_given_up_from_the_app() {
     assert_eq!(
         actions_of(&refused, "warning/move_waiting/"),
         [
-            words::add_account_shown(OS, "Claude", true),
-            words::cancel_switch(OS, true)
+            words::add_account_shown(FRONT, "Claude", true),
+            words::cancel_switch(FRONT, true)
         ]
     );
     model.send(notice.actions[1].intent.clone());
@@ -1159,7 +1166,7 @@ fn the_menu_lists_every_account_under_its_tool() {
             )
         })
         .collect();
-    let named = |title, aside| words::named_in_menu(OS, title, aside);
+    let named = |title, aside| words::named_in_menu(FRONT, title, aside);
     assert_eq!(
         sections,
         [
@@ -1182,7 +1189,7 @@ fn the_menu_lists_every_account_under_its_tool() {
         .collect();
     let weekly = |figure: &str| {
         words::limits_line(
-            OS,
+            FRONT,
             &[(words::limit_short("weekly", None), figure.to_owned())],
         )
     };
@@ -1204,7 +1211,7 @@ fn a_machine_without_claude_code_says_so_first() {
             .install
             .as_ref()
             .map(|item| item.title.as_str()),
-        Some(words::claude_code_not_installed(OS).as_str())
+        Some(words::claude_code_not_installed(FRONT).as_str())
     );
     assert_eq!(shown.window_request.serial, 0);
     model.shutdown();
@@ -1220,7 +1227,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
             read_in(snapshot) && snapshot.footing == Footing::CodexUnused
         });
         assert!(
-            matches!(&shown.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(OS).0),
+            matches!(&shown.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(FRONT).0),
             "{}: {:?}",
             world.name(),
             shown.accounts_shown
@@ -1230,7 +1237,7 @@ fn a_machine_nobody_is_signed_in_on_offers_an_account() {
             snapshot.footing == Footing::NoOneSignedIn
         });
         assert!(
-            matches!(&declined.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(OS).0),
+            matches!(&declined.accounts_shown, AccountsShown::NoAccounts { title, .. } if *title == words::no_accounts(FRONT).0),
             "{}: {:?}",
             world.name(),
             declined.accounts_shown
@@ -1278,7 +1285,7 @@ fn the_login_in_use_is_offered_a_name() {
 fn the_login_left_in_a_file_is_put_away_from_its_sheet() {
     let launched = made(World::LeftInFile);
     let (model, told) = started(&launched);
-    let put_away = words::clean_up(OS, true);
+    let put_away = words::clean_up(FRONT, true);
     told.last_where("the file said, with Put Away…", |snapshot| {
         actions_of(snapshot, "warning/fallback_login/") == [put_away.as_str()]
     });
@@ -1560,10 +1567,10 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     let titles = |label| {
         vec![
             words::switch_account(Some(label)),
-            words::sign_in_again(OS, true),
+            words::sign_in_again(FRONT, true),
             words::rename(true).into(),
-            words::warm_up_now(OS),
-            words::remove_account(OS),
+            words::warm_up_now(FRONT),
+            words::remove_account(FRONT),
         ]
     };
     assert_eq!(
@@ -1638,7 +1645,7 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     assert_eq!(
         (item.title.as_str(), item.subtitle.as_deref()),
         (
-            words::issues(OS, 1).as_str(),
+            words::issues(FRONT, 1).as_str(),
             Some(words::could_not(&Doing::ReadUsage).as_str())
         )
     );
@@ -1654,15 +1661,15 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
     assert!(shown.sections.is_empty(), "nothing is known");
     assert_eq!(
         shown.menu_accounts_note,
-        Some(words::no_accounts_to_show(OS))
+        Some(words::no_accounts_to_show(FRONT))
     );
     assert_eq!(
         shown.accounts_shown,
         AccountsShown::ReadFailed {
-            title: words::could_not_read_accounts(OS),
+            title: words::could_not_read_accounts(FRONT),
             detail: failure,
             retry: crate::present::Choice {
-                title: words::try_again(OS),
+                title: words::try_again(FRONT),
                 intent: Intent::Refresh { asked: true },
                 enabled: true,
             },
@@ -1737,19 +1744,22 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
         ("stuck", words::SWITCH_WAITING)
     );
     let give_up = notice.actions.first().expect("an action");
-    assert_eq!(give_up.title, words::cancel_switch(OS, true));
+    assert_eq!(give_up.title, words::cancel_switch(FRONT, true));
     assert_eq!(give_up.intent, Intent::AbandonStuckSwitch);
     assert_eq!(
         give_up
             .confirm
             .as_ref()
             .map(|question| question.confirm.clone()),
-        Some(words::cancel_switch(OS, false))
+        Some(words::cancel_switch(FRONT, false))
     );
     let item = shown.menu_notices.others.expect("an item");
     assert_eq!(
         (item.title.as_str(), item.subtitle.as_deref()),
-        (words::issues(OS, 1).as_str(), Some(words::SWITCH_WAITING))
+        (
+            words::issues(FRONT, 1).as_str(),
+            Some(words::SWITCH_WAITING)
+        )
     );
     assert_eq!(
         item.intent,
@@ -1764,7 +1774,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     });
     let lines = checked.machine.checks.lines();
     let interrupted = (lines.iter())
-        .find(|line| line.name == words::check_name(OS, "interrupted_switch", ""))
+        .find(|line| line.name == words::check_name(FRONT, "interrupted_switch", ""))
         .expect("doctor's check");
     assert_eq!(interrupted.level, crate::Level::Warn);
     assert_eq!(
@@ -1773,7 +1783,7 @@ fn an_interrupted_switch_is_offered_a_way_out_as_the_app_starts() {
     );
     assert_eq!(
         checked.machine.checks.summary,
-        Some(words::check_issues(OS, 2)),
+        Some(words::check_issues(FRONT, 2)),
         "personal's saved sign-in, and the switch"
     );
 
@@ -1851,9 +1861,9 @@ fn this_mac_shows_the_cores_checks() {
     );
     assert_eq!(
         personal.action.as_ref().map(|again| again.title.clone()),
-        Some(words::sign_in_again(OS, true))
+        Some(words::sign_in_again(FRONT, true))
     );
-    assert_eq!(checks.summary, Some(words::check_issues(OS, 1)));
+    assert_eq!(checks.summary, Some(words::check_issues(FRONT, 1)));
     model.shutdown();
 }
 
@@ -2046,7 +2056,7 @@ fn the_account_windows_are_what_their_ui_tests_read() {
     else {
         unreachable!()
     };
-    assert_eq!(title, words::cannot_open_link(OS));
+    assert_eq!(title, words::cannot_open_link(FRONT));
     assert!(reason.contains("This link is on example.com."), "{reason}");
     model.shutdown();
 }
@@ -2113,8 +2123,12 @@ fn every_other_host_has_its_own_stand_in() {
 /// folder an app's fixture is kept in is touched.
 #[test]
 fn an_unknown_fixture_is_refused_naming_every_one() {
-    let refused =
-        PitboardModel::fixture("twoTool".into(), Arc::new(Told::default()), Arc::new(Utc));
+    let refused = PitboardModel::fixture(
+        "twoTool".into(),
+        FRONT,
+        Arc::new(Told::default()),
+        Arc::new(Utc),
+    );
     match refused {
         Err(super::FixtureError::Unknown { reason }) => {
             assert!(reason.contains("\"twoTool\""), "{reason}");
@@ -2217,6 +2231,7 @@ fn an_exported_fixture_is_made_in_the_temporary_directory() {
     let listener = Arc::new(Told::default());
     let model = PitboardModel::fixture(
         "oneTool".into(),
+        FRONT,
         Arc::clone(&listener) as Arc<dyn ModelListener>,
         Arc::new(Utc),
     )
@@ -2252,6 +2267,7 @@ fn an_exported_fixture_in_a_directory_of_its_own_is_made_there() {
     let listener = Arc::new(Told::default());
     let model = PitboardModel::fixture_in(
         "oneTool".into(),
+        FRONT,
         own.path().to_string_lossy().into_owned(),
         Arc::clone(&listener) as Arc<dyn ModelListener>,
         StandInApps::new(&[], true),
@@ -2301,6 +2317,7 @@ fn started_in(
     let told = Arc::new(Told::default());
     let model = PitboardModel::fixture_in(
         world.name().into(),
+        FRONT,
         own.path().to_string_lossy().into_owned(),
         Arc::clone(&told) as Arc<dyn ModelListener>,
         Arc::clone(apps) as Arc<dyn AppControl>,
@@ -2423,7 +2440,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
         posted,
         [RunOutNotice {
             id: format!("claude/personal/session/-{resets_at}"),
-            title: words::limit_notification(OS, "5-hour", None, true),
+            title: words::limit_notification(FRONT, "5-hour", None, true),
             subtitle: Some("Claude Code".into()),
             body: format!(
                 "{} {}",
@@ -2432,7 +2449,7 @@ fn a_run_out_is_posted_through_the_notifications_fixture_in_is_given() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::switch_button(OS, "work"),
+                title: words::switch_button(FRONT, "work"),
                 clicked: "switch/claude/work".into(),
             }),
         }]
@@ -2470,10 +2487,10 @@ fn a_login_replaced_outside_is_posted_through_the_notifications_fixture_in_is_gi
     assert_eq!(
         said,
         [(
-            words::sign_in_replaced(OS),
-            words::in_app_warning(OS, &replaced).expect("the app's words"),
+            words::sign_in_replaced(FRONT),
+            words::in_app_warning(FRONT, &replaced).expect("the app's words"),
             Some(NotificationButton {
-                title: words::sign_in_again_button(OS),
+                title: words::sign_in_again_button(FRONT),
                 clicked: "sign-in-again/claude/work".into(),
             })
         )]
@@ -2506,7 +2523,7 @@ fn a_notification_the_system_refused_is_said_after_doctors_checks() {
     assert_eq!(line.level, crate::Level::Warn);
     // Said at the clock time it was refused, which the test cannot know to the minute.
     let said = words::check_text(&words::not_posted(
-        &words::limit_notification(OS, "5-hour", None, true),
+        &words::limit_notification(FRONT, "5-hour", None, true),
         "\n",
         "COMException 0x80070490",
     ));

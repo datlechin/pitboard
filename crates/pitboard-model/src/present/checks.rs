@@ -123,7 +123,7 @@ pub(crate) fn checks(seen: &Seen) -> ChecksShown {
         .count();
     ChecksShown {
         groups,
-        summary: any.then(|| words::check_issues(seen.os, issues)),
+        summary: any.then(|| words::check_issues(seen.front, issues)),
         verdict: any.then(|| words::checks_verdict(issues, failed).into()),
         level: crate::doctor_level(&checks),
         checking,
@@ -131,7 +131,7 @@ pub(crate) fn checks(seen: &Seen) -> ChecksShown {
             .checked_at
             .filter(|_| any && !checking)
             .map(|at| words::checked_at(&seen.clock(at))),
-        waiting: (!any).then(|| words::checking(seen.os)),
+        waiting: (!any).then(|| words::checking(seen.front)),
         report: machine.report.clone(),
     }
 }
@@ -146,8 +146,8 @@ fn tool_of(check: &Check) -> Option<ProviderId> {
 
 // Doctor's words, less any command, where they already are the apps'; the apps' own elsewhere.
 fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
-    let (os, passed) = (seen.os, check.level == Level::Ok);
-    let mut name = words::check_name(os, &check.code, &check.name);
+    let (front, passed) = (seen.front, check.level == Level::Ok);
+    let mut name = words::check_name(front, &check.code, &check.name);
     let mut detail = words::check_text(&check.detail);
     let mut advice =
         Some(words::check_text(&check.advice)).filter(|said| !passed && !said.is_empty());
@@ -160,7 +160,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
         None => words::sign_in_standing(pitboard_core::status::Standing::NothingParked).into(),
     };
     let settings = |section| ItemOffer {
-        title: words::open_settings(os),
+        title: words::open_settings(front),
         intent: Intent::Show {
             place: Some(Place::Settings { section }),
         },
@@ -193,13 +193,13 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
     } else {
         match (check.code.as_str(), check.level) {
             ("security_tool", Level::Ok) => detail = words::KEYCHAIN_READY.into(),
-            ("home", Level::Ok) => detail = words::folder_private(os).into(),
+            ("home", Level::Ok) => detail = words::folder_private(front).into(),
             ("home", _) => {
-                detail = words::folder_shared(os);
+                detail = words::folder_shared(front);
                 advice = Some(words::FOLDER_NAMES_ACCOUNTS.into());
             }
             ("private_on_disk", _) => {
-                detail = words::sign_in_files_shared(os);
+                detail = words::sign_in_files_shared(front);
                 advice = None;
             }
             ("vault", _) => {
@@ -220,7 +220,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
                 detail = words::nothing_signed_in_to(ProviderId::Claude.name());
                 advice = None;
                 action = Some(ItemOffer {
-                    title: words::add_account(os, true),
+                    title: words::add_account(front, true),
                     intent: Intent::PresentSheet {
                         sheet: Sheet::Add {
                             tool: Some(Tool::Claude),
@@ -269,7 +269,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
             }
             ("codex_auth_file", _) => {
                 detail = match signed_in(ProviderId::Codex) {
-                    Some(_) => words::codex_file_shared(os),
+                    Some(_) => words::codex_file_shared(front),
                     None => words::nothing_signed_in_to(ProviderId::Codex.name()),
                 };
                 advice = None;
@@ -288,7 +288,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
                 detail = words::LEFTOVER_FILE_SAYS.into();
                 advice = unread.then(|| words::CANNOT_CLEAN_UP_UNREAD.into());
                 action = (!unread).then(|| ItemOffer {
-                    title: words::clean_up(os, true),
+                    title: words::clean_up(front, true),
                     intent: Intent::PresentSheet { sheet: Sheet::Stow },
                     enabled: true,
                     confirm: None,
@@ -297,7 +297,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
             ("interrupted_switch", _) => {
                 advice = None;
                 action = seen.state.stuck.then(|| ItemOffer {
-                    title: words::cancel_switch(os, true),
+                    title: words::cancel_switch(front, true),
                     intent: Intent::AbandonStuckSwitch,
                     enabled: true,
                     confirm: Some(super::notices::cancel_stuck_question(seen)),
@@ -329,7 +329,7 @@ fn line(seen: &Seen, id: u64, check: &Check) -> CheckLine {
         spoken_level: words::spoken_level(check.level).to_owned(),
         detail,
         advice,
-        learn: (!passed && action.is_none()).then(|| next::of_check(os)),
+        learn: (!passed && action.is_none()).then(|| next::of_check(front)),
         action,
     }
 }
@@ -355,13 +355,12 @@ mod tests {
         Utc, account, both_tools, claude_code, mechanism_words, read, status, strings_of,
     };
     use crate::present::{ItemOffer, present_on};
-    use crate::{Account, Level};
-    use pitboard_core::host::Os;
+    use crate::{Account, Front, Level};
     use pitboard_core::provider::ProviderId;
     use pitboard_core::state::Key;
     use pitboard_core::status::Standing;
 
-    const OS: Os = Os::MacOs;
+    const FRONT: Front = Front::MacMenuBar;
 
     fn check(code: &str, level: Level, detail: &str, advice: &str) -> Check {
         Check {
@@ -383,7 +382,7 @@ mod tests {
 
     fn shown_in(state: &mut State, checks: Vec<Check>) -> ChecksShown {
         state.machine.checks = checks;
-        present_on(OS, state, 0, &Utc).machine.checks
+        present_on(FRONT, state, 0, &Utc).machine.checks
     }
 
     fn shown(accounts: Vec<Account>, checks: Vec<Check>) -> ChecksShown {
@@ -417,7 +416,7 @@ mod tests {
                 (
                     4,
                     "Pitboard Folder".into(),
-                    words::folder_private(OS).into()
+                    words::folder_private(FRONT).into()
                 ),
                 (
                     2,
@@ -533,8 +532,8 @@ mod tests {
                 )
             })
             .collect();
-        let again = words::sign_in_again(OS, true);
-        let remove = words::remove_account(OS);
+        let again = words::sign_in_again(FRONT, true);
+        let remove = words::remove_account(FRONT);
         assert_eq!(
             said,
             [
@@ -585,17 +584,20 @@ mod tests {
             offered,
             [
                 Some((
-                    words::open_settings(OS),
+                    words::open_settings(FRONT),
                     Intent::Show {
                         place: Some(Place::Settings {
                             section: SettingsSection::Advanced
                         })
                     }
                 )),
-                Some((words::cancel_switch(OS, true), Intent::AbandonStuckSwitch)),
+                Some((
+                    words::cancel_switch(FRONT, true),
+                    Intent::AbandonStuckSwitch
+                )),
                 None,
                 Some((
-                    words::clean_up(OS, true),
+                    words::clean_up(FRONT, true),
                     Intent::PresentSheet { sheet: Sheet::Stow }
                 )),
                 Some((words::REFRESH.into(), Intent::Refresh { asked: true })),
@@ -612,7 +614,7 @@ mod tests {
                 line.learn,
                 line.action
                     .is_none()
-                    .then(|| crate::present::next::of_check(OS)),
+                    .then(|| crate::present::next::of_check(FRONT)),
                 "{}",
                 line.name
             );
@@ -668,7 +670,7 @@ mod tests {
             (
                 words::CLAUDE_CODE_NEEDS_SIGNING_IN,
                 Some(words::check_text(soon)),
-                Some(words::sign_in_again(OS, true))
+                Some(words::sign_in_again(FRONT, true))
             )
         );
     }
@@ -784,7 +786,7 @@ mod tests {
         };
         let said = |issues, failed| {
             (
-                Some(words::check_issues(OS, issues)),
+                Some(words::check_issues(FRONT, issues)),
                 Some(words::checks_verdict(issues, failed).to_owned()),
             )
         };
@@ -796,7 +798,10 @@ mod tests {
             (two.0, two.1, Level::Fail)
         );
         assert_eq!(over(&[]), (None, None, Level::Ok));
-        assert_eq!(words::check_issues(OS, 0), "No Issues");
-        assert_eq!(words::check_issues(Os::Windows, 2), "2 issues");
+        assert_eq!(words::check_issues(FRONT, 0), "No Issues");
+        assert_eq!(
+            words::check_issues(Front::WindowsNotificationArea, 2),
+            "2 issues"
+        );
     }
 }

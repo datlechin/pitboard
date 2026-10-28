@@ -241,7 +241,7 @@ public sealed class ModelTests
             var keeping = new Keeping();
             var apps = new StandInApps();
             var posting = new Posting();
-            using var model = new PitboardModel(new AppLaunch(environment, null), keeping, apps, posting, new InUtc());
+            using var model = new PitboardModel(new AppLaunch(environment, null, Front.WindowsNotificationArea), keeping, apps, posting, new InUtc());
 
             var first = model.Snapshot();
             model.Shutdown();
@@ -347,7 +347,7 @@ public sealed class ModelTests
     {
         const string Store = "7e15c34f-69ec-55b4-9542-f1c1fe3d7085";
         var launch = new AppLaunch(
-            new Dictionary<string, string>(), null,
+            new Dictionary<string, string>(), null, Front.WindowsNotificationArea,
             Windows: new WindowsLaunch(
                 Directory: @"C:\Users\dana\AppData\Local\Pitboard", Key: @"C:\Users\dana\.pitboard",
                 LinkScheme: "pitboard",
@@ -355,7 +355,7 @@ public sealed class ModelTests
                     Stores: new Dictionary<string, string[]> { [@"C:\Users\dana\.pitboard"] = [Store] },
                     Pages: new Dictionary<string, Dictionary<string, string>>())));
         Assert.AreEqual("pitboard", launch.Windows?.LinkScheme);
-        Assert.IsNull(new AppLaunch(new Dictionary<string, string>(), null).Windows);
+        Assert.IsNull(new AppLaunch(new Dictionary<string, string>(), null, Front.WindowsNotificationArea).Windows);
 
         var work = new WindowAccount(
             Sites.Claude, Label: "work", Email: "work@example.com", Store: Store, InUse: true, Title: "work");
@@ -404,9 +404,9 @@ public sealed class ModelTests
         var failed = Assert.IsInstanceOfType<WaitingShown.ReadFailed>(snapshot.AccountWindows.Waiting.Shown);
         Assert.AreEqual("Try Again", failed.Retry.Title);
         Assert.AreEqual(
-            OperatingSystem.IsWindows() ? "A download is in progress. Exit anyway?" : "A download is in progress. Quit anyway?",
-            PitboardModelMethods.DownloadsQuitQuestion(1)?.Title);
-        Assert.IsNull(PitboardModelMethods.DownloadsQuitQuestion(0));
+            "A download is in progress. Exit anyway?",
+            PitboardModelMethods.DownloadsQuitQuestion(Front.WindowsNotificationArea, 1)?.Title);
+        Assert.IsNull(PitboardModelMethods.DownloadsQuitQuestion(Front.WindowsNotificationArea, 0));
 
         Intent[] intents =
         [
@@ -491,7 +491,8 @@ public sealed class ModelTests
     public void TheAppsLaunchIsItsEnvironmentAndWhereItIs()
     {
         var launch = new AppLaunch(
-            new Dictionary<string, string> { ["USERPROFILE"] = @"C:\Users\x" }, @"C:\Program Files\Pitboard");
+            new Dictionary<string, string> { ["USERPROFILE"] = @"C:\Users\x" }, @"C:\Program Files\Pitboard",
+            Front.WindowsNotificationArea);
         var moved = launch with
         {
             EarlierPreferences = new EarlierPreferences(
@@ -766,7 +767,7 @@ public sealed class ModelTests
         if (names.Length == 0)
         {
             var refused = Assert.ThrowsExactly<FixtureException.Unavailable>(
-                () => PitboardModel.Fixture("twoTools", listener, new InUtc()));
+                () => PitboardModel.Fixture("twoTools", Front.WindowsNotificationArea, listener, new InUtc()));
             Assert.Contains("--features fixture", refused.reason);
             Assert.ThrowsExactly<FixtureException.Unavailable>(
                 () => PitboardModelMethods.FixturePage("pitboard-fixture://claude.ai/"));
@@ -781,7 +782,7 @@ public sealed class ModelTests
         ];
         CollectionAssert.AreEqual(ordered, names);
         var unknown = Assert.ThrowsExactly<FixtureException.Unknown>(
-            () => PitboardModel.Fixture("twoTool", listener, new InUtc()));
+            () => PitboardModel.Fixture("twoTool", Front.WindowsNotificationArea, listener, new InUtc()));
         Assert.Contains("twoTools, oneTool", unknown.reason);
         Assert.Contains("<title>claude.ai stand-in</title>", PitboardModelMethods.FixturePage("pitboard-fixture://claude.ai/"));
         Assert.IsEmpty(listener.Told);
@@ -843,7 +844,7 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var clock = new InUtc();
-        using var model = PitboardModel.FixtureIn("oneTool", _own, waiting, new StandInApps(), new Posting(), clock);
+        using var model = PitboardModel.FixtureIn("oneTool", Front.WindowsNotificationArea, _own, waiting, new StandInApps(), new Posting(), clock);
 
         var read = Start(model, waiting);
         model.Shutdown();
@@ -868,7 +869,7 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var apps = new StandInApps();
-        using var model = PitboardModel.FixtureIn("chatGPTOpen", _own, waiting, apps, new Posting(), new InUtc());
+        using var model = PitboardModel.FixtureIn("chatGPTOpen", Front.WindowsNotificationArea, _own, waiting, apps, new Posting(), new InUtc());
         Start(model, waiting);
 
         model.Send(new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
@@ -895,7 +896,7 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var apps = new StandInApps { RefusesToQuit = true };
-        using var model = PitboardModel.FixtureIn("chatGPTOpen", _own, waiting, apps, new Posting(), new InUtc());
+        using var model = PitboardModel.FixtureIn("chatGPTOpen", Front.WindowsNotificationArea, _own, waiting, apps, new Posting(), new InUtc());
         Start(model, waiting);
 
         model.Send(new Intent.SwitchTo(new AccountKey(Tool.Codex, "spare")));
@@ -920,7 +921,7 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var posting = new Posting();
-        using var model = PitboardModel.FixtureIn("oneTool", _own, waiting, new StandInApps(), posting, new InUtc());
+        using var model = PitboardModel.FixtureIn("oneTool", Front.WindowsNotificationArea, _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
 
         model.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")));
@@ -938,7 +939,7 @@ public sealed class ModelTests
                 Id: $"claude/personal/session/-{resetsAt}",
                 Title: LimitReached, Subtitle: "Claude Code", Body: "personal has used 100%. work has used 42%.",
                 Clicked: "accounts",
-                Button: new NotificationButton(OperatingSystem.IsWindows() ? "Switch to work" : "Switch", "switch/claude/work")),
+                Button: new NotificationButton("Switch to work", "switch/claude/work")),
         ];
         CollectionAssert.AreEqual(ranOut, posted);
     }
@@ -949,16 +950,16 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var posting = new Posting();
-        using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
+        using var model = PitboardModel.FixtureIn("loginReplaced", Front.WindowsNotificationArea, _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
 
         // The account in use has run out too, which is posted after it.
         var posted = posting.Posted.Until(2, Patience);
         model.Shutdown();
 
-        var again = OperatingSystem.IsWindows() ? "Sign in again…" : "Sign In Again";
+        const string again = "Sign in again…";
         var notice = posted.Single(notice => notice.Id.StartsWith("warning/login_replaced/", StringComparison.Ordinal));
-        Assert.AreEqual(OperatingSystem.IsWindows() ? "Sign-in replaced" : "Sign-In Replaced", notice.Title);
+        Assert.AreEqual("Sign-in replaced", notice.Title);
         Assert.AreEqual(
             "work’s sign-in was replaced outside Pitboard: Claude Code is now signed in to personal, " +
             "and Pitboard has no sign-in saved for work.",
@@ -973,14 +974,14 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var posting = new Posting();
-        using var model = PitboardModel.FixtureIn("switchedByItself", _own, waiting, new StandInApps(), posting, new InUtc());
+        using var model = PitboardModel.FixtureIn("switchedByItself", Front.WindowsNotificationArea, _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
 
         var notice = posting.Posted.First(posted => posted.Id.StartsWith("auto/", StringComparison.Ordinal), Patience);
         Assert.IsNotNull(notice, "no automatic switch was posted");
         Assert.AreEqual("Switched to personal", notice.Title);
         Assert.AreEqual("Claude Code", notice.Subtitle);
-        Assert.AreEqual(OperatingSystem.IsWindows() ? "Switch back" : "Switch Back", notice.Button?.Title);
+        Assert.AreEqual("Switch back", notice.Button?.Title);
 
         model.Send(new Intent.NotificationClicked(notice.Button!.Clicked));
         var back = waiting.Until(snapshot => Uses(snapshot, "claude/work"), Patience);
@@ -995,7 +996,7 @@ public sealed class ModelTests
         NeedsFixtures();
         var waiting = new Waiting();
         var posting = new Posting { Refuses = "COMException 0x80070490" };
-        using var model = PitboardModel.FixtureIn("loginReplaced", _own, waiting, new StandInApps(), posting, new InUtc());
+        using var model = PitboardModel.FixtureIn("loginReplaced", Front.WindowsNotificationArea, _own, waiting, new StandInApps(), posting, new InUtc());
         Start(model, waiting);
         // The login replaced, then the run-out of the account in use, the last refused.
         Assert.HasCount(2, posting.Posted.Until(2, Patience));
@@ -1013,8 +1014,8 @@ public sealed class ModelTests
         Assert.EndsWith(" · COMException 0x80070490", line.Detail);
     }
 
-    // A notification's title, in the case each system gives one.
-    private static string LimitReached => OperatingSystem.IsWindows() ? "5-hour limit reached" : "5-Hour Limit Reached";
+    // A notification's title, in the Windows app's case.
+    private const string LimitReached = "5-hour limit reached";
 
     private static bool LibraryIsOpened =>
         typeof(ModelTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -1055,10 +1056,10 @@ public sealed class ModelTests
             string[] homes = ["USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "PITBOARD_HOME"];
             var environment = homes.ToDictionary(
                 home => home, home => Directory.CreateDirectory(Path.Combine(root, home)).FullName);
-            var refused = PitboardModelMethods.LaunchRefusal(environment);
+            var refused = PitboardModelMethods.LaunchRefusal(Front.WindowsNotificationArea, environment);
             var waiting = new Waiting();
             using var model = new PitboardModel(
-                new AppLaunch(environment, null), waiting, new StandInApps(), new Posting(), new InUtc());
+                new AppLaunch(environment, null, Front.WindowsNotificationArea), waiting, new StandInApps(), new Posting(), new InUtc());
 
             model.Send(new Intent.Start());
             var read = waiting.Until(

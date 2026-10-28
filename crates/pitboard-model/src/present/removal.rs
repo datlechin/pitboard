@@ -22,7 +22,7 @@ pub enum RemovalShown {
 
 pub(crate) fn uninstall(seen: &Seen) -> ItemOffer {
     ItemOffer {
-        title: words::uninstall_pitboard(seen.os),
+        title: words::uninstall_pitboard(seen.front),
         intent: Intent::Uninstall,
         enabled: seen.state.may_uninstall(),
         confirm: Some(Question {
@@ -61,7 +61,7 @@ pub(crate) fn removal(seen: &Seen) -> Option<RemovalShown> {
 
 fn again(seen: &Seen) -> Choice {
     Choice {
-        title: words::try_again(seen.os),
+        title: words::try_again(seen.front),
         intent: Intent::Uninstall,
         enabled: seen.state.may_uninstall(),
     }

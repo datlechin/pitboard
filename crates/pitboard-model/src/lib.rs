@@ -1,10 +1,12 @@
 //! The model Pitboard's native apps run on, over its core, and what their UniFFI bindings
 //! export.
 //!
-//! An app makes one `PitboardModel`, sends it what was asked of it, and shows the snapshots
-//! its listener is told of. Nothing the model exports waits on the core: `launch.rs` makes
-//! the core from what the app was started with, and only the model's own threads call it.
-//! Beside the model and the records its snapshots carry, the bindings export the sites'
+//! An app makes one `PitboardModel`, naming its `Front`, sends it what was asked of it, and
+//! shows the snapshots its listener is told of. Nothing the model exports waits on the core:
+//! `launch.rs` makes the core from what the app was started with, and only the model's own
+//! threads call it. What differs by front is said by `front.rs`, and each exported function
+//! whose answer differs by front takes the front first. Beside the model and the records its
+//! snapshots carry, the bindings export the sites'
 //! records (`sites.rs`), the account windows' rules (`account_windows`), `check_name` and
 //! `downloads_quit_question` of `present`, the fixtures' `fixture_names` and `fixture_page`,
 //! and three free functions the macOS app asks of its bundle and its environment,
@@ -29,6 +31,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 uniffi::setup_scaffolding!();
+
+mod front;
+pub use front::{Engine, Front};
 
 mod sites;
 pub use sites::{Site, SiteLink};
@@ -61,10 +66,11 @@ pub use present::{
     WindowQuestion, WindowWaiting, check_name, downloads_quit_question,
 };
 pub use present::{
-    AccountWindowWords, ActivityWords, AppWords, MenuWords, SettingsWords, SheetWords,
-    ShortcutsWords, WindowWords, already_there, app_words, install_update, links_to, named_version,
-    path_too_long, ready_to_install, still_switching, trash_says, usage_of,
-    webview_runtime_too_old,
+    AccountWindowWords, ActivityWords, AppWords, MacMenuBarWords, MenuWords, SettingsWords,
+    SheetWords, WindowWords, WindowsNotificationAreaWords, already_there, app_words,
+    install_update, links_to, mac_menu_bar_words, named_version, path_too_long, ready_to_install,
+    still_switching, trash_says, usage_of, webview_runtime_too_old,
+    windows_notification_area_words,
 };
 pub use present::{JumpAsk, JumpTask, jump_refused};
 
@@ -156,7 +162,8 @@ impl From<AccountKey> for Key {
     }
 }
 
-// The tools the app lists on `os`, in the order a listing shows them.
+// The tools the app lists on `os`, in the order a listing shows them: those the core supports
+// there, so a front asks with its system.
 pub(crate) fn listed(os: Os) -> impl Iterator<Item = ProviderId> {
     ProviderId::ALL
         .iter()
@@ -166,11 +173,6 @@ pub(crate) fn listed(os: Os) -> impl Iterator<Item = ProviderId> {
 
 pub(crate) fn tools_on(os: Os) -> Vec<ProviderId> {
     listed(os).collect()
-}
-
-#[cfg(test)]
-pub(crate) fn tools() -> Vec<ProviderId> {
-    tools_on(pitboard_core::host::OS)
 }
 
 /// The `pitboard` a terminal would run.
@@ -231,16 +233,16 @@ pub fn no_update_key() -> String {
 
 // macOS shows a notification's buttons from categories registered at launch, by their titles.
 #[uniffi::export]
-pub fn notification_buttons() -> Vec<NotificationButtonKind> {
-    present::notification_buttons()
+pub fn notification_buttons(front: Front) -> Vec<NotificationButtonKind> {
+    present::notification_buttons(front)
 }
 
 // What stops the Windows app before it makes a model, which then shows this alone.
 #[uniffi::export]
-pub fn launch_refusal(environment: HashMap<String, String>) -> Option<ReadFailure> {
+pub fn launch_refusal(front: Front, environment: HashMap<String, String>) -> Option<ReadFailure> {
     let environment: Environment = environment.into_iter().collect();
     // The gate writes nothing, so the command line's caller name never reaches the audit log.
-    launch::refusal(Context::for_command_line(&environment))
+    launch::refusal(front, Context::for_command_line(&environment))
 }
 
 // `Pitboard.exe --unregister`, as the MSI's full uninstall runs it; a refusal takes nothing away.
@@ -473,13 +475,17 @@ mod tests {
             ])
         };
         let full = scratch.join(".pitboard");
-        assert_eq!(launch_refusal(environment(&full.to_string_lossy())), None);
+        let front = Front::WindowsNotificationArea;
+        assert_eq!(
+            launch_refusal(front, environment(&full.to_string_lossy())),
+            None
+        );
         assert_eq!(
             pitboard_core::release::version(),
             Some(env!("CARGO_PKG_VERSION")),
             "named to the release gate first"
         );
-        let relative = launch_refusal(environment("pitboard")).expect("refused");
+        let relative = launch_refusal(front, environment("pitboard")).expect("refused");
         assert_eq!(relative.code, "home_not_absolute");
         assert!(
             relative.message.starts_with("PITBOARD_HOME"),

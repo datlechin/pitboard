@@ -974,6 +974,7 @@ fn notify(listener: &dyn ModelListener, told: &Receiver<Snapshot>, stopped: &Ato
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Front;
     use crate::model::Intent;
     use crate::model::QuitQuestion;
     use crate::model::state::{After, Cadence, Now, State};
@@ -1005,7 +1006,7 @@ mod tests {
 
     /// The read the state asks for first, once what is installed is in.
     fn a_read(worker: &Worker) -> Job {
-        let mut state = State::new(Cadence::APP);
+        let mut state = State::new(Front::MacMenuBar, Cadence::APP);
         let now = Now {
             running: Duration::ZERO,
             epoch_ms: 0,
@@ -1705,6 +1706,7 @@ mod tests {
             let (home, helper) = (home.clone(), helper.map(Path::to_path_buf));
             let places = pitboard_core::app::command_line_places(&at_home, None);
             Arc::new(AppCore::asking(
+                Front::MacMenuBar,
                 move || {
                     let made = Made {
                         core: pitboard_core::service::Pitboard::new(
@@ -1754,7 +1756,8 @@ mod tests {
         .into_iter()
         .map(|(name, value)| (name.to_owned(), value))
         .collect();
-        let started_at = |at: &Path| AppCore::for_app(environment.clone(), Some(text(at)));
+        let started_at =
+            |at: &Path| AppCore::for_app(environment.clone(), Some(text(at)), Front::MacMenuBar);
         let (from_the_app, own) = found(started_at(&app));
         assert_eq!(
             from_the_app,

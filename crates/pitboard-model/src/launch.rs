@@ -11,7 +11,7 @@
 use crate::model::state::in_its_app;
 use crate::present::words::{in_app_given_up, in_app_refusal, in_app_warning, sentence, typeset};
 use crate::{
-    Abandoned, Account, Awaiting, FoundCommandLine, Level, Parked, Schedule, Status, Usage,
+    Abandoned, Account, Awaiting, FoundCommandLine, Front, Level, Parked, Schedule, Status, Usage,
     Warning, found_command_line,
 };
 use pitboard_core::app::AppContext;
@@ -42,27 +42,43 @@ pub(crate) enum PitboardError {
     },
 }
 
-impl From<pitboard_core::error::Error> for PitboardError {
-    fn from(error: pitboard_core::error::Error) -> Self {
+impl PitboardError {
+    // The core's refusal, in `front`'s words.
+    fn refused(front: Front, error: &pitboard_core::error::Error) -> PitboardError {
         PitboardError::Failed {
             code: error.code().to_string(),
-            message: in_app_refusal(pitboard_core::host::OS, &error)
-                .unwrap_or_else(|| sentence(&error.to_string())),
+            message: in_app_refusal(front, error).unwrap_or_else(|| sentence(&error.to_string())),
             warnings: Vec::new(),
-            account: account_of(&error),
+            account: account_of(error),
+        }
+    }
+
+    // A change the core refused, and what it warned of on the way, in `front`'s words.
+    fn failed(front: Front, failed: &service::Failed) -> PitboardError {
+        PitboardError::Failed {
+            code: failed.error.code().to_string(),
+            message: in_app_refusal(front, &failed.error)
+                .unwrap_or_else(|| sentence(&failed.error.to_string())),
+            warnings: warnings(front, &failed.warnings),
+            account: account_of(&failed.error),
         }
     }
 }
 
-impl From<service::Failed> for PitboardError {
-    fn from(failed: service::Failed) -> Self {
-        PitboardError::Failed {
-            code: failed.error.code().to_string(),
-            message: in_app_refusal(pitboard_core::host::OS, &failed.error)
-                .unwrap_or_else(|| sentence(&failed.error.to_string())),
-            warnings: warnings(&failed.warnings),
-            account: account_of(&failed.error),
-        }
+// What the core answered, a refusal said in the words of the front that asked.
+trait Said<T> {
+    fn said(self, front: Front) -> Result<T, PitboardError>;
+}
+
+impl<T> Said<T> for Result<T, pitboard_core::error::Error> {
+    fn said(self, front: Front) -> Result<T, PitboardError> {
+        self.map_err(|error| PitboardError::refused(front, &error))
+    }
+}
+
+impl<T> Said<T> for Result<T, service::Failed> {
+    fn said(self, front: Front) -> Result<T, PitboardError> {
+        self.map_err(|failed| PitboardError::failed(front, &failed))
     }
 }
 
@@ -101,22 +117,21 @@ pub(crate) struct WarmRefused {
     pub(crate) error: Box<PitboardError>,
 }
 
-impl From<service::Failed> for WarmRefused {
-    fn from(failed: service::Failed) -> Self {
+impl WarmRefused {
+    fn of(front: Front, failed: &service::Failed) -> WarmRefused {
         WarmRefused {
             told_apart: switch::warm::told_apart(&failed.error),
-            error: Box::new(failed.into()),
+            error: Box::new(PitboardError::failed(front, failed)),
         }
     }
 }
 
-fn warnings(found: &[service::Warning]) -> Vec<Warning> {
+fn warnings(front: Front, found: &[service::Warning]) -> Vec<Warning> {
     found
         .iter()
         .map(|w| Warning {
             code: w.code().to_string(),
-            message: in_app_warning(pitboard_core::host::OS, w)
-                .unwrap_or_else(|| sentence(&w.to_string())),
+            message: in_app_warning(front, w).unwrap_or_else(|| sentence(&w.to_string())),
             provider: w.tool(),
             account: match w {
                 service::Warning::LoginReplaced { tool, id, .. } => Some(account_id(*tool, id)),
@@ -144,11 +159,15 @@ fn account_id(tool: ProviderId, id: &str) -> String {
     }
 }
 
-// What the gate every change passes refuses in `ctx`, as a read failure says it.
-pub(crate) fn refusal(ctx: pitboard_core::context::Context) -> Option<crate::ReadFailure> {
+// What the gate every change passes refuses in `ctx`, as a read failure says it in `front`'s
+// words.
+pub(crate) fn refusal(
+    front: Front,
+    ctx: pitboard_core::context::Context,
+) -> Option<crate::ReadFailure> {
     pitboard_core::release::set_version(env!("CARGO_PKG_VERSION"));
     let refused = service::Pitboard::new(ctx).permit().err()?;
-    let PitboardError::Failed { code, message, .. } = refused.into();
+    let PitboardError::Failed { code, message, .. } = PitboardError::refused(front, &refused);
     Some(crate::ReadFailure { code, message })
 }
 
@@ -439,8 +458,8 @@ fn account(row: status::Row, now: i64) -> Account {
     }
 }
 
-fn switched(changing: Changing<switch::Outcome>) -> Result<Switched, PitboardError> {
-    changed(changing, |outcome, warnings| Switched {
+fn switched(front: Front, changing: Changing<switch::Outcome>) -> Result<Switched, PitboardError> {
+    changed(front, changing, |outcome, warnings| Switched {
         outcome: match outcome {
             switch::Outcome::Switched {
                 provider,
@@ -471,7 +490,7 @@ fn switched(changing: Changing<switch::Outcome>) -> Result<Switched, PitboardErr
     })
 }
 
-fn status_of(done: service::Done<status::Report>) -> Status {
+fn status_of(front: Front, done: service::Done<status::Report>) -> Status {
     let now = done.value.now;
     Status {
         now,
@@ -492,7 +511,7 @@ fn status_of(done: service::Done<status::Report>) -> Status {
             .into_iter()
             .map(|row| account(row, now))
             .collect(),
-        warnings: warnings(&done.warnings),
+        warnings: warnings(front, &done.warnings),
     }
 }
 
@@ -553,11 +572,12 @@ fn auto_switched(auto: Auto, warnings: Vec<Warning>, threshold: Threshold) -> Au
 }
 
 fn changed<T, R>(
+    front: Front,
     outcome: Changing<T>,
     make: impl FnOnce(T, Vec<Warning>) -> R,
 ) -> Result<R, PitboardError> {
-    let done = outcome?;
-    Ok(make(done.value, warnings(&done.warnings)))
+    let done = outcome.said(front)?;
+    Ok(make(done.value, warnings(front, &done.warnings)))
 }
 
 pub(crate) struct SignInSession {
@@ -575,6 +595,7 @@ pub(crate) struct SignInSession {
     /// meanwhile, from a login shell that answered late, may look elsewhere for programs,
     /// but keeps its accounts in the same place.
     made: Arc<Made>,
+    front: Front,
 }
 
 impl SignInSession {
@@ -598,7 +619,7 @@ impl SignInSession {
             account: None,
         })?;
         match held.as_mut() {
-            Some(watched) => watched.paste(line).map_err(PitboardError::from),
+            Some(watched) => watched.paste(line).said(self.front),
             None => Ok(()),
         }
     }
@@ -616,8 +637,9 @@ impl SignInSession {
                 warnings: Vec::new(),
                 account: None,
             })?;
-        let login = watched.finish()?;
+        let login = watched.finish().said(self.front)?;
         changed(
+            self.front,
             self.made
                 .core
                 .enroll_signed_in_as(login, self.naming.clone()),
@@ -786,6 +808,8 @@ impl Kept {
 /// as `Kept` keeps it.
 pub(crate) struct AppCore {
     made: Kept,
+    // whose words a refusal is said in
+    front: Front,
     // Held until the app quits or uninstalls, so `pitboard uninstall` refuses meanwhile.
     open: std::sync::OnceLock<Mutex<Option<pitboard_core::app::Open>>>,
 }
@@ -793,7 +817,7 @@ pub(crate) struct AppCore {
 impl AppCore {
     /// The app's core. It reads `environment`, the one the app was started with, by the
     /// code the command line reads its own with, and the schedule runs the command line that
-    /// comes with the app at `app`.
+    /// comes with the app at `app`. What it refuses is said in `front`'s words.
     ///
     /// The person's login shell is asked for its `PATH` when something first needs the core,
     /// never here: it can take seconds, and an app makes its model on its main thread. Each
@@ -802,10 +826,15 @@ impl AppCore {
     /// Nothing is read with it where nothing may be read here, as the command line reads
     /// nothing then ([`AppCore::readable`]): every read the model's lanes make asks first, and
     /// every change asks the gate the core's changes pass, which asks the same.
-    pub(crate) fn for_app(environment: HashMap<String, String>, app: Option<String>) -> Arc<Self> {
+    pub(crate) fn for_app(
+        environment: HashMap<String, String>,
+        app: Option<String>,
+        front: Front,
+    ) -> Arc<Self> {
         let environment: Environment = environment.into_iter().collect();
         let app = app.map(PathBuf::from);
         Arc::new(AppCore::asking(
+            front,
             move || {
                 let found = AppContext::discover(&environment, app.as_deref());
                 let late = found.late;
@@ -817,11 +846,13 @@ impl AppCore {
 
     // `make` also says whether the login shell it asked answered too late.
     pub(crate) fn asking(
+        front: Front,
         make: impl Fn() -> (Made, bool) + Send + Sync + 'static,
         again_after: Duration,
     ) -> AppCore {
         pitboard_core::release::set_version(env!("CARGO_PKG_VERSION"));
         AppCore {
+            front,
             made: Kept {
                 make: Box::new(make),
                 again_after,
@@ -853,21 +884,21 @@ impl AppCore {
     /// where it has no way to say one. A change asks the gate the core's changes pass, which
     /// refuses the same before anything else.
     fn readable(&self) -> Result<Arc<Made>, PitboardError> {
-        Self::may_read(|| self.core())
+        self.may_read(|| self.core())
     }
 
     /// The same, where the core may be made once more first, as `Kept::value_asking_again`
     /// says.
     fn readable_asking_again(&self) -> Result<Arc<Made>, PitboardError> {
-        Self::may_read(|| self.held(self.made.value_asking_again()))
+        self.may_read(|| self.held(self.made.value_asking_again()))
     }
 
     /// The core `made` makes, once the release gate lets this build do anything, and then
     /// once every home it names is a full path.
-    fn may_read(made: impl FnOnce() -> Arc<Made>) -> Result<Arc<Made>, PitboardError> {
-        pitboard_core::release::check()?;
+    fn may_read(&self, made: impl FnOnce() -> Arc<Made>) -> Result<Arc<Made>, PitboardError> {
+        pitboard_core::release::check().said(self.front)?;
         let made = made();
-        made.core.check_homes()?;
+        made.core.check_homes().said(self.front)?;
         Ok(made)
     }
 
@@ -891,7 +922,7 @@ impl AppCore {
         file: pitboard_core::app::AppFile,
         body: &str,
     ) -> Result<(), PitboardError> {
-        Ok(self.core().core.keep_app_file(file, body)?)
+        self.core().core.keep_app_file(file, body).said(self.front)
     }
 
     /// What the command line inside this copy of the app is. Asks the file system about that
@@ -930,7 +961,7 @@ impl AppCore {
             return Vec::new();
         };
         let here = made.core.installed();
-        crate::listed(pitboard_core::host::OS)
+        crate::listed(self.front.os())
             .filter(|tool| here.contains(tool))
             .collect()
     }
@@ -943,23 +974,28 @@ impl AppCore {
     /// once its tightest limit could have moved by a percentage point, which is what keeps
     /// the app and the command line to one request between them.
     pub(crate) fn status(&self, fresh: bool) -> Result<Status, PitboardError> {
-        Ok(status_of(self.readable()?.core.status(fresh)?))
+        let done = self.readable()?.core.status(fresh).said(self.front)?;
+        Ok(status_of(self.front, done))
     }
 
     pub(crate) fn switch_to(&self, account: &Key) -> Result<Switched, PitboardError> {
-        switched(self.core().core.switch_to(&account.qualified()))
+        switched(self.front, self.core().core.switch_to(&account.qualified()))
     }
 
     /// What `switch_to` does once somebody has agreed to put `account`'s login in place of a
     /// login in use its service refuses for good.
     pub(crate) fn replace_with(&self, account: &Key) -> Result<Switched, PitboardError> {
-        switched(self.core().core.replace_with(&account.qualified()))
+        switched(
+            self.front,
+            self.core().core.replace_with(&account.qualified()),
+        )
     }
 
     /// Writes `account` into its tool's config where that names another account, while it is
     /// in use, and refuses where it no longer is. Gives what it warned of.
     pub(crate) fn update_config(&self, account: &Key) -> Result<Vec<Warning>, PitboardError> {
         changed(
+            self.front,
             self.core().core.update_config(&account.qualified()),
             |_, warnings| warnings,
         )
@@ -969,15 +1005,17 @@ impl AppCore {
     /// with it, as `pitboard stow` asks first: `None` where nothing is. Takes no lock and writes
     /// nothing, and may ask Anthropic whose the login in it is, and whose the login stored is.
     pub(crate) fn left_login(&self) -> Result<Option<Left>, PitboardError> {
-        Ok(self.readable()?.core.left_login()?)
+        self.readable()?.core.left_login().said(self.front)
     }
 
     /// Puts away the file behind Claude Code's store, while it holds what `seen` was taken of,
     /// as `pitboard stow` does. Gives what it did, and what it warned of.
     pub(crate) fn stow(&self, seen: &str) -> Result<(Stowed, Vec<Warning>), PitboardError> {
-        changed(self.core().core.stow(seen), |stowed, warnings| {
-            (stowed, warnings)
-        })
+        changed(
+            self.front,
+            self.core().core.stow(seen),
+            |stowed, warnings| (stowed, warnings),
+        )
     }
 
     /// Switches Claude Code by itself where a limit of the account in use has reached `at`%
@@ -985,9 +1023,11 @@ impl AppCore {
     /// nearest share there can be.
     pub(crate) fn auto_switch(&self, at: u8) -> Result<AutoSwitched, PitboardError> {
         let threshold = Threshold::clamped(i64::from(at));
-        changed(self.core().core.auto_switch(threshold), |auto, warnings| {
-            auto_switched(auto, warnings, threshold)
-        })
+        changed(
+            self.front,
+            self.core().core.auto_switch(threshold),
+            |auto, warnings| auto_switched(auto, warnings, threshold),
+        )
     }
 
     /// What switching Claude Code by itself at `at`% would come to, from the core's files
@@ -996,34 +1036,50 @@ impl AppCore {
     /// a minute.
     pub(crate) fn auto_look(&self, at: u8) -> Result<AutoLooked, PitboardError> {
         let threshold = Threshold::clamped(i64::from(at));
-        Ok(match self.readable()?.core.auto_look(threshold)? {
-            Look::Stands(auto) => {
-                AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), threshold)))
-            }
-            Look::Act => AutoLooked::Act,
-        })
+        Ok(
+            match self
+                .readable()?
+                .core
+                .auto_look(threshold)
+                .said(self.front)?
+            {
+                Look::Stands(auto) => {
+                    AutoLooked::Stands(Box::new(auto_switched(*auto, Vec::new(), threshold)))
+                }
+                Look::Act => AutoLooked::Act,
+            },
+        )
     }
 
     /// Each Claude Code account, whether Pitboard warms it up and where it stands, and the
     /// span of the day, from the core's files alone, so a read asks it every time.
     pub(crate) fn warm_overview(&self) -> Result<Overview, PitboardError> {
-        Ok(self.readable()?.core.warm_overview()?)
+        self.readable()?.core.warm_overview().said(self.front)
     }
 
     /// Warms up the first account turned on that is due, as the core decides: looking at its
     /// files first, so where none is due it takes no lock and says where each one stands.
     pub(crate) fn warm_up(&self) -> Result<WarmUp, WarmRefused> {
-        Ok(self.core().core.warm_up()?.value)
+        self.core()
+            .core
+            .warm_up()
+            .map(|done| done.value)
+            .map_err(|failed| WarmRefused::of(self.front, &failed))
     }
 
     /// Warms up `account` now, whatever the span of the day.
     pub(crate) fn warm_now(&self, account: &Key) -> Result<WarmUp, WarmRefused> {
-        Ok(self.core().core.warm_now(&account.qualified())?.value)
+        self.core()
+            .core
+            .warm_now(&account.qualified())
+            .map(|done| done.value)
+            .map_err(|failed| WarmRefused::of(self.front, &failed))
     }
 
     /// Warms up `account` from now on, or stops.
     pub(crate) fn warm_turn(&self, account: &Key, on: bool) -> Result<(), PitboardError> {
         changed(
+            self.front,
             self.core().core.warm_turn(&account.qualified(), on),
             |_, _| (),
         )
@@ -1033,11 +1089,14 @@ impl AppCore {
     /// starts and ends at once is refused as the command line refuses it.
     pub(crate) fn warm_range(&self, from: u16, to: u16) -> Result<(), PitboardError> {
         let range = Range::new(from, to).ok_or_else(|| {
-            PitboardError::from(pitboard_core::error::Error::Usage(
-                "the span starts and ends at the same time".into(),
-            ))
+            PitboardError::refused(
+                self.front,
+                &pitboard_core::error::Error::Usage(
+                    "the span starts and ends at the same time".into(),
+                ),
+            )
         })?;
-        changed(self.core().core.warm_range(range), |_, _| ())
+        changed(self.front, self.core().core.warm_range(range), |_, _| ())
     }
 
     // With the app's own hold on Pitboard's directory, which goes with the directory.
@@ -1048,9 +1107,11 @@ impl AppCore {
             .get_or_init(|| Mutex::new(made.core.hold_open()))
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        changed(made.core.uninstall_from_app(&mut own), |removed, _| {
-            Uninstalled::of(&removed)
-        })
+        changed(
+            self.front,
+            made.core.uninstall_from_app(&mut own),
+            |removed, _| Uninstalled::of(&removed),
+        )
     }
 
     /// Enroll the account `tool` has signed in now, under `naming`.
@@ -1059,7 +1120,11 @@ impl AppCore {
         tool: ProviderId,
         naming: switch::Naming,
     ) -> Result<Enrolled, PitboardError> {
-        changed(self.core().core.enroll_current_as(tool, naming), enrolled)
+        changed(
+            self.front,
+            self.core().core.enroll_current_as(tool, naming),
+            enrolled,
+        )
     }
 
     /// Starts `tool`'s own sign-in, watched rather than inherited, again for the account
@@ -1077,11 +1142,12 @@ impl AppCore {
         let (watched, naming) = match again {
             Some(label) => (
                 made.core
-                    .sign_in_watched(&Key::new(tool, &label).qualified())?,
+                    .sign_in_watched(&Key::new(tool, &label).qualified())
+                    .said(self.front)?,
                 switch::Naming::As(label),
             ),
             None => (
-                made.core.sign_in_watched_for(tool)?,
+                made.core.sign_in_watched_for(tool).said(self.front)?,
                 switch::Naming::FromEmail,
             ),
         };
@@ -1092,15 +1158,24 @@ impl AppCore {
             watched: Mutex::new(Some(watched)),
             naming,
             made,
+            front: self.front,
         }))
     }
 
     pub(crate) fn forget(&self, account: &Key) -> Result<(), PitboardError> {
-        changed(self.core().core.forget(&account.qualified()), |_, _| ())
+        changed(
+            self.front,
+            self.core().core.forget(&account.qualified()),
+            |_, _| (),
+        )
     }
 
     pub(crate) fn rename(&self, account: &Key, to: &str) -> Result<(), PitboardError> {
-        changed(self.core().core.rename(&account.qualified(), to), |_, _| ())
+        changed(
+            self.front,
+            self.core().core.rename(&account.qualified(), to),
+            |_, _| (),
+        )
     }
 
     /// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
@@ -1136,11 +1211,12 @@ impl AppCore {
     /// flight, rather than an empty panel and a spinner. It warns of an interrupted switch
     /// nothing can finish as `status` does, wherever that can be told without a request.
     pub(crate) fn status_offline(&self) -> Result<Status, PitboardError> {
-        Ok(status_of(self.readable()?.core.status_offline()?))
+        let done = self.readable()?.core.status_offline().said(self.front)?;
+        Ok(status_of(self.front, done))
     }
 
     pub(crate) fn abandon_recovery(&self) -> Result<GaveUp, PitboardError> {
-        let gave_up = self.core().core.abandon_recovery()?;
+        let gave_up = self.core().core.abandon_recovery().said(self.front)?;
         Ok(GaveUp {
             switch: gave_up.switch.map(|a| Abandoned {
                 from: a.from,
@@ -1148,7 +1224,7 @@ impl AppCore {
                 logins_kept: u32::try_from(a.kept).unwrap_or(u32::MAX),
             }),
             moves: gave_up.moves.iter().map(in_app_given_up).collect(),
-            warnings: warnings(&gave_up.warnings),
+            warnings: warnings(self.front, &gave_up.warnings),
         })
     }
 
@@ -1198,7 +1274,7 @@ impl AppCore {
     /// The proof the one gate every change passes hands out, where this process may change
     /// anything, for a file the app keeps of its own outside Pitboard's directory.
     pub(crate) fn permit(&self) -> Result<service::Permit, PitboardError> {
-        Ok(self.core().core.permit()?)
+        self.core().core.permit().said(self.front)
     }
 
     /// Whether anything keeps parked logins alive without a command being run. `None` where
@@ -1222,16 +1298,19 @@ impl AppCore {
     /// line to run, and first, as every change is, where this process may change nothing.
     pub(crate) fn schedule_install(&self) -> Result<String, PitboardError> {
         let made = self.core();
-        made.core.permit()?;
+        made.core.permit().said(self.front)?;
         if made.helper.is_none() {
-            return Err(pitboard_core::error::Error::ScheduleProgramUnnamed.into());
+            return Err(PitboardError::refused(
+                self.front,
+                &pitboard_core::error::Error::ScheduleProgramUnnamed,
+            ));
         }
-        Ok(made.core.schedule_install()?.to_string())
+        Ok(made.core.schedule_install().said(self.front)?.to_string())
     }
 
     /// Take it away. `false` when there was nothing installed.
     pub(crate) fn schedule_uninstall(&self) -> Result<bool, PitboardError> {
-        Ok(self.core().core.schedule_uninstall()?)
+        self.core().core.schedule_uninstall().said(self.front)
     }
 
     /// Point a schedule an app up to 0.3.0 wrote at the command line this app comes with.
@@ -1239,7 +1318,7 @@ impl AppCore {
     /// renewing nothing. The model asks once a launch: `true` when it repaired one, and
     /// nothing changes where the schedule already runs a command line or there is none.
     pub(crate) fn schedule_repair(&self) -> Result<bool, PitboardError> {
-        Ok(self.core().core.schedule_repair()?)
+        self.core().core.schedule_repair().said(self.front)
     }
 
     /// What is running `tool` with a login a switch would leave it on, by kind, for the model
@@ -1292,7 +1371,6 @@ impl AppCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools;
     use pitboard_core::context::Context;
 
     // A core over a home that is no folder on macOS and Linux, and one nothing makes on Windows,
@@ -1380,7 +1458,11 @@ mod tests {
     // reaches no scheduler.
     #[test]
     fn the_app_schedules_nothing_without_a_command_line_to_run() {
-        let core = AppCore::for_app(environment(&nowhere().to_string_lossy(), &[]), None);
+        let core = AppCore::for_app(
+            environment(&nowhere().to_string_lossy(), &[]),
+            None,
+            Front::MacMenuBar,
+        );
         let Err(PitboardError::Failed { code, message, .. }) = core.schedule_install() else {
             panic!("the app scheduled itself");
         };
@@ -1393,7 +1475,8 @@ mod tests {
     fn a_core_failure_without_an_app_sentence_starts_with_a_capital_and_ends_with_a_period() {
         use pitboard_core::error::Error;
         let said = |error: Error| {
-            let PitboardError::Failed { message, .. } = error.into();
+            let PitboardError::Failed { message, .. } =
+                PitboardError::refused(Front::MacMenuBar, &error);
             message
         };
         let refused = || Error::ScheduleRefused {
@@ -1410,12 +1493,14 @@ mod tests {
         };
         let PitboardError::Failed {
             message, warnings, ..
-        } = service::Failed {
-            error: Error::SignedInAccountChanged,
-            warnings: vec![overridden()],
-            said_first: 0,
-        }
-        .into();
+        } = PitboardError::failed(
+            Front::MacMenuBar,
+            &service::Failed {
+                error: Error::SignedInAccountChanged,
+                warnings: vec![overridden()],
+                said_first: 0,
+            },
+        );
         assert_eq!(
             message,
             sentence(&Error::SignedInAccountChanged.to_string())
@@ -1613,10 +1698,15 @@ mod tests {
         let said: Vec<String> = errors
             .into_iter()
             .map(|error| {
-                let PitboardError::Failed { message, .. } = error.into();
+                let PitboardError::Failed { message, .. } =
+                    PitboardError::refused(Front::MacMenuBar, &error);
                 message
             })
-            .chain(warnings(&found).into_iter().map(|warning| warning.message))
+            .chain(
+                warnings(Front::MacMenuBar, &found)
+                    .into_iter()
+                    .map(|warning| warning.message),
+            )
             .collect();
         for message in said {
             assert!(!message.is_empty());
@@ -1629,7 +1719,11 @@ mod tests {
 
     #[test]
     fn the_apps_core_names_the_apps_version_to_the_release_gate() {
-        AppCore::for_app(environment(&nowhere().to_string_lossy(), &[]), None);
+        AppCore::for_app(
+            environment(&nowhere().to_string_lossy(), &[]),
+            None,
+            Front::MacMenuBar,
+        );
         assert_eq!(
             pitboard_core::release::version(),
             Some(env!("CARGO_PKG_VERSION"))
@@ -1645,6 +1739,7 @@ mod tests {
             let host = pitboard_core::testing::MemoryHost::new();
             set(&host);
             refusal(
+                Front::WindowsNotificationArea,
                 Context::new(home.clone())
                     .with_pitboard_home(pitboard)
                     .with_caller("app".into())
@@ -1697,6 +1792,7 @@ mod tests {
         let host = pitboard_core::testing::MemoryHost::new();
         host.runs_with(pitboard_core::host::Elevation::Elevated { why: "as root" });
         let core = AppCore::asking(
+            Front::MacMenuBar,
             move || {
                 let mut made = made(None);
                 let ctx = Context::new(nowhere())
@@ -1728,6 +1824,7 @@ mod tests {
             let (home, helper) = (home.clone(), helper.clone());
             let host = pitboard_core::testing::MemoryHost::new();
             AppCore::asking(
+                Front::MacMenuBar,
                 move || {
                     let mut made = made(Some(&helper));
                     let ctx = Context::new(home.clone())
@@ -1783,6 +1880,7 @@ mod tests {
             let host = pitboard_core::testing::MemoryHost::new();
             let given = pitboard.clone();
             let core = AppCore::asking(
+                Front::MacMenuBar,
                 move || {
                     let mut made = made(None);
                     let ctx = Context::new(PathBuf::clone(&home))
@@ -1853,10 +1951,18 @@ mod tests {
     /// which stands in for a command line that is there.
     #[test]
     fn the_app_repairs_nothing_where_no_schedule_runs_it() {
-        let launched = AppCore::for_app(environment(&nowhere().to_string_lossy(), &[]), None);
+        let launched = AppCore::for_app(
+            environment(&nowhere().to_string_lossy(), &[]),
+            None,
+            Front::MacMenuBar,
+        );
         assert!(!launched.schedule_repair().expect("nothing to repair"));
         let there = std::env::current_exe().expect("this test's own program");
-        let named = AppCore::asking(move || (made(Some(&there)), false), ASK_AGAIN_AFTER);
+        let named = AppCore::asking(
+            Front::MacMenuBar,
+            move || (made(Some(&there)), false),
+            ASK_AGAIN_AFTER,
+        );
         assert!(!named.schedule_repair().expect("nothing to repair"));
     }
 
@@ -1867,6 +1973,7 @@ mod tests {
         let (release, released) = std::sync::mpsc::channel::<()>();
         let released = Mutex::new(released);
         let core = Arc::new(AppCore::asking(
+            Front::MacMenuBar,
             {
                 let asks = asks.clone();
                 move || {
@@ -1882,7 +1989,11 @@ mod tests {
             pitboard_core::host::Os::MacOs => 3,
             pitboard_core::host::Os::Linux | pitboard_core::host::Os::Windows => 2,
         };
-        assert_eq!(tools().len(), listed, "listing the tools asks nothing");
+        assert_eq!(
+            crate::tools_on(pitboard_core::host::OS).len(),
+            listed,
+            "listing the tools asks nothing"
+        );
         assert_eq!(asks.count(), 0, "and nor does making the core");
         assert!(core.whole(ProviderId::Codex) && !core.moving(ProviderId::Codex));
         assert_eq!(
@@ -1925,6 +2036,7 @@ mod tests {
     fn a_login_shell_too_slow_to_answer_is_asked_once_more_later() {
         let asks = Asks::default();
         let mut core = AppCore::asking(
+            Front::MacMenuBar,
             {
                 let asks = asks.clone();
                 move || match asks.note() {
@@ -1955,6 +2067,7 @@ mod tests {
     fn a_login_shell_is_not_asked_again_sooner_or_for_nothing() {
         let soon = Asks::default();
         let early = AppCore::asking(
+            Front::MacMenuBar,
             {
                 let soon = soon.clone();
                 move || {
@@ -1970,6 +2083,7 @@ mod tests {
 
         let answered = Asks::default();
         let core = AppCore::asking(
+            Front::MacMenuBar,
             {
                 let answered = answered.clone();
                 move || {
@@ -1985,6 +2099,7 @@ mod tests {
 
         let late = Asks::default();
         let again = AppCore::asking(
+            Front::MacMenuBar,
             {
                 let late = late.clone();
                 move || match late.note() {
@@ -2022,6 +2137,7 @@ mod tests {
                 ],
             ),
             None,
+            Front::MacMenuBar,
         );
         assert_eq!(core.core().search_path, None, "the shell could not be run");
         let Err(PitboardError::Failed { code, .. }) =

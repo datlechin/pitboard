@@ -96,7 +96,7 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         super.init()
         guard let centre else { return }
         centre.delegate = self
-        centre.setNotificationCategories(Self.categories(notificationButtons()))
+        centre.setNotificationCategories(Self.categories(notificationButtons(front: front)))
     }
 
     // macOS refuses Pitboard's own activation from the background, so a button whose window

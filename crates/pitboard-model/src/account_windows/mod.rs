@@ -8,9 +8,9 @@
 //! and which stores go after a read, the records of stores and last pages, which `records.rs`
 //! reads and writes, the links waiting for a window, the account picker and the downloads.
 //!
-//! What differs by system is a `match` on `host::OS`, as the core's facts about the system
-//! are, so a system added there does not compile until each is said for it. Each such fact
-//! takes the system as an argument, so the tests say every system's on any of them.
+//! What differs by front is a `match` on the app's `Front`, its engine or its system, so a
+//! front added does not compile until each is said for it. Each such fact takes the front as
+//! an argument, so the tests say every front's on any of them.
 
 mod accounts;
 mod downloads;
@@ -21,7 +21,7 @@ pub(crate) mod records;
 pub(crate) mod stores;
 
 pub use accounts::{SiteMenu, WindowAccount};
-pub(crate) use accounts::{forget_message_on, site_menus, window_accounts, windows_of_account};
+pub(crate) use accounts::{forget_message, site_menus, window_accounts, windows_of_account};
 pub use downloads::{download_destination, download_host, download_question};
 pub use notes::{WindowNoteKind, opening_note, remove_data_alert, window_note};
 pub use pages::{
@@ -35,7 +35,7 @@ pub use policy::{
 };
 pub(crate) use policy::{is_site_page, window_address};
 
-use pitboard_core::host::Os;
+use crate::Front;
 
 /// What an alert says: its title, and the sentences below it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -47,13 +47,13 @@ pub struct AlertText {
 }
 
 /// How a sentence names the machine Pitboard runs on, which keeps what a window keeps.
-pub(crate) fn this_machine(os: Os) -> &'static str {
-    match os {
-        Os::MacOs => "this Mac",
+pub(crate) fn this_machine(front: Front) -> &'static str {
+    match front {
+        Front::MacMenuBar => "this Mac",
         // No app runs on Linux.
-        Os::Linux => "this computer",
+        Front::Gnome => "this computer",
         // As Windows 11 names the machine in its own Settings and File Explorer.
-        Os::Windows => "this PC",
+        Front::WindowsNotificationArea => "this PC",
     }
 }
 
@@ -65,8 +65,8 @@ mod tests {
     /// Windows, as the owner decided.
     #[test]
     fn a_machine_is_called_what_its_system_calls_it() {
-        assert_eq!(this_machine(Os::MacOs), "this Mac");
-        assert_eq!(this_machine(Os::Linux), "this computer");
-        assert_eq!(this_machine(Os::Windows), "this PC");
+        assert_eq!(this_machine(Front::MacMenuBar), "this Mac");
+        assert_eq!(this_machine(Front::Gnome), "this computer");
+        assert_eq!(this_machine(Front::WindowsNotificationArea), "this PC");
     }
 }

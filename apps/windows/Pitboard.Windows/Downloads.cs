@@ -25,7 +25,7 @@ public sealed class Downloads
 
     // Counted here rather than from a snapshot: a download started a moment before Quit is under way before the
     // snapshot that lists it.
-    public Question? QuitQuestion => PitboardModelMethods.DownloadsQuitQuestion((uint)_live.Count);
+    public Question? QuitQuestion => PitboardModelMethods.DownloadsQuitQuestion(Identity.Front, (uint)_live.Count);
 
     // The stores of the windows whose downloads are under way, the newest first.
     public IEnumerable<string> Stores => _live.Select(running => running.Store).Reverse();
@@ -45,7 +45,7 @@ public sealed class Downloads
         _send(new Intent.DownloadStarted(running.Id, store, name));
         var allowed = !ask || await allow(PitboardModelMethods.DownloadQuestion(name, PitboardModelMethods.DownloadHost(operation.Uri)));
         var file = allowed && _live.Contains(running)
-            ? PitboardModelMethods.DownloadDestination(_folder, name, [.. _live.Select(other => other.File).OfType<string>()])
+            ? PitboardModelMethods.DownloadDestination(Identity.Front, _folder, name, [.. _live.Select(other => other.File).OfType<string>()])
             : null;
         try
         {

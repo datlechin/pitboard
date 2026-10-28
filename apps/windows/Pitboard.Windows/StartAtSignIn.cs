@@ -44,7 +44,7 @@ public sealed class StartAtSignIn(IStartupItem item)
     public bool CanTurnOn => Refusal is null && !TurnedOff;
 
     // Why it cannot be turned on here, as the settings and the welcome say it, or what it is for.
-    public string Note(string usually) => Refusal ?? (TurnedOff ? Words.Settings.StartupTurnedOff : null) ?? usually;
+    public string Note(string usually) => Refusal ?? (TurnedOff ? Words.Own.StartupTurnedOff : null) ?? usually;
 
     // Read again each time the settings show it, since another program can change the Run key.
     public void Read()
@@ -99,7 +99,7 @@ public sealed class FixtureStartupItem(bool offInSettings = false) : IStartupIte
     {
         if (starts && TurnedOff())
         {
-            throw new InvalidOperationException(Words.Settings.StartupTurnedOff);
+            throw new InvalidOperationException(Words.Own.StartupTurnedOff);
         }
 
         if (!TurnedOff())

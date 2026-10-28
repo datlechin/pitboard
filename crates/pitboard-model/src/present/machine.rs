@@ -2,12 +2,12 @@
 
 use super::checks::{ChecksShown, checks};
 use super::{Seen, words};
+use crate::Front;
 use crate::model::AtLimit;
 use crate::model::machine::ScheduleFailure;
 use crate::model::state::AutoStanding;
 use crate::{AccountKey, AutoSwitched, FoundCommandLine, Schedule};
 use pitboard_core::duty::autoswitch::Threshold;
-use pitboard_core::host::Os;
 use pitboard_core::state::Key;
 
 /// What the app shows of this machine rather than its accounts. Not called `Machine`, the
@@ -241,7 +241,7 @@ fn warm(seen: &Seen) -> WarmShown {
             })
     });
     WarmShown {
-        title: words::warm_up(seen.os),
+        title: words::warm_up(seen.front),
         none_enrolled: accounts.is_empty().then(|| words::NONE_TO_WARM.into()),
         from: range.from(),
         to: range.to(),
@@ -269,7 +269,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
     let at = state.preferences.threshold().percent();
     let choice = state.preferences.at_limit();
     let note = words::at_limit_note(
-        seen.os,
+        seen.front,
         choice,
         at,
         state
@@ -286,7 +286,7 @@ fn at_limit(seen: &Seen) -> AtLimitShown {
             .into_iter()
             .map(|choice| AtLimitChoice {
                 choice,
-                title: words::at_limit_choice(seen.os, choice),
+                title: words::at_limit_choice(seen.front, choice),
             })
             .collect(),
         at,
@@ -365,10 +365,10 @@ fn schedule(seen: &Seen) -> ScheduleShown {
     let cannot = machine
         .own
         .filter(|own| !own.lasting())
-        .map(|own| words::cannot_schedule(seen.os, own.temporary));
+        .map(|own| words::cannot_schedule(seen.front, own.temporary));
     let note = match &machine.schedule {
         Some(Schedule::Installed { .. }) => None,
-        Some(Schedule::Unsupported) => Some(words::no_scheduler(seen.os)),
+        Some(Schedule::Unsupported) => Some(words::no_scheduler(seen.front)),
         Some(Schedule::Absent) | None => cannot.clone(),
     };
     // Said once: a refusal the note under the switch says already is not said again.
@@ -377,7 +377,7 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         .as_ref()
         .map(|failed| match failed {
             ScheduleFailure::CannotSchedule { temporary } => {
-                words::cannot_schedule(seen.os, *temporary)
+                words::cannot_schedule(seen.front, *temporary)
             }
             ScheduleFailure::Refused { message } => message.clone(),
         })
@@ -388,7 +388,7 @@ fn schedule(seen: &Seen) -> ScheduleShown {
         note,
         failed,
         about: words::renewal_about(
-            seen.os,
+            seen.front,
             seen.accounts()
                 .iter()
                 .any(|account| crate::model::state::in_its_app(account.provider)),
@@ -413,7 +413,7 @@ fn activity(seen: &Seen) -> ActivityShown {
             })
             .collect(),
         empty: log.is_empty().then(|| {
-            let (title, detail) = words::no_activity(seen.os);
+            let (title, detail) = words::no_activity(seen.front);
             EmptyList {
                 title,
                 detail: detail.into(),
@@ -439,21 +439,24 @@ fn command_line(seen: &Seen) -> CommandLineShown {
             Some(FoundCommandLine::Nowhere) | None => None,
         },
         offers_link: nowhere && own.lasting(),
-        cannot_link: (nowhere && own.temporary).then(|| words::cannot_link(seen.os)),
-        terminal_note: (nowhere && seen.os == Os::Windows).then(|| words::NEW_TERMINALS.into()),
+        cannot_link: (nowhere && own.temporary).then(|| words::cannot_link(seen.front)),
+        terminal_note: match seen.front {
+            Front::WindowsNotificationArea => nowhere.then(|| words::NEW_TERMINALS.into()),
+            Front::MacMenuBar | Front::Gnome => None,
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::words;
+    use crate::Front;
     use crate::present::present_on;
     use crate::present::testing::{
         Unreadable, Utc, account, claude_code, claude_desktop, desktop_account, read, status,
     };
     use crate::{LocalTime, PlatformError};
     use pitboard_core::duty::warm::{Overview, Range};
-    use pitboard_core::host::Os;
 
     // An American's clock, in 12 hours.
     struct Twelve;
@@ -489,7 +492,7 @@ mod tests {
             accounts: Vec::new(),
             halted: None,
         });
-        present_on(Os::Windows, &state, 0, clock)
+        present_on(Front::WindowsNotificationArea, &state, 0, clock)
             .machine
             .warm
             .range_label
@@ -545,7 +548,7 @@ mod tests {
     fn warm_up_says_so_while_no_claude_code_account_is_enrolled() {
         let state = read(status(Vec::new(), Vec::new()), vec![claude_code()]);
         assert_eq!(
-            present_on(Os::Windows, &state, 0, &Utc)
+            present_on(Front::WindowsNotificationArea, &state, 0, &Utc)
                 .machine
                 .warm
                 .none_enrolled
@@ -561,21 +564,21 @@ mod tests {
                 status(accounts, Vec::new()),
                 vec![claude_code(), claude_desktop()],
             );
-            present_on(Os::MacOs, &state, 0, &Utc)
+            present_on(Front::MacMenuBar, &state, 0, &Utc)
                 .machine
                 .schedule
                 .about
         };
         assert_eq!(
             about(vec![account(Some("work")).signed_in().build()]),
-            words::renewal_about(Os::MacOs, false)
+            words::renewal_about(Front::MacMenuBar, false)
         );
         assert_eq!(
             about(vec![
                 account(Some("work")).signed_in().build(),
                 desktop_account("work", true)
             ]),
-            words::renewal_about(Os::MacOs, true)
+            words::renewal_about(Front::MacMenuBar, true)
         );
     }
 
@@ -601,12 +604,14 @@ mod tests {
             (true, Some(words::warming_halted(&Halt::ProgramMissing))),
         ] {
             state.warm.overview = Some(overview(on));
-            let windows = present_on(Os::Windows, &state, 0, &Utc).machine.warm;
-            let mac = present_on(Os::MacOs, &state, 0, &Utc).machine.warm;
+            let windows = present_on(Front::WindowsNotificationArea, &state, 0, &Utc)
+                .machine
+                .warm;
+            let mac = present_on(Front::MacMenuBar, &state, 0, &Utc).machine.warm;
             assert_eq!(
                 windows,
                 super::WarmShown {
-                    title: words::warm_up(Os::Windows),
+                    title: words::warm_up(Front::WindowsNotificationArea),
                     ..mac
                 },
                 "but in its own case"

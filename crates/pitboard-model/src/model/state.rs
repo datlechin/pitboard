@@ -51,8 +51,8 @@ use crate::account_windows::records::{Entry, Loaded};
 use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
-    FoundCommandLine, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch, Switched,
-    Uninstalled, Usage, WarmRefused, Warning,
+    FoundCommandLine, Front, GaveUp, OwnCommandLine, PitboardError, Schedule, Status, Switch,
+    Switched, Uninstalled, Usage, WarmRefused, Warning,
 };
 use pitboard_core::duty::autoswitch::Threshold;
 use pitboard_core::duty::cadence::{
@@ -965,6 +965,8 @@ impl SigningIn {
 /// Everything the model knows. The actor thread owns it, and nothing else touches it.
 #[derive(Debug)]
 pub(crate) struct State {
+    /// Which app is shown it, which says what differs by front.
+    pub(crate) front: Front,
     cadence: Cadence,
     /// Whether what runs by itself has been started. A test drives everything itself until
     /// it says so, as the Swift model's tests did.
@@ -1147,8 +1149,9 @@ struct OutsideSwitch {
 }
 
 impl State {
-    pub(crate) fn new(cadence: Cadence) -> State {
+    pub(crate) fn new(front: Front, cadence: Cadence) -> State {
         State {
+            front,
             cadence,
             started: false,
             status: None,
@@ -2422,7 +2425,7 @@ impl State {
         if self.loading_kept {
             return;
         }
-        let tools = crate::tools_on(pitboard_core::host::OS);
+        let tools = crate::tools_on(self.front.os());
         let new = Advice::about(read, &tools, &self.told_this_launch);
         for advice in &new {
             self.told_this_launch
@@ -2468,7 +2471,7 @@ impl State {
                 .insert(heads_up.key_of(), heads_up.window.resets_at.unwrap_or(0));
             kept = true;
             jobs.push(Job::Post {
-                notice: crate::present::at_limit_notice(&heads_up, read.now),
+                notice: crate::present::at_limit_notice(self.front, &heads_up, read.now),
             });
         }
         kept
@@ -2494,7 +2497,7 @@ impl State {
             if self.told.insert(key, 0).is_none() {
                 kept = true;
                 jobs.push(Job::Post {
-                    notice: crate::present::unusable_notice(account),
+                    notice: crate::present::unusable_notice(self.front, account),
                 });
             }
         }
@@ -2620,6 +2623,7 @@ impl State {
             }) => {
                 jobs.push(Job::Post {
                     notice: crate::present::auto_switched_notice(
+                        self.front,
                         &from,
                         &to,
                         &accounts,
@@ -2675,7 +2679,7 @@ impl State {
                 });
                 if self.auto_told.insert(format!("refused/{code}")) {
                     jobs.push(Job::Post {
-                        notice: crate::present::auto_refused_notice(&code, &message),
+                        notice: crate::present::auto_refused_notice(self.front, &code, &message),
                     });
                 }
             }
@@ -2703,11 +2707,11 @@ impl State {
                 ..
             } => Some((
                 key.clone(),
-                crate::present::auto_skipped_notice(key, from, used, why),
+                crate::present::auto_skipped_notice(self.front, key, from, used, why),
             )),
             AutoSwitched::NotWatching { key, why, .. } => Some((
                 key.clone(),
-                crate::present::auto_not_watching_notice(key, why),
+                crate::present::auto_not_watching_notice(self.front, key, why),
             )),
             AutoSwitched::Watching { .. }
             | AutoSwitched::Waiting { .. }
@@ -2813,6 +2817,7 @@ impl State {
                         if self.warm.told.untold(&told_apart) {
                             jobs.push(Job::Post {
                                 notice: crate::present::warm_failed_notice(
+                                    self.front,
                                     &told_apart.key,
                                     message,
                                 ),
@@ -3521,7 +3526,7 @@ impl State {
                     .find(|enrolled| enrolled.id == account)
                     .and_then(|enrolled| enrolled.key.as_ref());
                 jobs.push(Job::Post {
-                    notice: crate::present::standing_notice(warning, again),
+                    notice: crate::present::standing_notice(self.front, warning, again),
                 });
             }
         }
@@ -4502,11 +4507,11 @@ impl State {
         };
     }
 
-    // Where a sheet, a question or a failure comes up: over the macOS welcome while it is shown,
-    // whose Add starts them, so its Continue is still in front. Windows' window hosts them.
+    // Where a sheet, a question or a failure comes up: over the welcome while it is shown, where
+    // the front's welcome hosts them.
     fn show_over(&mut self, place: Option<Place>) {
-        let welcome = self.window.place == Some(Place::Welcome)
-            && pitboard_core::host::OS != pitboard_core::host::Os::Windows;
+        let welcome =
+            self.window.place == Some(Place::Welcome) && self.front.welcome_hosts_sheets();
         self.show(if welcome { Some(Place::Welcome) } else { place });
     }
 

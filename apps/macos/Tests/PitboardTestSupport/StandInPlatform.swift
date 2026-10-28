@@ -6,7 +6,7 @@ import PitboardKit
 package func fixtureModel(_ name: String, in folder: URL) throws -> AppModel {
     try AppModel.listening { listener in
         try PitboardModel.fixtureIn(
-            name: name, temporaryDirectory: folder.path, listener: listener,
+            name: name, front: .macMenuBar, temporaryDirectory: folder.path, listener: listener,
             apps: NoOtherApps(), notifications: Unposted(), localTime: Utc())
     }
 }

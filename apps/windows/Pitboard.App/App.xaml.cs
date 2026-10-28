@@ -152,7 +152,7 @@ public partial class App : Application, IIconTargets
             try
             {
                 return AppModel.Listening(
-                    queue, listener => PitboardModel.Fixture(fixture, listener, new WindowsLocalTime()));
+                    queue, listener => PitboardModel.Fixture(fixture, Identity.Front, listener, new WindowsLocalTime()));
             }
             catch (FixtureException refused)
             {

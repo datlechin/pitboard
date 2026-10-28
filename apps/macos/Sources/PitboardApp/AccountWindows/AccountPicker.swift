@@ -168,7 +168,7 @@ private struct LinkLine: View {
             .truncationMode(.middle)
             .textSelection(.enabled)
             .help(url)
-            .accessibilityLabel(words.accountWindow.link ?? "")
+            .accessibilityLabel(macWords.link)
             .accessibilityValue(url)
     }
 }

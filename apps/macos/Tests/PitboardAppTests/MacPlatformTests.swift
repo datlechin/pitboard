@@ -183,7 +183,7 @@ private final class Opened: @unchecked Sendable {
 /// Each button the model can post is registered at launch with its symbol, and only one that
 /// opens a window brings Pitboard forward, which macOS refuses the app itself from the background.
 @Test func everyButtonHasACategoryOfItsOwn() {
-    let buttons = notificationButtons()
+    let buttons = notificationButtons(front: front)
     let categories = MacNotifications.categories(buttons)
     #expect(Set(categories.map(\.identifier)) == Set(buttons.map(\.title)))
     for category in categories {

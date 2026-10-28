@@ -70,7 +70,7 @@ final class AppRemoval {
         try? loginItem.unregister()
         try? FileManager.default.removeItem(at: support)
         if Self.installedByHomebrew(app, prefixes: homebrew) {
-            let help = words.settings.homebrewHelp.flatMap { URL(string: $0.link) }
+            let help = URL(string: macWords.homebrewHelp.link)
             _ = ask(.homebrew(help: help))
         } else {
             let link = commandLine.linksHere ? commandLine.link : nil
@@ -118,17 +118,15 @@ final class AppRemoval {
 
     // The first button is the default.
     static func said(_ asked: Asked) -> (title: String, message: String, buttons: [String]) {
-        let settings = words.settings
         switch asked {
         case .trash(let link):
             return (
-                settings.moveToTrashQuestion ?? "", trashSays(link: link),
-                [settings.moveToTrash ?? "", words.window.cancel]
+                macWords.moveToTrashQuestion, trashSays(link: link),
+                [macWords.moveToTrash, words.window.cancel]
             )
         case .homebrew:
             return (
-                settings.removeWithHomebrew ?? "", settings.homebrewRemovesIt ?? "",
-                [words.window.ok]
+                macWords.removeWithHomebrew, macWords.homebrewRemovesIt, [words.window.ok]
             )
         }
     }

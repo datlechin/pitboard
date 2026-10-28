@@ -55,7 +55,7 @@ public sealed class RunValue(Build build, string exe, IRunKey key) : IStartupIte
     // What the Run key's documentation allows a command line.
     public const int Longest = 260;
 
-    public string? Refusal => build is Build.Debug ? Words.Settings.DebugNeverStarts : null;
+    public string? Refusal => build is Build.Debug ? Words.Own.DebugNeverStarts : null;
 
     public static string Command(string exe) => $"\"{exe}\" {Launching.SignIn}";
 
@@ -79,7 +79,7 @@ public sealed class RunValue(Build build, string exe, IRunKey key) : IStartupIte
 
         if (starts && TurnedOff())
         {
-            throw new InvalidOperationException(Words.Settings.StartupTurnedOff);
+            throw new InvalidOperationException(Words.Own.StartupTurnedOff);
         }
 
         if (!starts)

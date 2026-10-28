@@ -18,17 +18,20 @@ const menu = repo("apps/macos/Sources/PitboardApp/MenuBar/MenuBarContent.swift")
 const appWords = repo("crates/pitboard-model/src/present/app_words.rs").replace(/\\\n\s*/g, "");
 // each command's words in app_words(), as the menu takes them, and as app_words.rs makes them
 const said: Record<string, [string, string]> = {
-  "Add Account…": ["addAccount", "add_account: words::add_account(os, true),"],
+  "Add Account…": ["addAccount", "add_account: words::add_account(front, true),"],
   Refresh: ["refresh", "refresh: words::REFRESH.into(),"],
-  "Open Pitboard": ["openPitboard", 'open_pitboard: titled(os, "Open Pitboard", "Open Pitboard"),'],
-  "Settings…": ["settings", 'settings: titled(os, "Settings…", "Settings"),'],
+  "Open Pitboard": [
+    "openPitboard",
+    'open_pitboard: titled(front, "Open Pitboard", "Open Pitboard"),',
+  ],
+  "Settings…": ["settings", 'settings: titled(front, "Settings…", "Settings"),'],
   "Check for Updates…": [
     "checkForUpdates",
-    'check_for_updates: titled(os, "Check for Updates…", "Check for updates"),',
+    'check_for_updates: titled(front, "Check for Updates…", "Check for updates"),',
   ],
-  "About Pitboard": ["about", 'about: titled(os, "About Pitboard", "About Pitboard"),'],
-  "Pitboard Help": ["help", 'help: titled(os, "Pitboard Help", "Pitboard help"),'],
-  "Quit Pitboard": ["quit", 'Os::MacOs | Os::Linux => "Quit Pitboard",'],
+  "About Pitboard": ["about", 'about: titled(front, "About Pitboard", "About Pitboard"),'],
+  "Pitboard Help": ["help", 'help: titled(front, "Pitboard Help", "Pitboard help"),'],
+  "Quit Pitboard": ["quit", 'Front::MacMenuBar | Front::Gnome => "Quit Pitboard",'],
 };
 
 // From an item's words to the next item: the modifiers SwiftUI gives it.
@@ -61,10 +64,10 @@ test("the questions' macOS shortcuts are AccountCommands.swift's: the Account me
   );
   assert.ok(
     repo("crates/pitboard-model/src/present/accounts.rs").includes(
-      "title: words::remove_account(seen.os),",
+      "title: words::remove_account(seen.front),",
     ),
   );
-  assert.ok(catalogue.includes('titled(os, "Remove Account…", "Remove account…")'));
+  assert.ok(catalogue.includes('titled(front, "Remove Account…", "Remove account…")'));
   const page = repo("website/src/pages/index.astro");
   assert.ok(
     page.includes(

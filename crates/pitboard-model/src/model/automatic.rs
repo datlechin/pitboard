@@ -10,11 +10,11 @@ use super::testing::machine::{Hand, Stub, any_read, offline_read};
 use super::testing::records::{Refusal, refusal, status, switched, watching};
 use super::{AtLimit, Intent, NotificationButton, Place, RunOutNotice};
 use crate::AccountKey;
+use crate::Front;
 use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
 use crate::present::words;
 use crate::{Account, Adoption, AutoLooked, AutoSwitched, Status};
-use pitboard_core::host::{OS, Os};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::words as said;
@@ -438,7 +438,7 @@ fn a_switch_it_made_is_said_and_taken_as_a_switch_somebody_asked_for() {
             ),
             clicked: "accounts".into(),
             button: Some(NotificationButton {
-                title: words::switch_back(OS),
+                title: words::switch_back(Front::MacMenuBar),
                 clicked: r#"switch-back/["claude/work","claude/personal"]"#.into(),
             }),
         }]
@@ -512,9 +512,9 @@ fn only_a_switch_by_itself_offers_switch_back_from_its_notification_and_its_noti
     let posted = switched_by_itself(&mut model, &mut machine);
 
     let button = posted.button.expect("Switch Back");
-    assert_eq!(button.title, words::switch_back(OS));
+    assert_eq!(button.title, words::switch_back(Front::MacMenuBar));
     assert_eq!(
-        crate::notification_buttons()
+        crate::notification_buttons(Front::MacMenuBar)
             .into_iter()
             .find(|kind| kind.title == button.title)
             .map(|kind| (kind.opens_window, kind.symbol)),
@@ -530,7 +530,11 @@ fn only_a_switch_by_itself_offers_switch_back_from_its_notification_and_its_noti
         .collect();
     assert_eq!(
         offered[0],
-        (words::switch_back(OS).as_str(), &back_to_work(), true)
+        (
+            words::switch_back(Front::MacMenuBar).as_str(),
+            &back_to_work(),
+            true
+        )
     );
 
     machine.switched = switched(ProviderId::Claude, "personal", "work", Vec::new());
@@ -667,7 +671,10 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     turned_on(&mut model, &mut machine);
     model.refresh(&mut machine);
     let note = |os, file_left| words::at_limit_note(os, AtLimit::Switch, 95, file_left, 33);
-    assert_eq!(model.shown().machine.at_limit.note, note(OS, false));
+    assert_eq!(
+        model.shown().machine.at_limit.note,
+        note(Front::MacMenuBar, false)
+    );
 
     machine.answer = Ok(super::testing::records::warned(
         vec![work(40.0), personal()],
@@ -679,13 +686,16 @@ fn the_setting_promises_33_seconds_only_while_no_file_is_behind_the_keychain() {
     model.refresh(&mut machine);
     assert_eq!(
         model.on_a_mac().machine.at_limit.note,
-        note(Os::MacOs, true)
+        note(Front::MacMenuBar, true)
     );
     assert_eq!(
         model.on_windows().machine.at_limit.note,
-        note(Os::Windows, true)
+        note(Front::WindowsNotificationArea, true)
     );
-    assert_ne!(note(Os::MacOs, true), note(Os::MacOs, false));
+    assert_ne!(
+        note(Front::MacMenuBar, true),
+        note(Front::MacMenuBar, false)
+    );
 }
 
 /// A reason it did not switch is said once for the limit and its reset, whether the decision
@@ -717,7 +727,10 @@ fn a_reason_it_did_not_switch_is_said_once() {
         "the look stands on what was recorded"
     );
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, words::not_switched(OS));
+    assert_eq!(
+        machine.posted[0].title,
+        words::not_switched(Front::MacMenuBar)
+    );
     assert_eq!(
         machine.posted[0].body,
         words::used_then("work", "97% of its 5-hour limit", &words::sentence(why))
@@ -754,7 +767,7 @@ fn a_reason_it_is_not_watching_is_said_once() {
         machine.posted,
         [RunOutNotice {
             id: "auto-not-watching/switch_interrupted".into(),
-            title: words::not_switching(OS),
+            title: words::not_switching(Front::MacMenuBar),
             subtitle: Some("Claude Code".into()),
             body: words::sentence(why),
             clicked: "limits".into(),
@@ -795,7 +808,10 @@ fn a_refusal_is_said_once_and_lets_go() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1);
-    assert_eq!(machine.posted[0].title, words::could_not_switch_itself(OS));
+    assert_eq!(
+        machine.posted[0].title,
+        words::could_not_switch_itself(Front::MacMenuBar)
+    );
     assert!(!model.state.switch_under_way());
     assert!(model.state.presented.is_none(), "nobody asked, so no alert");
 }
@@ -1108,7 +1124,10 @@ fn no_account_with_room_is_said_once_for_a_limit_and_its_reset() {
     model.refresh(&mut machine);
     assert_eq!(machine.auto_at.len(), 2);
     assert_eq!(machine.posted.len(), 1, "{:?}", machine.posted);
-    assert_eq!(machine.posted[0].title, words::not_switched(OS));
+    assert_eq!(
+        machine.posted[0].title,
+        words::not_switched(Front::MacMenuBar)
+    );
     let AutoSwitched::Skipped { why, .. } = no_room(9_000) else {
         unreachable!("no room is a switch skipped");
     };

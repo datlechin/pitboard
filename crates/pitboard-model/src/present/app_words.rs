@@ -1,8 +1,9 @@
-// Every control and sentence the apps draw on their own; one only a system shows is None elsewhere.
+// Every control and sentence the apps draw on their own: what every front draws, in its case,
+// and what one front alone draws, in that front's own catalogue.
 
 use super::SetupLink;
 use super::words::{self, titled};
-use pitboard_core::host::{OS, Os};
+use crate::Front;
 use pitboard_core::provider::ProviderId;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -15,14 +16,6 @@ pub struct AppWords {
     pub settings: SettingsWords,
     pub sheet: SheetWords,
     pub account_window: AccountWindowWords,
-    pub shortcuts: ShortcutsWords,
-}
-
-// What a Shortcuts action says that the model's answers don't: macOS's alone.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ShortcutsWords {
-    pub not_read_yet: Option<String>,
-    pub none_in_use: Option<String>,
 }
 
 // The menu bar item's and the notification area icon's menus, and the app's own menus.
@@ -39,8 +32,6 @@ pub struct MenuWords {
     pub quit: String,
     pub account: String,
     pub copy_email: String,
-    // what Narrator calls the notification area's menu
-    pub icon_menu: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -66,20 +57,8 @@ pub struct WindowWords {
     pub plan: String,
     pub sign_in: String,
     pub warm_up: String,
-    // the macOS toolbar's button that shows and hides the inspector
-    pub inspector: Option<String>,
-    pub inspector_help: Option<String>,
-    // what the inspector says while no account is selected
-    pub no_selection: Option<String>,
-    // a check's detail's own menu, and an expanded row's email, on Windows
-    pub copy: Option<String>,
-    pub select_all: Option<String>,
-    // what Narrator calls the checks
-    pub checks: Option<String>,
     // what VoiceOver and Narrator call the spinner while the checks run
-    pub checking: Option<String>,
-    // a Windows Debug build's refusal of a link outside a fixture
-    pub debug_link_refused: Option<String>,
+    pub checking: String,
 }
 
 // The activity list's columns and toolbar.
@@ -99,69 +78,26 @@ pub struct SettingsWords {
     pub general: String,
     pub limits: String,
     pub advanced: String,
-    // the Windows page's last section
-    pub about: Option<String>,
     // "Open Pitboard at Login", "Start when you sign in to Windows"
     pub open_at_login: String,
     pub open_at_login_note: String,
-    // a Windows Debug build, which never writes the Run key
-    pub debug_never_starts: Option<String>,
-    // macOS waits for Login Items to allow it, with a button to them
-    pub login_items_waiting: Option<String>,
-    pub open_login_items: Option<String>,
-    // Windows' Startup settings turned it off, with a link to them
-    pub startup_turned_off: Option<String>,
-    pub open_startup_settings: Option<String>,
     pub notifications: String,
     pub notifications_off: String,
     pub open_notification_settings: String,
-    pub notifications_off_for_every_app: Option<String>,
-    pub notifications_off_by_policy: Option<String>,
-    // what the macOS menu bar item shows, and its choices
-    pub menu_bar_shows: Option<String>,
-    pub account_and_usage: Option<String>,
-    pub usage_only: Option<String>,
-    pub icon_only: Option<String>,
     // over General's update settings
     pub updates: String,
     pub check_for_updates_automatically: String,
-    pub download_and_install_automatically: Option<String>,
     pub version: String,
     pub check_now: String,
-    // a Windows copy that has no update to check for yet, or is a beta
-    pub no_release_to_update_to: Option<String>,
-    pub beta_updates: Option<String>,
     pub keep_saved_sign_ins_fresh: String,
     pub command_line: String,
     // beside where the command line is
     pub path: String,
-    pub install_command_line: Option<String>,
-    pub link_failed: Option<String>,
-    pub cannot_link_command_line: Option<String>,
     // what VoiceOver and Narrator call the spinner while Settings looks for one
-    pub looking_for_command_line: Option<String>,
-    // a Windows copy that cannot update itself
-    pub update_key_invalid: Option<String>,
-    pub win_sparkle_missing: Option<String>,
-    pub notifications_unoffered: Option<String>,
+    pub looking_for_command_line: String,
     // over Uninstall Pitboard… on macOS, beside Uninstall… on Windows
     pub uninstall: String,
     pub uninstall_note: String,
-    // what the macOS app asks of itself once Pitboard's own data is gone, `trash_says` the message
-    pub move_to_trash_question: Option<String>,
-    pub move_to_trash: Option<String>,
-    // a copy Homebrew installed, which Homebrew removes
-    pub remove_with_homebrew: Option<String>,
-    pub homebrew_removes_it: Option<String>,
-    // the docs' table of how to remove Pitboard by how it was installed
-    pub homebrew_help: Option<SetupLink>,
-    // the Windows page's section with a card each that opens Diagnostics and Activity
-    pub troubleshoot: Option<String>,
-    pub diagnostics_about: Option<String>,
-    pub activity_about: Option<String>,
-    // what Narrator calls the warm-up hours' pickers
-    pub warm_from: Option<String>,
-    pub warm_to: Option<String>,
     pub from: String,
     pub to: String,
     pub help: String,
@@ -212,9 +148,81 @@ pub struct AccountWindowWords {
     // "Show in Finder", "Show in folder"
     pub show_file: String,
     pub show_file_help: String,
-    pub could_not_open: Option<String>,
+}
+
+// What the macOS app alone draws.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MacMenuBarWords {
+    // the toolbar's button that shows and hides the inspector
+    pub inspector: String,
+    pub inspector_help: String,
+    // what the inspector says while no account is selected
+    pub no_selection: String,
+    // Settings waits for Login Items to allow it, with a button to them
+    pub login_items_waiting: String,
+    pub open_login_items: String,
+    // what the menu bar item shows, and its choices
+    pub menu_bar_shows: String,
+    pub account_and_usage: String,
+    pub usage_only: String,
+    pub icon_only: String,
+    // under General's update settings
+    pub download_and_install_automatically: String,
+    pub install_command_line: String,
+    pub link_failed: String,
+    pub cannot_link_command_line: String,
+    // what the app asks of itself once Pitboard's own data is gone, `trash_says` the message
+    pub move_to_trash_question: String,
+    pub move_to_trash: String,
+    // a copy Homebrew installed, which Homebrew removes
+    pub remove_with_homebrew: String,
+    pub homebrew_removes_it: String,
+    // the docs' table of how to remove Pitboard by how it was installed
+    pub homebrew_help: SetupLink,
     // what VoiceOver calls the link the Open Link window opens
-    pub link: Option<String>,
+    pub link: String,
+    // what a Shortcuts action says that the model's answers don't
+    pub not_read_yet: String,
+    pub none_in_use: String,
+}
+
+// What the Windows app alone draws.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WindowsNotificationAreaWords {
+    // what Narrator calls the notification area's menu
+    pub icon_menu: String,
+    // a check's detail's own menu, and an expanded row's email
+    pub copy: String,
+    pub select_all: String,
+    // what Narrator calls the checks
+    pub checks: String,
+    // a Debug build's refusal of a link outside a fixture
+    pub debug_link_refused: String,
+    // the Settings page's last section
+    pub about: String,
+    // a Debug build, which never writes the Run key
+    pub debug_never_starts: String,
+    // Startup settings turned it off, with a link to them
+    pub startup_turned_off: String,
+    pub open_startup_settings: String,
+    pub notifications_off_for_every_app: String,
+    pub notifications_off_by_policy: String,
+    // a copy that has no update to check for yet, or is a beta
+    pub no_release_to_update_to: String,
+    pub beta_updates: String,
+    // a copy that cannot update itself
+    pub update_key_invalid: String,
+    pub win_sparkle_missing: String,
+    pub notifications_unoffered: String,
+    // the Settings page's section with a card each that opens Diagnostics and Activity
+    pub troubleshoot: String,
+    pub diagnostics_about: String,
+    pub activity_about: String,
+    // what Narrator calls the warm-up hours' pickers
+    pub warm_from: String,
+    pub warm_to: String,
+    // an account window whose page could not be made
+    pub could_not_open: String,
 }
 
 // A switch Pitboard hasn't answered in the time Shortcuts gives an action.
@@ -297,31 +305,28 @@ pub fn trash_says(link: Option<String>) -> String {
 }
 
 #[uniffi::export]
-pub fn app_words() -> AppWords {
-    app_words_on(OS)
-}
-
-pub(crate) fn app_words_on(os: Os) -> AppWords {
-    let mac = |words: &str| (os != Os::Windows).then(|| words.to_owned());
-    let windows = |words: &str| (os == Os::Windows).then(|| words.to_owned());
+pub fn app_words(front: Front) -> AppWords {
+    let add_account_asks = match front {
+        Front::WindowsNotificationArea => true,
+        Front::MacMenuBar | Front::Gnome => false,
+    };
     AppWords {
         app_name: words::PITBOARD.into(),
         menu: MenuWords {
-            add_account: words::add_account(os, true),
+            add_account: words::add_account(front, true),
             refresh: words::REFRESH.into(),
-            open_pitboard: titled(os, "Open Pitboard", "Open Pitboard"),
-            settings: titled(os, "Settings…", "Settings"),
-            check_for_updates: titled(os, "Check for Updates…", "Check for updates"),
-            about: titled(os, "About Pitboard", "About Pitboard"),
-            help: titled(os, "Pitboard Help", "Pitboard help"),
-            quit: match os {
-                Os::Windows => "Exit",
-                Os::MacOs | Os::Linux => "Quit Pitboard",
+            open_pitboard: titled(front, "Open Pitboard", "Open Pitboard"),
+            settings: titled(front, "Settings…", "Settings"),
+            check_for_updates: titled(front, "Check for Updates…", "Check for updates"),
+            about: titled(front, "About Pitboard", "About Pitboard"),
+            help: titled(front, "Pitboard Help", "Pitboard help"),
+            quit: match front {
+                Front::WindowsNotificationArea => "Exit",
+                Front::MacMenuBar | Front::Gnome => "Quit Pitboard",
             }
             .into(),
             account: words::ACCOUNT.into(),
-            copy_email: titled(os, "Copy Email Address", "Copy email address"),
-            icon_menu: windows("Pitboard menu"),
+            copy_email: titled(front, "Copy Email Address", "Copy email address"),
         },
         window: WindowWords {
             accounts: "Accounts".into(),
@@ -329,33 +334,24 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             diagnostics: "Diagnostics".into(),
             refresh: words::REFRESH.into(),
             refresh_help: "Read every account’s usage again".into(),
-            add_account: words::add_account(os, os == Os::Windows),
+            add_account: words::add_account(front, add_account_asks),
             add_account_help: "Sign in to another account".into(),
-            check_again: titled(os, "Check Again", "Check again"),
+            check_again: titled(front, "Check Again", "Check again"),
             check_again_help: "Make every check again".into(),
-            copy_report: titled(os, "Copy Report", "Copy report"),
+            copy_report: titled(front, "Copy Report", "Copy report"),
             copy_report_help: "Copy the checks for a bug report, with email addresses and \
                                account identifiers hidden"
                 .into(),
-            open_link: titled(os, "Open Link", "Open link"),
+            open_link: titled(front, "Open Link", "Open link"),
             cancel: words::CANCEL.into(),
             close: "Close".into(),
             ok: "OK".into(),
             dismiss: words::DISMISS.into(),
             email: "Email".into(),
             plan: "Plan".into(),
-            sign_in: titled(os, "Sign-In", "Sign-in"),
-            warm_up: words::warm_up(os),
-            inspector: mac("Inspector"),
-            inspector_help: mac("Show or hide the selected account’s details"),
-            no_selection: mac("No Account Selected"),
-            copy: windows("Copy"),
-            select_all: windows("Select all"),
-            checks: windows("Checks"),
-            checking: Some("Checking".into()),
-            debug_link_refused: windows(
-                "A Debug build opens a pitboard-debug link only in a fixture.",
-            ),
+            sign_in: titled(front, "Sign-In", "Sign-in"),
+            warm_up: words::warm_up(front),
+            checking: "Checking".into(),
         },
         activity: ActivityWords {
             date: "Date".into(),
@@ -370,110 +366,49 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             general: "General".into(),
             limits: "Limits".into(),
             advanced: "Advanced".into(),
-            about: windows("About"),
-            open_at_login: words::open_at_login(os).0.into(),
-            open_at_login_note: words::open_at_login(os).1.into(),
-            debug_never_starts: windows("A Debug build never starts when you sign in to Windows."),
-            login_items_waiting: mac("macOS is waiting for you to allow Pitboard in Login Items."),
-            open_login_items: mac("Open Login Items Settings…"),
-            startup_turned_off: windows(
-                "Turned off in Settings > Apps > Startup, where you can turn it on again.",
-            ),
-            open_startup_settings: windows("Open Startup settings"),
+            open_at_login: words::open_at_login(front).0.into(),
+            open_at_login_note: words::open_at_login(front).1.into(),
             notifications: words::NOTIFICATIONS.into(),
-            notifications_off: match os {
-                Os::Windows => {
+            notifications_off: match front {
+                Front::WindowsNotificationArea => {
                     "Notifications from Pitboard are turned off in Settings > System > \
                      Notifications."
                 }
-                Os::MacOs | Os::Linux => {
+                Front::MacMenuBar | Front::Gnome => {
                     "Notifications from Pitboard are turned off in System Settings."
                 }
             }
             .into(),
             open_notification_settings: titled(
-                os,
+                front,
                 "Open Notification Settings…",
                 "Open notification settings",
             ),
-            notifications_off_for_every_app: windows(
-                "Notifications are turned off for every app in Settings > System > Notifications.",
-            ),
-            notifications_off_by_policy: windows(
-                "Group Policy turns off app notifications on this PC.",
-            ),
-            menu_bar_shows: mac("Menu Bar Shows"),
-            account_and_usage: mac("Account and Usage"),
-            usage_only: mac("Usage Only"),
-            icon_only: mac("Icon Only"),
             updates: "Updates".into(),
             check_for_updates_automatically: titled(
-                os,
+                front,
                 "Check for Updates Automatically",
                 "Check for updates automatically",
             ),
-            download_and_install_automatically: mac("Download and Install Automatically"),
             version: "Version".into(),
-            check_now: titled(os, "Check Now", "Check now"),
-            no_release_to_update_to: windows(
-                "No full release of Pitboard for Windows is out yet, so there is no update to \
-                 check for.",
-            ),
-            beta_updates: windows(
-                "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.",
-            ),
-            keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(os),
-            command_line: titled(os, "Command Line", "Command line"),
+            check_now: titled(front, "Check Now", "Check now"),
+            keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(front),
+            command_line: titled(front, "Command Line", "Command line"),
             path: "Path".into(),
-            install_command_line: mac("Install Command Line Tool…"),
-            link_failed: mac("The link couldn’t be made."),
-            cannot_link_command_line: mac(
-                "This copy of Pitboard can’t link the command line inside it.",
-            ),
-            looking_for_command_line: Some("Looking for pitboard".into()),
-            update_key_invalid: windows(
-                "This copy of Pitboard can’t update itself: the update key it was built with isn’t \
-                 a valid key. Install a later version by hand.",
-            ),
-            win_sparkle_missing: windows(
-                "This copy of Pitboard can’t update itself: WinSparkle.dll, which updates it, is \
-                 missing. Install Pitboard again.",
-            ),
-            notifications_unoffered: windows("Windows offers this process no app notifications."),
-            uninstall: match os {
-                Os::Windows => "Uninstall Pitboard",
-                Os::MacOs | Os::Linux => words::UNINSTALL,
+            looking_for_command_line: "Looking for pitboard".into(),
+            uninstall: match front {
+                Front::WindowsNotificationArea => "Uninstall Pitboard",
+                Front::MacMenuBar | Front::Gnome => words::UNINSTALL,
             }
             .into(),
             uninstall_note: "Deletes Pitboard’s saved sign-ins and settings, and leaves each tool \
                              signed in to the account in use."
                 .into(),
-            move_to_trash_question: mac("Move Pitboard to the Trash?"),
-            move_to_trash: mac("Move to Trash"),
-            remove_with_homebrew: mac("Remove Pitboard with Homebrew"),
-            homebrew_removes_it: mac(&format!(
-                "{DELETED} Homebrew installed the app, so Homebrew removes it."
-            )),
-            homebrew_help: (os != Os::Windows).then(|| SetupLink {
-                title: words::learn_more(os),
-                link: REMOVE_PAGE.into(),
-            }),
-            troubleshoot: windows("Troubleshoot"),
-            diagnostics_about: (os == Os::Windows).then(|| {
-                let names = crate::tools_on(os).into_iter().map(ProviderId::name);
-                format!(
-                    "Check how {} are set up on this PC.",
-                    pitboard_core::words::listed(std::iter::once(words::PITBOARD).chain(names))
-                )
-            }),
-            activity_about: windows("Every switch and change Pitboard made."),
-            warm_from: windows("Warm up from"),
-            warm_to: windows("Warm up to"),
             from: "From".into(),
             to: "To".into(),
-            help: titled(os, "Pitboard Help", "Pitboard help"),
-            report_a_problem: titled(os, "Report a Problem", "Report a problem"),
-            source_code: titled(os, "Source Code on GitHub", "Source code on GitHub"),
+            help: titled(front, "Pitboard Help", "Pitboard help"),
+            report_a_problem: titled(front, "Report a Problem", "Report a problem"),
+            source_code: titled(front, "Source Code on GitHub", "Source code on GitHub"),
             license: "Apache License 2.0".into(),
             copyright: "Copyright 2026 the Pitboard authors".into(),
         },
@@ -481,12 +416,12 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             tool: "Tool".into(),
             account: words::ACCOUNT.into(),
             name: "Name".into(),
-            sign_in_page: titled(os, "Sign-In Page", "Sign-in page"),
-            copy_link: titled(os, "Copy Link", "Copy link"),
+            sign_in_page: titled(front, "Sign-In Page", "Sign-in page"),
+            copy_link: titled(front, "Copy Link", "Copy link"),
             open: words::OPEN.into(),
             code: "Code".into(),
             paste_code: "Paste the code from your browser".into(),
-            submit_code: titled(os, "Submit Code", "Submit code"),
+            submit_code: titled(front, "Submit Code", "Submit code"),
         },
         account_window: AccountWindowWords {
             back: "Back".into(),
@@ -497,48 +432,123 @@ pub(crate) fn app_words_on(os: Os) -> AppWords {
             stop_help: "Stop loading this page".into(),
             reload: "Reload".into(),
             reload_help: "Load this page again".into(),
-            reload_page: titled(os, "Reload Page", "Reload page"),
+            reload_page: titled(front, "Reload Page", "Reload page"),
             downloads: "Downloads".into(),
             downloads_help: "Show this window’s downloads".into(),
-            could_not_load: titled(os, "Couldn’t Load the Page", "Couldn’t load the page"),
-            try_again: words::try_again(os),
-            remove_website_data: titled(os, "Remove Website Data…", "Remove website data…"),
+            could_not_load: titled(front, "Couldn’t Load the Page", "Couldn’t load the page"),
+            try_again: words::try_again(front),
+            remove_website_data: titled(front, "Remove Website Data…", "Remove website data…"),
             remove: words::REMOVE.into(),
-            actual_size: titled(os, "Actual Size", "Actual size"),
-            zoom_in: titled(os, "Zoom In", "Zoom in"),
-            zoom_out: titled(os, "Zoom Out", "Zoom out"),
+            actual_size: titled(front, "Actual Size", "Actual size"),
+            zoom_in: titled(front, "Zoom In", "Zoom in"),
+            zoom_out: titled(front, "Zoom Out", "Zoom out"),
             go: "Go".into(),
             download: words::DOWNLOAD.into(),
             stop_download_help: "Stop this download".into(),
-            show_file: match os {
-                Os::Windows => "Show in folder",
-                Os::MacOs | Os::Linux => "Show in Finder",
+            show_file: match front {
+                Front::WindowsNotificationArea => "Show in folder",
+                Front::MacMenuBar | Front::Gnome => "Show in Finder",
             }
             .into(),
-            show_file_help: match os {
-                Os::Windows => "Show the file in its folder",
-                Os::MacOs | Os::Linux => "Show the file in Finder",
+            show_file_help: match front {
+                Front::WindowsNotificationArea => "Show the file in its folder",
+                Front::MacMenuBar | Front::Gnome => "Show the file in Finder",
             }
             .into(),
-            could_not_open: windows("Couldn’t open this window"),
-            link: mac("Link"),
         },
-        shortcuts: ShortcutsWords {
-            not_read_yet: mac("Pitboard hasn’t read its accounts yet. Try again in a moment."),
-            none_in_use: mac(words::NONE_IN_USE),
+    }
+}
+
+#[uniffi::export]
+pub fn mac_menu_bar_words() -> MacMenuBarWords {
+    MacMenuBarWords {
+        inspector: "Inspector".into(),
+        inspector_help: "Show or hide the selected account’s details".into(),
+        no_selection: "No Account Selected".into(),
+        login_items_waiting: "macOS is waiting for you to allow Pitboard in Login Items.".into(),
+        open_login_items: "Open Login Items Settings…".into(),
+        menu_bar_shows: "Menu Bar Shows".into(),
+        account_and_usage: "Account and Usage".into(),
+        usage_only: "Usage Only".into(),
+        icon_only: "Icon Only".into(),
+        download_and_install_automatically: "Download and Install Automatically".into(),
+        install_command_line: "Install Command Line Tool…".into(),
+        link_failed: "The link couldn’t be made.".into(),
+        cannot_link_command_line: "This copy of Pitboard can’t link the command line inside it."
+            .into(),
+        move_to_trash_question: "Move Pitboard to the Trash?".into(),
+        move_to_trash: "Move to Trash".into(),
+        remove_with_homebrew: "Remove Pitboard with Homebrew".into(),
+        homebrew_removes_it: format!(
+            "{DELETED} Homebrew installed the app, so Homebrew removes it."
+        ),
+        homebrew_help: SetupLink {
+            title: words::learn_more(Front::MacMenuBar),
+            link: REMOVE_PAGE.into(),
         },
+        link: "Link".into(),
+        not_read_yet: "Pitboard hasn’t read its accounts yet. Try again in a moment.".into(),
+        none_in_use: words::NONE_IN_USE.into(),
+    }
+}
+
+#[uniffi::export]
+pub fn windows_notification_area_words() -> WindowsNotificationAreaWords {
+    let names = crate::tools_on(Front::WindowsNotificationArea.os())
+        .into_iter()
+        .map(ProviderId::name);
+    WindowsNotificationAreaWords {
+        icon_menu: "Pitboard menu".into(),
+        copy: "Copy".into(),
+        select_all: "Select all".into(),
+        checks: "Checks".into(),
+        debug_link_refused: "A Debug build opens a pitboard-debug link only in a fixture.".into(),
+        about: "About".into(),
+        debug_never_starts: "A Debug build never starts when you sign in to Windows.".into(),
+        startup_turned_off: "Turned off in Settings > Apps > Startup, where you can turn it on \
+                             again."
+            .into(),
+        open_startup_settings: "Open Startup settings".into(),
+        notifications_off_for_every_app: "Notifications are turned off for every app in Settings \
+                                          > System > Notifications."
+            .into(),
+        notifications_off_by_policy: "Group Policy turns off app notifications on this PC.".into(),
+        no_release_to_update_to: "No full release of Pitboard for Windows is out yet, so there \
+                                  is no update to check for."
+            .into(),
+        beta_updates: "A beta updates itself to 1.0.0 once that is out. Install a later beta by \
+                       hand."
+            .into(),
+        update_key_invalid: "This copy of Pitboard can’t update itself: the update key it was \
+                             built with isn’t a valid key. Install a later version by hand."
+            .into(),
+        win_sparkle_missing: "This copy of Pitboard can’t update itself: WinSparkle.dll, which \
+                              updates it, is missing. Install Pitboard again."
+            .into(),
+        notifications_unoffered: "Windows offers this process no app notifications.".into(),
+        troubleshoot: "Troubleshoot".into(),
+        diagnostics_about: format!(
+            "Check how {} are set up on this PC.",
+            pitboard_core::words::listed(std::iter::once(words::PITBOARD).chain(names))
+        ),
+        activity_about: "Every switch and change Pitboard made.".into(),
+        warm_from: "Warm up from".into(),
+        warm_to: "Warm up to".into(),
+        could_not_open: "Couldn’t open this window".into(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::present::testing::{mechanism_words, strings_in, strings_of, title_cased};
+    use crate::present::testing::{mechanism_words, strings_of, title_cased};
 
-    // Each system's words of one control, a word only one system shows empty on the other.
+    // Each shipping front's words of one control.
     fn pairs() -> Vec<(String, String)> {
-        let both = |os| strings_in(&format!("{:?}", app_words_on(os)).replace("None", "\"\""));
-        let (mac, windows) = (both(Os::MacOs), both(Os::Windows));
+        let (mac, windows) = (
+            strings_of(&app_words(Front::MacMenuBar)),
+            strings_of(&app_words(Front::WindowsNotificationArea)),
+        );
         assert_eq!(mac.len(), windows.len());
         mac.into_iter().zip(windows).collect()
     }
@@ -565,9 +575,6 @@ mod tests {
             ),
         ];
         for (mac, windows) in pairs() {
-            if mac.is_empty() || windows.is_empty() {
-                continue;
-            }
             let (one, other) = (mac.to_lowercase(), windows.to_lowercase());
             let alike = one == other
                 || one.strip_suffix('…') == Some(&other)
@@ -601,17 +608,25 @@ mod tests {
             "PC",
             "OK",
         ];
-        for said in strings_of(&app_words_on(Os::Windows)) {
+        let words = strings_of(&app_words(Front::WindowsNotificationArea));
+        for said in words
+            .into_iter()
+            .chain(strings_of(&windows_notification_area_words()))
+        {
             assert!(title_cased(&said, &NAMES).is_empty(), "{said:?}");
         }
     }
 
     #[test]
     fn no_control_says_park_put_away_give_up_enrol_record_or_settle() {
-        for os in [Os::MacOs, Os::Windows] {
-            for said in strings_of(&app_words_on(os)) {
-                assert!(mechanism_words(&said).is_empty(), "{said}");
-            }
+        let said = [
+            strings_of(&app_words(Front::MacMenuBar)),
+            strings_of(&app_words(Front::WindowsNotificationArea)),
+            strings_of(&mac_menu_bar_words()),
+            strings_of(&windows_notification_area_words()),
+        ];
+        for said in said.into_iter().flatten() {
+            assert!(mechanism_words(&said).is_empty(), "{said}");
         }
     }
 
@@ -662,7 +677,10 @@ mod tests {
     // Plan 2: the Windows views said these themselves.
     #[test]
     fn the_windows_views_words_of_their_own_are_here() {
-        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        let (mac, windows) = (
+            app_words(Front::MacMenuBar),
+            app_words(Front::WindowsNotificationArea),
+        );
         assert_eq!(windows.app_name, "Pitboard");
         assert_eq!(
             (
@@ -674,31 +692,22 @@ mod tests {
                 "Pitboard watches your limits only while it’s running."
             )
         );
+        let own = windows_notification_area_words();
         assert_eq!(
-            windows.settings.debug_never_starts.as_deref(),
-            Some("A Debug build never starts when you sign in to Windows.")
+            own.debug_never_starts,
+            "A Debug build never starts when you sign in to Windows."
         );
         assert_eq!(
-            windows.window.debug_link_refused.as_deref(),
-            Some("A Debug build opens a pitboard-debug link only in a fixture.")
-        );
-        assert_eq!(
-            (
-                mac.settings.debug_never_starts,
-                mac.window.debug_link_refused
-            ),
-            (None, None)
+            own.debug_link_refused,
+            "A Debug build opens a pitboard-debug link only in a fixture."
         );
     }
 
     #[test]
-    fn a_word_only_one_system_shows_is_none_on_the_other() {
-        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
-        assert_eq!(windows.settings.menu_bar_shows, None);
-        assert_eq!(mac.settings.startup_turned_off, None);
-        assert_eq!(
-            windows.settings.startup_turned_off.as_deref(),
-            Some("Turned off in Settings > Apps > Startup, where you can turn it on again.")
+    fn each_front_words_a_control_its_own_way() {
+        let (mac, windows) = (
+            app_words(Front::MacMenuBar),
+            app_words(Front::WindowsNotificationArea),
         );
         assert_eq!(
             (mac.menu.settings.as_str(), windows.menu.settings.as_str()),
@@ -717,33 +726,131 @@ mod tests {
         );
         assert_eq!(mac.window.diagnostics, "Diagnostics");
         assert_eq!(mac.activity.by, "By");
+    }
+
+    // Every word one shipping app alone draws, as it drew each before its front had a catalogue.
+    #[test]
+    fn each_shipping_fronts_catalogue_says_what_its_app_drew() {
+        let mac = mac_menu_bar_words();
         assert_eq!(
-            mac.shortcuts,
-            ShortcutsWords {
-                not_read_yet: Some(
-                    "Pitboard hasn’t read its accounts yet. Try again in a moment.".into()
-                ),
-                none_in_use: Some("No account is in use.".into()),
-            }
+            [
+                mac.inspector,
+                mac.inspector_help,
+                mac.no_selection,
+                mac.login_items_waiting,
+                mac.open_login_items,
+                mac.menu_bar_shows,
+                mac.account_and_usage,
+                mac.usage_only,
+                mac.icon_only,
+                mac.download_and_install_automatically,
+                mac.install_command_line,
+                mac.link_failed,
+                mac.cannot_link_command_line,
+                mac.move_to_trash_question,
+                mac.move_to_trash,
+                mac.remove_with_homebrew,
+                mac.homebrew_removes_it,
+                mac.link,
+                mac.not_read_yet,
+                mac.none_in_use,
+            ],
+            [
+                "Inspector",
+                "Show or hide the selected account’s details",
+                "No Account Selected",
+                "macOS is waiting for you to allow Pitboard in Login Items.",
+                "Open Login Items Settings…",
+                "Menu Bar Shows",
+                "Account and Usage",
+                "Usage Only",
+                "Icon Only",
+                "Download and Install Automatically",
+                "Install Command Line Tool…",
+                "The link couldn’t be made.",
+                "This copy of Pitboard can’t link the command line inside it.",
+                "Move Pitboard to the Trash?",
+                "Move to Trash",
+                "Remove Pitboard with Homebrew",
+                "Its saved sign-ins and settings are deleted. Homebrew installed the app, so \
+                 Homebrew removes it.",
+                "Link",
+                "Pitboard hasn’t read its accounts yet. Try again in a moment.",
+                "No account is in use.",
+            ]
         );
         assert_eq!(
-            windows.shortcuts,
-            ShortcutsWords {
-                not_read_yet: None,
-                none_in_use: None,
+            mac.homebrew_help,
+            SetupLink {
+                title: "Learn More".into(),
+                link: "https://docs.usepitboard.com/install/remove#remove-pitboard-itself".into(),
             }
+        );
+        let windows = windows_notification_area_words();
+        assert_eq!(
+            [
+                windows.icon_menu,
+                windows.copy,
+                windows.select_all,
+                windows.checks,
+                windows.debug_link_refused,
+                windows.about,
+                windows.debug_never_starts,
+                windows.startup_turned_off,
+                windows.open_startup_settings,
+                windows.notifications_off_for_every_app,
+                windows.notifications_off_by_policy,
+                windows.no_release_to_update_to,
+                windows.beta_updates,
+                windows.update_key_invalid,
+                windows.win_sparkle_missing,
+                windows.notifications_unoffered,
+                windows.troubleshoot,
+                windows.diagnostics_about,
+                windows.activity_about,
+                windows.warm_from,
+                windows.warm_to,
+                windows.could_not_open,
+            ],
+            [
+                "Pitboard menu",
+                "Copy",
+                "Select all",
+                "Checks",
+                "A Debug build opens a pitboard-debug link only in a fixture.",
+                "About",
+                "A Debug build never starts when you sign in to Windows.",
+                "Turned off in Settings > Apps > Startup, where you can turn it on again.",
+                "Open Startup settings",
+                "Notifications are turned off for every app in Settings > System > Notifications.",
+                "Group Policy turns off app notifications on this PC.",
+                "No full release of Pitboard for Windows is out yet, so there is no update to \
+                 check for.",
+                "A beta updates itself to 1.0.0 once that is out. Install a later beta by hand.",
+                "This copy of Pitboard can’t update itself: the update key it was built with isn’t \
+                 a valid key. Install a later version by hand.",
+                "This copy of Pitboard can’t update itself: WinSparkle.dll, which updates it, is \
+                 missing. Install Pitboard again.",
+                "Windows offers this process no app notifications.",
+                "Troubleshoot",
+                "Check how Pitboard, Claude Code and Codex are set up on this PC.",
+                "Every switch and change Pitboard made.",
+                "Warm up from",
+                "Warm up to",
+                "Couldn’t open this window",
+            ]
         );
     }
 
     // A spinner says nothing on screen, so each system's screen reader is told what it waits for.
     #[test]
     fn a_spinner_is_named_on_each_system() {
-        for os in [Os::MacOs, Os::Windows] {
-            let words = app_words_on(os);
-            assert_eq!(words.window.checking.as_deref(), Some("Checking"));
+        for front in [Front::MacMenuBar, Front::WindowsNotificationArea] {
+            let words = app_words(front);
+            assert_eq!(words.window.checking, "Checking");
             assert_eq!(
-                words.settings.looking_for_command_line.as_deref(),
-                Some("Looking for pitboard")
+                words.settings.looking_for_command_line,
+                "Looking for pitboard"
             );
         }
     }
@@ -752,16 +859,13 @@ mod tests {
     // points a copy Homebrew installed at Homebrew.
     #[test]
     fn the_macos_uninstall_ends_with_the_app_itself() {
-        let (mac, windows) = (
-            app_words_on(Os::MacOs).settings,
-            app_words_on(Os::Windows).settings,
-        );
+        let mac = mac_menu_bar_words();
         assert_eq!(
             (
-                mac.move_to_trash_question.as_deref(),
-                mac.move_to_trash.as_deref()
+                mac.move_to_trash_question.as_str(),
+                mac.move_to_trash.as_str()
             ),
-            (Some("Move Pitboard to the Trash?"), Some("Move to Trash"))
+            ("Move Pitboard to the Trash?", "Move to Trash")
         );
         assert_eq!(
             trash_says(None),
@@ -774,23 +878,21 @@ mod tests {
         );
         assert_eq!(
             (
-                mac.remove_with_homebrew.as_deref(),
-                mac.homebrew_removes_it.as_deref()
+                mac.remove_with_homebrew.as_str(),
+                mac.homebrew_removes_it.as_str()
             ),
             (
-                Some("Remove Pitboard with Homebrew"),
-                Some(
-                    "Its saved sign-ins and settings are deleted. Homebrew installed the app, so \
-                     Homebrew removes it."
-                )
+                "Remove Pitboard with Homebrew",
+                "Its saved sign-ins and settings are deleted. Homebrew installed the app, so \
+                 Homebrew removes it."
             )
         );
         assert_eq!(
             mac.homebrew_help,
-            Some(SetupLink {
+            SetupLink {
                 title: "Learn More".into(),
                 link: "https://docs.usepitboard.com/install/remove#remove-pitboard-itself".into()
-            })
+            }
         );
         let page = include_str!("../../../../docs/install/remove.mdx");
         assert!(
@@ -801,21 +903,15 @@ mod tests {
             page.contains("`brew uninstall --cask pitboard-app`"),
             "the command is the page's, which Learn More opens"
         );
-        assert_eq!(
-            (
-                windows.move_to_trash,
-                windows.remove_with_homebrew,
-                windows.homebrew_help
-            ),
-            (None, None, None),
-            "Windows' installer removes the app"
-        );
     }
 
     // Plan 3: a command that asks for more says so on Windows; the macOS toolbar's has no ellipsis.
     #[test]
     fn the_windows_command_bar_says_add_account_asks_for_more() {
-        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        let (mac, windows) = (
+            app_words(Front::MacMenuBar),
+            app_words(Front::WindowsNotificationArea),
+        );
         assert_eq!(
             (
                 mac.window.add_account.as_str(),
@@ -828,7 +924,10 @@ mod tests {
     // Plan 4.3 and 4.9: what the inspector and an expanded row label an account's values.
     #[test]
     fn an_accounts_values_are_labelled_in_each_systems_case() {
-        let (mac, windows) = (app_words_on(Os::MacOs), app_words_on(Os::Windows));
+        let (mac, windows) = (
+            app_words(Front::MacMenuBar),
+            app_words(Front::WindowsNotificationArea),
+        );
         let labels = |words: &AppWords| {
             [
                 words.window.email.clone(),
@@ -839,17 +938,11 @@ mod tests {
         };
         assert_eq!(labels(&mac), ["Email", "Plan", "Sign-In", "Warm-Up"]);
         assert_eq!(labels(&windows), ["Email", "Plan", "Sign-in", "Warm-up"]);
-        assert_eq!(mac.window.inspector.as_deref(), Some("Inspector"));
+        assert_eq!(mac_menu_bar_words().inspector, "Inspector");
+        assert_eq!(mac_menu_bar_words().no_selection, "No Account Selected");
         assert_eq!(
-            (
-                mac.window.no_selection.as_deref(),
-                windows.window.no_selection
-            ),
-            (Some("No Account Selected"), None)
-        );
-        assert_eq!(
-            windows.settings.diagnostics_about.as_deref(),
-            Some("Check how Pitboard, Claude Code and Codex are set up on this PC.")
+            windows_notification_area_words().diagnostics_about,
+            "Check how Pitboard, Claude Code and Codex are set up on this PC."
         );
         assert_eq!(
             (
@@ -858,13 +951,7 @@ mod tests {
             ),
             ("Uninstall", "Uninstall Pitboard")
         );
-        assert_eq!(
-            (mac.settings.troubleshoot, mac.settings.path.as_str()),
-            (None, "Path")
-        );
-        assert_eq!(
-            (windows.window.inspector, windows.window.copy.as_deref()),
-            (None, Some("Copy"))
-        );
+        assert_eq!(mac.settings.path, "Path");
+        assert_eq!(windows_notification_area_words().copy, "Copy");
     }
 }
