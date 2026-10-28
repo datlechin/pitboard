@@ -25,8 +25,8 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
   its checks run in.
 - [The Linux packages](linux-packages.md): how dpkg and rpm order their versions, the
   repository key's packets, what gpg does as its check reads it, how Debian 13 builds the Debian
-  packages and Debian 13 and Ubuntu 26.04 install them, and how Fedora 43 builds the RPM
-  packages.
+  packages and Debian 13 and Ubuntu 26.04 install them, and how Fedora 43 builds the RPM packages
+  and Fedora 43, Fedora 44 and Tumbleweed install them.
 - [WebKit and SwiftUI](webkit.md): the account windows on macOS.
 - [Foundation's URLs](foundation-urls.md): how a link was read before `pitboard-sites`.
 - [The bindings](bindings.md): what UniFFI generates for C# and Swift.

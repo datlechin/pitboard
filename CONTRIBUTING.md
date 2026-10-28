@@ -196,9 +196,9 @@ python3 .github/scripts/test-linux-app.py
 scripts` runs every case, as [The Linux app](#the-linux-app) says.
 
 For a change to the Linux packages, `packaging/linux/debian`, `packaging/linux/pitboard.spec`,
-`pitboard.rpmlintrc`, `install-test.Containerfile` there, or `build-linux-packages.sh`,
-`check-linux-packages.sh` and `test-linux-packages.sh` in `.github/scripts`, run the steps
-[Linux packages](#linux-packages) lists, and:
+`pitboard.rpmlintrc`, the `install-test-*.Containerfile` images there, or
+`build-linux-packages.sh`, `check-linux-packages.sh` and `test-linux-packages.sh` in
+`.github/scripts`, run the steps [Linux packages](#linux-packages) lists, and:
 
 ```sh
 shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh \
@@ -878,16 +878,17 @@ install: the Debian packages on Debian 13 by debhelper from `packaging/linux/deb
 packages on Fedora 43 by rpmbuild from `packaging/linux/pitboard.spec`. Both build `pitboard`,
 the release tarball's command line byte for byte with its man page and completions, and
 `pitboard-app`, which depends on the `pitboard` of its own version. Debian's add
-`pitboard-archive-keyring`, the repository's key. Build and check them in containers, and
-install the Debian packages there, into a folder `out` of your choosing:
+`pitboard-archive-keyring`, the repository's key. Build, check and install them in containers,
+into a folder `out` of your choosing:
 
 ```sh
 apps/linux/scripts/in-container.sh debian-13 command-line out
 git archive HEAD | apps/linux/scripts/in-container.sh debian-13 deb out/pitboard-v*.tar.gz out
 apps/linux/scripts/in-container.sh debian-13 packages-test
-.github/scripts/test-linux-packages.sh out
+.github/scripts/test-linux-packages.sh deb out
 git archive HEAD | apps/linux/scripts/in-container.sh fedora-43 rpm out/pitboard-v*.tar.gz out
 apps/linux/scripts/in-container.sh fedora-43 packages-test
+.github/scripts/test-linux-packages.sh rpm out
 ```
 
 - `command-line` builds the command line for musl and packs it with `pack-command-line.sh`, as a
@@ -900,7 +901,8 @@ apps/linux/scripts/in-container.sh fedora-43 packages-test
 - `packages-test` runs `test-linux-packages.py`, which builds packages broken for each rule of
   the check, with the tools of the system's format.
 - `test-linux-packages.sh` installs the Debian packages on fresh Debian 13 and Ubuntu 26.04
-  images, checks them there and purges them.
+  images, or the RPM packages on fresh Fedora 43, Fedora 44 and openSUSE Tumbleweed images,
+  checks them there and removes them.
 
 The engine copies a step's files in and out with its own `cp`, so the containers mount nothing
 more. A failed step's files are copied out too.
@@ -919,10 +921,12 @@ more. A failed step's files are copied out too.
   `packaging/linux/pitboard.rpmlintrc`, and fails where one of them matches nothing.
 
 A package manager runs as root only while an image builds. Pitboard's programs run in the
-images only as uid 1000, with fresh homes and no network.
+images only as uid 1000, with fresh homes and no network. After the removal, the test fails on
+any file or folder the packages listed, or a folder above one, that the system did not hold
+before and no package holds.
 
-CI's `linux-packaging` job runs the Debian packages' four on `ubuntu-26.04` and
-`ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<arch>` for 7 days.
+CI's `linux-packaging` job runs the four of each format on `ubuntu-26.04` and
+`ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<format>-<arch>` for 7 days.
 
 ## Tool registers
 

@@ -250,8 +250,9 @@ in a desktop's session. Not measured, each for the Linux session machines:
 - Whether Plasma's and the AppIndicator extension's `org.kde.StatusNotifierWatcher` has an owner
   by the time the session starts the autostart entry. A launch at sign-in waits 10 seconds for
   one, then ends where none came.
-- Whether the rpm installs and runs on openSUSE Tumbleweed, as on Fedora. Until a package is
-  built and installed there, Uninstall names `sudo dnf remove` alone for the rpm.
+- Whether the app runs on openSUSE Tumbleweed, as on Fedora. Its rpm installs there and zypper
+  removes it ([The RPM packages](linux-packages.md#the-rpm-packages)), but Uninstall names
+  `sudo dnf remove` alone for the rpm, and Tumbleweed has no dnf.
 - What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
   `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
   ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where
@@ -259,8 +260,8 @@ in a desktop's session. Not measured, each for the Linux session machines:
 
 ## The Linux packages
 
-Every build in [the packages' facts](linux-packages.md) is arm64, in Docker on a Mac. Not
-measured:
+Every build and install in [the packages' facts](linux-packages.md) is arm64, in Docker on a
+Mac. Not measured:
 
-- An x86_64 build of either format. rpmlint's verdict on the x86_64 command line was read from
-  an rpm `rpmbuild --target x86_64` made of the released binary.
+- An x86_64 build or install of either format. rpmlint's verdict on the x86_64 command line was
+  read from an rpm `rpmbuild --target x86_64` made of the released binary.

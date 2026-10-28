@@ -211,3 +211,33 @@ and rustup's stable, from `fedora` and `updates` of that day.
 - Tumbleweed's own packages, 118 of the 123 in its image, say their build host is
   `reproducible`.
 
+### Installed
+
+Measured the same day by `test-linux-packages.sh`, arm64, with dnf and zypper fetching from each
+distribution's repositories while the image built:
+
+- Fedora 43, `fedora:43@sha256:a651ddf4…`, dnf5 5.2.18.0; Fedora 44,
+  `fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80`, rpm 6.0.2
+  and dnf5 5.4.3.0; and openSUSE Tumbleweed 20261020,
+  `opensuse/tumbleweed@sha256:216f7358df3fabe995e8acb94343c19afc95875c5572617a4996d70149a5e83a`,
+  rpm 4.20.1 and zypper 1.14.101 on libzypp 17.38.16, with no dnf. Each installed the two packages
+  and what they require, `pitboard --version` ran as uid 1000 with no network, and
+  desktop-file-validate and `appstreamcli validate --no-net` passed the installed launcher and
+  metainfo. dnf said "skipped OpenPGP checks for 2 packages from repository: @commandline", and
+  zypper read the format 4 packages, zstd payload and all.
+- A build that held none of the folders above left, once dnf removed it on Fedora 43,
+  `dbus-1/services`, `gnome-shell/search-providers`, `krunner/dbusplugins` and the `hicolor`
+  folders, with nothing holding them. With `Requires: hicolor-icon-theme` and the others the
+  spec's, neither dnf nor zypper left a file or a folder no package holds.
+- On 29 October, with the app's program, dnf installed gtk4 4.20.4-1.fc43 and libadwaita
+  1.8.8-1.fc43 on Fedora 43 and gtk4 4.22.5-2.fc44 and libadwaita 1.9.4-1.fc44 on Fedora 44, and
+  zypper libgtk-4-1 4.22.5-1.1 and libadwaita-1-0 1.9.4-1.1 on Tumbleweed, by the sonames the app
+  requires. Fedora 44's gtk4 requires tinysparql's library, which brings libsoup3 and
+  glib-networking 2.80.1-4.fc44, whose `org.gtk.GLib.PACRunner.service` is in `dbus-1/services`
+  though it holds no folder. dnf erased pitboard-app first and glib-networking with the unneeded
+  requirements after it, which left `dbus-1` and `dbus-1/services` with nothing holding them.
+  dbus-daemon's dbus-common 1:1.16.2 holds both, as on a system with a bus, so the dnf images
+  install it before the packages. On Tumbleweed GTK's requirements bring dbus-1-common, which
+  holds them, and zypper removes the packages alone.
+- The same day on Debian 13 and Ubuntu 26.04, `apt-get purge` left no folder no package holds
+  either. `dpkg-query -L` of several packages puts an empty line between their lists.

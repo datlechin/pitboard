@@ -55,6 +55,8 @@ Requires: pitboard = %{version}-%{release}
 Requires: gtk4 >= 4.18
 Requires: libadwaita >= 1.7
 Requires: glib2 >= 2.84
+# The theme the app's icons are in, which holds its folders but symbolic/status.
+Requires: hicolor-icon-theme
 
 %description -n pitboard-app
 Pitboard switches Claude Code and OpenAI's Codex CLI between your own accounts
@@ -84,12 +86,18 @@ install -D -m 0644 %{command_line}/completions/pitboard.fish \
 %check
 %meson_test
 
+# A folder no package the packages require is sure to hold is the packages' too, so that
+# removing them takes it away. Fedora's filesystem holds zsh's and fish's, Tumbleweed's neither.
 %files
 %license LICENSE NOTICE
 %{_bindir}/pitboard
 %{_mandir}/man1/pitboard.1*
 %{bash_completions_dir}/pitboard
+%dir %{_datadir}/zsh
+%dir %{zsh_completions_dir}
 %{zsh_completions_dir}/_pitboard
+%dir %{_datadir}/fish
+%dir %{fish_completions_dir}
 %{fish_completions_dir}/pitboard.fish
 
 %files -n pitboard-app
@@ -97,11 +105,18 @@ install -D -m 0644 %{command_line}/completions/pitboard.fish \
 %{_bindir}/pitboard-app
 %{_mandir}/man1/pitboard-app.1*
 %{_datadir}/applications/com.usepitboard.Pitboard.desktop
+%dir %{_datadir}/dbus-1
+%dir %{_datadir}/dbus-1/services
 %{_datadir}/dbus-1/services/com.usepitboard.Pitboard.service
+%dir %{_datadir}/gnome-shell
+%dir %{_datadir}/gnome-shell/search-providers
 %{_datadir}/gnome-shell/search-providers/com.usepitboard.Pitboard.search-provider.ini
 %{_datadir}/icons/hicolor/scalable/apps/com.usepitboard.Pitboard.svg
 %{_datadir}/icons/hicolor/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg
+%dir %{_datadir}/icons/hicolor/symbolic/status
 %{_datadir}/icons/hicolor/symbolic/status/com.usepitboard.Pitboard-*-symbolic.svg
+%dir %{_datadir}/krunner
+%dir %{_datadir}/krunner/dbusplugins
 %{_datadir}/krunner/dbusplugins/com.usepitboard.Pitboard.desktop
 %{_datadir}/metainfo/com.usepitboard.Pitboard.metainfo.xml
 
