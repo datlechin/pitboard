@@ -222,7 +222,8 @@ The apps:
 The rest:
 
 - `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills, and in
-  `linux/` the Linux repository's public key.
+  `linux/` the Linux repository's public key and the Debian packages' `debian/` recipe, which
+  `build-linux-packages.sh` copies into the source it builds.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
@@ -293,6 +294,10 @@ keeps it is in the header of the module named.
   release.
 - The Linux repository's signing subkey has 180 days left whenever CI passes:
   `linux-repository-key.sh` in `install-script` fails otherwise (`RepositoryKey`).
+- A Linux package's command line is the release tarball's file, byte for byte
+  (`a_command_line_that_is_not_the_tarballs_is_refused`), and the app's package depends on the
+  command line of its own version
+  (`an_app_that_does_not_depend_on_its_own_command_line_is_refused`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`

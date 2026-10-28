@@ -527,6 +527,7 @@ Under Meson's prefix, `/usr` for a package:
 | `share/icons/hicolor/symbolic/status/com.usepitboard.Pitboard-<level>[-attention]-symbolic.svg` | `data/icons/symbolic/status`, the levels `plenty`, `low`, `out` and `none` |
 | `share/gnome-shell/search-providers/com.usepitboard.Pitboard.search-provider.ini` | `data` |
 | `share/krunner/dbusplugins/com.usepitboard.Pitboard.desktop` | `data/krunner` |
+| `share/man/man1/pitboard-app.1` | `data/pitboard-app.1` |
 
 The Plasma widget, `share/plasma/plasmoids/com.usepitboard.Pitboard/` with its `metadata.json`
 and `contents/ui/{main,Feed,FullRepresentation,AccountRow}.qml`, is installed while Meson's

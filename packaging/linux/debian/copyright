@@ -1,0 +1,32 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Pitboard
+Upstream-Contact: https://github.com/datlechin/pitboard/issues
+Source: https://github.com/datlechin/pitboard
+
+Files: *
+Copyright: 2026 the Pitboard authors
+License: Apache-2.0
+Comment:
+ The programs link the Rust crates Cargo.lock names, each under its own
+ license. The bill of materials on each release lists them.
+ .
+ This product is not affiliated with, endorsed by, or sponsored by Anthropic
+ PBC or OpenAI. "Anthropic", "Claude" and "Claude Code" are trademarks of
+ Anthropic PBC, and "OpenAI", "ChatGPT" and "Codex" are trademarks of OpenAI,
+ used here only to describe interoperability, under nominative fair use.
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ use this file except in compliance with the License. You may obtain a copy of
+ the License at
+ .
+ http://www.apache.org/licenses/LICENSE-2.0
+ .
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions and limitations under
+ the License.
+ .
+ On Debian systems, the full text of the Apache License, Version 2.0 can be
+ found in the file /usr/share/common-licenses/Apache-2.0.

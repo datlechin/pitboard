@@ -24,7 +24,8 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
   the GNOME, KDE and GTK readings its decisions rest on, and the images and headless display
   its checks run in.
 - [The Linux packages](linux-packages.md): how dpkg and rpm order their versions, the
-  repository key's packets, and what gpg does as its check reads it.
+  repository key's packets, what gpg does as its check reads it, and how Debian 13 builds the
+  Debian packages.
 - [WebKit and SwiftUI](webkit.md): the account windows on macOS.
 - [Foundation's URLs](foundation-urls.md): how a link was read before `pitboard-sites`.
 - [The bindings](bindings.md): what UniFFI generates for C# and Swift.

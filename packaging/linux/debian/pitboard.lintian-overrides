@@ -1,0 +1,3 @@
+# Built static against musl, so that one binary runs on every Linux whatever its C library: the
+# release tarball's, which install.sh installs too.
+pitboard: statically-linked-binary [usr/bin/pitboard]

@@ -1,0 +1,3 @@
+bash debian/command-line/completions/pitboard.bash pitboard
+fish debian/command-line/completions/pitboard.fish pitboard
+zsh debian/command-line/completions/pitboard.zsh pitboard

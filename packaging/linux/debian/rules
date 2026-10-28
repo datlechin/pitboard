@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+# The command line, the app and the repository's keyring. build-linux-packages.sh unpacks the
+# release's command line tarball in debian/command-line, the app is the Meson install of
+# apps/linux, and the keyring is the committed key, unarmored.
+
+%:
+	dh $@ --buildsystem=meson --sourcedirectory=apps/linux
+
+# No package here holds the Plasma widget, which needs Plasma 6.4, which Debian 13 lacks.
+override_dh_auto_configure:
+	dh_auto_configure -- -Dpackage=deb -Dplasma_widget=false
+
+execute_after_dh_auto_install:
+	mkdir -p debian/tmp/usr/share/keyrings
+	gpg --dearmor <packaging/linux/pitboard-archive-keyring.asc \
+		>debian/tmp/usr/share/keyrings/pitboard-archive-keyring.pgp
+
+# The command line is the release tarball's binary byte for byte, as every other way to install
+# it has it. Cargo's release profile strips both programs, so there is no debug symbol to keep.
+override_dh_strip:
+	dh_strip -Npitboard --no-automatic-dbgsym
+
+override_dh_dwz:
+	dh_dwz -Npitboard

@@ -1,8 +1,9 @@
 #!/bin/sh
-# install-deps.sh <ubuntu-26.04|debian-13|fedora-44>: as root, on a fresh image of the
-# distribution named, what the Linux app's build, tests and checks take: the distribution's
-# packages, the desktop's own fonts, rustup and the Cargo tools CI runs. An image's build and
-# CI's containers run it. It changes the system it runs on, so never a machine of your own.
+# install-deps.sh <ubuntu-26.04|debian-13|fedora-44> [packaging]: as root, on a fresh image of
+# the distribution named, what the Linux app's build, tests and checks take: the distribution's
+# packages, the desktop's own fonts, rustup and the Cargo tools CI runs, and with `packaging`,
+# what its packages' build and checks take beside. An image's build and CI's containers run it.
+# It changes the system it runs on, so never a machine of your own.
 #
 # Debian's and Ubuntu's packages come from one snapshot of their archives, so a run installs
 # what the last change here was checked against. Fedora keeps none, so its packages are the
@@ -15,11 +16,12 @@ rustup=1.29.2
 nextest=0.9.146
 hack=0.6.45
 
-if [ "$#" -ne 1 ]; then
-  echo "usage: install-deps.sh <ubuntu-26.04|debian-13|fedora-44>" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || [ "${2-packaging}" != packaging ]; then
+  echo "usage: install-deps.sh <ubuntu-26.04|debian-13|fedora-44> [packaging]" >&2
   exit 2
 fi
 distro=$1
+packaging=${2-}
 if [ "$(id -u)" -ne 0 ]; then
   echo "install-deps.sh installs packages, so it runs as root, in an image or a container" >&2
   exit 1
@@ -30,6 +32,21 @@ apt_packages='curl gcc libc6-dev pkg-config python3 libgtk-4-dev libgtk-4-bin li
   libglib2.0-dev-bin meson ninja-build desktop-file-utils appstream dbus-daemon at-spi2-core
   mutter libgl1-mesa-dri libegl-mesa0 librsvg2-bin librsvg2-common adwaita-icon-theme
   hicolor-icon-theme gvfs'
+# build-linux-packages.sh's debhelper and its completions add-on, musl for the command line and
+# gpg for the keyring; check-linux-packages.sh's lintian; and rpm, whose comparison of versions
+# test-release.py checks.
+packaging_packages=
+case $distro:$packaging in
+  *:) ;;
+  debian-13:packaging)
+    packaging_packages='build-essential debhelper dh-shell-completions dpkg-dev lintian gnupg
+      musl-tools rpm'
+    ;;
+  *)
+    echo "install-deps.sh has packaging for debian-13 alone, not $distro" >&2
+    exit 2
+    ;;
+esac
 
 case $distro in
   ubuntu-26.04 | debian-13)
@@ -48,7 +65,8 @@ case $distro in
       set -- --snapshot "$snapshot"
     fi
     # shellcheck disable=SC2086 # each list is words
-    apt-get install --update -y --no-install-recommends "$@" $apt_packages $fonts
+    apt-get install --update -y --no-install-recommends "$@" $apt_packages $fonts \
+      $packaging_packages
     ;;
   fedora-44)
     # util-linux for setpriv, which CI's jobs run the tests through. Plasma's QML modules, Qt's

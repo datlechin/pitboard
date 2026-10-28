@@ -1,0 +1,65 @@
+Source: pitboard
+Section: utils
+Priority: optional
+Maintainer: Ngo Quoc Dat <datlechin@gmail.com>
+Rules-Requires-Root: no
+# No rustc or cargo: rust-toolchain.toml's stable comes from rustup, and Debian 13's Rust 1.85 is
+# under the app's 1.92. The floor's versions reach the app's Depends: each library's symbols
+# file names its -dev package as Build-Depends-Package, and dpkg-shlibdeps takes the version
+# from here.
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-sequence-shell-completions,
+ meson,
+ pkgconf,
+ libgtk-4-dev (>= 4.18),
+ libadwaita-1-dev (>= 1.7),
+ libglib2.0-dev (>= 2.84),
+ libglib2.0-dev-bin,
+ desktop-file-utils,
+ appstream,
+ librsvg2-bin,
+ python3,
+ gnupg,
+Standards-Version: 4.7.2
+Homepage: https://usepitboard.com
+Vcs-Browser: https://github.com/datlechin/pitboard
+Vcs-Git: https://github.com/datlechin/pitboard.git
+
+Package: pitboard
+Architecture: amd64 arm64
+Depends:
+ ${misc:Depends},
+Recommends:
+ pitboard-archive-keyring,
+Description: command line that switches AI coding tools between your accounts
+ Pitboard switches Claude Code and OpenAI's Codex CLI between your own
+ accounts without signing you out, and shows what each account has left of
+ its limits.
+ .
+ This package holds the pitboard command, its manual page and its bash, zsh
+ and fish completions.
+
+Package: pitboard-app
+Architecture: amd64 arm64
+# Renewal and the watch service run the pitboard beside the app, with this version's options.
+Depends:
+ pitboard (= ${binary:Version}),
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: app that switches AI coding tools between your accounts
+ Pitboard switches Claude Code and OpenAI's Codex CLI between your own
+ accounts without signing you out, and shows what each account has left of
+ its limits.
+ .
+ This package holds the desktop app.
+
+Package: pitboard-archive-keyring
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+Description: OpenPGP key of Pitboard's package repository
+ apt checks the signature of packages.usepitboard.com's indices with this
+ key. A new copy of the key, such as one whose expiry was extended, reaches
+ installed systems as an update of this package.

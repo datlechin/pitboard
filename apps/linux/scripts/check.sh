@@ -18,6 +18,11 @@
 #   scripts                   test-linux-app.py, check-linux-app.sh's cases included
 #   widget                    the Plasma widget: qmllint, then its tests under headless.sh, which
 #                             need Plasma 6.4's QML modules, the pictures kept as ui keeps its own
+#   command-line <out>        the command line built for musl and packed into <out> as a
+#                             release builds and packs it
+#   deb <tarball> <out>       the Debian packages built into <out> from the source tar on stdin
+#                             and the command line tarball, then check-linux-packages.sh on them
+#   packages-test             test-linux-packages.py, which needs Debian's packaging tools
 #
 # Meson's build folder and its install tree are `meson` and `destdir` in Cargo's target folder.
 # The build folder holds Cargo's release target, so a run sets it up again and never removes it.
@@ -29,8 +34,14 @@ target=${CARGO_TARGET_DIR:-$repo/target}
 
 usage() {
   echo "usage: check.sh <lint | test [<archive> <folder>] | ui [<archive> <folder>] |" \
-    "archive <file> | release | floor | scripts | widget>" >&2
+    "archive <file> | release | floor | scripts | widget | command-line <out> |" \
+    "deb <tarball> <out> | packages-test>" >&2
   exit 2
+}
+
+# The version Cargo.toml's [workspace.package] names, as release.yml's guard reads it.
+manifest_version() {
+  sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml
 }
 
 [ "$#" -ge 1 ] || usage
@@ -98,6 +109,25 @@ case $step in
     PITBOARD_LINUX_PICTURES=${PITBOARD_LINUX_PICTURES:-$target/linux-pictures}
     export PITBOARD_LINUX_PICTURES
     apps/linux/scripts/headless.sh sh "$plasmoid/tests/run-tests.sh"
+    ;;
+  command-line)
+    [ "$#" -eq 1 ] || usage
+    triple=$(uname -m)-unknown-linux-musl
+    # ring compiles C, and needs a compiler that targets musl.
+    env "CC_$(echo "$triple" | tr - _)=musl-gcc" \
+      cargo build --release --locked -p pitboard --target "$triple"
+    sh .github/scripts/pack-command-line.sh "$target/$triple/release/pitboard" \
+      "pitboard-v$(manifest_version)-$triple" "$1"
+    ;;
+  deb)
+    [ "$#" -eq 2 ] || usage
+    sh .github/scripts/build-linux-packages.sh deb "$1" "$2"
+    sh .github/scripts/check-linux-packages.sh "$2" "$1" "$(manifest_version)"
+    ;;
+  packages-test)
+    [ "$#" -eq 0 ] || usage
+    TEST_LINUX_PACKAGES_TOOLS='dpkg dpkg-deb lintian gpg desktop-file-validate appstreamcli' \
+      python3 .github/scripts/test-linux-packages.py
     ;;
   *) usage ;;
 esac
