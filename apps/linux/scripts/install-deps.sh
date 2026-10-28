@@ -25,10 +25,11 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+# GVfs, as GNOME desktops run it: it changes the files GIO makes of links.
 apt_packages='curl gcc libc6-dev pkg-config python3 libgtk-4-dev libgtk-4-bin libadwaita-1-dev
   libglib2.0-dev-bin meson ninja-build desktop-file-utils appstream dbus-daemon at-spi2-core
   mutter libgl1-mesa-dri libegl-mesa0 librsvg2-bin librsvg2-common adwaita-icon-theme
-  hicolor-icon-theme'
+  hicolor-icon-theme gvfs'
 
 case $distro in
   ubuntu-26.04 | debian-13)
@@ -55,7 +56,7 @@ case $distro in
       ca-certificates curl gcc pkgconf-pkg-config python3 gtk4-devel gtk4-devel-tools \
       libadwaita-devel glib2-devel meson ninja-build desktop-file-utils appstream dbus-daemon \
       at-spi2-core mutter mesa-dri-drivers mesa-libEGL librsvg2-tools adwaita-icon-theme \
-      hicolor-icon-theme adwaita-sans-fonts adwaita-mono-fonts util-linux
+      hicolor-icon-theme adwaita-sans-fonts adwaita-mono-fonts util-linux gvfs
     ;;
   *)
     echo "install-deps.sh knows ubuntu-26.04, debian-13 and fedora-44, not $distro" >&2

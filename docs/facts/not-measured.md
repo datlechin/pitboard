@@ -1,9 +1,10 @@
 # Not measured
 
 What nobody has measured about Claude Code, Codex, Claude Desktop, watching Pitboard's
-directory and the Linux app's checks, and what Pitboard does where it cannot know. What was read
-or measured is in each tool's register, `crates/pitboard-core/src/provider/<tool>/assumptions.rs`,
-and in [The app model](app-model.md#watching-pitboards-directory).
+directory, the Linux app and its checks, and what Pitboard does where it cannot know. What was
+read or measured is in each tool's register,
+`crates/pitboard-core/src/provider/<tool>/assumptions.rs`, and in
+[The app model](app-model.md#watching-pitboards-directory).
 
 ## Claude Code
 
@@ -196,3 +197,24 @@ Mac. None of CI's Linux app jobs has run yet. Not measured:
 - How long each job takes with no cache, and how fast snapshot.ubuntu.com answers a runner,
   whose stalls from the Mac lasted minutes. Only the jobs' timeouts bound them.
 - `in-container.sh` under podman: only docker has run it.
+
+## The Linux app on a desktop
+
+The app's services were measured against stand-ins on a bus of the tests' own and with systemd's
+autostart generator in the checks' images ([What the Linux app rests on](linux-app.md)), never
+in a desktop's session. Not measured, each for the Linux session machines:
+
+- Whether Plasma starts an autostart entry through `xdg-desktop-autostart.target` as GNOME's
+  systemd session does, and whether it honours `TryExec` there and where Plasma starts
+  without systemd. The app writes `TryExec` either way.
+- The `PATH` and the rest of the environment the app starts with from the launcher, from an
+  autostart entry and by D-Bus activation, on GNOME and on Plasma under Wayland (M7), and so
+  whether a debug build started that way would run on the real homes. A debug build has no
+  launcher, D-Bus service or autostart entry, and quits outside a fixture.
+- Which notification backend GLib picks in a Plasma session, which turns on whether anything
+  owns `org.gtk.Notifications` there, and how many buttons Plasma draws. The app posts the
+  same notice to either, at most three buttons.
+- Whether a click on a notification in GNOME Shell and in Plasma reaches `app.notice-clicked`
+  with its argument, as the stand-ins of their interfaces do.
+- `PrepareForSleep` from a real logind across a suspend. The app tells the model a wake only
+  on `false` from the owner of `org.freedesktop.login1`.

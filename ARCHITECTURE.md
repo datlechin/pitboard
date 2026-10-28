@@ -190,8 +190,9 @@ The apps:
   - `Pitboard.Probe`: the session machine's measurements of the app's adapters, never shipped.
   - `Icon`: the drawings `Pitboard.ico` is made from.
 - `apps/linux/`: the Linux app, GTK 4 and libadwaita, which Meson builds and installs.
-  - `src/`: the glue: what a build is and the names it answers to (`config.rs`), and whether
-    a launch starts anything (`launch.rs`).
+  - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
+    launch starts anything (`launch.rs`), and the desktop's services the app speaks for the
+    model, with a fixture's stand-ins for them (`platform/`).
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons, and the GResource `build.rs` compiles for the program.
@@ -625,6 +626,18 @@ keeps it is in the header of the module named.
   (`a_build_with_no_model_quits_before_it_owns_a_name`).
 - Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
   (`neither_search_starts_pitboard`).
+- A Linux notification's click reaches the app only as `app.notice-clicked`, with the argument
+  the notice gave it (`a_notice_posts_its_default_action_and_buttons_as_app_actions`,
+  `a_click_on_a_freedesktop_server_reaches_the_notices_action_with_its_argument`).
+- The Linux app starts at sign-in by one autostart entry that names its program and tries it
+  first. Turning it off removes that entry alone, and Uninstall that entry and the app's own
+  data and cache folders (`turning_it_off_removes_only_its_own_entry`,
+  `uninstall_removes_the_apps_own_entry_and_folders_and_nothing_else`).
+- The Linux app makes the files of its own link scheme, so a link reaches the model as written,
+  where GVfs would write it again (`a_link_opened_is_handed_on_as_written`).
+- In a fixture, the Linux app's stand-ins for the autostart entry, the notifications, the tray
+  and the browser write only in the fixture's folder and reach no bus
+  (`a_fixtures_stand_ins_write_only_in_its_folder`).
 - Only a Meson release build installs anything, and it claims `com.usepitboard.Pitboard` and
   `pitboard://` alone: `check-linux-app.sh` fails a tree that holds a fixture's text,
   `.Devel`, `pitboard-debug` or a file outside its layout (`test-linux-app.py`).

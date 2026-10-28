@@ -25,6 +25,9 @@ adw = { package = "libadwaita", version = "0.9.2", features = ["v1_7"] }
 gio = { version = "0.22.10", features = ["v2_84"] }
 glib = { version = "0.22.10", features = ["v2_84"] }
 gtk = { package = "gtk4", version = "0.11.5", features = ["v4_18"] }
+# A fixture's stand-ins write what they would have done as JSON lines.
+serde.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 tempfile.workspace = true

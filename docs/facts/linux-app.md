@@ -1,6 +1,6 @@
 # What the Linux app rests on
 
-Read on 28 October 2026 in the sources named, each at the version Debian 13 ships where that
+Read on 28 and 29 October 2026 in the sources named, each at the version Debian 13 ships where that
 matters, and measured where a line says so in Docker on the owner's Mac, as uid 1000 in
 `debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259` (arm64)
 with Debian's packages of that day, or in [the checks' images](#the-checks-images).
@@ -97,6 +97,116 @@ service file nor a launcher, and quits before it reaches the bus (`launch.rs`).
   GTK 4.18.6 answers `""` (`gtk/a11y/gtkatspicontext.c:770-771`), so the UI tests run where
   GTK is 4.22, Ubuntu 26.04's, and the floor's leg runs the rest.
 
+## Notifications
+
+`src/platform/notifications.rs` posts through GNotification. Read in GLib 2.84.4 and GNOME Shell
+48.7, Debian 13's:
+
+- GApplication makes its notification backend at its first send or withdraw
+  (`gio/gapplication.c:3104-3105,3146-3147`). GLib picks the backend once for the process: the
+  one `GNOTIFICATION_BACKEND` names, else the first by priority whose check passes, and keeps
+  the answer (`gio/giomodule.c:764-871`). `portal`, 110, only where GLib uses portals, in a
+  sandbox (`gio/gportalnotificationbackend.c:44-53`); `gtk`, 100, where `org.gtk.Notifications`
+  has an owner on the session bus when first asked (`gio/ggtknotificationbackend.c:44-77`);
+  `freedesktop`, 0, always (`gio/gfdonotificationbackend.c:56-59,452-460`). So the app's tests
+  run each backend in a program of its own.
+- The `gtk` backend sends `AddNotification` with the app's id, the notice's id and the
+  notification as a dictionary: `title`, `body`, `priority` by its nick, `default-action` and
+  its target, and `buttons`, each a `label`, an `action` and a `target`
+  (`gio/gnotification.c:766-857`).
+- The `freedesktop` backend sends `Notify` with the actions `default` and each button's
+  detailed action name, and the hints `desktop-entry`, the app's id, and `urgency`: 0 for low,
+  1 for normal and high, 2 for urgent (`gio/gfdonotificationbackend.c:256-381`). It hears
+  `ActionInvoked` from the owner of `org.freedesktop.Notifications` on the app's own
+  connection, and activates the `app.` action named, with its target, only where the app has
+  that action with that parameter type (`:135-240,464-500`). A click reaches a running app
+  alone.
+- GNOME Shell refuses a notification from an id with no `<id>.desktop` installed ("could not be
+  found", `js/ui/notificationDaemon.js:491-498,663-675`), so the debug build's `.Devel` id,
+  which installs no launcher, gets none: its fixture posts to a stand-in. It draws the first
+  three buttons (`js/ui/messageList.js:20,752`), takes the priority nicks as its urgencies
+  (`js/ui/notificationDaemon.js:404-409`), and activates an `app.` action by
+  `org.freedesktop.Application.ActivateAction` on the app's bus name
+  (`js/ui/notificationDaemon.js:513-517`, `src/shell-app.c:1523-1529`), which the bus starts
+  where the app is not running.
+
+Measured on a bus of the test's own: a notice posted from another thread reaches a stand-in
+`org.gtk.Notifications` with its default action and its first three buttons as
+`app.notice-clicked` and their arguments, and a stand-in freedesktop server's `ActionInvoked`
+for the default and for a button reaches the app's `notice-clicked` with each argument
+(`tests/notifications_gtk.rs`, `tests/notifications_freedesktop.rs`). An app only registered
+keeps its bus connection past its drop, its exported actions holding it, and `TestDBus` waits
+30 seconds for it ("Weak notify timeout"); `g_application_run`'s end lets go of it
+(`gio/gapplication.c:2729-2741`), so those tests run the app.
+
+## Start at sign-in
+
+`src/platform/autostart.rs` writes `$XDG_CONFIG_HOME/autostart/<app id>.desktop`, with
+`Exec=<program> --sign-in` and `TryExec=<program>`. A flag of the app's own, since GLib keeps
+`--gapplication-service` for D-Bus service files (`gio/gapplication.c:551-552`).
+
+- The Desktop Application Autostart Specification 0.5 (13 February 2006): of entries of one
+  name, the one in `$XDG_CONFIG_HOME/autostart` counts (2.1); an entry with `Hidden=true` is
+  ignored, and hides the others of its name (2.2.1); one whose non-empty `TryExec` names no
+  installed program is not started (2.2.3).
+- The Desktop Entry Specification 1.5, The Exec key: an argument holding a reserved character is
+  double quoted, with `"`, `` ` ``, `$` and `\` escaped, and a literal `%` is `%%`.
+- systemd 257.13's XDG autostart generator, which turns entries into units of the user
+  manager, reads the person's folder before `$XDG_CONFIG_DIRS`
+  (`src/xdg-autostart-generator/xdg-autostart-generator.c:56-77`), and makes no unit for an
+  entry with `Hidden=true` (`xdg-autostart-service.c:527-530`), one it cannot read, which it
+  hides (`:357-361`), or one whose `TryExec` it cannot find (`:561-570`).
+
+Measured in Debian 13's image (systemd 257.13) and Fedora 44's (259.10), as uid 1000, by
+running the generator on the entry the app writes: it made
+`app-com.usepitboard.Pitboard@autostart.service`, `Type=exec`,
+`ExecStart=:<program> --sign-in`, `After=` and `PartOf=graphical-session.target`, wanted by
+`xdg-desktop-autostart.target`. A program path with a space, quoted, came out as one argument.
+`Hidden=true`, or the program removed, made no unit. So an entry starts its program as a unit of
+the user manager, in the manager's environment, whatever the shell that wrote it had: a
+fixture's stand-in writes in place of the entry.
+
+## Waking
+
+`src/platform/logind.rs` hears `PrepareForSleep` on the system bus.
+
+- org.freedesktop.login1(5), systemd 257.13: `PrepareForSleep` is sent with `true` right
+  before the system suspends or hibernates and with `false` right after
+  (`man/org.freedesktop.login1.xml:769-783`).
+- GLib 2.84.4 delivers a signal subscribed to by a well-known sender only from the name's
+  current owner (`gio/gdbusconnection.c:4326-4350`), and `g_bus_watch_name_on_connection` with
+  no flags asks the bus to start nothing.
+
+Measured on a bus of the test's own: `PrepareForSleep(true)` from the owner of
+`org.freedesktop.login1` tells nothing and `(false)` tells one wake; with no owner, the app hears
+that once, and a `(false)` from a connection that owns no such name tells nothing
+(`tests/logind.rs`).
+
+## Links
+
+`src/platform/links.rs` hands the model what arrives, as text.
+
+- GApplication makes a `GFile` of each link: on the command line through
+  `g_file_new_for_commandline_arg` (`gio/gapplication.c:1209`), which takes an argument with a
+  scheme to `g_file_new_for_uri` (`gio/gfile.c:7640-7650`), and in `Open` over the bus through
+  `g_file_new_for_uri` (`gio/gapplicationimpl-dbus.c:240`).
+- GLib's own VFS makes a link of a scheme it does not know a file that gives the text back as
+  given (`gio/glocalvfs.c:92-106`, `gio/gdummyfile.c:141-149`). GVfs 1.57.2, Debian 13's,
+  parses it into a mount and writes it again (`client/gdaemonvfs.c:173-260,389-422`,
+  `client/gdaemonfile.c:207-214`).
+- A scheme registered with `g_vfs_register_uri_scheme`, GLib 2.50's, is looked up before the
+  VFS's own for that process alone (`gio/gvfs.c:195-252,387-470`).
+- GTK 4.18.6's `GtkUriLauncher` opens a link through the OpenURI portal where it has the
+  interface at version 3, and through GIO's handler for the scheme otherwise
+  (`gtk/gtkurilauncher.c:320-328`, `gdk/gdk.c:486-508`).
+
+Measured in Debian 13's image with Debian's `gvfs` 1.57.2 added, as uid 1000 under
+`headless.sh`: `open` handed `pitboard-debug://open/?url=…` for `pitboard-debug://open?url=…`
+and `pitboard-debug:///open` for `pitboard-debug:open`. Without GVfs, and with the app's scheme
+registered in either image, each came as written. Registered with GLib's own VFS made first
+inside the lookup, the run did not return in nine minutes and was stopped; made before, it
+passed. So the app registers its scheme before it runs, and every check's image has GVfs.
+
 ## The install layout
 
 Under Meson's prefix, `/usr` for a package:
@@ -160,6 +270,10 @@ arm64 in Docker 29.8.2 on the owner's Mac on 28 October 2026, as uid 1000:
 | Debian 13 | `debian:13@sha256:8c4733a9…` | snapshot `20261028T000000Z` | 4.18.6, 1.7.6, 2.84.4 | 48.7 | 25.0.7, 19.1.7 |
 | Fedora 44 | `fedora:44@sha256:43b29f65…` | `fedora` and `updates`, that day | 4.22.5, 1.9.4, 2.88.4 | 50.6 | 26.2.5, 22.1.8 |
 
+- Each image has GVfs, as GNOME desktops do ([Links](#links)), since 29 October 2026: 1.60.0 in
+  Ubuntu and 1.57.2 in Debian from the same snapshot, and 1.60.3 in Fedora, whose packages that
+  day had the versions above. GVfs's daemon starts on the private bus when GIO first asks, and
+  says "A connection to the bus can't be made" as the bus ends with each run.
 - apt 3.2.0 (Ubuntu) and 3.0.3 (Debian) take `--snapshot <id>` with `install --update`, and
   read every suite of the image's sources from `snapshot.ubuntu.com/ubuntu/<id>`, or
   `snapshot.debian.org/archive/debian/<id>` and `debian-security/<id>`, with no change to the
@@ -188,7 +302,8 @@ arm64 in Docker 29.8.2 on the owner's Mac on 28 October 2026, as uid 1000:
 - Debian's 397 packages, 198 MB, came from snapshot.debian.org in 15 s, and Fedora's 414,
   279 MiB, in a 93 s step. snapshot.ubuntu.com answered each request in about 2 s, a cached one
   included: Ubuntu's 400 packages, 215 MB, took 3 min 39 s, and in two other runs apt waited
-  more than ten minutes on one file, which curl fetched in 7 s.
+  more than ten minutes on one file, which curl fetched in 7 s. On 29 October its 453 packages
+  with GVfs, 223 MB, took 1 h 18 min.
 
 ## The headless display
 
