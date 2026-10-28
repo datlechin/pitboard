@@ -18,7 +18,7 @@ public sealed class LaunchingTests
     [TestMethod]
     public void UnregisteringAsksNeitherTheCoreNorARunningCopy()
     {
-        var start = Launching.Decide(["--unregister"], Release, null, Unasked<ReadFailure?>("the core"), Unasked<bool>("the key"));
+        var start = Launching.Decide(["--unregister"], Release, null, Unasked<ReadFailure?>("the core"), Unasked<bool?>("the key"));
 
         Assert.AreEqual(Start.Unregister, start);
     }
@@ -27,7 +27,7 @@ public sealed class LaunchingTests
     [TestMethod]
     public void UnregisteringTheShareTargetAsksNeitherTheCoreNorARunningCopy()
     {
-        var start = Launching.Decide(["--unregister-share"], Release, null, Unasked<ReadFailure?>("the core"), Unasked<bool>("the key"));
+        var start = Launching.Decide(["--unregister-share"], Release, null, Unasked<ReadFailure?>("the core"), Unasked<bool?>("the key"));
 
         Assert.AreEqual(Start.UnregisterShare, start);
     }
@@ -35,7 +35,7 @@ public sealed class LaunchingTests
     [TestMethod]
     public void ARefusedLaunchTakesNoKey()
     {
-        var start = Launching.Decide([], Release, null, () => Elevated, Unasked<bool>("the key"));
+        var start = Launching.Decide([], Release, null, () => Elevated, Unasked<bool?>("the key"));
 
         Assert.AreEqual(Start.Refused, start);
     }
@@ -45,6 +45,32 @@ public sealed class LaunchingTests
     {
         Assert.AreEqual(Start.Run, Launching.Decide([], Release, null, () => null, () => true));
         Assert.AreEqual(Start.Redirect, Launching.Decide([], Release, null, () => null, () => false));
+    }
+
+    // Windows App SDK found no copy holding the key for one of two launches at once (docs/facts/windows-app.md).
+    [TestMethod]
+    public void ALaunchThatFindsNoCopyHoldingTheKeyIsDropped()
+    {
+        Assert.AreEqual(Start.Dropped, Launching.Decide([], Release, null, () => null, () => null));
+    }
+
+    [TestMethod]
+    public void TheCopyHoldingTheKeyIsAskedForAgainUntilFound()
+    {
+        var answers = new Queue<string?>([null, null, "running"]);
+        var pauses = 0;
+
+        Assert.AreEqual("running", Launching.Holder(answers.Dequeue, () => pauses++));
+        Assert.AreEqual(2, pauses);
+    }
+
+    [TestMethod]
+    public void TheCopyHoldingTheKeyIsAskedForAFewTimesAtMost()
+    {
+        var asked = 0;
+
+        Assert.IsNull(Launching.Holder<string>(() => { asked++; return null; }, () => { }));
+        Assert.AreEqual(Launching.Asks, asked);
     }
 
     [TestMethod]
@@ -126,7 +152,7 @@ public sealed class LaunchingTests
     [TestMethod]
     public void ADebugBuildOutsideAFixtureRefusesALinkAndTakesNoKey()
     {
-        Assert.AreEqual(Start.LinkRefused, Launching.Decide([Shared], Debug, null, () => null, Unasked<bool>("the key")));
+        Assert.AreEqual(Start.LinkRefused, Launching.Decide([Shared], Debug, null, () => null, Unasked<bool?>("the key")));
         Assert.AreEqual(Start.Run, Launching.Decide([Shared], Debug, Fixture, () => null, () => true));
         Assert.AreEqual(Start.Run, Launching.Decide([], Debug, null, () => null, () => true), "a launch with no link");
         Assert.AreEqual(

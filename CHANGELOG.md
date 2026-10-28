@@ -16,6 +16,8 @@ again._
 
 - On macOS, the Accounts window keeps working through a switch, and as a tool's accounts come
   or go, where macOS 27 could quit Pitboard while the list moved its rows.
+- Pitboard for Windows started twice at once opens one window, where the second copy could
+  quit with an error.
 
 ## [1.0.0-beta.6] - 2026-10-28
 

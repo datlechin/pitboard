@@ -26,6 +26,14 @@ Microsoft's documentation.
   the STA thread, as Microsoft's [App instancing](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/applifecycle/applifecycle-instancing)
   does it, to a copy that runs and to one that is starting, on both images (`LifecycleTests`,
   run 38795330950).
+- `FindOrRegisterForKey` answers null where another copy holds the key's mutex but no copy
+  `GetInstances` lists has the key: `TrySetKey` fails and `FindForKey` returns `nullptr`
+  (commit 13160d54, read on 28 October 2026). One of two launches at once met it on the x64
+  image and quit on a `NullReferenceException` in `Program`
+  (`LifecycleTests.TwoLaunchesAtOnceOpenOneWindow`, run 40717766160), once in the 40 runs
+  before it. So a launch asks again, 50 ms apart and 20 times at most, which finds the copy
+  or takes the key once that copy has quit, and drops a launch that still finds none
+  (`LaunchingTests`).
 - `FindOrRegisterForKey` returns the `AppInstance` that `GetCurrent` does, so the handler
   `Program` connects before it takes the key hears each launch handed to that key. An
   unpackaged launch's arguments are its whole command line, as `GetCommandLine` has it, its

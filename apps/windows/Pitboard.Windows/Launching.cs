@@ -51,11 +51,15 @@ public static class Launching
 
     public const string OpenWindow = "--open-window";
 
+    // How many times a launch asks for the copy holding the key.
+    public const int Asks = 20;
+
     // A link launch reads no flag: Microsoft's guide to URI schemes warns that a link's unencoded quotes or spaces split
-    // it into more arguments, which another app can make look like Pitboard's own.
+    // it into more arguments, which another app can make look like Pitboard's own. holdsKey answers null where no copy
+    // could be found holding the key.
     public static Start Decide(
         IReadOnlyCollection<string> arguments, Identity running, string? fixtureFolder, Func<ReadFailure?> refusal,
-        Func<bool> holdsKey)
+        Func<bool?> holdsKey)
     {
         var link = Link(arguments, running.LinkScheme);
         var given = link is null ? arguments.ToHashSet(StringComparer.OrdinalIgnoreCase) : [];
@@ -79,13 +83,35 @@ public static class Launching
             return Start.LinkRefused;
         }
 
-        if (holdsKey())
+        switch (holdsKey())
         {
-            return Start.Run;
+            case true:
+                return Start.Run;
+            case null:
+                return Start.Dropped;
         }
 
         // A click's arguments reach only the copy that registered, and nobody asked for the other two.
         return Unasked(given) ? Start.Dropped : Start.Redirect;
+    }
+
+    // Windows App SDK's FindOrRegisterForKey answers null where another copy holds the key's mutex but none it lists
+    // has the key, as for one of two launches at once (docs/facts/windows-app.md). Asked again, it finds that copy, or
+    // takes the key once that copy has quit.
+    public static T? Holder<T>(Func<T?> findOrRegister, Action pause)
+        where T : class
+    {
+        for (var asked = 1; asked < Asks; asked++)
+        {
+            if (findOrRegister() is { } holder)
+            {
+                return holder;
+            }
+
+            pause();
+        }
+
+        return findOrRegister();
     }
 
     // A Jump List task opens what it asks for, and no window of its own.
