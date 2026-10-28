@@ -136,3 +136,78 @@ distribution's archive while the image built:
   libglib2.0-0t64 2.88.0-1ubuntu0.1 on Ubuntu 26.04, and with Debian 13.7's libgtk-4-1
   4.18.6+ds-2 and libadwaita-1-0 1.7.6-1~deb13u1 beside the libglib2.0-0t64 2.84.4-3~deb13u5 the
   validators had brought.
+
+## The RPM packages
+
+Measured on 29 October 2026 in Docker on the owner's Mac (arm64), as uid 1000 in Fedora 43 from
+`fedora:43@sha256:a651ddf48ea28a06ed4e1e6519f51c9f47e7a5a138722ade87369b8fbb7e5b42` with
+rpm-build 6.0.2-1.fc43, redhat-rpm-config 343-14.fc43, rpmlint 2.8.0, meson 1.8.5, gcc 15.3.1
+and rustup's stable, from `fedora` and `updates` of that day.
+
+- Fedora 43's and Fedora 44's RPM, 6.0.2, evaluates `%_rpmformat` to 4, which Fedora 43's
+  `/usr/lib/rpm/macros` sets. Its changelog says "Revert to v4 package format by default for now
+  (upstream switched to v6)".
+  With `--define '_rpmformat 6'` rpmbuild wrote a package whose `%{RPMFORMAT}` is 6 and whose
+  lead `file` reads as "RPM v4.0", where format 4's reads "RPM v3.0".
+- redhat-rpm-config's `%_binary_payload` is `w19.zstdio` in format 4 too, so the packages need
+  `rpmlib(PayloadIsZstd)`.
+- `%__os_install_post` runs `brp-strip` and `brp-strip-comment-note` only where there is no
+  debuginfo package, which `%global debug_package %{nil}` gives. `brp-strip` runs `strip -g`
+  only on what `file` calls "not stripped", which neither program is. `brp-strip-comment-note`
+  runs `strip -R .comment` on every stripped ELF file, and took the musl command line's 168 bytes
+  of `.comment` out. With `%global __brp_strip_comment_note %{nil}` the packaged
+  `/usr/bin/pitboard` is the tarball's (`cmp`). `add-determinism` and the other steps leave it.
+- The musl command line carries a GNU build ID, `.note.gnu.build-id` (`readelf -n`), from Debian's
+  gcc. Fedora sets `%_build_id_links compat` and `%_missing_build_ids_terminate_build 1`, but with
+  no debuginfo package rpmbuild made no `/usr/lib/.build-id` link, and packaged a copy of the
+  binary whose build ID `objcopy` had removed without a word.
+- `%meson` begins with `%set_build_flags`, which exports
+  `RUSTFLAGS="${RUSTFLAGS:-%{build_rustflags}}"` wherever rust-srpm-macros' `macros.rust`
+  defines `build_rustflags`:
+  `-Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Cforce-frame-pointers=yes`, with
+  `-Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes` in a build. `%undefine
+  build_rustflags` leaves `RUSTFLAGS` as the caller set it. Its `CFLAGS` and `LDFLAGS` are
+  Fedora's hardened ones.
+- `%meson` sets up `%{_vpath_srcdir}` in `redhat-linux-build` with `--buildtype=plain
+  --wrap-mode=nodownload --auto-features=enabled`, and C1's Cargo step built the app in it with
+  no network. `%meson_test` ran the 14 Meson tests in `%check`.
+- redhat-rpm-config sets `%source_date_epoch_from_changelog 1` and
+  `%clamp_mtime_to_source_date_epoch 1`. With `SOURCE_DATE_EPOCH` in the environment, rpmbuild
+  takes it over the changelog's date for every file's time, and with
+  `use_source_date_epoch_as_buildtime` for the build time. Macros expand in `%changelog`.
+- `%{bash_completions_dir}`, `%{zsh_completions_dir}` and `%{fish_completions_dir}` are
+  `/usr/share/bash-completion/completions`, `/usr/share/zsh/site-functions` and
+  `/usr/share/fish/vendor_completions.d`.
+- Fedora's `filesystem` holds the completions' folders, `applications`, `metainfo`,
+  `licenses` and `man/man1`; `hicolor-icon-theme` 0.18 holds `hicolor`, `scalable/apps` and
+  `symbolic/apps` but not `symbolic/status`; `dbus-common` holds `dbus-1/services`; in the build
+  image nothing holds `gnome-shell/search-providers` or `krunner/dbusplugins`. Tumbleweed's
+  `filesystem` holds `applications`, `metainfo`, `licenses` and `man/man1`, and util-linux
+  `bash-completion/completions`, but none holds zsh's or fish's folder.
+- GTK's and GLib's libraries version no symbol, and libadwaita one, `LIBADWAITA_1_0`, for all of
+  1.x (`readelf -V`), so rpm's ELF generator requires `libgtk-4.so.1()(64bit)`,
+  `libadwaita-1.so.0()(64bit)` and `libglib-2.0.so.0()(64bit)` with no version. Fedora's gtk4,
+  libadwaita and glib2 provide those. Only glibc's requirements carry versions, so the sonames
+  alone take any GTK 4, libadwaita 1 and GLib 2, below the floor too.
+- The names the spec requires at the floor's versions, read on 29 October with
+  `dnf repoquery --provides` in fedora:43 and fedora:44 and `zypper info --provides` in
+  Tumbleweed 20261020: Fedora's gtk4, libadwaita and glib2 provide their own names at their
+  versions, such as `gtk4 = 4.20.4-1.fc43`; Tumbleweed's libgtk-4-1 4.22.5-1.1 provides
+  `gtk4 = 4.22.5`, libadwaita-1-0 1.9.4-1.1 `libadwaita = 1.9.4` and libglib-2_0-0 2.88.4-1.1
+  `glib2 = 2.88.4`. So `gtk4 >= 4.18`, `libadwaita >= 1.7` and `glib2 >= 2.84` hold the floor on
+  every rpm system of it, and need no rich dependency.
+- The app requires `libgtk-4.so.1()(64bit)`, `libadwaita-1.so.0()(64bit)` with
+  `libadwaita-1.so.0(LIBADWAITA_1_0)(64bit)`, `libglib-2.0.so.0()(64bit)`,
+  `libgio-2.0.so.0()(64bit)`, `libgobject-2.0.so.0()(64bit)` and `libpango-1.0.so.0()(64bit)`,
+  beside glibc's and libgcc_s's, and `check-linux-packages.sh` passes it.
+- rpmlint 2.8.0 with Fedora's configuration, `--strict`: on the command line,
+  `statically-linked-binary`, and on aarch64 `position-independent-executable-suggested`, which
+  it gives where `file` does not say "pie executable". The released v1.0.0-beta.6's
+  aarch64-unknown-linux-musl `pitboard` is "statically linked", its x86_64-unknown-linux-musl one
+  "static-pie linked": an rpm of each, made with `rpmbuild --target`, drew the first error on both
+  and the second on aarch64 alone. On a file named other than `%{NVRA}.rpm`,
+  `non-coherent-filename`. On the app, nothing. A filter that matches nothing is an
+  error, `unused-rpmlintrc-filter`, and `-r` takes one file, as its `lint.py` reads it.
+- Tumbleweed's own packages, 118 of the 123 in its image, say their build host is
+  `reproducible`.
+

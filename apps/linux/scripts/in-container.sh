@@ -1,13 +1,13 @@
 #!/bin/sh
-# in-container.sh <ubuntu-26.04|debian-13|fedora-44> [step...]: the Linux app's checks on a
-# Linux of their own, with podman or else docker, as CI runs them: check.sh's steps, each in a
-# fresh container of the image apps/linux/containers holds for the distribution, as the image's
-# uid 1000, on no network. With no step, the steps the distribution's CI job runs.
+# in-container.sh <ubuntu-26.04|debian-13|fedora-43|fedora-44> [step...]: the Linux app's checks
+# on a Linux of their own, with podman or else docker, as CI runs them: check.sh's steps, each in
+# a fresh container of the image apps/linux/containers holds for the distribution, as the
+# image's uid 1000, on no network. With no step, the steps the distribution's CI job runs.
 #
-# in-container.sh <distro> command-line <out> and in-container.sh <distro> deb <command line
-# tarball> <out> run the one step, which writes files for this machine: the engine copies the
-# tarball in and the step's files out to <out>, and `deb` reads the source tar on this script's
-# stdin, as `git archive HEAD |` writes it.
+# in-container.sh <distro> command-line <out> and in-container.sh <distro> <deb|rpm> <command
+# line tarball> <out> run the one step, which writes files for this machine: the engine copies
+# the tarball in and the step's files out to <out>, and `deb` and `rpm` read the source tar on
+# this script's stdin, as `git archive HEAD |` writes it.
 #
 # A container sees the repository read only at /src, this machine's Cargo registry read only,
 # and the volume PITBOARD_TARGET_VOLUME names, pitboard-linux-app-target unless set, which keeps
@@ -21,8 +21,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
 
 usage() {
-  echo "usage: in-container.sh <ubuntu-26.04|debian-13|fedora-44> [step... |" \
-    "command-line <out> | deb <command line tarball> <out>]" >&2
+  echo "usage: in-container.sh <ubuntu-26.04|debian-13|fedora-43|fedora-44> [step... |" \
+    "command-line <out> | <deb|rpm> <command line tarball> <out>]" >&2
   exit 2
 }
 
@@ -40,11 +40,15 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 case ${1-} in
   command-line) [ "$#" -eq 2 ] || usage ;;
-  deb) [ "$#" -eq 3 ] || usage ;;
+  deb | rpm) [ "$#" -eq 3 ] || usage ;;
   "")
     case $distro in
       ubuntu-26.04) set -- lint test ui release ;;
       debian-13) set -- lint test floor ;;
+      fedora-43)
+        echo "in-container.sh fedora-43 builds the RPM packages, and runs only the step named" >&2
+        exit 2
+        ;;
       *) set -- lint test widget ;;
     esac
     ;;
@@ -139,9 +143,9 @@ case $1 in
     echo "in-container.sh: $distro command-line" >&2
     handed command-line "$2"
     ;;
-  deb)
-    echo "in-container.sh: $distro deb" >&2
-    handed deb "$3" "$2"
+  deb | rpm)
+    echo "in-container.sh: $distro $1" >&2
+    handed "$1" "$3" "$2"
     ;;
   *)
     for step in "$@"; do

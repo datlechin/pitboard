@@ -1,0 +1,7 @@
+# rpmlint's filters for check-linux-packages.sh's run on the RPM packages, each with its reason.
+# rpmlint fails a run where a filter matches nothing, so none outlives its reason.
+
+# The command line is the release tarball's, built static against musl so that one binary runs on
+# every Linux whatever its C library, as install.sh installs it too. Rust's
+# aarch64-unknown-linux-musl target links it at a fixed address, its x86_64 one as static-pie.
+addFilter("^pitboard\.\w+: E: (statically-linked-binary|position-independent-executable-suggested) /usr/bin/pitboard$")

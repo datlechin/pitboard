@@ -195,8 +195,8 @@ python3 .github/scripts/test-linux-app.py
 `appstreamcli` are not on `PATH`, as on a Mac. `apps/linux/scripts/in-container.sh debian-13
 scripts` runs every case, as [The Linux app](#the-linux-app) says.
 
-For a change to the Linux packages, `packaging/linux/debian`,
-`packaging/linux/install-test.Containerfile`, or `build-linux-packages.sh`,
+For a change to the Linux packages, `packaging/linux/debian`, `packaging/linux/pitboard.spec`,
+`pitboard.rpmlintrc`, `install-test.Containerfile` there, or `build-linux-packages.sh`,
 `check-linux-packages.sh` and `test-linux-packages.sh` in `.github/scripts`, run the steps
 [Linux packages](#linux-packages) lists, and:
 
@@ -784,8 +784,9 @@ container:
 
 With no step it runs the steps of the distribution's job on CI: `lint`, `test`, `ui` and
 `release` on `ubuntu-26.04`, `lint`, `test` and `floor` on `debian-13`, `lint`, `test` and
-`widget` on `fedora-44`. A container runs as uid 1000, sees the repository and this machine's
-Cargo registry read only, and keeps Cargo's and Meson's folders in the volume
+`widget` on `fedora-44`. `fedora-43` builds the RPM packages, and runs only the steps
+[Linux packages](#linux-packages) names. A container runs as uid 1000, sees the repository and
+this machine's Cargo registry read only, and keeps Cargo's and Meson's folders in the volume
 `pitboard-linux-app-target`, or the one `PITBOARD_TARGET_VOLUME` names. Only a `cargo fetch`
 before the steps has the network, for Cargo's git checkouts. The release's link, at more than
 one job, takes most of 8 GiB: where the machine or Docker's VM has less, set
@@ -872,49 +873,56 @@ fixture empties first.
 
 ### Linux packages
 
-The Debian packages are built on Debian 13, the floor, by debhelper from
-`packaging/linux/debian` over the Meson install: `pitboard`, the release tarball's command line
-byte for byte with its man page and completions; `pitboard-app`, which depends on the
-`pitboard` of its own version; and `pitboard-archive-keyring`, the repository's key. Build,
-check and install them in containers, into a folder `out` of your choosing:
+Each format's packages are built on the oldest system of the floor that uses it, over the Meson
+install: the Debian packages on Debian 13 by debhelper from `packaging/linux/debian`, the RPM
+packages on Fedora 43 by rpmbuild from `packaging/linux/pitboard.spec`. Both build `pitboard`,
+the release tarball's command line byte for byte with its man page and completions, and
+`pitboard-app`, which depends on the `pitboard` of its own version. Debian's add
+`pitboard-archive-keyring`, the repository's key. Build and check them in containers, and
+install the Debian packages there, into a folder `out` of your choosing:
 
 ```sh
 apps/linux/scripts/in-container.sh debian-13 command-line out
 git archive HEAD | apps/linux/scripts/in-container.sh debian-13 deb out/pitboard-v*.tar.gz out
 apps/linux/scripts/in-container.sh debian-13 packages-test
 .github/scripts/test-linux-packages.sh out
+git archive HEAD | apps/linux/scripts/in-container.sh fedora-43 rpm out/pitboard-v*.tar.gz out
+apps/linux/scripts/in-container.sh fedora-43 packages-test
 ```
 
 - `command-line` builds the command line for musl and packs it with `pack-command-line.sh`, as a
   release does.
-- `deb` builds the packages with `build-linux-packages.sh` from the commit `git archive` writes,
-  not the working tree, and from the tarball named, then checks them with
-  `check-linux-packages.sh`. Each goes to `out` as `<package>-v<version>-<architecture>.deb`,
-  since GitHub renames a release file whose name holds the `~` of a Debian version.
+- `deb` and `rpm` build the packages with `build-linux-packages.sh` from the commit
+  `git archive` writes, not the working tree, and from the tarball named, then check them with
+  `check-linux-packages.sh`. Each goes to `out` as
+  `<package>-v<version>-<architecture>.<deb|rpm>`, since GitHub renames a release file whose name
+  holds the `~` of a package version.
 - `packages-test` runs `test-linux-packages.py`, which builds packages broken for each rule of
-  the check.
-- `test-linux-packages.sh` installs the packages on fresh Debian 13 and Ubuntu 26.04 images,
-  checks them there and purges them.
+  the check, with the tools of the system's format.
+- `test-linux-packages.sh` installs the Debian packages on fresh Debian 13 and Ubuntu 26.04
+  images, checks them there and purges them.
 
 The engine copies a step's files in and out with its own `cp`, so the containers mount nothing
 more. A failed step's files are copied out too.
 
 `check-linux-packages.sh` fails a release's packages:
 
-- that are not the three at `linux-versions.sh`'s version for the machine's architecture, or
-  that hold a file outside their layout;
+- that are not the release's at `linux-versions.sh`'s version for the machine's architecture,
+  or that hold a file outside their layout;
 - whose `/usr/bin/pitboard`, man page or completions are not the command line tarball's;
-- whose app does not depend on the `pitboard` of its own version and on the floor's libadwaita
-  1.7, GTK 4.18 and GLib 2.84, or whose tree, as Meson installed it, `check-linux-app.sh`
+- whose app does not depend on the `pitboard` of its own version and on the floor's libadwaita,
+  GTK and GLib, at 1.7, 4.18 and 2.84, or whose tree, as Meson installed it, `check-linux-app.sh`
   fails;
 - whose keyring is not `packaging/linux/pitboard-archive-keyring.asc`, unarmored;
-- that lintian warns about.
+- that are not in RPM's format 4, which Tumbleweed's RPM reads;
+- that lintian or rpmlint warns about. rpmlint takes the filters in
+  `packaging/linux/pitboard.rpmlintrc`, and fails where one of them matches nothing.
 
 A package manager runs as root only while an image builds. Pitboard's programs run in the
 images only as uid 1000, with fresh homes and no network.
 
-CI's `linux-packaging` job runs the four on `ubuntu-26.04` and `ubuntu-26.04-arm`, and keeps
-the packages as `linux-packages-<arch>` for 7 days.
+CI's `linux-packaging` job runs the Debian packages' four on `ubuntu-26.04` and
+`ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<arch>` for 7 days.
 
 ## Tool registers
 

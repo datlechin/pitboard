@@ -1,8 +1,8 @@
 # Not measured
 
 What nobody has measured about Claude Code, Codex, Claude Desktop, watching Pitboard's
-directory, the Linux app and its checks, and what Pitboard does where it cannot know. What was
-read or measured is in each tool's register,
+directory, the Linux app, its checks and its packages, and what Pitboard does where it cannot
+know. What was read or measured is in each tool's register,
 `crates/pitboard-core/src/provider/<tool>/assumptions.rs`, and in
 [The app model](app-model.md#watching-pitboards-directory).
 
@@ -256,3 +256,11 @@ in a desktop's session. Not measured, each for the Linux session machines:
   `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
   ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where
   nothing sets it, the app says 24 hour times, the schema's default, whatever Plasma shows.
+
+## The Linux packages
+
+Every build in [the packages' facts](linux-packages.md) is arm64, in Docker on a Mac. Not
+measured:
+
+- An x86_64 build of either format. rpmlint's verdict on the x86_64 command line was read from
+  an rpm `rpmbuild --target x86_64` made of the released binary.

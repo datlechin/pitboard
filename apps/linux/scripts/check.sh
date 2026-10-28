@@ -22,7 +22,9 @@
 #                             release builds and packs it
 #   deb <tarball> <out>       the Debian packages built into <out> from the source tar on stdin
 #                             and the command line tarball, then check-linux-packages.sh on them
-#   packages-test             test-linux-packages.py, which needs Debian's packaging tools
+#   rpm <tarball> <out>       the same for the RPM packages
+#   packages-test             test-linux-packages.py, with the packaging tools of this system's
+#                             format, Debian's or Fedora's
 #
 # Meson's build folder and its install tree are `meson` and `destdir` in Cargo's target folder.
 # The build folder holds Cargo's release target, so a run sets it up again and never removes it.
@@ -35,7 +37,7 @@ target=${CARGO_TARGET_DIR:-$repo/target}
 usage() {
   echo "usage: check.sh <lint | test [<archive> <folder>] | ui [<archive> <folder>] |" \
     "archive <file> | release | floor | scripts | widget | command-line <out> |" \
-    "deb <tarball> <out> | packages-test>" >&2
+    "<deb|rpm> <tarball> <out> | packages-test>" >&2
   exit 2
 }
 
@@ -119,14 +121,24 @@ case $step in
     sh .github/scripts/pack-command-line.sh "$target/$triple/release/pitboard" \
       "pitboard-v$(manifest_version)-$triple" "$1"
     ;;
-  deb)
+  deb | rpm)
     [ "$#" -eq 2 ] || usage
-    sh .github/scripts/build-linux-packages.sh deb "$1" "$2"
-    sh .github/scripts/check-linux-packages.sh "$2" "$1" "$(manifest_version)"
+    sh .github/scripts/build-linux-packages.sh "$step" "$1" "$2"
+    sh .github/scripts/check-linux-packages.sh "$step" "$2" "$1" "$(manifest_version)"
     ;;
   packages-test)
     [ "$#" -eq 0 ] || usage
-    TEST_LINUX_PACKAGES_TOOLS='dpkg dpkg-deb lintian gpg desktop-file-validate appstreamcli' \
+    # shellcheck source=/dev/null # the system's, read as os-release(5) says a shell may
+    . /etc/os-release
+    case $ID in
+      debian) tools='dpkg dpkg-deb lintian gpg' ;;
+      fedora) tools='rpm rpmbuild rpmlint rpm2archive' ;;
+      *)
+        echo "check.sh packages-test runs on Debian or Fedora, not $ID" >&2
+        exit 2
+        ;;
+    esac
+    TEST_LINUX_PACKAGES_TOOLS="$tools desktop-file-validate appstreamcli" \
       python3 .github/scripts/test-linux-packages.py
     ;;
   *) usage ;;

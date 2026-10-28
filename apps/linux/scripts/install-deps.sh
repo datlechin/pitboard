@@ -1,9 +1,9 @@
 #!/bin/sh
-# install-deps.sh <ubuntu-26.04|debian-13|fedora-44> [packaging]: as root, on a fresh image of
-# the distribution named, what the Linux app's build, tests and checks take: the distribution's
-# packages, the desktop's own fonts, rustup and the Cargo tools CI runs, and with `packaging`,
-# what its packages' build and checks take beside. An image's build and CI's containers run it.
-# It changes the system it runs on, so never a machine of your own.
+# install-deps.sh <ubuntu-26.04|debian-13|fedora-43|fedora-44> [packaging]: as root, on a fresh
+# image of the distribution named, what the Linux app's build, tests and checks take: the
+# distribution's packages, the desktop's own fonts, rustup and the Cargo tools CI runs, and with
+# `packaging`, what its packages' build and checks take beside. An image's build and CI's
+# containers run it. It changes the system it runs on, so never a machine of your own.
 #
 # Debian's and Ubuntu's packages come from one snapshot of their archives, so a run installs
 # what the last change here was checked against. Fedora keeps none, so its packages are the
@@ -17,7 +17,7 @@ nextest=0.9.146
 hack=0.6.45
 
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || [ "${2-packaging}" != packaging ]; then
-  echo "usage: install-deps.sh <ubuntu-26.04|debian-13|fedora-44> [packaging]" >&2
+  echo "usage: install-deps.sh <ubuntu-26.04|debian-13|fedora-43|fedora-44> [packaging]" >&2
   exit 2
 fi
 distro=$1
@@ -32,9 +32,10 @@ apt_packages='curl gcc libc6-dev pkg-config python3 libgtk-4-dev libgtk-4-bin li
   libglib2.0-dev-bin meson ninja-build desktop-file-utils appstream dbus-daemon at-spi2-core
   mutter libgl1-mesa-dri libegl-mesa0 librsvg2-bin librsvg2-common adwaita-icon-theme
   hicolor-icon-theme gvfs'
-# build-linux-packages.sh's debhelper and its completions add-on, musl for the command line and
-# gpg for the keyring; check-linux-packages.sh's lintian; and rpm, whose comparison of versions
-# test-release.py checks.
+# On Debian 13, build-linux-packages.sh's debhelper and its completions add-on, musl for the
+# command line and gpg for the keyring; check-linux-packages.sh's lintian; and rpm, whose
+# comparison of versions test-release.py checks. On Fedora 43, rpmbuild and rpmlint, and
+# rpmsign with gpg, which sign the RPM packages.
 packaging_packages=
 case $distro:$packaging in
   *:) ;;
@@ -42,8 +43,9 @@ case $distro:$packaging in
     packaging_packages='build-essential debhelper dh-shell-completions dpkg-dev lintian gnupg
       musl-tools rpm'
     ;;
+  fedora-43:packaging) packaging_packages='rpm-build rpmlint rpm-sign gnupg2' ;;
   *)
-    echo "install-deps.sh has packaging for debian-13 alone, not $distro" >&2
+    echo "install-deps.sh has packaging for debian-13 and fedora-43, not $distro" >&2
     exit 2
     ;;
 esac
@@ -68,20 +70,25 @@ case $distro in
     apt-get install --update -y --no-install-recommends "$@" $apt_packages $fonts \
       $packaging_packages
     ;;
-  fedora-44)
-    # util-linux for setpriv, which CI's jobs run the tests through. Plasma's QML modules, Qt's
-    # qmllint and qmltestrunner, PyGObject for the stand-in for the app, and Breeze's icons and
-    # colour schemes, for the Plasma widget's checks.
+  fedora-43 | fedora-44)
+    # util-linux for setpriv, which CI's jobs run the tests through. On Fedora 44, Plasma's QML
+    # modules, Qt's qmllint and qmltestrunner, PyGObject for the stand-in for the app, and
+    # Breeze's icons and colour schemes, for the Plasma widget's checks.
+    widget_packages=
+    if [ "$distro" = fedora-44 ]; then
+      widget_packages='plasma-workspace libplasma kf6-kirigami qt6-qtdeclarative-devel
+        python3-gobject-base breeze-icon-theme kf6-qqc2-desktop-style'
+    fi
+    # shellcheck disable=SC2086 # each list is words
     dnf install -y --repo fedora --repo updates --setopt=install_weak_deps=False \
       ca-certificates curl gcc pkgconf-pkg-config python3 gtk4-devel gtk4-devel-tools \
       libadwaita-devel glib2-devel meson ninja-build desktop-file-utils appstream dbus-daemon \
       at-spi2-core mutter mesa-dri-drivers mesa-libEGL librsvg2-tools adwaita-icon-theme \
-      hicolor-icon-theme adwaita-sans-fonts adwaita-mono-fonts util-linux gvfs \
-      plasma-workspace libplasma kf6-kirigami qt6-qtdeclarative-devel python3-gobject-base \
-      breeze-icon-theme kf6-qqc2-desktop-style
+      hicolor-icon-theme adwaita-sans-fonts adwaita-mono-fonts util-linux gvfs $widget_packages \
+      $packaging_packages
     ;;
   *)
-    echo "install-deps.sh knows ubuntu-26.04, debian-13 and fedora-44, not $distro" >&2
+    echo "install-deps.sh knows ubuntu-26.04, debian-13, fedora-43 and fedora-44, not $distro" >&2
     exit 2
     ;;
 esac
