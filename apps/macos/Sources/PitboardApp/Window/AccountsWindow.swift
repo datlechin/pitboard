@@ -151,6 +151,9 @@ struct AccountsWindow: View {
             }
         }
         .listStyle(.inset)
+        // Afresh as a tool comes or goes: macOS 27 crashed updating rows and sections at once
+        // (docs/facts/macos-app.md).
+        .id(model.sections.map { [$0.id, $0.heading ?? ""] })
         .contextMenu(forSelectionType: String.self) { ids in
             if let item = ids.first.flatMap(model.item) {
                 AccountMenuItems(

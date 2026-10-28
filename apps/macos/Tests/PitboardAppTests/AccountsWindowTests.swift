@@ -20,6 +20,46 @@ import Testing
     #expect(await eventually { shown.contentMinSize == NSSize(width: 560, height: 400) })
 }
 
+// macOS 27's AppKit updated the list's table inside another of its updates when one change put
+// rows under a new heading or took them out, and Pitboard crashed there (docs/facts/macos-app.md).
+@MainActor
+@Test func theListStartsAfreshWhenAToolComesOrGoesAndOnlyThen() async throws {
+    let model = AppModel(model: StandInModel(snapshot(0)))
+    let alone = [AccountSection(id: "claude", heading: nil, accounts: sample)]
+    model.apply(snapshot(1, sections: alone))
+    let shown = await accountsWindow(showing: model)
+    let first = try #require(listTable(in: shown.contentView))
+
+    let fewer = AccountSection(id: "claude", heading: nil, accounts: sample.dropLast())
+    model.apply(snapshot(2, sections: [fewer]))
+    await settle()
+    #expect(listTable(in: shown.contentView) === first, "an account went, and the tools stayed")
+
+    let codex = account("codex", plan: "Plus", standing: .inUse, limits: [], signIn: "In use")
+    let tools = [
+        AccountSection(id: "claude", heading: "Claude Code", accounts: sample),
+        AccountSection(id: "codex", heading: "Codex", accounts: [codex]),
+    ]
+    model.apply(snapshot(3, sections: tools))
+    await settle()
+    let second = try #require(listTable(in: shown.contentView))
+    #expect(second !== first)
+
+    model.apply(snapshot(4, sections: alone))
+    await settle()
+    #expect(listTable(in: shown.contentView) !== second)
+}
+
+// The inspector's form is a table too, at the window's trailing edge.
+@MainActor
+private func listTable(in view: NSView?) -> NSTableView? {
+    func tables(in view: NSView) -> [NSTableView] {
+        (view as? NSTableView).map { [$0] } ?? view.subviews.flatMap(tables)
+    }
+    return view.flatMap { tables(in: $0) }?
+        .min { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }
+}
+
 @MainActor
 func accountsWindow(_ items: [AccountItem] = sample, notices: [PanelNotice] = []) async throws
     -> NSWindow
@@ -30,6 +70,11 @@ func accountsWindow(_ items: [AccountItem] = sample, notices: [PanelNotice] = []
             1, updated: "Updated 1:36 PM",
             sections: [AccountSection(id: "claude", heading: nil, accounts: items)],
             notices: notices))
+    return await accountsWindow(showing: model)
+}
+
+@MainActor
+func accountsWindow(showing model: AppModel) async -> NSWindow {
     let controller = NSHostingController(
         rootView: AccountsWindow(model: model, windows: standInWindows(model)))
     controller.sizingOptions = [.minSize]
