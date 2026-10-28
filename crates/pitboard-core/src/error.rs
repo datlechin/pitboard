@@ -1275,21 +1275,29 @@ fn temporary_copy(path: &std::path::Path, job: crate::schedule::Job) -> String {
         crate::schedule::Job::Renew => "turn on daily renewal",
         crate::schedule::Job::Watch => "install the watch service",
     };
-    if crate::schedule::opened_from_a_zip(path) {
-        return format!(
+    use crate::schedule::TemporaryCopy;
+    match crate::schedule::temporary_copy(path) {
+        Some(TemporaryCopy::Zip) => format!(
             "{} would run {}, which is in a temporary copy Windows made of a zip it opened. \
              Install Pitboard, or extract the zip, and {turn_on} from there.",
             job_named(job),
             path.display()
-        );
+        ),
+        Some(TemporaryCopy::AppImage) => format!(
+            "{} would run {}, which is in the folder an AppImage runs from and is gone once it \
+             quits. Install Pitboard rather than run it from an AppImage, and {turn_on} from \
+             there.",
+            job_named(job),
+            path.display()
+        ),
+        Some(TemporaryCopy::Translocated) | None => format!(
+            "{} would run {}, which is in a temporary copy macOS made of the app and is gone \
+             once the app quits. Move Pitboard to your Applications folder, open it from there, \
+             and {turn_on} again.",
+            job_named(job),
+            path.display()
+        ),
     }
-    format!(
-        "{} would run {}, which is in a temporary copy macOS made of the app and is gone once \
-         the app quits. Move Pitboard to your Applications folder, open it from there, and \
-         {turn_on} again.",
-        job_named(job),
-        path.display()
-    )
 }
 
 fn not_absolute(variable: &str, path: &std::path::Path) -> String {

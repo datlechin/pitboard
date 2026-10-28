@@ -372,9 +372,10 @@ keeps it is in the header of the module named.
   `uninstalling_takes_the_watch_service_with_it`).
 - Nothing rewrites a task changed in Task Scheduler, which `doctor` warns of
   (`task::drifted`), and the app's start-up repair points a schedule at the command line
-  inside the app only where its Pitboard is gone or it runs an app's own program
-  (`schedule::fault`). The MSI's full uninstall takes away only the tasks
-  that run its own `bin\pitboard.exe` (`schedule::uninstall_for_app`).
+  inside the app only where its Pitboard is gone or it runs an app's own program, macOS's
+  bundle's or Linux's `pitboard-app` (`schedule::fault`, `Os::an_apps_own_program`,
+  `a_schedule_running_the_linux_app_is_at_fault`). The MSI's full uninstall takes away only
+  the tasks that run its own `bin\pitboard.exe` (`schedule::uninstall_for_app`).
 
 ### Tests
 
@@ -507,8 +508,9 @@ keeps it is in the header of the module named.
   `a_snapshot_asked_for_names_every_part`). A field added to `Snapshot` does not compile until
   it has a `Part` (`Snapshot::parts_changed_since`).
 - One change to daily renewal runs at a time, and turning it on is refused where the command
-  line inside this copy would not last (`schedule::in_a_temporary_copy`,
-  `model/maintaining.rs`).
+  line inside this copy would not last: in macOS's translocated copy, Explorer's copy of a zip
+  or an AppImage's folder (`schedule::in_a_temporary_copy`,
+  `a_temporary_copy_is_told_by_its_path`, `model/maintaining.rs`).
 - The macOS app's `AppModel` shows only a snapshot newer than the one it shows
   (`aSnapshotThatIsNotNewerIsDropped`), and `ModelListening` holds it weakly, since the model
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).

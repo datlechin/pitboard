@@ -25,7 +25,7 @@
 
 use crate::context::Context;
 use crate::error::{Error, Result};
-use crate::host::Scheduler;
+use crate::host::{Os, Scheduler};
 use crate::permit::Permit;
 use std::path::{Path, PathBuf};
 
@@ -220,20 +220,45 @@ fn lasting(program: &Path, job: Job) -> Result<&Path> {
     Ok(program)
 }
 
-/// Whether `program` is inside a temporary copy: the one macOS makes of an app opened where it
-/// was downloaded, which is there while the app runs and gone once it quits, a path through a
-/// directory named `AppTranslocation`, or the one Windows' Explorer makes of a program opened
-/// inside a zip. Neither a schedule nor a link can rely on one, so an app asks this of the
-/// command line inside it, by the rule a schedule is refused by.
+/// Whether `program` is inside a temporary copy, which is there while it runs and gone once it
+/// quits ([`TemporaryCopy`]). Neither a schedule nor a link can rely on one, so an app asks this
+/// of the command line inside it, by the rule a schedule is refused by.
 pub fn in_a_temporary_copy(program: &Path) -> bool {
-    program
+    temporary_copy(program).is_some()
+}
+
+/// A copy a program runs from that is gone once it quits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TemporaryCopy {
+    /// The one macOS makes of an app opened where it was downloaded, through a directory named
+    /// `AppTranslocation`.
+    Translocated,
+    /// The one Windows' Explorer makes of a program opened inside a zip.
+    Zip,
+    /// The folder an AppImage's runtime mounts it in, or extracts it into to run it.
+    AppImage,
+}
+
+pub(crate) fn temporary_copy(program: &Path) -> Option<TemporaryCopy> {
+    if program
         .components()
         .any(|part| part.as_os_str() == "AppTranslocation")
-        || opened_from_a_zip(program)
+    {
+        Some(TemporaryCopy::Translocated)
+    } else if opened_from_a_zip(program) {
+        Some(TemporaryCopy::Zip)
+    } else if program
+        .components()
+        .any(|part| an_appimages_folder(part.as_os_str().as_encoded_bytes()))
+    {
+        Some(TemporaryCopy::AppImage)
+    } else {
+        None
+    }
 }
 
 // Explorer's `%TEMP%\Temp1_<zip>.zip`, named as seen and not measured.
-pub(crate) fn opened_from_a_zip(program: &Path) -> bool {
+fn opened_from_a_zip(program: &Path) -> bool {
     program.to_string_lossy().split(['/', '\\']).any(|part| {
         let name = part.to_ascii_lowercase();
         let Some(numbered) = name.strip_prefix("temp") else {
@@ -242,6 +267,24 @@ pub(crate) fn opened_from_a_zip(program: &Path) -> bool {
         let digits = numbered.bytes().take_while(u8::is_ascii_digit).count();
         digits > 0 && numbered[digits..].starts_with('_') && name.ends_with(".zip")
     })
+}
+
+// type2-runtime's `.mount_`, up to six bytes of the AppImage's name and six `mkdtemp` fills, and
+// `appimage_extracted_` and the file's MD5 in lower-case hex (docs/facts/linux.md).
+fn an_appimages_folder(name: &[u8]) -> bool {
+    let mounted = name.strip_prefix(b".mount_").is_some_and(|rest| {
+        (6..=12).contains(&rest.len())
+            && rest[rest.len() - 6..].iter().all(u8::is_ascii_alphanumeric)
+    });
+    let extracted = name
+        .strip_prefix(b"appimage_extracted_")
+        .is_some_and(|digest| {
+            digest.len() == 32
+                && digest
+                    .iter()
+                    .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        });
+    mounted || extracted
 }
 
 pub(crate) fn task(ctx: &Context, job: Job) -> Option<crate::host::task::Task> {
@@ -370,7 +413,7 @@ pub(crate) fn repair(ctx: &Context, permit: Permit) -> Result<bool> {
 // person's, and doctor names the way back.
 fn broken(ctx: &Context, program: &Path) -> bool {
     let drifted = task(ctx, Job::Renew).is_some_and(|task| !task.drifted.is_empty());
-    !drifted && fault(program, program.is_file()).is_some()
+    !drifted && fault(ctx.os, program, program.is_file()).is_some()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -381,25 +424,15 @@ pub(crate) enum Fault {
     TheApp,
 }
 
-// Doctor's judgement and the app's repair alike.
-pub(crate) fn fault(program: &Path, found: bool) -> Option<Fault> {
+// Doctor's judgement and the app's repair alike, for a program on `os`.
+pub(crate) fn fault(os: Os, program: &Path, found: bool) -> Option<Fault> {
     if !found {
         Some(Fault::Gone)
-    } else if an_apps_own_program(program) {
+    } else if os.an_apps_own_program(program) {
         Some(Fault::TheApp)
     } else {
         None
     }
-}
-
-/// Whether `program` is the one an app bundle starts, `Contents/MacOS/<name>`, where no
-/// command line is ever kept.
-pub(crate) fn an_apps_own_program(program: &Path) -> bool {
-    let mut dirs = program
-        .ancestors()
-        .skip(1)
-        .map(|dir| dir.file_name().and_then(|n| n.to_str()));
-    dirs.next() == Some(Some("MacOS")) && dirs.next() == Some(Some("Contents"))
 }
 
 /// Hand `job` to the system's scheduler, running `program` with `options` and given
@@ -457,7 +490,6 @@ pub(crate) fn uninstall_for_app(ctx: &Context, permit: Permit) -> Result<bool> {
 )]
 mod tests {
     use super::*;
-    use crate::host::Os;
     use crate::host::memory::MemoryHost;
     use std::sync::Arc;
 
@@ -509,6 +541,21 @@ mod tests {
             .collect()
     }
 
+    // This system's app's own program under `home`, as 0.3.0 scheduled it on a Mac, and the
+    // command line the app comes with.
+    fn the_app(home: &Path) -> (PathBuf, PathBuf) {
+        match crate::host::OS {
+            Os::MacOs | Os::Windows => (
+                home.join("Applications/Pitboard.app/Contents/MacOS/Pitboard"),
+                home.join("Applications/Pitboard.app/Contents/Helpers/pitboard"),
+            ),
+            Os::Linux => (
+                home.join("usr/bin/pitboard-app"),
+                home.join("usr/bin/pitboard"),
+            ),
+        }
+    }
+
     /// Put a program at `path`, for a schedule to name.
     fn a_program_at(path: &Path) {
         std::fs::create_dir_all(path.parent().expect("a directory")).expect("its directory");
@@ -537,12 +584,7 @@ mod tests {
     fn a_repair_the_scheduler_will_not_start_leaves_the_schedule_as_it_was() {
         let home = Scratch::new();
         std::fs::create_dir_all(home.ctx().default_pitboard_home()).expect("a Pitboard home");
-        let app = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
-        let bundled = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        let (app, bundled) = the_app(home.path());
         a_program_at(&app);
         a_program_at(&bundled);
         let ctx = home.ctx();
@@ -678,6 +720,21 @@ mod tests {
             "{refused}"
         );
 
+        let mounted = home.path().join(".mount_PitboaJgKlbE/usr/bin/pitboard");
+        a_program_at(&mounted);
+        let refused = install(
+            &ctx.clone().with_schedule_program(mounted),
+            Permit::for_a_test(),
+        )
+        .expect_err("a copy an AppImage mounted");
+        assert_eq!(refused.code(), "schedule_program_temporary");
+        assert!(
+            refused
+                .to_string()
+                .contains("Install Pitboard rather than run it from an AppImage"),
+            "{refused}"
+        );
+
         assert_eq!(status(&ctx), Installed::No, "nothing was written");
     }
 
@@ -735,9 +792,50 @@ mod tests {
             (r"C:\Users\x\Temp12_Pitboard.ZIP\bin\pitboard.exe", true),
             (r"C:\Users\x\Temp_pitboard.zip\pitboard.exe", false),
             (r"C:\Users\x\Temp1_pitboard\pitboard.exe", false),
+            ("/tmp/.mount_PitboaJgKlbE/usr/bin/pitboard", true),
+            ("/run/user/1000/.mount_x1aB2c3/usr/bin/pitboard", true),
+            (
+                "/tmp/appimage_extracted_0123456789abcdef0123456789abcdef/usr/bin/pitboard",
+                true,
+            ),
+            ("/home/x/.mount_/usr/bin/pitboard", false),
+            ("/home/x/.mount_ab/usr/bin/pitboard", false),
+            ("/home/x/mount_PitboaJgKlbE/usr/bin/pitboard", false),
+            ("/home/x/.mount_PitboardThings/usr/bin/pitboard", false),
+            ("/home/x/.mount_Pitboa-+_*.,/usr/bin/pitboard", false),
+            ("/tmp/appimage_extracted_cache/usr/bin/pitboard", false),
+            (
+                "/tmp/appimage_extracted_0123456789ABCDEF0123456789ABCDEF/usr/bin/pitboard",
+                false,
+            ),
+            ("/home/x/Applications/Pitboard.AppImage", false),
         ] {
             assert_eq!(in_a_temporary_copy(Path::new(path)), temporary, "{path}");
         }
+    }
+
+    // A schedule that runs an app's own program renews nothing, on each system by its rule.
+    #[test]
+    fn a_schedule_running_the_linux_app_is_at_fault() {
+        let fault_of = |os: Os, program: &str| fault(os, Path::new(program), true);
+        assert_eq!(
+            fault_of(Os::Linux, "/usr/bin/pitboard-app"),
+            Some(Fault::TheApp)
+        );
+        assert_eq!(fault_of(Os::Linux, "/usr/bin/pitboard"), None);
+        assert_eq!(
+            fault_of(Os::Linux, "/opt/Pitboard.app/Contents/MacOS/Pitboard"),
+            None,
+            "no bundle on Linux"
+        );
+        let bundle = "/Applications/Pitboard.app/Contents/MacOS/Pitboard";
+        assert_eq!(fault_of(Os::MacOs, bundle), Some(Fault::TheApp));
+        assert_eq!(fault_of(Os::MacOs, "/usr/bin/pitboard-app"), None);
+        assert_eq!(fault_of(Os::Windows, bundle), Some(Fault::TheApp));
+        assert_eq!(
+            fault(Os::Linux, Path::new("/usr/bin/pitboard-app"), false),
+            Some(Fault::Gone)
+        );
     }
 
     /// What `pitboard doctor` reads back is what was written, including a path the
@@ -768,12 +866,7 @@ mod tests {
     fn a_schedule_that_runs_an_app_is_pointed_at_its_command_line() {
         let home = Scratch::new();
         std::fs::create_dir_all(home.ctx().default_pitboard_home()).expect("a Pitboard home");
-        let app = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
-        let bundled = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        let (app, bundled) = the_app(home.path());
         a_program_at(&app);
         a_program_at(&bundled);
         let ctx = home.ctx();
@@ -882,12 +975,7 @@ mod tests {
     fn a_process_another_job_started_still_repairs() {
         let home = Scratch::new();
         std::fs::create_dir_all(home.ctx().default_pitboard_home()).expect("a Pitboard home");
-        let app = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
-        let bundled = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        let (app, bundled) = the_app(home.path());
         a_program_at(&app);
         a_program_at(&bundled);
         let ctx = home.ctx();
@@ -1272,12 +1360,7 @@ mod tests {
     fn a_repair_writes_the_proxy_the_schedules_file_gives_and_never_the_apps() {
         let home = Scratch::new();
         std::fs::create_dir_all(home.ctx().default_pitboard_home()).expect("a Pitboard home");
-        let app = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/MacOS/Pitboard");
-        let bundled = home
-            .path()
-            .join("Applications/Pitboard.app/Contents/Helpers/pitboard");
+        let (app, bundled) = the_app(home.path());
         a_program_at(&app);
         a_program_at(&bundled);
         let apps_own = [("HTTPS_PROXY", "http://app.example.com:3128")];

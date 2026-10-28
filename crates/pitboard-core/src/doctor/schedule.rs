@@ -76,7 +76,7 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
             again,
         ));
     };
-    match crate::schedule::fault(program, schedule.program_found) {
+    match crate::schedule::fault(facts.os, program, schedule.program_found) {
         Some(Fault::Gone) => {
             return Some(fail(
                 "schedule",

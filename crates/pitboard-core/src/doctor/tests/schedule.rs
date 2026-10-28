@@ -48,6 +48,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         network: direct(),
         network_differs: false,
     });
+    f.os = Os::MacOs;
     let checks = evaluate(&f);
     let the_app = check(&checks, "schedule");
     assert_eq!(
@@ -67,6 +68,15 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         Level::Ok,
         "the command line an app comes with is a command line"
     );
+    f.os = Os::Linux;
+    for (program, level) in [
+        ("/usr/bin/pitboard-app", Level::Fail),
+        ("/usr/bin/pitboard", Level::Ok),
+    ] {
+        f.schedule.as_mut().expect("set above").program = Some(PathBuf::from(program));
+        assert_eq!(check(&evaluate(&f), "schedule").level, level, "{program}");
+    }
+    f.os = crate::host::OS;
 
     f.schedule.as_mut().expect("set above").program = None;
     let checks = evaluate(&f);

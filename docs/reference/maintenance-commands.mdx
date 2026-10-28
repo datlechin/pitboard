@@ -87,7 +87,7 @@ The system starts the job without your shell's environment. `install` gives it e
     A task holds no environment, so `install` writes the proxy variables to `schedule.env` in Pitboard's directory, and each run reads them from there. `install` refuses with `schedule_program_temporary` when the program is in the temporary copy Windows makes of a zip it opened.
   </Tab>
   <Tab title="Linux">
-    A systemd user timer runs the job 15 minutes after your user's systemd starts, then 24 hours after each run. `install` writes the proxy variables and `PITBOARD_NO_ARGV` into the job.
+    A systemd user timer runs the job 15 minutes after your user's systemd starts, then 24 hours after each run. `install` writes the proxy variables and `PITBOARD_NO_ARGV` into the job. It refuses with `schedule_program_temporary` when the program is inside an AppImage, which runs from a folder that is gone once it quits.
   </Tab>
 </Tabs>
 

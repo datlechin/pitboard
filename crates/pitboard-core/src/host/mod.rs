@@ -101,6 +101,9 @@ pub const OS: Os = os::OS;
 /// that runs it and the doctor check that looks for it cannot drift apart.
 pub(crate) const SECURITY: &str = "/usr/bin/security";
 
+// The Linux app's program, which its packages put beside `pitboard`.
+const LINUX_APP: &str = "pitboard-app";
+
 impl Os {
     /// The program Pitboard reaches the system's own store of secrets through, where it goes
     /// through one rather than calling the system directly.
@@ -247,12 +250,28 @@ impl Os {
         match self {
             Os::MacOs => (app.extension() == Some("app".as_ref()))
                 .then(|| app.join("Contents/Helpers/pitboard")),
-            Os::Linux => None,
+            Os::Linux => (app.file_name() == Some(LINUX_APP.as_ref()))
+                .then(|| app.with_file_name("pitboard")),
             Os::Windows => app
                 .file_name()
                 .filter(|name| name.eq_ignore_ascii_case("Pitboard.exe"))
                 .and_then(|_| app.parent())
                 .map(|install| install.join("bin").join("pitboard.exe")),
+        }
+    }
+
+    // The program an app itself starts, where no command line is kept, so a schedule that runs
+    // it renews nothing. Windows keeps macOS's bundle rule, which no path there meets.
+    pub(crate) fn an_apps_own_program(self, program: &Path) -> bool {
+        match self {
+            Os::MacOs | Os::Windows => {
+                let mut dirs = program
+                    .ancestors()
+                    .skip(1)
+                    .map(|dir| dir.file_name().and_then(|n| n.to_str()));
+                dirs.next() == Some(Some("MacOS")) && dirs.next() == Some(Some("Contents"))
+            }
+            Os::Linux => program.file_name() == Some(LINUX_APP.as_ref()),
         }
     }
 }
@@ -1441,6 +1460,43 @@ mod tests {
             r"\\?\D:\Users\Dana\Library\x",
             r"C:\Users\Dana\Library"
         ));
+    }
+
+    // Linux's packages put `pitboard-app` beside `pitboard` in one `bin`.
+    #[test]
+    fn each_systems_app_names_the_command_line_it_comes_with() {
+        let names = |os: Os, app: &str| os.app_command_line(Path::new(app));
+        let helper = |app: &str| Some(Path::new(app).join("Contents/Helpers/pitboard"));
+        for (os, app, inside) in [
+            (
+                Os::Linux,
+                "/usr/bin/pitboard-app",
+                Some(PathBuf::from("/usr/bin/pitboard")),
+            ),
+            (
+                Os::Linux,
+                "/home/x/.local/bin/pitboard-app",
+                Some(PathBuf::from("/home/x/.local/bin/pitboard")),
+            ),
+            (Os::Linux, "/usr/bin/pitboard", None),
+            (Os::Linux, "/usr/bin/Pitboard-App", None),
+            (Os::Linux, "/usr/bin/pitboard-app.desktop", None),
+            (Os::Linux, "/Applications/Pitboard.app", None),
+            (
+                Os::MacOs,
+                "/Applications/Pitboard.app",
+                helper("/Applications/Pitboard.app"),
+            ),
+            (Os::MacOs, "/usr/bin/pitboard-app", None),
+            (
+                Os::Windows,
+                "C:/Program Files/Pitboard/Pitboard.exe",
+                Some(PathBuf::from("C:/Program Files/Pitboard/bin/pitboard.exe")),
+            ),
+            (Os::Windows, "C:/Program Files/Pitboard/pitboard-app", None),
+        ] {
+            assert_eq!(names(os, app), inside, "{os:?} {app}");
+        }
     }
 
     // launchd, a systemd user timer where systemd started Linux, and Task Scheduler.
