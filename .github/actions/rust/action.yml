@@ -12,6 +12,10 @@ inputs:
     description: "'false' leaves the Cargo cache out."
     required: false
     default: "true"
+  key:
+    description: Tells apart the caches of rows of one job that run on the same image.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -30,4 +34,5 @@ runs:
     - if: inputs.cache == 'true'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
+        key: ${{ inputs.key }}
         save-if: ${{ github.ref == 'refs/heads/main' }}

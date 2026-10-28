@@ -225,6 +225,9 @@ keeps it is in the header of the module named.
 - Every request goes out on its context's agent, `api::agent`, given the proxy the context read
   from its variables alone. `clippy.toml` refuses every other way ureq makes an agent or lets a
   request change its configuration.
+- On Linux the core speaks D-Bus through one zbus 5, on its blocking API and its own executor,
+  and the command line links no tokio. Each row of CI's `linux` job fails where the workspace
+  has a second zbus or `pitboard` links tokio ([zbus](docs/facts/linux.md#zbus)).
 - No request goes past a SOCKS proxy the person named: `proxy::Refusal` fails each request
   `NO_PROXY` does not exempt before anything is sent, and the agent follows no redirect
   (`every_socks_proxy_is_refused_before_anything_is_sent`,
@@ -436,10 +439,10 @@ keeps it is in the header of the module named.
 - Outside a host's own face, a test sets a file's mode or makes a link only through
   `fs::testing`. The integration harness says what differs by system in
   `crates/pitboard/tests/cli/common/os.rs`, one `match` on `host::OS` for each fact.
-- The whole suite runs on macOS, Linux and Windows: a test put off on a system says why in its
-  `ignore` reason or a `// windows:` line, which `.github/scripts/windows-pending.py` holds to
-  the reasons it accepts. A test of Claude Desktop outside the core returns
-  where the tool is not supported rather than being ignored.
+- The whole suite runs on macOS, Linux and Windows, and the core's and the command line's on
+  musl too: a test put off on a system says why in its `ignore` reason or a `// windows:` line,
+  which `.github/scripts/windows-pending.py` holds to the reasons it accepts. A test of Claude
+  Desktop outside the core returns where the tool is not supported rather than being ignored.
 - No test makes the app model over the machine's own environment. The Rust tests run the real
   core over a `ScratchMachine`, the C# and Swift tests only a fixture's model or one never
   started, and every `OtherApps` and `Notifier` a test hands in records and posts
