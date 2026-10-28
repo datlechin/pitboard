@@ -269,13 +269,27 @@ export interface FileRow {
   platforms: Platform[];
 }
 
+// Each Linux package's file name ends in its machine and format.
+const LINUX_PACKAGES = [
+  ["amd64.deb", "a Debian package for x86_64"],
+  ["arm64.deb", "a Debian package for aarch64"],
+  ["x86_64.rpm", "an RPM package for x86_64"],
+  ["aarch64.rpm", "an RPM package for aarch64"],
+] as const;
+
 // A file the release gains fails the build until it is described here.
 export function fileRows(release: Release): FileRow[] {
   const v = release.version;
+  const packaged = release.assets.some((a) => /\.(deb|rpm)$/.test(a.name));
   const known: [string, string, Platform[]][] = [
     [`Pitboard-v${v}-macos.zip`, "The app, for Apple silicon and Intel", ["macos"]],
     [`Pitboard-v${v}-windows-x64.msi`, "The app, Windows on x64", ["windows"]],
     [`Pitboard-v${v}-windows-arm64.msi`, "The app, Windows on ARM64", ["windows"]],
+    ...LINUX_PACKAGES.map(([file, what]): [string, string, Platform[]] => [
+      `pitboard-app-v${v}-${file}`,
+      `The app, ${what}`,
+      ["linux"],
+    ]),
     [
       `pitboard-v${v}-aarch64-apple-darwin.tar.gz`,
       "Command line, macOS on Apple silicon",
@@ -288,12 +302,20 @@ export function fileRows(release: Release): FileRow[] {
       "Command line, Linux on aarch64",
       ["linux"],
     ],
+    ...LINUX_PACKAGES.map(([file, what]): [string, string, Platform[]] => [
+      `pitboard-v${v}-${file}`,
+      `Command line, ${what}`,
+      ["linux"],
+    ]),
+    [`pitboard-archive-keyring-v${v}-all.deb`, "The repository's key, a Debian package", ["linux"]],
     [`pitboard-v${v}-x86_64-pc-windows-msvc.zip`, "Command line, Windows on x64", ["windows"]],
     [`pitboard-v${v}-aarch64-pc-windows-msvc.zip`, "Command line, Windows on ARM64", ["windows"]],
     ["install.sh", "The install script", ["macos", "linux"]],
     [
       "SHA256SUMS",
-      "Checksums of the apps, the command line archives and <code>install.sh</code>",
+      packaged
+        ? "Checksums of the apps, the command line archives, the Linux packages and <code>install.sh</code>"
+        : "Checksums of the apps, the command line archives and <code>install.sh</code>",
       ["macos", "windows", "linux"],
     ],
     ["appcast.xml", "The feed the app updates from", ["macos"]],

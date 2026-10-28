@@ -371,6 +371,105 @@ test("lists a beta's files in order, each with the platforms it serves", async (
   );
 });
 
+test("describes every Linux package and its bill of materials, and SHA256SUMS names them", async () => {
+  const v = "1.0.0-beta.8";
+  const packages = [
+    `pitboard-app-v${v}-amd64.deb`,
+    `pitboard-app-v${v}-arm64.deb`,
+    `pitboard-app-v${v}-x86_64.rpm`,
+    `pitboard-app-v${v}-aarch64.rpm`,
+    `pitboard-v${v}-amd64.deb`,
+    `pitboard-v${v}-arm64.deb`,
+    `pitboard-v${v}-x86_64.rpm`,
+    `pitboard-v${v}-aarch64.rpm`,
+  ];
+  const keyring = `pitboard-archive-keyring-v${v}-all.deb`;
+  const release = made(v, [
+    `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
+    ...packages,
+    ...packages.map((name) => `${name}.cdx.json`),
+    keyring,
+    "install.sh",
+    "SHA256SUMS",
+  ]);
+  const rows = fileRows(release);
+  assert.deepEqual(
+    rows.map((row) => [row.asset.name, row.forHtml, row.bom?.name ?? null, row.platforms]),
+    [
+      [
+        `pitboard-app-v${v}-amd64.deb`,
+        "The app, a Debian package for x86_64",
+        `pitboard-app-v${v}-amd64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-app-v${v}-arm64.deb`,
+        "The app, a Debian package for aarch64",
+        `pitboard-app-v${v}-arm64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-app-v${v}-x86_64.rpm`,
+        "The app, an RPM package for x86_64",
+        `pitboard-app-v${v}-x86_64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-app-v${v}-aarch64.rpm`,
+        "The app, an RPM package for aarch64",
+        `pitboard-app-v${v}-aarch64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-x86_64-unknown-linux-musl.tar.gz`,
+        "Command line, Linux on x86_64",
+        null,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-amd64.deb`,
+        "Command line, a Debian package for x86_64",
+        `pitboard-v${v}-amd64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-arm64.deb`,
+        "Command line, a Debian package for aarch64",
+        `pitboard-v${v}-arm64.deb.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-x86_64.rpm`,
+        "Command line, an RPM package for x86_64",
+        `pitboard-v${v}-x86_64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [
+        `pitboard-v${v}-aarch64.rpm`,
+        "Command line, an RPM package for aarch64",
+        `pitboard-v${v}-aarch64.rpm.cdx.json`,
+        ["linux"],
+      ],
+      [keyring, "The repository's key, a Debian package", null, ["linux"]],
+      ["install.sh", "The install script", null, ["macos", "linux"]],
+      [
+        "SHA256SUMS",
+        "Checksums of the apps, the command line archives, the Linux packages and <code>install.sh</code>",
+        null,
+        ["macos", "windows", "linux"],
+      ],
+    ],
+  );
+  const without = fileRows(made(v, ["install.sh", "SHA256SUMS"]));
+  assert.equal(
+    without.at(-1)?.forHtml,
+    "Checksums of the apps, the command line archives and <code>install.sh</code>",
+  );
+  for (const name of [`pitboard-v${v}-riscv64.deb`, `pitboard-plasma-widget-v${v}-all.deb`]) {
+    assert.throws(() => fileRows(made(v, [name, "SHA256SUMS"])), /does not describe/);
+  }
+});
+
 test("gives each update feed to its own platform", async () => {
   const r = await latest();
   const feed = { name: "appcast-windows.xml", size: 1, sha256: null, url: "" };
