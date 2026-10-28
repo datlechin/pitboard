@@ -391,7 +391,8 @@ keeps it is in the header of the module named.
   nothing.
 - A fixture is the real core and the real model over a machine of its own, `MemoryHost`,
   `ScriptedApi` and a folder in the temporary directory. Only the `fixture` feature builds one
-  and only a debug build reads `PITBOARD_FIXTURE` ([The fixtures](docs/facts/fixtures.md)).
+  and only a debug build is started in one, by `PITBOARD_FIXTURE`, which the model's `started`
+  reads ([The fixtures](docs/facts/fixtures.md)).
 - Nothing that ships is built for tests. `build-app.sh` fails a bundle whose core library,
   app or command line holds a fixture world's text or `PITBOARD_TEST_CLAUDE_DESKTOP`, or links
   a SQLite other than the system's, and `check-windows-build.ps1` and `check-windows-app.ps1`
@@ -480,10 +481,16 @@ keeps it is in the header of the module named.
   (`aSnapshotThatIsNotNewerIsDropped`), and `ModelListening` holds it weakly, since the model
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).
 - The Windows app asks the core's gate, `launch_refusal`, before anything else a launch does
-  but `--unregister` and `--unregister-share` (`ReleaseGateTests`).
-- A macOS debug build started without `PITBOARD_FIXTURE` quits before anything of the app
-  starts, since Shortcuts, Spotlight, a widget or a control start it through Launch Services
-  on the real home (`aDebugBuildStartedOutsideAFixtureStartsNothing`).
+  but `--unregister` and `--unregister-share`, and after `started` alone, which reads only the
+  variables it is given (`ReleaseGateTests`).
+- Every app asks the model how it was started, `started`, before it makes anything. A debug
+  build without `PITBOARD_FIXTURE` is outside a fixture, and a release build is never in one
+  (`a_debug_build_without_a_fixture_is_outside_one`,
+  `a_fixture_is_named_by_its_variable_whatever_it_holds`, `a_release_build_reads_no_fixture`).
+  Outside one, the macOS debug build quits before anything of the app starts, since Shortcuts,
+  Spotlight, a widget or a control start it through Launch Services on the real home
+  (`aDebugBuildStartedOutsideAFixtureStartsNothing`), and the Windows one takes no link and no
+  task (`LaunchingTests`).
 - The macOS app's Shortcuts actions run in the app, over its model, and the release holds
   the metadata Shortcuts and Spotlight read them and their App Shortcuts from
   (`scripts/build-app.sh`).

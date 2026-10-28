@@ -26,11 +26,7 @@ public static class Program
         Shell.Name(Running);
         var environment = Environment.GetEnvironmentVariables().Cast<DictionaryEntry>()
             .ToDictionary(variable => (string)variable.Key, variable => variable.Value as string ?? "");
-#if DEBUG
-        var fixture = environment.GetValueOrDefault("PITBOARD_FIXTURE");
-#else
-        string? fixture = null;
-#endif
+        var fixture = PitboardModelMethods.Started(Running.Build, environment) is Started.Fixture { Name: var named } ? named : null;
         // Where the core makes it: Rust's temp_dir and .NET's GetTempPath both ask GetTempPath2W.
         var fixtureFolder = fixture is null ? null : Path.Combine(Path.GetTempPath(), "pitboard-fixture");
         ReadFailure? refusal = null;

@@ -2,12 +2,6 @@ using Pitboard.Core;
 
 namespace Pitboard.Windows;
 
-public enum Build
-{
-    Debug,
-    Release,
-}
-
 public sealed record Identity(Build Build)
 {
     // Which app this is to the model, whose words and rules that differ by front follow it.

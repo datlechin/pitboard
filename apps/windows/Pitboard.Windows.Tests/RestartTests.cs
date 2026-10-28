@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Pitboard.Core;
 
 namespace Pitboard.Windows.Tests;
 

@@ -6,19 +6,18 @@
 //! `launch.rs` makes the core from what the app was started with, and only the model's own
 //! threads call it. What differs by front is said by `front.rs`, and each exported function
 //! whose answer differs by front takes the front first. Beside the model and the records its
-//! snapshots carry, the bindings export the sites'
-//! records (`sites.rs`), the account windows' rules (`account_windows`), `check_name` and
-//! `downloads_quit_question` of `present`, the fixtures' `fixture_names` and `fixture_page`,
-//! and three free functions the macOS app asks of its bundle and its environment,
-//! `app_command_line`, `can_run` and `pitboard_directory`, and the Windows app's
-//! `launch_refusal` and `unschedule_app`. The snapshot carries what an
-//! app shows of the accounts and the machine, such as a limit's names or how long an account
-//! lasts, made by `present` and the model, so no free function says it again. The free
-//! functions answer at once from what they are given, apart from `can_run`, which asks the
-//! file system about one path, `launch_refusal`, which asks the system how this process runs,
-//! `download_destination`, which asks the file system whether each name it tries is taken, and
-//! `unschedule_app`, which asks the system's scheduler and may take the watch and renewal
-//! tasks away. Timestamps are epoch seconds.
+//! snapshots carry, the bindings export the sites' records (`sites.rs`), the account windows'
+//! rules (`account_windows`), `check_name` and `downloads_quit_question` of `present`, the
+//! fixtures' `fixture_names` and `fixture_page`, `started`, which every app asks first, three
+//! free functions the macOS app asks of its bundle and its environment, `app_command_line`,
+//! `can_run` and `pitboard_directory`, and the Windows app's `launch_refusal` and
+//! `unschedule_app`. The snapshot carries what an app shows of the accounts and the machine,
+//! such as a limit's names or how long an account lasts, made by `present` and the model, so
+//! no free function says it again. The free functions answer at once from what they are
+//! given, apart from `can_run`, which asks the file system about one path, `launch_refusal`,
+//! which asks the system how this process runs, `download_destination`, which asks the file
+//! system whether each name it tries is taken, and `unschedule_app`, which asks the system's
+//! scheduler and may take the watch and renewal tasks away. Timestamps are epoch seconds.
 
 use pitboard_core::context::{Context, Environment};
 use pitboard_core::host::Os;
@@ -235,6 +234,40 @@ pub fn no_update_key() -> String {
 #[uniffi::export]
 pub fn notice_buttons(front: Front) -> Vec<NoticeButtonOffer> {
     present::notice_buttons(front)
+}
+
+/// Which build of an app this is: a debug build is launched into a fixture, a release never.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Build {
+    Debug,
+    Release,
+}
+
+/// How a launch was started, as each front asks before it makes anything.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum Started {
+    /// Over the homes its environment names: every launch of a release build.
+    Live,
+    /// A debug build in the fixture `PITBOARD_FIXTURE` names, whichever it names:
+    /// `PitboardModel::fixture` refuses one that is none of `fixture_names`.
+    Fixture { name: String },
+    /// A debug build with no fixture, as the system starts one for a link, a widget or a
+    /// shortcut, with the person's own homes. What it does then is the front's: the macOS app
+    /// quits, the Windows app takes no link and no task.
+    OutsideFixture,
+}
+
+/// How a launch of `build` with `environment` was started. A release build reads nothing of
+/// the environment, so nothing outside can put it in a fixture.
+#[uniffi::export]
+pub fn started(build: Build, mut environment: HashMap<String, String>) -> Started {
+    match build {
+        Build::Release => Started::Live,
+        Build::Debug => match environment.remove("PITBOARD_FIXTURE") {
+            Some(name) => Started::Fixture { name },
+            None => Started::OutsideFixture,
+        },
+    }
 }
 
 // What stops the Windows app before it makes a model, which then shows this alone.
@@ -502,6 +535,53 @@ mod tests {
         let app = scratch.join("Pitboard").to_string_lossy().into_owned();
         assert!(!unschedule_app(environment, app));
         assert!(!scratch.exists(), "nothing is made");
+    }
+
+    fn launched_with(variables: &[(&str, &str)]) -> HashMap<String, String> {
+        variables
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+            .collect()
+    }
+
+    // As Shortcuts, a widget or a link starts one: with the person's own homes.
+    #[test]
+    fn a_debug_build_without_a_fixture_is_outside_one() {
+        assert_eq!(
+            started(Build::Debug, HashMap::new()),
+            Started::OutsideFixture
+        );
+        assert_eq!(
+            started(
+                Build::Debug,
+                launched_with(&[("HOME", "/Users/dana"), ("PITBOARD_FIXTURES", "twoTools")])
+            ),
+            Started::OutsideFixture
+        );
+    }
+
+    // Which fixtures there are is `PitboardModel::fixture`'s to say, in the library it has.
+    #[test]
+    fn a_fixture_is_named_by_its_variable_whatever_it_holds() {
+        for name in ["twoTools", "", "none of them"] {
+            assert_eq!(
+                started(Build::Debug, launched_with(&[("PITBOARD_FIXTURE", name)])),
+                Started::Fixture { name: name.into() },
+                "{name:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_release_build_reads_no_fixture() {
+        assert_eq!(
+            started(
+                Build::Release,
+                launched_with(&[("PITBOARD_FIXTURE", "twoTools")])
+            ),
+            Started::Live
+        );
+        assert_eq!(started(Build::Release, HashMap::new()), Started::Live);
     }
 
     // So no tool the core adds reaches the one arm that is not one of the apps' tools.

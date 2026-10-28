@@ -68,7 +68,8 @@ struct Dependencies {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Dependencies {
         #if DEBUG
-            if let name = environment[Fixture.variable] {
+            let launched = started(build: Launch.build, environment: environment)
+            if case .fixture(let name) = launched {
                 return Fixture.dependencies(named: name, environment: environment)
             }
         #endif

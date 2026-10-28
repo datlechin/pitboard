@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Xml;
+using Pitboard.Core;
 
 namespace Pitboard.Windows;
 

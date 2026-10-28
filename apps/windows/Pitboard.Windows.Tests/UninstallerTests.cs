@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Xml.Linq;
+using Pitboard.Core;
 
 namespace Pitboard.Windows.Tests;
 
