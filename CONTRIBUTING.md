@@ -158,17 +158,20 @@ on `PATH`. `TEST_INSTALL_SHELLS` names the ones that must be found, as CI sets i
 
 For a change to the release's scripts, `release-kind.sh`, `core-unchanged.sh`,
 `check-winget-hashes.py`, `windows-appcast.py`, `windows-versions.sh`,
-`windows-update-key.sh`, `windows-update-sign.sh` and `session-gate.sh` in `.github/scripts`,
-`apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
+`windows-update-key.sh`, `windows-update-sign.sh`, `session-gate.sh` and `linux-versions.sh` in
+`.github/scripts`, `apps/macos/scripts/build-number.sh`, the cargo-binstall metadata in
 `crates/pitboard/Cargo.toml`, or a workflow's call of a PowerShell script in `.github/scripts`:
 
 ```sh
 shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.sh \
   .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh \
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
-  apps/macos/scripts/build-number.sh
+  .github/scripts/linux-versions.sh apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
 ```
+
+The cases that need `dpkg` or `rpm` skip where it is not on `PATH`.
+`TEST_RELEASE_TOOLS` names the ones that must be found, as CI sets it on Linux.
 
 For a change to the Linux app's scripts, `apps/linux/scripts`,
 `apps/linux/data/metainfo-releases.py` and `.github/scripts/check-linux-app.sh`:

@@ -154,6 +154,7 @@ jobs:
         include:
           - os: ubuntu-latest
             shells: sh dash bash zsh busybox
+            tools: dpkg rpm
           - os: macos-latest
             shells: sh dash bash zsh
     runs-on: ${{ matrix.os }}
@@ -163,11 +164,12 @@ jobs:
         with:
           persist-credentials: false
       # The Ubuntu image has neither zsh nor BusyBox, and the script has to run under both, nor
-      # the validators check-linux-app.sh runs.
+      # the validators check-linux-app.sh runs. rpm compares the Linux packages' versions as dnf
+      # and zypper do.
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh busybox desktop-file-utils appstream
+          sudo apt-get install -y zsh busybox desktop-file-utils appstream rpm
       # 0.11.0 takes test's -ef from POSIX.1-2024; the Ubuntu image has 0.9.0.
       - if: runner.os == 'Linux'
         uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
@@ -180,6 +182,7 @@ jobs:
           .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
           .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
+          .github/scripts/linux-versions.sh
           apps/macos/scripts/build-number.sh
           .github/scripts/check-linux-app.sh apps/linux/scripts/cargo-build.sh
           apps/linux/scripts/install-deps.sh apps/linux/scripts/headless.sh
@@ -188,7 +191,9 @@ jobs:
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
-      - run: python3 .github/scripts/test-release.py
+      - env:
+          TEST_RELEASE_TOOLS: ${{ matrix.tools }}
+        run: python3 .github/scripts/test-release.py
       # check-linux-app.sh's cases need Linux's validators, which macOS lacks.
       - env:
           TEST_LINUX_APP_TOOLS: ${{ runner.os == 'Linux' && 'desktop-file-validate appstreamcli' || '' }}

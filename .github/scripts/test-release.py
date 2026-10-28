@@ -24,6 +24,7 @@ WINDOWS_VERSIONS = REPO / ".github" / "scripts" / "windows-versions.sh"
 WINDOWS_UPDATE_KEY = REPO / ".github" / "scripts" / "windows-update-key.sh"
 WINDOWS_UPDATE_SIGN = REPO / ".github" / "scripts" / "windows-update-sign.sh"
 SESSION_GATE = REPO / ".github" / "scripts" / "session-gate.sh"
+LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
 SCRIPTS = REPO / ".github" / "scripts"
@@ -66,10 +67,25 @@ ONLY_FROM_A_BETA = (
     "the session bundle is built only from a branch whose Pitboard version is 1.0.0-beta.1 or "
     "later"
 )
+NO_PACKAGE_VERSION = (
+    "has no package version: it takes X.Y.Z, X.Y.Z-rcN or, from 1.0.0, X.Y.Z-beta.N with N from "
+    "1 to 98"
+)
 
 
 def run(*args):
     return subprocess.run(["sh", *map(str, args)], capture_output=True, text=True)
+
+
+# A case that needs a tool skips where it is missing, and fails where TEST_RELEASE_TOOLS names it,
+# as CI's Linux leg does.
+def needs(test, *tools):
+    named = os.environ.get("TEST_RELEASE_TOOLS", "").split()
+    for tool in tools:
+        if shutil.which(tool) is None:
+            if tool in named:
+                test.fail(f"TEST_RELEASE_TOOLS names {tool}, which is not on PATH")
+            test.skipTest(f"{tool} is not on PATH")
 
 
 # Ed25519 as RFC 8032's section 6 writes it, Sparkle's and WinSparkle's signatures, so a test
@@ -1068,6 +1084,85 @@ class WindowsUpdateSign(unittest.TestCase):
         done = run(WINDOWS_UPDATE_SIGN, "v1.0.0", "true", self.public, self.work)
         self.assertEqual(done.returncode, 2)
         self.assertIn("usage:", done.stderr)
+
+
+class LinuxVersions(unittest.TestCase):
+    # A tag's version and its packages', in release order.
+    VERSIONS = {
+        "1.0.0-beta.6": "1.0.0~beta.6",
+        "1.0.0-beta.7": "1.0.0~beta.7",
+        "1.0.0-beta.10": "1.0.0~beta.10",
+        "1.0.0-rc1": "1.0.0~rc1",
+        "1.0.0-rc2": "1.0.0~rc2",
+        "1.0.0-rc10": "1.0.0~rc10",
+        "1.0.0": "1.0.0",
+        "1.0.1-beta.1": "1.0.1~beta.1",
+        "1.0.1": "1.0.1",
+        "1.10.0": "1.10.0",
+    }
+
+    def versions(self, version):
+        done = run(LINUX_VERSIONS, version)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, "")
+        pairs = [line.split("=", 1) for line in done.stdout.splitlines()]
+        self.assertEqual([key for key, _ in pairs], ["deb", "rpm-version", "rpm-release"])
+        return tuple(value for _, value in pairs)
+
+    def test_each_kind_has_its_package_versions(self):
+        for version, package in {
+            **self.VERSIONS,
+            "0.15.2": "0.15.2",
+            "0.16.0-rc1": "0.16.0~rc1",
+            "2.0.0-beta.98": "2.0.0~beta.98",
+        }.items():
+            with self.subTest(version=version):
+                self.assertEqual(self.versions(version), (package, package, "1"))
+
+    def test_package_versions_rise_with_the_release(self):
+        needs(self, "dpkg", "rpm")
+        rows = [self.versions(version) for version in self.VERSIONS]
+        for before, after in zip(rows, rows[1:]):
+            with self.subTest(before=before[0], after=after[0]):
+                dpkg = subprocess.run(["dpkg", "--compare-versions", before[0], "lt", after[0]])
+                self.assertEqual(dpkg.returncode, 0)
+                # The comparison dnf and zypper make, which answers -1 where the first is older.
+                vercmp = f"%{{lua:print(rpm.vercmp('{before[1]}', '{after[1]}'))}}"
+                rpm = subprocess.run(["rpm", "--eval", vercmp], capture_output=True, text=True)
+                self.assertEqual(rpm.returncode, 0, rpm.stderr)
+                self.assertEqual(rpm.stdout.strip(), "-1")
+
+    def test_a_version_it_cannot_number_is_refused(self):
+        for version in (
+            "1.0",
+            "1.0.0.1",
+            "01.0.0",
+            "1.0.0-rc0",
+            "1.0.0-rc01",
+            "1.0.0-rc.1",
+            "1.0.0-beta.0",
+            "1.0.0-beta.99",
+            "1.0.0-beta1",
+            "1.0.0-alpha.1",
+            "0.15.0-beta.1",
+            "1.0.0~rc1",
+            "1.0.0+1",
+            "v1.0.0",
+            "",
+            "1.0.0\n2.0.0",
+        ):
+            with self.subTest(version=version):
+                done = run(LINUX_VERSIONS, version)
+                self.assertEqual(done.returncode, 1)
+                self.assertEqual(done.stdout, "")
+                self.assertIn(NO_PACKAGE_VERSION, done.stderr)
+
+    def test_it_takes_one_argument(self):
+        for args in ((), ("1.0.0", "1.0.1")):
+            with self.subTest(args=args):
+                done = run(LINUX_VERSIONS, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
 
 
 class ScriptCalls(unittest.TestCase):

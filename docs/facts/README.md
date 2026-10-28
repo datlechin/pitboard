@@ -23,6 +23,7 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
 - [The Linux app](linux-app.md): its floor, its builds' names, what it installs and where,
   the GNOME, KDE and GTK readings its decisions rest on, and the images and headless display
   its checks run in.
+- [The Linux packages](linux-packages.md): how dpkg and rpm order their versions.
 - [WebKit and SwiftUI](webkit.md): the account windows on macOS.
 - [Foundation's URLs](foundation-urls.md): how a link was read before `pitboard-sites`.
 - [The bindings](bindings.md): what UniFFI generates for C# and Swift.
