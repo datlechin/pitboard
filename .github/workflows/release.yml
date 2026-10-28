@@ -168,18 +168,9 @@ jobs:
           rm -f "$RUNNER_TEMP/key.p8"
 
       - name: Package
-        shell: bash
-        run: |
-          name="pitboard-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          bin="target/${{ matrix.target }}/release/pitboard"
-          out="$RUNNER_TEMP/dist/$name"
-          mkdir -p "$out/completions"
-          cp "$bin" LICENSE NOTICE README.md "$out/"
-          "$bin" manpage > "$out/pitboard.1"
-          for shell in bash zsh fish; do
-            "$bin" completions "$shell" > "$out/completions/pitboard.$shell"
-          done
-          tar -C "$RUNNER_TEMP/dist" -czf "$RUNNER_TEMP/dist/$name.tar.gz" "$name"
+        run: >
+          sh .github/scripts/pack-command-line.sh "target/${{ matrix.target }}/release/pitboard"
+          "pitboard-${GITHUB_REF_NAME}-${{ matrix.target }}" "$RUNNER_TEMP/dist"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ matrix.target }}

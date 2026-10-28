@@ -27,6 +27,7 @@ WINDOWS_UPDATE_SIGN = REPO / ".github" / "scripts" / "windows-update-sign.sh"
 SESSION_GATE = REPO / ".github" / "scripts" / "session-gate.sh"
 LINUX_VERSIONS = REPO / ".github" / "scripts" / "linux-versions.sh"
 LINUX_REPOSITORY_KEY = REPO / ".github" / "scripts" / "linux-repository-key.sh"
+PACK_COMMAND_LINE = REPO / ".github" / "scripts" / "pack-command-line.sh"
 REPOSITORY_KEY = REPO / "packaging" / "linux" / "pitboard-archive-keyring.asc"
 WINDOWS_APP = REPO / "apps" / "windows" / "Pitboard.App" / "Pitboard.App.csproj"
 PACKAGE_WINDOWS = REPO / ".github" / "scripts" / "package-windows.ps1"
@@ -1402,6 +1403,78 @@ class RepositoryKey(unittest.TestCase):
                 done = run(LINUX_REPOSITORY_KEY, *args)
                 self.assertEqual(done.returncode, 2)
                 self.assertIn("usage: linux-repository-key.sh <public key> <seconds", done.stderr)
+
+
+class PackCommandLine(unittest.TestCase):
+    NAME = "pitboard-v1.0.0-beta.7-aarch64-unknown-linux-musl"
+    # A stand-in for the command line, which writes its man page and completions as pitboard does.
+    STAND_IN = """#!/bin/sh
+case $1 in
+  manpage) echo '.TH pitboard 1 "pitboard 1.0.0-beta.7"' ;;
+  completions) echo "# pitboard's $2 completions" ;;
+  *) exit 64 ;;
+esac
+"""
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+        self.binary = self.work / "release" / "pitboard"
+        self.binary.parent.mkdir()
+        self.binary.write_text(self.STAND_IN)
+        self.binary.chmod(0o755)
+        self.out = self.work / "dist"
+
+    def test_the_tarball_holds_the_command_line_its_man_page_and_completions(self):
+        done = run(PACK_COMMAND_LINE, self.binary, self.NAME, self.out)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(os.listdir(self.out), [f"{self.NAME}.tar.gz"])
+        with tarfile.open(self.out / f"{self.NAME}.tar.gz") as tar:
+            files = {
+                member.name.removeprefix(f"{self.NAME}/"): member
+                for member in tar.getmembers()
+                if member.isfile()
+            }
+            read = {name: tar.extractfile(member).read() for name, member in files.items()}
+            self.assertEqual(
+                {member.name for member in tar.getmembers() if member.isdir()},
+                {self.NAME, f"{self.NAME}/completions"},
+            )
+        self.assertEqual(
+            set(read),
+            {
+                "pitboard",
+                "pitboard.1",
+                "completions/pitboard.bash",
+                "completions/pitboard.zsh",
+                "completions/pitboard.fish",
+                "LICENSE",
+                "NOTICE",
+                "README.md",
+            },
+        )
+        self.assertEqual(read["pitboard"], self.binary.read_bytes())
+        self.assertEqual(files["pitboard"].mode & 0o111, 0o111)
+        self.assertEqual(read["pitboard.1"], b'.TH pitboard 1 "pitboard 1.0.0-beta.7"\n')
+        for shell in ("bash", "zsh", "fish"):
+            self.assertEqual(
+                read[f"completions/pitboard.{shell}"], f"# pitboard's {shell} completions\n".encode()
+            )
+        for file in ("LICENSE", "NOTICE", "README.md"):
+            self.assertEqual(read[file], (REPO / file).read_bytes())
+
+    def test_a_command_line_that_writes_no_man_page_packs_nothing(self):
+        self.binary.write_text(self.STAND_IN.replace("manpage)", "never)"))
+        done = run(PACK_COMMAND_LINE, self.binary, self.NAME, self.out)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertFalse(self.out.exists() and os.listdir(self.out))
+
+    def test_it_takes_three_arguments(self):
+        for args in ((self.binary, self.NAME), (self.binary, self.NAME, self.out, self.out)):
+            with self.subTest(args=len(args)):
+                done = run(PACK_COMMAND_LINE, *args)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("usage:", done.stderr)
 
 
 class ScriptCalls(unittest.TestCase):

@@ -184,7 +184,7 @@ jobs:
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
           .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
           .github/scripts/linux-versions.sh .github/scripts/linux-repository-key.sh
-          apps/macos/scripts/build-number.sh
+          .github/scripts/pack-command-line.sh apps/macos/scripts/build-number.sh
           .github/scripts/check-linux-app.sh apps/linux/scripts/cargo-build.sh
           apps/linux/scripts/install-deps.sh apps/linux/scripts/headless.sh
           apps/linux/scripts/in-container.sh apps/linux/scripts/check.sh
