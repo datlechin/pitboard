@@ -8,8 +8,13 @@ mod file;
 pub(crate) mod folder;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod memory;
-// macOS parks in the login keychain; Linux in files, and Windows in files sealed to the account.
-#[cfg(any(target_os = "linux", windows, test))]
+#[cfg_attr(
+    target_os = "macos",
+    allow(
+        dead_code,
+        reason = "macOS parks in the login keychain; every system's tests read these rules"
+    )
+)]
 pub(crate) mod vault;
 
 pub(crate) use file::PlainFile;

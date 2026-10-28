@@ -26,7 +26,7 @@ pub(crate) struct FileVault {
 }
 
 impl FileVault {
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg_attr(windows, allow(dead_code, reason = "Windows' host seals every park"))]
     pub(crate) fn new(ctx: &Context) -> FileVault {
         FileVault {
             dir: super::vault_dir(ctx),
@@ -34,7 +34,10 @@ impl FileVault {
         }
     }
 
-    #[cfg(any(windows, test))]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only Windows' host seals a park")
+    )]
     pub(crate) fn sealed(ctx: &Context, seal: &'static dyn Seal) -> FileVault {
         FileVault {
             dir: super::vault_dir(ctx),
