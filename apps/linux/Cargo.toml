@@ -1,0 +1,36 @@
+[package]
+name = "pitboard-linux"
+description = "Pitboard's app for GNOME and KDE Plasma, which Meson builds and installs. Never published."
+version.workspace = true
+edition.workspace = true
+# gtk4 0.11 needs Rust 1.92, past the 1.91 the published crates keep.
+rust-version = "1.92"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "pitboard_linux"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pitboard-app"
+path = "src/main.rs"
+
+# Linux alone builds the app; elsewhere the crate compiles as nothing, and Cargo matches a
+# build-dependency's cfg against the machine that builds. Each binding is held to the floor,
+# GTK 4.18, libadwaita 1.7 and GLib 2.84, as Debian 13 ships them.
+[target.'cfg(target_os = "linux")'.dependencies]
+adw = { package = "libadwaita", version = "0.9.2", features = ["v1_7"] }
+gio = { version = "0.22.10", features = ["v2_84"] }
+glib = { version = "0.22.10", features = ["v2_84"] }
+gtk = { package = "gtk4", version = "0.11.5", features = ["v4_18"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+tempfile.workspace = true
+
+[target.'cfg(target_os = "linux")'.build-dependencies]
+glib-build-tools = "0.22.8"
+
+[lints]
+workspace = true

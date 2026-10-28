@@ -382,7 +382,7 @@ jobs:
           tool: cargo-hack@0.6.45
       # --rust-version installs the rust-version in Cargo.toml and checks with it; the
       # workspace behaviour keeps it one cargo check, not one per package.
-      - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-targets --locked
+      - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --exclude pitboard-linux --all-targets --locked
       - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-model --all-targets --locked --features fixture
 
   apple:
@@ -1062,7 +1062,7 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-hack@0.6.45
-      - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-targets --locked
+      - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --exclude pitboard-linux --all-targets --locked
       # The fixtures, which only a build with the feature compiles.
       - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-model --all-targets --locked --features fixture
 

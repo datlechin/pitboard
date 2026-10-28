@@ -11,6 +11,22 @@ members = [
     "crates/uniffi-bindgen-csharp",
     "crates/pitboard-conformance",
     "crates/pitboard-probe",
+    "apps/linux",
+]
+# Every member but the Linux app, whose GTK and libadwaita development files are on no machine
+# but the Linux app's own: `cargo build`, `clippy` and `nextest` leave it out unless asked
+# with `-p pitboard-linux` or `--workspace`, where it compiles as nothing off Linux.
+default-members = [
+    "crates/pitboard-core",
+    "crates/pitboard",
+    "crates/pitboard-model",
+    "crates/pitboard-ffi",
+    "crates/pitboard-sites",
+    "crates/pitboard-share-ffi",
+    "crates/uniffi-bindgen-swift",
+    "crates/uniffi-bindgen-csharp",
+    "crates/pitboard-conformance",
+    "crates/pitboard-probe",
 ]
 
 [workspace.package]

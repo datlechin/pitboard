@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/usepitboard/Pitboard">
+    <file compressed="true">com.usepitboard.Pitboard.metainfo.xml</file>
+    <file>icons/scalable/apps/com.usepitboard.Pitboard.svg</file>
+    <file>icons/scalable/apps/com.usepitboard.Pitboard.Devel.svg</file>
+    <file>icons/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg</file>
+  </gresource>
+</gresources>

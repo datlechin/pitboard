@@ -41,6 +41,11 @@ version = 2
 # CC0-1.0 is notify's, a public domain dedication with nothing to keep or pass on.
 allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib", "Unlicense", "ISC", "BSD-3-Clause", "MPL-2.0", "CC0-1.0"]
 confidence-threshold = 0.9
+# target-lexicon reads a target's name in system-deps' build scripts, which find GTK for the
+# Linux app at build time; none of it is in the program.
+exceptions = [
+  { allow = ["Apache-2.0 WITH LLVM-exception"], crate = "target-lexicon" },
+]
 
 [bans]
 multiple-versions = "warn"

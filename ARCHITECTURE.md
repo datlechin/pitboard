@@ -189,6 +189,13 @@ The apps:
     the built app.
   - `Pitboard.Probe`: the session machine's measurements of the app's adapters, never shipped.
   - `Icon`: the drawings `Pitboard.ico` is made from.
+- `apps/linux/`: the Linux app, GTK 4 and libadwaita, which Meson builds and installs.
+  - `src/`: the glue: what a build is and the names it answers to (`config.rs`), and whether
+    a launch starts anything (`launch.rs`).
+  - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
+    script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
+    KRunner's runner and the icons, and the GResource `build.rs` compiles for the program.
+  - `scripts/`: Meson's Cargo step.
 
 The rest:
 
@@ -608,6 +615,13 @@ keeps it is in the header of the module named.
   the model gave it, read only where a link would be, and its switch is a request from outside
   (`LaunchingTests`, `model/quick_actions.rs`).
   Only a Release build writes the list, and `--unregister` deletes it.
+- A build of the Linux app is the release only where Meson built it, and anything Cargo builds
+  alone is the debug build, with an id, a link scheme and an object path of its own
+  (`a_build_is_a_release_only_where_meson_says_so`, `each_build_has_its_own_id_scheme_and_path`).
+  Until it links the model, its program quits before it reaches the session bus
+  (`a_build_with_no_model_quits_before_it_owns_a_name`).
+- Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
+  (`neither_search_starts_pitboard`).
 
 ### Account windows
 

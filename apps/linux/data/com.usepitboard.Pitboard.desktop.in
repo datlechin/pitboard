@@ -1,0 +1,23 @@
+[Desktop Entry]
+Type=Application
+Name=Pitboard
+GenericName=Account Switcher
+Comment=Switch AI coding tools between your accounts
+Keywords=Claude;Codex;Anthropic;OpenAI;account;switch;limits;usage;
+Icon=com.usepitboard.Pitboard
+Exec=@BINDIR@/pitboard-app %u
+TryExec=@BINDIR@/pitboard-app
+DBusActivatable=true
+StartupNotify=true
+Terminal=false
+Categories=Development;
+MimeType=x-scheme-handler/pitboard;
+Actions=add-account;refresh;
+
+[Desktop Action add-account]
+Name=Add Account
+Exec=@BINDIR@/pitboard-app --add-account
+
+[Desktop Action refresh]
+Name=Refresh
+Exec=@BINDIR@/pitboard-app --refresh

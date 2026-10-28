@@ -20,6 +20,8 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
 - [What the Windows app's glue rests on](windows-app.md): WinUI, WebView2, the Windows App SDK,
   WinSparkle and Microsoft's guidance.
 - [The macOS app](macos-app.md): what the Swift app said, and Foundation and AppKit.
+- [The Linux app](linux-app.md): its floor, its builds' names, what it installs and where,
+  and the GNOME, KDE and GTK readings its decisions rest on.
 - [WebKit and SwiftUI](webkit.md): the account windows on macOS.
 - [Foundation's URLs](foundation-urls.md): how a link was read before `pitboard-sites`.
 - [The bindings](bindings.md): what UniFFI generates for C# and Swift.

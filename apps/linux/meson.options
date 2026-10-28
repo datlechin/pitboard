@@ -1,0 +1,7 @@
+option(
+  'package',
+  type: 'combo',
+  choices: ['none', 'deb', 'rpm'],
+  value: 'none',
+  description: 'The package manager that installs this build, whose command Uninstall names',
+)

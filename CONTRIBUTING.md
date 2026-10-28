@@ -77,7 +77,7 @@ lint and a run of the `fixture::` tests of its own.
 CI checks the workspace on Rust 1.91 too:
 
 ```sh
-cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-targets --locked
+cargo hack check --rust-version --workspace-behavior=cargo --workspace --exclude pitboard-linux --all-targets --locked
 ```
 
 Only a Mac compiles `rusqlite`, so CI also checks `pitboard-core`, `pitboard` and
@@ -165,6 +165,14 @@ shellcheck -s sh .github/scripts/release-kind.sh .github/scripts/core-unchanged.
   .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh \
   apps/macos/scripts/build-number.sh
 python3 .github/scripts/test-release.py
+```
+
+For a change to the Linux app's build scripts, `apps/linux/scripts/cargo-build.sh` and
+`apps/linux/data/metainfo-releases.py`:
+
+```sh
+shellcheck -s sh apps/linux/scripts/cargo-build.sh
+python3 .github/scripts/test-linux-app.py
 ```
 
 The macOS app, Windows, the Windows app, Linux and the website have checks of their own, in
