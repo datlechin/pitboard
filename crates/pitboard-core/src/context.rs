@@ -80,12 +80,15 @@ const READ: &[&str] = &[
 
 // Read only by a build for tests: a release lists none and reads none.
 #[cfg(any(test, feature = "test-support"))]
-const READ_BY_BUILDS_FOR_TESTS: &[&str] = &[TEST_CLAUDE_DESKTOP];
+const READ_BY_BUILDS_FOR_TESTS: &[&str] = &[TEST_CLAUDE_DESKTOP, TEST_BUS];
 #[cfg(not(any(test, feature = "test-support")))]
 const READ_BY_BUILDS_FOR_TESTS: &[&str] = &[];
 
 #[cfg(any(test, feature = "test-support"))]
 const TEST_CLAUDE_DESKTOP: &str = "PITBOARD_TEST_CLAUDE_DESKTOP";
+// The D-Bus address of the bus a test started, the only one a build for tests reaches on Linux.
+#[cfg(any(test, feature = "test-support"))]
+const TEST_BUS: &str = "PITBOARD_TEST_BUS";
 
 /// Every variable Pitboard reads from its environment, by name.
 pub(crate) fn variables() -> impl Iterator<Item = &'static str> {
@@ -439,6 +442,9 @@ pub struct Context {
     pub(crate) sign_in_script: Option<Arc<dyn crate::switch::SignInScript>>,
     #[cfg(any(test, feature = "test-support"))]
     scratch_claude: Option<ScratchClaude>,
+    // The bus a test started, on Linux: in a build for tests, the only one reached.
+    #[cfg(any(test, feature = "test-support"))]
+    test_bus: Option<String>,
     #[cfg(any(test, feature = "test-support"))]
     awaited_every: Option<std::time::Duration>,
     #[cfg(test)]
@@ -633,6 +639,8 @@ impl Context {
             sign_in_script: None,
             #[cfg(any(test, feature = "test-support"))]
             scratch_claude: None,
+            #[cfg(any(test, feature = "test-support"))]
+            test_bus: None,
             #[cfg(any(test, feature = "test-support"))]
             awaited_every: None,
             #[cfg(test)]
@@ -889,6 +897,25 @@ impl Context {
         self
     }
 
+    // The bus a test started, which a release has no word for.
+    #[cfg(any(test, feature = "test-support"))]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a session bus to find")
+    )]
+    pub(crate) fn test_bus(&self) -> Option<&str> {
+        self.test_bus.as_deref()
+    }
+
+    /// Reach the D-Bus at `address` on Linux, a bus the test started: in a build for tests no
+    /// other is reached, the session's own least of all.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn with_test_bus(mut self, address: String) -> Context {
+        self.test_bus = Some(address);
+        self
+    }
+
     // How often a sign-in waited for asks the process list: a second, unless a test said.
     pub(crate) fn awaited_every(&self) -> std::time::Duration {
         #[cfg(any(test, feature = "test-support"))]
@@ -1060,6 +1087,9 @@ impl Context {
             #[cfg(any(test, feature = "test-support"))]
             scratch_claude: None,
             #[cfg(any(test, feature = "test-support"))]
+            test_bus: owned(TEST_BUS)
+                .filter(|address| env.os() == Os::Linux && !address.is_empty()),
+            #[cfg(any(test, feature = "test-support"))]
             awaited_every: None,
             #[cfg(test)]
             unknown_machine: false,
@@ -1224,6 +1254,21 @@ mod tests {
         let scratch = read.scratch_claude().expect("named");
         assert_eq!(scratch.data, folder.join("data"));
         assert_eq!(scratch.app, folder.join("Claude.app"));
+    }
+
+    // Withheld from every command a test runs unless it passes its own bus on by name.
+    #[test]
+    fn the_test_bus_is_listed_only_in_a_build_for_tests_and_read_on_linux() {
+        assert!(variables().any(|name| name == "PITBOARD_TEST_BUS"));
+        assert!(!READ.contains(&"PITBOARD_TEST_BUS"));
+        assert_eq!(Context::for_unit_test().test_bus(), None);
+        let address = "unix:path=/tmp/pitboard-test/bus";
+        let read = |os| {
+            let pairs = [("HOME", "/home/x"), ("PITBOARD_TEST_BUS", address)];
+            Context::read(&Environment::on(os, pairs), "cli")
+        };
+        assert_eq!(read(Os::Linux).test_bus(), Some(address));
+        assert_eq!(read(Os::MacOs).test_bus(), None);
     }
 
     // It panics before anything there is listed or opened.

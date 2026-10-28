@@ -15,7 +15,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 
 | File | Holds | Written or taken by |
 | --- | --- | --- |
-| `state.json` | The enrolled accounts with their email addresses, ids and plans, their parked logins' names and expiry, whose login each tool has stored, a renewal of Claude Code's login not saved yet, a Claude Desktop move under way, a sign-in inside Claude left halfway, and which folders in `parks/` are set aside | Every change and renewal, and a read that finds a tool's stored login changed or an account's plan different from the one recorded |
+| `state.json` | The enrolled accounts with their email addresses, ids and plans, their parked logins' names and expiry, whose login each tool has stored, a renewal of Claude Code's login not saved yet, a Claude Desktop move under way, a sign-in inside Claude left halfway, which folders in `parks/` are set aside, and on Linux how parked logins are kept | Every change and renewal, and a read that finds a tool's stored login changed or an account's plan different from the one recorded |
 | `state.lock` | The lock that lets one change run at a time | As `state.json`, and every automatic switch |
 | `journal.json` | The record of a Claude Code or Codex switch until it is done. One left behind marks an [interrupted switch](/concepts/switching#interrupted-switches). | A switch |
 | `pending` | Names of parked logins about to be written, one per line, which the next change resolves. A line for a folder in `parks/` starts with `folder `. Absent when empty. | Anything that parks a login |
@@ -27,7 +27,7 @@ Pitboard creates each directory at mode 0700 and each file at 0600. On Windows, 
 | `warm/` | Where Claude Code runs a warm-up, in `warm/claude/`, with a home and config of its own made for the run and removed after it. | A warm-up |
 | `signin/` | Where a tool signs in, apart from the login in use. Removed when the sign-in ends, or by the next one. | A sign-in |
 | `signin-work/` | The folder a tool's sign-in runs in. Emptied as each sign-in starts and kept after it, since the browser it opens may run there. | A sign-in |
-| `vault/` | Linux and Windows: the parked logins of Claude Code and Codex, one file each, sealed to your Windows account on Windows | Anything that parks or renews a login |
+| `vault/` | Windows, and Linux where `state.json` says files: the parked logins of Claude Code and Codex, one file each, sealed to your Windows account on Windows | Anything that parks or renews a login |
 | `parks/` | macOS: the parked logins of Claude Desktop and the folders set aside, one folder each, as [Folders in parks](/reference/files#folders-in-parks) lists | A change to a Claude Desktop account, `repair` and `adopt` |
 | `usage.json` | The newest usage reading of each account | Reading usage, and the status line |
 | `usage.lock` | The lock around `usage.json` and `sessions.json` | As `usage.json` |
@@ -63,11 +63,23 @@ Your home's own folders count, so `/home/sync/.pitboard` is refused.
 | Tool | System | A parked login is | Named |
 | --- | --- | --- | --- |
 | Claude Code, Codex | macOS | An item in your default keychain | `pitboard-park-<account id>-<time>` |
-| Claude Code, Codex | Linux | A file in `~/.pitboard/vault/` | `pitboard-park-<account id>-<time>.json` |
+| Claude Code, Codex | Linux | An item in your login keyring, the Secret Service's default collection | `pitboard-park-<account id>-<time>` |
+| Claude Code, Codex | Linux, where `state.json` says files | A file in `~/.pitboard/vault/` | `pitboard-park-<account id>-<time>.json` |
 | Claude Code, Codex | Windows | A file in `vault` in Pitboard's directory, sealed with Windows' data protection under your account | `pitboard-park-<account id>-<time>.json` |
 | Claude Desktop | macOS | A folder in `~/.pitboard/parks/`, as [Folders in parks](/reference/files#folders-in-parks) lists | `pitboard-park-<account id>-<time>` |
 
 On macOS, a keychain item's account is the one Claude Code's own item uses, from `USER`. Pitboard writes it through `/usr/bin/security`: on macOS 26, an item written through the Security framework takes about a second for each read by `security`, against 0.01 seconds.
+
+On Linux, a Secret Service item is labelled `Pitboard parked login`, with the attribute `xdg:schema` set to `com.usepitboard.Pitboard.Park` and `service` to its name.
+
+On Linux, `state.json` records how a Pitboard directory keeps its parked logins, as `vault`:
+
+| `form` | Parked logins are | Recorded |
+| --- | --- | --- |
+| `secret_service` | Items in your login keyring | By the directory's first save, where a Secret Service answers with a default collection |
+| `files` | Files in `vault/` | By the directory's first save, where none answers, and for a directory an earlier Pitboard made |
+
+Pitboard keeps the form a directory recorded.
 
 When Pitboard renews Claude Code's login, a copy of the renewed login waits beside the parked logins as `pitboard-park-renewing-<time>` until it is saved where Claude Code keeps it.
 

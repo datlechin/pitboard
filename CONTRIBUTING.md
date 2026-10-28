@@ -113,6 +113,12 @@ either `Applications` panics. So does one named through `..`. The harness names 
 test's own folder, and starts the stand-in under its `Claude.app` where a test needs Claude
 open. `pitboard_core::testing::desktop` writes a data folder as Claude leaves one.
 
+On Linux, a build for tests reaches no D-Bus but one a test started and named, with
+`Context::with_test_bus` or `PITBOARD_TEST_BUS`. `pitboard_core::testing::SecretService` starts
+`dbus-daemon` and `gnome-keyring-daemon` in the test's own folder, on a bus of its own, and the
+tests that park there fail, naming the package, where `dbus-daemon` or `gnome-keyring` is not
+installed.
+
 As root, under `sudo`, from an elevated terminal on Windows, or on a file system without Unix
 modes, some tests fail and say why.
 

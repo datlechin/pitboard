@@ -59,9 +59,9 @@ built with a `context::Context`:
   of its own, which a build for tests refuses. `watch.rs` watches one folder through each
   system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
-    launchd, SQLite and managed preferences; `/proc`, systemd, the D-Bus it is asked over
-    (`bus.rs`) and glibc's way to keep descriptors from the login shell; and what both POSIX
-    systems share.
+    launchd, SQLite and managed preferences; `/proc`, systemd, the Secret Service
+    (`secret_service.rs`), the D-Bus both are asked over (`bus.rs`) and glibc's way to keep
+    descriptors from the login shell; and what both POSIX systems share.
   - `host/windows/`: Credential Manager, DPAPI seals, Task Scheduler, processes, tokens, jobs,
     the registry and files made private by their access list.
   - `acl.rs`, `owner.rs`, `replace.rs`, `token.rs`, `task.rs`: Windows' rules, compiled on
@@ -107,8 +107,9 @@ built with a `context::Context`:
   each a function of typed values, and every error and warning with its code.
 - `audit.rs`, `redact.rs`: the activity log, and a diagnosis made safe to paste.
 - `assumptions.rs`: how a register is written.
-- `stand_in.rs`, `desktop_testing.rs`, `fault.rs`, `helper.rs`: for tests alone: the stand-in
-  program, the Claude Desktop the tests play, crash points and a test run as another process.
+- `stand_in.rs`, `desktop_testing.rs`, `secret_service_testing.rs`, `fault.rs`, `helper.rs`: for
+  tests alone: the stand-in program, the Claude Desktop the tests play, the Secret Service they
+  start on Linux, crash points and a test run as another process.
 
 The other crates:
 
@@ -319,6 +320,11 @@ keeps it is in the header of the module named.
   entropy naming the park, never kept in Credential Manager, and one that does not open is
   unreadable, never absent (`store/vault.rs`,
   `a_seal_whose_key_is_not_found_is_unreadable_not_absent`).
+- On Linux each home's parks are where `state.json`'s `vault` says: one Secret Service item per
+  park in the default collection, shared by every home of the session as the keychain is, or
+  0600 files in the home. A home records the form its first save found and keeps it
+  (`a_home_keeps_the_vault_form_it_recorded`), and one on the Secret Service never falls back to
+  files (`a_home_on_the_secret_service_is_refused_where_none_answers_and_never_falls_back_to_files`).
 - `abandon` gives up an interrupted switch first, whatever Claude Desktop's state, and `adopt`
   drops every waiting move and awaited sign-in, which were the other computer's. A change of
   Claude Desktop that fails carries what it did first in its error (`Error::SaidFirst`), which
@@ -395,6 +401,9 @@ keeps it is in the header of the module named.
   for tests (`a_test_never_reaches_the_systems_own_scheduler`), and on Linux the user's systemd
   is asked nothing (`the_systems_user_manager_is_never_asked_from_a_build_for_tests`). The Release build
   `ReleaseGateTests` starts at 1.x only reads Task Scheduler and writes no task.
+- No test reaches the session's bus: a build for tests connects only to a bus a test started
+  and named, and never to one in the account's own runtime folder
+  (`a_build_for_tests_connects_to_no_bus_it_was_not_given`).
 - No test addresses a name a real login may be kept under, or a folder that is, holds or lies
   in a real login place: `guard_not_live` refuses `provider::names`' families, `host::lies_in`
   answers for folders, and CI's Windows legs check afterwards that nothing leaked

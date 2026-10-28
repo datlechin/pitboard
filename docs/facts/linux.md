@@ -178,3 +178,34 @@ Read on 29 October 2026 in each crate as crates.io serves it.
 - `async-io` runs zbus's own executor, so the musl command line links no tokio:
   `cargo tree -p pitboard --target aarch64-unknown-linux-musl -e normal,build -i tokio` finds
   nothing.
+
+## The Secret Service
+
+Read on 29 October 2026 in the [Secret Service API](https://specifications.freedesktop.org/secret-service/latest/),
+draft 0.2, and in each crate as crates.io serves it. Measured the same day in a Debian 13
+container on arm64, as uid 1000 on a bus of its own, with `gnome-keyring` 48.0 and `dbus` 1.16.2,
+through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
+
+- A collection's alias `default` names where an item goes unless the program says otherwise. A
+  freshly unlocked login keyring is `/org/freedesktop/secrets/collection/login`, which `default`
+  names, beside a `session` collection that is kept only in memory. With no login keyring made,
+  `ReadAlias("default")` is `/`, which secret-service reads as `NoResult`, and only `session` is
+  there. So a park goes in the default collection alone, and a new home takes the Secret Service
+  only where one answers with a default collection (`secret_service::answers`).
+- An item's attributes are what was written, `xdg:schema` and `service`, whether the collection
+  is locked or not, and its label reads back. Its content type does not: written
+  `application/json`, it reads back `text/plain`. A `CreateItem` with `replace` and the same
+  attributes replaces the item at the same path, with a warning on gnome-keyring's standard
+  error (`a_park_round_trips_as_one_item_of_pitboards_schema`).
+- A search by `xdg:schema` finds every item of the collection with it, whatever home wrote it,
+  and nothing of another schema (`the_list_holds_every_park_on_the_bus_and_nothing_of_another_schema`).
+- With nothing on the bus owning `org.freedesktop.secrets`, opening a session fails with
+  `org.freedesktop.DBus.Error.ServiceUnknown` within 30 milliseconds. secret-service 5.2.0
+  turns only an address or connection error into its `Unavailable`, so this one is a zbus
+  method error.
+- secret-service is taken over oo7 0.6.0, whose `rust-version` is 1.92, past the core's 1.91, and
+  which is async only and always pulls ashpd, and over keyring 4.2.0, whose crate docs tell an
+  application that controls which store it uses not to link it, and whose `Entry` hides the
+  attributes a list of parks searches by. Its crypto is pure Rust (aes 0.9, cbc 0.2, hkdf 0.13,
+  sha2 0.11), so the musl command line links it, and it rides on the core's zbus 5 with
+  `async-io`: `cargo tree -d -i zbus` names one zbus.

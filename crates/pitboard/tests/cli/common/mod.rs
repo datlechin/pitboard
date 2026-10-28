@@ -95,6 +95,10 @@ const SECURITY: &str = "/usr/bin/security";
 
 pub(crate) struct Env {
     pub root: PathBuf,
+    // The Secret Service this test started in `root`, which each command reaches as
+    // `PITBOARD_TEST_BUS`, stopped before `root` is deleted.
+    #[cfg(target_os = "linux")]
+    secret_service: Option<pitboard_core::testing::SecretService>,
     // `root`'s, taken away once the drop below has deleted what outlives it.
     _scratch: tempfile::TempDir,
     pub service: String,
@@ -110,7 +114,11 @@ pub(crate) struct Env {
 
 /// alpha signed in and enrolled, beta enrolled by signing in privately.
 pub(crate) fn two_accounts(name: &str) -> Env {
-    let mut env = Env::new(name);
+    two_accounts_in(Env::new(name))
+}
+
+/// [`two_accounts`], in `env`.
+pub(crate) fn two_accounts_in(mut env: Env) -> Env {
     let (a, o, b, p) = (env.uuid('a'), env.uuid('o'), env.uuid('b'), env.uuid('p'));
     env.sign_in(&a, "a@example.com", &o, "refresh-a");
     let (_, err, code) = env.run(&["enroll", "alpha"]);
@@ -174,6 +182,8 @@ impl Env {
             .create();
         Env {
             root,
+            #[cfg(target_os = "linux")]
+            secret_service: None,
             _scratch: scratch,
             service,
             name: name.to_string(),
@@ -181,6 +191,33 @@ impl Env {
             usage,
             mocks: Vec::new(),
         }
+    }
+
+    /// [`Env::new`], with a Secret Service of this test's own on a bus it started, which every
+    /// command is given: a new Pitboard directory parks there.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn with_secret_service(name: &str) -> Env {
+        let mut env = Env::new(name);
+        let started = pitboard_core::testing::SecretService::start(&env.root.join("keyring"))
+            .unwrap_or_else(|missing| panic!("{missing}"));
+        env.secret_service = Some(started);
+        env
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn secret_service(&self) -> &pitboard_core::testing::SecretService {
+        self.secret_service
+            .as_ref()
+            .expect("a test that started a Secret Service")
+    }
+
+    // Where this test's Pitboard parks: its own Secret Service, where it started one.
+    fn parked_login(&self) -> Kept {
+        #[cfg(target_os = "linux")]
+        if self.secret_service.is_some() {
+            return Kept::InSecretService;
+        }
+        os::parked_login()
     }
 
     /// Count how often Pitboard asks Anthropic what an account has left, from here on.
@@ -350,6 +387,12 @@ impl Env {
                 .into_iter()
                 .map(|(name, folder)| (name, folder.into_os_string())),
         );
+        #[cfg(target_os = "linux")]
+        given.extend(
+            self.secret_service
+                .as_ref()
+                .map(|started| ("PITBOARD_TEST_BUS", started.address().into())),
+        );
         given
     }
 
@@ -494,7 +537,7 @@ impl Env {
                 name: ".credentials.json".into(),
                 contents: credential.into(),
             },
-            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
+            Kept::Sealed | Kept::InSecretService => unreachable!("{ONLY_PARKS}"),
         };
         let mut steps = vec![Step::Says("Opening browser to sign in\n".into())];
         steps.extend(held);
@@ -514,8 +557,8 @@ impl Env {
     /// machine's.
     pub(crate) fn write_park(&self, service: &str, contents: &str) {
         guard_not_live(service);
-        match os::parked_login() {
-            Kept::InKeychain | Kept::Sealed => {
+        match self.parked_login() {
+            Kept::InKeychain | Kept::Sealed | Kept::InSecretService => {
                 pitboard_core::testing::vault_write(&self.context(), service, contents)
                     .unwrap_or_else(|e| panic!("{service} could not be parked: {e}"));
             }
@@ -530,8 +573,8 @@ impl Env {
     }
 
     pub(crate) fn is_parked(&self, service: &str) -> bool {
-        match os::parked_login() {
-            Kept::InKeychain | Kept::Sealed => {
+        match self.parked_login() {
+            Kept::InKeychain | Kept::Sealed | Kept::InSecretService => {
                 pitboard_core::testing::vault_read(&self.context(), service)
                     .unwrap_or_else(|e| panic!("{service} could not be read: {e}"))
                     .is_some()
@@ -553,8 +596,8 @@ impl Env {
     /// before it got this far.
     pub(crate) fn delete_park(&self, service: &str) {
         guard_not_live(service);
-        match os::parked_login() {
-            Kept::InKeychain | Kept::Sealed => {
+        match self.parked_login() {
+            Kept::InKeychain | Kept::Sealed | Kept::InSecretService => {
                 let _ = pitboard_core::testing::vault_delete(&self.context(), service);
             }
             Kept::InFile => {
@@ -575,7 +618,7 @@ impl Env {
             Kept::InFile => {
                 let _ = std::fs::remove_file(self.live_path());
             }
-            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
+            Kept::Sealed | Kept::InSecretService => unreachable!("{ONLY_PARKS}"),
         }
     }
 
@@ -879,7 +922,7 @@ impl Env {
                 self.write_live(&body);
                 return;
             }
-            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
+            Kept::Sealed | Kept::InSecretService => unreachable!("{ONLY_PARKS}"),
         }
         self.guard(&self.service);
         let done = Command::new(SECURITY)
@@ -913,7 +956,7 @@ impl Env {
             // is a stand-in for something else. `doctor` reads these modes and fails on a
             // login anybody can read, which is how this was found.
             Kept::InFile => os::write_private(&self.live_path(), credential),
-            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
+            Kept::Sealed | Kept::InSecretService => unreachable!("{ONLY_PARKS}"),
         }
     }
 
@@ -937,7 +980,7 @@ impl Env {
                 .unwrap()
                 .unwrap(),
             Kept::InFile => std::fs::read_to_string(self.live_path()).unwrap(),
-            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
+            Kept::Sealed | Kept::InSecretService => unreachable!("{ONLY_PARKS}"),
         };
         serde_json::from_str(&raw).unwrap()
     }
@@ -1291,7 +1334,8 @@ fn delete_keychain_item(service: &str) {
         .output();
 }
 
-const SEALS_NOTHING: &str = "Claude Code keeps no login sealed: only Pitboard's vault does";
+const ONLY_PARKS: &str =
+    "Claude Code keeps no login sealed or in the Secret Service: only Pitboard's vault does";
 
 impl Drop for Env {
     fn drop(&mut self) {
@@ -1307,18 +1351,18 @@ impl Drop for Env {
             }
             why.is_none()
         };
-        match os::parked_login() {
+        match self.parked_login() {
             Kept::InKeychain => {
                 for service in self.parks_named().iter().filter(ours) {
                     delete_keychain_item(service);
                 }
             }
-            Kept::InFile | Kept::Sealed => {}
+            Kept::InFile | Kept::Sealed | Kept::InSecretService => {}
         }
         match os::claude_code_login() {
             Kept::InKeychain => delete_keychain_item(&self.service),
             Kept::InFile => {}
-            Kept::Sealed => unreachable!("{SEALS_NOTHING}"),
+            Kept::Sealed | Kept::InSecretService => unreachable!("{ONLY_PARKS}"),
         }
         // A test that turned Claude Code's Credential Manager store on left its login in this
         // test's slot there, each piece by name.

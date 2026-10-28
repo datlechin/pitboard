@@ -1,10 +1,13 @@
-//! Linux: files, a vault of files, `/proc`, systemd and the D-Bus it is asked over.
+//! Linux: files, the Secret Service, `/proc`, systemd and the D-Bus both are asked over.
 //!
 //! Claude Code has no keyring backend on Linux, so its login is a plaintext file it sets to
-//! 0600, and Pitboard's parked logins are 0600 files in a 0700 directory beside it.
+//! 0600. Pitboard parks each login as an item of the Secret Service, or as a 0600 file in a 0700
+//! directory beside it where a home recorded files: one where no Secret Service answered, as
+//! over SSH or in a container, and one an earlier Pitboard kept.
 
 mod bus;
 mod procfs;
+mod secret_service;
 mod systemd;
 
 pub(super) use super::unix::awake;
@@ -79,19 +82,27 @@ impl Host for Linux {
     }
 
     fn vault_forms(&self) -> &'static [VaultForm] {
-        &[VaultForm::Files]
+        &[VaultForm::SecretService, VaultForm::Files]
     }
 
-    fn new_home_form(&self, _ctx: &Context) -> Option<VaultForm> {
-        Some(VaultForm::Files)
+    fn new_home_form(&self, ctx: &Context) -> Option<VaultForm> {
+        Some(if secret_service::answers(ctx) {
+            VaultForm::SecretService
+        } else {
+            VaultForm::Files
+        })
     }
 
-    fn vault(&self, ctx: &Context, _form: Option<VaultForm>) -> Box<dyn RawStore> {
-        Box::new(FileVault::new(ctx))
+    fn vault(&self, ctx: &Context, form: Option<VaultForm>) -> Box<dyn RawStore> {
+        match form {
+            Some(VaultForm::SecretService) => Box::new(secret_service::Vault::of(ctx)),
+            Some(VaultForm::Files) | None => Box::new(FileVault::new(ctx)),
+        }
     }
 
-    fn vault_is_shared(&self, _form: Option<VaultForm>) -> bool {
-        false
+    // A collection belongs to the session, a vault of files to its home.
+    fn vault_is_shared(&self, form: Option<VaultForm>) -> bool {
+        form == Some(VaultForm::SecretService)
     }
 
     // Nothing asks: Claude Desktop's data folder is refused here first.

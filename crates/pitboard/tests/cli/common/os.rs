@@ -21,6 +21,13 @@ pub(crate) enum Kept {
     InFile,
     // Sealed to the Windows account: only Pitboard's own vault can write or open it.
     Sealed,
+    // An item of the Secret Service a test started on Linux, which goes with its bus: only
+    // Pitboard's own vault keeps one.
+    #[cfg_attr(
+        not(target_os = "linux"),
+        allow(dead_code, reason = "only Linux has a Secret Service")
+    )]
+    InSecretService,
 }
 
 // An item of the login keychain on macOS; `.credentials.json` in its config folder on Linux, and

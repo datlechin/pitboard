@@ -19,7 +19,9 @@ Pitboard moves and stores the OAuth refresh tokens of Claude Code and OpenAI's C
     Claude Code keeps its own login in a plaintext `.credentials.json`, which takes the access list of its folder, or in Credential Manager, which every sign-in of yours on that PC reads. Codex keeps its login in a plaintext `auth.json`. `pitboard doctor` fails if anyone else can reach a parked login or Claude Code's file, and warns for Codex's `auth.json`, each time with the `icacls` commands that fix it.
   </Tab>
   <Tab title="Linux">
-    Parked logins are files in `~/.pitboard/vault/`, at mode 0600 in a 0700 directory, and Claude Code keeps its own login in a plaintext `~/.claude/.credentials.json`. Any process running as you can read both. `pitboard doctor` fails if anyone else has access to either, and warns for Codex's `auth.json`.
+    Parked logins are items in your login keyring, the Secret Service's default collection, which every Pitboard directory of your session shares. Pitboard reaches it over your session's D-Bus, through an encrypted session.
+
+    A Pitboard directory made where no Secret Service answers, such as in a container, keeps its parked logins as files in `~/.pitboard/vault/`, at mode 0600 in a 0700 directory, and so does one an earlier Pitboard made. Claude Code keeps its own login in a plaintext `~/.claude/.credentials.json`. Any process running as you can read these files. `pitboard doctor` fails if anyone else has access to them, and warns for Codex's `auth.json`.
   </Tab>
 </Tabs>
 

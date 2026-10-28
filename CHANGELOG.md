@@ -24,6 +24,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - On Linux, Pitboard writes its units in `$XDG_CONFIG_HOME/systemd/user`.
 - The account index is schema 9, which earlier versions cannot read, so update the command line
   and the app together.
+- On Linux, a new Pitboard directory keeps its parked logins in the Secret Service's default
+  keyring, and in 0600 files only where no Secret Service answers; one that kept them in files
+  keeps them there.
 
 ### Fixed
 

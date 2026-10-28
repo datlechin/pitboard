@@ -142,3 +142,11 @@ These were not measured. Each says what Pitboard does where it cannot know.
   to it. Whether that `PATH` finds `claude` and `codex` where people install them, such as
   `~/.local/bin`, is not measured. The watch service looks for each tool only on the `PATH` it
   was given.
+- The Secret Service of any provider but gnome-keyring 48.0 in a container: KDE's ksecretd,
+  oo7-daemon and KeePassXC's, whether each names a default collection and replaces an item by
+  its attributes, and what each answers locked. Pitboard asks each what the specification says,
+  and parks only where `default` names a collection
+  ([linux.md](linux.md#the-secret-service)).
+- A desktop session's keyring reached from a terminal, and over SSH while the same person is
+  signed in to the desktop: whether the session's bus is found there and the login keyring is
+  unlocked. A home made where none answers keeps files.
