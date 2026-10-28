@@ -132,6 +132,11 @@ pub(crate) const LOCKED: &str = "the keychain is locked and cannot ask to be unl
                                  here; unlock it with `security unlock-keychain`, or run \
                                  Pitboard from a desktop session";
 
+// The Secret Service's collection, on Linux, where a run the schedule started asks nobody.
+const KEYRING_LOCKED: &str = "the login keyring is locked, or nothing answers for it on this \
+                              session's bus, and it cannot ask to be unlocked from here; run \
+                              Pitboard in your desktop session, where signing in unlocks it";
+
 // `ERROR_NO_SUCH_LOGON_SESSION`: a network logon has no credential set
 // (docs/facts/windows-runners.md).
 const UNREACHABLE: &str = "Credential Manager cannot be reached from this logon, as in a sign-in \
@@ -139,7 +144,8 @@ const UNREACHABLE: &str = "Credential Manager cannot be reached from this logon,
 
 pub(crate) fn locked(os: crate::host::Os) -> &'static str {
     match os {
-        crate::host::Os::MacOs | crate::host::Os::Linux => LOCKED,
+        crate::host::Os::MacOs => LOCKED,
+        crate::host::Os::Linux => KEYRING_LOCKED,
         crate::host::Os::Windows => UNREACHABLE,
     }
 }
@@ -150,9 +156,10 @@ pub enum Error {
     /// The store could not be interrogated. Never treat this as "no credential".
     #[error("the credential store could not be read: {0}")]
     Unreadable(String),
-    /// The keychain is locked and cannot ask to be unlocked from where this runs, as over
-    /// SSH, or Credential Manager cannot be reached from this logon. Never "no credential"
-    /// either, and nothing is wrong with what it holds.
+    /// The keychain or the Secret Service's collection is locked and cannot ask to be unlocked
+    /// from where this runs, as over SSH, nothing answers for the Secret Service on this
+    /// session's bus, or Credential Manager cannot be reached from this logon. Never "no
+    /// credential" either, and nothing is wrong with what it holds.
     #[error("the credential store could not be read: {}", locked(crate::host::OS))]
     Locked,
     // Pieces in Credential Manager that no read can join, as Claude Code can leave a login it
@@ -540,6 +547,19 @@ pub(crate) fn vault_kind(ctx: &Context) -> Backend {
     vault(ctx).kind()
 }
 
+/// Where this home's parks are, as a person looks for them. `None` where its state file cannot
+/// say which form it keeps them in.
+pub(crate) fn vault_place(ctx: &Context) -> Option<crate::host::Vault> {
+    use crate::host::Vault;
+    match vault_kind(ctx) {
+        Backend::Keychain => Some(Vault::Keychain),
+        Backend::SecretService => Some(Vault::SecretService),
+        Backend::File => Some(Vault::Files),
+        Backend::SealedFile => Some(Vault::SealedFiles),
+        Backend::CredentialManager | Backend::Absent | Backend::Unknown => None,
+    }
+}
+
 /// What writing the live credential would cost, asked of the backend that would take the
 /// write. A login living in the fallback file has no ceiling, and used to be told it had
 /// the keychain's.
@@ -822,7 +842,8 @@ mod tests {
         use crate::host::Os;
         assert_eq!(Error::Locked.code(), "credential_store_locked");
         assert_eq!(locked(Os::MacOs), LOCKED);
-        assert_eq!(locked(Os::Linux), LOCKED);
+        assert!(locked(Os::Linux).starts_with("the login keyring is locked"));
+        assert!(!crate::words::names_what_linux_has_not(locked(Os::Linux)));
         assert!(
             locked(Os::Windows).starts_with("Credential Manager cannot be reached from this logon")
         );

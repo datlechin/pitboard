@@ -31,7 +31,7 @@ fn a_park_behind_a_locked_keychain_is_read_as_locked() {
     host.vault().fault_all(Fault::Locked);
     assert_eq!(
         park_facts(&ctx, &state)[0].unreadable,
-        Some(Unreadable::Locked)
+        Some(Unreadable::Locked(store::Backend::Keychain))
     );
 }
 

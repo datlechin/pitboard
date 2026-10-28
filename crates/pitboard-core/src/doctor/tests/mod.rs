@@ -318,13 +318,15 @@ pub(super) fn everything_said(os: Os) -> Facts {
                 runs_pitboard: true,
             });
         }
-        // Claude Code's file is its only store, with no ceiling, and parks are files.
+        // Claude Code's file is its only store, with no ceiling, and parks are in a locked
+        // login keyring.
         Os::Linux => {
             // Only systemd's units are read as an earlier Pitboard wrote them.
             f.schedule.as_mut().expect("set above").outdated = true;
             f.watch_service.as_mut().expect("set above").outdated = true;
             f.backend = Ok(store::Backend::File);
-            f.vault = store::Backend::File;
+            f.vault = store::Backend::SecretService;
+            f.parks[0].unreadable = Some(Unreadable::Locked(store::Backend::SecretService));
             f.credential_cost = None;
             f.readable_by_others = vec![(
                 "/home/x/.claude/.credentials.json".into(),

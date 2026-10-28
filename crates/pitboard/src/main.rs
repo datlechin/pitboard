@@ -4,7 +4,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use pitboard_core::context::Context;
 use pitboard_core::doctor;
 use pitboard_core::error::Error;
-use pitboard_core::host::Os;
+use pitboard_core::host::{Os, Vault};
 use pitboard_core::provider::{Adoption, SignsIn};
 use pitboard_core::schedule::{Job, Location};
 use pitboard_core::service::{Changing, Done, Failed, Pitboard, Warning};
@@ -998,7 +998,7 @@ fn adopt(pitboard: &Pitboard) -> Report {
 
 fn repair(pitboard: &Pitboard) -> Report {
     changed("repair", pitboard.repair(), |r| {
-        let human = repaired(pitboard_core::host::OS, &r, &pitboard.parks_folder());
+        let human = repaired(pitboard.vault(), &r, &pitboard.parks_folder());
         (
             json!({
                 "given_back": r.given_back.iter().map(|(label, service)| json!({
@@ -1015,9 +1015,13 @@ fn repair(pitboard: &Pitboard) -> Report {
     })
 }
 
-// Parked logins are keychain items the whole Mac shares, and on Linux and Windows files in the
-// vault of this Pitboard directory.
-fn repaired(os: Os, r: &pitboard_core::switch::Reclaimed, parks: &std::path::Path) -> String {
+// A park nobody can account for may be another Pitboard's in a vault every home shares, and a
+// vault of files is this Pitboard directory's alone.
+fn repaired(
+    vault: Option<Vault>,
+    r: &pitboard_core::switch::Reclaimed,
+    parks: &std::path::Path,
+) -> String {
     if r.is_empty() {
         return "Every parked login here is accounted for.\n".to_string();
     }
@@ -1036,11 +1040,17 @@ fn repaired(os: Os, r: &pitboard_core::switch::Reclaimed, parks: &std::path::Pat
         ));
     }
     if !r.strangers.is_empty() {
-        let why = match os {
-            Os::MacOs => {
+        let why = match vault {
+            Some(Vault::Keychain) => {
                 "the keychain is shared by the whole machine, and they may be another Pitboard's"
             }
-            Os::Linux | Os::Windows => "Pitboard deletes only a parked login it wrote down",
+            Some(Vault::SecretService) => {
+                "the login keyring is shared by every Pitboard directory of your session, and \
+                 they may be another Pitboard's"
+            }
+            Some(Vault::Files | Vault::SealedFiles) | None => {
+                "Pitboard deletes only a parked login it wrote down"
+            }
         };
         said.push_str(&format!(
             "{} parked login(s) here belong to no account Pitboard knows and were \
@@ -1049,11 +1059,15 @@ fn repaired(os: Os, r: &pitboard_core::switch::Reclaimed, parks: &std::path::Pat
         ));
     }
     if !r.unreadable.is_empty() {
-        let next = match os {
-            Os::MacOs => " Unlock the keychain and run this again.",
+        let next = match vault {
+            Some(Vault::Keychain) => " Unlock the keychain and run this again.",
+            Some(Vault::SecretService) => {
+                " Run this again in your desktop session, where signing in unlocks the login \
+                 keyring."
+            }
             // A sealed park does not open in a logon without this account's key, as over SSH.
-            Os::Windows => " Run this again from a desktop session.",
-            Os::Linux => "",
+            Some(Vault::SealedFiles) => " Run this again from a desktop session.",
+            Some(Vault::Files) | None => "",
         };
         said.push_str(&format!(
             "{} could not be read this time and were left alone.{next}\n",
@@ -1696,20 +1710,20 @@ mod tests {
         ));
     }
 
-    // Parked logins are keychain items the whole Mac shares, and on Linux and Windows files in
-    // the vault of this Pitboard directory, which no keychain locks.
+    // Keychain items the whole Mac shares, Secret Service items every home of a Linux session
+    // shares, and files in the vault of this Pitboard directory, which nothing locks.
     #[test]
-    fn repair_says_why_it_left_parked_logins_alone_in_the_words_of_its_system() {
+    fn repair_says_why_it_left_parked_logins_alone_in_the_words_of_its_vault() {
         let left = pitboard_core::switch::Reclaimed {
             strangers: vec!["pitboard-park-a-1".into()],
             unreadable: vec!["pitboard-park-b-1".into()],
             ..Default::default()
         };
-        let said = |os| repaired(os, &left, std::path::Path::new("/x/parks"));
+        let said = |vault| repaired(Some(vault), &left, std::path::Path::new("/x/parks"));
         let stranger = "1 parked login(s) here belong to no account Pitboard knows and were not \
                         written down by this one. Left alone:";
         assert_eq!(
-            said(Os::MacOs),
+            said(Vault::Keychain),
             format!(
                 "{stranger} the keychain is shared by the whole machine, and they may be another \
                  Pitboard's.\n\
@@ -1718,7 +1732,16 @@ mod tests {
             )
         );
         assert_eq!(
-            said(Os::Windows),
+            said(Vault::SecretService),
+            format!(
+                "{stranger} the login keyring is shared by every Pitboard directory of your \
+                 session, and they may be another Pitboard's.\n\
+                 1 could not be read this time and were left alone. Run this again in your \
+                 desktop session, where signing in unlocks the login keyring.\n"
+            )
+        );
+        assert_eq!(
+            said(Vault::SealedFiles),
             format!(
                 "{stranger} Pitboard deletes only a parked login it wrote down.\n\
                  1 could not be read this time and were left alone. Run this again from a \
@@ -1726,7 +1749,7 @@ mod tests {
             )
         );
         assert_eq!(
-            said(Os::Linux),
+            said(Vault::Files),
             format!(
                 "{stranger} Pitboard deletes only a parked login it wrote down.\n\
                  1 could not be read this time and were left alone.\n"

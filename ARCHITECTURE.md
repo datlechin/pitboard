@@ -325,6 +325,10 @@ keeps it is in the header of the module named.
   0600 files in the home. A home records the form its first save found and keeps it
   (`a_home_keeps_the_vault_form_it_recorded`), and one on the Secret Service never falls back to
   files (`a_home_on_the_secret_service_is_refused_where_none_answers_and_never_falls_back_to_files`).
+- A locked Secret Service collection, a dismissed prompt and a bus with nothing to answer are
+  `credential_store_locked`, never a store with nothing in it
+  (`a_locked_collection_is_locked_never_absent`). A run a job started never asks to unlock the
+  login keyring (`a_run_a_job_started_never_asks_to_unlock`).
 - `abandon` gives up an interrupted switch first, whatever Claude Desktop's state, and `adopt`
   drops every waiting move and awaited sign-in, which were the other computer's. A change of
   Claude Desktop that fails carries what it did first in its error (`Error::SaidFirst`), which

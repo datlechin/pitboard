@@ -2438,10 +2438,10 @@ mod tests {
             Error::Store(crate::store::Error::Locked).exit_code()
         );
         assert!(
-            stopped.to_string().ends_with(
-                "desktop session. Pitboard deleted nothing, having parked the login in the file \
-                 for `work`."
-            ),
+            stopped.to_string().ends_with(&format!(
+                "{}. Pitboard deleted nothing, having parked the login in the file for `work`.",
+                crate::store::locked(crate::host::OS)
+            )),
             "{stopped}"
         );
 

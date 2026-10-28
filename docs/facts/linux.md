@@ -202,7 +202,19 @@ through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
 - With nothing on the bus owning `org.freedesktop.secrets`, opening a session fails with
   `org.freedesktop.DBus.Error.ServiceUnknown` within 30 milliseconds. secret-service 5.2.0
   turns only an address or connection error into its `Unavailable`, so this one is a zbus
-  method error.
+  method error, which the store takes for `Locked`
+  (`no_secret_service_on_the_bus_is_locked_never_absent`).
+- A collection locked through `Lock` keeps its items' attributes readable and lists them as
+  locked; `GetSecret` and `CreateItem` fail with `org.freedesktop.Secret.Error.IsLocked`. A login
+  keyring locked since gnome-keyring started, started again without `--unlock`, reports
+  `Locked` true and answers every search, the service's and the collection's, with nothing. So
+  the store asks the collection's `Locked` before and after each question, and a locked one is
+  `Locked`, never empty (`a_locked_collection_is_locked_never_absent`).
+- `Unlock` of a locked collection returns a prompt. With no `org.gnome.keyring.SystemPrompter`
+  on the bus, gnome-keyring says "couldn't create system prompt" on its standard error and
+  completes the prompt dismissed within 90 milliseconds, which secret-service reads as `Prompt`
+  (`a_prompt_nobody_can_answer_is_refused_within_seconds`). A run the schedule or the watch
+  service started calls neither `Unlock` nor `Prompt` (`a_run_a_job_started_never_asks_to_unlock`).
 - secret-service is taken over oo7 0.6.0, whose `rust-version` is 1.92, past the core's 1.91, and
   which is async only and always pulls ashpd, and over keyring 4.2.0, whose crate docs tell an
   application that controls which store it uses not to link it, and whose `Entry` hides the

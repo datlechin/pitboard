@@ -6,10 +6,17 @@
 //! Spoken through `secret-service`, a DH session over zbus 5's blocking API, one connection
 //! for each question, on the session's bus as `bus::session` finds it. Read in the Secret
 //! Service API 0.2 draft and measured with gnome-keyring 48.0 (`docs/facts/linux.md`).
+//!
+//! A locked collection, a prompt dismissed and nothing on the bus to answer say nothing of what
+//! the collection holds, so each is `Locked`, never a collection with nothing in it: a keyring
+//! locked since its daemon started answers every search with nothing. A run the schedule or the
+//! watch service started never asks to unlock it, since nobody is there to answer; a run a
+//! person started asks, as `secret-tool` does.
 
 use super::bus;
 use crate::context::Context;
 use crate::permit::Permit;
+use crate::schedule::Job;
 use crate::store::{Backend, Error, RawStore};
 use ::secret_service::EncryptionType;
 use ::secret_service::blocking::{Collection, Item, SecretService};
@@ -21,35 +28,68 @@ const SERVICE: &str = "service";
 const LABEL: &str = "Pitboard parked login";
 // What it holds; gnome-keyring 48.0 reads it back as `text/plain`, so nothing is told by it.
 const CONTENT_TYPE: &str = "application/json";
+// What a provider answers for a collection or an item it keeps locked, and the bus where nothing
+// owns `org.freedesktop.secrets`.
+const LOCKED: [&str; 3] = [
+    "org.freedesktop.Secret.Error.IsLocked",
+    "org.freedesktop.DBus.Error.ServiceUnknown",
+    "org.freedesktop.DBus.Error.NameHasNoOwner",
+];
 
 /// The parks every home of this session keeps in the Secret Service.
 pub(super) struct Vault {
     ctx: Context,
+    // Whether a person started this run, who can answer the provider's unlock prompt.
+    asks: bool,
 }
 
 impl Vault {
     pub(super) fn of(ctx: &Context) -> Vault {
-        Vault { ctx: ctx.clone() }
+        let started_by_a_job = [Job::Renew, Job::Watch]
+            .into_iter()
+            .any(|job| crate::schedule::started_this_run(ctx, job));
+        Vault {
+            ctx: ctx.clone(),
+            asks: !started_by_a_job,
+        }
     }
 
-    // What `then` makes of the default collection, a failure said as `otherwise` says one.
+    // What `then` makes of the default collection, unlocked first, a failure said as `otherwise`
+    // says one. Asked again after, since one locked meanwhile answers a search with nothing.
     fn open<T>(
         &self,
         otherwise: fn(String) -> Error,
         then: impl FnOnce(&Collection<'_>) -> Result<T, Error>,
     ) -> Result<T, Error> {
-        let connection = bus::session(&self.ctx).map_err(otherwise)?;
-        let service = SecretService::connect_with_existing(EncryptionType::Dh, connection)
-            .map_err(said(otherwise))?;
+        let service = connected(&self.ctx, otherwise)?;
         let collection = service.get_default_collection().map_err(said(otherwise))?;
-        then(&collection)
+        if collection.is_locked().map_err(said(otherwise))? {
+            if !self.asks {
+                return Err(Error::Locked);
+            }
+            collection.unlock().map_err(said(otherwise))?;
+        }
+        let answer = then(&collection)?;
+        if collection.is_locked().map_err(said(otherwise))? {
+            return Err(Error::Locked);
+        }
+        Ok(answer)
     }
 }
 
-/// Whether a Secret Service on this session's bus has a default collection to park in, as a
-/// new home asks before it records its form.
+// A session with the Secret Service, where one answers on this session's bus.
+fn connected<'a>(
+    ctx: &Context,
+    otherwise: fn(String) -> Error,
+) -> Result<SecretService<'a>, Error> {
+    let connection = bus::session(ctx).map_err(|_| Error::Locked)?;
+    SecretService::connect_with_existing(EncryptionType::Dh, connection).map_err(said(otherwise))
+}
+
+/// Whether a Secret Service on this session's bus has a default collection to park in, locked
+/// or not, as a new home asks before it records its form. Nothing is unlocked to tell.
 pub(super) fn answers(ctx: &Context) -> bool {
-    Vault::of(ctx).open(Error::Unreadable, |_| Ok(())).is_ok()
+    connected(ctx, Error::Unreadable).is_ok_and(|service| service.get_default_collection().is_ok())
 }
 
 fn attributes(service: &str) -> HashMap<&str, &str> {
@@ -76,9 +116,23 @@ fn secret_of(collection: &Collection<'_>, service: &str) -> Result<Option<String
     }
 }
 
-// What the Secret Service said, as a store's error.
+// What the Secret Service said, as a store's error: locked, dismissed or not there is `Locked`.
 fn said(otherwise: fn(String) -> Error) -> impl Fn(::secret_service::Error) -> Error {
-    move |error| otherwise(format!("the Secret Service: {error}"))
+    use ::secret_service::Error as Said;
+    move |error| match &error {
+        Said::Locked
+        | Said::Prompt
+        | Said::PromptDisconnected
+        | Said::Unavailable
+        | Said::NoResult => Error::Locked,
+        Said::Zbus(zbus::Error::MethodError(name, ..)) if LOCKED.contains(&name.as_str()) => {
+            Error::Locked
+        }
+        Said::ZbusFdo(fdo) if LOCKED.contains(&zbus::DBusError::name(fdo).as_str()) => {
+            Error::Locked
+        }
+        _ => otherwise(format!("the Secret Service: {error}")),
+    }
 }
 
 impl RawStore for Vault {
@@ -242,6 +296,111 @@ mod tests {
 
         for vault in [&here, &there] {
             assert_eq!(vault.list().expect("listed"), Some(vec![park(0), park(1)]));
+        }
+    }
+
+    // Every question, whoever asks: a person's run is refused once its prompt is dismissed.
+    fn refused_every_way(vault: &Vault, park: &str) {
+        let permit = Permit::for_a_test();
+        let locked = |what: &str, answer: Result<String, Error>| match answer {
+            Err(Error::Locked) => {}
+            other => panic!("{what}: {other:?}"),
+        };
+        locked("read", vault.read(park).map(|r| format!("{r:?}")));
+        locked("look", vault.contains(park).map(|c| c.to_string()));
+        locked("list", vault.list().map(|l| format!("{l:?}")));
+        locked(
+            "write",
+            vault.write(permit, park, AGAIN).map(|()| String::new()),
+        );
+        locked("delete", vault.delete(permit, park).map(|()| String::new()));
+    }
+
+    // gnome-keyring 48.0 answers a search of a keyring locked since it started with nothing.
+    #[test]
+    fn a_locked_collection_is_locked_never_absent() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let service = started(scratch.path());
+        let ctx = home(scratch.path(), "home", &service);
+        Vault::of(&ctx)
+            .write(Permit::for_a_test(), &park(0), LOGIN)
+            .expect("written");
+        service.lock();
+
+        for ctx in [ctx.clone(), ctx.clone().started_by_the_schedule()] {
+            refused_every_way(&Vault::of(&ctx), &park(0));
+        }
+        assert!(answers(&ctx), "a locked collection is one to park in");
+    }
+
+    // The renewal timer and the watch service: nobody is there to answer a prompt.
+    #[test]
+    fn a_run_a_job_started_never_asks_to_unlock() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let service = started(scratch.path());
+        let ctx = home(scratch.path(), "home", &service);
+        service.lock();
+
+        for job in [
+            ctx.clone().started_by_the_schedule(),
+            ctx.clone().started_by_the_watch_service(),
+        ] {
+            refused_every_way(&Vault::of(&job), &park(0));
+        }
+        let asked = service.asked();
+        assert!(
+            !asked
+                .iter()
+                .any(|member| member == "Unlock" || member == "Prompt"),
+            "{asked:?}"
+        );
+    }
+
+    // A bus with no prompter on it, as in a container: gnome-keyring 48.0 dismisses the prompt
+    // it cannot show at once.
+    #[test]
+    fn a_prompt_nobody_can_answer_is_refused_within_seconds() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let service = started(scratch.path());
+        let vault = Vault::of(&home(scratch.path(), "home", &service));
+        service.lock();
+
+        let asking = std::time::Instant::now();
+        let read = vault.read(&park(0));
+        let took = asking.elapsed();
+
+        assert!(matches!(read, Err(Error::Locked)), "{read:?}");
+        assert!(took < std::time::Duration::from_secs(5), "{took:?}");
+        let asked = service.asked();
+        assert!(
+            asked.iter().any(|member| member == "Unlock")
+                && asked.iter().any(|member| member == "Prompt"),
+            "a person's run asks: {asked:?}"
+        );
+    }
+
+    // As over SSH or in a container: a home on the Secret Service cannot tell what it holds.
+    #[test]
+    fn no_secret_service_on_the_bus_is_locked_never_absent() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let nobody = Started::without_a_provider(&scratch.path().join("nobody"))
+            .unwrap_or_else(|missing| panic!("{missing}"));
+        let mut stopped = started(scratch.path());
+        let ctx = home(scratch.path(), "home", &stopped);
+        Vault::of(&ctx)
+            .write(Permit::for_a_test(), &park(0), LOGIN)
+            .expect("written");
+        stopped.stop();
+
+        let without_a_bus =
+            Context::for_unit_test().with_pitboard_home(scratch.path().join("bare"));
+        for ctx in [home(scratch.path(), "nobody", &nobody), ctx, without_a_bus] {
+            refused_every_way(&Vault::of(&ctx), &park(0));
+            assert!(!answers(&ctx));
+            assert_eq!(
+                super::super::host().new_home_form(&ctx),
+                Some(crate::state::VaultForm::Files)
+            );
         }
     }
 }

@@ -2,14 +2,10 @@
 //! started, which each command is given as `PITBOARD_TEST_BUS`, as a desktop session's keyring
 //! answers on the session's bus.
 
-use crate::common::{Env, two_accounts_in};
+use crate::common::{Env, envelope, two_accounts_in};
 
 fn parks(env: &Env) -> Vec<String> {
-    env.secret_service()
-        .items()
-        .into_iter()
-        .map(|item| item.attributes["service"].clone())
-        .collect()
+    env.secret_service().names()
 }
 
 #[test]
@@ -37,4 +33,22 @@ fn a_switch_parks_and_puts_back_through_the_secret_service() {
         !env.root.join("pitboard/vault").exists(),
         "no park is a file"
     );
+}
+
+// A keyring a screen lock or a sign-out left locked, which no run here may ask to unlock.
+#[test]
+fn a_locked_keyring_refuses_with_credential_store_locked_and_changes_nothing() {
+    let env = two_accounts_in(Env::with_secret_service("secret-service-locked"));
+    env.secret_service().lock();
+    let before = (env.live(), env.state(), parks(&env));
+
+    let (out, _, code) = env.run(&["use", "beta", "--json"]);
+
+    assert_eq!(code, 1, "{out}");
+    assert_eq!(
+        envelope(&out)["error"]["code"],
+        "credential_store_locked",
+        "{out}"
+    );
+    assert_eq!((env.live(), env.state(), parks(&env)), before);
 }

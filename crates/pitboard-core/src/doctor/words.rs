@@ -106,6 +106,10 @@ pub(super) const DELETED_ON_THE_NEXT_CHANGE: &str = "Pitboard deletes them on it
 pub(super) const DELETED_ONCE_THE_KEYCHAIN_OPENS: &str = "Pitboard deletes them on its next \
      change; if they stay, check the keychain is unlocked.";
 
+pub(super) const DELETED_ONCE_THE_LOGIN_KEYRING_OPENS: &str = "Pitboard deletes them on its next \
+     change; if they stay, make that change in your desktop session, where signing in unlocks \
+     the login keyring.";
+
 pub(super) const NO_STABLE_IDENTIFIER: &str = "this machine has no stable identifier";
 
 pub(super) fn never_copy_between_machines(home: impl Display) -> String {
@@ -151,6 +155,11 @@ pub(super) const UNLOCK_AND_RUN_ANY_COMMAND: &str = "Pitboard wrote these names 
 
 pub(super) const RUN_ANY_COMMAND: &str = "Pitboard wrote these names down before creating a \
      login in them. Run any Pitboard command; it resolves them before doing anything else.";
+
+pub(super) const RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION: &str = "Pitboard wrote these names down \
+     before creating a login in them and cannot read them back to find out what is there. Run \
+     any Pitboard command in your desktop session, where signing in unlocks the login keyring; \
+     it resolves them before doing anything else.";
 
 pub(super) fn not_switched_to_for(seconds: i64) -> String {
     format!(
@@ -206,6 +215,12 @@ pub(super) const NOTHING_PARKED: &str = "nothing parked to switch to";
 pub(super) const NOT_READ_THE_KEYCHAIN_IS_LOCKED: &str = "not read: the keychain is locked";
 
 pub(super) const UNLOCK_IT_THEN_DOCTOR: &str = "Unlock it, then run `pitboard doctor` again.";
+
+pub(super) const NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED: &str =
+    "not read: the login keyring is locked, or nothing answers for it on this session's bus";
+
+pub(super) const IN_THE_DESKTOP_SESSION_THEN_DOCTOR: &str =
+    "Run `pitboard doctor` again in your desktop session, where signing in unlocks it.";
 
 pub(super) const PARK_DOES_NOT_OPEN: &str = "its parked login does not open in this logon";
 

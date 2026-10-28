@@ -279,7 +279,7 @@ fn an_interrupted_switch_and_leftover_parks_are_reported() {
     assert!(healthy(&checks), "neither stops Pitboard working");
 }
 
-// A keychain can be locked; a folder of files Pitboard reads as itself cannot.
+// A keychain or a login keyring can be locked; a folder of files Pitboard reads as itself cannot.
 #[test]
 fn parks_left_to_delete_or_resolve_are_waited_on_as_their_vault_keeps_them() {
     let mut f = facts();
@@ -307,6 +307,11 @@ fn parks_left_to_delete_or_resolve_are_waited_on_as_their_vault_keeps_them() {
             store::Backend::SealedFile,
             words::DELETED_ON_THE_NEXT_CHANGE,
             words::RUN_ANY_COMMAND,
+        ),
+        (
+            store::Backend::SecretService,
+            words::DELETED_ONCE_THE_LOGIN_KEYRING_OPENS,
+            words::RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION,
         ),
     ] {
         f.vault = vault;

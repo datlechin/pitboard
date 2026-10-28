@@ -168,6 +168,26 @@ impl SecretService {
         items
     }
 
+    /// The `service` of each item of the default collection, which a locked one says too.
+    pub fn names(&self) -> Vec<String> {
+        let client = self.client();
+        let collection = client
+            .get_default_collection()
+            .expect("a default collection");
+        let mut names: Vec<String> = collection
+            .get_all_items()
+            .expect("its items")
+            .iter()
+            .filter_map(|item| {
+                item.get_attributes()
+                    .expect("its attributes")
+                    .remove("service")
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
     /// An item another program keeps in the default collection.
     pub fn plant(&self, label: &str, attributes: &[(&str, &str)], secret: &str) {
         let client = self.client();

@@ -192,10 +192,10 @@ pub(super) fn judge_discarded(facts: &Facts) -> Option<Check> {
         .filter(|d| d.kind == crate::state::ParkKind::Folder)
         .count();
     let vault = state.discarded.len() - folders;
-    let advice = if vault > 0 && facts.vault == store::Backend::Keychain {
-        words::DELETED_ONCE_THE_KEYCHAIN_OPENS
-    } else {
-        words::DELETED_ON_THE_NEXT_CHANGE
+    let advice = match (vault, facts.vault) {
+        (1.., store::Backend::Keychain) => words::DELETED_ONCE_THE_KEYCHAIN_OPENS,
+        (1.., store::Backend::SecretService) => words::DELETED_ONCE_THE_LOGIN_KEYRING_OPENS,
+        _ => words::DELETED_ON_THE_NEXT_CHANGE,
     };
     Some(warn(
         "discarded",
@@ -295,10 +295,14 @@ pub(super) fn judge_pending(facts: &Facts) -> Check {
             "pending_parks",
             "parks being reclaimed",
             words::could_not_be_read_this_time(n),
-            if facts.vault == store::Backend::Keychain {
-                words::UNLOCK_AND_RUN_ANY_COMMAND
-            } else {
-                words::RUN_ANY_COMMAND
+            match facts.vault {
+                store::Backend::Keychain => words::UNLOCK_AND_RUN_ANY_COMMAND,
+                store::Backend::SecretService => words::RUN_ANY_COMMAND_IN_THE_DESKTOP_SESSION,
+                store::Backend::File
+                | store::Backend::SealedFile
+                | store::Backend::CredentialManager
+                | store::Backend::Absent
+                | store::Backend::Unknown => words::RUN_ANY_COMMAND,
             },
         ),
     }

@@ -19,8 +19,8 @@ pub(crate) struct ParkFact {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Unreadable {
-    // Behind a locked keychain, which says nothing about the login.
-    Locked,
+    // Behind a locked keychain or Secret Service, the vault's, which says nothing about the login.
+    Locked(store::Backend),
     // A lost key, with `CryptUnprotectData`'s code: not a missing or damaged file.
     Sealed(Option<i32>),
     Broken(String),
@@ -37,6 +37,7 @@ impl ParkFact {
 }
 
 pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
+    let vault = store::vault_kind(ctx);
     // From files alone, never Claude Code's config, which another session can rewrite.
     let in_use: std::collections::BTreeMap<ProviderId, Option<crate::provider::Owner>> =
         ProviderId::ALL
@@ -66,7 +67,7 @@ pub(super) fn park_facts(ctx: &Context, state: &State) -> Vec<ParkFact> {
                     LoginKind::Folder(_) => return None,
                 };
                 park::load(ctx, tool, &a.key(), p).err().map(|e| match e {
-                    Error::Store(store::Error::Locked) => Unreadable::Locked,
+                    Error::Store(store::Error::Locked) => Unreadable::Locked(vault),
                     Error::Store(store::Error::Sealed { code, .. }) => Unreadable::Sealed(code),
                     Error::ParkedCredentialMissing { .. } => {
                         Unreadable::Broken(words::MISSING_FROM_THE_VAULT.into())
@@ -190,7 +191,15 @@ fn park_judged(fact: &ParkFact, now: i64, moment: &dyn Fn(i64, i64) -> String) -
         };
     };
     match &fact.unreadable {
-        Some(Unreadable::Locked) => {
+        Some(Unreadable::Locked(store::Backend::SecretService)) => {
+            return warn(
+                code,
+                name,
+                words::NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED,
+                words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
+            );
+        }
+        Some(Unreadable::Locked(_)) => {
             return warn(
                 code,
                 name,

@@ -19,6 +19,28 @@ fn an_unreadable_store_fails_rather_than_reporting_nothing_stored() {
     assert_eq!(check(&checks, "credential_store").level, Level::Fail);
 }
 
+// The login keyring on Linux, which no file stands behind, and which a desktop session unlocks.
+#[test]
+fn a_park_behind_a_locked_login_keyring_is_not_read_and_needs_no_sign_in() {
+    let mut f = facts();
+    f.os = Os::Linux;
+    f.vault = store::Backend::SecretService;
+    let mut behind = parked("work", Some(NOW + 20 * 86_400));
+    behind.unreadable = Some(Unreadable::Locked(store::Backend::SecretService));
+    f.parks = vec![behind];
+
+    let checks = evaluate(&f);
+    let park = named(&checks, "account work");
+    assert_eq!(park.level, Level::Warn, "{}", park.detail);
+    assert_eq!(
+        (park.detail.as_str(), park.advice.as_str()),
+        (
+            words::NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED,
+            words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR
+        )
+    );
+}
+
 // Every parked login behind it used to fail too, each advised to sign in again for nothing.
 #[test]
 fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
@@ -26,7 +48,7 @@ fn a_locked_keychain_is_one_failure_and_sends_nobody_to_sign_in_again() {
     f.os = Os::MacOs;
     f.credential = Err(store::Error::Locked);
     let mut behind = parked("work", Some(NOW + 20 * 86_400));
-    behind.unreadable = Some(Unreadable::Locked);
+    behind.unreadable = Some(Unreadable::Locked(store::Backend::Keychain));
     f.parks = vec![behind];
 
     let checks = evaluate(&f);

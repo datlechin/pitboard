@@ -69,7 +69,7 @@ If no account qualifies, nothing moves until the account runs out. The app then 
 
 When Pitboard stays on the account or cannot decide, the app posts a notification and `pitboard watch` prints the reason. [Automatic switching](/reference/automatic-switching) lists each reason and what ends it.
 
-On macOS, a run that cannot read the keychain, such as `pitboard watch` over SSH, fails only its own tries: see [macOS says the keychain is locked](/troubleshooting/accounts#macos-says-the-keychain-is-locked). On Windows, the same holds for a run in a sign-in over SSH with a key: see [Windows says Credential Manager cannot be reached](/troubleshooting/accounts#windows-says-credential-manager-cannot-be-reached).
+On macOS, a run that cannot read the keychain, such as `pitboard watch` over SSH, fails only its own tries: see [macOS says the keychain is locked](/troubleshooting/accounts#macos-says-the-keychain-is-locked). On Windows, the same holds for a run in a sign-in over SSH with a key: see [Windows says Credential Manager cannot be reached](/troubleshooting/accounts#windows-says-credential-manager-cannot-be-reached). On Linux, it holds for the watch service while the login keyring is locked: see [Linux says the login keyring is locked](/troubleshooting/accounts#linux-says-the-login-keyring-is-locked).
 
 A login file behind the keychain, or on Windows behind Credential Manager, does not stop a switch. [Open sessions](/concepts/open-sessions) says when open sessions follow it.
 

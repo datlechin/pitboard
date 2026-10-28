@@ -108,6 +108,20 @@ pub enum SecretStore {
     CredentialManager,
 }
 
+/// Where a home keeps its parked logins of Claude Code and Codex, as a person would look for
+/// them: on macOS the keychain, on Windows sealed files, on Linux the form the home recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vault {
+    /// Items of the login keychain, which every home on the Mac shares.
+    Keychain,
+    /// Items of the Secret Service's default collection, which every home of the session shares.
+    SecretService,
+    /// Files in the home's `vault`, which only this account reads.
+    Files,
+    /// Files in the home's `vault`, sealed to this Windows account.
+    SealedFiles,
+}
+
 /// The only program trusted to read Claude Code's keychain item. Named here so the backend
 /// that runs it and the doctor check that looks for it cannot drift apart.
 pub(crate) const SECURITY: &str = "/usr/bin/security";
