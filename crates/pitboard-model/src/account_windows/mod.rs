@@ -2,7 +2,8 @@
 //! and which store keeps each one's data, where a page may go, what a window says, what a
 //! download is called, and what a page may do. Each app's web code asks them as its engine
 //! asks it, WebKit on macOS and WebView2 on Windows, on its main thread: each answers at once
-//! from what it is given, and only `download_destination` looks at the file system.
+//! from what it is given, and only `download_destination` looks at the file system. The Linux
+//! app has no account windows yet, so nothing offers it one (`offered_windows`).
 //!
 //! What follows the app's reads is the model's, in `model/windows.rs`: which windows close
 //! and which stores go after a read, the records of stores and last pages, which `records.rs`
@@ -21,7 +22,9 @@ pub(crate) mod records;
 pub(crate) mod stores;
 
 pub use accounts::{SiteMenu, WindowAccount};
-pub(crate) use accounts::{forget_message, site_menus, window_accounts, windows_of_account};
+pub(crate) use accounts::{
+    forget_message, offered_windows, site_menus, window_accounts, windows_of_account,
+};
 pub use downloads::{download_destination, download_host, download_question};
 pub use notes::{WindowNoteKind, opening_note, remove_data_alert, window_note};
 pub use pages::{

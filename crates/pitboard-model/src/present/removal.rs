@@ -30,7 +30,7 @@ pub(crate) fn uninstall(seen: &Seen) -> ItemOffer {
             confirm_is_default: false,
             ..Question::asking(
                 words::UNINSTALL_QUESTION.into(),
-                words::UNINSTALL_SAYS.into(),
+                words::uninstall_says(seen.front),
                 words::UNINSTALL.into(),
             )
         }),

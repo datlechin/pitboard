@@ -71,7 +71,7 @@ fn uninstall_asks_first() {
             confirm_is_default: false,
             ..Question::asking(
                 words::UNINSTALL_QUESTION.into(),
-                words::UNINSTALL_SAYS.into(),
+                words::uninstall_says(os),
                 words::UNINSTALL.into(),
             )
         }),

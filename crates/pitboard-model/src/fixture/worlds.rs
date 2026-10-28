@@ -9,7 +9,7 @@
 //! core and the model make of that machine.
 
 use super::FixtureError;
-use super::apps::{CHATGPT, CLAUDE, FixtureApps, Unposted};
+use super::apps::{CLAUDE, FixtureApps, Unposted, chatgpt, chatgpt_system};
 use super::tools::{Browser, Warmer};
 use crate::model::preferences::Preferences;
 use crate::model::state::Cadence;
@@ -743,18 +743,20 @@ pub(crate) struct Launched {
 
 impl Launched {
     /// The app's model over this world, as an app has it: at the app's own pace, with the
-    /// world's apps, posting nothing.
+    /// world's apps where its front names other apps, posting nothing.
     pub(crate) fn model(
         &self,
         listener: Arc<dyn Listener>,
         local_time: Arc<dyn LocalTime>,
     ) -> Arc<PitboardModel> {
-        self.model_over(
-            listener,
-            Some(Arc::clone(&self.apps) as Arc<dyn OtherApps>),
-            Arc::new(Unposted),
-            local_time,
-        )
+        let apps = match self.front {
+            Front::MacMenuBar | Front::WindowsNotificationArea => {
+                Some(Arc::clone(&self.apps) as Arc<dyn OtherApps>)
+            }
+            // The core has no Linux app id, so a live GNOME model names none.
+            Front::Gnome => None,
+        };
+        self.model_over(listener, apps, Arc::new(Unposted), local_time)
     }
 
     /// The app's model over this world, asking `other_apps` and posting through `notifier`.
@@ -774,13 +776,15 @@ impl Launched {
                 notifier,
                 local_time,
                 earlier: None,
-                windows: Some(WindowsPlace::of(
-                    self.front,
-                    self.windows.clone(),
-                    &self.pitboard,
-                    None,
-                    super::pages::SCHEME,
-                )),
+                windows: self.front.offers_account_windows().then(|| {
+                    WindowsPlace::of(
+                        self.front,
+                        self.windows.clone(),
+                        &self.pitboard,
+                        None,
+                        super::pages::SCHEME,
+                    )
+                }),
                 widget_feed: None,
             },
             Cadence::APP,
@@ -809,14 +813,16 @@ pub(crate) fn make(world: World, folder: Folder, front: Front) -> Result<Launche
                 .map_err(|error| Unmade(format!("keeping the app's preferences: {error}")))?;
         }
     }
+    let chatgpt = chatgpt(chatgpt_system(front));
     let running: &[&str] = match world {
-        World::ChatGptOpen => &[CHATGPT],
+        World::ChatGptOpen => &[chatgpt.app],
         World::ClaudeDesktopOpen if world.has_claude_desktop() => &[CLAUDE],
         _ => &[],
     };
     let apps = FixtureApps::new(
         Arc::clone(&machine.host),
         Arc::clone(&machine.claude),
+        chatgpt,
         running,
     );
     let ctx = machine.app_context(

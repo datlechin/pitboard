@@ -1,6 +1,7 @@
 //! What a fixture's model asks of the app's own system, played by the fixture: the other
 //! apps on its machine, and notifications, which it posts none of.
 
+use crate::Front;
 use crate::model::{AppId, Notice, Notifier, OtherApps, PlatformError};
 use pitboard_core::host::{OS, Os};
 use pitboard_core::testing::MemoryHost;
@@ -10,15 +11,30 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-/// ChatGPT on this system, as the core's holder detection names it.
-pub(crate) const CHATGPT: &str = chatgpt(OS).app;
+/// The shipping apps' ChatGPT on this system, as the core's holder detection names it.
+#[cfg(test)]
+pub(crate) const CHATGPT: &str = chatgpt(chatgpt_system(Front::MacMenuBar)).app;
+
+/// The system whose ChatGPT a world of the app `front` names runs. The Linux app's is Linux's.
+/// The shipping apps' bindings are tested on every system, against Windows' ChatGPT on Windows
+/// and a Mac's elsewhere, as their own tests name it (`ModelTests.cs`'s `ChatGpt`).
+pub(crate) const fn chatgpt_system(front: Front) -> Os {
+    match front {
+        Front::Gnome => Os::Linux,
+        Front::MacMenuBar | Front::WindowsNotificationArea => match OS {
+            Os::Windows => Os::Windows,
+            Os::MacOs | Os::Linux => Os::MacOs,
+        },
+    }
+}
 
 pub(crate) const CLAUDE: &str = "com.anthropic.claudefordesktop";
 
 /// ChatGPT on one system, as pitboard-core's `provider::codex::holders` tells it from the
 /// process list: what tells the core the app is open.
 pub(crate) struct ChatGpt {
-    /// As `OtherApps` takes it: on macOS its bundle id, on Windows its AUMID.
+    /// As `OtherApps` takes it: on macOS its bundle id, on Windows its AUMID. On Linux, where
+    /// nothing takes it, its package.
     pub(crate) app: &'static str,
     /// Where it runs its own `codex`, two of them, as there were on the Mac.
     codex: &'static str,
@@ -36,9 +52,15 @@ pub(crate) const fn chatgpt(os: Os) -> ChatGpt {
             package: Some("OpenAI.Codex_2p2nqsd0c76g0"),
         },
         // As the process list of a Mac running ChatGPT 26.928.31416 gave it.
-        Os::MacOs | Os::Linux => ChatGpt {
+        Os::MacOs => ChatGpt {
             app: "com.openai.codex",
             codex: "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+            package: None,
+        },
+        // Where its package installs the codex it runs (codex_linux_app).
+        Os::Linux => ChatGpt {
+            app: "chatgpt",
+            codex: "/usr/lib/chatgpt/resources/codex",
             package: None,
         },
     }
@@ -73,6 +95,7 @@ const QUITS_AFTER: Duration = Duration::from_secs(2);
 /// agree the way the process list and the system's list of apps agree on a real machine.
 /// Nothing here touches an app of the machine running the fixture.
 pub(crate) struct FixtureApps {
+    chatgpt: ChatGpt,
     host: Arc<MemoryHost>,
     // played over the fixture's machine, writing its data folder as 2.7032.0 does as it quits
     claude: Arc<FakeClaude>,
@@ -97,13 +120,16 @@ fn held(held: &Mutex<Held>) -> MutexGuard<'_, Held> {
 }
 
 impl FixtureApps {
-    /// The apps of the machine `host` is, `running` among them from the start.
+    /// The apps of the machine `host` is, `running` among them from the start, ChatGPT as
+    /// `chatgpt` is on its system.
     pub(crate) fn new(
         host: Arc<MemoryHost>,
         claude: Arc<FakeClaude>,
+        chatgpt: ChatGpt,
         running: &[&str],
     ) -> Arc<FixtureApps> {
         let apps = Arc::new(FixtureApps {
+            chatgpt,
             host,
             claude,
             held: Arc::default(),
@@ -150,10 +176,10 @@ impl FixtureApps {
         let turn = now.claude_turns;
         drop(now);
         self.held.1.notify_all();
-        match app {
-            CHATGPT => chatgpt(OS).opens(&self.host),
-            CLAUDE => self.claude.opens(),
-            _ => {}
+        if app == self.chatgpt.app {
+            self.chatgpt.opens(&self.host);
+        } else if app == CLAUDE {
+            self.claude.opens();
         }
         turn
     }
@@ -166,10 +192,10 @@ impl FixtureApps {
         }
         drop(now);
         self.held.1.notify_all();
-        match app {
-            CHATGPT => self.host.runs_at("codex", &[]),
-            CLAUDE => self.claude.quits(),
-            _ => {}
+        if app == self.chatgpt.app {
+            self.host.runs_at("codex", &[]);
+        } else if app == CLAUDE {
+            self.claude.quits();
         }
     }
 

@@ -2,9 +2,9 @@
 //!
 //! An app names its front once, in `AppLaunch`, and the model words and decides by it what
 //! differs from one app to another: a control's case, what the machine is called, where a
-//! sheet comes up, its account windows' engine, whether it has a status item and whether it
-//! offers quick actions. Each is a `match` on `Front` with no `_` arm, so a front added does
-//! not compile until each is said for it. What the core decides about the system the app runs
+//! sheet comes up, whether it has account windows and their engine, whether it has a status
+//! item and whether it offers quick actions. Each is a `match` on `Front` with no `_` arm, so a
+//! front added does not compile until each is said for it. What the core decides about the system the app runs
 //! on, such as which tools it supports or how its file system compares names, is asked of
 //! `os()`.
 
@@ -66,12 +66,22 @@ impl Front {
         }
     }
 
+    /// Whether the front opens an account's site in a window of its own.
+    pub fn offers_account_windows(self) -> bool {
+        match self {
+            Front::MacMenuBar | Front::WindowsNotificationArea => true,
+            // Not until the distributions it runs on carry WebKitGTK 2.56
+            // (docs/facts/linux-app.md, Account windows).
+            Front::Gnome => false,
+        }
+    }
+
     /// Whether the front offers what the model's quick actions ask from outside it: the
-    /// Windows Jump List's tasks.
+    /// Windows Jump List's tasks, GNOME's search and KRunner's results.
     pub fn keeps_quick_actions(self) -> bool {
         match self {
-            Front::WindowsNotificationArea => true,
-            Front::MacMenuBar | Front::Gnome => false,
+            Front::WindowsNotificationArea | Front::Gnome => true,
+            Front::MacMenuBar => false,
         }
     }
 
@@ -92,6 +102,27 @@ impl Front {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The Linux app's windows wait on WebKitGTK; its search and KRunner find quick actions.
+    #[test]
+    fn each_front_says_what_it_offers() {
+        assert_eq!(
+            [
+                Front::MacMenuBar.offers_account_windows(),
+                Front::WindowsNotificationArea.offers_account_windows(),
+                Front::Gnome.offers_account_windows(),
+            ],
+            [true, true, false]
+        );
+        assert_eq!(
+            [
+                Front::MacMenuBar.keeps_quick_actions(),
+                Front::WindowsNotificationArea.keeps_quick_actions(),
+                Front::Gnome.keeps_quick_actions(),
+            ],
+            [false, true, true]
+        );
+    }
 
     // GNOME's welcome is a dialog that what it starts comes up over, as the Mac's window is.
     #[test]

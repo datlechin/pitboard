@@ -290,10 +290,17 @@ pub(crate) fn uninstall_pitboard(front: Front) -> String {
 
 pub(crate) const UNINSTALL_QUESTION: &str = "Uninstall Pitboard?";
 
-pub(crate) const UNINSTALL_SAYS: &str = "Pitboard deletes its saved sign-ins, settings and \
-                                         account windows. Each tool stays signed in to the \
-                                         account in use, and you sign in to the others again to \
-                                         use them.";
+pub(crate) fn uninstall_says(front: Front) -> String {
+    let deletes = if front.offers_account_windows() {
+        "its saved sign-ins, settings and account windows"
+    } else {
+        "its saved sign-ins and settings"
+    };
+    format!(
+        "Pitboard deletes {deletes}. Each tool stays signed in to the account in use, and you \
+         sign in to the others again to use them."
+    )
+}
 
 pub(crate) const UNINSTALL: &str = "Uninstall";
 
@@ -712,9 +719,15 @@ mod tests {
         );
         assert_eq!(UNINSTALL_QUESTION, "Uninstall Pitboard?");
         assert_eq!(
-            UNINSTALL_SAYS,
+            uninstall_says(Front::MacMenuBar),
             "Pitboard deletes its saved sign-ins, settings and account windows. Each tool stays \
              signed in to the account in use, and you sign in to the others again to use them."
+        );
+        assert_eq!(
+            uninstall_says(Front::Gnome),
+            "Pitboard deletes its saved sign-ins and settings. Each tool stays signed in to the \
+             account in use, and you sign in to the others again to use them.",
+            "a front with no account windows has none to delete"
         );
         assert_eq!(UNINSTALL, "Uninstall");
         assert_eq!(UNINSTALLING, "Uninstalling Pitboard…");

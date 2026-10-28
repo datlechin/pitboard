@@ -1249,7 +1249,7 @@ impl State {
             window_waits: false,
             standing_in: false,
             machine: MachineState::default(),
-            windows: Windows::new(cadence.arming),
+            windows: Windows::new(cadence.arming, front.offers_account_windows()),
             removing: None,
             at_work: 0,
             glancing: Glancing::default(),

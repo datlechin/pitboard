@@ -8,7 +8,7 @@
 use super::{Choice, EmptyList, Question, Seen, words};
 use crate::account_windows::records::store_key;
 use crate::account_windows::{
-    SiteMenu, WindowAccount, WindowNoteKind, site_menus, window_accounts,
+    SiteMenu, WindowAccount, WindowNoteKind, offered_windows, site_menus,
 };
 use crate::model::windows::{Download, Picking};
 use crate::model::{Intent, Sheet};
@@ -135,6 +135,16 @@ pub enum PickerShown {
     },
     /// What arrived is not opened, and why.
     Refused { title: String, reason: String },
+    /// The front has no account windows, so the link can be opened in the browser alone.
+    NoWindows {
+        title: String,
+        link: SiteLink,
+        /// The link on one line, without its scheme.
+        link_text: String,
+        detail: String,
+        /// What the button that hands the link to the browser says.
+        in_browser: String,
+    },
     /// No enrolled account has a window on the link's site: it can be opened in the browser,
     /// or an account added, and the link waits meanwhile.
     NoAccount {
@@ -207,7 +217,7 @@ pub enum DownloadState {
 pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
     let windows = &seen.state.windows;
     let status = seen.state.status.as_ref();
-    let accounts = window_accounts(seen.accounts());
+    let accounts = offered_windows(seen.front, seen.accounts());
     let open = windows
         .open
         .iter()
@@ -240,7 +250,7 @@ pub(crate) fn account_windows(seen: &Seen) -> AccountWindowsShown {
         })
         .collect();
     AccountWindowsShown {
-        menus: site_menus(seen.accounts()),
+        menus: site_menus(seen.front, seen.accounts()),
         accounts,
         open,
         waiting: waiting(seen),
@@ -308,6 +318,16 @@ fn picker(seen: &Seen) -> Option<LinkPicker> {
             title: words::cannot_open_link(seen.front),
             reason: refusal.to_string(),
         },
+        Picking::NoWindows(link) => {
+            let (title, detail) = words::no_windows(seen.front, &link.site.name);
+            PickerShown::NoWindows {
+                title,
+                link_text: link_text(&link.url),
+                detail,
+                in_browser: words::open_in_browser(seen.front),
+                link,
+            }
+        }
         Picking::NoAccount(link) => {
             let (title, detail) = words::no_site_account(seen.front, &link.site.name);
             PickerShown::NoAccount {

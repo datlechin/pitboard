@@ -131,6 +131,39 @@ no word names one desktop's settings or another system's place
   and `zypper` for the rpm, which one build serves to Fedora and openSUSE alike
   (`package_removal`).
 
+## Account windows
+
+The Linux app opens none in v1 (brief `webwindows`): `Front::Gnome.offers_account_windows()` is
+false, so no menu, row or quick action offers a window and a link that arrives is offered to the
+browser alone (`PickerShown::NoWindows`), and the app's launch names no records folder. What they
+wait for, from the plan's research of 28 October 2026 (`.claude/plans/linux-app/research`), read
+from WebKit's and Epiphany's sources and not run:
+
+- **WebKitGTK 2.56.** WebKit fe4fb973bb (2026-08-19, bug 321520) adds claude.ai to
+  `urlRequiresFirefoxBrowser` in `Source/WebCore/platform/glib/UserAgentQuirks.cpp`, absent
+  from tag `webkitgtk-2.54.2`; c22ba3278c (2026-10-13, bug 319164) adds a navigation's target
+  and source `WebKitFrameInfo`, which `NavigationTarget::Frame` and `Asker` need. Pitboard sets
+  no user agent, so neither works before 2.56. Debian 13 has 2.54.0 in trixie-security, and
+  Ubuntu rebases WebKitGTK's majors into an LTS's security pocket, noble's from 2.44.0 to
+  2.52.6 (Debian's and Launchpad's records, read for the critique), so the floor's
+  distributions carry 2.56 some months after it ships.
+- **The `webkit6` crate**, 0.6.1, stops at the feature `v2_52`. It is generated from GIR, so
+  2.54's and 2.56's calls wait on a release regenerated upstream.
+- **Gaps that stay on 2.56**, each a model word or a request upstream before windows ship:
+  - `script-dialog`'s `WebKitScriptDialog` carries no frame and no origin
+    (`WebKitScriptDialog.h.in`, main), so `dialog_title(host, main_frame)` cannot be honoured.
+  - 2.56's `WebKitFrameInfo` has `is_main_frame` and no origin and no web view, so an opener
+    navigating its sign-in window reads as that window's own, where `WebSession.swift:78-84`
+    tells them apart.
+  - Epiphany numbers a download that is there as `name(1).ext` (`ephy-download.c:246-266`),
+    while the model numbers as Finder for `Engine::WebKitGtk` (`account_windows/downloads.rs`).
+  - Intelligent Tracking Prevention is the app's to set (Epiphany sets it from a preference),
+    and macOS's default is not read: the engine's default stays.
+  - `context-menu` offers its stock download actions, which macOS removes: removed, or sent
+    through `decide_response` asking first.
+  - Ubuntu's AppArmor rule on unprivileged user namespaces may stop WebKit's bwrap sandbox for a
+    host app, so the package may need a profile of its own (M13).
+
 ## Notifications
 
 `src/platform/notifications.rs` posts through GNotification. Read in GLib 2.84.4 and GNOME Shell

@@ -62,7 +62,7 @@ pub use machine::{
     ActivityLine, ActivityShown, AtLimitChoice, AtLimitShown, CommandLineShown, EmptyList,
     MachineShown, ScheduleShown, TermsShown, WarmAccountShown, WarmShown,
 };
-pub use quick_actions::{QuickAction, QuickAsk, outside_refused};
+pub use quick_actions::{QuickAction, QuickAsk, outside_refused, search};
 pub use removal::{Package, PackageCommand, PackageRemoval, RemovalShown, package_removal};
 pub use sheets::check_name;
 pub(crate) use sheets::saved_name;

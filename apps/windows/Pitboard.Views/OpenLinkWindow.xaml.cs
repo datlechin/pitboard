@@ -86,8 +86,9 @@ public sealed partial class OpenLinkWindow : Window
             AutomationProperties.SetAutomationId(Heading, $"picker.{Identifiers.Of(shown)}");
         }
 
-        LinkLine.Visibility = Look.Shown(shown is PickerShown.NoAccount or PickerShown.Choose);
-        Explanation.Visibility = Look.Shown(shown is PickerShown.ReadFailed or PickerShown.Refused or PickerShown.NoAccount);
+        LinkLine.Visibility = Look.Shown(shown is PickerShown.NoWindows or PickerShown.NoAccount or PickerShown.Choose);
+        Explanation.Visibility = Look.Shown(
+            shown is PickerShown.ReadFailed or PickerShown.Refused or PickerShown.NoWindows or PickerShown.NoAccount);
         AccountList.Visibility = Look.Shown(shown is PickerShown.Choose);
         CancelButton.Visibility = Look.Shown(shown is not (null or PickerShown.Refused));
         Primary(null, null);
@@ -111,6 +112,17 @@ public sealed partial class OpenLinkWindow : Window
                 Heading.Text = refused.Title;
                 Explanation.Text = refused.Reason;
                 Primary(Words.Window.Ok, Cancel);
+                break;
+            // Neither shipping app meets it: each has account windows.
+            case PickerShown.NoWindows browser:
+                Heading.Text = browser.Title;
+                ShowLink(browser.LinkText, browser.Link.Url);
+                Explanation.Text = browser.Detail;
+                Primary(browser.InBrowser, () =>
+                {
+                    _inBrowser(browser.Link.Url);
+                    Cancel();
+                });
                 break;
             case PickerShown.NoAccount none:
                 Heading.Text = none.Title;

@@ -495,6 +495,63 @@ fn the_windows_are_the_enrolled_accounts_of_each_site() {
     );
 }
 
+/// The Linux app has no account windows until WebKitGTK 2.56 reaches the distributions it runs
+/// on (brief `webwindows`): no menu, row or quick action offers one, and a link that arrives
+/// is handed to the browser whatever the accounts, with no account to choose and nothing that
+/// opens a window.
+#[test]
+fn the_gnome_front_offers_no_account_window_and_hands_a_link_to_the_browser() {
+    let gnome = Front::Gnome;
+    let mut machine = machine();
+    let mut model = started_on(gnome, &mut machine);
+    let shown = model.shown();
+    assert_eq!(
+        (shown.account_windows.accounts, shown.account_windows.menus),
+        (Vec::new(), Vec::new())
+    );
+    let actions: Vec<crate::ActionKind> = (shown.sections.iter())
+        .flat_map(|section| &section.accounts)
+        .flat_map(|item| item.actions.iter().map(|action| action.kind))
+        .collect();
+    assert!(!actions.is_empty(), "the rows' own menus");
+    assert!(
+        !actions.contains(&crate::ActionKind::OpenWindow),
+        "{actions:?}"
+    );
+    let quick = shown.quick_actions.expect("offered");
+    assert!(
+        !quick
+            .iter()
+            .any(|action| matches!(action.ask, QuickAsk::OpenWindow { .. })),
+        "{quick:?}"
+    );
+
+    model.send(shared("https://claude.ai/new", LINK_SCHEME));
+    let (title, detail) = words::no_windows(gnome, "claude.ai");
+    let waiting = picker(&model);
+    assert_eq!(
+        waiting.shown,
+        PickerShown::NoWindows {
+            title,
+            link: crate::SiteLink::from(
+                pitboard_sites::SiteLink::parse("https://claude.ai/new").expect("a link")
+            ),
+            link_text: "claude.ai/new".into(),
+            detail,
+            in_browser: words::open_in_browser(gnome),
+        }
+    );
+    model.later(Duration::from_secs(5));
+    model.tick();
+    model.send(Intent::OpenLink {
+        arrival: waiting.arrival,
+        store: claude("w"),
+    });
+    model.run(&mut machine);
+    assert_eq!(picker(&model), waiting, "never armed, and nothing to open");
+    assert_eq!(open_window(&model, &claude("w")), None);
+}
+
 /// A window that cannot show its page yet says what it waits for in the model's words, as
 /// the Open Link window does: the accounts being read, or, where they could not be and
 /// nothing is known, why, with a way to try again that reads them again. Once they are read,

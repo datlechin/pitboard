@@ -463,7 +463,7 @@ fn actions(
                 ),
             ]
         });
-    let windows = windows_of_account(account, seen.accounts())
+    let windows = windows_of_account(seen.front, account, seen.accounts())
         .into_iter()
         .map(|window| AccountAction {
             kind: ActionKind::OpenWindow,
@@ -647,7 +647,7 @@ pub(crate) fn needs_sign_in(account: &Account) -> bool {
 }
 
 // The line under an account in the menu: its limits, or what stands in their way.
-fn summary(seen: &Seen, account: &Account) -> String {
+pub(crate) fn summary(seen: &Seen, account: &Account) -> String {
     in_place_of_limits(seen, account).unwrap_or_else(|| limits_said(seen, account))
 }
 

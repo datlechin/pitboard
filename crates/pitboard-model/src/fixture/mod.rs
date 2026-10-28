@@ -95,7 +95,8 @@ impl PitboardModel {
     /// launch; only `firstLaunch` is a machine whose app has never been seen. Other apps are
     /// the fixture's, where ChatGPT runs Codex's login in `chatGPTOpen` and quits when asked,
     /// and Claude, a stand-in of the core's, runs in `claudeDesktopOpen`, quits when asked and,
-    /// opened in front for a sign-in, signs in and quits; nothing is posted as a notification.
+    /// opened in front for a sign-in, signs in and quits; a GNOME model names none, as a live
+    /// one names none. Nothing is posted as a notification.
     /// Clock times are said as `local_time` says them. Nothing runs until the app sends
     /// `Intent::Start`.
     ///

@@ -99,6 +99,8 @@ pub(crate) enum Picking {
     ReadFailed(String),
     /// What arrived is not opened.
     Refused(LinkRefusal),
+    /// The front has no account windows: the browser opens the link, whatever the accounts.
+    NoWindows(SiteLink),
     /// No enrolled account has a window on the link's site.
     NoAccount(SiteLink),
     /// The accounts with a window on the link's site, and the one chosen until the person
@@ -140,6 +142,8 @@ pub(crate) struct Windows {
     web_scheme: String,
     /// How long a link waits before it can be opened.
     arming_delay: Duration,
+    // whether the front has account windows to open a link in
+    offered: bool,
     // Where the engine deletes a store's folder only as its browser process exits.
     deletion_lingers: bool,
     kept: Kept,
@@ -182,11 +186,12 @@ pub(crate) struct Windows {
 }
 
 impl Windows {
-    pub(crate) fn new(arming_delay: Duration) -> Windows {
+    pub(crate) fn new(arming_delay: Duration, offered: bool) -> Windows {
         Windows {
             link_scheme: LINK_SCHEME.into(),
             web_scheme: WEB_SCHEME.into(),
             arming_delay,
+            offered,
             deletion_lingers: false,
             kept: Kept::Unread,
             enrolled: None,
@@ -214,7 +219,7 @@ impl Windows {
             // WebView2 deletes a profile's folder only as its browser process exits.
             Engine::WebView2 => true,
             Engine::WebKit => false,
-            // No app runs on Linux, which answers as the Mac does.
+            // Nothing is measured until the Linux app has account windows (M8).
             Engine::WebKitGtk => false,
         };
         link_scheme.clone_into(&mut self.link_scheme);
@@ -662,6 +667,9 @@ impl Windows {
             Err(refusal) => return Some(Picking::Refused(refusal.clone())),
             Ok(link) => link.clone(),
         };
+        if !self.offered {
+            return Some(Picking::NoWindows(link));
+        }
         let Some(status) = status else {
             return Some(problem.map_or(Picking::Reading, |problem| {
                 Picking::ReadFailed(problem.to_owned())

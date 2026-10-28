@@ -126,8 +126,8 @@ The other crates:
   - `lib.rs`: what the bindings export beside the model, `Tool` and `AccountKey` among them,
     and the free functions an app calls as it starts.
   - `front.rs`: `Front`, the app a model serves, and what follows from it alone: its `Engine`,
-    its system, where a sheet comes up, the `Surfaces` it starts with and whether it keeps
-    quick actions.
+    its system, where a sheet comes up, the `Surfaces` it starts with, whether it has account
+    windows and whether it keeps quick actions.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
@@ -563,8 +563,13 @@ keeps it is in the header of the module named.
 - A snapshot carries the status item's words only while the front has one: the shipping
   fronts from the start, and a front that starts with none once `Intent::SurfacesChanged` says
   one came, until it says it went (`a_front_shows_a_status_item_only_while_it_has_one`). Quick
-  actions are offered only by a front that keeps them, the Windows app alone
+  actions are offered only by a front that keeps them, the Windows app and the Linux app
   (`quick_actions_are_offered_only_where_the_front_keeps_them`).
+- Whether a front has account windows and keeps quick actions is `Front`'s. The Linux app has no
+  account windows, so nothing offers one and a link that arrives goes to the browser, and its
+  search finds a switch to each account and Add Account
+  (`the_gnome_front_offers_no_account_window_and_hands_a_link_to_the_browser`,
+  `the_gnome_front_offers_a_switch_for_each_account_and_add_account`).
 - One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`). Each names the parts that differ

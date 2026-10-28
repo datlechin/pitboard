@@ -144,7 +144,10 @@ test("a site with several accounts' windows is a submenu of their labels, the on
   assert.ok(source.includes("title: words::open_site(site.name()),"));
   assert.ok(catalogue.includes('format!("Open {site}")'));
   // in the accounts' order, which the status gives with the signed-in account first
-  assert.ok(source.includes("let windows = window_accounts(accounts);"));
+  assert.ok(source.includes("let windows = offered_windows(front, accounts);"));
+  assert.ok(
+    source.includes("if front.offers_account_windows() {\n        window_accounts(accounts)"),
+  );
   assert.ok(core("status.rs").includes("rows.sort_by_key(|r| (rank(r.provider), !r.signed_in));"));
   const sites = menu(false).flatMap((e) => ("command" in e && e.submenu ? [e] : []));
   assert.deepEqual(
