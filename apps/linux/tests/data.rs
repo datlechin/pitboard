@@ -5,6 +5,7 @@
 use std::path::Path;
 
 use pitboard_linux::config::Build;
+use pitboard_linux::platform::{krunner, search};
 
 const RELEASE: Build = Build::Release;
 
@@ -67,16 +68,16 @@ fn the_service_starts_the_program_as_a_service() {
 #[test]
 fn neither_search_starts_pitboard() {
     let (id, path) = (RELEASE.app_id(), RELEASE.object_path());
-    let search = read(&format!("{id}.search-provider.ini"));
+    let provider = read(&format!("{id}.search-provider.ini"));
     let group = "Shell Search Provider";
-    assert_eq!(string(&search, group, "DesktopId"), format!("{id}.desktop"));
-    assert_eq!(string(&search, group, "BusName"), id);
     assert_eq!(
-        string(&search, group, "ObjectPath"),
-        format!("{path}/SearchProvider")
+        string(&provider, group, "DesktopId"),
+        format!("{id}.desktop")
     );
-    assert_eq!(string(&search, group, "Version"), "2");
-    assert!(!search.boolean(group, "AutoStart").unwrap());
+    assert_eq!(string(&provider, group, "BusName"), id);
+    assert_eq!(string(&provider, group, "ObjectPath"), search::path(path));
+    assert_eq!(string(&provider, group, "Version"), "2");
+    assert!(!provider.boolean(group, "AutoStart").unwrap());
 
     let runner = read(&format!("krunner/{id}.desktop"));
     let entry = "Desktop Entry";
@@ -87,7 +88,7 @@ fn neither_search_starts_pitboard() {
     );
     assert_eq!(
         string(&runner, entry, "X-Plasma-DBusRunner-Path"),
-        format!("{path}/Runner")
+        krunner::path(path)
     );
 }
 

@@ -227,3 +227,7 @@ in a desktop's session. Not measured, each for the Linux session machines:
   for the plan and not since.
 - Whether Plasma and the AppIndicator extension draw the status icons in the panel's text
   colour, through KDE's `ColorScheme-Text` class and GTK's symbolic recolouring.
+- Whether GNOME Shell's search and KRunner reach a running Pitboard and show its results, and
+  whether the window comes to the front for a result GNOME Shell activates, which carries a
+  timestamp and no activation token, and for one KRunner 6.17 or later runs after setting its
+  token.

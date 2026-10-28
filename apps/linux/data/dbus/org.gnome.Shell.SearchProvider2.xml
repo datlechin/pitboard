@@ -1,0 +1,32 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  GNOME Shell's search provider, version 2, as GNOME Shell 48.7 declares it in
+  data/dbus-interfaces/org.gnome.ShellSearchProvider2.xml.
+-->
+<node>
+  <interface name="org.gnome.Shell.SearchProvider2">
+    <method name="GetInitialResultSet">
+      <arg type="as" name="terms" direction="in"/>
+      <arg type="as" name="results" direction="out"/>
+    </method>
+    <method name="GetSubsearchResultSet">
+      <arg type="as" name="previous_results" direction="in"/>
+      <arg type="as" name="terms" direction="in"/>
+      <arg type="as" name="results" direction="out"/>
+    </method>
+    <method name="GetResultMetas">
+      <arg type="as" name="identifiers" direction="in"/>
+      <arg type="aa{sv}" name="metas" direction="out"/>
+    </method>
+    <method name="ActivateResult">
+      <arg type="s" name="identifier" direction="in"/>
+      <arg type="as" name="terms" direction="in"/>
+      <arg type="u" name="timestamp" direction="in"/>
+    </method>
+    <method name="LaunchSearch">
+      <arg type="as" name="terms" direction="in"/>
+      <arg type="u" name="timestamp" direction="in"/>
+    </method>
+  </interface>
+</node>

@@ -1,5 +1,6 @@
 //! What the app asks of the desktop for the model: notifications, start at sign-in, waking
-//! from sleep, links, the status item, and what Uninstall takes back of the app.
+//! from sleep, links, the status item, and what Uninstall takes back of the app; and what the
+//! desktop asks of the app: GNOME's search and KRunner.
 //!
 //! Each takes and gives plain values of the glue's own, so nothing here links the model. A
 //! service a fixture must keep off the desktop is a trait, which the desktop's own and
@@ -7,10 +8,12 @@
 //! outside the fixture's folder.
 
 pub mod autostart;
+pub mod krunner;
 pub mod leftovers;
 pub mod links;
 pub mod logind;
 pub mod notifications;
+pub mod search;
 pub mod stand_in;
 pub mod tray;
 

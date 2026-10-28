@@ -7,5 +7,7 @@
     <file>icons/symbolic/apps/com.usepitboard.Pitboard-symbolic.svg</file>
     <file>dbus/org.kde.StatusNotifierItem.xml</file>
     <file>dbus/com.canonical.dbusmenu.xml</file>
+    <file>dbus/org.gnome.Shell.SearchProvider2.xml</file>
+    <file>dbus/org.kde.krunner1.xml</file>
   </gresource>
 </gresources>

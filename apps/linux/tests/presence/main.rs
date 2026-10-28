@@ -1,5 +1,6 @@
 //! The app's presence on the session bus, each on a bus of the test's own: the status item and
-//! its menu, read and driven by stand-ins for a tray's watcher and host.
+//! its menu, read and driven by stand-ins for a tray's watcher and host, and the search
+//! provider and runner, asked by stand-ins for GNOME Shell and KRunner.
 #![cfg(target_os = "linux")]
 
 mod host;
@@ -11,6 +12,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gio::prelude::*;
+use pitboard_linux::platform::krunner::{self, Run, Runner};
+use pitboard_linux::platform::search::{self, Asked, Found, Provider};
 use pitboard_linux::platform::tray::{
     Desktop, Heard, Status, StatusItem, ToolTip, TrayEntry, TrayItem,
 };
@@ -20,6 +23,7 @@ use watcher::Watcher;
 
 const ID: &str = "com.usepitboard.Pitboard";
 const TITLE: &str = "Pitboard";
+const APP: &str = "/com/usepitboard/Pitboard";
 
 struct Session {
     address: String,
@@ -55,7 +59,7 @@ impl Session {
     }
 }
 
-// `test` on a bus of its own, which finds the services in `services`, on a main context of its own.
+// `test` on a bus of its own, which starts what `services` holds, and a main context of its own.
 fn on_a_bus(services: Option<&Path>, test: impl FnOnce(&Session)) {
     let test_bus = gio::TestDBus::new(gio::TestDBusFlags::NONE);
     if let Some(services) = services {
@@ -686,6 +690,277 @@ fn activate_hands_over_the_token_the_host_provided() {
                 Heard::Clicked {
                     id: "open".into(),
                     token: Some("token-2".into()),
+                },
+            ]
+        );
+    });
+}
+
+fn found(id: &str, name: &str) -> Found {
+    Found {
+        id: id.into(),
+        name: name.into(),
+        description: format!("Switch to {name}"),
+        icon: "com.usepitboard.Pitboard".into(),
+    }
+}
+
+// The model's answers for the terms the tests search for.
+fn answers(terms: &[String]) -> Vec<Found> {
+    let terms: Vec<&str> = terms.iter().map(String::as_str).collect();
+    match terms.as_slice() {
+        ["wo"] => vec![
+            found("switch/work", "work"),
+            found("switch/workshop", "workshop"),
+        ],
+        ["work"] => vec![found("switch/work", "work")],
+        ["ho"] => vec![found("switch/home", "home")],
+        _ => Vec::new(),
+    }
+}
+
+type Matched = (String, String, String, i32, f64, Properties);
+
+// GNOME's search provider and KRunner's runner on the app's connection, as the app serves both,
+// with what each was asked and told.
+struct Searched {
+    _provider: Provider,
+    _runner: Runner,
+    host: Host,
+    shell: At,
+    krunner: At,
+    terms: Rc<RefCell<Vec<Vec<String>>>>,
+    asked: Rc<RefCell<Vec<Asked>>>,
+    runs: Rc<RefCell<Vec<Run>>>,
+}
+
+impl Searched {
+    fn new(session: &Session) -> Searched {
+        let app = session.connect();
+        let terms = Rc::new(RefCell::new(Vec::new()));
+        let results = |terms: &Rc<RefCell<Vec<Vec<String>>>>| {
+            let terms = terms.clone();
+            move |asked: &[String]| {
+                terms.borrow_mut().push(asked.to_vec());
+                answers(asked)
+            }
+        };
+        let (asked, ask) = collected();
+        let (runs, run) = collected();
+        let at = |path: String, interface| At {
+            name: app.unique_name().unwrap().into(),
+            path,
+            interface,
+        };
+        Searched {
+            _provider: Provider::serve(&app, APP, results(&terms), ask).unwrap(),
+            _runner: Runner::serve(&app, APP, results(&terms), run).unwrap(),
+            host: Host::new(session.connect()),
+            shell: at(search::path(APP), "org.gnome.Shell.SearchProvider2"),
+            krunner: at(krunner::path(APP), "org.kde.krunner1"),
+            terms,
+            asked,
+            runs,
+        }
+    }
+
+    fn shell(&self, method: &str, arguments: glib::Variant) -> glib::Variant {
+        self.host
+            .call(&self.shell, method, arguments)
+            .unwrap_or_else(|e| panic!("{method}: {e}"))
+    }
+
+    fn krunner(&self, method: &str, arguments: glib::Variant) -> glib::Variant {
+        self.host
+            .call(&self.krunner, method, arguments)
+            .unwrap_or_else(|e| panic!("{method}: {e}"))
+    }
+
+    fn initial(&self, terms: &[&str]) -> Vec<String> {
+        let reply = self.shell("GetInitialResultSet", (terms,).to_variant());
+        reply.get::<(Vec<String>,)>().unwrap().0
+    }
+
+    fn subsearch(&self, previous: &[&str], terms: &[&str]) -> Vec<String> {
+        let reply = self.shell("GetSubsearchResultSet", (previous, terms).to_variant());
+        reply.get::<(Vec<String>,)>().unwrap().0
+    }
+
+    fn activate(&self, id: &str) {
+        self.shell("ActivateResult", (id, vec!["wo"], 0u32).to_variant());
+    }
+
+    fn matched(&self, query: &str) -> Vec<Matched> {
+        let reply = self.krunner("Match", (query,).to_variant());
+        reply.get::<(Vec<Matched>,)>().unwrap().0
+    }
+
+    fn run(&self, id: &str, action: &str) {
+        self.krunner("Run", (id, action).to_variant());
+    }
+}
+
+#[test]
+fn the_initial_results_are_what_the_results_answer_for_the_terms() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+
+        assert_eq!(
+            searched.initial(&["wo"]),
+            ["switch/work", "switch/workshop"]
+        );
+        assert_eq!(
+            searched.subsearch(&["switch/work", "switch/workshop"], &["work"]),
+            ["switch/work"]
+        );
+        // A subsearch answers no more than the results it narrows.
+        assert!(
+            searched
+                .subsearch(&["switch/workshop"], &["work"])
+                .is_empty()
+        );
+        assert_eq!(
+            searched.terms.take(),
+            [vec!["wo"], vec!["work"], vec!["work"]]
+        );
+    });
+}
+
+#[test]
+fn metas_carry_name_description_and_icon() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+        searched.initial(&["wo"]);
+
+        let reply = searched.shell(
+            "GetResultMetas",
+            (vec!["switch/workshop", "switch/never"],).to_variant(),
+        );
+        let (metas,) = reply.get::<(Vec<Properties>,)>().unwrap();
+        assert_eq!(metas.len(), 1, "{metas:?}");
+        let meta = &metas[0];
+        assert_eq!(
+            meta.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["description", "icon", "id", "name"]
+        );
+        assert_eq!(meta["id"], "switch/workshop".to_variant());
+        assert_eq!(meta["name"], "workshop".to_variant());
+        assert_eq!(meta["description"], "Switch to workshop".to_variant());
+        // As GNOME Shell 48.7 reads it (`js/ui/remoteSearch.js:225-226`).
+        let icon = gio::Icon::deserialize(&meta["icon"]).unwrap();
+        let themed = icon.downcast::<gio::ThemedIcon>().unwrap();
+        assert!(
+            themed
+                .names()
+                .iter()
+                .any(|name| name == "com.usepitboard.Pitboard"),
+            "{:?}",
+            themed.names()
+        );
+    });
+}
+
+#[test]
+fn activating_a_result_tells_its_id() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+        searched.initial(&["wo"]);
+
+        searched.activate("switch/workshop");
+
+        assert_eq!(
+            searched.asked.take(),
+            [Asked::Activate("switch/workshop".into())]
+        );
+    });
+}
+
+#[test]
+fn launching_a_search_opens_the_window() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+
+        searched.shell("LaunchSearch", (vec!["wo"], 0u32).to_variant());
+
+        assert_eq!(searched.asked.take(), [Asked::Open]);
+    });
+}
+
+// Each search hands on an id only it gave, and only while its search lasts.
+#[test]
+fn an_id_never_given_activates_nothing() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+
+        searched.activate("switch/work");
+        searched.initial(&["wo"]);
+        searched.initial(&["ho"]);
+        searched.activate("switch/work");
+        searched.run("switch/home", "");
+        searched.matched("wo");
+        searched.krunner("Teardown", ().to_variant());
+        searched.run("switch/work", "");
+
+        assert!(searched.asked.borrow().is_empty(), "{:?}", searched.asked);
+        assert!(searched.runs.borrow().is_empty(), "{:?}", searched.runs);
+    });
+}
+
+#[test]
+fn a_match_answers_the_results_with_their_relevance() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+        let matched = |id: &str, text: &str, relevance: f64| {
+            let subtext = properties([("subtext", format!("Switch to {text}").to_variant())]);
+            // The fourth is the category's relevance, KRunner 6's Moderate.
+            let icon = "com.usepitboard.Pitboard";
+            (id.into(), text.into(), icon.into(), 50, relevance, subtext)
+        };
+
+        assert_eq!(
+            searched.matched("wo"),
+            [
+                matched("switch/work", "work", 1.0),
+                matched("switch/workshop", "workshop", 0.5),
+            ]
+        );
+        assert!(searched.matched("work  home").is_empty());
+        assert_eq!(
+            searched.terms.take(),
+            [vec!["wo"], vec!["work", "home"]],
+            "KRunner's query is the terms GNOME Shell would give"
+        );
+        let actions = searched.krunner("Actions", ().to_variant());
+        assert_eq!(
+            actions,
+            (Vec::<(String, String, String)>::new(),).to_variant()
+        );
+        let config = searched.krunner("Config", ().to_variant());
+        assert_eq!(config, (Properties::new(),).to_variant());
+    });
+}
+
+#[test]
+fn run_tells_the_id_after_its_token() {
+    on_a_bus(None, |session| {
+        let searched = Searched::new(session);
+        searched.matched("wo");
+
+        searched.krunner("SetActivationToken", ("token",).to_variant());
+        searched.run("switch/work", "");
+        searched.run("switch/workshop", "");
+        searched.run("switch/work", "an-action");
+
+        assert_eq!(
+            searched.runs.take(),
+            [
+                Run {
+                    id: "switch/work".into(),
+                    token: Some("token".into()),
+                },
+                Run {
+                    id: "switch/workshop".into(),
+                    token: None,
                 },
             ]
         );

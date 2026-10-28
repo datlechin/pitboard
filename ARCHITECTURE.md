@@ -193,7 +193,8 @@ The apps:
   - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
     launch starts anything (`launch.rs`), what the program carries in its GResource
     (`resources.rs`), and the desktop's services the app speaks for the model, the status item
-    among them, with a fixture's stand-ins for them (`platform/`).
+    among them, with a fixture's stand-ins for them, and what it answers GNOME's search and
+    KRunner (`platform/`).
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
@@ -627,7 +628,8 @@ keeps it is in the header of the module named.
   Until it links the model, its program quits before it reaches the session bus
   (`a_build_with_no_model_quits_before_it_owns_a_name`).
 - Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
-  (`neither_search_starts_pitboard`).
+  (`neither_search_starts_pitboard`). Each hands the app back only an id it was given in that
+  search (`an_id_never_given_activates_nothing`).
 - A Linux notification's click reaches the app only as `app.notice-clicked`, with the argument
   the notice gave it (`a_notice_posts_its_default_action_and_buttons_as_app_actions`,
   `a_click_on_a_freedesktop_server_reaches_the_notices_action_with_its_argument`).

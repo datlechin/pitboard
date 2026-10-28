@@ -225,17 +225,19 @@ Read in the sources named, each at the version Debian 13 ships where it ships on
 - Plasma's watcher takes a name only while it has an owner and the item answers at
   `/StatusNotifierItem`, and lets go of it as the name goes (`:39-68,75-91`). The extension
   takes the name's owner at the same path, and refuses a name with none (v59
-  `statusNotifierWatcher.js:174-202`). So the item owns its name before it registers, and registers again each time the watcher's name
-  gets an owner, as a restarted plasmashell's would.
+  `statusNotifierWatcher.js:174-202`). So the item owns its name before it registers, and
+  registers again each time the watcher's name gets an owner, as a restarted plasmashell's
+  would.
 - Plasma 6.3.6's host reads every property with one `GetAll`, again on each `New*` signal
   (`applets/systemtray/statusnotifieritemsource.cpp:88-94,215-230`), drops a tool tip whose
   title is empty (`:344-348`), and draws the menu `Menu` names, calling `ContextMenu` only for
   an item with none (`:533-543`). The extension shows an item only with an `Id` and a `Menu`
   (v59 `appIndicator.js:476-524`).
 - The specification lets a tool tip's text hold a subset of HTML. Plasma 6.3.6 shows it with
-  Qt's `Text.AutoText` (`applets/systemtray/package/contents/ui/items/StatusNotifierItem.qml:21-22`),
-  as rich text only where it reads as markup, and the extension shows no tool tip. So the text
-  goes as written: escaped, an `&` would show as `&amp;` in Plasma.
+  Qt's `Text.AutoText`, as rich text only where it reads as markup
+  (`applets/systemtray/package/contents/ui/items/StatusNotifierItem.qml:21-22`), and the
+  extension shows no tool tip. So the text goes as written: escaped, an `&` would show as
+  `&amp;` in Plasma.
 - Plasma 6.3.6 asks KWin for an activation token and provides it with
   `ProvideXdgActivationToken` before each `Activate`, `SecondaryActivate` and `ContextMenu`
   (`applets/systemtray/statusnotifieritemjob.cpp:26-60`). The extension provides one before
@@ -251,27 +253,65 @@ Read in the sources named, each at the version Debian 13 ships where it ships on
   raises the revision only as entries are added, removed or moved and says a property's change
   with `ItemsPropertiesUpdated` (`:905-915,1097,1118,1222-1245`), and refuses a number it does
   not have (`:1340-1350`).
-- Plasma 6.3.6's importer reads a level of the layout with every property, again on
-  `LayoutUpdated`, but takes an entry's type, toggle type and submenu once, and of an entry it
-  knows updates only the properties the new layout holds (`libdbusmenuqt/dbusmenuimporter.cpp:81-89,368-445`).
-  A property gone back to its default comes back only through `ItemsPropertiesUpdated`
-  (`:327-354`). The extension v59 reads the whole layout with `type` and `children-display`
-  alone, and an entry's properties only when it first sees its number (`dbusMenu.js:340-430`).
-  So an entry keeps its number while it stays, a radio entry and a plain one of the same id are
-  two entries, and a change to an entry that stays is said with `ItemsPropertiesUpdated`.
+- Plasma 6.3.6's importer reads a level of the layout with every property, again on `LayoutUpdated`,
+  but takes an entry's type, toggle type and submenu once, and of an entry it knows updates only the
+  properties the new layout holds (`libdbusmenuqt/dbusmenuimporter.cpp:81-89,368-445`). A property
+  gone back to its default comes back only through `ItemsPropertiesUpdated` (`:327-354`). The
+  extension v59 reads the whole layout with `type` and `children-display` alone, and an entry's
+  properties only when it first sees its number (`dbusMenu.js:340-430`). So an entry keeps its
+  number while it stays, a radio entry and a plain one of the same id are two entries, and a change
+  to an entry that stays is said with `ItemsPropertiesUpdated`.
 - As a menu opens, Plasma 6.3.6 calls `AboutToShow(0)` and sends `opened`
   (`dbusmenuimporter.cpp:463-479`), and the extension does both too (v59 `dbusMenu.js:938-952`),
   and calls `AboutToShow(0)` once as it first reads the menu (`:878-879`). A click on an entry is
   `Event(<number>, "clicked", …)`. So the item takes `AboutToShow` of the root for a glance.
 
-Measured on a bus of the test's own, as uid 1000 in Debian 13's image: an item registers with a
-stand-in watcher once its name has an owner and the watcher's has one, and again as the watcher's
-name comes back; with no watcher, nothing registered and a service file that would have started
-one was not started, which a `StartServiceByName` of it then did; a stand-in host reads the
-properties above and hears `NewStatus`, `NewIcon` and `NewToolTip` only for what changed, a new
-entry raises the revision by one with `LayoutUpdated` while the others keep their numbers, and a
-radio entry chosen or an entry enabled is said with `ItemsPropertiesUpdated` alone
-(`tests/presence`).
+Measured on a bus of the test's own, as uid 1000 in each of [the checks'
+images](#the-checks-images), the tests failing first in Debian 13's against an item that did
+nothing: an item registers with a stand-in watcher once its name has an owner and the watcher's has
+one, and again as the watcher's name comes back; with no watcher, nothing registered and a service
+file that would have started one was not started, which a `StartServiceByName` of it then did; a
+stand-in host reads the properties above and hears `NewStatus`, `NewIcon` and `NewToolTip` only for
+what changed, a new entry raises the revision by one with `LayoutUpdated` while the others keep
+their numbers, and a radio entry chosen or an entry enabled is said with `ItemsPropertiesUpdated`
+alone (`tests/presence`).
+
+## Search and KRunner
+
+`src/platform/search.rs` and `src/platform/krunner.rs` answer on the app's own connection,
+under its object path, with the results the app gives for a search's terms. Read at GNOME Shell
+48.7 and KRunner 6.13.0, Debian 13's, and at KRunner 6.17.0:
+
+- `data/dbus/org.gnome.Shell.SearchProvider2.xml` is GNOME Shell 48.7's
+  `data/dbus-interfaces/org.gnome.ShellSearchProvider2.xml`. A subsearch "may return less
+  results, but not more or different results" than those it narrows, so the provider answers
+  only results among them. GNOME Shell splits what is typed into its words for the terms
+  (`js/ui/searchController.js:19-24`), asks the metas of the results it shows, and takes a
+  meta's `icon` back with `g_icon_deserialize` (`js/ui/remoteSearch.js:221-245,280-305`). It
+  activates a result, or launches a search of the app's own, with the terms and a timestamp
+  of its own, and with no activation token (`:328-336`).
+- `data/dbus/org.kde.krunner1.xml` is KRunner 6.17.0's `src/data/org.kde.krunner1.xml`, the
+  first release with `SetActivationToken`, whose file 6.30.0 still holds as it is. On Wayland
+  KRunner 6.17.0 asks KWin for a token and sets it just before `Run`
+  (`src/dbusrunner.cpp:270-312`). KRunner 6.13.0 has no such call and runs with no token
+  (`src/dbusrunner.cpp:269-287`). Ubuntu 26.04 ships KRunner 6.24.0 and Fedora 44 6.25.0
+  (Launchpad, Fedora's mdapi).
+- KRunner hands a match's id back to `Run` with an empty action for its default, and calls
+  `Teardown` as a session that matched ends (6.17.0 `src/dbusrunner.cpp:84-93,270-290`). With
+  `X-Plasma-API=DBus`, the runner's, it calls no `Config` (`:33,106-113`). A match's fourth
+  field is its category's relevance, which orders the categories, and its fifth orders the
+  matches within one, from 0 to 1 (`src/querymatch.h:63-136`). Plasma 6.3.6's applications
+  runner puts an application at Moderate, High where the query starts its name and Highest
+  where the query is its name (`runners/services/servicerunner.cpp:255-290`). So Pitboard's
+  matches are Moderate, their relevance falling in the order the app gave them.
+
+Measured on a bus of the test's own, as uid 1000 in each of the checks' images, the tests failing
+first in Debian 13's against a provider and a runner that served nothing: a stand-in GNOME Shell
+gets the ids of the results the app gives for its terms, a subsearch's among those it narrows alone,
+metas whose icon `g_icon_deserialize` makes a themed icon of that name, an activation of a result
+given and a launched search told, and nothing told for an id the search did not give; a stand-in
+KRunner gets the same results as matches at Moderate, the first at 1 and the next at 0.5, and a run
+told with the token set before it, and none after `Teardown` (`tests/presence`).
 
 ## The install layout
 
