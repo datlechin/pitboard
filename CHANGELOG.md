@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0-beta.6] - 2026-10-28
+
+_On macOS, an update may take away a widget or control you placed, which then needs adding
+again._
+
 ### Added
 
 - `pitboard status`, its `--json` and the app show a Codex account's limits for one model under
@@ -499,6 +504,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   never run, so a new computer with nothing enrolled no longer reads as broken.
 - `pitboard doctor`, **This Mac** and **This PC** show Codex's checks once Pitboard finds `codex`,
   before Codex has run for the first time.
+
+## [0.15.2] - 2026-10-28
+
+### Fixed
+
+- Pitboard adds and switches a Claude Desktop account whose `oauth:tokenCacheV2` holds its
+  tokens while `oauth:tokenCache` stays emptied, as Claude 3.6556.2 leaves them after a sign-in,
+  where it said Claude had not finished signing in.
 
 ## [0.15.1] - 2026-10-23
 
@@ -1413,12 +1426,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.5...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.6...HEAD
+[1.0.0-beta.6]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.5...v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.4...v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.3...v1.0.0-beta.4
 [1.0.0-beta.3]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v1.0.0-beta.1
+[0.15.2]: https://github.com/datlechin/pitboard/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/datlechin/pitboard/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/datlechin/pitboard/compare/v0.13.0...v0.14.0
