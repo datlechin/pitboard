@@ -21,7 +21,8 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
   WinSparkle and Microsoft's guidance.
 - [The macOS app](macos-app.md): what the Swift app said, and Foundation and AppKit.
 - [The Linux app](linux-app.md): its floor, its builds' names, what it installs and where,
-  and the GNOME, KDE and GTK readings its decisions rest on.
+  the GNOME, KDE and GTK readings its decisions rest on, and the images and headless display
+  its checks run in.
 - [WebKit and SwiftUI](webkit.md): the account windows on macOS.
 - [Foundation's URLs](foundation-urls.md): how a link was read before `pitboard-sites`.
 - [The bindings](bindings.md): what UniFFI generates for C# and Swift.
@@ -35,5 +36,5 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
 - [The site's figures](site.md): the shells, prompts and keys usepitboard.com's terminals
   draw, the keys a browser keeps from a page, a box's edges in Firefox, and how the apps' menus,
   dialogs, lists and Limits controls behave.
-- [Not measured](not-measured.md): what nobody has measured about the tools and about watching
-  Pitboard's directory, and what Pitboard does where it cannot know.
+- [Not measured](not-measured.md): what nobody has measured about the tools, watching
+  Pitboard's directory and the Linux app's checks, and what Pitboard does where it cannot know.

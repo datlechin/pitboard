@@ -1,9 +1,9 @@
 # Not measured
 
-What nobody has measured about Claude Code, Codex and Claude Desktop, and about watching
-Pitboard's directory, and what Pitboard does where it cannot know. What was read or measured
-is in each tool's register, `crates/pitboard-core/src/provider/<tool>/assumptions.rs`, and in
-[The app model](app-model.md#watching-pitboards-directory).
+What nobody has measured about Claude Code, Codex, Claude Desktop, watching Pitboard's
+directory and the Linux app's checks, and what Pitboard does where it cannot know. What was read
+or measured is in each tool's register, `crates/pitboard-core/src/provider/<tool>/assumptions.rs`,
+and in [The app model](app-model.md#watching-pitboards-directory).
 
 ## Claude Code
 
@@ -184,3 +184,15 @@ These were not measured. Each says what Pitboard does where it cannot know.
 - Headless mutter on GitHub's runners, x86_64 and arm64, in Ubuntu 26.04's image:
   `linux-facts.yml`'s `display` job measures what Docker on the Mac measured
   ([linux.md](linux.md#the-headless-display)).
+
+## The Linux app's checks
+
+Every reading in [the checks' images](linux-app.md#the-checks-images) is arm64, in Docker on a
+Mac. None of CI's Linux app jobs has run yet. Not measured:
+
+- A container job on `ubuntu-26.04-arm`, and headless mutter as a fresh user in a container
+  on GitHub's runners. Each job fails where either does not start.
+- Any x86_64 image.
+- How long each job takes with no cache, and how fast snapshot.ubuntu.com answers a runner,
+  whose stalls from the Mac lasted minutes. Only the jobs' timeouts bound them.
+- `in-container.sh` under podman: only docker has run it.

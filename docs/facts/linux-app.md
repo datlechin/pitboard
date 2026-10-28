@@ -3,7 +3,7 @@
 Read on 28 October 2026 in the sources named, each at the version Debian 13 ships where that
 matters, and measured where a line says so in Docker on the owner's Mac, as uid 1000 in
 `debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259` (arm64)
-with Debian's packages of that day.
+with Debian's packages of that day, or in [the checks' images](#the-checks-images).
 
 ## The floor
 
@@ -141,9 +141,6 @@ rustup's 1.98.1 and 1.92, run as uid 1000 with every home fresh:
 - dbus-daemon 1.16.2 does not start for a uid the password database lacks ("Could not get
   password database information for UID of current process"), so the image has a user for
   uid 1000.
-- mutter 48.7 runs `--headless --wayland --no-x11 --virtual-monitor 1280x800` as uid 1000 with
-  no seat and no logind, on a "surfaceless renderer without GPU", and warns only that
-  `org.freedesktop.locale1` and colord are absent.
 - desktop-file-validate 0.28 passes the launcher and KRunner's runner, its `Type=Service`
   included. librsvg 2.60's `rsvg-convert` writes only a regular file, not `/dev/null`.
 - Meson 1.7.0 configures a project that names no compiler language, which the app's, that
@@ -151,6 +148,86 @@ rustup's 1.98.1 and 1.92, run as uid 1000 with every home fresh:
   else, `bin/pitboard-app` at mode 0755, and the release's program holds neither `.Devel` nor
   `pitboard-debug`. appstreamcli 1.0.5 passes the metainfo with `validate --no-net`.
 - `cargo hack check --rust-version -p pitboard-linux --all-targets` passes on Rust 1.92.
+
+## The checks' images
+
+`apps/linux/scripts/in-container.sh` and CI's jobs run the checks in these images, measured on
+arm64 in Docker 29.8.2 on the owner's Mac on 28 October 2026, as uid 1000:
+
+| | Image | Packages from | GTK, libadwaita, GLib | mutter | Mesa, LLVM |
+|---|---|---|---|---|---|
+| Ubuntu 26.04 | `ubuntu:26.04@sha256:0e73b714…` | snapshot `20261028T000000Z` | 4.22.4, 1.9.1, 2.88.0 | 50.1 | 26.0.8, 21.1.8 |
+| Debian 13 | `debian:13@sha256:8c4733a9…` | snapshot `20261028T000000Z` | 4.18.6, 1.7.6, 2.84.4 | 48.7 | 25.0.7, 19.1.7 |
+| Fedora 44 | `fedora:44@sha256:43b29f65…` | `fedora` and `updates`, that day | 4.22.5, 1.9.4, 2.88.4 | 50.6 | 26.2.5, 22.1.8 |
+
+- apt 3.2.0 (Ubuntu) and 3.0.3 (Debian) take `--snapshot <id>` with `install --update`, and
+  read every suite of the image's sources from `snapshot.ubuntu.com/ubuntu/<id>`, or
+  `snapshot.debian.org/archive/debian/<id>` and `debian-security/<id>`, with no change to the
+  sources. On arm64 Ubuntu, whose sources name `ports.ubuntu.com`, apt reads
+  `snapshot.ubuntu.com/ubuntu` too, which serves arm64's indexes and packages. A snapshot holds
+  its versions: at `20260601T000000Z` Ubuntu's apt takes libgtk-4-1 4.22.2+ds-1ubuntu1 and
+  mutter 50.1-0ubuntu2.1, where the archive has 4.22.4+ds-0ubuntu0.1 and 50.1-0ubuntu2.5.
+- Debian's `trixie-updates` and `trixie-security` Release files are valid for a week. At
+  `20260601T000000Z` apt refused both as expired 142 days before, and took them with
+  `Acquire::Check-Valid-Until=false`, the option snapshot.debian.org's own page gives for a
+  snapshot older than a dozen days. Ubuntu's snapshot of that day expired nothing.
+- The Ubuntu and Debian images hold no CA certificates, and apt reads a snapshot over https
+  alone ("certificate verify failed"), so `install-deps.sh` takes `ca-certificates` from the
+  image's own archive first. That call also leaves the archive's Release files in place, which
+  apt takes the snapshot's address from: in an image with no lists, one `install --update
+  --snapshot` fetched the archive's own indexes alone, then found no package.
+- Fedora keeps no snapshot. Its image enables `fedora`, `updates` and
+  `fedora-cisco-openh264`, and `install-deps.sh` names the first two.
+- Debian 13 ships no Adwaita Sans: gsettings-desktop-schemas 48.0-1 overrides `font-name` with
+  Cantarell 11 (bugs.debian.org/1093547), which `GSETTINGS_BACKEND=memory` keeps, so its image
+  takes `fonts-cantarell`. Ubuntu 26.04 ships `fonts-adwaita` 49.0, Fedora 44
+  `adwaita-sans-fonts`.
+- Fedora's image has `useradd` but not `setpriv`, which is util-linux's, beside the
+  util-linux-core it ships. Ubuntu's and Debian's have both. Ubuntu's image has a user at
+  uid 1000, `ubuntu`; the others' Containerfiles make one, since dbus-daemon needs it.
+- Debian's 397 packages, 198 MB, came from snapshot.debian.org in 15 s, and Fedora's 414,
+  279 MiB, in a 93 s step. snapshot.ubuntu.com answered each request in about 2 s, a cached one
+  included: Ubuntu's 400 packages, 215 MB, took 3 min 39 s, and in two other runs apt waited
+  more than ten minutes on one file, which curl fetched in 7 s.
+
+## The headless display
+
+`apps/linux/scripts/headless.sh` runs the tests in mutter's headless Wayland compositor, as
+GTK's own CI does (`.gitlab-ci/run-tests.sh`, GTK main, read for the plan on 28 October 2026).
+Measured in each image above, as uid 1000:
+
+- mutter 48.7, 50.1 and 50.6 each run `--headless --wayland --no-x11 --virtual-monitor
+  1280x800` under `dbus-run-session`, with no seat (`XDG_SEAT` unset, no `/run/systemd/seats`)
+  and no logind. Each says "Created surfaceless renderer without GPU" and "Added virtual
+  monitor Meta-0", warns only that `org.freedesktop.locale1` and colord are absent, and gives
+  its command `WAYLAND_DISPLAY=wayland-0` in the `XDG_RUNTIME_DIR` the script made, mode 0700.
+- GTK on that display takes EGL 1.5 from Mesa and an OpenGL ES 3.2 context
+  (`GDK_DEBUG=opengl`), on llvmpipe: eglinfo, on the same Wayland platform, names the
+  renderer as the table's last column has it. Mesa 26, Ubuntu's and Fedora's, first tries
+  zink, and warns on stderr that Vulkan has no driver, before it takes llvmpipe.
+- GTK 4.16 made Vulkan the default renderer on Wayland (`gtk-4.16.0.news`). With
+  `GSK_RENDERER` unset, GTK 4.22.4 and 4.22.5 try Vulkan, which no image has a driver for,
+  pass over GL ("Not using GL: renderer is llvmpipe", `GSK_DEBUG=renderer`), try Vulkan again,
+  and land on GskGLRenderer. GTK 4.18.6 passes over GL the same way and lands on it too. So the
+  script names the renderer, rather than leave it to what an image lacks. `GSK_RENDERER=help`
+  lists `opengl` and `gl` in each and `ngl` in 4.18.6 alone. `gl` warns in 4.18.6 that the old
+  GL renderer is gone, `ngl` warns in 4.22 that it was renamed to `gl`, and `opengl` takes
+  GskGLRenderer in each with no warning, so the script sets `opengl`.
+- On the private bus, the first GTK client's call starts `org.a11y.Bus` from at-spi2-core's
+  service file (2.56.2 in Debian, 2.60.4 in Ubuntu, 2.60.7 in Fedora), whose bus is a
+  socket under the script's `XDG_RUNTIME_DIR/at-spi`. `org.a11y.atspi.Registry` starts on that
+  bus when asked, and with `gtk4-builder-tool preview`'s window open its root lists that
+  program as its one child. So an AT-SPI client finds the app on the private bus, and nothing
+  of a desktop's.
+- `gtk4-builder-tool validate` needs a display: without one it says "Could not initialize
+  windowing system" and exits 1 on a valid file too. Under the script it passes a valid file,
+  refuses an unknown property with its line and column, and stops at the first file it
+  refuses. So `check.sh` validates in its `test` step, under the script as a user, where CI's
+  lint, run as the container's root, cannot.
+- nextest 0.9.146 writes a profile's JUnit report under the workspace's `target/nextest`, not
+  the archive's target folder, in a run from an archive too: a fresh user's run in a checkout
+  root owns failed with "failed to create store dir at `/src/target/nextest/ci`" until that
+  folder was the user's. So CI's jobs make it the test user's.
 
 ## The icons
 

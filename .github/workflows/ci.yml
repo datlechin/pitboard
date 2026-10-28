@@ -162,11 +162,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The Ubuntu image has neither zsh nor BusyBox, and the script has to run under both.
+      # The Ubuntu image has neither zsh nor BusyBox, and the script has to run under both, nor
+      # the validators check-linux-app.sh runs.
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh busybox
+          sudo apt-get install -y zsh busybox desktop-file-utils appstream
       # 0.11.0 takes test's -ef from POSIX.1-2024; the Ubuntu image has 0.9.0.
       - if: runner.os == 'Linux'
         uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
@@ -180,10 +181,17 @@ jobs:
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
           .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
           apps/macos/scripts/build-number.sh
+          .github/scripts/check-linux-app.sh apps/linux/scripts/cargo-build.sh
+          apps/linux/scripts/install-deps.sh apps/linux/scripts/headless.sh
+          apps/linux/scripts/in-container.sh apps/linux/scripts/check.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
       - run: python3 .github/scripts/test-release.py
+      # check-linux-app.sh's cases need Linux's validators, which macOS lacks.
+      - env:
+          TEST_LINUX_APP_TOOLS: ${{ runner.os == 'Linux' && 'desktop-file-validate appstreamcli' || '' }}
+        run: python3 .github/scripts/test-linux-app.py
 
   # Every test Windows leaves out, by an ignore, a cfg or an early return, gives a reason
   # .github/scripts/windows-pending.py accepts.
@@ -1050,6 +1058,122 @@ jobs:
           if (Test-Path -LiteralPath 'HKCU:\Software\Classes\AppUserModelId\Pitboard.Probe') { throw 'Pitboard.Probe registered' }
           exit 0
 
+  # The Linux app on both machines its packages are for, in Ubuntu 26.04's image by digest, with
+  # apps/linux/scripts/check.sh's steps, which in-container.sh runs locally: the lint, the tests
+  # and Meson's release, installed and checked. A container's user is root, so root builds, and a
+  # fresh user runs the tests from a nextest archive under headless.sh, as
+  # test-as-standard-user.ps1 does on Windows.
+  linux-app:
+    name: linux-app (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    container:
+      image: docker.io/library/ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd
+    timeout-minutes: 45
+    env:
+      RUSTUP_HOME: /opt/rustup
+      CARGO_HOME: /opt/cargo
+      NEXTEST_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          apps/linux/scripts/install-deps.sh ubuntu-26.04
+          echo /opt/cargo/bin >> "$GITHUB_PATH"
+      - uses: ./.github/actions/rust
+      - run: apps/linux/scripts/check.sh lint
+      - run: apps/linux/scripts/check.sh archive "$RUNNER_TEMP/linux-app-tests.tar.zst"
+      - name: The tests, as a fresh user under headless.sh
+        run: |
+          useradd --user-group --no-create-home pitboard-tests
+          # nextest writes its report under the workspace's target, whatever the archive's was.
+          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
+          setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
+            apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-linux-app-${{ matrix.arch }}
+          path: target/nextest/ci/junit.xml
+      - run: apps/linux/scripts/check.sh release
+
+  # The Linux app's floor, Debian 13 by digest, with its GTK 4.18, libadwaita 1.7 and GLib 2.84,
+  # and the Rust its manifest names.
+  linux-app-floor:
+    runs-on: ubuntu-26.04
+    container:
+      image: docker.io/library/debian:13@sha256:8c4733a92aacd0bcff3779eadc35a4a5147f36cb20a5fcb56504cbc740212259
+    timeout-minutes: 45
+    env:
+      RUSTUP_HOME: /opt/rustup
+      CARGO_HOME: /opt/cargo
+      NEXTEST_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          apps/linux/scripts/install-deps.sh debian-13
+          echo /opt/cargo/bin >> "$GITHUB_PATH"
+      - uses: ./.github/actions/rust
+      - run: apps/linux/scripts/check.sh lint
+      - run: apps/linux/scripts/check.sh archive "$RUNNER_TEMP/linux-app-tests.tar.zst"
+      - name: The tests, as a fresh user under headless.sh
+        run: |
+          useradd --user-group --no-create-home pitboard-tests
+          # nextest writes its report under the workspace's target, whatever the archive's was.
+          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
+          setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
+            apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-linux-app-floor
+          path: target/nextest/ci/junit.xml
+      - run: apps/linux/scripts/check.sh floor
+
+  # Fedora 44 by digest. Fedora keeps no snapshot of its archive, so its packages move under the
+  # image.
+  linux-app-fedora:
+    runs-on: ubuntu-26.04
+    container:
+      image: docker.io/library/fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+    timeout-minutes: 30
+    env:
+      RUSTUP_HOME: /opt/rustup
+      CARGO_HOME: /opt/cargo
+      NEXTEST_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: |
+          apps/linux/scripts/install-deps.sh fedora-44
+          echo /opt/cargo/bin >> "$GITHUB_PATH"
+      - uses: ./.github/actions/rust
+      - run: apps/linux/scripts/check.sh lint
+      - run: apps/linux/scripts/check.sh archive "$RUNNER_TEMP/linux-app-tests.tar.zst"
+      - name: The tests, as a fresh user under headless.sh
+        run: |
+          useradd --user-group --no-create-home pitboard-tests
+          # nextest writes its report under the workspace's target, whatever the archive's was.
+          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
+          setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
+            apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-linux-app-fedora
+          path: target/nextest/ci/junit.xml
+
   # The floor the manifests promise, built the way someone on an older toolchain builds it.
   msrv:
     runs-on: ubuntu-latest
@@ -1261,6 +1385,9 @@ jobs:
       - csharp
       - csharp-windows
       - windows-app
+      - linux-app
+      - linux-app-floor
+      - linux-app-fedora
       - msrv
       - semver
       - deny

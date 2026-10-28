@@ -195,7 +195,10 @@ The apps:
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons, and the GResource `build.rs` compiles for the program.
-  - `scripts/`: Meson's Cargo step.
+  - `scripts/`: Meson's Cargo step, and the checks: `check.sh`'s steps, the headless display
+    the tests run in, the packages an image or CI's container takes, and the run of the
+    checks in a container.
+  - `containers/`: the images `in-container.sh` builds, one per distribution CI checks.
 
 The rest:
 
@@ -622,6 +625,9 @@ keeps it is in the header of the module named.
   (`a_build_with_no_model_quits_before_it_owns_a_name`).
 - Neither GNOME's search nor KRunner starts Pitboard: each asks only a Pitboard that is running
   (`neither_search_starts_pitboard`).
+- Only a Meson release build installs anything, and it claims `com.usepitboard.Pitboard` and
+  `pitboard://` alone: `check-linux-app.sh` fails a tree that holds a fixture's text,
+  `.Devel`, `pitboard-debug` or a file outside its layout (`test-linux-app.py`).
 
 ### Account windows
 
