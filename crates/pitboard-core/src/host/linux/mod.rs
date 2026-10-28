@@ -12,6 +12,7 @@ pub(crate) use super::unix::{fs, proc, user};
 
 use super::administered::Administered;
 use super::unix::service;
+use super::unix::shell::Spawn;
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Process, Scheduler};
 use crate::context::{Context, Environment};
 use crate::store::vault::FileVault;
@@ -21,14 +22,28 @@ use std::sync::Arc;
 
 pub(super) const OS: Os = Os::Linux;
 
-/// What `posix_spawn` is told when Pitboard starts the person's login shell: a session of its
-/// own. Linux has no flag that keeps the rest of this process's descriptors from it; every
-/// one Rust opens is closed on exec already, and no app on Linux asks yet.
-pub(super) const SPAWN_FLAGS: libc::c_short = libc::POSIX_SPAWN_SETSID;
+/// How `posix_spawn` starts the person's login shell: in a session of its own, and on glibc
+/// with none of this process's descriptors but the three it is handed, whatever a library in
+/// the app opened without close-on-exec. Linux has no flag that does it, so it is glibc 2.34's
+/// file action. musl has none, and only an app asks for the login shell: the Linux app links
+/// glibc, and the musl command line never asks.
+pub(super) const SPAWN: Spawn = Spawn {
+    flags: libc::POSIX_SPAWN_SETSID,
+    #[cfg(target_env = "gnu")]
+    close_the_rest: Some(close_from_three),
+    #[cfg(not(target_env = "gnu"))]
+    close_the_rest: None,
+};
+
+#[cfg(target_env = "gnu")]
+fn close_from_three(actions: &mut super::unix::shell::Actions) -> bool {
+    // SAFETY: the actions are initialised, and stay where they are until they are destroyed.
+    unsafe { libc::posix_spawn_file_actions_addclosefrom_np(actions.raw(), 3) == 0 }
+}
 
 /// Linux has a login shell to ask, as macOS does.
 pub(super) fn login_path(env: &Environment) -> LoginPath {
-    super::unix::shell::login_path(env, SPAWN_FLAGS)
+    super::unix::shell::login_path(env, SPAWN)
 }
 
 pub(super) fn rename_exclusive(from: &std::ffi::CStr, to: &std::ffi::CStr) -> libc::c_int {

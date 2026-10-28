@@ -541,8 +541,11 @@ mod tests {
             );
             assert_eq!(
                 places(Os::Linux, &[("HOME", "/home/x")], tool),
-                [under("/home/x", &[".local", "bin"])],
-                "{tool}"
+                [
+                    under("/home/x", &[".local", "bin"]),
+                    "/home/linuxbrew/.linuxbrew/bin".into()
+                ],
+                "Homebrew's default prefix on Linux: {tool}"
             );
         }
 
@@ -943,7 +946,8 @@ mod tests {
             places(Os::Linux, &[("HOME", "/home/x")], None),
             [
                 under("/home/x", &[".cargo", "bin"]),
-                under("/home/x", &[".local", "bin"])
+                under("/home/x", &[".local", "bin"]),
+                "/home/linuxbrew/.linuxbrew/bin".into()
             ]
         );
         let windows = [

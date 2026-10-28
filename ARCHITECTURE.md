@@ -59,8 +59,8 @@ built with a `context::Context`:
   of its own, which a build for tests refuses. `watch.rs` watches one folder through each
   system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
-    launchd, SQLite and managed preferences; `/proc` and systemd; and what both POSIX systems
-    share.
+    launchd, SQLite and managed preferences; `/proc`, systemd and glibc's way to keep
+    descriptors from the login shell; and what both POSIX systems share.
   - `host/windows/`: Credential Manager, DPAPI seals, Task Scheduler, processes, tokens, jobs,
     the registry and files made private by their access list.
   - `acl.rs`, `owner.rs`, `replace.rs`, `token.rs`, `task.rs`: Windows' rules, compiled on
@@ -535,6 +535,10 @@ keeps it is in the header of the module named.
 - The macOS app's Shortcuts actions run in the app, over its model, and the release holds
   the metadata Shortcuts and Spotlight read them and their App Shortcuts from
   (`scripts/build-app.sh`).
+- The login shell an app asks for its `PATH` is handed none of the app's descriptors but its
+  three: on macOS by `POSIX_SPAWN_CLOEXEC_DEFAULT`, on Linux with glibc by
+  `posix_spawn_file_actions_addclosefrom_np`, and musl has neither, where no app runs
+  (`host::unix::shell::Spawn`, `a_login_shell_is_handed_only_its_three_descriptors`).
 - The Windows app's own data folder is `Pitboard App` in the known folder Local AppData, never
   in Pitboard's directory, so `pitboard uninstall` never deletes the account windows'
   sign-ins (`host::pitboard_app_on_windows`).

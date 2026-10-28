@@ -52,3 +52,40 @@ is built from. No AppImage was run.
   `AppRun` ends, unless `NO_CLEANUP` is set.
 - So a `pitboard` inside either folder is gone by the next run, and a schedule or the watch
   service refuses it with `schedule_program_temporary` (`a_temporary_copy_is_told_by_its_path`).
+
+## Homebrew on Linux
+
+- Its install script puts Homebrew in `/home/linuxbrew/.linuxbrew`, so its programs are in
+  `/home/linuxbrew/.linuxbrew/bin`: Homebrew's `docs/Homebrew-on-Linux.md` at commit
+  `5cec10029857fd8082da6b11bac5878419f4772a` of 23 September 2026, read on 28 October 2026, when
+  Homebrew 7.0.11 was its newest release.
+- formulae.brew.sh's JSON, read on 28 October 2026: the `claude-code` cask, 2.1.308, has
+  `x86_64_linux` and `arm64_linux` variations, which download Claude Code's `linux-x64` and
+  `linux-arm64` builds, and links `claude` as `$HOMEBREW_PREFIX/bin/claude`. The `codex` cask,
+  0.165.0, has the same two, which download Codex's `x86_64-unknown-linux-musl` and
+  `aarch64-unknown-linux-musl` packages, and links `bin/codex` as `$HOMEBREW_PREFIX/bin/codex`.
+  There is no `codex` formula.
+- So an app on Linux looks for `claude`, `codex` and `pitboard` in that `bin` too, after the
+  login shell's `PATH` (`Os::package_bins`, `an_app_on_linux_looks_in_homebrews_bin`). Homebrew
+  installed in another prefix is found only on the login shell's `PATH`.
+
+## The login shell's descriptors
+
+- glibc 2.34 added `posix_spawn_file_actions_addclosefrom_np`, "enabling posix_spawn and
+  posix_spawnp to close all file descriptors greater than or equal to a given integer" (its
+  `NEWS`, and `posix/spawn.h` at tag `glibc-2.34`, read on 28 October 2026). The libc crate
+  0.2.191 binds it in `unix/linux_like/linux/gnu` alone.
+- The floor's glibc, read on 28 October 2026: Debian 13 `2.41-12+deb13u4` (packages.debian.org),
+  Ubuntu 26.04 `2.43-2ubuntu2.4` (Launchpad), Fedora 43 `2.42-17.fc43` (Fedora's mdapi). Each is
+  past 2.34.
+- musl's `include/spawn.h` at tag `v1.2.6` has no such action, only `addclose`, `adddup2`,
+  `addopen`, `addchdir_np` and `addfchdir_np`.
+- Neither has a `posix_spawn` flag like macOS's `POSIX_SPAWN_CLOEXEC_DEFAULT`: glibc's
+  `spawn.h` at 2.34 and 2.42 and musl's at 1.2.6 define `RESETIDS` to `SETSID`, and glibc 2.42
+  `SETCGROUP` too. So on glibc the login shell is started with `addclosefrom_np(actions, 3)`
+  after its three are set up, and on musl with nothing more
+  (`a_login_shell_is_handed_only_its_three_descriptors`).
+- Only an app asks for the login shell. Linked by cargo-zigbuild 0.24.0 against glibc 2.28 on 28
+  October 2026, the debug `pitboard` for `x86_64-unknown-linux-gnu` named no
+  `posix_spawn_file_actions_addclosefrom_np` and no symbol version past `GLIBC_2.28`, so a glibc
+  build of the command line still links before glibc 2.34.

@@ -175,11 +175,12 @@ impl Os {
         }
     }
 
-    // Homebrew's on a Mac, also npm's global `bin` there (`install_places`); none on Linux.
+    // Homebrew's on a Mac, also npm's global `bin` there (`install_places`), and on Linux its
+    // default prefix's (docs/facts/linux.md).
     pub(crate) fn package_bins(self, env: &Environment) -> Vec<PathBuf> {
         match self {
             Os::MacOs => vec!["/opt/homebrew/bin".into(), "/usr/local/bin".into()],
-            Os::Linux => Vec::new(),
+            Os::Linux => vec!["/home/linuxbrew/.linuxbrew/bin".into()],
             Os::Windows => [
                 ("APPDATA", &["npm"][..]),
                 ("LOCALAPPDATA", &["Microsoft", "WinGet", "Links"]),
@@ -1460,6 +1461,20 @@ mod tests {
             r"\\?\D:\Users\Dana\Library\x",
             r"C:\Users\Dana\Library"
         ));
+    }
+
+    // Homebrew's default prefix on Linux, where its `claude-code` and `codex` casks install too.
+    #[test]
+    fn an_app_on_linux_looks_in_homebrews_bin() {
+        let env = Environment::on(Os::Linux, [("HOME", "/home/x")]);
+        let brew = PathBuf::from("/home/linuxbrew/.linuxbrew/bin");
+        assert_eq!(Os::Linux.package_bins(&env), std::slice::from_ref(&brew));
+        for tool in crate::provider::ProviderId::ALL {
+            if let Some(cli) = tool.cli() {
+                assert!((cli.install_places)(&env).contains(&brew), "{tool}");
+            }
+        }
+        assert!(crate::app::command_line_places(&env, None).contains(&brew));
     }
 
     // Linux's packages put `pitboard-app` beside `pitboard` in one `bin`.
