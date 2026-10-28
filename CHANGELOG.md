@@ -7,6 +7,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Pitboard adds and switches a Claude Desktop account whose `oauth:tokenCacheV2` holds its
+  tokens while `oauth:tokenCache` stays emptied, as Claude 3.6556.2 leaves them after a sign-in,
+  where it said Claude had not finished signing in.
+
 ## [0.15.1] - 2026-10-23
 
 ### Changed

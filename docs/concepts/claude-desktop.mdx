@@ -21,9 +21,9 @@ Pitboard asks claude.ai nothing and decrypts nothing, so no service tells it who
 
 Pitboard records the fingerprint when you enrol the account and when it puts the account in use. It reads the cookie only during a change, with Claude closed. A read opens only Claude's settings, `config.json` and `config.json.journal`, and says who is in use as Pitboard last read it, with when.
 
-Claude can replace an account's session cookie while it stays signed in, as seen once in 2.19675.0 on 5 October 2026. So Pitboard takes a session cookie it has not seen as the account Claude names in one case: `config.json` names the account Pitboard last read in use, that account holds no parked login, and neither token cache is emptied. A switch then parks that login under that account and warns `login_taken_as_named`. Nothing is deleted on Claude's word.
+Claude can replace an account's session cookie while it stays signed in, as seen once in 2.19675.0 on 5 October 2026. So Pitboard takes a session cookie it has not seen as the account Claude names in one case: `config.json` names the account Pitboard last read in use, that account holds no parked login, and a token cache holds tokens. A switch then parks that login under that account and warns `login_taken_as_named`. Nothing is deleted on Claude's word.
 
-A session cookie Pitboard has not seen beside an emptied token cache is a sign-in Claude has not finished. Any other login Pitboard cannot tie to its own record stops each change, with nothing changed. [`login_in_doubt`](/reference/errors#claude-desktop) says what to do.
+Claude writes each token cache only as something asks it for a token, so after a sign-in one can stay emptied while the other holds the account's tokens, as read in 2.7032.0, 3.6556.2 and 4.29.0. A session cookie Pitboard has not seen while every token cache holds the emptied value is a sign-in Claude has not finished. Any other login Pitboard cannot tie to its own record stops each change, with nothing changed. [`login_in_doubt`](/reference/errors#claude-desktop) says what to do.
 
 Not known: how often Claude replaces its own login. Not known either: whether quitting Claude within seconds of a sign-in leaves the new login under the previous account's name.
 
