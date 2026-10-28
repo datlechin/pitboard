@@ -384,8 +384,21 @@ pub(crate) fn pitboard_app_on_windows(local: &[PathBuf]) -> Vec<PathBuf> {
         .collect()
 }
 
+// Where the Linux app keeps its own data and cache, each build its own: the account windows'
+// sign-ins among them, as on Windows.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn pitboard_app_on_linux(data: &[PathBuf], cache: &[PathBuf]) -> Vec<PathBuf> {
+    data.iter()
+        .chain(cache)
+        .flat_map(|dir| {
+            ["com.usepitboard.Pitboard", "com.usepitboard.Pitboard.Devel"].map(|id| dir.join(id))
+        })
+        .collect()
+}
+
 // Where this account keeps a real login, or would, and where `started_in` says, for a build for
-// tests to refuse. This account's own are asked of the system, never of the environment.
+// tests to refuse. This account's own are asked of the system, never of the environment: its
+// XDG folders are the defaults in the home the system names.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn real_login_places(
     started_in: Option<&Context>,
@@ -406,12 +419,18 @@ pub(crate) fn real_login_places(
                 ctx.pitboard_home.clone(),
                 ctx.default_pitboard_home(),
             ];
-            if ctx.os != Os::Windows {
-                places.extend([
+            match ctx.os {
+                Os::MacOs => places.extend([
                     ctx.home.join("Library/Application Support/Claude"),
                     ctx.home.join("Library/Application Support/Claude-3p"),
                     PathBuf::from("/Applications/Claude.app"),
-                ]);
+                ]),
+                Os::Linux => places.extend(pitboard_app_on_linux(
+                    ctx.data_home.as_slice(),
+                    ctx.cache_home.as_slice(),
+                )),
+                // Asked of the system below, with the ones this process was started with.
+                Os::Windows => {}
             }
             places
         })
@@ -1373,6 +1392,34 @@ mod tests {
             local.join("Pitboard"),
             local.join("Pitboard").join("App"),
             local.join("Pitboard App Debugger"),
+        ] {
+            assert!(!refused(path.clone()), "{}", path.display());
+        }
+    }
+
+    // Compared by component, so the release's folder and the debug build's never hold each other.
+    #[test]
+    fn the_linux_apps_folders_are_refused_in_any_spelling() {
+        let (data, cache) = (PathBuf::from("/h/.local/share"), PathBuf::from("/h/.cache"));
+        let places =
+            pitboard_app_on_linux(std::slice::from_ref(&data), std::slice::from_ref(&cache));
+        let refused = |path: PathBuf| places.iter().any(|place| lies_in(&path, place));
+        for path in [
+            data.join("com.usepitboard.Pitboard").join("window.json"),
+            data.join("com.usepitboard.pitboard.devel").join("x"),
+            cache.join("COM.USEPITBOARD.PITBOARD"),
+            cache.join("com.usepitboard.Pitboard.Devel"),
+            data.clone(),
+            cache.clone(),
+        ] {
+            assert!(refused(path.clone()), "{}", path.display());
+        }
+        for path in [
+            data.join("com.usepitboard.Pitboards"),
+            data.join("com.usepitboard.Pitboard.Develop"),
+            data.join("com.usepitboard"),
+            cache.join("pitboard"),
+            PathBuf::from("/h/.config/com.usepitboard.Pitboard"),
         ] {
             assert!(!refused(path.clone()), "{}", path.display());
         }

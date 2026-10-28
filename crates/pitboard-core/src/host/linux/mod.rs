@@ -277,6 +277,38 @@ mod tests {
         }
     }
 
+    // The account's own are the spec's defaults in its passwd home; the test's own may be others.
+    #[test]
+    fn a_build_for_tests_on_linux_refuses_the_apps_folders_and_names_no_mac_library() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        let (data, cache) = (scratch.path().join("data"), scratch.path().join("cache"));
+        let named = |path: &Path| path.to_string_lossy().into_owned();
+        let env: Environment = [
+            ("HOME", named(&scratch.path().join("home"))),
+            ("XDG_DATA_HOME", named(&data)),
+            ("XDG_CACHE_HOME", named(&cache)),
+        ]
+        .into_iter()
+        .collect();
+        let places = super::super::real_login_places(Some(&Context::for_command_line(&env)))
+            .expect("this account's places");
+        let own = user::accounts_own_home().expect("this account has a home");
+        for folder in [own.join(".local/share"), own.join(".cache"), data, cache] {
+            for app in ["com.usepitboard.Pitboard", "com.usepitboard.Pitboard.Devel"] {
+                let place = folder.join(app);
+                assert!(places.contains(&place), "{} in {places:?}", place.display());
+            }
+        }
+        for place in &places {
+            let mac = place.components().any(|part| {
+                ["Library", "Applications"]
+                    .map(std::ffi::OsStr::new)
+                    .contains(&part.as_os_str())
+            });
+            assert!(!mac, "{}", place.display());
+        }
+    }
+
     /// Homebrew starts Pitboard through a link in its `bin` that leads into a directory
     /// named after the version, and the next upgrade deletes that directory. Linux says
     /// where the running program is with every link resolved, so the schedule is given the

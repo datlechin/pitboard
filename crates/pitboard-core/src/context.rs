@@ -53,6 +53,8 @@ const READ: &[&str] = &[
     "ANTHROPIC_ORGANIZATION_ID",
     "ANTHROPIC_CONFIG_DIR",
     "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
     "WSL_DISTRO_NAME",
     "CODEX_HOME",
     "CODEX_INSTALL_DIR",
@@ -396,6 +398,11 @@ pub struct Context {
     pub(crate) git_bash: Option<PathBuf>,
     // `WSL_DISTRO_NAME` on Linux, set even empty, which WSL gives its programs.
     pub(crate) wsl_distro: Option<String>,
+    // The base folders of XDG Base Directory 0.8 on macOS and Linux, Pitboard's reading of
+    // them: Claude Code reads `XDG_CONFIG_HOME` its own way (`settings::Profiles`).
+    pub(crate) config_home: Option<PathBuf>,
+    pub(crate) data_home: Option<PathBuf>,
+    pub(crate) cache_home: Option<PathBuf>,
     /// The scheduler's job this process runs as, where a test says. `None` is whatever the
     /// scheduler said when it started this process.
     pub(crate) scheduled_job: Option<String>,
@@ -437,6 +444,31 @@ pub struct Context {
     pub(crate) warm_script: Option<Arc<dyn crate::duty::warm::run::WarmScript>>,
 }
 
+// As XDG Base Directory 0.8 reads a base folder: the one its variable names where that is a full
+// path, since a relative one is ignored as one unset or empty, and otherwise `default` in the
+// home. Windows has none.
+fn base_folder(
+    os: Os,
+    home: &std::path::Path,
+    named: Option<PathBuf>,
+    default: &[&str],
+) -> Option<PathBuf> {
+    match os {
+        Os::MacOs | Os::Linux => Some(named.filter(|folder| folder.is_absolute()).unwrap_or_else(
+            || {
+                default
+                    .iter()
+                    .fold(home.to_path_buf(), |at, part| at.join(part))
+            },
+        )),
+        Os::Windows => None,
+    }
+}
+
+const CONFIG_HOME: &[&str] = &[".config"];
+const DATA_HOME: &[&str] = &[".local", "share"];
+const CACHE_HOME: &[&str] = &[".cache"];
+
 fn programs(
     named: impl Fn(ProviderId, crate::provider::Cli) -> PathBuf,
 ) -> std::collections::BTreeMap<ProviderId, PathBuf> {
@@ -467,6 +499,23 @@ impl Context {
         &self.home
     }
 
+    /// Where XDG Base Directory 0.8 puts this context's configuration on macOS and Linux:
+    /// `XDG_CONFIG_HOME` where it names a full path, else `.config` in the home. None on
+    /// Windows.
+    pub fn config_home(&self) -> Option<&std::path::Path> {
+        self.config_home.as_deref()
+    }
+
+    /// The same for data: `XDG_DATA_HOME`, else `.local/share` in the home.
+    pub fn data_home(&self) -> Option<&std::path::Path> {
+        self.data_home.as_deref()
+    }
+
+    /// The same for what may be thrown away: `XDG_CACHE_HOME`, else `.cache` in the home.
+    pub fn cache_home(&self) -> Option<&std::path::Path> {
+        self.cache_home.as_deref()
+    }
+
     // The one the schedule renews, whatever `PITBOARD_HOME` says.
     pub(crate) fn default_pitboard_home(&self) -> PathBuf {
         self.os.default_pitboard_home(&self.home)
@@ -489,6 +538,9 @@ impl Context {
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn new(home: PathBuf) -> Context {
+        let base = |default| base_folder(crate::host::OS, &home, None, default);
+        let (config_home, data_home, cache_home) =
+            (base(CONFIG_HOME), base(DATA_HOME), base(CACHE_HOME));
         Context {
             os: crate::host::OS,
             pitboard_home: crate::host::OS.default_pitboard_home(&home),
@@ -520,6 +572,9 @@ impl Context {
             path_ext: None,
             git_bash: None,
             wsl_distro: None,
+            config_home,
+            data_home,
+            cache_home,
             scheduled_job: None,
             started_by: None,
             sudo: false,
@@ -873,6 +928,13 @@ impl Context {
                 .filter(|named| !named.is_empty())
                 .map_or_else(|| PathBuf::from(tool.program()), PathBuf::from)
         };
+        let base =
+            |variable, default| base_folder(env.os(), &home, env.named_folder(variable), default);
+        let (config_home, data_home, cache_home) = (
+            base("XDG_CONFIG_HOME", CONFIG_HOME),
+            base("XDG_DATA_HOME", DATA_HOME),
+            base("XDG_CACHE_HOME", CACHE_HOME),
+        );
         let read = Context {
             os: env.os(),
             pitboard_home: env.pitboard_home(),
@@ -931,6 +993,9 @@ impl Context {
                 .path("WSL_DISTRO_NAME")
                 .filter(|_| env.os() == Os::Linux)
                 .map(|named| named.to_string_lossy().into_owned()),
+            config_home,
+            data_home,
+            cache_home,
             scheduled_job: None,
             started_by: None,
             sudo: env.set("SUDO_UID"),
@@ -1533,6 +1598,54 @@ mod tests {
         );
         let posix = Context::read(&Environment::on(Os::Linux, pairs), "cli");
         assert_eq!(posix.home, PathBuf::from("/c/Users/x"));
+    }
+
+    // XDG Base Directory 0.8 ignores one that is not a full path, as one unset or empty.
+    #[test]
+    fn a_relative_xdg_folder_is_taken_for_unset() {
+        let (_scratch, home, named) = full_home();
+        let elsewhere = home.with_file_name("elsewhere");
+        let full = elsewhere.to_string_lossy().into_owned();
+        let read = |os: Os, pairs: &[(&str, &str)]| {
+            let homes = [("HOME", named.as_str()), ("USERPROFILE", named.as_str())];
+            Context::read(
+                &Environment::on(os, homes.iter().chain(pairs).copied()),
+                "cli",
+            )
+        };
+        let given = read(
+            Os::Linux,
+            &[
+                ("XDG_CONFIG_HOME", &full),
+                ("XDG_DATA_HOME", "relative/data"),
+                ("XDG_CACHE_HOME", ""),
+            ],
+        );
+        assert_eq!(given.config_home(), Some(elsewhere.as_path()));
+        let data = home.join(".local").join("share");
+        assert_eq!(given.data_home(), Some(data.as_path()), "relative");
+        let cache = home.join(".cache");
+        assert_eq!(given.cache_home(), Some(cache.as_path()), "empty");
+        let unset = read(Os::MacOs, &[]);
+        let config = home.join(".config");
+        assert_eq!(
+            (unset.config_home(), unset.data_home(), unset.cache_home()),
+            (
+                Some(config.as_path()),
+                Some(data.as_path()),
+                Some(cache.as_path())
+            )
+        );
+        let windows = read(Os::Windows, &[("XDG_DATA_HOME", &full)]);
+        assert_eq!(
+            (
+                windows.config_home(),
+                windows.data_home(),
+                windows.cache_home()
+            ),
+            (None, None, None),
+            "Windows has none"
+        );
     }
 
     // A full path on every system, which nothing makes, in a folder of the test's own.

@@ -54,9 +54,10 @@ built with a `context::Context`:
   - `printed.rs`, `names.rs`, `jwt.rs`: what a terminal makes of a tool's output, the names a
     real login may be kept under, and a token's claims, never checked.
 - `holder.rs`: what keeps a tool's login in memory while it runs.
-- `host/`: the machine behind one seam, the `Host` trait a test replaces with `memory.rs`, and
-  the `fs`, `proc` and `user` functions each system answers. `watch.rs` watches one folder
-  through each system's own notice of a change.
+- `host/`: the machine behind one seam, the `Host` trait a test replaces with `memory.rs`, the
+  `fs`, `proc` and `user` functions each system answers, and the folders each system's app keeps
+  of its own, which a build for tests refuses. `watch.rs` watches one folder through each
+  system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
     launchd, SQLite and managed preferences; `/proc` and systemd; and what both POSIX systems
     share.
@@ -535,6 +536,9 @@ keeps it is in the header of the module named.
 - The Windows app's own data folder is `Pitboard App` in the known folder Local AppData, never
   in Pitboard's directory, so `pitboard uninstall` never deletes the account windows'
   sign-ins (`host::pitboard_app_on_windows`).
+- The Linux app's own folders are `com.usepitboard.Pitboard` and its `.Devel` twin in the XDG
+  data and cache folders, never in Pitboard's directory (`host::pitboard_app_on_linux`,
+  `the_linux_apps_folders_are_refused_in_any_spelling`).
 - Only a Release build an MSI installed registers anything with Windows, and
   `Pitboard.exe --unregister` takes back what it registered. CI's Windows legs fail a run that
   leaves a link scheme, a notification registration, a start at sign-in, a `PATH` entry or a
