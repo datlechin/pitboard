@@ -284,7 +284,7 @@ mod tests {
     use super::super::harness::{
         self, NOW, Rig, account, machine_on, oauth, owner, parked_services, two_parked_on,
     };
-    use super::super::{renew_parked, repair, settle, switch};
+    use super::super::{Due, renew_due, renew_parked, repair, settle, switch};
     use super::*;
     use crate::context::ScratchMachine;
     use crate::host::memory::MemoryHost;
@@ -632,7 +632,7 @@ mod tests {
     }
 
     // The renewal inside every `pitboard` writes a park, which a move cut short would leave in
-    // the form it is leaving.
+    // the form it is leaving. A run the schedule started waits too, and keeps no refusal.
     #[test]
     fn a_renewal_waits_for_a_move_cut_short() {
         let m = two_parked_on(MemoryHost::by_form(), "move-renewal-waits");
@@ -648,10 +648,13 @@ mod tests {
         let before = (state_file(&m), in_files(&m), in_the_secret_service(&m));
 
         assert!(renew_parked(&m.ctx, Permit::for_a_test()).is_empty());
+        let scheduled = m.ctx.clone().started_by_the_schedule();
+        assert!(renew_due(&scheduled, Permit::for_a_test(), Due::ToStayAlive).is_empty());
 
         assert_eq!(
             (state_file(&m), in_files(&m), in_the_secret_service(&m)),
             before
         );
+        assert_eq!(crate::schedule::refused(&m.ctx), None);
     }
 }

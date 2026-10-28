@@ -22,6 +22,7 @@ description: "Fix an expired parked login, a renewal schedule that stopped or us
 | `but in Task Scheduler it`, then what changed, such as `is disabled` | Windows | Someone changed the task in Task Scheduler. |
 | `and its last run`, then how it ended | Windows | The last run failed. |
 | `as an earlier Pitboard wrote it` | Linux | The timer counts only time awake, and the units fail once their `pitboard` is gone. |
+| `but a run of it`, then what it `could not open` | All | A run found the keychain or the login keyring locked, or could not read the parked logins. |
 
 As it starts, the app points a schedule whose `pitboard` is gone at its own command line. Otherwise, turn daily renewal off and on again: with **Keep Saved Sign-Ins Fresh** in the app's **Settings** > **Advanced**, or on the command line:
 
@@ -31,6 +32,8 @@ pitboard schedule install
 ```
 
 Where the last run failed, run `pitboard renew` to see what it says. [Renewal schedule](/reference/files#renewal-schedule) lists where each system keeps the schedule.
+
+Where a run could not open the parked logins, renewal tries again at its next run, and the line goes once a run of it opens them. A `pitboard renew` you run yourself renews them now and leaves the line, since it says nothing of what the schedule's runs find.
 
 ### Linux has no scheduler for it
 

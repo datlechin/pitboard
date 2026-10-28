@@ -93,6 +93,18 @@ pub(crate) fn save<T: Serialize>(permit: Permit, path: &Path, kept: &T) -> error
     atomic::write(permit, path, &body, atomic::Perms::Secret).map_err(failed)
 }
 
+/// Nothing kept at `path` any more: no file, rather than an empty record.
+pub(crate) fn forget(permit: Permit, path: &Path) -> error::Result<()> {
+    match crate::host::fs::remove_file(permit, path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(error::Error::StateWriteFailed {
+            path: path.to_path_buf(),
+            source,
+        }),
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::disallowed_methods,

@@ -24,9 +24,14 @@
 //! than inventing one.
 
 use crate::context::Context;
+use crate::duty::ledger;
 use crate::error::{Error, Result};
-use crate::host::{Os, Scheduler};
+use crate::host::{Os, Scheduler, Vault};
 use crate::permit::Permit;
+use crate::state::Key;
+use crate::switch::Renewal;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// Once a day. A refresh token's life is measured in weeks and Pitboard starts renewing
@@ -188,6 +193,69 @@ pub(crate) fn for_its_run(ctx: &Context, job: Job) -> Context {
         Some(given) if !given.is_empty() => run.with_proxy_variables_over(&given),
         _ => run,
     }
+}
+
+/// What the store refused a run of renewal the schedule started, kept in `renewal.json` in
+/// Pitboard's directory until a run it starts opens the store ([`ran`]). A run at boot can find
+/// the store locked that is open again by the time anybody looks, so doctor says it from here.
+/// Nothing kept is secret: a time, where the parked logins are kept, and codes.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct Refused {
+    /// When the run was.
+    pub(crate) at: i64,
+    /// Where the parked logins it could not open are kept.
+    pub(crate) vault: Option<Vault>,
+    /// Each code the store refused one of them with.
+    pub(crate) codes: BTreeSet<String>,
+}
+
+impl Refused {
+    /// Whether the store was locked, rather than unreadable another way.
+    pub(crate) fn locked(&self) -> bool {
+        self.codes.contains(crate::store::Error::Locked.code())
+    }
+}
+
+fn refused_path(ctx: &Context) -> PathBuf {
+    crate::home::dir(ctx).join("renewal.json")
+}
+
+/// What the store last refused a run the schedule started, where no run it started has opened
+/// the store since.
+pub(crate) fn refused(ctx: &Context) -> Option<Refused> {
+    let kept: Refused = ledger::load(&refused_path(ctx));
+    (!kept.codes.is_empty()).then_some(kept)
+}
+
+/// A run of renewal came to `outcomes`, under the lock renewal takes. A run the schedule started
+/// keeps the codes the store refused its parked logins with, and forgets them once the store
+/// opened for every parked login it asked about. A run that asked about none keeps what was
+/// kept, and a run somebody started keeps nothing: it says nothing of what the schedule's runs
+/// meet.
+pub(crate) fn ran(ctx: &Context, permit: Permit, outcomes: &[(Key, Renewal)]) {
+    if !started_this_run(ctx, Job::Renew) || outcomes.is_empty() {
+        return;
+    }
+    let codes: BTreeSet<String> = outcomes
+        .iter()
+        .filter_map(|(_, outcome)| match outcome {
+            Renewal::Failed(Error::Store(refused)) => Some(refused.code().to_owned()),
+            _ => None,
+        })
+        .collect();
+    let path = refused_path(ctx);
+    // What the run renewed stands whether or not this is kept.
+    let _ = if codes.is_empty() {
+        ledger::forget(permit, &path)
+    } else {
+        let refused = Refused {
+            at: ctx.now(),
+            vault: crate::store::vault_place(ctx),
+            codes,
+        };
+        ledger::save(permit, &path, &refused)
+    };
 }
 
 /// The Pitboard `job` should run: the one the context names, or this one, by the path it was
@@ -1437,5 +1505,120 @@ mod tests {
             !matches!(status(&ctx), Installed::Yes { .. }),
             "and nothing is left written"
         );
+    }
+
+    const RUN: i64 = crate::switch::harness::NOW + 11 * 86_400;
+
+    // A machine whose parked login `there` is due at `RUN`, in the directory daily renewal
+    // renews, with the schedule installed, and the context of that moment. Its parked logins
+    // are the login keyring's.
+    fn due(name: &str) -> (crate::switch::harness::Rig, Context) {
+        use crate::switch::harness;
+        let m = harness::machine_on(MemoryHost::by_form(), name).in_the_default_home();
+        harness::renews(&m, "there-refresh", "there-refresh-2");
+        install(&m.ctx, Permit::for_a_test()).expect("scheduled");
+        let at = m
+            .ctx
+            .clone()
+            .with_clock(Arc::new(crate::time::FixedClock::at(RUN)));
+        (m, at)
+    }
+
+    fn codes(run: &[(Key, Renewal)]) -> Vec<&'static str> {
+        run.iter().map(|(_, outcome)| outcome.code()).collect()
+    }
+
+    fn renewed(ctx: &Context) -> Vec<(Key, Renewal)> {
+        crate::service::Pitboard::new(ctx.clone())
+            .renew()
+            .expect("a run")
+    }
+
+    fn doctor_says(ctx: &Context) -> crate::doctor::Check {
+        crate::service::Pitboard::new(ctx.clone())
+            .doctor()
+            .checks
+            .into_iter()
+            .find(|check| check.code == "schedule")
+            .expect("the schedule's line")
+    }
+
+    /// A run at boot can find the login keyring locked that is open again by the time anybody
+    /// runs doctor, in the desktop session. So the run keeps what the store refused it and
+    /// when, and doctor says it from there.
+    #[test]
+    fn a_scheduled_renewal_that_cannot_open_the_store_is_recorded_and_doctor_says_so() {
+        let (m, at) = due("refused-kept");
+        m.mem.vault().fault_all(crate::store::memory::Fault::Locked);
+
+        let run = renewed(&at.clone().started_by_the_schedule());
+
+        assert_eq!(codes(&run), ["credential_store_locked"]);
+        assert_eq!(
+            refused(&m.ctx),
+            Some(Refused {
+                at: RUN,
+                vault: Some(Vault::SecretService),
+                codes: ["credential_store_locked".to_string()].into(),
+            })
+        );
+        m.mem.vault().heal_all();
+        let said = doctor_says(&at.with_clock(Arc::new(crate::time::FixedClock::at(RUN + 33_120))));
+        assert_eq!(said.level, crate::doctor::Level::Warn);
+        assert!(
+            said.detail
+                .contains("9h 12m ago, could not open the login keyring: it was locked"),
+            "{}",
+            said.detail
+        );
+    }
+
+    /// What was kept stays until a run the schedule started opens the store: a run that asked
+    /// it about nothing says nothing of it.
+    #[test]
+    fn the_next_scheduled_renewal_that_opens_the_store_clears_the_record() {
+        let (m, at) = due("refused-forgotten");
+        let path = crate::home::dir(&m.ctx).join("renewal.json");
+        std::fs::write(
+            &path,
+            r#"{"at":1760000000,"vault":"secret_service","codes":["credential_store_locked"]}"#,
+        )
+        .expect("kept by an earlier run");
+        let kept = refused(&m.ctx).expect("read back");
+        assert_eq!(
+            (kept.at, kept.vault, kept.locked()),
+            (1_760_000_000, Some(Vault::SecretService), true)
+        );
+
+        let nothing_due = renewed(&m.ctx.clone().started_by_the_schedule());
+        assert!(codes(&nothing_due).is_empty());
+        assert_eq!(refused(&m.ctx), Some(kept), "the store was asked nothing");
+
+        let run = renewed(&at.clone().started_by_the_schedule());
+
+        assert_eq!(codes(&run), ["renewed"]);
+        assert_eq!(refused(&m.ctx), None);
+        assert!(!path.exists(), "no file, rather than an empty record");
+        assert_eq!(doctor_says(&at).level, crate::doctor::Level::Ok);
+    }
+
+    /// A run somebody started says nothing of what the schedule's runs meet, so it keeps
+    /// nothing, and forgets nothing the schedule's kept.
+    #[test]
+    fn a_renewal_by_hand_records_nothing() {
+        let (m, at) = due("refused-by-hand");
+        m.mem.vault().fault_all(crate::store::memory::Fault::Locked);
+
+        let by_hand = renewed(&at);
+
+        assert_eq!(codes(&by_hand), ["credential_store_locked"]);
+        assert_eq!(refused(&m.ctx), None);
+        assert!(!crate::home::dir(&m.ctx).join("renewal.json").exists());
+
+        renewed(&at.clone().started_by_the_schedule());
+        let kept = refused(&m.ctx).expect("kept by the schedule's run");
+        m.mem.vault().heal_all();
+        assert_eq!(codes(&renewed(&at)), ["renewed"]);
+        assert_eq!(refused(&m.ctx), Some(kept));
     }
 }

@@ -123,6 +123,7 @@ pub(super) fn scheduled(network: NetworkFact, network_differs: bool) -> Schedule
         network,
         network_differs,
         outdated: false,
+        refused: None,
     }
 }
 

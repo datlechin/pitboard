@@ -388,6 +388,12 @@ keeps it is in the header of the module named.
   its Pitboard is gone (`a_unit_is_written_only_where_the_user_manager_reads_its_folder`,
   `a_unit_is_written_only_for_the_home_the_user_manager_runs_with`,
   `a_service_whose_pitboard_is_gone_is_skipped`).
+- A renewal the schedule started records what the store refused it in `renewal.json`, under
+  `state.lock`, and doctor says it until a run the schedule started opens the store. A renewal
+  by hand records nothing (`schedule::ran`,
+  `a_scheduled_renewal_that_cannot_open_the_store_is_recorded_and_doctor_says_so`,
+  `the_next_scheduled_renewal_that_opens_the_store_clears_the_record`,
+  `a_renewal_by_hand_records_nothing`).
 - A job is given the installing context's proxy variables, in files written private, or in
   `schedule.env` and `watch.env` on Windows, and `doctor` warns with `schedule_proxy` where
   they would send a request another way than this run

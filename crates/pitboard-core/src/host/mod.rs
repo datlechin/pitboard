@@ -110,7 +110,9 @@ pub enum SecretStore {
 
 /// Where a home keeps its parked logins of Claude Code and Codex, as a person would look for
 /// them: on macOS the keychain, on Windows sealed files, on Linux the form the home recorded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Kept in a record by its [`Vault::code`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Vault {
     /// Items of the login keychain, which every home on the Mac shares.
     Keychain,
@@ -1188,6 +1190,20 @@ pub(crate) fn current_program() -> std::io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vault_is_kept_by_its_code() {
+        for vault in [
+            Vault::Keychain,
+            Vault::SecretService,
+            Vault::Files,
+            Vault::SealedFiles,
+        ] {
+            let kept = serde_json::to_value(vault).expect("kept");
+            assert_eq!(kept, vault.code(), "{vault:?}");
+            assert_eq!(serde_json::from_value::<Vault>(kept).expect("read"), vault);
+        }
+    }
 
     // As a pipe a program started meanwhile took with it, or one that left the run's group.
     #[test]

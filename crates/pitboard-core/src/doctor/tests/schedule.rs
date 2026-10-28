@@ -18,6 +18,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         network: direct(),
         network_differs: false,
         outdated: false,
+        refused: None,
     });
     let checks = evaluate(&f);
     let found = check(&checks, "schedule");
@@ -49,6 +50,7 @@ fn a_schedule_is_judged_by_whether_the_pitboard_it_runs_is_still_there() {
         network: direct(),
         network_differs: false,
         outdated: false,
+        refused: None,
     });
     f.os = Os::MacOs;
     let checks = evaluate(&f);
@@ -170,6 +172,7 @@ fn a_task_is_judged_by_its_settings_and_its_last_run() {
         network: direct(),
         network_differs: false,
         outdated: false,
+        refused: None,
     };
     let judged = |f: &Facts| {
         evaluate(f)
@@ -234,6 +237,7 @@ fn a_unit_an_earlier_pitboard_wrote_is_said_by_doctor() {
     let program = "/usr/local/bin/pitboard";
     f.schedule = Some(ScheduleFact {
         outdated: true,
+        refused: None,
         ..scheduled(direct(), false)
     });
     f.watch_service = Some(WatchServiceFact {
@@ -590,4 +594,53 @@ fn the_schedules_proxy_is_read_from_what_install_wrote() {
             && !hidden.contains("proxy.example.com"),
         "{hidden}"
     );
+}
+
+// A run at boot can find the store locked, and doctor runs where it is open: what the run kept
+// is said, with when, below what a gone Pitboard or an earlier one's unit says.
+#[test]
+fn a_run_that_could_not_open_the_store_is_said_with_when() {
+    let mut f = facts();
+    let mut schedule = scheduled(direct(), false);
+    schedule.refused = Some(crate::schedule::Refused {
+        at: NOW - 33_120,
+        vault: Some(crate::host::Vault::SecretService),
+        codes: ["credential_store_locked".to_string()].into(),
+    });
+    f.schedule = Some(schedule);
+    for os in [Os::Linux, Os::MacOs, Os::Windows] {
+        f.os = os;
+        let checks = evaluate(&f);
+        let refused = check(&checks, "schedule");
+        assert_eq!(refused.level, Level::Warn, "{os:?}");
+        assert_eq!(
+            (refused.detail.as_str(), refused.advice.as_str()),
+            (
+                words::could_not_open(
+                    &words::runs_daily("/usr/local/bin/pitboard"),
+                    33_120,
+                    Some(crate::host::Vault::SecretService),
+                    true
+                )
+                .as_str(),
+                words::RUNS_AGAIN_AT_ITS_NEXT_RUN
+            ),
+            "{os:?}"
+        );
+        if os == Os::Linux {
+            for said in [&refused.detail, &refused.advice] {
+                assert!(!crate::words::names_what_linux_has_not(said), "{said}");
+            }
+        }
+    }
+
+    let schedule = f.schedule.as_mut().expect("set above");
+    schedule.outdated = true;
+    assert_eq!(
+        check(&evaluate(&f), "schedule").detail,
+        words::renews_by_time_awake(&words::runs_daily("/usr/local/bin/pitboard"))
+    );
+    let schedule = f.schedule.as_mut().expect("set above");
+    schedule.program_found = false;
+    assert_eq!(check(&evaluate(&f), "schedule").level, Level::Fail);
 }

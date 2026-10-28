@@ -18,6 +18,8 @@ pub(crate) struct ScheduleFact {
     pub(crate) network_differs: bool,
     // Written by an earlier Pitboard, as `Scheduler::outdated` reads it.
     pub(crate) outdated: bool,
+    // What the store refused a run of it, until a run of it opens the store.
+    pub(crate) refused: Option<crate::schedule::Refused>,
 }
 
 pub(crate) struct WatchServiceFact {
@@ -47,6 +49,7 @@ pub(super) fn schedule_fact(ctx: &Context) -> Option<ScheduleFact> {
         network: network_fact(&proxies),
         network_differs: !proxies.same_way(&ctx.proxy),
         outdated: crate::schedule::outdated(ctx, crate::schedule::Job::Renew),
+        refused: crate::schedule::refused(ctx),
     })
 }
 
@@ -107,6 +110,20 @@ pub(super) fn judge_schedule(facts: &Facts) -> Option<Check> {
             "renewal schedule",
             words::renews_by_time_awake(&runs),
             again,
+        ));
+    }
+    // A run at boot can find the store locked that is open by the time anybody looks.
+    if let Some(refused) = &schedule.refused {
+        return Some(warn(
+            "schedule",
+            "renewal schedule",
+            words::could_not_open(
+                &runs,
+                facts.now - refused.at,
+                refused.vault,
+                refused.locked(),
+            ),
+            words::RUNS_AGAIN_AT_ITS_NEXT_RUN,
         ));
     }
     let Some(task) = &schedule.task else {

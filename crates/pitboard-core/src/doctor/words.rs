@@ -1,6 +1,6 @@
 use super::network::ProxyFact;
 use crate::host::task::Drift;
-use crate::host::{Access, Os, SecretStore};
+use crate::host::{Access, Os, SecretStore, Vault};
 use crate::words as said;
 use std::fmt::Display;
 
@@ -1328,6 +1328,25 @@ pub(super) fn not_run_yet(runs: &str) -> String {
     format!("{runs}  ·  not run yet")
 }
 
+// Where the parked logins a run could not open are kept, and why where the store was locked.
+pub(super) fn could_not_open(runs: &str, ago: i64, vault: Option<Vault>, locked: bool) -> String {
+    let what = match (vault, locked) {
+        (Some(Vault::SecretService), true) => {
+            "the login keyring: it was locked, or nothing answered for it"
+        }
+        (Some(Vault::SecretService), false) => "the login keyring",
+        (Some(Vault::Keychain), true) => "the keychain: it was locked",
+        (Some(Vault::Keychain), false) => "the keychain",
+        (Some(Vault::Files | Vault::SealedFiles) | None, _) => "its parked logins",
+    };
+    format!(
+        "{runs}, but a run of it, {} ago, could not open {what}",
+        said::span(ago)
+    )
+}
+
+pub(super) const RUNS_AGAIN_AT_ITS_NEXT_RUN: &str = "Renewal runs again at its next daily run.";
+
 pub(super) const AGAIN_IN_THE_APP_OR_A_TERMINAL: &str = "Turn daily renewal off and on again: in \
      the app's Settings, or with `pitboard schedule uninstall` and then `pitboard schedule \
      install`.";
@@ -2442,6 +2461,22 @@ mod tests {
         assert_eq!(
             not_run_yet("daily  ·  runs C:\\pitboard.exe"),
             "daily  ·  runs C:\\pitboard.exe  ·  not run yet"
+        );
+        let runs = "daily  ·  runs /usr/bin/pitboard";
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::SecretService), true),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open the \
+             login keyring: it was locked, or nothing answered for it"
+        );
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::Keychain), true),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open the \
+             keychain: it was locked"
+        );
+        assert_eq!(
+            could_not_open(runs, 33_120, Some(Vault::SealedFiles), false),
+            "daily  ·  runs /usr/bin/pitboard, but a run of it, 9h 12m ago, could not open its \
+             parked logins"
         );
         assert_eq!(
             runs_from_sign_in(Some(90), "/opt/homebrew/bin/pitboard"),

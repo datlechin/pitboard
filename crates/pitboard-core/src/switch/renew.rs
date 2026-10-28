@@ -84,7 +84,8 @@ pub(crate) fn renew_parked(ctx: &Context, permit: Permit) -> Vec<(Key, Renewal)>
     renew_due(ctx, permit, Due::ToBeAsked)
 }
 
-/// The same, for whichever reason.
+/// The same, for whichever reason. A run the schedule started keeps what the store refused it,
+/// under the lock ([`crate::schedule::ran`]).
 pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Renewal)> {
     let Some(_exclusive) = try_exclusive(ctx, permit) else {
         return Vec::new();
@@ -159,7 +160,7 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
                 })
                 .collect()
         });
-    let outcomes = asked
+    let outcomes: Vec<(Key, Renewal)> = asked
         .into_iter()
         .map(|(key, tool, held, answer)| {
             let outcome = apply(ctx, permit, &mut state, tool, &key, &held, answer)
@@ -168,6 +169,7 @@ pub(crate) fn renew_due(ctx: &Context, permit: Permit, due: Due) -> Vec<(Key, Re
         })
         .collect();
     purge(ctx, permit, &mut state);
+    crate::schedule::ran(ctx, permit, &outcomes);
     outcomes
 }
 
