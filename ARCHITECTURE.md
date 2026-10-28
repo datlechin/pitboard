@@ -424,7 +424,9 @@ keeps it is in the header of the module named.
   every other change the app makes to the index, is claimed there as its intent is taken and
   held until the read after it, so one runs at a time and the look the watch asks leaves the
   index alone until then (`model/switching.rs`, `model/changing.rs`,
-  `a_write_heard_during_a_change_of_the_apps_own_is_looked_at_once_it_is_over`).
+  `a_write_heard_during_a_change_of_the_apps_own_is_looked_at_once_it_is_over`, and over the
+  real core `a_rename_is_read_after_it_whatever_the_watchs_look_finds_meanwhile` and its
+  twins).
 - An app is quit only when the person says so, never by force, within 30 seconds, and
   Pitboard opens again only the copy it quit: Claude only where its folder is whole
   (`Pitboard::whole`). Changes of a tool whose login is its app's files never overlap

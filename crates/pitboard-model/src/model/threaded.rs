@@ -1592,16 +1592,49 @@ fn read_after<'a>(want: &'a [&'a str]) -> impl Fn(&[Snapshot]) -> bool + 'a {
     }
 }
 
+// What asks the look a test holds before the app's own change: the poll, on a machine whose
+// world nothing watches, or a write to the account index, which the watch on Pitboard's
+// directory hears, as both apps take it.
+#[derive(Debug, Clone, Copy)]
+enum LookAsked {
+    ByThePoll,
+    ByAWrite,
+}
+
+impl LookAsked {
+    // Pitboard's directory is there for the watch to begin on as the model starts, as it is
+    // for an app that has run before.
+    fn world(self, name: &str) -> World {
+        match self {
+            LookAsked::ByThePoll => World::unwatched(name),
+            LookAsked::ByAWrite => {
+                let world = World::new(name);
+                std::fs::create_dir_all(world.pitboard_dir()).expect("Pitboard's directory");
+                world
+            }
+        }
+    }
+
+    fn ask(self, world: &World) {
+        match self {
+            LookAsked::ByThePoll => {}
+            LookAsked::ByAWrite => world.index_written_later(5),
+        }
+    }
+}
+
 // The look reads the index as `change` wrote it, and lands before the read after the change,
-// once what is told says it has `answered`. The look held is the poll's own, on a machine
-// whose world nothing watches (`World::unwatched`).
+// once what is told says it has `answered`.
 fn with_a_look_held(
+    world: &World,
+    asked: LookAsked,
     model: &PitboardModel,
     told: &Told,
     change: impl FnOnce(),
     answered: impl Fn(&[Snapshot]) -> bool,
 ) {
     let (held, release) = model.next_look.hold();
+    asked.ask(world);
     held.recv_timeout(PATIENCE)
         .expect("a look held on the lane of reads");
     change();
@@ -1615,9 +1648,8 @@ fn closed_or_over(told: &[Snapshot]) -> bool {
         .is_some_and(|last| last.sheet.is_none() && last.signing_in.is_none())
 }
 
-#[test]
-fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
-    let world = World::unwatched("rename-looked-at");
+fn a_rename_is_read_after_a_look(asked: LookAsked, name: &str) {
+    let world = asked.world(name);
     world.enrolled("work", "here", 10.0);
     world.index_written_earlier(60);
     let told = Arc::new(Told::default());
@@ -1638,15 +1670,24 @@ fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
             to: "office".into(),
         });
     };
-    with_a_look_held(&renaming, &told, rename, closed_or_over);
+    with_a_look_held(&world, asked, &renaming, &told, rename, closed_or_over);
     told.until("the read after the rename", read_after(&["office"]));
     renaming.shutdown();
 }
 
 #[test]
-fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
-    let world = World::unwatched("name-looked-at");
-    // Nothing enrolled, so there is no account index until the enrolment writes one.
+fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
+    a_rename_is_read_after_a_look(LookAsked::ByThePoll, "rename-looked-at");
+}
+
+#[test]
+fn a_rename_is_read_after_it_whatever_the_watchs_look_finds_meanwhile() {
+    a_rename_is_read_after_a_look(LookAsked::ByAWrite, "rename-heard");
+}
+
+fn adding_the_login_in_use_is_read_after_a_look(asked: LookAsked, name: &str) {
+    let world = asked.world(name);
+    // Nothing enrolled, so the account index holds no account until the enrolment adds one.
     world.signed_in("here", 10.0);
     let told = Arc::new(Told::default());
     let adding = model(&world.core(), &told);
@@ -1658,14 +1699,23 @@ fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() 
     let enrol = || {
         adding.send(Intent::Enrol { tool: Tool::Claude });
     };
-    with_a_look_held(&adding, &told, enrol, naming("example"));
+    with_a_look_held(&world, asked, &adding, &told, enrol, naming("example"));
     told.until("the read after adding it", read_after(&["example"]));
     adding.shutdown();
 }
 
 #[test]
-fn a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile() {
-    let mut world = World::unwatched("sign-in-looked-at");
+fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
+    adding_the_login_in_use_is_read_after_a_look(LookAsked::ByThePoll, "name-looked-at");
+}
+
+#[test]
+fn adding_the_login_in_use_is_read_after_it_whatever_the_watchs_look_finds_meanwhile() {
+    adding_the_login_in_use_is_read_after_a_look(LookAsked::ByAWrite, "name-heard");
+}
+
+fn a_sign_in_is_read_after_it_enrols_after_a_look(asked: LookAsked, name: &str) {
+    let mut world = asked.world(name);
     world.enrolled("work", "here", 10.0);
     let _claude = world.claude_stand_in();
     world.index_written_earlier(60);
@@ -1677,12 +1727,22 @@ fn a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile() {
     told.until("a code asked for", signing(|s| s.wants_code));
     world.signed_in_privately("away", "access-away", 20.0);
     let paste_it = || model.send(paste("the-code#the-state"));
-    with_a_look_held(&model, &told, paste_it, closed_or_over);
+    with_a_look_held(&world, asked, &model, &told, paste_it, closed_or_over);
     told.until(
         "the read after the sign-in",
         read_after(&["work", "example"]),
     );
     model.shutdown();
+}
+
+#[test]
+fn a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile() {
+    a_sign_in_is_read_after_it_enrols_after_a_look(LookAsked::ByThePoll, "sign-in-looked-at");
+}
+
+#[test]
+fn a_sign_in_is_read_after_it_enrols_whatever_the_watchs_look_finds_meanwhile() {
+    a_sign_in_is_read_after_it_enrols_after_a_look(LookAsked::ByAWrite, "sign-in-heard");
 }
 
 /// A model over `core` telling `told`, posting through `posted`, with no other app running.
