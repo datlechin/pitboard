@@ -31,7 +31,20 @@ jobs:
       fail-fast: false
       matrix:
         tool: [claude-code, codex]
-        platform: [linux-x64, darwin-arm64, win32-x64, win32-arm64]
+        platform:
+          - linux-x64
+          - linux-arm64
+          - linux-x64-musl
+          - linux-arm64-musl
+          - darwin-arm64
+          - win32-x64
+          - win32-arm64
+        # Codex's Linux builds are musl already, and it publishes no package of either name.
+        exclude:
+          - tool: codex
+            platform: linux-x64-musl
+          - tool: codex
+            platform: linux-arm64-musl
         include:
           - tool: claude-code
             package: "@anthropic-ai/claude-code"

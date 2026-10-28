@@ -749,8 +749,8 @@ has measured.
   Electron app's `app.asar` for the system `assumptions::archive_platform` names. The check is
   shallow on purpose: a literal present proves nothing, and one gone, or one ruled out
   appearing, proves something moved.
-- `.github/workflows/conformance.yml` checks four builds each of Claude Code's and Codex's
-  newest against their registers twice a week. Claude Desktop's is checked by hand on an
+- `.github/workflows/conformance.yml` checks seven builds of Claude Code's newest and five of
+  Codex's against their registers twice a week. Claude Desktop's is checked by hand on an
   installed copy, since where its builds are published is not recorded.
 - Adding a tool takes a register read out of a named build, with its table; a module under
   `provider/` implementing `Provider` or `Folder`; and, where its builds have a recorded

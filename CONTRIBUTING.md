@@ -710,7 +710,8 @@ cargo run -p pitboard-conformance -- <app.asar> --provider desktop
 Point it at the tool's native binary, not the npm wrapper, which carries none.
 `npm pack @anthropic-ai/claude-code-<system>@<version>` holds `claude`, and
 `npm pack @openai/codex@<version>-<system>` holds `codex` under `vendor/`. `<system>` is one
-of `darwin-arm64`, `linux-x64`, `win32-x64` and `win32-arm64`.
+of `darwin-arm64`, `linux-x64`, `linux-arm64`, `win32-x64` and `win32-arm64`, and for Claude
+Code `linux-x64-musl` and `linux-arm64-musl` too: Codex's Linux builds are musl already.
 
 Claude Desktop's register is read by hand from `Contents/Resources/app.asar` in Claude's
 bundle, on a Mac where Claude is installed. No conformance job reads it, since where its
