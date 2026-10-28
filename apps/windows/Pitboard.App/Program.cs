@@ -47,9 +47,11 @@ public static class Program
             () => refusal = PitboardFfiMethods.LaunchRefusal(environment),
             () =>
             {
-                var holder = AppInstance.FindOrRegisterForKey(Running.InstanceKey(fixtureFolder));
-                running = holder.IsCurrent ? null : holder;
-                return holder.IsCurrent;
+                var holder = Launching.Holder<AppInstance>(
+                    () => AppInstance.FindOrRegisterForKey(Running.InstanceKey(fixtureFolder)),
+                    () => Thread.Sleep(50));
+                running = holder is { IsCurrent: false } ? holder : null;
+                return holder?.IsCurrent;
             });
         switch (start)
         {

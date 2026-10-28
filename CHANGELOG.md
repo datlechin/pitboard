@@ -7,10 +7,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0-beta.7] - 2026-10-28
+
+_On macOS, an update may take away a widget or control you placed, which then needs adding
+again._
+
 ### Fixed
 
 - On macOS, the Accounts window keeps working through a switch, and as a tool's accounts come
   or go, where macOS 27 could quit Pitboard while the list moved its rows.
+- Pitboard for Windows started twice at once opens one window, where the second copy could
+  quit with an error.
 
 ## [1.0.0-beta.6] - 2026-10-28
 
@@ -1431,7 +1438,8 @@ again._
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.6...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.7...HEAD
+[1.0.0-beta.7]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.6...v1.0.0-beta.7
 [1.0.0-beta.6]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.5...v1.0.0-beta.6
 [1.0.0-beta.5]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.4...v1.0.0-beta.5
 [1.0.0-beta.4]: https://github.com/datlechin/pitboard/compare/v1.0.0-beta.3...v1.0.0-beta.4
