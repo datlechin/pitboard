@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   TROUBLESHOOT,
@@ -24,11 +24,18 @@ const views = (file: string) => repo(`apps/windows/Pitboard.Views/${file}`);
 const shell = (file: string) => repo(`apps/windows/Pitboard.Windows/${file}`);
 const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
 const core = (file: string) => repo(`crates/pitboard-core/src/${file}`);
+// present/words/, a file for each surface that says the words, read as one
+const catalogue = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => present(`words/${file}`))
+  .join("\n");
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
-// app_words.rs and words.rs, where every word the Windows views draw is the model's: each holds
-// the words as a literal, and a view binds the field of app_words() that gives it.
-const said = joined(present("app_words.rs") + present("words.rs"));
+// app_words.rs and present/words/, where every word the Windows views draw is the model's: each
+// holds the words as a literal, and a view binds the field of app_words() that gives it.
+const said = joined(present("app_words.rs") + catalogue);
 const owned = (words: string) => said.includes(`"${words}"`);
 
 const headings = new Set(tools.map(([, name]) => name));
@@ -81,9 +88,10 @@ test("a beta's menu has no Check for updates, as IconMenu.cs offers it only besi
 });
 
 test("the menu heads each tool's accounts with its name, one group of them, and names each account with how much it has used", () => {
-  const words = present("words.rs");
   assert.ok(
-    words.includes('(Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),'),
+    catalogue.includes(
+      '(Os::Windows, Some(aside)) => format!("{title} ({})", uncapitalised(aside)),',
+    ),
   );
   assert.ok(
     present("accounts.rs").includes(
@@ -123,18 +131,14 @@ test("an account's tooltip in the icon's menu is the line the menu bar app shows
     .filter((e) => "account" in e && e.label === "work");
   assert.ok(work && "tip" in work);
   // in sentence case, as the Windows app says each limit after the first
-  assert.ok(
-    present("words.rs").includes(
-      '(_, Os::Windows) => format!("{} {figure}", uncapitalised(name)),',
-    ),
-  );
+  assert.ok(catalogue.includes('(_, Os::Windows) => format!("{} {figure}", uncapitalised(name)),'));
   assert.equal(work.tip, "5-hour 12% used, weekly 40%");
 });
 
 test("a site with several accounts' windows is a submenu of their labels, the one in use first", () => {
   const source = repo("crates/pitboard-model/src/account_windows/accounts.rs");
   assert.ok(source.includes("title: words::open_site(site.name()),"));
-  assert.ok(present("words.rs").includes('format!("Open {site}")'));
+  assert.ok(catalogue.includes('format!("Open {site}")'));
   // in the accounts' order, which the status gives with the signed-in account first
   assert.ok(source.includes("let windows = window_accounts(accounts);"));
   assert.ok(core("status.rs").includes("rows.sort_by_key(|r| (rank(r.provider), !r.signed_in));"));
@@ -151,15 +155,16 @@ test("a site with several accounts' windows is a submenu of their labels, the on
 });
 
 test("the icon's tooltip names Pitboard, then each account in use with its tool and its menu line", () => {
-  const words = present("words.rs");
-  assert.ok(words.includes("let mut tip = vec![PITBOARD.to_owned()];"));
-  assert.ok(words.includes('.map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),'));
+  assert.ok(catalogue.includes("let mut tip = vec![PITBOARD.to_owned()];"));
+  assert.ok(
+    catalogue.includes('.map(|(name, line)| format!("{name}: {}", uncapitalised(&line))),'),
+  );
   assert.ok(
     present("accounts.rs").includes(
       ".map(|account| (seen.name_of(account), summary(seen, account))),",
     ),
   );
-  assert.ok(words.includes('format!("{label} ({tool})")'));
+  assert.ok(catalogue.includes('format!("{label} ({tool})")'));
   assert.equal(
     trayTip(moments.after),
     "Pitboard\nwork (Claude Code): 5-hour 12% used, weekly 40%\nmain (Codex): weekly 7% used",
@@ -249,9 +254,9 @@ test("the Accounts page says what AccountsPage.xaml binds and the core says", ()
   for (const field of ["Refresh", "AddAccount"])
     assert.ok(xaml.includes(`Label="{x:Bind shown:Words.Window.${field}}"`), field);
   for (const said of [page.title, ...page.commands]) assert.ok(owned(said), said);
-  assert.ok(present("words.rs").includes('format!("Updated {clock}")'));
+  assert.ok(catalogue.includes('format!("Updated {clock}")'));
   assert.match(page.updated, /^Updated \d\d:\d\d$/);
-  assert.ok(present("words.rs").includes('titled(os, "In Use", IN_USE)'));
+  assert.ok(catalogue.includes('titled(os, "In Use", IN_USE)'));
   assert.deepEqual(
     page.sections.map((s) => s.name),
     ["Claude Code", "Codex"],
@@ -290,11 +295,9 @@ test("an opened row's cards say what AccountsPage.xaml binds from app_words() an
   assert.ok(xaml.includes('Content="{x:Bind shown:Words.Window.Copy}"'));
   assert.ok(xaml.includes('AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"'));
   assert.ok(owned(detail.copy) && owned("Copy email address"));
-  assert.ok(
-    present("words.rs").includes(`titled(os, "Warm-Up Settings…", "${detail.warmUpSettings}")`),
-  );
-  assert.ok(present("words.rs").includes('format!("Saved sign-in valid until {until}")'));
-  assert.ok(present("words.rs").includes(`pub(crate) const WARM_UP_OFF: &str = "${detail.off}";`));
+  assert.ok(catalogue.includes(`titled(os, "Warm-Up Settings…", "${detail.warmUpSettings}")`));
+  assert.ok(catalogue.includes('format!("Saved sign-in valid until {until}")'));
+  assert.ok(catalogue.includes(`pub(crate) const WARM_UP_OFF: &str = "${detail.off}";`));
   // the day and month in the regional format's order, its month abbreviated
   assert.ok(
     shell("WindowsLocalTime.cs").includes(
@@ -332,7 +335,7 @@ test("an opened row's cards say what AccountsPage.xaml binds from app_words() an
     'Text="{x:Bind ResetsIn}"',
   ])
     assert.ok(xaml.includes(bound), bound);
-  assert.ok(present("words.rs").includes('format!("in {}", span(seconds))'));
+  assert.ok(catalogue.includes('format!("in {}", span(seconds))'));
   const [card, line] = [row("work").cards[0], row("work").limits[0]];
   assert.deepEqual(
     [card.name, card.used, card.resets],
@@ -348,9 +351,8 @@ test("an opened row's cards say what AccountsPage.xaml binds from app_words() an
 });
 
 test("the notice after a switch says what notices.rs and NoticeBar.xaml.cs put together", () => {
-  const words = present("words.rs");
-  assert.ok(words.includes('Some(tool) => format!("Switched {tool} to {label}")'));
-  assert.ok(words.includes('Some(tool) => format!("{tool} sessions already open follow in")'));
+  assert.ok(catalogue.includes('Some(tool) => format!("Switched {tool} to {label}")'));
+  assert.ok(catalogue.includes('Some(tool) => format!("{tool} sessions already open follow in")'));
   assert.ok(
     views("NoticeBar.xaml.cs").includes(
       'CountdownText.Text = $"{label} {Countdown.Left(until, now)}";',
@@ -399,7 +401,7 @@ test("Settings says what SettingsPage.xaml, SettingsViewModel.cs and machine.rs 
     ),
   );
   const machine = joined(present("machine.rs"));
-  const words = joined(present("words.rs"));
+  const words = joined(catalogue);
   assert.ok(words.includes(`pub(crate) const AT_LIMIT: &str = "${s.atLimit.header}";`));
   assert.ok(words.includes(`"${s.atLimit.choice}"),`));
   assert.ok(machine.includes("share_label: words::AT.into(),"));
@@ -456,7 +458,7 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
   const xaml = views("SettingsPage.xaml");
   assert.ok(xaml.includes('Header="{x:Bind ViewModel.WarmTitle, Mode=OneWay}"'));
   assert.ok(present("machine.rs").includes("title: words::warm_up(seen.os),"));
-  assert.ok(present("words.rs").includes(`titled(os, "Warm-Up", "${w.header}")`));
+  assert.ok(catalogue.includes(`titled(os, "Warm-Up", "${w.header}")`));
   // what a warm-up does under its name, its hours beside it, and its icon, Brightness
   assert.ok(xaml.includes('<TextBlock Text="{x:Bind ViewModel.WarmNote, Mode=OneWay}" />'));
   assert.ok(present("machine.rs").includes("note: words::WARM_UP_NOTE.into(),"));
@@ -472,11 +474,9 @@ test("Warm-up says what SettingsPage.xaml, WarmAccountRow.cs and machine.rs say"
     assert.ok(xaml.includes(`Header="{x:Bind shown:Words.Settings.${field}}"`), name);
     assert.ok(owned(name), name);
   }
-  assert.ok(present("words.rs").includes('Some(format!("{} to {to}", time_of_day(from)?))'));
+  assert.ok(catalogue.includes('Some(format!("{} to {to}", time_of_day(from)?))'));
   assert.equal(w.range, "07:00 to 23:00");
-  assert.ok(
-    present("words.rs").includes('Some(at) => format!("Next warm-up: {account} at {at}."),'),
-  );
+  assert.ok(catalogue.includes('Some(at) => format!("Next warm-up: {account} at {at}."),'));
   assert.equal(w.standing, "Next warm-up: personal at 22:00.");
   assert.ok(present("machine.rs").includes("title: choice.account.clone(),"));
   assert.ok(shell("WarmAccountRow.cs").includes("public string Title => _account.Title;"));
@@ -497,13 +497,12 @@ test("Activity lists Windows' changes in the app's words, dated as the regional 
   assert.ok(xaml.includes('Label="{x:Bind shown:Words.Window.Refresh}"'));
   assert.ok(owned(page.title) && owned(page.command));
   assert.ok(shell("WindowsLocalTime.cs").includes('At(epoch).ToString("g", Culture)'));
-  const words = present("words.rs");
-  assert.ok(words.includes('"use" | "switch" => "Switch".into(),'));
-  assert.ok(words.includes('"enroll" => "Add".into(),'));
-  assert.ok(words.includes('"warm-up" => "Warm-up".into(),'));
-  assert.ok(words.includes('"ok" => "Done".into(),'));
-  assert.ok(words.includes('"app" => "Pitboard app".into(),'));
-  assert.ok(words.includes('"cli" => "Command line".into(),'));
+  assert.ok(catalogue.includes('"use" | "switch" => "Switch".into(),'));
+  assert.ok(catalogue.includes('"enroll" => "Add".into(),'));
+  assert.ok(catalogue.includes('"warm-up" => "Warm-up".into(),'));
+  assert.ok(catalogue.includes('"ok" => "Done".into(),'));
+  assert.ok(catalogue.includes('"app" => "Pitboard app".into(),'));
+  assert.ok(catalogue.includes('"cli" => "Command line".into(),'));
   assert.deepEqual(
     page.rows.map((r) => [r.date, r.change, r.account, r.result, r.by]),
     [
@@ -518,7 +517,7 @@ test("the notification at the share says what WindowsNotifications.cs builds fro
   const source = shell("WindowsNotifications.cs");
   assert.ok(source.includes('public const string DisplayName = "Pitboard";'));
   assert.ok(source.includes("new AppNotificationButton(button.Title)"));
-  const words = joined(present("words.rs"));
+  const words = joined(catalogue);
   // a toast takes any button, so it names the account it switches to
   assert.ok(words.includes("Os::Windows => switch_to(label),"));
   const notices = present("notices.rs");

@@ -1,6 +1,6 @@
 // What Settings' General and Advanced show, in each app's words (present/app_words.rs for macOS,
 // SettingsPage.xaml and SettingsViewModel.cs for Windows, and present/machine.rs and
-// present/words.rs), for the page's one machine: a release from
+// present/words/), for the page's one machine: a release from
 // Homebrew's pitboard-app cask on macOS, whose command line is the one inside the app, and the
 // MSI's install on Windows, whose command line is the one in the app's folder (reference/settings.mdx).
 // settings.test.ts finds each in its source.
@@ -39,7 +39,7 @@ export const winGeneral = {
 };
 
 // SettingsPage.xaml's Advanced: Keep saved sign-ins fresh, where the command line is, and Uninstall
-// Pitboard, which asks first (present/words.rs `uninstall_pitboard`, `UNINSTALL_QUESTION`)
+// Pitboard, which asks first (present/words/machine.rs `uninstall_pitboard`, `UNINSTALL_QUESTION`)
 export const winAdvanced = {
   section: "Advanced",
   commandLine: "Command line",
@@ -60,7 +60,7 @@ export const isBeta = (version: string) => version.includes("-beta.");
 // AdvancedSettings.swift's and SettingsPage.xaml's switch, in each system's case
 export const renew = { macos: "Keep Saved Sign-Ins Fresh", windows: "Keep saved sign-ins fresh" };
 
-// words.rs `renewal_about`, with Claude Desktop enrolled on macOS
+// present/words/machine.rs `renewal_about`, with Claude Desktop enrolled on macOS
 export const renewalAbout = (system: "macos" | "windows") =>
   system === "macos"
     ? "Your Mac refreshes saved sign-ins, except Claude Desktop’s, once a day so they don’t expire."
@@ -74,7 +74,7 @@ export const commandLine = {
   macos: "/opt/homebrew/bin/pitboard",
   windows: "C:\\Users\\me\\AppData\\Local\\Programs\\Pitboard\\bin\\pitboard.exe",
 };
-// words.rs `update_note` for the one inside the app
+// present/words/machine.rs `update_note` for the one inside the app
 export const updateNote = "The one inside this app, so it updates with the app.";
 
 // macOS's Uninstall, its button the model's offer, and the note under it

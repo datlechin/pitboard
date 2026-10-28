@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   accountSpoken,
@@ -91,6 +91,13 @@ function cases(body: string, call: string): [number, string][] {
 }
 
 const said = core("words.rs");
+// present/words/, a file for each surface that says the words, read as one
+const ffiWords = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
+  .join("\n");
 
 test("each system lists the tools Pitboard supports on it, Claude Desktop on macOS alone", () => {
   assert.ok(provider.includes("(ProviderId::Claude | ProviderId::Codex, _) => true,"));
@@ -332,9 +339,8 @@ test("the notification comes when personal's weekly limit, at its pace, reaches 
   assert.equal(minute(clock.menuBar + left), minute(clock.warned));
   assert.deepEqual(headsUp.title, limitNotification(week, false));
   assert.equal(headsUp.body, `personal has used ${share}%. work has used 40%.`);
-  const ffi = repo("crates/pitboard-model/src/present/words.rs");
-  assert.ok(ffi.includes('assert_eq!(has_used_share("work", "95%"), "work has used 95%.");'));
-  assert.ok(ffi.includes('assert_eq!(other_used("spare", Some(80)), "spare has used 20%.");'));
+  assert.ok(ffiWords.includes('assert_eq!(has_used_share("work", "95%"), "work has used 95%.");'));
+  assert.ok(ffiWords.includes('assert_eq!(other_used("spare", Some(80)), "spare has used 20%.");'));
 });
 
 test("a label, email or plan a visitor types stays text in every line words.ts writes as HTML", () => {
@@ -356,7 +362,6 @@ test("a label, email or plan a visitor types stays text in every line words.ts w
   for (const t of [label, email]) assert.ok(!html.join("\n").includes(t), t);
 });
 
-const ffiWords = repo("crates/pitboard-model/src/present/words.rs");
 const ffiAccounts = repo("crates/pitboard-model/src/present/accounts.rs");
 
 // Each `assert_eq!(call(args), "…")` of a test body, its arguments as written and the words.
@@ -370,7 +375,7 @@ const calls = (body: string, call: string) =>
     ),
   ].map((m) => [m[1], m[2]] as const);
 
-test("a reset counts down and a read says when as present/words.rs's tests of its span say", () => {
+test("a reset counts down and a read says when as present/words/accounts.rs's tests of its span say", () => {
   const body = rustTest(ffiWords, "a_reset_is_counted_down_in_hours_and_minutes");
   const counted = [...body.matchAll(/\(([\d_ *+]+), "in ([^"]+)"\)/g)];
   assert.ok(counted.length >= 10, `${counted.length} spans`);
@@ -384,7 +389,7 @@ test("a reset counts down and a read says when as present/words.rs's tests of it
   );
 });
 
-test("a limit is spoken as present/words.rs's a_limit_is_spoken_as_one_sentence says", () => {
+test("a limit is spoken as present/words/accounts.rs's a_limit_is_spoken_as_one_sentence says", () => {
   const body = rustTest(ffiWords, "a_limit_is_spoken_as_one_sentence");
   const spoken: [Parameters<typeof spokenLimit>, string][] = [
     [["5-hour limit", 42, "Resets 3:45 PM"], "5-hour limit, 42 percent used, resets 3:45 PM"],
@@ -404,7 +409,7 @@ test("a limit is spoken as present/words.rs's a_limit_is_spoken_as_one_sentence 
   );
 });
 
-test("a limit's names, reset and menu line are present/words.rs's an_account_is_said_in_these_words", () => {
+test("a limit's names, reset and menu line are present/words/accounts.rs's an_account_is_said_in_these_words", () => {
   const body = rustTest(ffiWords, "an_account_is_said_in_these_words");
   for (const words of [
     "5-hour limit",
@@ -447,7 +452,7 @@ test("a limit's names, reset and menu line are present/words.rs's an_account_is_
   );
 });
 
-test("a saved sign-in says when it expires, as present/words.rs's a_saved_sign_in_says_when_it_expires says", () => {
+test("a saved sign-in says when it expires, as present/words/accounts.rs's a_saved_sign_in_says_when_it_expires says", () => {
   const body = rustTest(ffiWords, "a_saved_sign_in_says_when_it_expires");
   const found = calls(body, "sign_in_expires");
   assert.ok(found.length >= 6, `${found.length} cases`);
@@ -457,7 +462,7 @@ test("a saved sign-in says when it expires, as present/words.rs's a_saved_sign_i
   }
 });
 
-test("a notification is titled as present/words.rs's a_notification_is_titled_as_each_system_titles_one says", () => {
+test("a notification is titled as present/words/notices.rs's a_notification_is_titled_as_each_system_titles_one says", () => {
   const body = rustTest(ffiWords, "a_notification_is_titled_as_each_system_titles_one")
     .replace(/\( /g, "(")
     .replace(/ \)/g, ")");
@@ -480,7 +485,7 @@ test("a notification is titled as present/words.rs's a_notification_is_titled_as
   });
 });
 
-test("the menu bar item, a row and its button are spoken as present/words.rs says them", () => {
+test("the menu bar item, a row and its button are spoken as present/words/ says them", () => {
   for (const line of [
     "let mut said = vec![PITBOARD];",
     "said.push(shown);",

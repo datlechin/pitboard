@@ -3,7 +3,7 @@ using Pitboard.Core;
 namespace Pitboard.Windows.Tests;
 
 // What the model presents, made by hand, so each view test says only what it is about, in the model's words as
-// present/words.rs pins them for these labels, which StandInsTests checks.
+// present/words/ pins them for these labels, which StandInsTests checks.
 internal static class Items
 {
     public static AccountItem Account(string provider, string label, bool inUse = false) =>

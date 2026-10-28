@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   ADOPTION_CEILING_SECONDS,
@@ -85,6 +85,13 @@ import { SITE_BANNED, bannedFromDocs, wordPattern } from "../../scripts/guard.mj
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const core = (path: string) => repo(`crates/pitboard-core/src/${path}`);
 const ffi = (path: string) => repo(`crates/pitboard-model/src/${path}`);
+// present/words/, a file for each surface that says the words, read as one
+const catalogue = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
+  .join("\n");
 const autoswitch = core("duty/autoswitch.rs");
 const advising = ffi("model/advising.rs");
 
@@ -651,7 +658,7 @@ test("warm-ups start a period as the last one resets, within the hours set", () 
 
 test("a share is clamped to 50 to 99, and every change of it is a choice made", () => {
   assert.deepEqual([0, 49.4, 50, 77.6, 99, 120].map(clamped), [50, 50, 50, 78, 99, 99]);
-  const words = ffi("present/words.rs").replace(/\\\n\s*/g, "");
+  const words = catalogue.replace(/\\\n\s*/g, "");
   assert.ok(
     words.includes("once a limit of the account in use reaches {at}%, while the app is open."),
   );
@@ -828,9 +835,7 @@ test("everything the model says keeps the site's rules: no dash, a committed fac
   const text = face("Inter-4.1-opsz-wght");
   const mono = face("JetBrainsMono-2.304-wght");
   const banned = wordPattern([...bannedFromDocs(repo("docs/AGENTS.md")), ...SITE_BANNED]);
-  const source = ["crates/pitboard-core/src/words.rs", "crates/pitboard-model/src/present/words.rs"]
-    .map(repo)
-    .join("\n");
+  const source = [core("words.rs"), catalogue].join("\n");
   const { said, printed } = everything();
   assert.ok(said.length > 100, `${said.length} strings`);
   for (const [t, faces] of [

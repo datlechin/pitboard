@@ -15,7 +15,7 @@ export const choices: { value: AtLimit; mac: string; win: string }[] = [
 
 // the pop-up's and the ComboBox's name, which says the share
 export const atLabel = (share: number) => `${heading} ${share}%`;
-// present/words.rs `AT`: the share's field, beside When a limit reaches
+// present/words/machine.rs `AT`: the share's field, beside When a limit reaches
 export const shareLabel = "At";
 export const shareRange = "From 50% to 99%";
 
@@ -29,12 +29,12 @@ export const terms = {
 export const timeOfDay = (minutes: number) =>
   `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
-// words.rs `warm_hours`: a clock says a day's end as the next day's 00:00, which a span ending
-// then does not mean.
+// present/words/machine.rs `warm_hours`: a clock says a day's end as the next day's 00:00, which a
+// span ending then does not mean.
 export function warmHours(from: number, to: number): string {
   if (from === 0 && to === 24 * 60) return "All day";
   return `${timeOfDay(from)} to ${to === 24 * 60 ? "midnight" : timeOfDay(to)}`;
 }
 
-// present/words.rs `warm_up`
+// present/words/machine.rs `warm_up`
 export const warm = { title: { macos: "Warm-Up", windows: "Warm-up" } };

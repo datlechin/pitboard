@@ -62,7 +62,7 @@ export const copyEmail = (system: System) =>
 export const removeAccount = (system: System) =>
   titled(system, "Remove Account…", "Remove account…");
 
-// What Remove Account… asks (present/words.rs `remove_title`, account_windows/accounts.rs
+// What Remove Account… asks (present/words/accounts.rs `remove_title`, account_windows/accounts.rs
 // `forget_message_on`).
 export const removeTitle = (a: Account, w: World, system: System) =>
   `Remove “${nameOf(a, w, system)}”?`;
@@ -76,7 +76,7 @@ export const REMOVE = "Remove";
 export const CANCEL = "Cancel";
 
 // The Rename sheet, and the one that names an account just added (present/sheets.rs,
-// present/words.rs).
+// present/words/sheets.rs).
 export const renameTitle = (label: string) => `Rename “${label}”`;
 export const RENAMING = "Only its name changes, here and in the command line.";
 export const RENAME = "Rename";
@@ -89,7 +89,7 @@ export const naming = (email: string, tool: string) =>
   email ? `${email} is added.` : `The account ${tool} is signed in to is added.`;
 export const DONE = "Done";
 
-// present/words.rs `unusable_name`: why what is typed is no name.
+// present/words/sheets.rs `unusable_name`: why what is typed is no name.
 export function unusableName(problem: "empty" | "not_one_word" | "separator"): string {
   switch (problem) {
     case "empty":
@@ -101,12 +101,12 @@ export function unusableName(problem: "empty" | "not_one_word" | "separator"): s
   }
 }
 
-// present/words.rs `in_app_refusal` of core/error.rs `LabelTaken`: the name a tool's other account
-// has, and whose it is (core/words.rs `login`).
+// present/words/refusals.rs `in_app_refusal` of core/error.rs `LabelTaken`: the name a tool's other
+// account has, and whose it is (core/words.rs `login`).
 export const nameTaken = (label: string, email: string) =>
   `${label} is already the name of ${email}. Type another name.`;
 
-// The sign-in sheets (present/sheets.rs, present/words.rs).
+// The sign-in sheets (present/sheets.rs, present/words/sheets.rs).
 export const TOOL = "Tool";
 export const ACCOUNT = "Account";
 export const addAccount = (system: System) => titled(system, "Add Account", "Add account");
@@ -132,10 +132,11 @@ export const LATER = "Later";
 // A sign-in inside Claude, which saves the account in use and signs Claude out first
 // (present/sheets.rs `in_app_form`, `in_app_signing_in_text`).
 export const CONTINUE = "Continue";
-// present/words.rs `signs_out_first`: what Pitboard does first, keeping `again`'s sign-in as it is
+// present/words/sheets.rs `signs_out_first`: what Pitboard does first, keeping `again`'s sign-in as
+// it is
 export const signsOutFirst = (app: string, work: string, again: string | null) =>
   `Pitboard ${again === work ? `keeps ${work}’s sign-in as it is` : `saves ${work}`} and signs ${app} out first, without signing out at claude.ai.`;
-// present/words.rs `in_app_steps`, for a Claude Pitboard did not open for it
+// present/words/sheets.rs `in_app_steps`, for a Claude Pitboard did not open for it
 export function inAppSteps(app: string, again: string | null): string[] {
   const who = again === null ? "the account you’re adding" : `${again} again`;
   const adds = again === null ? "Pitboard adds it" : `Pitboard saves it for ${again}`;
@@ -146,14 +147,15 @@ export function inAppSteps(app: string, again: string | null): string[] {
   ];
 }
 export const signingOut = (label: string) => [`Saving ${label}.`, `Saving ${label}`] as const;
-// present/words.rs `in_app_note`, under the steps while Pitboard waits for the app to quit
+// present/words/sheets.rs `in_app_note`, under the steps while Pitboard waits for the app to quit
 export const inAppNote = (app: string) =>
   `Don’t choose Log out in ${app}: it ends the sign-in at claude.ai, and Pitboard can’t bring it back.`;
 export const waitingToQuit = (app: string) => `Waiting for ${app} to quit`;
 export const switchBackTo = (system: System, label: string) =>
   titled(system, `Switch Back to ${label}`, `Switch back to ${label}`);
 
-// The notice a tool's last switch leaves (present/notices.rs `of_last_switch`, present/words.rs).
+// The notice a tool's last switch leaves (present/notices.rs `of_last_switch`,
+// present/words/notices.rs).
 export const switchedTo = (tool: string | null, label: string) =>
   tool ? `Switched ${tool} to ${label}` : `Switched to ${label}`;
 export const signedInTo = (tool: string | null, label: string) =>
@@ -171,7 +173,7 @@ export function signedInNow(name: string, again: boolean, app: string | null): s
 }
 export const restartNotice = (program: string, from: string) =>
   `Any ${program} session started before this switch keeps using ${from || "the account it started with"} until it is quit and started again.`;
-// present/words.rs `follows`: a Claude Desktop switch, with Claude closed
+// present/words/notices.rs `follows`: a Claude Desktop switch, with Claude closed
 export const CLAUDE_OPENS = "Claude opens signed in to it.";
 export const DISMISS = "Dismiss";
 export const switchBack = (system: System) => titled(system, "Switch Back", "Switch back");

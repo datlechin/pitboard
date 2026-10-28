@@ -3,7 +3,7 @@ using Pitboard.Core;
 namespace Pitboard.Windows.Tests;
 
 // Each call makes every list anew, as the bindings do for every snapshot told. Each sentence is the model's own, as
-// present/words.rs pins it, which StandInsTests checks.
+// present/words/ pins it, which StandInsTests checks.
 internal static class Snapshots
 {
     public static Snapshot Read(ulong revision) =>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   atLabel,
@@ -16,7 +16,14 @@ import { HIGHEST, LOWEST } from "../lib/model.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const machine = repo("crates/pitboard-model/src/present/machine.rs").replace(/\\\n\s*/g, "");
-const words = repo("crates/pitboard-model/src/present/words.rs").replace(/\\\n\s*/g, "");
+// present/words/, a file for each surface that says the words, read as one
+const words = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
+  .join("\n")
+  .replace(/\\\n\s*/g, "");
 
 test("the Limits settings say what machine.rs gives LimitsSettings.swift and SettingsPage.xaml", () => {
   assert.ok(machine.includes("title: words::BEFORE_RUNNING_OUT.into(),"));

@@ -477,8 +477,8 @@ function advise(s: State) {
   }
 }
 
-// present/words.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did not make
-// by itself, and of its not judging one.
+// present/words/notices.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did
+// not make by itself, and of its not judging one.
 const NOT_SWITCHED: Said = {
   macos: "Automatic Switch Skipped",
   windows: "Automatic switch skipped",

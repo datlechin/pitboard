@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   buildNumber,
@@ -18,14 +18,20 @@ import { checking } from "./machine.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
 const win = (file: string) => repo(`apps/windows/${file}`);
-const words = repo("crates/pitboard-model/src/present/words.rs");
+// present/words/, a file for each surface that says the words, read as one
+const words = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
+  .join("\n");
 // app_words.rs with its string literals' line continuations joined and its code on one line
 const appWords = repo("crates/pitboard-model/src/present/app_words.rs")
   .replace(/\\\n\s*/g, "")
   .replace(/\s+/g, " ")
   .replace(/\( /g, "(");
-// app_words.rs and words.rs with their line continuations joined, where every word the Windows
-// views draw is the model's
+// app_words.rs and present/words/ with their line continuations joined, where every word the
+// Windows views draw is the model's
 const modelWords = (repo("crates/pitboard-model/src/present/app_words.rs") + words).replace(
   /\\\n\s*/g,
   "",
@@ -105,7 +111,7 @@ test("Windows' General says what SettingsPage.xaml binds from app_words(), and t
   assert.ok(owned(winAbout.header) && owned(winAbout.copyright));
 });
 
-test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and words.rs give it", () => {
+test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and present/words/ give it", () => {
   const advanced = mac("Settings/AdvancedSettings.swift");
   assert.ok(advanced.includes("said.keepSavedSignInsFresh"));
   assert.ok(appWords.includes("keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(os),"));
@@ -168,7 +174,7 @@ test("the About panel numbers a build as build-number.sh does", () => {
   );
 });
 
-test("This PC says what present/words.rs `checking` says while it waits", () => {
+test("This PC says what present/words/checks.rs `checking` says while it waits", () => {
   assert.ok(words.includes('format!("Checking {}…", this_machine(os))'));
   assert.equal(checking("windows"), "Checking this PC…");
 });

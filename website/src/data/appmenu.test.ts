@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { appMenus, NO_ACCOUNT } from "./appmenu.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
 const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
+// present/words/, a file for each surface that says the words, read as one
+const catalogue = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => present(`words/${file}`))
+  .join("\n");
 // a Rust string literal as it reads once its line continuations are joined
 const appWords = present("app_words.rs").replace(/\\\n\s*/g, "");
 const facts = repo("docs/facts/site.md");
@@ -66,7 +73,7 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
     assert.ok(scenes.includes(`(words.${word}`), word);
     assert.ok(appWords.includes(said), said);
   }
-  assert.ok(present("words.rs").includes('titled(os, "Add Account…", "Add account…")'));
+  assert.ok(catalogue.includes('titled(os, "Add Account…", "Add account…")'));
   assert.ok(scenes.includes('.keyboardShortcut("n")'));
   const windows = mac("AccountWindows/AccountWindowCommands.swift");
   for (const [word, title] of [
@@ -87,7 +94,7 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
   }
   assert.ok(mac("App/RefreshCommand.swift").includes("?? words.menu.refresh"));
   assert.ok(appWords.includes("refresh: words::REFRESH.into(),"));
-  assert.ok(present("words.rs").includes('pub(crate) const REFRESH: &str = "Refresh";'));
+  assert.ok(catalogue.includes('pub(crate) const REFRESH: &str = "Refresh";'));
   // File lists a site's item for each site, the fixture's being claude.ai alone
   assert.ok(
     windows.includes(
@@ -105,10 +112,9 @@ test("the Account menu with nothing selected offers what the model says, each di
       "offers: vec![\n            words::switch_account(None),\n            words::sign_in_again(os, true),\n            words::rename(true).into(),\n        ],\n        forget: words::remove_account(os),",
     ),
   );
-  const words = repo("crates/pitboard-model/src/present/words.rs");
-  assert.ok(words.includes(`None => SWITCH.into(),`));
-  assert.ok(words.includes(`pub(crate) const SWITCH: &str = "${NO_ACCOUNT[0]}";`));
-  assert.ok(words.includes(`if asks { "${NO_ACCOUNT[2]}" } else { "Rename" }`));
+  assert.ok(catalogue.includes(`None => SWITCH.into(),`));
+  assert.ok(catalogue.includes(`pub(crate) const SWITCH: &str = "${NO_ACCOUNT[0]}";`));
+  assert.ok(catalogue.includes(`if asks { "${NO_ACCOUNT[2]}" } else { "Rename" }`));
   assert.ok(
     bar.includes(
       "Account, with no account selected: Switch, Sign In Again…, Rename…, Remove Account… ⌘⌫, all dimmed.",

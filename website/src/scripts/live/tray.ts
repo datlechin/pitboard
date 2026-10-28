@@ -186,7 +186,7 @@ class TrayDesk extends LiveFigure {
   }
 
   // the line an account's item and tooltip say, and the item's one line: why it can't be switched
-  // to in place of its figure (present/words.rs `named_in_menu`)
+  // to in place of its figure (present/words/accounts.rs `named_in_menu`)
   #said(s: State, a: Account) {
     const switching = s.switching?.id === a.id;
     return {

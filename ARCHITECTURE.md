@@ -122,8 +122,11 @@ The other crates:
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
     subject, `switching.rs`, `signing.rs` and the rest, and `threaded.rs` over the real core.
-  - `present/`: each `Snapshot`, every sentence and row an app shows; `words.rs` what both
-    apps say and the command line does not.
+  - `present/`: each `Snapshot`, every sentence and row an app shows; `words/` what both
+    apps say and the command line does not, a catalogue with a file per surface: the status
+    item, the accounts, notices, sheets, setting up, Settings and Activity (`machine.rs`),
+    Diagnostics (`checks.rs`), the account windows, failures and the core's refusals, and in
+    `mod.rs` the tools every one words with.
   - `account_windows/`: the rules of an account's window that each app's web code asks.
   - `sites.rs`: `pitboard-sites`' sites as records of this crate's own.
   - `fixture/`: the worlds a debug build of either app launches into, behind the `fixture`

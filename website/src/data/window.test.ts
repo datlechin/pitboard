@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as w from "./window.ts";
 import { account, moments } from "./world.ts";
@@ -9,9 +9,15 @@ const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.m
 const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
-const words = joined(present("words.rs"));
+// present/words/, a file for each surface that says the words, read as one
+const words = joined(
+  readdirSync(new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url))
+    .sort()
+    .map((file) => present(`words/${file}`))
+    .join("\n"),
+);
 const appWords = joined(present("app_words.rs"));
-// the words a test of present/words.rs pins, as a string literal of it
+// the words a test of present/words/ pins, as a string literal of it
 const pinned = (said: string) => words.includes(`"${said}"`);
 const after = moments.after;
 
@@ -217,7 +223,7 @@ test("a switch Pitboard made by itself offers Switch Back on its notice, while t
   assert.ok(notices.includes("|| notice.actions.iter().any(|action| action.switches)"));
 });
 
-test("Activity names each change and its end as present/words.rs does", () => {
+test("Activity names each change and its end as present/words/machine.rs does", () => {
   const arms = (fn: string) => {
     const body = words.slice(words.indexOf(`fn ${fn}(`)).split("\n}\n")[0];
     return [...body.matchAll(/((?:"[^"]+"\s*\|\s*)*"[^"]+")\s*=>\s*"([^"]+)"\.into\(\)/g)].flatMap(

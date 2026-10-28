@@ -122,8 +122,8 @@ why the contract moved. They hold each message as `[message]`: its code is the c
 
 A test of what Pitboard does checks codes and fields, and compares a sentence with the
 function that makes it. Each sentence is pinned once, in the tests of the module that makes
-it: `pitboard_core`'s `words.rs`, `error.rs` or `doctor/words.rs`, or `pitboard-model`'s
-`present/words.rs`.
+it: `pitboard_core`'s `words.rs`, `error.rs` or `doctor/words.rs`, or the file of
+`pitboard-model`'s `present/words/` for the surface that says it.
 
 Both apps' UI tests find a control by its accessibility identifier, named for the model's
 case it shows or sends: `notice.action.abandonStuckSwitch`, `setup.onlyOne`. A dialog's

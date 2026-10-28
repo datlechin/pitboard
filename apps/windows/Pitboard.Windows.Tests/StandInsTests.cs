@@ -5,7 +5,7 @@ using Pitboard.Core;
 namespace Pitboard.Windows.Tests;
 
 // PR 316 left the stand-ins with sentences of their own. Each one they say is the model's, as its sources hold it,
-// mostly as present/words.rs pins it for the same labels, so a view test reads what the app would show.
+// mostly as present/words/ pins it for the same labels, so a view test reads what the app would show.
 [TestClass]
 public sealed partial class StandInsTests
 {
