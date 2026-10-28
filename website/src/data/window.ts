@@ -63,7 +63,7 @@ export const removeAccount = (system: System) =>
   titled(system, "Remove Account…", "Remove account…");
 
 // What Remove Account… asks (present/words/accounts.rs `remove_title`, account_windows/accounts.rs
-// `forget_message_on`).
+// `forget_message`).
 export const removeTitle = (a: Account, w: World, system: System) =>
   `Remove “${nameOf(a, w, system)}”?`;
 export function removeMessage(a: Account, system: System): string {
