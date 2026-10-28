@@ -84,6 +84,8 @@ pub(crate) struct Facts {
     pub(crate) storage_dir: String,
     pub(crate) backend: Result<store::Backend, store::Error>,
     pub(crate) vault: store::Backend,
+    // Linux's alone: how the home keeps its parks, and a move of them.
+    pub(crate) vault_form: Option<parks::FormFact>,
     pub(crate) credential_file: PathBuf,
     pub(crate) credential: Result<Option<Value>, store::Error>,
     // Against the store's ceiling, where it has one.
@@ -163,6 +165,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         .ok()
         .and_then(|s| desktop::desktop_facts(ctx, s, claude_build.clone()));
     let desktop_app = desktop::installed(ctx, desktop.as_ref(), claude_build);
+    let vault_form = parks::form_fact(ctx);
     Facts {
         os: crate::host::OS,
         sid: ctx.sid.clone(),
@@ -178,6 +181,7 @@ pub(crate) fn gather(ctx: &Context) -> Facts {
         storage_dir: claude_paths::storage_dir(ctx),
         backend: found.backend,
         vault: store::vault_kind(ctx),
+        vault_form,
         credential_file: claude_live::credential_file(ctx),
         credential_cost: found.cost,
         no_argv: !ctx.argv_fallback(),

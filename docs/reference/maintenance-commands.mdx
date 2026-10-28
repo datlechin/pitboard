@@ -365,7 +365,8 @@ On macOS, Claude Desktop's checks read the folders in `~/.pitboard/parks`, open 
   | `fallback_login` | `fallback login` | macOS and Windows, when a login file sits behind the keychain or Credential Manager. Always warns. See [Claude Code over SSH uses another account](/troubleshooting#claude-code-over-ssh-uses-another-account). |
   | `home` | `Pitboard home` | Only you can read Pitboard's directory. Warns otherwise. |
   | `private_on_disk` | `logins on disk` | No file that holds a login can be read by other users: Claude Code's login file and, on Linux and Windows, the parked logins. Fails otherwise, with the `chmod` or `icacls` commands that fix it. |
-  | `vault` | `parked logins` | Windows only. The parked logins are sealed to this Windows account. Fails when none of them opens, and names a `pitboard enroll <label> --sign-in` for each. |
+  | `vault` | `parked logins` | On Windows, the parked logins are sealed to this Windows account. Fails when none of them opens, and names a `pitboard enroll <label> --sign-in` for each. |
+  | `vault` | `parked logins` | On Linux, where the parked logins are kept: `ok` in the login keyring, and in files where no Secret Service answers on your session's bus. Warns in files where one answers, and names `pitboard vault move secret-service`. Warns while the login keyring is locked or nothing answers for it, while a move is under way, and while parked logins a move left wait to be deleted. |
   | `state` | `accounts` | The account list can be read, and how many accounts are enrolled. |
   | `parked_login` | `account <label>` | One per Claude Code account. Warns when nothing is parked to switch to, the parked login is expired or due, or the keychain is locked. Fails when it cannot be used. |
   | `interrupted_switch` | `interrupted switch` | Only when a switch did not finish. Always warns. Suggests `pitboard abandon` when the next change cannot finish it. |

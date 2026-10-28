@@ -393,3 +393,153 @@ fn an_account_is_active_by_its_own_tools_record() {
     .expect("a login");
     assert_eq!(active(&park_facts(&ctx, &state)), ["alpha", "codex/work"]);
 }
+
+// A home's parks on Linux, as `pitboard vault` reads them.
+fn on_linux(kept: switch::Keeping, locked: bool) -> Facts {
+    let mut f = facts();
+    f.os = Os::Linux;
+    f.vault = match kept.place {
+        Some(crate::host::Vault::SecretService) => store::Backend::SecretService,
+        _ => store::Backend::File,
+    };
+    f.vault_form = Some(FormFact { kept, locked });
+    f
+}
+
+fn kept_in(place: crate::host::Vault, answers: bool) -> switch::Keeping {
+    switch::Keeping {
+        place: Some(place),
+        shared: place == crate::host::Vault::SecretService,
+        folder: Some(PathBuf::from("/home/x/.pitboard/vault")),
+        secret_service: Some(answers),
+        moving_to: None,
+        leaving: None,
+    }
+}
+
+fn vault_check(f: &Facts) -> (Level, String, String) {
+    let checks = evaluate(f);
+    let vault = check(&checks, "vault");
+    assert_eq!(vault.name, "parked logins");
+    (vault.level, vault.detail.clone(), vault.advice.clone())
+}
+
+#[test]
+fn files_where_a_secret_service_answers_are_warned_of() {
+    let f = on_linux(kept_in(crate::host::Vault::Files, true), false);
+    assert_eq!(
+        vault_check(&f),
+        (
+            Level::Warn,
+            "in 0600 files in /home/x/.pitboard/vault, though a Secret Service answers on this \
+             session's bus"
+                .into(),
+            "Run `pitboard vault move secret-service` to keep them in the login keyring instead."
+                .into()
+        )
+    );
+}
+
+// Where the parks are, whether that answers, and what a move under way or one that could not
+// delete everything left.
+#[test]
+fn the_vault_check_on_linux() {
+    use crate::host::Vault;
+    use crate::state::VaultForm;
+    let keyring = || kept_in(Vault::SecretService, true);
+    let files = || kept_in(Vault::Files, false);
+    let cases = [
+        (
+            on_linux(keyring(), false),
+            Level::Ok,
+            words::IN_THE_LOGIN_KEYRING.to_string(),
+            "",
+        ),
+        (
+            on_linux(keyring(), true),
+            Level::Warn,
+            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER.to_string(),
+            words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
+        ),
+        (
+            on_linux(kept_in(Vault::SecretService, false), true),
+            Level::Warn,
+            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER.to_string(),
+            words::IN_THE_DESKTOP_SESSION_THEN_DOCTOR,
+        ),
+        (
+            on_linux(files(), false),
+            Level::Ok,
+            "in 0600 files in /home/x/.pitboard/vault; no Secret Service answers on this \
+             session's bus"
+                .to_string(),
+            "",
+        ),
+        (
+            on_linux(
+                switch::Keeping {
+                    moving_to: Some(VaultForm::SecretService),
+                    ..files()
+                },
+                false,
+            ),
+            Level::Warn,
+            "a move into the login keyring is under way".to_string(),
+            words::THE_NEXT_CHANGE_FINISHES_IT,
+        ),
+        (
+            on_linux(
+                switch::Keeping {
+                    leaving: Some((VaultForm::Files, 2)),
+                    ..keyring()
+                },
+                false,
+            ),
+            Level::Warn,
+            "2 parked login(s) wait to be deleted from 0600 files in /home/x/.pitboard/vault"
+                .to_string(),
+            words::THE_NEXT_CHANGE_DELETES_THEM,
+        ),
+    ];
+    for (f, level, detail, advice) in cases {
+        assert_eq!(vault_check(&f), (level, detail, advice.to_string()));
+    }
+    assert!(
+        evaluate(&facts()).iter().all(|c| c.code != "vault"),
+        "macOS's keychain has no such check"
+    );
+}
+
+// Read where the home is, before any park, and a locked keyring said once.
+#[test]
+fn doctor_reads_where_the_home_keeps_its_parks() {
+    use crate::host::memory::MemoryHost;
+    use crate::store::memory::Fault;
+    let host = MemoryHost::by_form();
+    host.secret_service_answers(false);
+    let m = switch::harness::machine_on(Arc::clone(&host), "doctor-vault-files");
+    host.secret_service_answers(true);
+    let vault = |ctx: &Context| {
+        let diagnosis = run(ctx, &time::moment);
+        let vault = check(&diagnosis.checks, "vault");
+        (vault.level, vault.detail.clone())
+    };
+    let folder = home::dir(&m.ctx).join("vault");
+    assert_eq!(
+        vault(&m.ctx),
+        (
+            Level::Warn,
+            words::in_files_though_a_secret_service_answers(&folder.display().to_string())
+        )
+    );
+
+    let m = switch::harness::machine_on(Arc::clone(&host), "doctor-vault-locked");
+    host.vault().fault_all(Fault::Locked);
+    assert_eq!(
+        vault(&m.ctx),
+        (
+            Level::Warn,
+            words::IN_A_KEYRING_THAT_DOES_NOT_ANSWER.to_string()
+        )
+    );
+}

@@ -413,6 +413,7 @@ fn the_checks_come_in_the_order_each_system_prints_them() {
             "credential",
             "home",
             "private_on_disk",
+            "vault",
             "state",
             "parked_login",
             "interrupted_switch",

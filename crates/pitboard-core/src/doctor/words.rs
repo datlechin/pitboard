@@ -222,6 +222,42 @@ pub(super) const NOT_READ_THE_LOGIN_KEYRING_IS_LOCKED: &str =
 pub(super) const IN_THE_DESKTOP_SESSION_THEN_DOCTOR: &str =
     "Run `pitboard doctor` again in your desktop session, where signing in unlocks it.";
 
+pub(super) const IN_THE_LOGIN_KEYRING: &str =
+    "in the login keyring, which every Pitboard directory of your session shares";
+
+pub(super) const IN_A_KEYRING_THAT_DOES_NOT_ANSWER: &str = "in the login keyring, which is locked \
+                                                          or which nothing answers for on this \
+                                                          session's bus";
+
+pub(super) fn in_files(folder: &str) -> String {
+    format!("in 0600 files in {folder}; no Secret Service answers on this session's bus")
+}
+
+pub(super) fn in_files_though_a_secret_service_answers(folder: &str) -> String {
+    format!("in 0600 files in {folder}, though a Secret Service answers on this session's bus")
+}
+
+pub(super) const MOVE_INTO_THE_LOGIN_KEYRING: &str =
+    "Run `pitboard vault move secret-service` to keep them in the login keyring instead.";
+
+pub(super) fn moving_into(form: &str) -> String {
+    format!("a move into {form} is under way")
+}
+
+pub(super) fn left_in(parks: usize, form: &str) -> String {
+    format!("{parks} parked login(s) wait to be deleted from {form}")
+}
+
+pub(super) const THE_NEXT_CHANGE_DELETES_THEM: &str = "The next change deletes them.";
+
+// A form in a sentence, its folder named where it is files.
+pub(super) fn form(form: crate::state::VaultForm, folder: &str) -> String {
+    match form {
+        crate::state::VaultForm::SecretService => "the login keyring".to_string(),
+        crate::state::VaultForm::Files => format!("0600 files in {folder}"),
+    }
+}
+
 pub(super) const PARK_DOES_NOT_OPEN: &str = "its parked login does not open in this logon";
 
 pub(super) fn park_unusable(why: &str) -> String {

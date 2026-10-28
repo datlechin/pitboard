@@ -57,6 +57,7 @@ pub(crate) fn facts() -> Facts {
         storage_dir: "/home/x/.claude".into(),
         backend: Ok(store::Backend::Keychain),
         vault: store::Backend::Keychain,
+        vault_form: None,
         credential_file: PathBuf::from("/home/x/.claude/.credentials.json"),
         credential: Ok(Some(json!({"claudeAiOauth": {
             "refreshToken": "r",
@@ -456,7 +457,18 @@ fn site_machine(os: Os) -> Vec<Check> {
         Os::MacOs => facts,
         Os::Linux => Facts {
             backend: Ok(store::Backend::File),
-            vault: store::Backend::File,
+            vault: store::Backend::SecretService,
+            vault_form: Some(super::parks::FormFact {
+                kept: crate::switch::Keeping {
+                    place: Some(crate::host::Vault::SecretService),
+                    shared: true,
+                    folder: Some(home(".pitboard/vault")),
+                    secret_service: Some(true),
+                    moving_to: None,
+                    leaving: None,
+                },
+                locked: false,
+            }),
             credential_cost: None,
             ..facts
         },

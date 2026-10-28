@@ -279,8 +279,8 @@ keeps it is in the header of the module named.
 - A read never settles an interrupted switch or move: every change settles an interrupted
   switch first, under `state.lock`, and a move of Claude Desktop, with Claude closed, before a
   change of Claude Desktop, `repair` or `uninstall`. `status` and `doctor` say a switch a
-  change would stop at by the same decision, taking no lock (`switch::stuck`), and a waiting
-  move as `move_waiting`.
+  change would stop at by the same decision, taking no lock (`switch::stuck`), a waiting
+  move as `move_waiting`, and `doctor` a move of the parks cut short in its `vault` check.
 - No Claude Code or Codex login moves until Pitboard knows whose it is: asked of its service,
   or known by its refresh token's fingerprint from an earlier answer about that login
   (`switch/identify.rs`, `a_login_with_no_fingerprint_is_always_asked_about`).

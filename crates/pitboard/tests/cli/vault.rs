@@ -178,3 +178,37 @@ fn vault_move_out_of_a_locked_keyring_is_refused_and_changes_nothing() {
     assert_eq!((env.state(), env.secret_service().names()), before);
     assert!(!env.root.join("pitboard/vault").exists());
 }
+
+// windows: the Secret Service is Linux's own
+#[cfg(target_os = "linux")]
+#[test]
+fn doctor_says_the_login_keyring_and_warns_once_it_is_locked() {
+    let env = crate::common::two_accounts_in(Env::with_secret_service("vault-doctor"));
+    let vault = |env: &Env| {
+        let (value, _) = json(env, &["doctor"]);
+        let checks = value["data"]["checks"].as_array().expect("checks").clone();
+        let vault = checks
+            .into_iter()
+            .find(|check| check["code"] == "vault")
+            .unwrap_or_else(|| panic!("no vault check: {value}"));
+        (vault["level"].clone(), vault["detail"].clone())
+    };
+
+    assert_eq!(
+        vault(&env),
+        (
+            "ok".into(),
+            "in the login keyring, which every Pitboard directory of your session shares".into()
+        )
+    );
+    env.secret_service().lock();
+    assert_eq!(
+        vault(&env),
+        (
+            "warn".into(),
+            "in the login keyring, which is locked or which nothing answers for on this \
+             session's bus"
+                .into()
+        )
+    );
+}

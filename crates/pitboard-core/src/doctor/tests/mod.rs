@@ -326,6 +326,17 @@ pub(super) fn everything_said(os: Os) -> Facts {
             f.watch_service.as_mut().expect("set above").outdated = true;
             f.backend = Ok(store::Backend::File);
             f.vault = store::Backend::SecretService;
+            f.vault_form = Some(FormFact {
+                kept: switch::Keeping {
+                    place: Some(crate::host::Vault::SecretService),
+                    shared: true,
+                    folder: Some(PathBuf::from("/home/x/.pitboard/vault")),
+                    secret_service: Some(true),
+                    moving_to: None,
+                    leaving: None,
+                },
+                locked: true,
+            });
             f.parks[0].unreadable = Some(Unreadable::Locked(store::Backend::SecretService));
             f.credential_cost = None;
             f.readable_by_others = vec![(
