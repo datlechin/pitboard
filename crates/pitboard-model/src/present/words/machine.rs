@@ -48,7 +48,7 @@ pub(crate) fn cannot_schedule(os: Os, temporary: bool) -> String {
         Os::MacOs => "Move Pitboard to your Applications folder first. Until then macOS runs it \
                       from a temporary copy, which is gone once Pitboard quits."
             .into(),
-        // No app runs on Linux, and nothing there runs one from a temporary copy.
+        // No app runs on Linux.
         Os::Linux => "First move Pitboard to a folder it will stay in. Until then it runs \
                       from a temporary copy, which is gone once Pitboard quits."
             .into(),
@@ -251,7 +251,7 @@ pub(crate) fn cannot_link(os: Os) -> String {
         Os::MacOs => "Move Pitboard to your Applications folder first. Until then macOS runs it \
                       from a temporary copy, and a link to that would break."
             .into(),
-        // No app runs on Linux, and nothing there runs one from a temporary copy.
+        // No app runs on Linux.
         Os::Linux => "First move Pitboard to a folder it will stay in. Until then it runs \
                       from a temporary copy, and a link to that would break."
             .into(),
