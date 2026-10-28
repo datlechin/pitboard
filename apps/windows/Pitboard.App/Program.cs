@@ -5,7 +5,6 @@ using Microsoft.Windows.AppLifecycle;
 using Pitboard.Core;
 using Pitboard.Windows;
 using Windows.ApplicationModel.Activation;
-using Handover = Pitboard.Windows.Handover;
 
 namespace Pitboard.App;
 

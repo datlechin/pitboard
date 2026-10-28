@@ -35,7 +35,7 @@ struct Dependencies {
                 directory: records.path,
                 linkScheme: LinkTarget.scheme(in: .main) ?? "pitboard",
                 key: WebEnvironment.recordKey(environment: environment)),
-            handover: Handover(
+            handover: EarlierHandover(
                 preferences: earlier.handOver(), windows: earlier.handOverWindows()),
             widgetFeed: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
         let model = AppModel.listening { listener in

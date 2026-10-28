@@ -361,7 +361,7 @@ public sealed class ModelTests
             new Dictionary<string, string>(), null, Front.WindowsNotificationArea,
             AccountWindows: new AccountWindowsLaunch(
                 Directory: @"C:\Users\dana\AppData\Local\Pitboard", LinkScheme: "pitboard"),
-            Handover: new Handover(
+            Handover: new EarlierHandover(
                 Windows: new EarlierWindowRecords(
                     Stores: new Dictionary<string, string[]> { [@"C:\Users\dana\.pitboard"] = [Store] },
                     Pages: new Dictionary<string, Dictionary<string, string>>())));
@@ -508,7 +508,7 @@ public sealed class ModelTests
             Front.WindowsNotificationArea);
         var moved = launch with
         {
-            Handover = new Handover(
+            Handover = new EarlierHandover(
                 Preferences: new EarlierPreferences(
                     SecondAccountDeclined: ["codex"], HasBeenSeen: true, SecondAccountNudgeHidden: false)),
         };

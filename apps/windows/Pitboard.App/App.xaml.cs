@@ -6,7 +6,6 @@ using Pitboard.Core;
 using Pitboard.Views;
 using Pitboard.Windows;
 using Windows.Graphics;
-using Handover = Pitboard.Windows.Handover;
 using Launcher = Windows.System.Launcher;
 
 namespace Pitboard.App;

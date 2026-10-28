@@ -9,7 +9,7 @@
 //! The macOS app kept these in UserDefaults, as `webStores` and `windowPages`, by the same
 //! keys, with each store id in upper case, as Foundation writes a UUID: WebsiteData.swift's
 //! `StoreRecord` and `PageRecord`, as they were at a3e5ce0. It hands what it held over once,
-//! in `Handover::windows`, the way it hands over its earlier preferences.
+//! in `EarlierHandover::windows`, the way it hands over its earlier preferences.
 //! A store id is compared without regard to case wherever it comes from: read as written,
 //! every store the macOS app recorded would be taken for an orphan, and deleted with the
 //! sign-in it holds.

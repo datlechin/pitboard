@@ -1,8 +1,8 @@
 //! The app's own preferences, which the model keeps in `app.json` in Pitboard's directory:
 //! the tools somebody said "Not Now" to a second account for, whether the app has ever shown
 //! anybody anything, and what it does once a limit reaches what share. The macOS app kept
-//! them in UserDefaults, and hands them over once, in `Handover::preferences`: where the file
-//! is there, it wins.
+//! them in UserDefaults, and hands them over once, in `EarlierHandover::preferences`: where the
+//! file is there, it wins.
 
 use super::{AtLimit, EarlierPreferences, Tip};
 use pitboard_core::duty::autoswitch::Threshold;

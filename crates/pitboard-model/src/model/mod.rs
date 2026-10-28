@@ -122,7 +122,7 @@ pub struct AppLaunch {
     /// What the app kept in a store of its own before the model kept it, for the model to
     /// take once: on macOS what UserDefaults holds. `None` for an app with no earlier store.
     #[uniffi(default)]
-    pub handover: Option<Handover>,
+    pub handover: Option<EarlierHandover>,
     /// Where the model writes the widget feed, the glance of the accounts each widget,
     /// control and Shortcuts action reads, for an app whose widgets read a file: on macOS one
     /// in the App Group's container. `None` for one that names none: the feed is then made
@@ -160,7 +160,7 @@ pub struct AccountWindowsLaunch {
 /// the model to take once: on macOS what UserDefaults held. Where the model's own file is
 /// there it wins, and what is here of it is not read.
 #[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
-pub struct Handover {
+pub struct EarlierHandover {
     /// The app's own preferences, which the model keeps in `app.json`.
     #[uniffi(default)]
     pub preferences: Option<EarlierPreferences>,
@@ -171,8 +171,8 @@ pub struct Handover {
 }
 
 /// The account windows' records as an app's earlier store held them, every Pitboard
-/// directory's, by the key each was kept under, as `Handover` hands them over once. A store
-/// id may be in either case: Foundation writes a UUID in upper case.
+/// directory's, by the key each was kept under, as `EarlierHandover` hands them over once. A
+/// store id may be in either case: Foundation writes a UUID in upper case.
 #[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
 pub struct EarlierWindowRecords {
     /// The stores each directory's windows were made with: `webStores`.
@@ -192,8 +192,8 @@ pub enum DownloadEnd {
     Cancelled,
 }
 
-/// The app's own preferences as an app's earlier store held them, as `Handover` hands them
-/// over once.
+/// The app's own preferences as an app's earlier store held them, as `EarlierHandover` hands
+/// them over once.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct EarlierPreferences {
     /// The tools, by code, somebody said "Not Now" to a second account for:

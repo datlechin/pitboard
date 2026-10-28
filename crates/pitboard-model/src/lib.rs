@@ -40,8 +40,8 @@ pub use sites::{Site, SiteLink};
 
 mod model;
 pub use model::{
-    AccountWindowsLaunch, AppId, AppLaunch, AtLimit, Changed, DownloadEnd, EarlierPreferences,
-    EarlierWindowRecords, Handover, Intent, Listener, LocalTime, Notice, NoticeButton,
+    AccountWindowsLaunch, AppId, AppLaunch, AtLimit, Changed, DownloadEnd, EarlierHandover,
+    EarlierPreferences, EarlierWindowRecords, Intent, Listener, LocalTime, Notice, NoticeButton,
     NoticeButtonKind, NoticeButtonOffer, Notifier, OtherApps, OutsideAnswer, OutsideAsk, Pane,
     Part, PitboardModel, Place, PlatformError, ReadFailure, RunningSignIn, SettingsSection, Sheet,
     Snapshot, Tip, WindowRequest,
