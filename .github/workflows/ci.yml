@@ -191,6 +191,8 @@ jobs:
           apps/linux/plasmoid/tests/run-tests.sh
           .github/scripts/build-linux-packages.sh .github/scripts/check-linux-packages.sh
           .github/scripts/test-linux-packages.sh .github/scripts/pack-linux-session-bundle.sh
+          .github/scripts/linux-repository.sh .github/scripts/sign-linux-packages.sh
+          .github/scripts/sign-linux-repository.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py

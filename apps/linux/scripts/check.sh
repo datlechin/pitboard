@@ -24,7 +24,7 @@
 #                             and the command line tarball, then check-linux-packages.sh on them
 #   rpm <tarball> <out>       the same for the RPM packages
 #   packages-test             test-linux-packages.py, with the packaging tools of this system's
-#                             format, Debian's or Fedora's
+#                             format, Debian's or Fedora's, and on Fedora rpmsign's
 #
 # Meson's build folder and its install tree are `meson` and `destdir` in Cargo's target folder.
 # The build folder holds Cargo's release target, so a run sets it up again and never removes it.
@@ -132,7 +132,7 @@ case $step in
     . /etc/os-release
     case $ID in
       debian) tools='dpkg dpkg-deb lintian gpg' ;;
-      fedora) tools='rpm rpmbuild rpmlint rpm2archive' ;;
+      fedora) tools='rpm rpmbuild rpmlint rpm2archive rpmsign rpmkeys gpg' ;;
       *)
         echo "check.sh packages-test runs on Debian or Fedora, not $ID" >&2
         exit 2

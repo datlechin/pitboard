@@ -244,6 +244,107 @@ distribution's repositories while the image built:
 - The same day on Debian 13 and Ubuntu 26.04, `apt-get purge` left no folder no package holds
   either. `dpkg-query -L` of several packages puts an empty line between their lists.
 
+## The repository
+
+Read on 29 October 2026 in the sources named, and measured where a line says so: in Docker on
+the owner's Mac (arm64), as uid 1000, in
+`ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd` with
+`install-deps.sh`'s `repository` set from the snapshot `20261028T000000Z`: apt-utils 3.2.0,
+createrepo-c 1.2.1-2build1, appstream-generator 0.10.2-1 on libfyaml 0.9.4, appstream 1.1.2,
+gnupg 2.4.8, sqv 1.3.0, rpm 6.0.1 and jq 1.8.1; and in Fedora 43 with rpm-sign 6.0.2.
+
+### Debian's and apt's rules
+
+- Debian wiki, DebianRepository/UseThirdParty, modified 2025-11-02: a key a package manages goes
+  in `/usr/share/keyrings` "using the same filename that will be provided by the package"; "The
+  file SHOULD NOT be ASCII-Armored", an armored copy may be given beside it as `.asc`; "The
+  signed-by entry MUST point to a file, and not a fingerprint"; "Certificate updates SHOULD be
+  distributed by a Debian package called deriv-archive-keyring"; "a matching preferences file
+  SHOULD be created", pinned by "a user-controlled label (e.g. the hostname of the URI ...)" at a
+  Pin-Priority no higher than 100, which `pitboard.pref` is; the Deb822 format "MAY be used".
+- sources.list(5) of apt 3.0.3: a `.sources` file is deb822; `Signed-By` takes "absolute paths to
+  keyring files (have to be accessible and readable for the `_apt` system user ...)", and
+  recommends `/usr/share/keyrings` "for keyrings managed by packages"; `Architectures` defines
+  "for which architectures information should be downloaded", by default all of
+  `APT::Architectures`.
+- apt-ftparchive's `ftparchive/writer.cc` at apt 3.0.3: `APT::FTPArchive::DoByHash` writes a
+  copy of each file `release` names under `by-hash/<hash>/` and sets `Acquire-By-Hash: yes`;
+  `Valid-Until` is written only with `APT::FTPArchive::Release::ValidTime`; the hashes come from
+  `APT::FTPArchive::Release::MD5`, `SHA1`, `SHA256` and `SHA512`. `apt-ftparchive.cc`: the
+  selections `generate` takes are patterns matched against each tree's
+  `<dist>/<section>/<arch>`, and a tree's `Directory` is scanned for `*_<arch>.deb` and
+  `*_all.deb`.
+- Measured with apt-utils 3.2.0: `generate` printed `E:` for a missing folder and exited 0, so
+  `linux-repository.sh` checks that each index is there.
+- `methods/sqv.cc` at apt 3.0.3: apt runs sqv with `SEQUOIA_CRYPTO_POLICY` set to the first of
+  its overrides that exists, else `/usr/share/apt/default-sequoia.config`.
+- Measured with apt 3.0.3 on Debian 13: a suite whose `Release` named
+  `main/dep11/Components-arm64.yml.gz` and `.xz` but not `Components-arm64.yml` had none of its
+  catalog fetched, while Debian's own was. Debian trixie's `Release` names
+  `main/dep11/Components-arm64.yml` and `main/dep11/icons-64x64.tar`, which deb.debian.org
+  answers with 404, so `linux-repository.sh` serves the catalog and icons uncompressed too.
+- Debian 13's appstream 1.0.5 ships `50appstream`, which fetches `Components-<arch>.yml` and runs
+  `appstreamcli refresh --source=os` after an update, with every icon tarball
+  `DefaultEnabled "false"`; apt-config-icons 1.0.5 enables 48x48 and 64x64. On
+  packages.debian.org for trixie, appstream only suggests apt-config-icons, gnome-software 48.3-2
+  and gnome-core 48 do not name it, and plasma-discover depends on it and recommends the hidpi
+  and large ones.
+
+### appstream-generator
+
+- asgen-config.md of 0.9.1: "Options are: `alpinelinux`, `archlinux`, `debian`, `dummy`,
+  `rpmmd`, `ubuntu`"; `MediaBaseUrl` is optional, and remote icons need it and
+  `createScreenshotsStore` (`iconhandler.d`); 64x64 "must always be present and be cached".
+- Measured: Debian 13's appstream-generator 0.9.1-1+b3 and Fedora 43's 0.9.1-8.fc43 stop with
+  "This appstream-generator was built without support for RPM-MD!" (its meson option `rpmmd`
+  defaults to false). Fedora 43's updates and Fedora 44 have 0.10.1 on libfyaml 0.8, and it stops
+  with "libfyaml version 0.8 is too old, at least version 0.9 is required!". Ubuntu 26.04's
+  0.10.2 runs both backends, so the repository is built there.
+- The rpmmd backend reads `<ArchiveRoot>/<suite>/<section>/<arch>/os/repodata/repomd.xml`
+  (`rpmpkgindex.cpp`, 0.10.1), which `linux-repository.sh` gives it as a view of its tree.
+- Measured: the debian backend reads a package's files from its `md5sums` and finds nothing in a
+  deb without one; an architecture whose packages hold no metadata gets no `Components` file and
+  no hints; the app's SVG icon was rendered at 48, 64 and 128 pixels, and nothing at the `@2`
+  sizes. In 0.10, a size the `Icons` setting does not name keeps the default policy
+  (`config.cpp`), so the configuration turns the `@2` sizes off by name.
+- Each suite's hints are in `hints/<suite>/<section>/Hints-<arch>.json.gz`, beside
+  `hint-definitions.json`, which gives each tag's severity, `error`, `warning`, `info` or
+  `pedantic`, "to be used by other tools" (`engine.d`, 0.9.1). The app's metainfo draws one hint,
+  `asv-cid-contains-uppercase-letter`, which is `pedantic`.
+- `CID-Index-<arch>.json.gz` beside each catalog maps each component ID to its global ID.
+
+### dnf, PackageKit and zypper
+
+- Measured with `dnf repoquery` on Fedora 43: PackageKit 1.3.6 requires `libdnf.so.2`, the dnf
+  backend, and gnome-software 49.4 requires PackageKit-glib and appstream.
+- libdnf 0.75.0's `dnf-repo.cpp` downloads `appstream` and `appstream-icons` with each
+  repository, and PackageKit 1.3.6's dnf backend installs those two with
+  `as_utils_install_metadata_file` (`pk-backend-dnf-common.c`). libdnf5 5.2.18.0 downloads every
+  type that starts with `appstream` or `appdata` only when `optional_metadata_types`, whose
+  default is `comps,updateinfo`, holds `appstream`, and libdnf5-plugin-appstream installs them.
+- AppStream 1.1.3's `as_utils_install_metadata_file` takes a tarball whose name holds an icon size
+  to hold that size, and one whose name holds none to hold each size in its own folder.
+- libzypp 17.38.16's `RepomdFileCollector` downloads each type of a repository but `other`,
+  `filelists` and the `_db` ones. Tumbleweed's libzypp-plugin-appdata
+  1.0.1+git.20240209 reads `appdata` and `appdata-icons` from `repomd.xml` after each refresh by
+  root and installs them with `appstream-util install-origin`.
+- Measured: createrepo_c 1.2.1 compresses `primary`, `filelists` and `other` with zstd. Given a
+  gzipped file and `--no-compress`, modifyrepo_c stored it uncompressed under its `.gz` name, so
+  `linux-repository.sh` hands it the catalog and lets it compress it again.
+- Measured: rpm 6.0.1 on Ubuntu reads a package's header only with a database it can lock, which
+  `--dbpath` names.
+
+### Signing
+
+- Measured: sqv 1.3.0's `--cleartext` takes `--output`, refuses one that exists, "File exists
+  (os error 17)", and writes the text without the line ending before the signature, which
+  RFC 9580 7.1 leaves out of the signed text.
+- Measured on Fedora 43: rpmsign 6.0.2 with `_gpg_name` set to the subkey's fingerprint and `!`
+  signs a format 4 package with "Header OpenPGP V4 RSA/SHA512 signature". `rpmkeys --checksig`
+  says "digests OK" and exits 0 for a package nobody signed, and "digests SIGNATURES NOT OK",
+  exit 1, with `_pkgverify_level signature`; one signed by a key its database lacks is `NOKEY`,
+  exit 1.
+
 ## The session bundle
 
 Measured on 29 October 2026 on the owner's Mac (arm64), through the steps of `linux-facts.yml`'s

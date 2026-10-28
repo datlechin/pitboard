@@ -224,7 +224,9 @@ The rest:
 - `packaging/`: the casks, the Scoop manifest and `install.sh`, which a release fills, and in
   `linux/` the Linux repository's public key, the Debian packages' `debian/` recipe, which
   `build-linux-packages.sh` copies into the source it builds, the RPM packages' spec and
-  rpmlint's filters, and the images the packages' install test builds, one per package manager.
+  rpmlint's filters, and the images the packages' install test builds, one per package manager;
+  the repository's setup files, and apt-ftparchive's and appstream-generator's configuration in
+  `repository/`.
 - `docs/`: the source of docs.usepitboard.com, and `docs/facts`, kept off the site.
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
@@ -306,6 +308,12 @@ keeps it is in the header of the module named.
   RPM that built it writes by default (`a_package_in_rpm_format_6_is_refused`).
 - A test installs a deb or an rpm only while it builds a container image, and runs Pitboard's
   programs there only as uid 1000 with no network (`test-linux-packages.sh`).
+- The Linux repository's stable suite never holds a beta or a release candidate
+  (`stable_never_lists_a_beta_or_a_release_candidate`).
+- Nothing the Linux repository serves goes out unverified: an index or an RPM package the
+  committed key does not verify stops the build
+  (`an_index_the_committed_key_does_not_verify_stops_the_build`,
+  `an_unsigned_or_wrongly_signed_rpm_stops_the_signing`).
 - With nobody to ask, the command line deletes nothing it was not told to: `forget`, `stow`
   and `uninstall` refuse with `confirmation_needed` through a pipe, a script or `--json`
   unless given `--yes` (`Confirm` in `crates/pitboard/src/main.rs`, the `*_unconfirmed`

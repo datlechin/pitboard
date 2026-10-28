@@ -1,0 +1,25 @@
+{
+  "ProjectName": "Pitboard",
+  "ArchiveRoot": ".",
+  "Backend": "rpmmd",
+  "Features": {
+    "noDownloads": true,
+    "createScreenshotsStore": false,
+    "optimizePNGSize": false,
+    "screenshotVideos": false,
+    "metadataTimestamps": false,
+    "immutableSuites": false
+  },
+  "Suites": {
+    "stable": {"sections": ["main"], "architectures": ["x86_64", "aarch64"]},
+    "beta": {"sections": ["main"], "architectures": ["x86_64", "aarch64"]}
+  },
+  "Icons": {
+    "48x48": {"cached": true, "remote": false},
+    "48x48@2": {"cached": false, "remote": false},
+    "64x64": {"cached": true, "remote": false},
+    "64x64@2": {"cached": false, "remote": false},
+    "128x128": {"cached": true, "remote": false},
+    "128x128@2": {"cached": false, "remote": false}
+  }
+}

@@ -530,6 +530,39 @@ The release workflow cannot make rung one: `windows-update-sign` checks each sig
 key the release carries, and `windows-feed` with the key in the published MSIs, which rung one
 has moved on from.
 
+## The Linux repository
+
+`packages.usepitboard.com` serves Pitboard's apt and dnf repository from the bucket
+`pitboard-packages`. A release writes it from its own packages, through
+`.github/scripts/linux-repository.sh`, `sign-linux-packages.sh` and `sign-linux-repository.sh`.
+Nobody writes it by hand, and nothing deletes from it.
+
+| Path | What it holds |
+| --- | --- |
+| `deb/pool/main/p/pitboard/` | Every Debian package a release has put there, named from its own fields |
+| `deb/dists/<suite>/` | `Release`, `InRelease` and `Release.gpg`, and in `main` the `Packages` and `Contents` of amd64 and arm64 and the AppStream catalog in `dep11`, each also under `by-hash` |
+| `rpm/<suite>/<x86_64 or aarch64>/` | The RPM packages in `Packages`, and `repodata` with `repomd.xml.asc` and the AppStream catalog |
+| `pitboard-archive-keyring.pgp` and `.asc` | [The repository key](#the-linux-repository-key), unarmored for apt and armored for dnf and zypper |
+| `pitboard.sources`, `pitboard-beta.sources`, `pitboard.pref` | apt's setup: each channel's source, and the preferences file that keeps the repository to its own packages |
+| `pitboard.repo`, `pitboard-beta.repo` | dnf's and zypper's setup, one for each channel |
+
+- `stable` holds the latest full release, and `beta` whichever is highest of the betas and the
+  full releases. A release candidate writes neither. `linux-repository.sh` refuses a version
+  with `~`, a beta's or a release candidate's, in `stable`.
+- A suite lists the packages of the release that wrote it and nothing else. The pool and
+  `by-hash` only grow, so a client that holds an earlier index still finds its files.
+- No `Release` has a `Valid-Until`: releases come weeks apart.
+- The build stops on an error in the app's AppStream metadata, and where a catalog lacks the
+  app. The signing stops on an index or an RPM package the committed key does not verify.
+
+Each part is built on the system its tools need, by digest:
+
+| Part | System | Moves |
+| --- | --- | --- |
+| The Debian packages | Debian 13 | With the floor |
+| The RPM packages and their signatures | Fedora 43 | To Fedora 44 at Fedora 43's end of life |
+| The indices, the catalogs and their signatures | Ubuntu 26.04 | To a Debian whose appstream-generator runs its rpmmd backend, which Debian 13's 0.9.1 and Fedora's builds do not ([the facts](docs/facts/linux-packages.md#the-repository)) |
+
 ## The Linux repository key
 
 Pitboard's apt and dnf repository at `packages.usepitboard.com` and its rpm packages are signed

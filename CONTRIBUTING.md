@@ -206,6 +206,15 @@ shellcheck -s sh .github/scripts/build-linux-packages.sh .github/scripts/check-l
   .github/scripts/test-linux-packages.sh
 ```
 
+For a change to the Linux repository, `packaging/linux/repository` and its setup files there,
+or `linux-repository.sh`, `sign-linux-packages.sh` and `sign-linux-repository.sh` in
+`.github/scripts`, run the cases [The Linux repository](#the-linux-repository) names, and:
+
+```sh
+shellcheck -s sh .github/scripts/linux-repository.sh .github/scripts/sign-linux-packages.sh \
+  .github/scripts/sign-linux-repository.sh
+```
+
 The macOS app, Windows, the Windows app, Linux, the Linux app and the website have checks of
 their own, in their sections. CI's `all-green` check fails when any other job failed or was
 cancelled, and a pull request needs it to pass.
@@ -930,6 +939,29 @@ before and no package holds.
 
 CI's `linux-packaging` job runs the four of each format on `ubuntu-26.04` and
 `ubuntu-26.04-arm`, and keeps the packages as `linux-packages-<format>-<arch>` for 7 days.
+
+### The Linux repository
+
+A release writes Pitboard's apt and dnf repository from its packages, as
+[The Linux repository](RELEASING.md#the-linux-repository) says, with three scripts in
+`.github/scripts`:
+
+- `linux-repository.sh` builds the tree of a release's suites from its Debian and RPM packages:
+  apt's indices and AppStream catalog, dnf's and zypper's repository of each machine with the
+  same catalog, the key, and the setup files in `packaging/linux`. It refuses a beta or a
+  release candidate in `stable`, packages of two versions, an error among
+  appstream-generator's hints, and a catalog without the app. It runs on Ubuntu 26.04 with
+  `install-deps.sh`'s `repository` set, whose appstream-generator alone of the floor's runs its
+  rpmmd backend.
+- `sign-linux-packages.sh` signs each RPM package on Fedora 43, then checks it against the key
+  alone.
+- `sign-linux-repository.sh` signs each suite's `Release` and each `repomd.xml`, then checks
+  each signature against the key alone with sqv, as apt does, and with gpgv.
+
+Both sign with the signing subkey of the key named, from the `GNUPGHOME` the caller made, and
+leave nothing in place that the key does not verify. `test-linux-packages.py` tests each rule:
+the repository's cases where `install-deps.sh`'s `repository` set is on Ubuntu 26.04, and
+`sign-linux-packages.sh`'s in `packages-test` on `fedora-43`.
 
 ### The Linux session bundle
 
