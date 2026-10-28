@@ -149,6 +149,9 @@ _pitboard() {
             pitboard__subcmd__help__subcmd__schedule,uninstall)
                 cmd="pitboard__subcmd__help__subcmd__schedule__subcmd__uninstall"
                 ;;
+            pitboard__subcmd__help__subcmd__vault,move)
+                cmd="pitboard__subcmd__help__subcmd__vault__subcmd__move"
+                ;;
             pitboard__subcmd__help__subcmd__vault,status)
                 cmd="pitboard__subcmd__help__subcmd__vault__subcmd__status"
                 ;;
@@ -200,11 +203,17 @@ _pitboard() {
             pitboard__subcmd__vault,help)
                 cmd="pitboard__subcmd__vault__subcmd__help"
                 ;;
+            pitboard__subcmd__vault,move)
+                cmd="pitboard__subcmd__vault__subcmd__move"
+                ;;
             pitboard__subcmd__vault,status)
                 cmd="pitboard__subcmd__vault__subcmd__status"
                 ;;
             pitboard__subcmd__vault__subcmd__help,help)
                 cmd="pitboard__subcmd__vault__subcmd__help__subcmd__help"
+                ;;
+            pitboard__subcmd__vault__subcmd__help,move)
+                cmd="pitboard__subcmd__vault__subcmd__help__subcmd__move"
                 ;;
             pitboard__subcmd__vault__subcmd__help,status)
                 cmd="pitboard__subcmd__vault__subcmd__help__subcmd__status"
@@ -662,8 +671,22 @@ _pitboard() {
             return 0
             ;;
         pitboard__subcmd__help__subcmd__vault)
-            opts="status"
+            opts="status move"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__help__subcmd__vault__subcmd__move)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -1076,7 +1099,7 @@ _pitboard() {
             return 0
             ;;
         pitboard__subcmd__vault)
-            opts="-h --json --help status help"
+            opts="-h --json --help status move help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1090,7 +1113,7 @@ _pitboard() {
             return 0
             ;;
         pitboard__subcmd__vault__subcmd__help)
-            opts="status help"
+            opts="status move help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1117,9 +1140,37 @@ _pitboard() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        pitboard__subcmd__vault__subcmd__help__subcmd__move)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         pitboard__subcmd__vault__subcmd__help__subcmd__status)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pitboard__subcmd__vault__subcmd__move)
+            opts="-h --json --help secret-service files"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

@@ -12,7 +12,9 @@ expression: "serde_json :: json! ({ \"exit\" : code, \"envelope\" : value })"
       "kept": "files",
       "shared": false,
       "path": "[path]",
-      "secret_service": false
+      "secret_service": false,
+      "moving_to": null,
+      "leaving": null
     },
     "warnings": [],
     "error": null

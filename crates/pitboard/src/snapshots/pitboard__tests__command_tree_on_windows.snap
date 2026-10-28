@@ -1700,6 +1700,78 @@ expression: command_tree()
           "commands": []
         },
         {
+          "name": "move",
+          "aliases": [],
+          "hidden": false,
+          "about": "Move every parked login to another way of keeping them, which Windows does not offer",
+          "arguments": [
+            {
+              "id": "to",
+              "long": null,
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "FORM"
+              ],
+              "num_args": "1",
+              "action": "Set",
+              "index": 1,
+              "required": true,
+              "global": false,
+              "hidden": false,
+              "possible_values": [
+                "secret-service",
+                "files"
+              ],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Where to keep them"
+            },
+            {
+              "id": "json",
+              "long": "json",
+              "short": null,
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [
+                "JSON"
+              ],
+              "num_args": "0",
+              "action": "SetTrue",
+              "index": null,
+              "required": false,
+              "global": true,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [
+                "false"
+              ],
+              "conflicts_with": [],
+              "help": "Print JSON instead of text"
+            },
+            {
+              "id": "help",
+              "long": "help",
+              "short": "h",
+              "aliases": [],
+              "short_aliases": [],
+              "value_names": [],
+              "num_args": "0",
+              "action": "Help",
+              "index": null,
+              "required": false,
+              "global": false,
+              "hidden": false,
+              "possible_values": [],
+              "default_values": [],
+              "conflicts_with": [],
+              "help": "Print help"
+            }
+          ],
+          "commands": []
+        },
+        {
           "name": "help",
           "aliases": [],
           "hidden": false,
@@ -1711,6 +1783,14 @@ expression: command_tree()
               "aliases": [],
               "hidden": false,
               "about": "Say where parked logins are kept (the default)",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "move",
+              "aliases": [],
+              "hidden": false,
+              "about": "Move every parked login to another way of keeping them, which Windows does not offer",
               "arguments": [],
               "commands": []
             },
@@ -2441,6 +2521,14 @@ expression: command_tree()
               "aliases": [],
               "hidden": false,
               "about": "Say where parked logins are kept (the default)",
+              "arguments": [],
+              "commands": []
+            },
+            {
+              "name": "move",
+              "aliases": [],
+              "hidden": false,
+              "about": "Move every parked login to another way of keeping them, which Windows does not offer",
               "arguments": [],
               "commands": []
             }

@@ -46,10 +46,44 @@ pub enum VaultForm {
     Files,
 }
 
-// Where a home's parks are, recorded by its first save on a system that offers a choice.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+impl VaultForm {
+    /// What a program branches on, as `state.json` writes it: `secret_service` or `files`.
+    pub fn code(self) -> &'static str {
+        match self {
+            VaultForm::SecretService => "secret_service",
+            VaultForm::Files => "files",
+        }
+    }
+}
+
+// Where a home's parks are, recorded by its first save on a system that offers a choice, and a
+// move of them to another form (`switch/vault.rs`).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Vault {
     pub(crate) form: VaultForm,
+    // A move under way, written before anything is copied into this form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) moving_to: Option<VaultForm>,
+    // What a move took out of the form it left, listed by the save that names the new form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) leaving: Option<Leaving>,
+}
+
+impl Vault {
+    pub(crate) fn kept_as(form: VaultForm) -> Vault {
+        Vault {
+            form,
+            moving_to: None,
+            leaving: None,
+        }
+    }
+}
+
+// Parks still in the form a move left, each deleted from there and taken off this list.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Leaving {
+    pub(crate) from: VaultForm,
+    pub(crate) parks: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -429,8 +463,9 @@ pub struct State {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub awaiting: BTreeMap<String, Awaited>,
     /// How this home keeps its parked logins, where the system offers a choice. Recorded by
-    /// the home's first save and never changed by a save after it: the parks are where it
-    /// says, and a home that took another form would no longer find them.
+    /// the home's first save, and changed only by a move between forms (`pitboard vault
+    /// move`): the parks are where it says, and a home that took another form would no longer
+    /// find them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) vault: Option<Vault>,
 }
@@ -754,9 +789,18 @@ impl State {
     }
 
     /// Take `service` as this home's own from now on, because this home has used it: a
-    /// renewal presented its refresh token. Letting it go afterwards deletes it.
+    /// renewal presented its refresh token, or a move wrote it into a vault of this home alone.
+    /// Letting it go afterwards deletes it.
     pub(crate) fn used_here(&mut self, service: &str) {
         self.foreign.retain(|listed| listed != service);
+    }
+
+    /// Take `service`, which an account here holds, as one this home did not write: a move found
+    /// it in the vault it moves to, which every home shares. Letting it go leaves it there.
+    pub(crate) fn written_elsewhere(&mut self, service: &str) {
+        if self.references(service) && !self.is_foreign(service) {
+            self.foreign.push(service.to_string());
+        }
     }
 
     // Installed, spent by a renewal, or a copy of a login still signed in: nothing can use
@@ -1032,17 +1076,23 @@ fn current_document(ctx: &Context) -> Result<Option<Value>> {
 /// Read from the file at each look rather than from a state in memory, so the vault every
 /// caller opens is the one the home's last save named.
 pub(crate) fn vault_form(ctx: &Context) -> Result<Option<VaultForm>> {
+    Ok(vault(ctx)?.map(|vault| vault.form))
+}
+
+// The whole record, a move of the parks included.
+fn vault(ctx: &Context) -> Result<Option<Vault>> {
     let Some(mut document) = current_document(ctx)? else {
         return Ok(None);
     };
     let Some(vault) = document.get_mut("vault").map(Value::take) else {
         return Ok(None);
     };
-    let vault: Vault = serde_json::from_value(vault).map_err(|source| Error::StateCorrupt {
-        path: file(ctx),
-        source,
-    })?;
-    Ok(Some(vault.form))
+    serde_json::from_value(vault)
+        .map(Some)
+        .map_err(|source| Error::StateCorrupt {
+            path: file(ctx),
+            source,
+        })
 }
 
 /// Where a home that records no form yet writes down the one its parks go in, before the
@@ -1258,18 +1308,17 @@ pub(crate) fn save(ctx: &Context, permit: Permit, state: &State) -> Result<()> {
     atomic::write(permit, &path, body.as_bytes(), atomic::Perms::Secret).map_err(write)
 }
 
-// The form a save writes: none where the system keeps parks one way; otherwise the one this
-// state holds, else the one the file records, else the one a new home takes.
+// The record a save writes: none where the system keeps parks one way; otherwise the one this
+// state holds, else the one the file holds, else the form a new home takes.
 fn recorded_vault(ctx: &Context, state: &State) -> Result<Option<Vault>> {
     let host = ctx.host();
     if host.vault_forms().is_empty() {
         return Ok(None);
     }
-    let form = match state.vault {
-        Some(vault) => Some(vault.form),
-        None => vault_form(ctx)?.or_else(|| host.new_home_form(ctx)),
-    };
-    Ok(form.map(|form| Vault { form }))
+    match &state.vault {
+        Some(vault) => Ok(Some(vault.clone())),
+        None => Ok(vault(ctx)?.or_else(|| host.new_home_form(ctx).map(Vault::kept_as))),
+    }
 }
 
 #[cfg(test)]
@@ -2079,12 +2128,7 @@ mod tests {
         assert_eq!(document["schema"], 9);
         assert_eq!(document["vault"], serde_json::json!({"form": "files"}));
         let state: State = serde_json::from_value(document).expect("parses");
-        assert_eq!(
-            state.vault,
-            Some(Vault {
-                form: VaultForm::Files
-            })
-        );
+        assert_eq!(state.vault, Some(Vault::kept_as(VaultForm::Files)));
 
         let scratch = tempfile::tempdir().expect("a scratch folder");
         let home = scratch.path().join("home");

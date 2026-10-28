@@ -121,6 +121,7 @@ Usage: pitboard vault [OPTIONS] [COMMAND]
 | Command | What it does |
 | --- | --- |
 | `status` | Says where this Pitboard directory keeps the [parked logins](/security#where-parked-logins-are-kept) of Claude Code and Codex. The default. |
+| `move <FORM>` | On Linux, moves every parked login into `secret-service`, your login keyring, or `files`, 0600 files in `~/.pitboard/vault`. |
 
 `status` reads Pitboard's own files and changes nothing. Its first line says where they are:
 
@@ -131,12 +132,34 @@ Usage: pitboard vault [OPTIONS] [COMMAND]
 | `Parked logins are kept in the login keyring, which every Pitboard directory of your session shares.` | Linux, in the Secret Service. |
 | `Parked logins are kept in 0600 files in ~/.pitboard/vault, which only you can read.` | Linux, in files. |
 
-On Linux, a second line follows where no Secret Service answers on your session's bus:
+On Linux, more lines follow, in this order:
 
-| Second line | When |
+| Line | When |
 | --- | --- |
-| `No Secret Service answers on this session's bus, so they cannot be read from here. Run Pitboard in your desktop session, where signing in unlocks the login keyring.` | In the Secret Service. |
-| `No Secret Service answers on this session's bus, as over SSH or in a container.` | In files. |
+| `A move into the login keyring is under way: the next change finishes it.` | A move was cut short. |
+| `2 parked login(s) wait to be deleted from the login keyring: the next change deletes them.` | A move could not delete every parked login where they were. |
+| `` `pitboard vault move files` keeps them in 0600 files in ~/.pitboard/vault instead. `` | In the Secret Service, with no move waiting. |
+| `No Secret Service answers on this session's bus, so they cannot be read from here. Run Pitboard in your desktop session, where signing in unlocks the login keyring.` | In the Secret Service, where none answers. |
+| `` A Secret Service answers on this session's bus: `pitboard vault move secret-service` keeps them in the login keyring instead. `` | In files, with no move waiting. |
+| `No Secret Service answers on this session's bus, as over SSH or in a container.` | In files, where none answers. |
+
+Nothing moves parked logins between the two by itself. `move` asks both forms what they hold first, and where either is locked or nothing answers for it, it refuses with `credential_store_locked` and changes nothing. Then it records the move in `state.json`, writes each parked login into the new form and reads it back, records the new form, and only then deletes each from the old one. A move cut short is finished by the next change, and daily renewal waits for it. A parked login another Pitboard directory keeps in your login keyring stays there.
+
+| Output | When |
+| --- | --- |
+| `Moved 2 parked login(s) into the login keyring.` | It moved them. |
+| `Parked logins are kept in the login keyring from now on.` | There was none to move. |
+| `Parked logins are already kept in the login keyring.` | They were there already. |
+
+A parked login it could not delete from the old form, as from a login keyring locked meanwhile, is said with `parks_pending_removal` and deleted by the next change. Another `move` deletes them first, and refuses while it cannot. On macOS and Windows, `move` refuses with `vault_form_unsupported`.
+
+```sh
+pitboard vault move secret-service
+```
+
+```text
+Moved 2 parked login(s) into the login keyring.
+```
 
 ## `log`
 
@@ -175,6 +198,7 @@ The log is `audit.log` in Pitboard's directory, and holds no email address. Past
 | `abandon`, `repair` | That command runs. | None | `ok` |
 | `adopt` | `pitboard adopt` takes over a directory. | None | `ok` |
 | `uninstall` | `pitboard uninstall` ran and Pitboard's directory is still there. | None | `ok`, or `parks_pending_removal` when a parked login could not be deleted |
+| `vault-move` | `pitboard vault move` ran. | The form: `secret_service` or `files` | `ok`, `already_kept` when they were there already, `parks_pending_removal` when one could not be deleted from the old form, or the error code |
 | `renew` | `renew`, daily renewal, `status` or the app tries a due parked login. | The label | As the table in [`renew`](#renew) lists |
 | `recover` | Pitboard finishes or undoes an interrupted switch before another change. | The label the switch was to | `interrupted_switch_finished` or `interrupted_switch_undone` |
 | `reclaim` | A parked login is given back to its account. | The label | `ok` |

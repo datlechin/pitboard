@@ -261,6 +261,7 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say where parked logins are kept (the default)')
+            [CompletionResult]::new('move', 'move', [CompletionResultType]::ParameterValue, 'Move every parked login to another way of keeping them, which Windows does not offer')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -270,12 +271,22 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'pitboard;vault;move' {
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print JSON instead of text')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'pitboard;vault;help' {
             [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say where parked logins are kept (the default)')
+            [CompletionResult]::new('move', 'move', [CompletionResultType]::ParameterValue, 'Move every parked login to another way of keeping them, which Windows does not offer')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
         'pitboard;vault;help;status' {
+            break
+        }
+        'pitboard;vault;help;move' {
             break
         }
         'pitboard;vault;help;help' {
@@ -430,9 +441,13 @@ Register-ArgumentCompleter -Native -CommandName 'pitboard' -ScriptBlock {
         }
         'pitboard;help;vault' {
             [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Say where parked logins are kept (the default)')
+            [CompletionResult]::new('move', 'move', [CompletionResultType]::ParameterValue, 'Move every parked login to another way of keeping them, which Windows does not offer')
             break
         }
         'pitboard;help;vault;status' {
+            break
+        }
+        'pitboard;help;vault;move' {
             break
         }
         'pitboard;help;log' {

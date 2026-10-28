@@ -630,7 +630,7 @@ test("the scripts each system's release would write: kept, or the kept one in th
   const off = readTree(snaps("command_tree"));
   const on = readTree(snaps("command_tree_on_windows"));
   const pairs = differing(off, on);
-  assert.equal(pairs.length, 5);
+  assert.equal(pairs.length, 6);
   const zsh = snapshot(snaps("completions_zsh"));
   const powershell = snapshot(snaps("completions_powershell_on_windows"));
   for (const [script, toWindows] of [

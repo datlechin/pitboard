@@ -373,6 +373,15 @@ pub(crate) fn clear(ctx: &Context, permit: Permit) {
     let _ = crate::host::fs::remove_file(permit, &path(ctx));
 }
 
+// Every name written down for a vault item, which a move of the parks takes to the new form.
+pub(crate) fn vault_names(ctx: &Context) -> Vec<String> {
+    read(ctx)
+        .into_iter()
+        .filter(|(kind, _)| *kind == ParkKind::Vault)
+        .map(|(_, service)| service)
+        .collect()
+}
+
 /// Every name still outstanding, for `doctor` to report: written down, and named by nothing
 /// in `state`. A change records its park in `state.json` once the login is written, and the
 /// name stays on the list until the next change's sweep drops it; until then it is

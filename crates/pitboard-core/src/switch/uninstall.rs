@@ -133,7 +133,7 @@ fn take_away(
                 .any(|listed| listed.service == **name)
         })
         .count();
-    let pending = undeleted + state.renewing.len();
+    let pending = undeleted + state.renewing.len() + super::vault::leaving(state);
     // The sweep in settle has already resolved every outstanding name, so what is left
     // refers to nothing. The home goes next, and an index of names with no home is noise.
     if pending == 0 {

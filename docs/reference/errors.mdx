@@ -46,6 +46,7 @@ On Windows, a message names `claude.cmd` or `codex.cmd` where Pitboard found the
 | `renewal_failed` | 1 | Pitboard could not [renew](/guides/renewal) a parked login. | Run `pitboard doctor` if it keeps happening. In the app, open **Diagnostics**. |
 | `credential_too_large` | 3 | On macOS, the login is too large for `security` to read from standard input, and `PITBOARD_NO_ARGV=1` forbids the argument line. | Unset `PITBOARD_NO_ARGV`. Or, for Claude Code, sign out of MCP servers you no longer use. See [Large logins on macOS](/security#large-logins-on-macos). |
 | `credential_too_large` | 3 | On Windows, Claude Code's login is too large for Credential Manager, even in pieces. | Sign out of MCP servers you no longer use. |
+| `vault_form_unsupported` | 1 | `pitboard vault move` ran on macOS or Windows, which keep parked logins one way. Nothing changed. | Nothing. Only Linux keeps them either way. |
 
 ## Switching
 

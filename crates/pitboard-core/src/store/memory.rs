@@ -239,6 +239,21 @@ impl MemoryStore {
             .clone()
     }
 
+    // A locked Secret Service collection answers every question with `Locked`, as
+    // `host/linux/secret_service.rs` asks it whether it is locked first; a locked keychain
+    // still lists its names (`security dump-keychain`) and deletes as it is told.
+    fn collection_locked(&self) -> Result<(), Error> {
+        let locked = *self
+            .blanket
+            .lock()
+            .expect("a poisoned test store is a failed test")
+            == Some(Fault::Locked);
+        if self.kind == Backend::SecretService && locked {
+            return Err(Error::Locked);
+        }
+        Ok(())
+    }
+
     /// What a look at this service finds, reading what it holds where `contents` is asked
     /// for, and only whether it is there otherwise.
     fn look(&self, service: &str, contents: bool) -> Result<Option<String>, Error> {
@@ -273,6 +288,7 @@ impl RawStore for Arc<MemoryStore> {
 
     fn write(&self, _: Permit, service: &str, contents: &str) -> Result<(), Error> {
         self.touched("write", service);
+        self.collection_locked()?;
         if self.has_locked(service) {
             return Err(Error::Write("the keychain is locked".into()));
         }
@@ -317,6 +333,7 @@ impl RawStore for Arc<MemoryStore> {
 
     fn delete(&self, _: Permit, service: &str) -> Result<(), Error> {
         self.touched("delete", service);
+        self.collection_locked()?;
         self.items
             .lock()
             .expect("a poisoned test store is a failed test")
@@ -326,6 +343,7 @@ impl RawStore for Arc<MemoryStore> {
 
     fn list(&self) -> Result<Option<Vec<String>>, Error> {
         self.touched("list", "");
+        self.collection_locked()?;
         Ok(Some(
             self.services()
                 .into_iter()

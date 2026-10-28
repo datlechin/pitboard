@@ -75,8 +75,8 @@ pub(crate) use stow::stow;
 pub use stow::{Foreseen, Kept, Left, Stowed};
 pub use uninstall::Removed;
 pub(crate) use uninstall::{uninstall, uninstall_from_app};
-pub use vault::Keeping;
-pub(crate) use vault::keeping;
+pub use vault::{Keeping, Moved};
+pub(crate) use vault::{keeping, move_to};
 
 use crate::context::Context;
 use crate::error::{Error, Result};

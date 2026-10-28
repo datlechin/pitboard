@@ -152,7 +152,8 @@ fn error_section(code: &str, desktop: bool) -> Option<&'static str> {
         | "parked_credential_corrupt"
         | "park_slot_exhausted"
         | "renewal_failed"
-        | "credential_too_large" => "parked-logins",
+        | "credential_too_large"
+        | "vault_form_unsupported" => "parked-logins",
         "switch_rolled_back"
         | "switch_did_not_hold"
         | "switch_unverified"

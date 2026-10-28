@@ -83,7 +83,98 @@ fn vault_says_the_login_keyring_where_a_new_directory_parks_in_it() {
     assert_eq!(code, 0, "{err}");
     assert_eq!(
         out,
-        "Parked logins are kept in the login keyring, which every Pitboard directory of your \
-         session shares.\n"
+        format!(
+            "Parked logins are kept in the login keyring, which every Pitboard directory of your \
+             session shares.\n\
+             `pitboard vault move files` keeps them in 0600 files in {} instead.\n",
+            env.root.join("pitboard").join("vault").display()
+        )
     );
+}
+
+// macOS keeps parked logins in the keychain alone, Windows in sealed files alone, and on Linux a
+// directory nothing answers for in the Secret Service stays in files.
+#[test]
+fn vault_move_is_refused_where_it_cannot_move_and_changes_nothing() {
+    let env = two_accounts("vault-move-refused");
+    let before = (env.state(), env.parked_service("beta"));
+    let to = match OS {
+        Os::Linux => "secret-service",
+        Os::MacOs | Os::Windows => "files",
+    };
+
+    let (value, code) = json(&env, &["vault", "move", to]);
+
+    match OS {
+        Os::MacOs | Os::Windows => {
+            contract!("vault_move_unsupported", value, code);
+        }
+        Os::Linux => {
+            contract!("vault_move_with_no_keyring", value, code);
+        }
+    }
+    assert_eq!((env.state(), env.parked_service("beta")), before);
+    let beta = before.1.expect("beta is parked");
+    assert!(env.is_parked(&beta), "{beta} is where it was");
+}
+
+// windows: the Secret Service is Linux's own
+#[cfg(target_os = "linux")]
+#[test]
+fn vault_move_moves_every_parked_login_into_files_and_back() {
+    let env = crate::common::two_accounts_in(Env::with_secret_service("vault-move"));
+    let beta = env.parked_service("beta").expect("beta is parked");
+    let file = env.root.join("pitboard/vault").join(format!("{beta}.json"));
+    let folder = env.root.join("pitboard/vault");
+
+    let (value, code) = json(&env, &["vault", "move", "files"]);
+    contract!("vault_move_to_files", value, code);
+    assert_eq!(env.state()["vault"], serde_json::json!({"form": "files"}));
+    assert!(env.secret_service().names().is_empty());
+    assert!(file.is_file(), "{} holds beta's login", file.display());
+    let (out, err, code) = env.run(&["vault"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        out,
+        format!(
+            "Parked logins are kept in 0600 files in {}, which only you can read.\n\
+             A Secret Service answers on this session's bus: `pitboard vault move secret-service` \
+             keeps them in the login keyring instead.\n",
+            folder.display()
+        )
+    );
+
+    let (out, err, code) = env.run(&["vault", "move", "secret-service"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out, "Moved 1 parked login(s) into the login keyring.\n");
+    assert_eq!(
+        env.state()["vault"],
+        serde_json::json!({"form": "secret_service"})
+    );
+    assert_eq!(env.secret_service().names(), vec![beta.clone()]);
+    assert!(!file.exists(), "{} is gone", file.display());
+    let (value, code) = json(&env, &["vault", "move", "secret-service"]);
+    contract!("vault_move_kept_already", value, code);
+
+    let (_, err, code) = env.run(&["use", "beta"]);
+    assert_eq!(code, 0, "switch to beta: {err}");
+    assert_eq!(env.live()["claudeAiOauth"]["refreshToken"], "refresh-b");
+    let alpha = env.parked_service("alpha").expect("alpha is parked");
+    assert_eq!(env.secret_service().names(), vec![alpha]);
+}
+
+// windows: the Secret Service is Linux's own
+#[cfg(target_os = "linux")]
+#[test]
+fn vault_move_out_of_a_locked_keyring_is_refused_and_changes_nothing() {
+    let env = crate::common::two_accounts_in(Env::with_secret_service("vault-move-locked"));
+    env.secret_service().lock();
+    let before = (env.state(), env.secret_service().names());
+
+    let (value, code) = json(&env, &["vault", "move", "files"]);
+
+    assert_eq!(code, 1, "{value}");
+    assert_eq!(value["error"]["code"], "credential_store_locked", "{value}");
+    assert_eq!((env.state(), env.secret_service().names()), before);
+    assert!(!env.root.join("pitboard/vault").exists());
 }

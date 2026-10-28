@@ -390,6 +390,7 @@ Usage: pitboard vault [OPTIONS] [COMMAND]
 
 Commands:
   status  Say where parked logins are kept (the default)
+  move    Move every parked login into the login keyring or into 0600 files
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -403,6 +404,25 @@ Options:
 Say where parked logins are kept (the default)
 
 Usage: pitboard vault status [OPTIONS]
+
+Options:
+      --json
+          Print JSON instead of text
+
+  -h, --help
+          Print help
+
+== pitboard vault move
+Move every parked login into the login keyring or into 0600 files
+
+Usage: pitboard vault move [OPTIONS] <FORM>
+
+Arguments:
+  <FORM>
+          Where to keep them: `secret-service`, the login keyring, or `files`, 0600 files in
+          Pitboard's directory
+          
+          [possible values: secret-service, files]
 
 Options:
       --json

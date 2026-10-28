@@ -600,6 +600,15 @@ impl Pitboard {
         switch::keeping(&self.ctx)
     }
 
+    /// Moves every parked login of Claude Code and Codex this home holds into `to`, where the
+    /// system offers that form.
+    pub fn vault_move(&self, to: state::VaultForm) -> Changing<switch::Moved> {
+        let permit = self.permitted()?;
+        self.changing(permit, "vault-move", to.code(), None, |settled| {
+            switch::move_to(settled, to)
+        })
+    }
+
     /// Where an app's parked logins and the folders set aside are kept.
     pub fn parks_folder(&self) -> std::path::PathBuf {
         crate::store::folder::parks_dir(&self.ctx)
@@ -974,6 +983,16 @@ impl Audited for switch::Removed {
             "parks_pending_removal"
         } else {
             "ok"
+        }
+    }
+}
+
+impl Audited for switch::Moved {
+    fn audit_code(&self) -> &'static str {
+        match (self.changed, self.leaving) {
+            (false, _) => "already_kept",
+            (true, 0) => "ok",
+            (true, _) => "parks_pending_removal",
         }
     }
 }

@@ -221,6 +221,7 @@ set edit:completion:arg-completer[pitboard] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand status 'Say where parked logins are kept (the default)'
+            cand move 'Move every parked login to another way of keeping them, which macOS does not offer'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'pitboard;vault;status'= {
@@ -228,11 +229,19 @@ set edit:completion:arg-completer[pitboard] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'pitboard;vault;move'= {
+            cand --json 'Print JSON instead of text'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'pitboard;vault;help'= {
             cand status 'Say where parked logins are kept (the default)'
+            cand move 'Move every parked login to another way of keeping them, which macOS does not offer'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'pitboard;vault;help;status'= {
+        }
+        &'pitboard;vault;help;move'= {
         }
         &'pitboard;vault;help;help'= {
         }
@@ -356,8 +365,11 @@ set edit:completion:arg-completer[pitboard] = {|@words|
         }
         &'pitboard;help;vault'= {
             cand status 'Say where parked logins are kept (the default)'
+            cand move 'Move every parked login to another way of keeping them, which macOS does not offer'
         }
         &'pitboard;help;vault;status'= {
+        }
+        &'pitboard;help;vault;move'= {
         }
         &'pitboard;help;log'= {
         }

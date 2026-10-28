@@ -253,6 +253,39 @@ pub(crate) fn machine_on(host: Arc<MemoryHost>, name: &str) -> Rig {
     }
 }
 
+/// [`machine_on`], with `away` enrolled and parked beside `there`: a change of every park then
+/// has more than one to make.
+pub(crate) fn two_parked_on(host: Arc<MemoryHost>, name: &str) -> Rig {
+    let m = machine_on(host, name);
+    m.api.owned_by("access-away-refresh", owner("away"));
+    let service = park::reserve(&m.ctx, Permit::for_a_test(), "away").expect("a free name");
+    let parked = park::store_at(
+        &m.ctx,
+        Permit::for_a_test(),
+        provider::document(m.which),
+        &service,
+        &oauth("away-refresh", 30),
+    )
+    .expect("parked");
+    let mut state = state::load(&m.ctx).expect("state");
+    state.accounts.push(account("away", "away", Some(parked)));
+    state::save(&m.ctx, Permit::for_a_test(), &state).expect("saved");
+    m
+}
+
+/// Each account's park, by name, in order.
+pub(crate) fn parked_services(m: &Rig) -> Vec<String> {
+    let mut parked: Vec<String> = state::load(&m.ctx)
+        .expect("state")
+        .accounts
+        .iter()
+        .filter_map(|a| a.parked.as_ref())
+        .map(|park| park.service.clone())
+        .collect();
+    parked.sort();
+    parked
+}
+
 /// [`machine`], where `elsewhere`, enrolled with nothing parked, has since signed in to
 /// Claude Code outside Pitboard over `here`, whose only login that was, as `/login` does:
 /// its login in the keychain and its account in the config.

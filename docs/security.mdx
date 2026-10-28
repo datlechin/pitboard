@@ -21,7 +21,7 @@ Pitboard moves and stores the OAuth refresh tokens of Claude Code and OpenAI's C
   <Tab title="Linux">
     Parked logins are items in your login keyring, the Secret Service's default collection, which every Pitboard directory of your session shares. Pitboard reaches it over your session's D-Bus, through an encrypted session. While it is locked, a command you run lets your keyring ask for your password, and daily renewal and the watch service stop with [`credential_store_locked`](/troubleshooting/accounts#linux-says-the-login-keyring-is-locked) instead.
 
-    A Pitboard directory made where no Secret Service answers, such as in a container, keeps its parked logins as files in `~/.pitboard/vault/`, at mode 0600 in a 0700 directory, and so does one an earlier Pitboard made. Claude Code keeps its own login in a plaintext `~/.claude/.credentials.json`. Any process running as you can read these files. `pitboard doctor` fails if anyone else has access to them, and warns for Codex's `auth.json`.
+    A Pitboard directory made where no Secret Service answers, such as in a container, keeps its parked logins as files in `~/.pitboard/vault/`, at mode 0600 in a 0700 directory, and so does one an earlier Pitboard made. [`pitboard vault move`](/reference/maintenance-commands#vault) moves them between your login keyring and files. Claude Code keeps its own login in a plaintext `~/.claude/.credentials.json`. Any process running as you can read these files. `pitboard doctor` fails if anyone else has access to them, and warns for Codex's `auth.json`.
   </Tab>
 </Tabs>
 

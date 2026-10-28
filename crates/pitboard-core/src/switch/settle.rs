@@ -88,6 +88,8 @@ pub(crate) fn settle(
     refuse_custom_oauth(ctx, tool)?;
     let exclusive = exclusive(ctx, permit)?;
     let mut state = state::load(ctx)?;
+    // First, so nothing below reads or writes a park in a form the move is leaving.
+    super::vault::finish(ctx, permit, &mut state)?;
     let recovered = reconcile(ctx, permit, &mut state)?;
     // A copy that cannot be saved yet stops what acts on its slot's login, where that asks
     // again (`refresh::finished`), and nothing else.

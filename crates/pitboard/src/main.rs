@@ -2545,6 +2545,7 @@ mod tests {
             "pitboard schedule status",
             "pitboard schedule uninstall",
             "pitboard vault status",
+            "pitboard vault move",
             "pitboard log",
             "pitboard uninstall",
             "pitboard rename",
@@ -2561,6 +2562,10 @@ mod tests {
             assert!(page.contains(option), "{option} missing:\n{page}");
         }
         assert!(page.contains("[possible values: bash"), "{page}");
+        assert!(
+            page.contains("[possible values: secret\\-service, files]"),
+            "{page}"
+        );
         assert!(page.contains("[default: 20]"), "{page}");
         assert!(
             !page.contains("pitboard manpage"),

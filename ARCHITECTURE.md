@@ -87,7 +87,8 @@ built with a `context::Context`:
     renewed where Claude Code keeps it.
   - `auto.rs`, `warm.rs`, `stow.rs`: the automatic switch, the warm-up and putting away, under
     the lock every change takes.
-  - `vault.rs`: where a home keeps its parked logins of Claude Code and Codex.
+  - `vault.rs`: where a home keeps its parked logins of Claude Code and Codex, and a move of them
+    between the forms its system offers.
   - `switch/folder/`: every change to a tool whose login is its app's files.
   - `crash.rs`, `harness.rs`, `two_tools.rs`, `pinned.rs`, `refusals.rs`, `foreign.rs`,
     `forms.rs`: the crash matrix and the changes' tests.
@@ -326,6 +327,12 @@ keeps it is in the header of the module named.
   0600 files in the home. A home records the form its first save found and keeps it
   (`a_home_keeps_the_vault_form_it_recorded`), and one on the Secret Service never falls back to
   files (`a_home_on_the_secret_service_is_refused_where_none_answers_and_never_falls_back_to_files`).
+- Only `pitboard vault move` changes a home's form. It records the move first, writes every park
+  into the new form and reads it back before the index names that form, and deletes each from the
+  old form only after; a move cut short is finished forward by the next change, before anything
+  else writes a park (`a_move_killed_after_any_step_is_finished_by_the_next_change`). A park
+  another home keeps in the shared collection stays there
+  (`a_move_leaves_another_homes_parks_where_they_are`).
 - A locked Secret Service collection, a dismissed prompt and a bus with nothing to answer are
   `credential_store_locked`, never a store with nothing in it
   (`a_locked_collection_is_locked_never_absent`). A run a job started never asks to unlock the
@@ -708,8 +715,9 @@ What it holds besides the accounts:
 - `awaiting`: by tool, a sign-in inside the tool's app that Pitboard waits for.
 - `vault`: how this home keeps its parked logins, where the system offers more than one way
   (`Host::vault_forms`). The home's first save records it, before its first park is written,
-  and no save changes it (`a_home_keeps_the_vault_form_it_recorded`). macOS and Windows record
-  none.
+  and only `pitboard vault move` changes it (`a_home_keeps_the_vault_form_it_recorded`), with
+  `moving_to` while a move is under way and `leaving`, what it has still to delete from the form
+  it left. macOS and Windows record none.
 
 ## Tool registers
 

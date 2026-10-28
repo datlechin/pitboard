@@ -303,6 +303,11 @@ pub enum Error {
     #[error("the scheduler refused: {detail}")]
     ScheduleRefused { detail: String },
 
+    /// `pitboard vault move` on a system that keeps parked logins one way, as macOS keeps them
+    /// in the keychain and Windows in sealed files (`Host::vault_forms`). `form` is the one asked.
+    #[error("{}", vault_form_unsupported(*form))]
+    VaultFormUnsupported { form: crate::state::VaultForm },
+
     /// Each job serves the default home alone, so it is installed only where `PITBOARD_HOME`
     /// names that home or nothing. `home` is the directory it names, and `default` the
     /// default home, `~/.pitboard`.
@@ -1034,6 +1039,7 @@ impl Error {
             StateWriteFailed { .. } => "state_write_failed",
             ScheduleUnsupported { .. } => "schedule_unsupported",
             ScheduleRefused { .. } => "schedule_refused",
+            VaultFormUnsupported { .. } => "vault_form_unsupported",
             ScheduleNotDefaultHome { .. } => "schedule_not_default_home",
             ScheduleProgramMissing { .. } => "schedule_program_missing",
             ScheduleProgramTemporary { .. } => "schedule_program_temporary",
@@ -1310,6 +1316,21 @@ fn temporary_copy(path: &std::path::Path, job: crate::schedule::Job) -> String {
             path.display()
         ),
     }
+}
+
+fn vault_form_unsupported(form: crate::state::VaultForm) -> String {
+    let into = match form {
+        crate::state::VaultForm::SecretService => "the login keyring",
+        crate::state::VaultForm::Files => "files",
+    };
+    let kept = match crate::host::OS {
+        Os::MacOs => "On macOS, Pitboard keeps parked logins only in the login keychain",
+        Os::Windows => {
+            "On Windows, Pitboard keeps parked logins only in files sealed to your Windows account"
+        }
+        Os::Linux => "Pitboard keeps parked logins one way on this computer",
+    };
+    format!("{kept}, so they cannot be moved into {into}. Nothing has changed.")
 }
 
 fn manager_elsewhere(elsewhere: &crate::schedule::Elsewhere, job: crate::schedule::Job) -> String {
@@ -2412,6 +2433,9 @@ mod tests {
             Error::StoredLoginChanged { path: "f".into() },
             Error::Usage("u".into()),
             Error::ConfirmationNeeded { command: "stow" },
+            Error::VaultFormUnsupported {
+                form: crate::state::VaultForm::Files,
+            },
         ];
         let mut codes: Vec<&str> = samples.iter().map(Error::code).collect();
         codes.sort_unstable();

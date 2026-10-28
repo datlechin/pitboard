@@ -79,7 +79,7 @@ On Linux, `state.json` records how a Pitboard directory keeps its parked logins,
 | `secret_service` | Items in your login keyring | By the directory's first save, where a Secret Service answers with a default collection |
 | `files` | Files in `vault/` | By the directory's first save, where none answers, and for a directory an earlier Pitboard made |
 
-Pitboard keeps the form a directory recorded.
+Pitboard keeps the form a directory recorded until [`pitboard vault move`](/reference/maintenance-commands#vault) changes it. While a move is under way, `vault` also holds `moving_to`, the form it goes to, and once the new form is recorded, `leaving`, the parked logins still to be deleted from the form it left, with `from` and `parks`.
 
 When Pitboard renews Claude Code's login, a copy of the renewed login waits beside the parked logins as `pitboard-park-renewing-<time>` until it is saved where Claude Code keeps it.
 
