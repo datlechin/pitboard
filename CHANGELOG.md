@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-10-28
+
 ### Fixed
 
 - Pitboard adds and switches a Claude Desktop account whose `oauth:tokenCacheV2` holds its
@@ -926,7 +928,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pitboard keeps an audit log of every change it makes.
 - The account index is schema 3, with one parked login per account and its expiry.
 
-[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/datlechin/pitboard/compare/v0.15.2...HEAD
+[0.15.2]: https://github.com/datlechin/pitboard/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/datlechin/pitboard/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/datlechin/pitboard/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/datlechin/pitboard/compare/v0.13.0...v0.14.0
