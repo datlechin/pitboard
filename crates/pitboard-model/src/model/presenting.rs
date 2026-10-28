@@ -11,7 +11,7 @@ use super::testing::records::{
     CHATGPT, awaiting, chatgpt_holding, claude_code, codex, desktop_account, desktop_warning,
     enrolled_as, refusal, status, switched, warned, warning,
 };
-use super::{Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
+use super::{Cause, Doing, Intent, Place, SettingsSection, Sheet, Snapshot, Tip, WindowRequest};
 use crate::AccountKey;
 use crate::Tool;
 use crate::account_windows::WindowAccount;
@@ -1842,7 +1842,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
     assert_eq!(
         titles,
         [
-            words::COULD_NOT_READ_USAGE,
+            words::could_not(&Doing::ReadUsage).as_str(),
             words::warning_heading(&overridden())
         ]
     );
@@ -1851,7 +1851,7 @@ fn a_failed_read_says_why_and_that_the_numbers_are_old() {
         notice(
             "read",
             Severity::Error,
-            words::COULD_NOT_READ_USAGE,
+            &words::could_not(&Doing::ReadUsage),
             &[reason, words::LAST_MEASURED],
             vec![NoticeAction {
                 title: words::try_again(OS),
@@ -1920,7 +1920,7 @@ fn a_failed_read_with_nothing_to_list_is_what_the_window_shows() {
     assert_eq!(ids(&shown), Vec::<String>::new(), "said once in the window");
     assert_eq!(
         shown.menu_notices.others.and_then(|item| item.subtitle),
-        Some(words::COULD_NOT_READ_USAGE.into())
+        Some(words::could_not(&Doing::ReadUsage))
     );
 
     let mut empty = at_noon();
@@ -3886,7 +3886,12 @@ fn a_failure_away_from_the_window_is_said_in_it() {
     let shown = model.shown();
     assert_eq!(shown.window_request.serial, 1);
     let alert = shown.failure_alert.expect("an alert");
-    assert_eq!(alert.title, words::could_not_remove("beta"));
+    assert_eq!(
+        alert.title,
+        words::could_not(&Doing::Remove {
+            account: Key::new(ProviderId::Claude, "beta")
+        })
+    );
     assert_eq!(
         alert.message,
         "beta is the account in use, so it cannot be forgotten.\n\nANTHROPIC_API_KEY is set"
@@ -3925,8 +3930,18 @@ fn only_a_switch_asked_for_away_from_the_window_that_fails_opens_it() {
     switch(&mut model, &mut machine, Tool::Claude, "nobody");
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said in the window");
-    assert_eq!(failure.title, words::could_not_switch("nobody"));
-    assert_eq!(failure.message, "There is no account called claude/nobody.");
+    assert_eq!(
+        failure.doing,
+        Doing::Switch {
+            account: Key::new(ProviderId::Claude, "nobody")
+        }
+    );
+    assert_eq!(
+        failure.cause,
+        Cause::Refused {
+            message: "There is no account called claude/nobody.".into()
+        }
+    );
     assert_eq!(shown.window_request.serial, 1);
 }
 

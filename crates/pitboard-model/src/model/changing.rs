@@ -20,7 +20,7 @@ use super::testing::records::{
     CLAUDE, claude, codex_account, enrolled_as, refusal, status, still_running, switched, warned,
     warning,
 };
-use super::{Intent, Sheet};
+use super::{Cause, Doing, Intent, Sheet};
 use crate::present::testing::account;
 use crate::present::words;
 use crate::{Account, EnrolledAs};
@@ -102,8 +102,13 @@ fn the_login_in_use_is_added_at_once_and_named_after() {
     model.send(enrol(Tool::Claude));
     model.run(&mut machine);
     let refused = model.state.presented.clone().expect("said in the window");
-    assert_eq!(refused.title, words::could_not_sign_in(None));
-    assert_eq!(refused.message, "Anthropic couldn’t be reached.");
+    assert_eq!(refused.doing, Doing::SignIn { again: None });
+    assert_eq!(
+        refused.cause,
+        Cause::Refused {
+            message: "Anthropic couldn’t be reached.".into()
+        }
+    );
     assert_eq!(refused.warnings.len(), 1, "with what it warned of");
     assert_eq!(model.shown().sheet, None);
 
@@ -188,10 +193,17 @@ fn a_refused_forget_is_reported() {
     model.run(&mut machine);
     assert_eq!(machine.forgot, ["claude/alpha", "claude/beta"]);
     let refused = model.state.presented.clone().expect("said");
-    assert_eq!(refused.title, words::could_not_remove("beta"));
     assert_eq!(
-        refused.message,
-        "beta is the account in use, so it cannot be forgotten."
+        refused.doing,
+        Doing::Remove {
+            account: Key::new(ProviderId::Claude, "beta")
+        }
+    );
+    assert_eq!(
+        refused.cause,
+        Cause::Refused {
+            message: "beta is the account in use, so it cannot be forgotten.".into()
+        }
     );
     assert_eq!(
         refused.code.as_deref(),
@@ -844,8 +856,10 @@ fn a_name_that_cannot_be_saved_once_its_sheet_has_gone_is_said_in_the_window() {
     let shown = model.shown();
     assert_eq!(shown.sheet_failure, None, "not in another sheet");
     assert_eq!(
-        model.state.presented.clone().map(|failure| failure.title),
-        Some(words::could_not_rename("work"))
+        model.state.presented.clone().map(|failure| failure.doing),
+        Some(Doing::Rename {
+            account: Key::new(ProviderId::Claude, "work")
+        })
     );
 }
 
@@ -860,7 +874,12 @@ fn a_save_that_came_to_nothing_says_so() {
     model.give(Answer::Lost(job));
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, words::could_not_rename("work"));
+    assert_eq!(
+        failure.title,
+        words::could_not(&Doing::Rename {
+            account: Key::new(ProviderId::Claude, "work")
+        })
+    );
     assert_eq!(failure.message, words::NOT_KNOWN_HOW_IT_WENT);
     assert!(!shown.sheet_text.expect("the sheet").saving);
 }
@@ -994,7 +1013,7 @@ fn a_config_update_refused_is_said_in_the_window() {
     model.send(update_config(Tool::Claude, "work"));
     model.run(&mut machine);
     let refused = model.state.presented.clone().expect("said");
-    assert_eq!(refused.title, words::COULD_NOT_UPDATE_CONFIG);
+    assert_eq!(refused.doing, Doing::UpdateConfig);
     assert_eq!(refused.code.as_deref(), Some("account_not_in_use"));
     assert!(model.state.last_switches.is_empty());
     assert!(machine.switched_to.is_empty());
@@ -1081,7 +1100,10 @@ fn a_recording_whose_app_does_not_quit_reads_nothing_and_lets_its_sheet_go() {
         let shown = model.on_a_mac();
         assert_eq!(shown.sheet, Some(adding.clone()));
         let failure = shown.sheet_failure.expect("said in the sheet");
-        assert_eq!(failure.title, words::could_not_sign_in(None));
+        assert_eq!(
+            failure.title,
+            words::could_not(&Doing::SignIn { again: None })
+        );
         assert_eq!(failure.message, message);
         let form = shown.sheet_text.expect("the form");
         assert!(!form.saving, "{message}");

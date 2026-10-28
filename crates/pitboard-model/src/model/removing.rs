@@ -4,7 +4,7 @@ use super::state::{After, Answer, Job};
 use super::testing::machine::{Hand, Stub, any_read, desktop_machine};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CLAUDE, DANA, refusal, status};
-use super::{Intent, OutsideAnswer, OutsideAsk, Place};
+use super::{Doing, Intent, OutsideAnswer, OutsideAsk, Place};
 use crate::AccountKey;
 use crate::Tool;
 use crate::account_windows::records::{Entry, Records};
@@ -194,7 +194,7 @@ fn claude_still_open_uninstalls_nothing_and_says_why() {
     assert_eq!(machine.removals, 0);
     assert_eq!(removal(&model), None);
     let alert = model.shown().failure_alert.expect("said");
-    assert_eq!(alert.title, words::COULD_NOT_UNINSTALL);
+    assert_eq!(alert.title, words::could_not(&Doing::Uninstall));
     assert_eq!(alert.message, words::still_open("Claude", "try again"));
 }
 
@@ -291,7 +291,7 @@ fn a_refused_uninstall_says_why_and_pitboard_goes_on() {
     model.run(&mut machine);
     assert_eq!(removal(&model), None);
     let alert = model.shown().failure_alert.expect("said");
-    assert_eq!(alert.title, words::COULD_NOT_UNINSTALL);
+    assert_eq!(alert.title, words::could_not(&Doing::Uninstall));
     assert!(model.shown().uninstall.enabled);
     model.send(Intent::Show {
         place: Some(Place::Accounts),
@@ -372,7 +372,7 @@ fn an_uninstall_that_came_to_nothing_runs_nothing_more_and_offers_try_again() {
     assert_eq!(
         removal(&model),
         Some(RemovalShown::Stopped {
-            title: words::COULD_NOT_UNINSTALL.into(),
+            title: words::could_not(&Doing::Uninstall),
             line: words::UNINSTALL_NOT_KNOWN.into(),
             again: again.clone(),
         })

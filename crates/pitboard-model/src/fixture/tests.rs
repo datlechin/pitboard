@@ -12,7 +12,7 @@ use crate::Tool;
 use crate::model::testing::platform::{PATIENCE, Posted, StandInApps, Told, eventually};
 use crate::model::testing::records::read_in;
 use crate::model::{
-    AppControl, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
+    AppControl, Doing, Intent, LocalTime, ModelListener, NotificationButton, Notifications, Pane,
     PitboardModel, Place, PlatformError, RunOutNotice, Sheet, Snapshot, Tip,
 };
 use crate::present::testing::Utc;
@@ -1033,7 +1033,9 @@ fn a_stopped_move_is_given_up_from_the_app() {
     assert_eq!(
         refused.failure_alert,
         Some(crate::account_windows::AlertText {
-            title: words::could_not_switch("home"),
+            title: words::could_not(&Doing::Switch {
+                account: Key::new(ProviderId::Desktop, "home")
+            }),
             message: words::in_app_refusal(OS, &undetermined).expect("the app's words"),
             next: Some(crate::present::next::of_failure(
                 OS,
@@ -1589,7 +1591,9 @@ fn accounts_are_renamed_and_forgotten_as_the_window_offers() {
     });
     assert_eq!(
         refused.sheet_failure.map(|failure| failure.title),
-        Some(words::could_not_rename("personal"))
+        Some(words::could_not(&Doing::Rename {
+            account: Key::new(ProviderId::Claude, "personal")
+        }))
     );
     model.send(Intent::Rename {
         account: AccountKey::new(Tool::Claude, "personal"),
@@ -1635,7 +1639,7 @@ fn a_failed_read_is_said_in_the_menu_and_in_the_window() {
         (item.title.as_str(), item.subtitle.as_deref()),
         (
             words::issues(OS, 1).as_str(),
-            Some(words::COULD_NOT_READ_USAGE)
+            Some(words::could_not(&Doing::ReadUsage).as_str())
         )
     );
     assert_eq!(
@@ -2379,7 +2383,12 @@ fn a_refusal_to_quit_from_the_apps_fixture_in_is_given_stops_the_switch() {
         snapshot.failure_alert.is_some()
     });
     let failure = refused.failure_alert.as_ref().expect("stopped");
-    assert_eq!(failure.title, words::could_not_switch("spare"));
+    assert_eq!(
+        failure.title,
+        words::could_not(&Doing::Switch {
+            account: Key::new(ProviderId::Codex, "spare")
+        })
+    );
     assert_eq!(
         failure.message,
         words::still_open("ChatGPT", "switch again")

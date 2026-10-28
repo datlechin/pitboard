@@ -43,16 +43,11 @@ use super::machine::{LOG_LIMIT, MachineState, Scheduled};
 use super::preferences::Preferences;
 use super::windows::Windows;
 use super::{
-    AtLimit, Back, Failure, Intent, LastSwitch, OutsideAsk, Pane, Place, QuitQuestion, ReadFailure,
-    RestartNeeded, RunOutNotice, RunningSignIn, SettingsSection, Sheet, Tip, WindowRequest,
+    AtLimit, Back, Cause, Doing, Failure, Intent, LastSwitch, Opens, OutsideAsk, Pane, Place,
+    QuitQuestion, ReadFailure, RestartNeeded, RunOutNotice, RunningSignIn, SettingsSection, Sheet,
+    SignedIn, Tip, WindowRequest,
 };
 use crate::account_windows::records::{Entry, Loaded};
-use crate::present::words::{
-    COULD_NOT_CANCEL, COULD_NOT_CHANGE_WARM, COULD_NOT_CLEAN_UP, COULD_NOT_READ_USAGE,
-    COULD_NOT_TELL_WHOSE, COULD_NOT_UNINSTALL, COULD_NOT_UPDATE_CONFIG, NOT_KNOWN_HOW_IT_WENT,
-    could_not_remove, could_not_rename, could_not_sign_in, could_not_switch, could_not_warm,
-    signed_in_now,
-};
 use crate::present::{Clicked, GlanceText, UNUSABLE};
 use crate::{
     Abandoned, Account, Adoption, AutoLooked, AutoSwitched, Change, Doctored, Enrolled, EnrolledAs,
@@ -668,8 +663,8 @@ pub(crate) enum Answered {
     // a question the person has open at the Mac would go
     Asking,
     Uninstalling,
-    // under `title`; why stays in the app, since the core's words can name an email or a path
-    Failed { title: String },
+    // while `doing`; why stays in the app, since the core's words can name an email or a path
+    Failed { doing: Doing },
 }
 
 // The glance's last text, what a widget shows of it, how many times that changed, and whether
@@ -766,16 +761,16 @@ struct Asked {
 
 /// What a person asked for that did not happen, before it is numbered.
 struct Refused {
-    title: String,
-    message: String,
+    doing: Doing,
+    cause: Cause,
     code: Option<String>,
     warnings: Vec<Warning>,
     account: Option<Key>,
 }
 
 impl Refused {
-    /// `error`, said under `title`.
-    fn of(title: String, error: PitboardError) -> Refused {
+    /// `error`, which stopped `doing`.
+    fn of(doing: Doing, error: PitboardError) -> Refused {
         let PitboardError::Failed {
             code,
             message,
@@ -783,19 +778,19 @@ impl Refused {
             account,
         } = error;
         Refused {
-            title,
-            message,
+            doing,
+            cause: Cause::Refused { message },
             code: Some(code),
             warnings,
             account,
         }
     }
 
-    /// A job that came to nothing, under `title`: what it did is not known.
-    fn lost(title: String) -> Refused {
+    /// A job doing `doing` that came to nothing: what it did is not known.
+    fn lost(doing: Doing) -> Refused {
         Refused {
-            title,
-            message: NOT_KNOWN_HOW_IT_WENT.into(),
+            doing,
+            cause: Cause::NotKnownHowItWent,
             code: None,
             warnings: Vec::new(),
             account: None,
@@ -1746,8 +1741,8 @@ impl State {
             }
         } else if self.failure.is_some() && self.reads == 0 {
             for (request, _) in std::mem::take(&mut self.outside_held) {
-                let title = COULD_NOT_READ_USAGE.into();
-                self.answer_outside(request, Answered::Failed { title });
+                let doing = Doing::ReadUsage;
+                self.answer_outside(request, Answered::Failed { doing });
             }
         }
     }
@@ -1849,7 +1844,7 @@ impl State {
             }
             Err(Some(error)) => {
                 self.resume(now);
-                self.present(Refused::of(COULD_NOT_UNINSTALL.into(), error));
+                self.present(Refused::of(Doing::Uninstall, error));
             }
             Err(None) => self.removing = Some(Removing::Lost),
         }
@@ -2810,7 +2805,7 @@ impl State {
                 let PitboardError::Failed { message, .. } = &*error;
                 match asked {
                     Some(account) => {
-                        self.present(Refused::of(could_not_warm(&account.label), *error));
+                        self.present(Refused::of(Doing::Warm { account }, *error));
                     }
                     None => {
                         self.warm.failed = Some(message.clone());
@@ -2838,7 +2833,7 @@ impl State {
                 self.warm.overview = Some(overview);
                 self.warm_tick(now, jobs);
             }
-            Err(error) => self.present(Refused::of(COULD_NOT_CHANGE_WARM.into(), error)),
+            Err(error) => self.present(Refused::of(Doing::ChangeWarm, error)),
         }
     }
 
@@ -2889,7 +2884,7 @@ impl State {
         if let Some(request) = ticket.request {
             let answered = match &self.failure {
                 Some(_) => Answered::Failed {
-                    title: COULD_NOT_READ_USAGE.into(),
+                    doing: Doing::ReadUsage,
                 },
                 None => Answered::Updated {
                     at: self
@@ -3128,7 +3123,7 @@ impl State {
                     self.warm_later(now);
                 }
                 Job::SetWarm { .. } | Job::SetWarmRange { .. } => {
-                    self.present(Refused::lost(COULD_NOT_CHANGE_WARM.into()));
+                    self.present(Refused::lost(Doing::ChangeWarm));
                 }
                 // Whether it switched is not known, and nothing is said of it: the accounts
                 // are read again to show who is in use, and the next look decides again.
@@ -3323,10 +3318,12 @@ impl State {
         error: Option<PitboardError>,
         jobs: &mut Vec<Job>,
     ) {
-        let title = could_not_sign_in(signing.again.as_deref());
+        let doing = Doing::SignIn {
+            again: signing.again.clone(),
+        };
         let mut refused = match error {
-            Some(error) => Refused::of(title, error),
-            None => Refused::lost(title),
+            Some(error) => Refused::of(doing, error),
+            None => Refused::lost(doing),
         };
         let missing_code = format!("{}_program_missing", signing.tool.code());
         if refused.code.as_deref() == Some(missing_code.as_str()) {
@@ -3342,8 +3339,7 @@ impl State {
                 self.keep(&refused.warnings, jobs);
                 return;
             }
-            let missing = crate::present::words::missing(pitboard_core::host::OS, signing.tool);
-            refused.message = format!("{} {}", missing.title, missing.detail);
+            refused.cause = Cause::ProgramMissing { tool: signing.tool };
         }
         self.sign_in_refused(signing, refused, jobs);
     }
@@ -3379,13 +3375,16 @@ impl State {
                 opens: None,
                 back: None,
             });
-        let app = signing.in_its_app.then(|| provider.program());
-        let sentence = signed_in_now(&done.label, again, app);
+        let signed_in = SignedIn {
+            label: done.label,
+            again,
+            in_its_app: signing.in_its_app,
+        };
         // An account an app had not in use before is said as a switch to it.
         if signing.in_its_app && !signing.in_use_before {
-            said.opens = Some(sentence);
+            said.opens = Some(Opens::SignedIn(signed_in));
         } else {
-            said.said = Some(sentence);
+            said.said = Some(signed_in);
         }
         let switch_said = |code: &str| said.warnings.iter().any(|warning| warning.code == code);
         let counted = switch_said("sessions_still_running");
@@ -3811,16 +3810,13 @@ impl State {
         let QuitQuestion {
             account, name: app, ..
         } = question;
-        let message = |again: &str| match &outcome {
-            QuitOutcome::Lingering { .. } => {
-                crate::present::words::part_still_running(pitboard_core::host::OS, &app, again)
-            }
-            _ => crate::present::words::still_open(&app, again),
+        let cause = match &outcome {
+            QuitOutcome::Lingering { .. } => Cause::PartStillRunning { app },
+            _ => Cause::StillOpen { app },
         };
-        let (switching, other) = (message("switch again"), message("try again"));
-        let failed = |title: String, message: String| Refused {
-            title,
-            message,
+        let failed = |doing: Doing| Refused {
+            doing,
+            cause: cause.clone(),
             code: Some("app_open".into()),
             warnings: Vec::new(),
             account: Some(account.clone()),
@@ -3837,30 +3833,30 @@ impl State {
             After::Switch => {
                 self.switching = None;
                 self.reopen_after_switch = None;
-                let title = could_not_switch(&account.label);
+                let doing = Doing::Switch {
+                    account: account.clone(),
+                };
                 match self.outside_switch.take() {
                     Some(OutsideSwitch { request, .. }) => {
-                        self.answer_outside(request, Answered::Failed { title });
+                        self.answer_outside(request, Answered::Failed { doing });
                     }
-                    None => self.present(failed(title, switching)),
+                    None => self.present(failed(doing)),
                 }
             }
             After::SignIn { again, from, .. } => {
                 self.saved(from.as_ref());
                 if let Some(signing) = self.signing_in.take_if(|signing| signing.quitting) {
-                    let title = could_not_sign_in(again.as_deref());
-                    self.sign_in_refused(&signing, failed(title, other), jobs);
+                    self.sign_in_refused(&signing, failed(Doing::SignIn { again }), jobs);
                 }
             }
             After::Enrol { again, from, .. } => {
                 self.recording = None;
                 self.saved(from.as_ref());
-                let title = could_not_sign_in(again.as_deref());
-                self.save_failed(from.as_ref(), failed(title, other));
+                self.save_failed(from.as_ref(), failed(Doing::SignIn { again }));
             }
             After::Uninstall => {
                 self.resume(now);
-                self.present(failed(COULD_NOT_UNINSTALL.into(), other));
+                self.present(failed(Doing::Uninstall));
             }
         }
         // Here, once a switch this quit was for has let go: one asked meanwhile holds it back.
@@ -3951,18 +3947,20 @@ impl State {
             }
             Err(error) => {
                 self.switching = None;
-                let title = could_not_switch(&account.label);
+                let doing = Doing::Switch {
+                    account: account.clone(),
+                };
                 let refused = match error {
-                    Some(error) => Refused::of(title, error),
-                    None => Refused::lost(title),
+                    Some(error) => Refused::of(doing, error),
+                    None => Refused::lost(doing),
                 };
                 self.refused(tool, &refused);
                 // Nothing moved, so what the last switch said stands too.
                 self.keep(&refused.warnings, jobs);
                 match outside {
                     Some(request) => {
-                        let title = refused.title;
-                        self.answer_outside(request, Answered::Failed { title });
+                        let doing = refused.doing;
+                        self.answer_outside(request, Answered::Failed { doing });
                     }
                     None => self.present(refused),
                 }
@@ -4026,19 +4024,19 @@ impl State {
                 return;
             }
         };
-        let opens = matches!(adoption, Adoption::NextOpen { .. })
-            .then(|| crate::present::words::follows(&adoption));
-        let (follows_at, restart) = match adoption {
+        let (follows_at, restart, opens) = match adoption {
             Adoption::PollingWithin(within_seconds) => {
-                (Some(now.epoch() + i64::from(within_seconds)), None)
+                (Some(now.epoch() + i64::from(within_seconds)), None, None)
             }
-            Adoption::AtRenewal { .. } | Adoption::NextOpen { .. } => (None, None),
+            Adoption::AtRenewal { .. } => (None, None, None),
+            Adoption::NextOpen { app } => (None, None, Some(Opens::Switched { app })),
             Adoption::RestartRequired { program, .. } => (
                 None,
                 from.map(|from| RestartNeeded {
                     program: program.to_owned(),
                     from,
                 }),
+                None,
             ),
         };
         self.remember(LastSwitch {
@@ -4119,10 +4117,12 @@ impl State {
             }
             Err(error) => {
                 self.change_over();
-                let title = could_not_sign_in(again);
+                let doing = Doing::SignIn {
+                    again: again.map(str::to_owned),
+                };
                 let refused = match error {
-                    Some(error) => Refused::of(title, error),
-                    None => Refused::lost(title),
+                    Some(error) => Refused::of(doing, error),
+                    None => Refused::lost(doing),
                 };
                 self.refused(tool, &refused);
                 let none_stored = refused.code.as_deref() == Some("live_credential_absent");
@@ -4183,10 +4183,12 @@ impl State {
             }
             Err(error) => {
                 self.change_over();
-                let title = could_not_rename(&account.label);
+                let doing = Doing::Rename {
+                    account: account.clone(),
+                };
                 let refused = match error {
-                    Some(error) => Refused::of(title, error),
-                    None => Refused::lost(title),
+                    Some(error) => Refused::of(doing, error),
+                    None => Refused::lost(doing),
                 };
                 self.save_failed(from, refused);
             }
@@ -4244,10 +4246,12 @@ impl State {
             }
             Err(error) => {
                 self.change_over();
-                let title = could_not_remove(&account.label);
+                let doing = Doing::Remove {
+                    account: account.clone(),
+                };
                 let refused = match error {
-                    Some(error) => Refused::of(title, error),
-                    None => Refused::lost(title),
+                    Some(error) => Refused::of(doing, error),
+                    None => Refused::lost(doing),
                 };
                 self.refused(tool, &refused);
                 self.present(refused);
@@ -4283,8 +4287,8 @@ impl State {
             Err(error) => {
                 self.change_over();
                 self.present(match error {
-                    Some(error) => Refused::of(COULD_NOT_UPDATE_CONFIG.into(), error),
-                    None => Refused::lost(COULD_NOT_UPDATE_CONFIG.into()),
+                    Some(error) => Refused::of(Doing::UpdateConfig, error),
+                    None => Refused::lost(Doing::UpdateConfig),
                 });
             }
         }
@@ -4321,8 +4325,8 @@ impl State {
             Err(error) => {
                 self.left = Some(Leftover::Unknown);
                 let refused = match error {
-                    Some(error) => Refused::of(COULD_NOT_TELL_WHOSE.into(), error),
-                    None => Refused::lost(COULD_NOT_TELL_WHOSE.into()),
+                    Some(error) => Refused::of(Doing::TellWhose, error),
+                    None => Refused::lost(Doing::TellWhose),
                 };
                 self.sheet_failure = Some(self.number(refused));
             }
@@ -4365,8 +4369,8 @@ impl State {
             Err(error) => {
                 self.change_over();
                 let refused = match error {
-                    Some(error) => Refused::of(COULD_NOT_CLEAN_UP.into(), error),
-                    None => Refused::lost(COULD_NOT_CLEAN_UP.into()),
+                    Some(error) => Refused::of(Doing::CleanUp, error),
+                    None => Refused::lost(Doing::CleanUp),
                 };
                 self.save_failed(from, refused);
                 // What it found is out of date: the file may have changed, or been renewed
@@ -4415,8 +4419,8 @@ impl State {
             Err(error) => {
                 self.change_over();
                 self.present(match error {
-                    Some(error) => Refused::of(COULD_NOT_CANCEL.into(), error),
-                    None => Refused::lost(COULD_NOT_CANCEL.into()),
+                    Some(error) => Refused::of(Doing::CancelSwitch, error),
+                    None => Refused::lost(Doing::CancelSwitch),
                 });
             }
         }
@@ -4470,8 +4474,8 @@ impl State {
         self.failures += 1;
         Failure {
             id: self.failures,
-            title: refused.title,
-            message: refused.message,
+            doing: refused.doing,
+            cause: refused.cause,
             code: refused.code,
             warnings: refused.warnings,
             account: refused.account,

@@ -17,12 +17,15 @@ use super::testing::records::{
     CLAUDE, awaiting, claude, claude_code, claude_desktop, codex, codex_account, desktop_account,
     desktop_warning, enrolled_as, refusal, status, still_running, switched, warning,
 };
-use super::{Intent, Place, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, WindowRequest};
+use super::{
+    Cause, Doing, Intent, Place, QuitQuestion, RestartNeeded, RunningSignIn, Sheet, SignedIn,
+    WindowRequest,
+};
 use crate::AccountKey;
 use crate::EnrolledAs;
 use crate::Tool;
 use crate::present::words;
-use pitboard_core::host::{OS, Os};
+use pitboard_core::host::Os;
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::WaitStep;
@@ -117,6 +120,15 @@ fn sign_in_over(job: &Job) -> bool {
     matches!(job, Job::SignInOver { .. })
 }
 
+/// What a sign-in to `label` again by the tool, not in its app, kept of it.
+fn signed_in_again(label: &str) -> SignedIn {
+    SignedIn {
+        label: label.into(),
+        again: true,
+        in_its_app: false,
+    }
+}
+
 /// A sign-in that cannot start says why in the sheet that started it, which stays up to say it,
 /// and leaves nothing half-shown.
 #[test]
@@ -136,7 +148,10 @@ fn a_sign_in_that_cannot_start_is_reported() {
     assert_eq!(shown.signing_in, None);
     assert_eq!(shown.sheet, Some(add(None)));
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, words::could_not_sign_in(None));
+    assert_eq!(
+        failure.title,
+        words::could_not(&Doing::SignIn { again: None })
+    );
     assert_eq!(
         failure.message,
         "a sign-in here would write over the login in use"
@@ -391,10 +406,7 @@ fn a_sign_in_to_the_account_in_use_says_its_new_login_is_in_use() {
         (last.provider, &last.to),
         (ProviderId::Codex, &Key::new(ProviderId::Codex, "work"))
     );
-    assert_eq!(
-        last.said.as_deref(),
-        Some(words::signed_in_now("work", true, None).as_str())
-    );
+    assert_eq!(last.said, Some(signed_in_again("work")));
     assert_eq!(last.restart, None, "nothing switched away from anything");
     assert_eq!(last.follows_at, None);
     assert_eq!(last.warnings, std::slice::from_ref(&old_login));
@@ -413,8 +425,12 @@ fn a_first_sign_in_to_the_account_in_use_says_it_was_enrolled() {
     machine.enrolling = enrolled_as("work", EnrolledAs::InUse { again: false }, Vec::new());
     signs_in(&mut model, &mut machine, Tool::Codex, None, &[]);
     assert_eq!(
-        model.state.last_switches[0].said.as_deref(),
-        Some(words::signed_in_now("work", false, None).as_str())
+        model.state.last_switches[0].said,
+        Some(SignedIn {
+            label: "work".into(),
+            again: false,
+            in_its_app: false,
+        })
     );
 }
 
@@ -459,10 +475,7 @@ fn a_sign_in_to_the_account_in_use_keeps_what_the_last_switch_said() {
             from: "personal".into(),
         })
     );
-    assert_eq!(
-        last.said.as_deref(),
-        Some(words::signed_in_now("work", true, None).as_str())
-    );
+    assert_eq!(last.said, Some(signed_in_again("work")));
     assert_eq!(last.warnings, [still_running(), parked]);
 }
 
@@ -1284,10 +1297,7 @@ fn signing_in_again_to_the_account_in_use_says_it_has_a_new_login() {
         (last.provider, &last.to),
         (ProviderId::Claude, &Key::new(ProviderId::Claude, "work"))
     );
-    assert_eq!(
-        last.said.as_deref(),
-        Some(words::signed_in_now("work", true, None).as_str())
-    );
+    assert_eq!(last.said, Some(signed_in_again("work")));
     let work = &model.state.status.clone().expect("accounts").accounts[0];
     assert!(work.signed_in);
     assert!(!work.standing.switchable());
@@ -1497,8 +1507,13 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
 
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said in the window");
-    assert_eq!(failure.title, words::could_not_sign_in(None));
-    assert_eq!(failure.message, "The sign-in did not finish.");
+    assert_eq!(failure.doing, Doing::SignIn { again: None });
+    assert_eq!(
+        failure.cause,
+        Cause::Refused {
+            message: "The sign-in did not finish.".into()
+        }
+    );
     assert_eq!(
         shown.window_request,
         WindowRequest {
@@ -1512,8 +1527,14 @@ fn a_sign_in_that_fails_once_its_sheet_has_gone_says_so_in_the_window() {
     starts(&mut model, &mut machine, Tool::Claude, None);
     let failure = model.state.presented.clone().expect("said in the window");
     assert_eq!(
-        (failure.id, failure.title.as_str()),
-        (2, words::could_not_sign_in(None).as_str())
+        (failure.id, failure.doing, failure.cause),
+        (
+            2,
+            Doing::SignIn { again: None },
+            Cause::ProgramMissing {
+                tool: ProviderId::Claude
+            }
+        )
     );
 }
 
@@ -1604,7 +1625,10 @@ fn a_sign_in_lost_to_a_panic_is_said_and_over() {
     let shown = model.shown();
     assert_eq!(shown.signing_in, None);
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, words::could_not_sign_in(None));
+    assert_eq!(
+        failure.title,
+        words::could_not(&Doing::SignIn { again: None })
+    );
     assert_eq!(model.sheet_failure_code(), None);
 
     let id = starts(&mut model, &mut machine, Tool::Claude, None);
@@ -1750,7 +1774,7 @@ fn a_park_refused_opens_the_app_again_behind() {
     assert_eq!(shown.signing_in, None);
     assert_eq!(
         shown.sheet_failure.expect("said in the sheet").title,
-        words::could_not_sign_in(None)
+        words::could_not(&Doing::SignIn { again: None })
     );
     assert_eq!(
         shown.sheet_text.expect("the form").confirm,
@@ -1881,7 +1905,7 @@ fn a_park_cancelled_in_flight_and_asked_again_keeps_each_hold_its_own() {
 // Claude's quit failing each way: (quits, lingers, lost, what is said, what the apps were asked).
 pub(super) fn quits_failed() -> [(bool, bool, bool, String, Vec<String>); 3] {
     let still_open = words::still_open("Claude", "try again");
-    let lingering = words::part_still_running(OS, "Claude", "try again");
+    let lingering = words::part_still_running(Os::MacOs, "Claude", "try again");
     let (quit, open) = (format!("quit {CLAUDE}"), format!("open {CLAUDE}"));
     [
         (false, false, false, still_open.clone(), vec![quit.clone()]),
@@ -1911,7 +1935,10 @@ fn an_add_whose_app_does_not_quit_parks_nothing_and_lets_its_sheet_go() {
         assert_eq!(shown.signing_in, None);
         assert_eq!(shown.sheet, Some(add(Some(Tool::Desktop))));
         let failure = shown.sheet_failure.expect("said in the sheet");
-        assert_eq!(failure.title, words::could_not_sign_in(None));
+        assert_eq!(
+            failure.title,
+            words::could_not(&Doing::SignIn { again: None })
+        );
         assert_eq!(failure.message, message);
         assert!(!shown.sheet_text.expect("the form").saving, "{message}");
         assert_eq!(machine.apps.asked(), asked);
@@ -2023,7 +2050,7 @@ fn a_first_account_refused_as_signed_out_offers_the_sign_in_next() {
     let shown = model.on_a_mac();
     assert_eq!(
         shown.sheet_failure.expect("said in the sheet").title,
-        words::could_not_sign_in(None)
+        words::could_not(&Doing::SignIn { again: None })
     );
     assert_eq!(shown.sheet_text.expect("the form").confirm, words::CONTINUE);
     let jobs = model.send(sign_in(Tool::Desktop, None));

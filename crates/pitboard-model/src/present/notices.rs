@@ -9,7 +9,7 @@ use super::{
 };
 use crate::model::advice::HeadsUp;
 use crate::model::state::in_its_app;
-use crate::model::{Intent, LastSwitch, Place, Sheet};
+use crate::model::{Doing, Intent, LastSwitch, Opens, Place, Sheet, SignedIn};
 use crate::model::{NotificationButton, NotificationButtonKind, RunOutNotice};
 use crate::{Account, Adoption, Held, Warning};
 use pitboard_core::host::OS;
@@ -243,7 +243,7 @@ pub(crate) fn notices(seen: &Seen, footing: &Footing) -> Vec<PanelNotice> {
         said.push(notice(
             "read".into(),
             Severity::Error,
-            words::COULD_NOT_READ_USAGE.into(),
+            words::could_not(&Doing::ReadUsage),
             lines,
             vec![NoticeAction {
                 title: words::try_again(seen.os),
@@ -478,11 +478,17 @@ fn of_last_switch(seen: &Seen, last: &LastSwitch) -> PanelNotice {
     } else {
         Severity::Warning
     };
-    let mut lines: Vec<String> = last
-        .opens
-        .iter()
-        .chain(&last.said)
-        .cloned()
+    let signed_in = |said: &SignedIn| {
+        let app = said.in_its_app.then(|| last.provider.program());
+        words::signed_in_now(&said.label, said.again, app)
+    };
+    let opens = last.opens.as_ref().map(|opens| match opens {
+        Opens::Switched { app } => words::opens_signed_in(app),
+        Opens::SignedIn(said) => signed_in(said),
+    });
+    let mut lines: Vec<String> = opens
+        .into_iter()
+        .chain(last.said.as_ref().map(signed_in))
         .chain(restart)
         .collect();
     lines.extend(warned.iter().map(|warning| warning.message.clone()));
@@ -1231,7 +1237,7 @@ mod tests {
             restart: None,
             said: None,
             warnings: Vec::new(),
-            opens: Some("Claude opens signed in to it.".into()),
+            opens: Some(Opens::Switched { app: "Claude" }),
             back: None,
         }];
         let shown = present_on(Os::MacOs, &state, 0, &Utc);

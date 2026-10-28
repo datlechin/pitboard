@@ -1,51 +1,61 @@
-//! What a failure's alert says: what couldn't be done, and why where an app it asked to quit
-//! stopped it. And a switch that didn't finish: what it waits for, cancelling it, and what
-//! cancelling kept.
+//! What a failure's alert says: what couldn't be done, and why. And a switch that didn't
+//! finish: what it waits for, cancelling it, and what cancelling kept.
 
-use super::{sign_ins, titled, typeset};
+use super::{missing, sign_ins, titled, typeset};
+use crate::model::{Cause, Doing};
 use pitboard_core::host::Os;
+use pitboard_core::state::Key;
 use pitboard_core::words::listed;
 
 pub(crate) const NOT_KNOWN_HOW_IT_WENT: &str =
     "Pitboard stopped before it could say how this went. Refresh to see where things stand.";
 
-pub(crate) fn could_not_switch(label: &str) -> String {
-    format!("Couldn’t switch to {label}")
-}
-
-pub(crate) const COULD_NOT_CANCEL: &str = "Couldn’t cancel the switch";
-
-// `again`: the account signed in to again, or none for a new one.
-pub(crate) fn could_not_sign_in(again: Option<&str>) -> String {
-    match again {
-        Some(label) => format!("Couldn’t sign in to {label}"),
-        None => "Couldn’t add the account".into(),
+// What was being done, as a failure is titled: "Couldn’t switch to personal".
+pub(crate) fn could_not(doing: &Doing) -> String {
+    match doing {
+        Doing::Switch {
+            account: Key { label, .. },
+        } => format!("Couldn’t switch to {label}"),
+        Doing::CancelSwitch => "Couldn’t cancel the switch".into(),
+        Doing::SignIn { again: Some(label) } => format!("Couldn’t sign in to {label}"),
+        Doing::SignIn { again: None } => "Couldn’t add the account".into(),
+        Doing::Remove {
+            account: Key { label, .. },
+        } => format!("Couldn’t remove {label}"),
+        Doing::Rename {
+            account: Key { label, .. },
+        } => format!("Couldn’t rename {label}"),
+        Doing::UpdateConfig => "Couldn’t update Claude Code’s config".into(),
+        Doing::TellWhose => "Couldn’t tell whose sign-in it is".into(),
+        Doing::CleanUp => "Couldn’t clean up the sign-in file".into(),
+        Doing::ChangeWarm => "Couldn’t change which accounts are warmed up".into(),
+        Doing::Uninstall => "Couldn’t uninstall Pitboard".into(),
+        Doing::Warm {
+            account: Key { label, .. },
+        } => format!("Couldn’t warm up {label}"),
+        Doing::ReadUsage => "Couldn’t read usage".into(),
     }
 }
 
-pub(crate) fn could_not_remove(label: &str) -> String {
-    format!("Couldn’t remove {label}")
+// Why `doing` didn't happen.
+pub(crate) fn why_not(os: Os, doing: &Doing, cause: &Cause) -> String {
+    // what to do once the app has quit
+    let again = if matches!(doing, Doing::Switch { .. }) {
+        "switch again"
+    } else {
+        "try again"
+    };
+    match cause {
+        Cause::Refused { message } => message.clone(),
+        Cause::StillOpen { app } => still_open(app, again),
+        Cause::PartStillRunning { app } => part_still_running(os, app, again),
+        Cause::ProgramMissing { tool } => {
+            let missing = missing(os, *tool);
+            format!("{} {}", missing.title, missing.detail)
+        }
+        Cause::NotKnownHowItWent => NOT_KNOWN_HOW_IT_WENT.into(),
+    }
 }
-
-pub(crate) fn could_not_rename(label: &str) -> String {
-    format!("Couldn’t rename {label}")
-}
-
-pub(crate) const COULD_NOT_UPDATE_CONFIG: &str = "Couldn’t update Claude Code’s config";
-
-pub(crate) const COULD_NOT_TELL_WHOSE: &str = "Couldn’t tell whose sign-in it is";
-
-pub(crate) const COULD_NOT_CLEAN_UP: &str = "Couldn’t clean up the sign-in file";
-
-pub(crate) const COULD_NOT_CHANGE_WARM: &str = "Couldn’t change which accounts are warmed up";
-
-pub(crate) const COULD_NOT_UNINSTALL: &str = "Couldn’t uninstall Pitboard";
-
-pub(crate) fn could_not_warm(label: &str) -> String {
-    format!("Couldn’t warm up {label}")
-}
-
-pub(crate) const COULD_NOT_READ_USAGE: &str = "Couldn’t read usage";
 
 pub(crate) const LAST_MEASURED: &str = "The numbers shown are the last ones measured.";
 
@@ -140,6 +150,7 @@ pub(crate) fn cancel_switch(os: Os, asks: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pitboard_core::provider::ProviderId;
 
     #[test]
     fn what_is_left_of_an_app_that_quit_is_quit_in_task_manager_on_windows() {
@@ -155,39 +166,89 @@ mod tests {
         );
     }
 
-    // What a failure is titled, by what failed, pinned once.
+    // What a failure is titled, by what was being done, pinned once.
     #[test]
     fn a_failure_is_titled_in_these_words() {
-        assert_eq!(
-            NOT_KNOWN_HOW_IT_WENT,
-            "Pitboard stopped before it could say how this went. Refresh to see where things \
-             stand."
-        );
-        assert_eq!(could_not_switch("work"), "Couldn’t switch to work");
-        assert_eq!(COULD_NOT_CANCEL, "Couldn’t cancel the switch");
-        assert_eq!(could_not_sign_in(Some("work")), "Couldn’t sign in to work");
-        assert_eq!(could_not_sign_in(None), "Couldn’t add the account");
-        assert_eq!(could_not_remove("work"), "Couldn’t remove work");
-        assert_eq!(could_not_rename("work"), "Couldn’t rename work");
-        assert_eq!(
-            COULD_NOT_UPDATE_CONFIG,
-            "Couldn’t update Claude Code’s config"
-        );
-        assert_eq!(COULD_NOT_TELL_WHOSE, "Couldn’t tell whose sign-in it is");
-        assert_eq!(COULD_NOT_CLEAN_UP, "Couldn’t clean up the sign-in file");
-        assert_eq!(
-            COULD_NOT_CHANGE_WARM,
-            "Couldn’t change which accounts are warmed up"
-        );
-        assert_eq!(could_not_warm("work"), "Couldn’t warm up work");
-        assert_eq!(COULD_NOT_READ_USAGE, "Couldn’t read usage");
+        let work = || Key::new(ProviderId::Claude, "work");
+        for (doing, said) in [
+            (Doing::Switch { account: work() }, "Couldn’t switch to work"),
+            (Doing::CancelSwitch, "Couldn’t cancel the switch"),
+            (
+                Doing::SignIn {
+                    again: Some("work".into()),
+                },
+                "Couldn’t sign in to work",
+            ),
+            (Doing::SignIn { again: None }, "Couldn’t add the account"),
+            (Doing::Remove { account: work() }, "Couldn’t remove work"),
+            (Doing::Rename { account: work() }, "Couldn’t rename work"),
+            (Doing::UpdateConfig, "Couldn’t update Claude Code’s config"),
+            (Doing::TellWhose, "Couldn’t tell whose sign-in it is"),
+            (Doing::CleanUp, "Couldn’t clean up the sign-in file"),
+            (
+                Doing::ChangeWarm,
+                "Couldn’t change which accounts are warmed up",
+            ),
+            (Doing::Uninstall, "Couldn’t uninstall Pitboard"),
+            (Doing::Warm { account: work() }, "Couldn’t warm up work"),
+            (Doing::ReadUsage, "Couldn’t read usage"),
+        ] {
+            assert_eq!(could_not(&doing), said, "{doing:?}");
+        }
+    }
+
+    // Why, by its cause: what to do once an app has quit follows what was being done.
+    #[test]
+    fn a_failure_says_why_in_these_words() {
+        let switch = Doing::Switch {
+            account: Key::new(ProviderId::Codex, "work"),
+        };
+        let add = Doing::SignIn { again: None };
+        let chatgpt = || "ChatGPT".to_owned();
+        for (doing, cause, said) in [
+            (
+                &add,
+                Cause::Refused {
+                    message: "The sign-in didn’t finish.".into(),
+                },
+                "The sign-in didn’t finish.",
+            ),
+            (
+                &switch,
+                Cause::StillOpen { app: chatgpt() },
+                "ChatGPT is still open, so nothing has changed. Quit it, then switch again.",
+            ),
+            (
+                &add,
+                Cause::StillOpen { app: chatgpt() },
+                "ChatGPT is still open, so nothing has changed. Quit it, then try again.",
+            ),
+            (
+                &add,
+                Cause::PartStillRunning { app: chatgpt() },
+                "Part of ChatGPT is still running after it quit, so nothing has changed. Wait \
+                 until it ends, or quit it in Activity Monitor, then try again.",
+            ),
+            (
+                &add,
+                Cause::ProgramMissing {
+                    tool: ProviderId::Claude,
+                },
+                "Pitboard can’t find Claude Code on this Mac. Adding a Claude Code account runs \
+                 Claude Code’s own sign-in. Install it, then come back to this window.",
+            ),
+            (
+                &switch,
+                Cause::NotKnownHowItWent,
+                "Pitboard stopped before it could say how this went. Refresh to see where \
+                 things stand.",
+            ),
+        ] {
+            assert_eq!(why_not(Os::MacOs, doing, &cause), said, "{cause:?}");
+        }
         assert_eq!(
             LAST_MEASURED,
             "The numbers shown are the last ones measured."
-        );
-        assert_eq!(
-            still_open("ChatGPT", "switch again"),
-            "ChatGPT is still open, so nothing has changed. Quit it, then switch again."
         );
     }
 }

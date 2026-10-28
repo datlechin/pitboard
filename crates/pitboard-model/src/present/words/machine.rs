@@ -388,9 +388,9 @@ fn readable(code: &str) -> String {
 mod tests {
     use super::*;
     use crate::present::words::{
-        ACCOUNT, CANCELLED, CLEAR, COULD_NOT_UNINSTALL, DOWNLOADED, OPEN, add_a_second,
-        cannot_open_link, checking, could_not_read_accounts, no_link, no_site_account,
-        open_in_browser, open_link_as, quit_with_downloads, switch_button, try_again, window_open,
+        ACCOUNT, CANCELLED, CLEAR, DOWNLOADED, OPEN, add_a_second, cannot_open_link, checking,
+        could_not_read_accounts, no_link, no_site_account, open_in_browser, open_link_as,
+        quit_with_downloads, switch_button, try_again, window_open,
     };
 
     /// A `pitboard` installed apart from the app is updated the way it was installed, and none
@@ -653,7 +653,6 @@ mod tests {
         );
         assert_eq!(UNINSTALL, "Uninstall");
         assert_eq!(UNINSTALLING, "Uninstalling Pitboard…");
-        assert_eq!(COULD_NOT_UNINSTALL, "Couldn’t uninstall Pitboard");
         assert_eq!(KEPT_ITS_FOLDER, "Pitboard couldn’t remove everything");
         assert_eq!(folder_kept(crate::Uninstalled::Removed), None);
         assert_eq!(

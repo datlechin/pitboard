@@ -217,7 +217,9 @@ pub(crate) fn answers(seen: &Seen) -> Vec<OutsideAnswer> {
                 Answered::Replace { label } => (false, words::open_pitboard_to_replace(label)),
                 Answered::Asking => (false, words::QUESTION_OPEN.into()),
                 Answered::Uninstalling => (false, words::BEING_UNINSTALLED.into()),
-                Answered::Failed { title } => (false, words::failed_outside(title)),
+                Answered::Failed { doing } => {
+                    (false, words::failed_outside(&words::could_not(doing)))
+                }
             };
             OutsideAnswer {
                 request: *request,

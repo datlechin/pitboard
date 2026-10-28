@@ -57,8 +57,13 @@ pub(crate) fn follows(adoption: &pitboard_core::provider::Adoption) -> String {
         Adoption::RestartRequired { program, .. } => {
             format!("Restart any running {program} for this to take effect.")
         }
-        Adoption::NextOpen { app } => format!("{app} opens signed in to it."),
+        Adoption::NextOpen { app } => opens_signed_in(app),
     }
+}
+
+// What the app a switch closed holds once it is opened again.
+pub(crate) fn opens_signed_in(app: &str) -> String {
+    format!("{app} opens signed in to it.")
 }
 
 /// What a switch means for sessions of a tool that never picks one up by itself. Said of any
@@ -556,6 +561,10 @@ mod tests {
                 file: "/Users/x/.claude/.credentials.json".into()
             }),
             "Sessions already running keep their account until they’re started again."
+        );
+        assert_eq!(
+            follows(&Adoption::NextOpen { app: "Claude" }),
+            "Claude opens signed in to it."
         );
     }
 

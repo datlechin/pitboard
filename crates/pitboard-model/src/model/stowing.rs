@@ -5,7 +5,7 @@
 use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{claude, refusal, warned, warning};
-use super::{Intent, Sheet};
+use super::{Doing, Intent, Sheet};
 use crate::Held;
 use crate::present::Severity;
 use crate::present::words;
@@ -225,7 +225,7 @@ fn what_stops_it_is_said_in_the_sheet() {
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, words::COULD_NOT_TELL_WHOSE);
+    assert_eq!(failure.title, words::could_not(&Doing::TellWhose));
     assert!(!shown.stow_text.expect("still up").can_confirm);
 
     machine.leftover = Ok(Some(left(Foreseen::Kept(parked_now("work")))));
@@ -244,7 +244,7 @@ fn what_stops_it_is_said_in_the_sheet() {
     let shown = model.shown();
     assert_eq!(shown.sheet, Some(Sheet::Stow));
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, words::COULD_NOT_CLEAN_UP);
+    assert_eq!(failure.title, words::could_not(&Doing::CleanUp));
     assert_eq!(model.sheet_failure_code(), Some("left_login_changed"));
     assert!(!shown.stow_text.expect("still up").saving);
 }
@@ -311,6 +311,6 @@ fn putting_away_that_came_to_nothing_is_said_in_its_sheet() {
 
     let shown = model.shown();
     let failure = shown.sheet_failure.expect("said in the sheet");
-    assert_eq!(failure.title, words::COULD_NOT_CLEAN_UP);
+    assert_eq!(failure.title, words::could_not(&Doing::CleanUp));
     assert!(!shown.stow_text.expect("still up").saving);
 }

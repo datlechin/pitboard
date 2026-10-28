@@ -455,6 +455,10 @@ keeps it is in the header of the module named.
   of the glance and of a request from outside. The one conversion out of the core's
   `non_exhaustive` `ProviderId`, into `Tool`, is the model's only arm for a tool it does not
   know (`every_tool_the_core_knows_is_one_the_apps_name`).
+- `State` words nothing itself and imports nothing of `present::words`: a failure is what was
+  being done and why, and a switch's or a sign-in's notice what it did, which `present` words
+  for the system it shows on (`Failure`'s `Doing` and `Cause`, `LastSwitch`'s `SignedIn` and
+  `Opens`). A refusal of the core's is worded once, where `launch.rs` takes it.
 - One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`).

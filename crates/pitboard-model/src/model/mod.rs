@@ -506,13 +506,31 @@ pub(crate) struct LastSwitch {
     // when sessions already open will have picked it up, for a tool that follows by itself
     pub follows_at: Option<i64>,
     pub restart: Option<RestartNeeded>,
-    // what a sign-in that replaced the account's login in use said, since no switch did
-    pub said: Option<String>,
+    // a sign-in that replaced the account's login in use, since no switch did
+    pub said: Option<SignedIn>,
     pub warnings: Vec<Warning>,
-    // For a tool whose app holds the login from when it is next opened: that, as a sentence.
-    pub opens: Option<String>,
+    // for a tool whose app holds the login from when it is next opened
+    pub opens: Option<Opens>,
     // where switching by itself made it
     pub back: Option<Back>,
+}
+
+// A sign-in that put `label` in use: `again` where it was added already, `in_its_app` where the
+// tool's app signed in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SignedIn {
+    pub label: String,
+    pub again: bool,
+    pub in_its_app: bool,
+}
+
+// What put the account in that app: a switch that closed it, or a sign-in in it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Opens {
+    // a switch, which closed `app` for it
+    Switched { app: &'static str },
+    // a sign-in in the app to an account it did not have in use before
+    SignedIn(SignedIn),
 }
 
 // The account a switch by itself left, which Switch Back puts back in use.
@@ -527,13 +545,45 @@ pub(crate) struct Back {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Failure {
     pub id: u64,
-    // what was being done, as an alert's title says it: "Couldn’t switch to personal"
-    pub title: String,
-    pub message: String,
+    pub doing: Doing,
+    pub cause: Cause,
     pub code: Option<String>,
     pub warnings: Vec<Warning>,
     // the account its next step is for
     pub account: Option<Key>,
+}
+
+// What was being done when something did not happen, which titles what `present` says of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Doing {
+    Switch { account: Key },
+    CancelSwitch,
+    // `again`: the account signed in to again, or none for a new one
+    SignIn { again: Option<String> },
+    Remove { account: Key },
+    Rename { account: Key },
+    UpdateConfig,
+    TellWhose,
+    CleanUp,
+    ChangeWarm,
+    Uninstall,
+    Warm { account: Key },
+    ReadUsage,
+}
+
+// Why it did not happen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Cause {
+    // the core's refusal, in the app's words, as the launch boundary worded it
+    Refused { message: String },
+    // the app holding the tool's login, as a person knows it, did not quit when asked
+    StillOpen { app: String },
+    // it quit, and part of it is still running
+    PartStillRunning { app: String },
+    // the core found no program for the tool
+    ProgramMissing { tool: ProviderId },
+    // the job came to nothing, so how it went is not known
+    NotKnownHowItWent,
 }
 
 // What the model reads afresh each time an app shows it.

@@ -4,7 +4,7 @@ use super::state::Job;
 use super::testing::machine::{Hand, Stub, any_read};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CHATGPT, chatgpt_holding, codex, refusal, status, switched};
-use super::{Intent, OutsideAnswer, OutsideAsk};
+use super::{Doing, Intent, OutsideAnswer, OutsideAsk};
 use crate::AccountKey;
 use crate::Tool;
 use crate::present::testing::{LimitExt, account, unplaced, window};
@@ -424,7 +424,9 @@ fn a_switch_from_outside_whose_app_stays_open_answers_that_it_failed_and_shows_n
         [OutsideAnswer {
             request: 6,
             done: false,
-            said: words::failed_outside(&words::could_not_switch("spare")),
+            said: words::failed_outside(&words::could_not(&Doing::Switch {
+                account: Key::new(ProviderId::Codex, "spare")
+            })),
             question: None,
         }]
     );
@@ -463,7 +465,9 @@ fn a_switch_from_outside_the_core_refuses_says_only_that_it_failed_and_shows_no_
     });
     model.run(&mut machine);
     assert_eq!(model.shown().failure_alert, None);
-    let said = words::failed_outside(&words::could_not_switch("personal"));
+    let said = words::failed_outside(&words::could_not(&Doing::Switch {
+        account: Key::new(ProviderId::Claude, "personal"),
+    }));
     assert!(!said.contains('@') && !said.contains('/'), "{said}");
     assert_eq!(
         answers(&model),
@@ -495,7 +499,7 @@ fn a_refresh_from_outside_that_fails_says_only_that_it_failed() {
         [OutsideAnswer {
             request: 6,
             done: false,
-            said: words::failed_outside(words::COULD_NOT_READ_USAGE),
+            said: words::failed_outside(&words::could_not(&Doing::ReadUsage)),
             question: None,
         }]
     );
@@ -586,7 +590,7 @@ fn a_switch_from_outside_before_a_first_read_that_fails_says_it_failed() {
         [OutsideAnswer {
             request: 4,
             done: false,
-            said: words::failed_outside(words::COULD_NOT_READ_USAGE),
+            said: words::failed_outside(&words::could_not(&Doing::ReadUsage)),
             question: None,
         }]
     );

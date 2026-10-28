@@ -7,7 +7,7 @@ use super::state::{Answer, Job};
 use super::testing::machine::{Hand, Stub};
 use super::testing::records::{Refusal, refusal, status};
 use super::testing::world::World;
-use super::{Intent, RunOutNotice};
+use super::{Doing, Intent, RunOutNotice};
 use crate::AccountKey;
 use crate::Tool;
 use crate::present::testing::{LimitExt, account, window};
@@ -332,7 +332,12 @@ fn asked_for_now_what_went_wrong_is_said_in_the_window() {
     assert_eq!(machine.warmed, [Some("claude/personal".to_owned())]);
     let shown = model.shown();
     let failure = model.state.presented.clone().expect("said");
-    assert_eq!(failure.title, words::could_not_warm("personal"));
+    assert_eq!(
+        failure.doing,
+        Doing::Warm {
+            account: Key::new(ProviderId::Claude, "personal")
+        }
+    );
     assert_eq!(failure.code.as_deref(), Some("warm_up_not_started"));
     assert!(machine.posted.is_empty());
     assert_eq!(
@@ -406,7 +411,7 @@ fn a_setting_that_cannot_be_read_is_said_and_a_change_to_it_refused() {
     });
     model.run(&mut machine);
     let failure = model.state.presented.clone().expect("refused");
-    assert_eq!(failure.title, words::COULD_NOT_CHANGE_WARM);
+    assert_eq!(failure.doing, Doing::ChangeWarm);
     assert_eq!(failure.code.as_deref(), Some("warm_setting_corrupt"));
 }
 

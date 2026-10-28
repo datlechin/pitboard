@@ -193,7 +193,7 @@ test("a switch's notice and the setup step say what present/notices.rs and setup
     '(true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),',
     '(false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),',
     'Some(tool) => format!("Add a second {tool} account"),',
-    'Adoption::NextOpen { app } => format!("{app} opens signed in to it."),',
+    'format!("{app} opens signed in to it.")',
     'titled(os, "Switch Back", "Switch back")',
   ])
     assert.ok(words.includes(said), said);

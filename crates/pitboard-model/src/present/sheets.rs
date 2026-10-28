@@ -464,20 +464,24 @@ fn quit_asks(seen: &Seen, question: &QuitQuestion, then: &After) -> Question {
     }
 }
 
-/// A failure's alert, gone once it is read: its title, its message with everything else it
-/// warned about, and what to do.
+/// A failure's alert, gone once it is read: what was being done, why it didn't happen with
+/// everything else it warned about, and what to do.
 pub(crate) fn failure_alert(os: Os, failure: &Failure) -> AlertText {
     AlertText {
         next: Some(next_of(os, failure)),
-        ..alert_of(&failure.title, &failure.message, &failure.warnings)
+        ..alert_of(
+            &words::could_not(&failure.doing),
+            &words::why_not(os, &failure.doing, &failure.cause),
+            &failure.warnings,
+        )
     }
 }
 
 pub(crate) fn failure_text(os: Os, failure: &Failure) -> FailureText {
     FailureText {
         id: failure.id,
-        title: failure.title.clone(),
-        message: failure.message.clone(),
+        title: words::could_not(&failure.doing),
+        message: words::why_not(os, &failure.doing, &failure.cause),
         warnings: failure
             .warnings
             .iter()
@@ -495,6 +499,7 @@ fn next_of(os: Os, failure: &Failure) -> NextStep {
 mod tests {
     use super::*;
     use crate::AccountKey;
+    use crate::model::{Cause, Doing};
 
     fn rename(label: &str) -> Sheet {
         Sheet::Rename {
@@ -946,8 +951,12 @@ mod tests {
             Os::MacOs,
             &Failure {
                 id: 1,
-                title: "Couldn’t switch to personal".into(),
-                message: "Nothing is parked.".into(),
+                doing: Doing::Switch {
+                    account: Key::new(ProviderId::Claude, "personal"),
+                },
+                cause: Cause::Refused {
+                    message: "Nothing is parked.".into(),
+                },
                 code: Some("nothing_parked".into()),
                 account: None,
                 warnings: vec![crate::Warning {

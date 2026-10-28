@@ -1,8 +1,8 @@
 //! Uninstall Pitboard…, and how removing Pitboard from this machine goes once it is asked.
 
 use super::{Choice, ItemOffer, Question, Seen, words};
-use crate::model::Intent;
 use crate::model::state::Removing;
+use crate::model::{Doing, Intent};
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum RemovalShown {
@@ -52,7 +52,7 @@ pub(crate) fn removal(seen: &Seen) -> Option<RemovalShown> {
             },
         },
         Removing::Lost => RemovalShown::Stopped {
-            title: words::COULD_NOT_UNINSTALL.into(),
+            title: words::could_not(&Doing::Uninstall),
             line: words::UNINSTALL_NOT_KNOWN.into(),
             again: again(seen),
         },
