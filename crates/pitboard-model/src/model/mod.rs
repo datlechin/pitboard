@@ -209,16 +209,17 @@ pub struct EarlierPreferences {
 /// Something the person or the system asked the model for.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Intent {
-    /// Start what runs by itself: a read now and every five minutes, a look every two seconds
-    /// for a change made somewhere else, which reads what is already known, and the minute
-    /// tick; and read what the model keeps in Pitboard's directory, the record of what was
-    /// told. It also repairs, once a launch, a daily renewal schedule an app up to 0.3.0
-    /// wrote, which runs that app and renews nothing: where this home's schedule is such a
-    /// one, the core writes it again in the machine's own scheduler, as `pitboard schedule
-    /// install` would, to run the command line inside this copy, and logs the repair. That
-    /// changes the machine, so only the app sends this, over the home it serves, and a test
-    /// only over a scratch home. Until an app sends this, nothing runs by itself. Sent again,
-    /// it starts nothing more.
+    /// Start what runs by itself: a read now and every five minutes; a look now for a change
+    /// made somewhere else, which reads what is already known, and again each time the watch
+    /// on Pitboard's directory hears the account index or the readings written, or every two
+    /// seconds where nothing watches them; and the minute tick. Read what the model keeps in
+    /// Pitboard's directory, the record of what was told. It also repairs, once a launch, a
+    /// daily renewal schedule an app up to 0.3.0 wrote, which runs that app and renews
+    /// nothing: where this home's schedule is such a one, the core writes it again in the
+    /// machine's own scheduler, as `pitboard schedule install` would, to run the command line
+    /// inside this copy, and logs the repair. That changes the machine, so only the app sends
+    /// this, over the home it serves, and a test only over a scratch home. Until an app sends
+    /// this, nothing runs by itself. Sent again, it starts nothing more.
     Start,
     /// The machine woke from sleep: numbers read before it slept say nothing about now. Every
     /// front sends it each time its system wakes: the model's timers count only the time the

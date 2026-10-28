@@ -413,8 +413,9 @@ keeps it is in the header of the module named.
   (`a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all`).
 - The model's state belongs to its actor thread, and `State::apply` does no I/O. A switch, and
   every other change the app makes to the index, is claimed there as its intent is taken and
-  held until the read after it, so one runs at a time and the poll leaves the index alone
-  (`model/switching.rs`, `model/changing.rs`).
+  held until the read after it, so one runs at a time and the look the watch asks leaves the
+  index alone until then (`model/switching.rs`, `model/changing.rs`,
+  `a_write_heard_during_a_change_of_the_apps_own_is_looked_at_once_it_is_over`).
 - An app is quit only when the person says so, never by force, within 30 seconds, and
   Pitboard opens again only the copy it quit: Claude only where its folder is whole
   (`Pitboard::whole`). Changes of a tool whose login is its app's files never overlap
@@ -441,10 +442,10 @@ keeps it is in the header of the module named.
   config is refused where another account is in use by then, and **Put Away** puts away only
   the file its sheet looked at (`model/changing.rs`, `model/stowing.rs`).
 - Uninstalling from the app stops what runs by itself and closes every account window, and asks
-  the core only once nothing that writes Pitboard's directory is under way, holding the app's
-  `app.lock` until the directory goes. Nothing writes it after, and a refusal before anything
-  went starts the model again (`model/removing.rs`,
-  `after_uninstall_nothing_writes_pitboards_directory_again`).
+  the core only once nothing that writes Pitboard's directory is under way and its watch on the
+  directory has let go of it, holding the app's `app.lock` until the directory goes. Nothing
+  writes it after, and a refusal before anything went starts the model again
+  (`model/removing.rs`, `after_uninstall_nothing_writes_pitboards_directory_again`).
 - The widget feed, the glance widgets and intents read, names each account by an id derived
   from its own, never by an email, a token, a uuid, a path or a notice's lines. The model hands
   it to the app before the snapshot it changed with, writes it only where

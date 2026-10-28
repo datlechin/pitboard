@@ -18,6 +18,7 @@ use pitboard_core::app::AppContext;
 use pitboard_core::context::Environment;
 use pitboard_core::duty::autoswitch::{Auto, Blind, Look, Skip, Threshold};
 use pitboard_core::duty::warm::{Overview, Range};
+use pitboard_core::duty::written::Written;
 use pitboard_core::provider::{self, ProviderId};
 use pitboard_core::service::{self, Changing};
 use pitboard_core::state::Key;
@@ -1184,11 +1185,12 @@ impl AppCore {
     /// When Pitboard's account index last changed, in epoch milliseconds, or 0 when there is
     /// none, or where nothing may be read here.
     ///
-    /// One stat of one file, so the model asks often. A switch typed in a terminal used to
-    /// leave the menu bar naming the account the person had just stopped using, for as
-    /// long as five minutes, with a button offering a switch that had already happened.
-    /// The model polls this, and when it moves, reads `status_offline`: no network, and no
-    /// keychain unless an interrupted switch is waiting.
+    /// One stat of one file. A switch typed in a terminal used to leave the menu bar naming
+    /// the account the person had just stopped using, for as long as five minutes, with a
+    /// button offering a switch that had already happened. The model looks at this as the
+    /// watch on Pitboard's directory hears a write ([`AppCore::written`]), and when it moves,
+    /// reads `status_offline`: no network, and no keychain unless an interrupted switch is
+    /// waiting.
     pub(crate) fn changed_at(&self) -> i64 {
         self.readable().map_or(0, |made| made.core.changed_at())
     }
@@ -1198,13 +1200,19 @@ impl AppCore {
     ///
     /// Every read records its answers, and every session's status line what that session has
     /// seen where it moves a limit an answer gave, so what is remembered is the newest any
-    /// front end has. The model polls this beside `changed_at`, and when it moves, takes the
+    /// front end has. The model looks at this beside `changed_at`, and when it moves, takes the
     /// numbers from `status_offline`: no network, and no keychain unless an interrupted
     /// switch is waiting. Only the numbers: a reading moving says nothing about who is signed
     /// in, which is `changed_at`'s to say.
     pub(crate) fn readings_changed_at(&self) -> i64 {
         self.readable()
             .map_or(0, |made| made.core.readings_changed_at())
+    }
+
+    /// Pitboard's directory watched for the next write to the account index or the readings,
+    /// or where nothing may be read here ([`AppCore::readable`]), the refusal.
+    pub(crate) fn written(&self) -> Result<Written, PitboardError> {
+        Ok(self.readable()?.core.written())
     }
 
     /// The same report without asking anyone: the last numbers Pitboard measured, and whose

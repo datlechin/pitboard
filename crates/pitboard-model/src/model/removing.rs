@@ -1,7 +1,7 @@
 //! Uninstalling Pitboard from the app, driven through `State::apply` by hand.
 
 use super::state::{After, Answer, Job};
-use super::testing::machine::{Hand, Stub, any_read, desktop_machine};
+use super::testing::machine::{Hand, Stub, a_watch, any_read, desktop_machine};
 use super::testing::platform::StandInApps;
 use super::testing::records::{CLAUDE, DANA, refusal, status};
 use super::{Doing, Intent, OutsideAnswer, OutsideAsk, Place};
@@ -304,6 +304,11 @@ fn a_refused_uninstall_says_why_and_pitboard_goes_on() {
     model.later(Duration::from_secs(300));
     model.tick();
     assert_eq!(model.count(any_read), reads + 1);
+    assert_eq!(
+        model.count(a_watch),
+        2,
+        "the watch the uninstall stopped, begun again"
+    );
 }
 
 // A widget or a shortcut waits on its request's answer.

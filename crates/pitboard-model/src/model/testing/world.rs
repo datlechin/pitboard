@@ -93,6 +93,14 @@ impl World {
         }
     }
 
+    /// The same, on a machine where nothing watches Pitboard's directory: the model looks at
+    /// it every `look_every`, as it does on a drive no watch hears every write on.
+    pub(crate) fn unwatched(name: &str) -> World {
+        let world = World::new(name);
+        world.host.without_a_watch();
+        world
+    }
+
     pub(crate) fn warming_by(&mut self, script: Arc<dyn pitboard_core::testing::WarmScript>) {
         self.ctx = self.ctx.clone().with_warm_script(script);
     }

@@ -29,8 +29,9 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 
-/// Looks every few milliseconds, reads by itself only when started, once, asks whether to
-/// switch by itself only after a read or a change, and gives an app a moment to quit.
+/// Looks every few milliseconds where nothing watches Pitboard's directory, reads by itself
+/// only when started, once, asks whether to switch by itself only after a read or a change,
+/// and gives an app a moment to quit.
 const QUICK: Cadence = Cadence {
     look_every: Duration::from_millis(10),
     read_every: Duration::from_secs(3_600),
@@ -322,6 +323,34 @@ fn a_change_another_front_end_makes_is_told_without_asking_anyone() {
     let asked = world.api.calls();
     told.until("the rename", shows("office"));
     assert_eq!(world.api.calls(), asked, "nobody was asked");
+    model.shutdown();
+}
+
+/// A change made elsewhere is shown as it is written, with the look's timer an hour away:
+/// the watch on Pitboard's directory hears the write and asks the look.
+#[test]
+fn a_change_made_elsewhere_is_shown_without_waiting_for_a_look() {
+    let world = World::new("watched");
+    world.enrolled("work", "here", 10.0);
+    let told = Arc::new(Told::default());
+    let model = PitboardModel::over(
+        world.core(),
+        Arc::clone(&told) as Arc<dyn Listener>,
+        platform(StandInApps::new(&[], true)),
+        Cadence {
+            look_every: Duration::from_secs(3_600),
+            ..QUICK
+        },
+    );
+    model.send(Intent::Start);
+    told.until("the account read", shows("work"));
+
+    world
+        .elsewhere()
+        .rename("work", "office")
+        .expect("renamed in a terminal");
+    world.index_written_later(5);
+    told.until("the rename", shows("office"));
     model.shutdown();
 }
 
@@ -1564,7 +1593,8 @@ fn read_after<'a>(want: &'a [&'a str]) -> impl Fn(&[Snapshot]) -> bool + 'a {
 }
 
 // The look reads the index as `change` wrote it, and lands before the read after the change,
-// once what is told says it has `answered`.
+// once what is told says it has `answered`. The look held is the poll's own, on a machine
+// whose world nothing watches (`World::unwatched`).
 fn with_a_look_held(
     model: &PitboardModel,
     told: &Told,
@@ -1587,7 +1617,7 @@ fn closed_or_over(told: &[Snapshot]) -> bool {
 
 #[test]
 fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
-    let world = World::new("rename-looked-at");
+    let world = World::unwatched("rename-looked-at");
     world.enrolled("work", "here", 10.0);
     world.index_written_earlier(60);
     let told = Arc::new(Told::default());
@@ -1615,7 +1645,7 @@ fn a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile() {
 
 #[test]
 fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() {
-    let world = World::new("name-looked-at");
+    let world = World::unwatched("name-looked-at");
     // Nothing enrolled, so there is no account index until the enrolment writes one.
     world.signed_in("here", 10.0);
     let told = Arc::new(Told::default());
@@ -1635,7 +1665,7 @@ fn adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile() 
 
 #[test]
 fn a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile() {
-    let mut world = World::new("sign-in-looked-at");
+    let mut world = World::unwatched("sign-in-looked-at");
     world.enrolled("work", "here", 10.0);
     let _claude = world.claude_stand_in();
     world.index_written_earlier(60);

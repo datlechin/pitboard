@@ -301,13 +301,13 @@ fn an_account_turned_on_is_warmed_up_as_the_app_starts() {
             .iter()
             .any(|account| account.title == "personal" && account.on)
     );
-    let log = launched.core.log(20);
-    assert!(
-        log.iter().any(|change| change.verb == "warm-up"
-            && change.subject == "personal"
-            && change.outcome == "ok"),
-        "{log:?}"
-    );
+    // The row says it runs as soon as the core's files do, which a look the warm-up's own
+    // readings wake can show before the warm-up has ended and been logged.
+    eventually("the warm-up logged", || {
+        launched.core.log(20).iter().any(|change| {
+            change.verb == "warm-up" && change.subject == "personal" && change.outcome == "ok"
+        })
+    });
     model.shutdown();
 }
 

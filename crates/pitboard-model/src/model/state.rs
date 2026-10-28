@@ -19,6 +19,12 @@
 //! landed, as the Swift model's `switching` stayed set until its read returned. Meanwhile the
 //! change poll leaves the account index alone: the change is the switch's own.
 //!
+//! The poll is a look at when the account index and the readings were last written, asked as
+//! the watch on Pitboard's directory hears a write to either, on a thread of its own, and
+//! every few seconds only once it says nothing watches them. A write heard while a look is
+//! under way, or while a change of this app's own holds the index, is looked at once that is
+//! over.
+//!
 //! Every other change this app makes to the account index holds it the same way, from the
 //! moment it is asked for, a sign-in's from the moment it is told to enrol, and a change of an
 //! app's login once the app is seen closed, until the read after it is over or the change has
@@ -70,6 +76,7 @@ use std::time::Duration;
 /// How often the model does what it does by itself, and how long it waits for an app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Cadence {
+    /// How often the poll looks where nothing watches Pitboard's directory.
     pub(crate) look_every: Duration,
     pub(crate) read_every: Duration,
     /// How often, with switching Claude Code by itself on, it asks the core's look though
@@ -157,6 +164,10 @@ pub(crate) enum Job {
     ReadOffline { why: Why },
     /// When the account index and the usage readings were last written.
     Look,
+    /// Watch Pitboard's directory, on a thread of its own, until the model stops: each write
+    /// to the account index or the readings is said as `Answer::Written`, and where nothing
+    /// watches them `Answer::Unwatched` is said once, until a watch begins again.
+    Watch,
     /// Which tools' programs were found. Its own lane, so it never waits behind a read on
     /// the network, and a read can wait for it.
     AskInstalled,
@@ -272,7 +283,8 @@ pub(crate) enum Job {
     ReadLog { limit: u32 },
     /// Look for the `pitboard` a terminal would run.
     FindCommandLine,
-    /// Remove Pitboard from this machine, with the app's own hold on its directory.
+    /// Remove Pitboard from this machine, with the app's own hold on its directory, once the
+    /// watch on the directory has let go of it.
     Uninstall,
     /// Keep the glance in the file the app named for it.
     KeepGlance { text: String, reload: bool },
@@ -397,6 +409,11 @@ pub(crate) enum Answer {
         /// When the usage readings were last written, in epoch milliseconds.
         measured: i64,
     },
+    /// The watch heard a write to the account index or the readings, or began, so that one
+    /// may have gone unheard before it.
+    Written,
+    /// Nothing watches the account index and the readings, until the watch says otherwise.
+    Unwatched,
     Installed {
         tools: Vec<ProviderId>,
     },
@@ -612,6 +629,8 @@ impl Answer {
             | Answer::Uninstalled(_) => true,
             Answer::Lost(job) => job.writes(),
             Answer::Installed { .. }
+            | Answer::Written
+            | Answer::Unwatched
             | Answer::Held { .. }
             | Answer::Quit { .. }
             | Answer::Opened { .. }
@@ -1012,7 +1031,14 @@ pub(crate) struct State {
     changed_at: Option<i64>,
     /// The same for the usage readings, which every session's status line records into.
     readings_at: Option<i64>,
+    /// The look, due where nothing watches Pitboard's directory, every `look_every`, or where
+    /// a write heard is yet to be looked at.
     look: Timer,
+    /// Whether the watch said nothing watches Pitboard's directory.
+    unwatched: bool,
+    /// Whether a write was heard, or a look was put off by a change of this app's own, that no
+    /// look has read since.
+    unlooked: bool,
     timed_read: Timer,
     /// The core's look at whether to switch Claude Code by itself, `decide_every` after the
     /// last one ended, while switching by itself is on.
@@ -1172,6 +1198,8 @@ impl State {
             changed_at: None,
             readings_at: None,
             look: Timer::Off,
+            unwatched: false,
+            unlooked: false,
             timed_read: Timer::Off,
             decide: Timer::Off,
             switching: None,
@@ -1851,7 +1879,7 @@ impl State {
                 self.glancing.revision += 1;
             }
             Err(Some(error)) => {
-                self.resume(now);
+                self.resume(now, jobs);
                 self.present(Refused::of(Doing::Uninstall, error));
             }
             Err(None) => self.removing = Some(Removing::Lost),
@@ -1867,13 +1895,15 @@ impl State {
         }
     }
 
-    // Uninstalling stopped before the core removed anything: what runs by itself runs again.
-    fn resume(&mut self, now: Now) {
+    // Uninstalling stopped before the core removed anything: what runs by itself runs again,
+    // the watch the uninstall stopped with it.
+    fn resume(&mut self, now: Now, jobs: &mut Vec<Job>) {
         self.removing = None;
         self.windows.close_all(false);
         if self.started {
             self.look = Timer::Due(now.running);
             self.timed_read = Timer::Due(now.running);
+            jobs.push(Job::Watch);
         }
         self.decide_later(now);
         self.warm_later(now);
@@ -2300,8 +2330,8 @@ impl State {
     }
 
     /// Starts what runs by itself: what the model keeps read, a read now and every few
-    /// minutes, and a look for changes made somewhere else now and every few seconds. Once: a
-    /// second start starts nothing.
+    /// minutes, a look for changes made somewhere else now, and the watch that asks the next.
+    /// Once: a second start starts nothing.
     fn start(&mut self, now: Now, jobs: &mut Vec<Job>) {
         if self.started {
             return;
@@ -2312,6 +2342,7 @@ impl State {
         // Once a launch, as the Swift model's init did: after that the schedule runs a command
         // line, or was never the app's to repair.
         jobs.push(Job::RepairSchedule);
+        jobs.push(Job::Watch);
         self.timed_read = Timer::Due(now.running);
         self.look = Timer::Due(now.running);
         self.tick = Timer::Due(now.running + self.cadence.tick_every);
@@ -2326,8 +2357,12 @@ impl State {
         if self.removing.is_some() {
             return;
         }
+        if self.started && self.unlooked && self.look != Timer::Running && !self.holds_index() {
+            self.look = Timer::Due(now.running);
+        }
         if matches!(self.look, Timer::Due(at) if at <= now.running) {
             self.look = Timer::Running;
+            self.unlooked = false;
             jobs.push(Job::Look);
         }
         if matches!(self.timed_read, Timer::Due(at) if at <= now.running) {
@@ -2923,8 +2958,29 @@ impl State {
         self.read_over(ticket.timed, now);
     }
 
+    // The next look is the watch's to ask, but where nothing watches.
     fn look_over(&mut self, now: Now) {
         if self.started {
+            self.look = if self.unwatched {
+                Timer::Due(now.running + self.cadence.look_every)
+            } else {
+                Timer::Off
+            };
+        }
+    }
+
+    /// The watch heard a write, or began: looked at once nothing holds the look back.
+    fn written(&mut self) {
+        self.unwatched = false;
+        if self.started && self.removing.is_none() {
+            self.unlooked = true;
+        }
+    }
+
+    /// Nothing watches Pitboard's directory: it is looked at every `look_every` instead.
+    fn unwatched(&mut self, now: Now) {
+        self.unwatched = true;
+        if self.started && self.removing.is_none() && self.look == Timer::Off {
             self.look = Timer::Due(now.running + self.cadence.look_every);
         }
     }
@@ -2949,6 +3005,8 @@ impl State {
             Answer::WarmedUp { asked, done } => self.warmed_up(asked, done, now, jobs),
             Answer::WarmSet { done } => self.warm_set(done, now, jobs),
             Answer::Looked { changed, measured } => self.looked(changed, measured, now, jobs),
+            Answer::Written => self.written(),
+            Answer::Unwatched => self.unwatched(now),
             Answer::Installed { mut tools } => {
                 let gone = self.gone_since_asked.take();
                 if let Some(gone) = gone {
@@ -3112,6 +3170,7 @@ impl State {
                 Job::Read { ticket, .. } => self.landed(ticket, now),
                 Job::ReadOffline { why } => self.known(why, None, now, jobs),
                 Job::Look => self.look_over(now),
+                Job::Watch => self.unwatched(now),
                 Job::AskInstalled => self.installed_over(now, jobs),
                 // As the Swift model took a holding it could not read: nothing holds it.
                 Job::Holding { account, then } => self.held(account, None, then, jobs),
@@ -3644,7 +3703,8 @@ impl State {
         // change. What changed meanwhile stays unseen until it is shown: a change that fails
         // reads nothing after it, and a switch that failed after finishing an interrupted
         // switch has still moved who is signed in.
-        if self.switching.is_some() || self.changing > 0 {
+        if self.holds_index() {
+            self.unlooked = true;
             self.look_over(now);
             return;
         }
@@ -3865,7 +3925,7 @@ impl State {
                 self.save_failed(from.as_ref(), failed(Doing::SignIn { again }));
             }
             After::Uninstall => {
-                self.resume(now);
+                self.resume(now, jobs);
                 self.present(failed(Doing::Uninstall));
             }
         }
@@ -4447,6 +4507,12 @@ impl State {
     /// One of this app's own changes to the account index is over, and no longer holds it.
     fn change_over(&mut self) {
         self.changing = self.changing.saturating_sub(1);
+    }
+
+    /// Whether a change of this app's own holds the account index, which the poll leaves
+    /// alone meanwhile.
+    fn holds_index(&self) -> bool {
+        self.switching.is_some() || self.changing > 0
     }
 
     /// Keeps what a change warned about to be said beside the read after it once that read is

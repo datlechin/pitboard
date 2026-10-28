@@ -410,6 +410,10 @@ impl Stub {
                 changed: self.changed,
                 measured: self.readings,
             },
+            // Nothing watches this machine's directory, so the look's own timer looks, which a
+            // test drives. The watch's thread says each write as it comes, which a test that
+            // watches hands on itself.
+            Job::Watch => Answer::Unwatched,
             Job::AskInstalled => Answer::Installed {
                 tools: self.found.clone(),
             },
@@ -897,6 +901,11 @@ pub(crate) fn installed_ask(job: &Job) -> bool {
 
 pub(crate) fn a_look(job: &Job) -> bool {
     matches!(job, Job::Look)
+}
+
+/// The watch on Pitboard's directory, which a test that watches takes and answers itself.
+pub(crate) fn a_watch(job: &Job) -> bool {
+    matches!(job, Job::Watch)
 }
 
 /// A look for changes or a read of either kind: what a test leaves waiting while it answers

@@ -24,6 +24,11 @@
 //! started can hold open long after it. Once the actor has gone, that lane stops every
 //! sign-in still under way, so each thread ends, and `PitboardModel::shutdown` waits until
 //! it has.
+//!
+//! The watch on Pitboard's directory has a thread of its own too, which waits for the next
+//! write to the account index or the readings and says each as it comes. It is stopped as the
+//! lanes go, which waits for nothing, and before an uninstall, which waits until it has let go
+//! of the directory.
 
 use super::advice::Told;
 use super::machine::Scheduled;
@@ -36,6 +41,7 @@ use super::{
 use crate::account_windows::records::{self, Records};
 use crate::{AppCore, Holding, Remedy, SignInSession};
 use pitboard_core::app::AppFile;
+use pitboard_core::duty::written::{Stop, Waited};
 use pitboard_core::provider::ProviderId;
 use pitboard_core::state::Key;
 use pitboard_core::switch::Naming;
@@ -63,6 +69,8 @@ pub(crate) enum Lane {
     Kept,
     /// Posting through the app's system's notifications.
     Notify,
+    /// The watch on Pitboard's directory's own thread.
+    Watch,
     /// Warming up accounts, which runs Claude Code for seconds, apart from every read and
     /// change.
     Warm,
@@ -111,6 +119,7 @@ impl Job {
             | Job::KeepGlance { .. }
             | Job::CheckShared { .. } => Lane::Kept,
             Job::Post { .. } => Lane::Notify,
+            Job::Watch => Lane::Watch,
         }
     }
 }
@@ -200,6 +209,7 @@ impl Lanes {
             quit_within: cadence.quit_within,
             quit_checked_every: cadence.quit_checked_every,
             sign_ins: Arc::default(),
+            watch: Watching::default(),
             #[cfg(test)]
             next_look: Arc::default(),
         });
@@ -233,9 +243,27 @@ impl Lanes {
             Lane::Notify => &self.notify,
             Lane::Warm => &self.warm,
             Lane::SignIn => return self.sign_in(job),
+            Lane::Watch => return self.watch(),
         };
         // A lane that has gone has nothing left to answer to.
         let _ = lane.send(job);
+    }
+
+    /// Starts the watch on a thread of its own, unless one is under way or the lanes have
+    /// gone. One the system cannot start comes to nothing.
+    fn watch(&self) {
+        if !self.worker.watch.begin() {
+            return;
+        }
+        let worker = Arc::clone(&self.worker);
+        let answers = self.answers.clone();
+        let started = std::thread::Builder::new()
+            .name("pitboard-watch".into())
+            .spawn(move || watching(&worker, &answers));
+        if started.is_err() {
+            self.worker.watch.end();
+            let _ = self.answers.send(Msg::Done(Answer::Lost(Job::Watch)));
+        }
     }
 
     /// Starts a sign-in on a thread of its own, or tells one whether to enrol.
@@ -279,6 +307,13 @@ impl Lanes {
             self.worker.sign_ins.end(id);
             let _ = self.answers.send(Msg::Done(Answer::Lost(lost)));
         }
+    }
+}
+
+// The actor has gone, and nothing is left to take what the watch hears.
+impl Drop for Lanes {
+    fn drop(&mut self) {
+        self.worker.watch.close();
     }
 }
 
@@ -387,6 +422,126 @@ fn signing_in(
         tell(Answer::SignInStopped { id });
     }
     worker.sign_ins.end(id);
+}
+
+/// The watch's own thread, as `Job::Watch` starts it: each write it hears is said, and where
+/// nothing is watched that is said once, until a watch begins again. A watch that stopped with
+/// a panic comes to nothing, which the model takes as nothing watched.
+fn watching(worker: &Worker, answers: &Sender<Msg>) {
+    let tell = |answer| answers.send(Msg::Done(answer)).is_ok();
+    let watched = catch_unwind(AssertUnwindSafe(|| {
+        let Ok(mut written) = worker.core.written() else {
+            tell(Answer::Unwatched);
+            return;
+        };
+        if !worker.watch.made(written.stop_handle()) {
+            return;
+        }
+        let mut unwatched = false;
+        loop {
+            let told = match written.wait(Duration::MAX) {
+                Waited::Written => {
+                    unwatched = false;
+                    tell(Answer::Written)
+                }
+                Waited::Unwatched if !unwatched => {
+                    unwatched = true;
+                    tell(Answer::Unwatched)
+                }
+                Waited::Unwatched | Waited::Elapsed => true,
+                Waited::Stopped => false,
+            };
+            if !told {
+                return;
+            }
+        }
+    }));
+    if watched.is_err() {
+        tell(Answer::Lost(Job::Watch));
+    }
+    worker.watch.end();
+}
+
+/// The watch on Pitboard's directory, which the lanes start and stop and its own thread runs.
+#[derive(Default)]
+pub(crate) struct Watching {
+    held: Mutex<WatchHeld>,
+    /// Told as its thread ends.
+    ended: Condvar,
+}
+
+#[derive(Default)]
+struct WatchHeld {
+    /// The lanes have gone: no watch begins, and the one under way stops.
+    closed: bool,
+    /// A thread is watching, or making its watch.
+    running: bool,
+    /// Asked to stop before its watch was made.
+    stopped: bool,
+    /// What stops its wait, once its watch is made.
+    stop: Option<Stop>,
+}
+
+impl Watching {
+    fn held(&self) -> MutexGuard<'_, WatchHeld> {
+        // Every change here is whole whenever the lock is let go.
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// A watch is to begin: false where one is under way or the lanes have gone.
+    fn begin(&self) -> bool {
+        let mut held = self.held();
+        if held.closed || held.running {
+            return false;
+        }
+        held.running = true;
+        held.stopped = false;
+        true
+    }
+
+    /// The thread has made its watch, which `stop` stops: false where it was stopped
+    /// meanwhile, when it is let go of at once.
+    fn made(&self, stop: Stop) -> bool {
+        let mut held = self.held();
+        if held.closed || held.stopped {
+            return false;
+        }
+        held.stop = Some(stop);
+        true
+    }
+
+    /// The thread has let go of its watch.
+    fn end(&self) {
+        let mut held = self.held();
+        held.running = false;
+        held.stop = None;
+        self.ended.notify_all();
+    }
+
+    /// Stops the watch, and returns once its thread has let go of Pitboard's directory.
+    fn stop(&self) {
+        let mut held = self.held();
+        held.stopped = true;
+        if let Some(stop) = held.stop.take() {
+            stop.stop();
+        }
+        drop(
+            self.ended
+                .wait_while(held, |held| held.running)
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+    }
+
+    /// The lanes have gone: the watch stops, waited for by nothing.
+    fn close(&self) {
+        let mut held = self.held();
+        held.closed = true;
+        if let Some(stop) = held.stop.take() {
+            stop.stop();
+        }
+    }
 }
 
 /// The sign-ins under way, by id, which the actor's jobs and each sign-in's own thread
@@ -540,6 +695,7 @@ pub(crate) struct Worker {
     pub(crate) quit_within: Duration,
     pub(crate) quit_checked_every: Duration,
     pub(crate) sign_ins: Arc<SignIns>,
+    pub(crate) watch: Watching,
     #[cfg(test)]
     pub(crate) next_look: Arc<NextLook>,
 }
@@ -828,6 +984,7 @@ impl Worker {
                 own: core.own_command_line(),
             },
             Job::Uninstall => {
+                self.watch.stop();
                 let done = core.uninstall();
                 if done.is_ok()
                     && let Some(path) = &self.widget_feed
@@ -860,8 +1017,8 @@ impl Worker {
                     Answer::Stopped
                 }
             }
-            // A sign-in runs on a thread of its own, and never here.
-            Job::SignIn { .. } | Job::SignInOver { .. } => Answer::Lost(job),
+            // A sign-in and the watch run on threads of their own, and never here.
+            Job::SignIn { .. } | Job::SignInOver { .. } | Job::Watch => Answer::Lost(job),
         }
     }
 }
@@ -1026,6 +1183,7 @@ mod tests {
             quit_within: Duration::from_millis(50),
             quit_checked_every: Duration::from_millis(5),
             sign_ins: Arc::default(),
+            watch: Watching::default(),
             next_look: Arc::default(),
         }
     }
