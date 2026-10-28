@@ -70,3 +70,39 @@ with Swift 6.4.
   read 15 October 2026. With `Instant` there, an app asked to quit just before a sleep would
   have had its 30 seconds used up by the time the machine woke. Microsoft's contract: no
   machine has been put to sleep during a quit yet.
+
+## Watching Pitboard's directory
+
+Measured on 29 October 2026 with notify 8.2.1, watching a folder alone, not what is below
+it, through the core's own `atomic::write` and `home::remove_all`, in a test run once and not
+kept. Read the same day in notify 8.2.1's source.
+
+- On macOS 27.0.1 (26A434, arm64), on APFS, FSEvents named each file by its path with every
+  link resolved: `/private/var/folders/…` for a folder watched as `/var/folders/…`. A replace
+  of `state.json` came as six events for the temporary, in two batches, and five for
+  `state.json`, the flags of each split into `Create`, `Modify(Name)`, `Modify(Data)` and
+  `Modify(Metadata)`, 11 to 24 ms after the write began. A replace of `usage.json` came 12 ms
+  after. A read of `state.json` came as nothing. The folder removed whole came as three events
+  for the folder itself, `Create`, `Remove` and `Modify(Metadata)`, 12 ms after, and none for
+  the files in it; the folder had been made 300 ms before the watch began.
+- In Docker Desktop 29.8.2 (Linux 7.0.14-linuxkit, aarch64), in `pitboard-linux-refactor:trixie`
+  (sha256:0e0944571e15…, from `rust:1.98.1-slim-trixie@sha256:4cd8294…`, Debian 13.7), alike
+  on the named volume's ext4, on a tmpfs and on the container's overlayfs, inotify told a
+  replace of `state.json` as `Create`, `Modify(Data)` and `Access(Close(Write))` of the
+  temporary, then `Modify(Name(From))` of it, `Modify(Name(To))` of `state.json` and
+  `Modify(Name(Both))` of the two, 0.7 to 12 ms after the write began, the flush included. Each
+  open came as `Access(Open)`: of the folder, by the write's sweep of temporaries and its flush
+  of the folder, and of `state.json`, by a read. The folder removed whole came as
+  `Remove(File)` of each file, then `Remove(Folder)` of the folder itself, within 1 ms.
+- So a watch takes a file by its name alone, takes no `Access` for a change, and ends at a
+  `Remove` or a `Modify(Name)` of the folder itself (`host/watch.rs`,
+  `a_named_file_is_heard_by_its_name_alone`, `a_read_is_not_a_write`,
+  `the_folder_going_ends_the_watch`).
+- notify's Windows backend tells no event as a watch ends: where the folder is gone, it and
+  every other error ReadDirectoryChangesW answers with stop the watch in silence
+  (`src/windows.rs:339-368`). Its server thread sends `MetaEvent::SingleWatchComplete` once it
+  has closed the folder's handle, to the channel `ReadDirectoryChangesWatcher::create` is
+  given, which `host/windows/watch.rs` reads as the end. It reads the entries of a buffer
+  without looking at the length the system gave (`_bytes_written`, `:333`, `:381-385`), so
+  what an overflow comes to is not known
+  ([Not measured](not-measured.md#watching-pitboards-directory)).

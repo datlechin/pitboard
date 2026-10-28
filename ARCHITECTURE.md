@@ -55,7 +55,8 @@ built with a `context::Context`:
     real login may be kept under, and a token's claims, never checked.
 - `holder.rs`: what keeps a tool's login in memory while it runs.
 - `host/`: the machine behind one seam, the `Host` trait a test replaces with `memory.rs`, and
-  the `fs`, `proc` and `user` functions each system answers.
+  the `fs`, `proc` and `user` functions each system answers. `watch.rs` watches one folder
+  through each system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
     launchd, SQLite and managed preferences; `/proc` and systemd; and what both POSIX systems
     share.
@@ -89,7 +90,8 @@ built with a `context::Context`:
     crash matrix and the changes' tests.
 - `lock.rs`: Claude Code's locks around its login, taken as it takes them.
 - `duty/`: what a front end does by itself: how often (`cadence.rs`), what it tried and said
-  (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`) and the warm-up (`warm/`).
+  (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`), the warm-up (`warm/`), and when
+  the account index or the readings were written (`written.rs`).
 - `usage/`: what is left: one reading per account (`readings.rs`), pace (`pace.rs`) and how
   often Anthropic is asked (`budget.rs`).
 - `status.rs`, `statusline.rs`, `sessions.rs`, `schedule.rs`, `watch_service.rs`: the commands

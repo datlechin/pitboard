@@ -13,7 +13,8 @@
 //! every other change to the disk, each taking the [`Permit`] the one gate every change
 //! passes makes; asking whether a process is still alive; naming the person signed in.
 //! [`login_path`] is one too: the `PATH` the person's login shell builds, which an app the
-//! system started does not have.
+//! system started does not have. So is [`watch`]: a watch on one folder, through the system's
+//! own notice of a change, where the host says one hears every write ([`Host::watches`]).
 //!
 //! The system is chosen once, in this file, and nowhere else. A fact that differs by system
 //! is a `match` on [`OS`], and [`Os`] lists every system Pitboard runs on, so a system added
@@ -65,6 +66,7 @@ pub(crate) mod task;
 pub(crate) mod token;
 #[cfg(unix)]
 mod unix;
+pub(crate) mod watch;
 #[cfg(windows)]
 mod windows;
 
@@ -984,6 +986,12 @@ pub(crate) trait Host: Send + Sync + std::fmt::Debug {
     // Windows' drives; false off Linux.
     fn on_a_windows_drive(&self, _path: &Path) -> bool {
         false
+    }
+
+    /// Whether a watch of the folder `dir` ([`watch`]) hears every write there. Where it does
+    /// not, a front end looks at Pitboard's files every few seconds instead.
+    fn watches(&self, _dir: &Path) -> bool {
+        true
     }
 }
 

@@ -150,6 +150,7 @@ pub struct MemoryHost {
     kernel_is_wsl: AtomicBool,
     windows_drives: Mutex<Vec<PathBuf>>,
     fixed_drives: Mutex<Vec<char>>,
+    unwatched: AtomicBool,
 }
 
 impl Default for MemoryHost {
@@ -224,6 +225,7 @@ impl MemoryHost {
             kernel_is_wsl: AtomicBool::new(false),
             windows_drives: Mutex::new(Vec::new()),
             fixed_drives: Mutex::new(vec!['C']),
+            unwatched: AtomicBool::new(false),
         }
     }
 
@@ -359,6 +361,13 @@ impl MemoryHost {
     /// From now on there is no scheduler here.
     pub fn without_a_scheduler(&self) {
         self.unscheduled.store(true, Ordering::SeqCst);
+    }
+
+    /// From now on no folder here is watched, as on a drive where a watch would not hear every
+    /// write: a front end looks at Pitboard's files instead. Every folder is watched until a
+    /// test says this.
+    pub fn without_a_watch(&self) {
+        self.unwatched.store(true, Ordering::SeqCst);
     }
 
     /// From now on this machine says this process runs with `elevation`: as root, under
@@ -724,6 +733,11 @@ impl Host for MemoryHost {
         locked(&self.windows_drives)
             .iter()
             .any(|drive| path.starts_with(drive))
+    }
+
+    // The test's own folders, watched for real, as the file system they are on is real.
+    fn watches(&self, _dir: &Path) -> bool {
+        !self.unwatched.load(Ordering::SeqCst)
     }
 
     // In any case, as Credential Manager finds a target: one a test named, or Claude Code's item

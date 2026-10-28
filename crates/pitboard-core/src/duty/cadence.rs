@@ -19,7 +19,8 @@ pub(crate) const RETRY_MOST_SECONDS: i64 = 900;
 /// to be done.
 pub(crate) const ATTEMPTS: u32 = 3;
 
-// When the index and the readings were last written: no network and no keychain.
+// When the index and the readings were last written, where nothing can watch them
+// (`duty::written`): no network and no keychain.
 pub const LOOK_EVERY_SECONDS: i64 = 2;
 
 // Each account is still asked only as often as its budget allows.

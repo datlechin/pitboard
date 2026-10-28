@@ -7,6 +7,7 @@ mod procfs;
 mod systemd;
 
 pub(super) use super::unix::awake;
+pub(super) use super::unix::watch;
 pub(crate) use super::unix::{fs, proc, user};
 
 use super::administered::Administered;
@@ -115,6 +116,12 @@ impl Host for Linux {
     fn on_a_windows_drive(&self, path: &Path) -> bool {
         on_9p(path)
     }
+
+    // Not on 9p, where WSL 2 mounts Windows' drives: whether a write from Windows reaches an
+    // inotify watch there is not measured (docs/facts/not-measured.md).
+    fn watches(&self, dir: &Path) -> bool {
+        !on_9p(dir)
+    }
 }
 
 fn kernel_names_microsoft() -> bool {
@@ -212,6 +219,10 @@ mod tests {
         let scratch = tempfile::tempdir().expect("a scratch folder");
         assert!(!on_9p(scratch.path()));
         assert!(!on_9p(&scratch.path().join("not").join("made")));
+        assert!(
+            host().watches(scratch.path()),
+            "watched where it is not on 9p"
+        );
     }
 
     /// Homebrew starts Pitboard through a link in its `bin` that leads into a directory

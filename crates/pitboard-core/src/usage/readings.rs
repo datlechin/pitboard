@@ -20,8 +20,11 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+// The readings' name in Pitboard's directory.
+pub(crate) const FILE: &str = "usage.json";
+
 fn path(ctx: &Context) -> PathBuf {
-    home::dir(ctx).join("usage.json")
+    home::dir(ctx).join(FILE)
 }
 
 pub(crate) fn load(ctx: &Context) -> HashMap<String, Snapshot> {

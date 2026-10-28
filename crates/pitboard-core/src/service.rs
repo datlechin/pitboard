@@ -631,6 +631,13 @@ impl Pitboard {
         readings::changed_at(&self.ctx)
     }
 
+    /// Pitboard's directory watched for the next change to the account index or the readings,
+    /// for a front end to look at [`Pitboard::changed_at`] and
+    /// [`Pitboard::readings_changed_at`] as each is written.
+    pub fn written(&self) -> crate::duty::written::Written {
+        crate::duty::written::Written::new(&self.ctx)
+    }
+
     /// What the app keeps in `file` in Pitboard's directory, or `None`.
     pub fn app_file(&self, file: crate::app::AppFile) -> std::io::Result<Option<String>> {
         crate::app::read_app_file(&self.ctx, file)

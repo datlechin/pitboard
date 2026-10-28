@@ -10,6 +10,7 @@ pub(crate) mod proc;
 pub(crate) mod service;
 pub(crate) mod shell;
 pub(crate) mod user;
+pub(crate) mod watch;
 
 // Instant reads CLOCK_UPTIME_RAW on macOS and CLOCK_MONOTONIC on Linux, and neither counts a
 // sleep (macOS's clock_gettime(3), Linux man-pages 6.19).

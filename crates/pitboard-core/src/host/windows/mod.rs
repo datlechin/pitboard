@@ -19,6 +19,7 @@ pub(super) mod seal;
 mod settings;
 mod tasks;
 pub(crate) mod user;
+pub(super) mod watch;
 
 use super::administered::{Administered, Hive};
 use super::{Elevation, Floor, Host, Jar, JarError, Listed, LoginPath, Os, Scheduler};

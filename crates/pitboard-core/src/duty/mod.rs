@@ -5,13 +5,15 @@
 //! at its files that waits on nobody, and an act under the lock every change takes. The
 //! automatic switch ([`crate::duty::autoswitch`]) and the warm-up ([`crate::duty::warm`]) are two. What
 //! every duty shares is here: how often a front end decides, how long something that came to
-//! nothing waits before it is tried again, and how what was tried is kept between runs. What
-//! each duty decides, and what it does, is its own.
+//! nothing waits before it is tried again, how what was tried is kept between runs, and when
+//! another front end wrote what a duty decides from ([`crate::duty::written`]). What each duty
+//! decides, and what it does, is its own.
 
 pub mod autoswitch;
 pub mod cadence;
 pub(crate) mod ledger;
 pub mod warm;
+pub mod written;
 
 /// What a duty's look at the files alone came to.
 #[derive(Debug)]
