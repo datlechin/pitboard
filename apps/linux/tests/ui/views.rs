@@ -107,7 +107,7 @@ impl Viewed {
     /// As `of`, once a read shows what `read` holds of.
     pub(crate) fn once(world: &str, read: impl Fn(&Snapshot) -> bool) -> Viewed {
         let scratch = tempfile::tempdir().unwrap();
-        let clock = DesktopClock::following(None);
+        let clock = DesktopClock::following(None, None);
         let mut viewed = Viewed::reading(world, scratch.path(), clock.local_time(), read);
         viewed._scratch = Some(scratch);
         viewed
@@ -273,7 +273,7 @@ pub(crate) fn shown_in(
         Arc::new(Told(std::sync::Mutex::new(told))),
         None,
         Arc::new(Unposted),
-        DesktopClock::following(None).local_time(),
+        DesktopClock::following(None, None).local_time(),
     )
     .unwrap();
     model.send(Intent::Start);

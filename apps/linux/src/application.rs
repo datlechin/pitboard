@@ -464,7 +464,7 @@ fn told(app: &Application) -> impl Fn(Heard) + 'static {
 
 impl Running {
     fn start(app: &Application, launched: Launched) -> Result<Rc<Running>, String> {
-        let clock = DesktopClock::following(gio::SettingsSchemaSource::default().as_ref());
+        let clock = DesktopClock::following(gio::SettingsSchemaSource::default().as_ref(), None);
         let taking = app.downgrade();
         let (listener, listening) = listener::listening(move |snapshot| {
             if let Some(running) = taking.upgrade().and_then(|app| app.running()) {

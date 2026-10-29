@@ -411,7 +411,7 @@ mod tests {
             None
         }
         fn local_time(&self) -> Arc<dyn LocalTime> {
-            crate::local_time::DesktopClock::following(None).local_time()
+            crate::local_time::DesktopClock::following(None, None).local_time()
         }
         fn start_at_sign_in(&self) -> Option<&dyn StartAtSignIn> {
             None

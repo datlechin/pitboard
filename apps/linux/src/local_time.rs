@@ -24,15 +24,18 @@ pub struct DesktopClock {
 }
 
 impl DesktopClock {
-    /// The choice `schemas` hold: the system's own, in the app.
-    pub fn following(schemas: Option<&gio::SettingsSchemaSource>) -> DesktopClock {
+    /// The choice `schemas` hold, read through `backend`: the system's own schemas and GSettings'
+    /// default backend, in the app.
+    pub fn following(
+        schemas: Option<&gio::SettingsSchemaSource>,
+        backend: Option<&gio::SettingsBackend>,
+    ) -> DesktopClock {
         let twelve_hours = Arc::new(AtomicBool::new(false));
         let followed = schemas
             .and_then(|schemas| schemas.lookup(SCHEMA, true))
             .filter(|schema| schema.has_key(KEY))
             .map(|schema| {
-                let settings =
-                    gio::Settings::new_full(&schema, None::<&gio::SettingsBackend>, None);
+                let settings = gio::Settings::new_full(&schema, backend, None);
                 let set = |settings: &gio::Settings, twelve_hours: &AtomicBool| {
                     twelve_hours.store(settings.string(KEY) == TWELVE_HOURS, Ordering::Relaxed);
                 };
@@ -131,23 +134,28 @@ mod tests {
         }
     }
 
-    fn interface() -> gio::Settings {
+    // The desktop's interface settings in a backend of the test's own, so a run on a desktop
+    // writes nothing through its dconf.
+    fn interface(backend: &gio::SettingsBackend) -> gio::Settings {
         let schema = gio::SettingsSchemaSource::default()
             .and_then(|schemas| schemas.lookup(SCHEMA, true))
             .expect("every image installs GNOME's desktop schemas");
-        gio::Settings::new_full(&schema, None::<&gio::SettingsBackend>, None)
+        gio::Settings::new_full(&schema, Some(backend), None)
     }
 
     fn iterate() {
         while glib::MainContext::default().iteration(false) {}
     }
 
-    // headless.sh's GSETTINGS_BACKEND=memory keeps what this test sets in the process.
     #[test]
     fn the_clock_follows_the_desktops_choice() {
-        let desktop = interface();
+        let backend = gio::memory_settings_backend_new();
+        let desktop = interface(&backend);
         desktop.set_string(KEY, "12h").unwrap();
-        let clock = DesktopClock::following(gio::SettingsSchemaSource::default().as_ref());
+        let clock = DesktopClock::following(
+            gio::SettingsSchemaSource::default().as_ref(),
+            Some(&backend),
+        );
         let local_time = clock.local_time();
         let noon = |time: &LocalTime| time.time_of_day(12 * 60 + 5).unwrap();
         assert_eq!(noon(&local_time), "12:05 PM");
@@ -173,7 +181,7 @@ mod tests {
 
     #[test]
     fn without_the_desktops_schema_the_clock_is_twenty_four_hours() {
-        let clock = DesktopClock::following(None);
+        let clock = DesktopClock::following(None, None);
 
         assert_eq!(
             clock.local_time().time_of_day(18 * 60 + 30).unwrap(),
@@ -200,7 +208,11 @@ mod tests {
     // A snapshot is made while the main loop waits on the model, as it does while the app quits.
     #[test]
     fn local_time_answers_without_the_main_loop() {
-        let clock = DesktopClock::following(gio::SettingsSchemaSource::default().as_ref());
+        let backend = gio::memory_settings_backend_new();
+        let clock = DesktopClock::following(
+            gio::SettingsSchemaSource::default().as_ref(),
+            Some(&backend),
+        );
         let local_time = clock.local_time();
 
         let answered = std::thread::spawn(move || local_time.clock(AT, true))

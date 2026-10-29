@@ -39,7 +39,7 @@ pub(crate) fn unstarted() -> (Arc<PitboardModel>, tempfile::TempDir) {
         handover: None,
         widget_feed: None,
     };
-    let clock = crate::local_time::DesktopClock::following(None);
+    let clock = crate::local_time::DesktopClock::following(None, None);
     let model = PitboardModel::new(
         launch,
         Arc::new(Unheard),

@@ -218,7 +218,7 @@ impl Fed {
             told,
             None,
             Arc::new(Unposted),
-            DesktopClock::following(None).local_time(),
+            DesktopClock::following(None, None).local_time(),
         )
         .unwrap();
         let shown = Shown::new(model.snapshot());
