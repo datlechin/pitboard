@@ -619,6 +619,17 @@ pub(super) fn on_in(store: SecretStore) -> String {
 
 pub(super) const SWITCHED_ON: &str = "switched on";
 
+pub(super) const ON_IN_ITS_ONE_STORE: &str =
+    "switched on, and this login is in the plaintext file, Claude Code's one store on Linux";
+
+// The file a login is in with the flag on: on Linux it is no fallback (`live_chain_order`).
+pub(super) fn on_in_the_file(os: Os) -> &'static str {
+    match os {
+        Os::MacOs | Os::Windows => ON_IN_THE_FALLBACK_STORE,
+        Os::Linux => ON_IN_ITS_ONE_STORE,
+    }
+}
+
 pub(super) fn refused_as_a_session_starts(accounts: &str) -> String {
     format!(
         "Claude Code refuses the logins of {accounts} as a session starts, so Pitboard does not \
@@ -1594,6 +1605,27 @@ mod tests {
         assert_eq!(
             not_a_full_path("CODEX_HOME", std::path::Path::new("codex")),
             "CODEX_HOME is `codex`, which is not a full path"
+        );
+    }
+
+    #[test]
+    fn storage_v5_says_where_the_login_is() {
+        assert_eq!(
+            on_in(SecretStore::Keychain),
+            "switched on; the keychain is still where the login is"
+        );
+        assert_eq!(
+            on_in(SecretStore::CredentialManager),
+            "switched on; Credential Manager is still where the login is"
+        );
+        assert_eq!(
+            on_in_the_file(Os::MacOs),
+            "switched on, and this login is in the fallback store"
+        );
+        assert_eq!(on_in_the_file(Os::Windows), on_in_the_file(Os::MacOs));
+        assert_eq!(
+            on_in_the_file(Os::Linux),
+            "switched on, and this login is in the plaintext file, Claude Code's one store on Linux"
         );
     }
 

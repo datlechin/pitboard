@@ -484,7 +484,8 @@ pub(super) fn judge_fallback_login(facts: &Facts) -> Option<Check> {
 }
 
 // The flag moves no login out of the keychain or Credential Manager (`live_chain_order`,
-// `credman_migration`): only the file's may differ.
+// `credman_migration`): only the file's may differ, a fallback on macOS and the one store on
+// Linux.
 pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
     let flag_on = facts
         .config
@@ -501,7 +502,7 @@ pub(super) fn judge_storage_v5(facts: &Facts) -> Check {
         Ok(store::Backend::File) => warn(
             "storage_v5",
             "storage v5",
-            words::ON_IN_THE_FALLBACK_STORE,
+            words::on_in_the_file(facts.os),
             words::MAYBE_NOT_THE_SAME_FILE,
         ),
         _ => ok(

@@ -51,7 +51,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - On Linux, daily renewal and the watch service run a `pitboard` whose path holds a space or a
   `%`.
 - On Linux, Pitboard's messages, `pitboard doctor` and `pitboard --help` no longer name the
-  keychain, the menu bar, Activity Monitor or Claude Desktop.
+  keychain, a fallback store, the menu bar, Activity Monitor or Claude Desktop.
 - On Windows, `pitboard doctor` says Credential Manager still holds Claude Code's login under
   storage v5, and no longer says to unlock a keychain for parked logins it has yet to delete or
   account for.

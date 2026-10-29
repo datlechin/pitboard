@@ -341,6 +341,57 @@ fn the_successor_backend_alone_does_not_move_the_login() {
     }
 }
 
+// What each store says with the flag on: the keychain and Credential Manager keep the login,
+// macOS's file is the fallback a failed keychain write left, and Linux's is Claude Code's one
+// store (`live_chain_order`).
+#[test]
+fn the_successor_backend_says_the_store_the_login_is_in() {
+    let on = |os, backend| {
+        let mut f = facts();
+        f.os = os;
+        f.hover_rest_env = true;
+        f.backend = Ok(backend);
+        let checks = evaluate(&f);
+        let said = check(&checks, "storage_v5");
+        (said.level, said.detail.clone(), said.advice.clone())
+    };
+    assert_eq!(
+        on(Os::MacOs, store::Backend::Keychain),
+        (
+            Level::Ok,
+            words::on_in(SecretStore::Keychain),
+            String::new()
+        )
+    );
+    assert_eq!(
+        on(Os::Windows, store::Backend::CredentialManager),
+        (
+            Level::Ok,
+            words::on_in(SecretStore::CredentialManager),
+            String::new()
+        )
+    );
+    for (os, detail) in [
+        (Os::MacOs, words::ON_IN_THE_FALLBACK_STORE),
+        (Os::Windows, words::ON_IN_THE_FALLBACK_STORE),
+        (Os::Linux, words::ON_IN_ITS_ONE_STORE),
+    ] {
+        assert_eq!(
+            on(os, store::Backend::File),
+            (
+                Level::Warn,
+                detail.to_owned(),
+                words::MAYBE_NOT_THE_SAME_FILE.to_owned()
+            ),
+            "{os:?}"
+        );
+    }
+    assert_eq!(
+        on(Os::Linux, store::Backend::SecretService),
+        (Level::Ok, words::SWITCHED_ON.to_owned(), String::new())
+    );
+}
+
 #[test]
 fn the_successor_backend_is_quiet_when_it_is_off() {
     let mut f = facts();

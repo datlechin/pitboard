@@ -1402,11 +1402,12 @@ pub fn listed<T: AsRef<str>>(items: impl IntoIterator<Item = T>) -> String {
     }
 }
 
-// Linux has no keychain, no menu bar item of Pitboard's and no Activity Monitor.
+// Linux has no keychain or fallback store behind one, no menu bar item of Pitboard's and no
+// Activity Monitor.
 #[cfg(test)]
 pub(crate) fn names_what_linux_has_not(said: &str) -> bool {
     let said = said.to_lowercase();
-    ["keychain", "menu bar", "activity monitor"]
+    ["keychain", "fallback store", "menu bar", "activity monitor"]
         .iter()
         .any(|word| said.contains(word))
 }

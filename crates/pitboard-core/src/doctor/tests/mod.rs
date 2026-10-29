@@ -326,6 +326,7 @@ pub(super) fn everything_said(os: Os) -> Facts {
             f.schedule.as_mut().expect("set above").outdated = true;
             f.watch_service.as_mut().expect("set above").outdated = true;
             f.backend = Ok(store::Backend::File);
+            f.hover_rest_env = true;
             f.vault = store::Backend::SecretService;
             f.vault_form = Some(FormFact {
                 kept: switch::Keeping {
