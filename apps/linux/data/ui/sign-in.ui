@@ -7,7 +7,8 @@
   <requires lib="gtk" version="4.18"/>
   <requires lib="libadwaita" version="1.7"/>
   <template class="PitboardSignIn" parent="AdwDialog">
-    <property name="content-width">440</property>
+    <!-- Room for "Signing In to Claude Code" between Cancel and Submit Code. -->
+    <property name="content-width">500</property>
     <property name="child">
       <object class="AdwToolbarView">
         <child type="top">

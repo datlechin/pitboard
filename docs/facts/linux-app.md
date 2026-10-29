@@ -709,6 +709,8 @@ then dark by `AdwStyleManager`. Measured in Ubuntu 26.04's image:
   not drawn yet snapshots as nothing, so each picture is snapshotted right after a frame it asked
   for is drawn. A focused field's blinking cursor would be in one drawing and not the next, so
   the pictures turn the blink off.
+- A `GtkLabel` sets its Pango layout's width as it is allocated, so `pango_layout_is_ellipsized`
+  says whether a title shows whole. A picture fails on a label of a header bar it shows cut short.
 
 ## The accounts page
 
@@ -767,6 +769,9 @@ Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by
   shared text.
 - No fixture world's sign-in fails to start, so `linux-signIn-failed` is a sign-in that fails as
   a person's can: Claude Code refusing a code typed back without its state.
+- A header bar keeps its buttons' widths and ellipsizes its title: at a `content-width` of 440
+  the sign-in dialog showed "Signing In to Claude …" between Cancel and Submit Code. At 500 the
+  title is whole and its centre 2 logical pixels left of the dialog's (`linux-signIn-code`).
 
 ## Preferences
 

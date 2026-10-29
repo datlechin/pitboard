@@ -4,7 +4,8 @@
 //! drawn over a fixture's model, with every clock time said as one fixed time and animations
 //! off, so a picture is the same from one run to the next, which each holds
 //! (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up over,
-//! as the model shows it once it has taken what the picture sends it.
+//! as the model shows it once it has taken what the picture sends it. A header bar's title cut
+//! short fails its picture.
 #![cfg(target_os = "linux")]
 
 use std::path::{Path, PathBuf};
@@ -177,6 +178,25 @@ fn hold_still(widget: &gtk::Widget) {
     }
 }
 
+// What a header bar under `widget` shows cut short: a title GTK ellipsizes for want of room.
+fn cut_short(widget: &gtk::Widget, in_header: bool) -> Vec<String> {
+    let in_header = in_header || widget.is::<adw::HeaderBar>();
+    let mut cut = Vec::new();
+    if let Some(label) = widget.downcast_ref::<gtk::Label>()
+        && in_header
+        && label.is_mapped()
+        && label.layout().is_ellipsized()
+    {
+        cut.push(label.label().into());
+    }
+    let mut child = widget.first_child();
+    while let Some(widget) = child {
+        cut.extend(cut_short(&widget, in_header));
+        child = widget.next_sibling();
+    }
+    cut
+}
+
 // The app's style sheet and icons, which AdwApplication and GtkApplication take from the
 // resource as the app starts, and which a window drawn here has no application to take.
 fn styled() {
@@ -270,6 +290,8 @@ fn picture(
     });
     // A dialog comes up over the frames after it is mapped, at once with animations off.
     frames(&window, 3);
+    let cut = cut_short(window.upcast_ref(), false);
+    assert!(cut.is_empty(), "{name}: {cut:?} cut short");
     hold_still(window.upcast_ref());
     draw(&window, &format!("linux-{name}"), &folder(&scratch));
     window.destroy();
