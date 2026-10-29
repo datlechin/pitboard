@@ -1095,8 +1095,10 @@ jobs:
       - name: The tests, as a fresh user under headless.sh
         run: |
           useradd --user-group --no-create-home pitboard-tests
-          # nextest writes its report under the workspace's target, whatever the archive's was.
-          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
+          # nextest writes its report under the workspace's target, whatever the archive's was, in
+          # the profile's folder, which the archive's step made as root.
+          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest \
+            "target/nextest/$NEXTEST_PROFILE"
           setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
             apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
       - if: matrix.arch == 'x86_64'
@@ -1145,8 +1147,10 @@ jobs:
       - name: The tests, as a fresh user under headless.sh
         run: |
           useradd --user-group --no-create-home pitboard-tests
-          # nextest writes its report under the workspace's target, whatever the archive's was.
-          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
+          # nextest writes its report under the workspace's target, whatever the archive's was, in
+          # the profile's folder, which the archive's step made as root.
+          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest \
+            "target/nextest/$NEXTEST_PROFILE"
           setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
             apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
       - if: failure()
@@ -1181,8 +1185,10 @@ jobs:
       - name: The tests, as a fresh user under headless.sh
         run: |
           useradd --user-group --no-create-home pitboard-tests
-          # nextest writes its report under the workspace's target, whatever the archive's was.
-          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest
+          # nextest writes its report under the workspace's target, whatever the archive's was, in
+          # the profile's folder, which the archive's step made as root.
+          install -d -o pitboard-tests -g pitboard-tests "$RUNNER_TEMP/linux-app-tests" target/nextest \
+            "target/nextest/$NEXTEST_PROFILE"
           setpriv --reuid pitboard-tests --regid pitboard-tests --init-groups \
             apps/linux/scripts/check.sh test "$RUNNER_TEMP/linux-app-tests.tar.zst" "$RUNNER_TEMP/linux-app-tests"
       - if: failure()
