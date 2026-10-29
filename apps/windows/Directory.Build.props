@@ -18,5 +18,7 @@
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
     <!-- nuget.org alone: the library-packs of a source-built SDK, such as Homebrew's, hold an ILCompiler that differs from nuget.org's. -->
     <DisableImplicitLibraryPacksFolder>true</DisableImplicitLibraryPacksFolder>
+    <!-- Every test program takes test-as-standard-user.ps1's hang dump options: one that stops answering names the tests under way, which the timeout did not. -->
+    <EnableMicrosoftTestingExtensionsHangDump>true</EnableMicrosoftTestingExtensionsHangDump>
   </PropertyGroup>
 </Project>

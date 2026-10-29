@@ -387,9 +387,10 @@ try {
     for ($i = 0; $i -lt $programs.Count; $i++) {
         # Otherwise Microsoft.Testing.Platform's results go beside the program, where the user may only read.
         # A run that outlasts its timeout is cancelled and says which tests were under way, before the job's own
-        # timeout would end it with nothing said.
+        # timeout would end it with nothing said. A run that stops answering does not take the timeout, so
+        # HangDump names those tests, and ends it, first.
         $resultsDir = Join-Path $runDir "results-$i"
-        $arguments = @('--results-directory', $resultsDir, '--timeout', '12m')
+        $arguments = @('--results-directory', $resultsDir, '--timeout', '12m', '--hangdump', '--hangdump-timeout', '8m', '--hangdump-type', 'Mini')
         if ($Results) { $arguments += '--report-trx' }
         $run = Start-AsUser $programs[$i] $arguments $runDir $userEnv "dotnet-$i" -Alone
         Write-Output "::group::$($programs[$i]), as the standard user: $(if ($run.Exit -eq 0) { 'passed' } else { "exited $($run.Exit)" })"
