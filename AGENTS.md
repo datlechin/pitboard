@@ -66,8 +66,8 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   cargo-binstall.
 - Never mark a release latest by hand, or reuse or move an rc or beta tag. The release
   workflow decides latest.
-- An agent never dispatches a workflow but `windows-facts.yml`, only on its own branch, and
-  never with `session` set.
+- An agent never dispatches a workflow but `windows-facts.yml` or `linux-facts.yml`, only on
+  its own branch, and never with `session` set.
 - Never sign with a signer's release policy or production credentials outside `release.yml`
   on a `v*` tag. Test signing uses the signer's test policy or sandbox.
 - Never let a job that runs on a pull request or by hand reach the `release`,
@@ -271,6 +271,20 @@ a mistake here can sign someone out of a paid account. These rules apply to peop
   them only for what no reading of a build settles.
 - Never measure a running tool on a Linux machine that holds logins. Use
   [the Linux session machines](#the-linux-session-machines).
+- Never run `.github/scripts/linux-runner-facts.sh` on a machine of your own, but its display
+  parts in a container. It makes Linux users, mounts file systems and installs packages.
+- Only `linux-runner-facts.sh`, only through `linux-facts.yml` on a GitHub-hosted runner, may
+  make a Linux user, turn on linger for it, and run a `pitboard` the job built as that user,
+  started with `sudo -u` and an environment of its own, against that user's own systemd: the
+  one exception to the first rule above and to the rule on `sudo`. On the runner it may also
+  install packages from Ubuntu's archive, install Claude Code and Codex from npm into a scratch
+  prefix, which runs Claude Code's postinstall, start the tests' stand-in in the place of each
+  program, and mount a tmpfs, a loop-mounted btrfs and an NFS export on the loopback. In a
+  container of Ubuntu 26.04 named by digest, it may install packages from one Ubuntu snapshot
+  as root and make the user it runs headless mutter as. It undoes each in a trap. Never copy
+  one of those changes into a script meant for a person's machine.
+- `linux-facts.yml` stays `workflow_dispatch` only, names no secret, and uploads only its
+  redacted reports.
 - Never write to or delete from the `pitboard-packages` bucket, or anything served at
   `packages.usepitboard.com`, by hand. `release.yml` writes them on a `v*` tag, from the
   `linux-packages` environment.
