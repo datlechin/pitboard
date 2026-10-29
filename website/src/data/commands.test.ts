@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { attestCommand, commands, windowsWays } from "./commands.ts";
+import { plainText } from "../lib/changelog.ts";
+import { attestCommand, commands, linuxWays, windowsWays } from "./commands.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
-const pages = ["install", "install/script", "install/other-ways", "install/verify"]
+const pages = [
+  "install",
+  "install/script",
+  "install/linux-repository",
+  "install/other-ways",
+  "install/verify",
+]
   .map((page) => repo(`docs/${page}.mdx`))
   .join("\n");
 
@@ -56,4 +63,43 @@ test("offers Scoop with the bucket's own lines, from the first full release it h
     windowsWays(full).scoop?.map((c) => c.copy),
     bucket.trim().split("\n"),
   );
+});
+
+// A channel's setup is the repository page's, which sets up the beta channel and moves to stable.
+const repository = repo("docs/install/linux-repository.mdx");
+
+test("sets up the beta channel until a full release has the Linux app, and stable from then", () => {
+  for (const [release, setup] of [
+    [beta, "pitboard-beta"],
+    [full, "pitboard"],
+  ] as const) {
+    const { apt, dnf, zypper } = linuxWays(release);
+    for (const command of [...apt, ...dnf, ...zypper]) {
+      assert.ok(repository.includes(command.copy), `${setup}: ${command.copy}`);
+    }
+    assert.ok(apt.some((c) => c.copy.includes(`/etc/apt/sources.list.d/${setup}.sources `)));
+    for (const command of [dnf[0], zypper[0]]) assert.ok(command.copy.endsWith(`/${setup}.repo`));
+  }
+});
+
+// The offline build draws no release with the Linux app, so CommandBox never checks these there.
+test("shows each Linux command as it copies it", () => {
+  for (const release of [beta, full]) {
+    const { apt, dnf, zypper } = linuxWays(release);
+    for (const command of [...apt, ...dnf, ...zypper])
+      assert.equal(plainText(command.html), command.copy);
+  }
+});
+
+test("names each setup file the repository serves", () => {
+  const served = readdirSync(new URL("../../../packaging/linux/", import.meta.url)).filter((name) =>
+    /^pitboard.*\.(sources|repo|pref)$/.test(name),
+  );
+  const named = [beta, full].flatMap((release) => {
+    const { apt, dnf, zypper } = linuxWays(release);
+    return [...apt, ...dnf, ...zypper].flatMap(
+      (c) => c.copy.match(/[\w-]+\.(sources|repo|pref)\b/g) ?? [],
+    );
+  });
+  assert.deepEqual([...new Set(named)].sort(), served.sort());
 });

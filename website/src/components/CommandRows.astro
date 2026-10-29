@@ -1,0 +1,39 @@
+---
+// Commands under the name of what each set is for, one set to a row.
+import type { Command } from "../data/commands.ts";
+import CommandBox from "./CommandBox.astro";
+
+interface Props {
+  // what the first column names, for a screen reader
+  heading: string;
+  rows: [string, Command[]][];
+  shell?: "sh" | "pwsh";
+  class?: string;
+}
+const { heading, rows, shell = "sh", class: extra } = Astro.props;
+---
+
+<table class:list={["block w-full border-collapse", extra]} role="table">
+  <thead class="sr-only" role="rowgroup">
+    <tr class="block" role="row">
+      <th class="block p-0" scope="col" role="columnheader">{heading}</th>
+      <th class="block p-0" scope="col" role="columnheader">Command</th>
+    </tr>
+  </thead>
+  <tbody class="block" role="rowgroup">
+    {rows.map(([name, lines], i) => <tr class:list={["block", { "mt-5": i > 0 }]} role="row">
+      <th
+        class="mb-2 block p-0 text-left text-note/[1.5] font-normal text-fg"
+        scope="row"
+        role="rowheader"
+      >
+        {name}
+      </th>
+      <td class="block space-y-2 p-0" role="cell">
+        {lines.map((command) => (
+          <CommandBox command={command} shell={shell} />
+        ))}
+      </td>
+    </tr>)}
+  </tbody>
+</table>

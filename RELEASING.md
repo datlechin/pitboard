@@ -238,7 +238,10 @@ Ubuntu 26.04, Fedora 43 and openSUSE Tumbleweed images on both machines, as the 
 
 Once a full release or a beta is published, the `site` job asks Workers Builds to build
 usepitboard.com from `main` again, through `SITE_DEPLOY_HOOK`. The site lists the releases it
-found when it was built, and Workers Builds builds only on a push to `main`.
+found when it was built, and Workers Builds builds only on a push to `main`. Its Linux files and
+its Linux app follow the release that holds the app's packages, as its Windows files follow the
+installers: the latest once it has them, the newest published beta until then, with the beta
+channel's commands, and no app while none has.
 
 Immutable releases are on, and only the owner changes that setting. A published release's
 files and tag cannot change; its title, notes and marks can. Only the next version fixes a
