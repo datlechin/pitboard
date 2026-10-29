@@ -1,5 +1,6 @@
 //! What the app exports on the bus: its outside actions and nothing of its window's, each as the
-//! launcher, a notification and a Plasma widget ask for it, and the feed the widget reads.
+//! launcher, a notification and a Plasma widget ask for it, the feed the widget reads, and what
+//! the tray's menu sends.
 
 use std::collections::BTreeMap;
 
@@ -9,9 +10,10 @@ use super::harness::{
     App, Owned, Screen, WATCHER, activate, described, eventually, exporting, fed, owned, session,
 };
 use super::launch::read;
-use super::words;
+use super::{views, words};
 use pitboard_linux::config::OBJECT_PATH;
 use pitboard_linux::outside;
+use pitboard_linux::presence::{self, Picked};
 use pitboard_model::{Front, OutsideAnswer};
 
 #[test]
@@ -154,6 +156,25 @@ fn help_in_the_main_menu_opens_the_docs_in_the_browser() {
 
     eventually("the browser opens the docs", || {
         let opened = app.stand_in("browser.jsonl");
-        (opened == [serde_json::json!({ "open": pitboard_linux::presence::HELP })]).then_some(())
+        (opened == [serde_json::json!({ "open": presence::HELP })]).then_some(())
     });
+}
+
+// The tray draws the app's own menu and tells it of a click, so an account's entry sends what
+// its row sends, as the macOS menu's and the Windows icon's do, and not a switch from outside.
+#[test]
+fn an_account_in_the_tray_menu_sends_what_its_row_sends() {
+    let shown = views::shown_in("twoTools", &[], |_| true);
+
+    let (_, picked) = presence::tray(&shown, &words::app().menu);
+
+    let picked: BTreeMap<String, Picked> = picked.into_iter().collect();
+    let items: Vec<_> = (shown.sections.iter())
+        .flat_map(|section| &section.accounts)
+        .collect();
+    assert!(items.iter().any(|item| item.action.is_some()), "{items:?}");
+    for item in items {
+        let row = (item.action.as_ref()).map(|action| Picked::Send(action.intent.clone()));
+        assert_eq!(picked.get(&format!("account/{}", item.id)), row.as_ref());
+    }
 }

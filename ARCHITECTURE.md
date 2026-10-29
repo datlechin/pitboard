@@ -676,15 +676,27 @@ keeps it is in the header of the module named.
   `the_tray_going_while_the_window_is_hidden_quits`,
   `signing_in_with_a_tray_starts_held_with_no_window`, `signing_in_with_no_tray_ends`,
   `the_app_is_held_until_each_request_is_answered`).
-- The Linux app's only entry points on the bus are its `app.` actions, each taking an id the
-  model issued or none: a notification's click, a switch from outside, which a search, KRunner
-  and the Plasma widget ask for, and the launcher's Add Account and Refresh, each sending what a
-  click in the app sends. Its window is an `AdwWindow`
-  whose intents are its class's widget actions, which GTK exports nowhere
-  (`the_app_exports_only_its_outside_actions`,
-  `each_launcher_action_is_one_the_app_exports_and_says_its_words`). A switch from outside that
-  is refused is said in a notification
-  (`a_switch_from_outside_that_is_refused_is_said_in_a_notification`).
+- Any process in the session can call what the Linux app serves on the bus, so each answers
+  only for an id the app gave out and does no more than a click in the app:
+  - its `app.` actions, each taking an id the model issued or none: a notification's click, a
+    switch from outside, which the Plasma widget asks for, and the launcher's Add Account and
+    Refresh. Its window is an `AdwWindow` whose intents are its class's widget actions, which
+    GTK exports nowhere (`the_app_exports_only_its_outside_actions`,
+    `each_launcher_action_is_one_the_app_exports_and_says_its_words`). A switch from outside
+    that is refused is said in a notification
+    (`a_switch_from_outside_that_is_refused_is_said_in_a_notification`);
+  - GNOME's search provider's `ActivateResult` and `LaunchSearch`, and KRunner's `Run`, which
+    take only a result the search they end gave and make its switch a switch from outside, or
+    open the window (`an_id_never_given_activates_nothing`, `activating_a_result_tells_its_id`,
+    `run_tells_the_id_after_its_token`, `launching_a_search_opens_the_window`);
+  - the status item's `Activate`, which opens the window, and its DBusMenu's `Event`,
+    `EventGroup` and `AboutToShow`, which take only an entry the menu shows
+    (`activate_hands_over_the_token_the_host_provided`, `a_clicked_entry_is_told_once_by_its_id`,
+    `about_to_show_is_told_as_a_glance`). The tray draws that menu for the app and tells it of
+    a click, so an entry sends what the same entry of the macOS menu and the Windows icon's
+    sends, an account's switch with its questions, and not a switch from outside, which asks
+    none (`an_account_in_the_tray_menu_sends_what_its_row_sends`,
+    `a_notice_in_the_menu_sends_its_intent_or_opens_its_page`).
 - The Plasma widget reads only the widget feed, over a read-only interface, and switches only
   through `app.switch-from-outside`, each asked of the connection that owns the app's name, by
   its unique name, which the bus never starts: it asks nothing of a Pitboard not running and
