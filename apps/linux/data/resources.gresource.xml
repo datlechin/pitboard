@@ -13,6 +13,8 @@
     <file>ui/account-group.ui</file>
     <file>ui/limit-row.ui</file>
     <file>ui/notice-row.ui</file>
+    <file>ui/sign-in.ui</file>
+    <file>ui/open-link.ui</file>
     <file>style.css</file>
   </gresource>
 </gresources>

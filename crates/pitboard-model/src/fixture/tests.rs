@@ -786,6 +786,34 @@ fn a_gnome_fixture_asks_no_quit_question_and_says_chatgpt_in_words() {
     );
 }
 
+/// A GNOME front has no account windows to name its links' scheme, so its fixture reads the
+/// debug build's: a link that build hands over waits to be opened in the browser.
+#[test]
+fn a_gnome_fixture_reads_the_links_of_its_build() {
+    let world = World::OneTool;
+    let launched = make(
+        world,
+        Folder::own("gnome-links").expect("a folder"),
+        Front::Gnome,
+    )
+    .unwrap_or_else(|unmade| panic!("{}: {unmade}", world.name()));
+    let (model, told) = started(&launched);
+
+    model.send(Intent::LinkArrived {
+        text: "pitboard-debug://open?url=https%3A%2F%2Fclaude.ai%2Fchat%2F1f2e".into(),
+    });
+
+    let waiting = told.last_where("the link waiting", |last| {
+        last.account_windows.picker.is_some()
+    });
+    model.shutdown();
+    let shown = waiting.account_windows.picker.expect("a link").shown;
+    assert!(
+        matches!(&shown, crate::PickerShown::NoWindows { link, .. } if link.url == "https://claude.ai/chat/1f2e"),
+        "{shown:?}"
+    );
+}
+
 #[test]
 fn claude_is_quit_for_a_switch_and_opened_again_behind() {
     // windows: Claude Desktop is macOS only

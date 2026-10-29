@@ -1138,6 +1138,7 @@ impl PitboardModel {
                     )
                 }),
                 widget_feed: launch.widget_feed.map(PathBuf::from),
+                link_scheme: None,
             },
             Cadence::APP,
         )
@@ -1209,6 +1210,9 @@ pub(crate) struct Platform {
     pub(crate) windows: Option<WindowsPlace>,
     /// Where the widget feed is written, for an app that names a file.
     pub(crate) widget_feed: Option<PathBuf>,
+    /// The scheme of the Pitboard links this build answers, where its front has no account
+    /// windows to name it: a fixture's, on such a front. A release's where `None`.
+    pub(crate) link_scheme: Option<String>,
 }
 
 /// Where the account windows' records are kept and the key this launch's are kept under,
@@ -1255,6 +1259,9 @@ impl PitboardModel {
         let mut state = State::new(platform.front, cadence);
         if platform.widget_feed.is_some() {
             state.glance_to_a_file();
+        }
+        if let Some(scheme) = &platform.link_scheme {
+            state.windows.reads_links_of(scheme);
         }
         if let Some(place) = &platform.windows {
             state.windows.on(

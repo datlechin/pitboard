@@ -5,6 +5,7 @@
 //! GTK's own tests do, by their signals.
 
 use std::cell::{OnceCell, RefCell};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,10 +18,11 @@ use pitboard_linux::local_time::DesktopClock;
 use pitboard_linux::shown::Shown;
 use pitboard_linux::window::{Host, Window};
 use pitboard_model::{
-    AccountItem, Front, Intent, Notice, Notifier, PitboardModel, PlatformError, Snapshot,
+    AccountItem, Front, Intent, LocalTime, Notice, Notifier, PitboardModel, PlatformError, Snapshot,
 };
 
-use super::harness::PATIENCE;
+/// How long anything a view test waits for may take.
+pub(crate) const PATIENCE: Duration = Duration::from_secs(30);
 
 struct Unposted;
 
@@ -68,17 +70,26 @@ pub(crate) struct Viewed {
     pub(crate) asked: Rc<Asked>,
     model: Arc<PitboardModel>,
     _listening: glib::JoinHandle<()>,
-    _scratch: tempfile::TempDir,
+    _scratch: Option<tempfile::TempDir>,
 }
 
 impl Viewed {
+    /// In a folder of the test's own, telling the time by the desktop's clock.
     pub(crate) fn of(world: &str) -> Viewed {
+        let scratch = tempfile::tempdir().unwrap();
+        let clock = DesktopClock::following(None);
+        let mut viewed = Viewed::over(world, scratch.path(), clock.local_time());
+        viewed._scratch = Some(scratch);
+        viewed
+    }
+
+    /// The fixture made in `folder`, telling the time by `local_time`.
+    pub(crate) fn over(world: &str, folder: &Path, local_time: Arc<dyn LocalTime>) -> Viewed {
         adw::init().unwrap();
         pitboard_linux::resources::register();
         gtk::Settings::default()
             .unwrap()
             .set_gtk_enable_animations(false);
-        let scratch = tempfile::tempdir().unwrap();
         let store: Rc<OnceCell<Shown>> = Rc::default();
         let taking = store.clone();
         let (told, listening) = listener::listening(move |snapshot| {
@@ -86,15 +97,14 @@ impl Viewed {
                 shown.take(snapshot);
             }
         });
-        let clock = DesktopClock::following(None);
         let model = PitboardModel::fixture_in(
             world.into(),
             Front::Gnome,
-            scratch.path().to_string_lossy().into_owned(),
+            folder.to_string_lossy().into_owned(),
             told,
             None,
             Arc::new(Unposted),
-            clock.local_time(),
+            local_time,
         )
         .unwrap();
         let shown = Shown::new(model.snapshot());
@@ -103,7 +113,7 @@ impl Viewed {
         let hands = Rc::new(Hands {
             model: OnceCell::from(Arc::clone(&model)),
             asked: asked.clone(),
-            data: DataFolder::at(&scratch.path().join("data")),
+            data: DataFolder::at(&folder.join("data")),
         });
         let window = Window::new(None, &shown, hands);
         window.present();
@@ -113,7 +123,7 @@ impl Viewed {
             asked,
             model,
             _listening: listening,
-            _scratch: scratch,
+            _scratch: None,
         };
         viewed.until("the window shown", |_| viewed.window.is_mapped());
         viewed.model.send(Intent::Start);
@@ -190,9 +200,14 @@ impl pitboard_model::Listener for Told {
     }
 }
 
-/// The accounts the fixture `world`'s model shows once it has read them, as the program
-/// launched into it shows them: for a test over AT-SPI to know the model's words.
-pub(crate) fn items_of(world: &str) -> Vec<AccountItem> {
+/// What the fixture `world`'s model shows once it has read its accounts and been sent
+/// `intents`, once `done` holds, as the program launched into it shows it: for a test over
+/// AT-SPI to know the model's words.
+pub(crate) fn shown_in(
+    world: &str,
+    intents: &[Intent],
+    done: impl Fn(&Snapshot) -> bool,
+) -> Snapshot {
     let scratch = tempfile::tempdir().unwrap();
     let (told, heard) = std::sync::mpsc::channel();
     let model = PitboardModel::fixture_in(
@@ -207,16 +222,27 @@ pub(crate) fn items_of(world: &str) -> Vec<AccountItem> {
     .unwrap();
     model.send(Intent::Start);
     let deadline = Instant::now() + PATIENCE;
-    let read = loop {
+    let mut sent = false;
+    let shown = loop {
         let snapshot = heard
             .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .unwrap_or_else(|_| panic!("{world}: not read within {PATIENCE:?}"));
-        if !snapshot.reading && !snapshot.sections.is_empty() {
+            .unwrap_or_else(|_| panic!("{world}: not shown within {PATIENCE:?}"));
+        let read = !snapshot.reading && !snapshot.sections.is_empty();
+        if read && !sent {
+            sent = true;
+            intents.iter().for_each(|intent| model.send(intent.clone()));
+        }
+        if read && sent && done(&snapshot) {
             break snapshot;
         }
     };
     model.shutdown();
-    (read.sections.into_iter())
+    shown
+}
+
+/// The accounts the fixture `world`'s model shows once it has read them.
+pub(crate) fn items_of(world: &str) -> Vec<AccountItem> {
+    (shown_in(world, &[], |_| true).sections.into_iter())
         .flat_map(|section| section.accounts)
         .collect()
 }
@@ -248,4 +274,34 @@ pub(crate) fn button(root: &impl IsA<gtk::Widget>, label: &str) -> gtk::Button {
                 .collect();
             panic!("no button {label:?}: {labels:?}")
         })
+}
+
+/// What Escape does where `from` has the focus: the first shortcut for it from `from` up to its
+/// window, activated as GTK activates one for the key.
+pub(crate) fn escape(from: &impl IsA<gtk::Widget>) {
+    let mut at = Some(from.as_ref().clone());
+    while let Some(widget) = at {
+        let controllers = widget.observe_controllers();
+        for controller in (0..controllers.n_items()).filter_map(|i| controllers.item(i)) {
+            let Ok(shortcuts) = controller.downcast::<gtk::ShortcutController>() else {
+                continue;
+            };
+            for shortcut in (0..shortcuts.n_items()).filter_map(|i| shortcuts.item(i)) {
+                let shortcut = shortcut
+                    .downcast::<gtk::Shortcut>()
+                    .expect("shortcuts alone");
+                let escape = (shortcut.trigger())
+                    .and_downcast::<gtk::KeyvalTrigger>()
+                    .is_some_and(|trigger| {
+                        trigger.keyval() == gtk::gdk::Key::Escape && trigger.modifiers().is_empty()
+                    });
+                if escape && let Some(action) = shortcut.action() {
+                    action.activate(gtk::ShortcutActionFlags::EXCLUSIVE, &widget, None);
+                    return;
+                }
+            }
+        }
+        at = widget.parent();
+    }
+    panic!("nothing takes Escape");
 }

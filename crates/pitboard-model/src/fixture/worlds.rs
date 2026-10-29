@@ -786,6 +786,8 @@ impl Launched {
                     )
                 }),
                 widget_feed: None,
+                // The debug build's, for its links pasted, dropped or opened, windows or none.
+                link_scheme: Some(LINK_SCHEME.into()),
             },
             Cadence::APP,
         )

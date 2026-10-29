@@ -609,6 +609,12 @@ then dark by `AdwStyleManager`. Measured in Ubuntu 26.04's image:
 - Snapshotted at twice the window's size, 1200 by 1280 pixels for the 600 by 640 window, the
   text and the symbolic icons are drawn at that scale, with edges a pixel wide, not enlarged
   from 1x (looked at in `linux-accounts-noTool-dark.png`).
+- Drawn beside another, a picture's window lost the focus to it between its two drawings, which
+  dimmed its header bar, so the pictures are drawn one at a time (`.config/nextest.toml`).
+- A dialog comes up over the frames after it is mapped, and a window with a frame asked for and
+  not drawn yet snapshots as nothing, so each picture is snapshotted right after a frame it asked
+  for is drawn. A focused field's blinking cursor would be in one drawing and not the next, so
+  the pictures turn the blink off.
 
 ## The accounts page
 
@@ -641,8 +647,30 @@ libadwaita 1.9, by the tests named:
   (`src/adw-dialog.c` at 1.7.0), is a `GtkButton`, which GTK activates only once it is realized:
   an alert's buttons were realized a frame after the alert was mapped
   (`a_question_answers_with_its_default_and_close_responses`).
-- Drawn beside another, a picture's window lost the focus to it between its two drawings, which
-  dimmed its header bar, so the pictures are drawn one at a time (`.config/nextest.toml`).
+
+## The dialogs
+
+Read at libadwaita 1.7.0 and GTK 4.18.6, and measured in Ubuntu 26.04's image by the tests named:
+
+- `AdwAlertDialog` closes on any response: a response's button calls `adw_dialog_close` and only
+  then emits `response` (`button_clicked_cb`, `src/adw-alert-dialog.c`). With `can-close` off,
+  that close is a `close-attempt` instead, so Name, Rename and Clean Up stay up until the model
+  closes their sheet, saying inside what went wrong (`a_failure_stays_in_the_dialog`), and a
+  close attempt no response follows is Escape.
+- An `AdwDialog` in a window takes Escape through its sheet's shortcut, which calls
+  `adw_dialog_close` (`src/adw-floating-sheet.c`, `src/adw-bottom-sheet.c`): with `can-close` off
+  that is a `close-attempt`, which the sign-in dialog answers as its Cancel where the model says
+  Escape is that (`escape_while_signing_in_cancels_it`).
+- `AdwSpinner` always spins: its `AdwSpinnerPaintable` animates on the widget's frame clock with
+  `follow-enable-animations` off (`src/adw-spinner-paintable.c`). The sign-in dialog shows the
+  same paintable in a `GtkImage`, which libadwaita documents for a spinner where a widget of its
+  own does not fit, so the pictures hold it still as they hold a status page's.
+- A dropped link reaches a `GtkDropTarget` taking `G_TYPE_STRING` as a string, whatever it was
+  dragged from: a browser's address, or text (`a_dropped_link_opens_open_link`). Pasted text
+  comes with the white space it was copied with, which the model trims as Foundation trims
+  shared text.
+- No fixture world's sign-in fails to start, so `linux-signIn-failed` is a sign-in that fails as
+  a person's can: Claude Code refusing a code typed back without its state.
 
 ## The icons
 

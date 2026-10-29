@@ -581,11 +581,16 @@ keeps it is in the header of the module named.
   one came, until it says it went (`a_front_shows_a_status_item_only_while_it_has_one`). Quick
   actions are offered only by a front that keeps them, the Windows app and the Linux app
   (`quick_actions_are_offered_only_where_the_front_keeps_them`).
-- Whether a front has account windows and keeps quick actions is `Front`'s. The Linux app has no
-  account windows, so nothing offers one and a link that arrives goes to the browser, and its
-  search finds a switch to each account and Add Account
+- Whether a front has account windows, takes a pasted link and keeps quick actions is
+  `Front`'s. The Linux app has no account windows, so nothing offers one and a link that arrives
+  goes to the browser; a link pasted or dropped on it is read as a site's own link or a Pitboard
+  link of the build's scheme, by the rule any link from outside is; and its search finds a
+  switch to each account and Add Account
   (`the_gnome_front_offers_no_account_window_and_hands_a_link_to_the_browser`,
-  `the_gnome_front_offers_a_switch_for_each_account_and_add_account`).
+  `a_link_pasted_where_the_front_takes_one_is_read_as_a_site_link_or_a_pitboard_link`,
+  `the_gnome_front_offers_a_switch_for_each_account_and_add_account`). A fixture reads its debug
+  build's links on a front with no account windows to name their scheme
+  (`a_gnome_fixture_reads_the_links_of_its_build`).
 - One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
   (`snapshots_made_while_many_threads_send_arrive_in_order`). Each names the parts that differ
@@ -677,6 +682,14 @@ keeps it is in the header of the module named.
   the model's default and closes as Cancel
   (`a_notices_buttons_send_their_intents_asking_first_where_it_says`,
   `a_question_answers_with_its_default_and_close_responses`).
+- The Linux app's sheets are the model's: Add Account and Sign In Again sign in with the code
+  the browser shows and name the account added, a failure is said inside the sheet with what
+  was typed still there, and Escape while signing in is the sign-in's Cancel
+  (`adding_an_account_signs_in_with_the_fixtures_code_and_names_it`,
+  `a_failure_stays_in_the_dialog`, `escape_while_signing_in_cancels_it`). A link dropped on the
+  window or pasted in Open Link reaches the model as it came, and Open in Browser hands it to the
+  browser, a fixture's stand-in opener in a fixture (`a_dropped_link_opens_open_link`,
+  `a_pasted_link_opens_open_link`, `open_in_browser_hands_the_link_to_the_opener`).
 - In a fixture the Linux app writes, posts and registers nothing outside the fixture's folder,
   and leaves every home it was given as it found it, beside Mesa's shader cache
   (`a_fixture_writes_nothing_outside_its_folder`,

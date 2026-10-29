@@ -552,6 +552,61 @@ fn the_gnome_front_offers_no_account_window_and_hands_a_link_to_the_browser() {
     assert_eq!(open_window(&model, &claude("w")), None);
 }
 
+/// The Linux app's Open Link takes a link pasted or dropped on it: a site's own link, with the
+/// white space it was copied with, or a Pitboard link of the build's scheme, each read by the
+/// rule a link from outside is. A front whose links come from its Share extension alone reads
+/// only a Pitboard link.
+#[test]
+fn a_link_pasted_where_the_front_takes_one_is_read_as_a_site_link_or_a_pitboard_link() {
+    let waiting = |model: &Hand| match picker(model).shown {
+        PickerShown::NoWindows { link, .. } => Ok(link.url),
+        PickerShown::Refused { reason, .. } => Err(reason),
+        other => panic!("{other:?}"),
+    };
+    let mut machine = machine();
+    let mut gnome = started_on(Front::Gnome, &mut machine);
+    for (text, read) in [
+        (
+            " https://claude.ai/chat/1f2e\n",
+            Ok("https://claude.ai/chat/1f2e".to_owned()),
+        ),
+        (
+            "chatgpt.com/c/68a9",
+            Ok("https://chatgpt.com/c/68a9".into()),
+        ),
+        (
+            "pitboard://open?url=https%3A%2F%2Fclaude.ai%2Fnew",
+            Ok("https://claude.ai/new".into()),
+        ),
+        (
+            "https://example.com/page",
+            Err(pitboard_sites::LinkRefusal::NotASite {
+                host: Some("example.com".into()),
+            }
+            .to_string()),
+        ),
+        (
+            "pitboard://open?url=https://claude.ai/x#c",
+            Err(pitboard_sites::LinkRefusal::Unreadable.to_string()),
+        ),
+    ] {
+        gnome.send(Intent::LinkArrived { text: text.into() });
+        assert_eq!(waiting(&gnome), read, "{text:?}");
+    }
+
+    let mut model = started_on(Front::MacMenuBar, &mut machine);
+    model.send(Intent::LinkArrived {
+        text: "https://claude.ai/chat/1f2e".into(),
+    });
+    assert_eq!(
+        picker(&model).shown,
+        PickerShown::Refused {
+            title: words::cannot_open_link(Front::MacMenuBar),
+            reason: pitboard_sites::LinkRefusal::Unreadable.to_string(),
+        }
+    );
+}
+
 /// A window that cannot show its page yet says what it waits for in the model's words, as
 /// the Open Link window does: the accounts being read, or, where they could not be and
 /// nothing is known, why, with a way to try again that reads them again. Once they are read,

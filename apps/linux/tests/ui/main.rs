@@ -10,6 +10,8 @@ mod actions;
 mod harness;
 mod launch;
 mod lifecycle;
+mod open_link;
 mod questions;
+mod sign_in;
 mod views;
 mod words;

@@ -7,7 +7,8 @@
 //! (docs/facts/linux-app.md, What the app exports), so no other process reaches what the window
 //! does. Its keys are bound on its class too. Closing it hides it while a tray keeps Pitboard
 //! running, and quits Pitboard where none does. It keeps its size in the app's data folder, and
-//! tells the model it was looked at each time it maps.
+//! tells the model it was looked at each time it maps. Its dialogs are [`crate::dialogs`]'s, and
+//! a link dropped on it is handed to the model, which says what Open Link shows of it.
 
 mod account_group;
 mod accounts;
@@ -30,6 +31,8 @@ use pitboard_model::{Front, Intent, Part};
 use serde::{Deserialize, Serialize};
 
 use crate::data_folder::DataFolder;
+use crate::dialogs::Dialogs;
+use crate::platform::links;
 use crate::presence::HELP;
 use crate::shown::Shown;
 
@@ -74,6 +77,7 @@ mod imp {
         pub(super) accounts_page: TemplateChild<AccountsPage>,
         pub(super) host: OnceCell<Rc<dyn Host>>,
         pub(super) shown: OnceCell<Shown>,
+        pub(super) dialogs: OnceCell<Rc<Dialogs>>,
     }
 
     #[glib::object_subclass]
@@ -90,6 +94,11 @@ mod imp {
             });
             class.install_action("pitboard.refresh", None, |window, _, _| {
                 window.host().send(Intent::Refresh { asked: true });
+            });
+            class.install_action("pitboard.open-link", None, |window, _, _| {
+                if let Some(dialogs) = window.imp().dialogs.get() {
+                    dialogs.show_open_link();
+                }
             });
             class.install_action("pitboard.help", None, |window, _, _| {
                 window.host().open(HELP, window.upcast_ref());
@@ -154,6 +163,13 @@ impl Window {
             window.set_maximized(size.maximized);
         }
         imp.accounts_page.follow(shown, window.host());
+        let _ = imp
+            .dialogs
+            .set(Dialogs::follow(&window, shown, window.host()));
+        let host = window.host();
+        window.add_controller(links::drop_target(move |text| {
+            host.send(Intent::LinkArrived { text });
+        }));
         window.follow(shown);
         window
     }
@@ -179,6 +195,7 @@ impl Window {
             .update_property(&[gtk::accessible::Property::Label(&words.window.refresh)]);
         imp.main_menu.set_tooltip_text(Some(&gnome.main_menu));
         let menu = gio::Menu::new();
+        menu.append(Some(&gnome.open_link), Some("pitboard.open-link"));
         menu.append(Some(&words.menu.help), Some("pitboard.help"));
         imp.main_menu.set_menu_model(Some(&menu));
     }
@@ -284,7 +301,10 @@ mod tests {
         let host: Rc<dyn Host> = Rc::new(Shows(DataFolder::at(scratch.path())));
         let _ = AccountGroup::new(host.clone());
         let _ = LimitRow::default();
-        let _ = NoticeRow::new(host);
+        let _ = NoticeRow::new(host.clone());
+        let add = pitboard_model::Sheet::Add { tool: None };
+        let _ = crate::dialogs::sign_in::SignIn::new(add, host.clone());
+        let _ = crate::dialogs::open_link::OpenLink::new(host);
         window.destroy();
     }
 }

@@ -3,7 +3,8 @@
 //! as `linux-<surface>-<state>[-dark].png` in `PITBOARD_LINUX_PICTURES`, which CI uploads. Each is
 //! drawn over a fixture's model, with every clock time said as one fixed time and animations
 //! off, so a picture is the same from one run to the next, which each holds
-//! (docs/facts/linux-app.md, The pictures).
+//! (docs/facts/linux-app.md, The pictures). A dialog is drawn in the window it comes up over,
+//! as the model shows it once it has taken what the picture sends it.
 #![cfg(target_os = "linux")]
 
 use std::path::{Path, PathBuf};
@@ -15,10 +16,10 @@ use adw::prelude::*;
 use gtk::glib;
 use pitboard_linux::data_folder::DataFolder;
 use pitboard_linux::shown::Shown;
-use pitboard_linux::window::{Host, Window};
+use pitboard_linux::window::{AccountGroup, Host, Window};
 use pitboard_model::{
     AccountsShown, Front, Intent, Listener, LocalTime, Notice, Notifier, PitboardModel,
-    PlatformError, Snapshot,
+    PlatformError, Sheet, Snapshot, Tool,
 };
 
 const PATIENCE: Duration = Duration::from_secs(30);
@@ -107,6 +108,17 @@ fn iterate_until(what: &str, done: impl Fn() -> bool) {
     }
 }
 
+// Runs the main loop until `window` has drawn `count` frames more, each asked for once: one
+// asked for and not drawn yet leaves the window with nothing to snapshot.
+fn frames(window: &Window, count: i64) {
+    let clock = window.frame_clock().expect("a mapped window's clock");
+    for _ in 0..count {
+        let next = clock.frame_counter() + 1;
+        window.queue_draw();
+        iterate_until("its frame drawn", || clock.frame_counter() >= next);
+    }
+}
+
 // What `widget` draws, at twice its own size, as a display at 2x shows it, by the renderer of the
 // window it is in.
 fn drawn(widget: &impl IsA<gtk::Widget>) -> glib::Bytes {
@@ -128,9 +140,15 @@ fn drawn(widget: &impl IsA<gtk::Widget>) -> glib::Bytes {
 // frame clock of the widget it is given whatever the animations setting, and with none keeps
 // still (libadwaita 1.7.6 `adw-spinner-paintable.c`). The time a picture is drawn at is not in it.
 fn hold_still(widget: &gtk::Widget) {
-    if let Some(status) = widget.downcast_ref::<adw::StatusPage>()
-        && let Some(spinner) = status.paintable().and_downcast::<adw::SpinnerPaintable>()
-    {
+    let paintable = match (
+        widget.downcast_ref::<adw::StatusPage>(),
+        widget.downcast_ref::<gtk::Image>(),
+    ) {
+        (Some(status), _) => status.paintable(),
+        (_, Some(image)) => image.paintable(),
+        _ => None,
+    };
+    if let Some(spinner) = paintable.and_downcast::<adw::SpinnerPaintable>() {
         spinner.set_widget(None::<&gtk::Widget>);
     }
     let mut child = widget.first_child();
@@ -152,17 +170,30 @@ fn styled() {
     );
 }
 
-/// The window over the fixture `world`, as the model shows it once `shows` holds, light and
-/// dark, saved as `linux-accounts-<state>`.
-fn picture(world: &str, state: &str, start: bool, shows: impl Fn(&AccountsShown) -> bool) {
+// What a step of a picture sends the model, and what the model shows once it has taken it.
+type Step = (Option<Intent>, fn(&Snapshot) -> bool);
+
+/// The window over the fixture `world`, as the model shows it once it has taken each of
+/// `steps` in turn, with `then` done in it, light and dark, saved as `linux-<name>`. Each step's
+/// intent is sent once the step before shows what it waits for, from the first read on where
+/// `start`.
+fn picture(
+    name: &str,
+    world: &str,
+    start: bool,
+    steps: &[Step],
+    then: impl Fn(&Window),
+    dialog: bool,
+) {
     adw::init().unwrap();
     pitboard_linux::resources::register();
     styled();
-    gtk::Settings::default()
-        .unwrap()
-        .set_gtk_enable_animations(false);
+    let settings = gtk::Settings::default().unwrap();
+    settings.set_gtk_enable_animations(false);
+    // A focused field's cursor would be in one drawing and not the next.
+    settings.set_gtk_cursor_blink(false);
     // The same folder on every run, since a failure to read names its path.
-    let scratch = Path::new("/tmp/pitboard-linux-pictures").join(state);
+    let scratch = Path::new("/tmp/pitboard-linux-pictures").join(name);
     let _ = std::fs::remove_dir_all(&scratch);
     std::fs::create_dir_all(&scratch).unwrap();
     let (told, heard) = mpsc::channel();
@@ -180,25 +211,51 @@ fn picture(world: &str, state: &str, start: bool, shows: impl Fn(&AccountsShown)
     if start {
         model.send(Intent::Start);
         let deadline = Instant::now() + PATIENCE;
-        while !shows(&shown.accounts_shown) || shown.reading {
-            shown = heard
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .unwrap_or_else(|_| panic!("{world}: {state} not shown within {PATIENCE:?}"));
+        let wait = |done: &dyn Fn(&Snapshot) -> bool, shown: &mut Snapshot| {
+            while !done(shown) || shown.reading {
+                *shown = heard
+                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                    .unwrap_or_else(|_| panic!("{world}: {name} not shown within {PATIENCE:?}"));
+            }
+        };
+        wait(
+            &|shown| !matches!(shown.accounts_shown, AccountsShown::Reading { .. }),
+            &mut shown,
+        );
+        for (intent, done) in steps {
+            if let Some(intent) = intent {
+                model.send(intent.clone());
+            }
+            wait(done, &mut shown);
         }
     }
-    assert!(
-        shows(&shown.accounts_shown),
-        "{world}: {:?}",
-        shown.accounts_shown
-    );
     let store = Shown::new(shown);
     let data = DataFolder::at(&scratch.join("data"));
     let window = Window::new(None, &store, Rc::new(Drawn(data)));
     window.present();
     iterate_until("the window drawn", || window.is_mapped());
+    then(&window);
+    iterate_until("its dialog drawn", || {
+        window.visible_dialog().is_some_and(|dialog| {
+            dialog.is_mapped()
+                && dialog
+                    .default_widget()
+                    .is_none_or(|button| button.is_mapped())
+        }) == dialog
+    });
+    // A dialog comes up over the frames after it is mapped, at once with animations off.
+    frames(&window, 3);
     hold_still(window.upcast_ref());
-    let folder = folder(&scratch);
-    std::fs::create_dir_all(&folder).unwrap();
+    draw(&window, &format!("linux-{name}"), &folder(&scratch));
+    window.destroy();
+    model.shutdown();
+    std::fs::remove_dir_all(&scratch).unwrap();
+}
+
+/// `window` light and then dark, as `<name>.png` and `<name>-dark.png` in `folder`, each drawn
+/// twice and held the same.
+fn draw(window: &Window, name: &str, folder: &Path) {
+    std::fs::create_dir_all(folder).unwrap();
     let style = adw::StyleManager::default();
     for (scheme, suffix) in [
         (adw::ColorScheme::ForceLight, ""),
@@ -207,69 +264,257 @@ fn picture(world: &str, state: &str, start: bool, shows: impl Fn(&AccountsShown)
         style.set_color_scheme(scheme);
         let dark = !suffix.is_empty();
         iterate_until("the scheme drawn", || style.is_dark() == dark);
-        while glib::MainContext::default().iteration(false) {}
-        let first = drawn(&window);
-        let name = format!("linux-accounts-{state}{suffix}");
+        frames(window, 1);
+        let first = drawn(window);
+        let name = format!("{name}{suffix}");
         std::fs::write(folder.join(format!("{name}.png")), &first).unwrap();
         // Drawn again a moment later, as the next run would draw it, and kept where it differs.
         std::thread::sleep(Duration::from_millis(300));
-        while glib::MainContext::default().iteration(false) {}
-        let again = drawn(&window);
+        frames(window, 1);
+        let again = drawn(window);
         if again != first {
             std::fs::write(folder.join(format!("{name}-again.png")), &again).unwrap();
             panic!("{name} differs from one drawing to the next");
         }
     }
-    window.destroy();
-    model.shutdown();
-    std::fs::remove_dir_all(&scratch).unwrap();
+}
+
+/// The accounts page over `world`, once what it shows in place of the list or the list is
+/// `shows`, saved as `linux-accounts-<state>`.
+fn accounts(world: &str, state: &str, start: bool, shows: fn(&Snapshot) -> bool) {
+    picture(
+        &format!("accounts-{state}"),
+        world,
+        start,
+        &[(None, shows)],
+        |_| {},
+        false,
+    );
+}
+
+/// The code a Claude Code sign-in in a fixture takes, as its browser page shows one.
+const CODE: &str = "fixture-code#state";
+
+fn adding() -> Step {
+    (
+        Some(Intent::PresentSheet {
+            sheet: Sheet::Add { tool: None },
+        }),
+        |shown| shown.sheet_text.is_some(),
+    )
+}
+
+fn signing_in() -> Step {
+    (
+        Some(Intent::SignIn {
+            tool: Tool::Claude,
+            again: None,
+        }),
+        |shown| shown.signing_in_text.is_some(),
+    )
+}
+
+fn asked_for_the_code() -> Step {
+    (None, |shown| {
+        shown
+            .signing_in
+            .as_ref()
+            .is_some_and(|running| running.wants_code)
+    })
 }
 
 #[gtk::test]
 fn accounts_reading() {
-    picture("oneTool", "reading", false, |shown| {
-        matches!(shown, AccountsShown::Reading { .. })
+    accounts("oneTool", "reading", false, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::Reading { .. })
     });
 }
 
 #[gtk::test]
 fn accounts_no_tool() {
-    picture("noClaudeCode", "noTool", true, |shown| {
-        matches!(shown, AccountsShown::NoTool { .. })
+    accounts("noClaudeCode", "noTool", true, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::NoTool { .. })
     });
 }
 
 #[gtk::test]
 fn accounts_no_accounts() {
-    picture("empty", "noAccounts", true, |shown| {
-        matches!(shown, AccountsShown::NoAccounts { .. })
+    accounts("empty", "noAccounts", true, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::NoAccounts { .. })
     });
 }
 
 #[gtk::test]
 fn accounts_read_failed() {
-    picture("readFailure", "readFailed", true, |shown| {
-        matches!(shown, AccountsShown::ReadFailed { .. })
+    accounts("readFailure", "readFailed", true, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::ReadFailed { .. })
     });
 }
 
 #[gtk::test]
 fn accounts_two_tools() {
-    picture("twoTools", "twoTools", true, |shown| {
-        matches!(shown, AccountsShown::List)
+    accounts("twoTools", "twoTools", true, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::List)
     });
 }
 
 #[gtk::test]
 fn accounts_notices() {
-    picture("stuck", "notices", true, |shown| {
-        matches!(shown, AccountsShown::List)
+    accounts("stuck", "notices", true, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::List)
     });
 }
 
 #[gtk::test]
 fn accounts_setup() {
-    picture("onlyOne", "setup", true, |shown| {
-        matches!(shown, AccountsShown::List)
+    accounts("onlyOne", "setup", true, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::List)
     });
+}
+
+#[gtk::test]
+fn sign_in_tool() {
+    picture("signIn-tool", "twoTools", true, &[adding()], |_| {}, true);
+}
+
+#[gtk::test]
+fn sign_in_waiting() {
+    let waiting: Step = (None, |shown| {
+        shown
+            .signing_in
+            .as_ref()
+            .is_some_and(|running| !running.wants_code)
+    });
+    picture(
+        "signIn-waiting",
+        "oneTool",
+        true,
+        &[adding(), signing_in(), waiting],
+        |_| {},
+        true,
+    );
+}
+
+#[gtk::test]
+fn sign_in_code() {
+    picture(
+        "signIn-code",
+        "oneTool",
+        true,
+        &[adding(), signing_in(), asked_for_the_code()],
+        |_| {},
+        true,
+    );
+}
+
+// No world's sign-in fails to start, so the sign-in fails as a person's can in each: Claude
+// Code refuses a code typed back without its state.
+#[gtk::test]
+fn sign_in_failed() {
+    let refused: Step = (
+        Some(Intent::PasteCode {
+            code: "fixture-code".into(),
+        }),
+        |shown| (shown.signing_in_text.as_ref()).is_some_and(|text| text.refused.is_some()),
+    );
+    picture(
+        "signIn-failed",
+        "oneTool",
+        true,
+        &[adding(), signing_in(), asked_for_the_code(), refused],
+        |_| {},
+        true,
+    );
+}
+
+#[gtk::test]
+fn name() {
+    let named: Step = (Some(Intent::PasteCode { code: CODE.into() }), |shown| {
+        matches!(shown.sheet, Some(Sheet::Name { .. })) && shown.sheet_text.is_some()
+    });
+    picture(
+        "name",
+        "oneTool",
+        true,
+        &[adding(), signing_in(), asked_for_the_code(), named],
+        |_| {},
+        true,
+    );
+}
+
+#[gtk::test]
+fn question_remove() {
+    let read: Step = (None, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::List)
+    });
+    picture(
+        "question-remove",
+        "oneTool",
+        true,
+        &[read],
+        |window| {
+            let group = every_group(window)
+                .into_iter()
+                .find(|group| group.title() == "personal")
+                .expect("personal's group");
+            group
+                .activate_action("account.remove", None)
+                .expect("its menu's Remove");
+        },
+        true,
+    );
+}
+
+#[gtk::test]
+fn open_link_empty() {
+    let read: Step = (None, |shown| {
+        matches!(shown.accounts_shown, AccountsShown::List)
+    });
+    picture(
+        "openLink-empty",
+        "oneTool",
+        true,
+        &[read],
+        |window| {
+            window
+                .activate_action("pitboard.open-link", None)
+                .expect("the main menu's Open Link");
+        },
+        true,
+    );
+}
+
+#[gtk::test]
+fn open_link_in_browser() {
+    let arrived: Step = (
+        Some(Intent::LinkArrived {
+            text: "pitboard-debug://open?url=https%3A%2F%2Fclaude.ai%2Fchat%2F1f2e".into(),
+        }),
+        |shown| shown.account_windows.picker.is_some(),
+    );
+    picture(
+        "openLink-inBrowser",
+        "oneTool",
+        true,
+        &[arrived],
+        |_| {},
+        true,
+    );
+}
+
+// The window's account groups, in the order drawn.
+fn every_group(window: &Window) -> Vec<AccountGroup> {
+    let mut found = Vec::new();
+    let mut next = vec![window.clone().upcast::<gtk::Widget>()];
+    while let Some(widget) = next.pop() {
+        if let Ok(group) = widget.clone().downcast::<AccountGroup>() {
+            found.push(group);
+        }
+        let mut child = widget.last_child();
+        while let Some(widget) = child {
+            child = widget.prev_sibling();
+            next.push(widget);
+        }
+    }
+    found
 }
