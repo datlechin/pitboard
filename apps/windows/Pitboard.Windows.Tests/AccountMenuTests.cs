@@ -10,9 +10,9 @@ namespace Pitboard.Windows.Tests;
 [TestClass]
 public sealed class AccountMenuTests
 {
-    private static readonly AccountAction Switch = Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo("claude/spare"));
+    private static readonly AccountAction Switch = Items.Action(ActionKind.Switch, "Switch to spare", new Intent.SwitchTo(new AccountKey(Tool.Claude, "spare")));
     private static readonly AccountAction SignInAgain = Items.Action(
-        ActionKind.SignInAgain, "Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), enabled: false);
+        ActionKind.SignInAgain, "Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "spare"))), enabled: false);
     private static readonly AccountAction Rename = Items.RenameAction("claude", "spare");
 
     // Each item by what UI Automation finds it by, a separator as "-".
@@ -25,7 +25,7 @@ public sealed class AccountMenuTests
     [UITestMethod]
     public void TheMenuOffersWhatTheModelOffersThenCopyingThenRemoving()
     {
-        var item = Items.Account("claude", "spare") with { Actions = [Switch, SignInAgain, Rename, Items.RemoveAction("claude/spare")] };
+        var item = Items.Account("claude", "spare") with { Actions = [Switch, SignInAgain, Rename, Items.RemoveAction("claude", "spare")] };
 
         Assert.AreEqual("account.switchTo, account.rename, -, account.copyEmail, -, account.forget", string.Join(", ", Said(Menu(item))));
     }
@@ -34,7 +34,7 @@ public sealed class AccountMenuTests
     [UITestMethod]
     public void TheMenuShowsTheRowsKeysAndAnAccessKeyOnEachItem()
     {
-        var item = Items.Account("claude", "spare") with { Actions = [Switch, Rename, Items.RemoveAction("claude/spare")] };
+        var item = Items.Account("claude", "spare") with { Actions = [Switch, Rename, Items.RemoveAction("claude", "spare")] };
 
         var shown = Menu(item).Items.OfType<MenuFlyoutItem>().Select(entry => $"{entry.KeyboardAcceleratorTextOverride} {entry.AccessKey}");
 
@@ -46,7 +46,7 @@ public sealed class AccountMenuTests
     {
         var item = Items.Account("claude", "work", inUse: true) with
         {
-            Actions = [Switch with { Enabled = false }, Rename, Items.RemoveAction("claude/work", enabled: false)],
+            Actions = [Switch with { Enabled = false }, Rename, Items.RemoveAction("claude", "work", enabled: false)],
         };
 
         Assert.AreEqual("account.rename, -, account.copyEmail", string.Join(", ", Said(Menu(item))));
@@ -63,7 +63,7 @@ public sealed class AccountMenuTests
     [UITestMethod]
     public void RemovingCarriesItsQuestion()
     {
-        var remove = Items.RemoveAction("claude/spare");
+        var remove = Items.RemoveAction("claude", "spare");
         var asked = new List<(Question?, Intent)>();
         var menu = AccountMenu.For(Items.Account("claude", "spare") with { Actions = [remove] }, (question, intent) => asked.Add((question, intent)), _ => { });
 
@@ -88,7 +88,7 @@ public sealed class AccountMenuTests
     public void TheAccountsWindowsComeAfterWhatItDoes()
     {
         var spare = Items.Window("codex", "spare");
-        var item = Items.Account("codex", "spare") with { Actions = [Rename, Items.WindowAction(spare), Items.RemoveAction("codex/spare")] };
+        var item = Items.Account("codex", "spare") with { Actions = [Rename, Items.WindowAction(spare), Items.RemoveAction("codex", "spare")] };
         var opened = new List<WindowAccount>();
 
         var menu = AccountMenu.For(item, (_, _) => { }, _ => { }, opened.Add, held: []);

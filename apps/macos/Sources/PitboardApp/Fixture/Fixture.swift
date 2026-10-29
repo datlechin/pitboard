@@ -2,10 +2,9 @@
     import Foundation
     import PitboardKit
 
-    // pitboard-ffi's worlds, the real core and model over a machine of their own. Only a debug
-    // build reads PITBOARD_FIXTURE, so nothing outside can put a release in one.
+    // pitboard-model's worlds, the real core and model over a machine of their own. Only a
+    // debug build is started in one (`started`), so nothing outside can put a release in one.
     enum Fixture {
-        static let variable = "PITBOARD_FIXTURE"
         // Set, macOS refuses the fixture's login item, as it can refuse an app's own.
         static let loginItemRefuses = "PITBOARD_FIXTURE_LOGIN_ITEM_REFUSES"
 
@@ -29,7 +28,7 @@
             do {
                 model = try AppModel.listening { listener in
                     try PitboardModel.fixture(
-                        name: name, listener: listener, localTime: MacLocalTime())
+                        name: name, front: front, listener: listener, localTime: MacLocalTime())
                 }
             } catch let refused as FixtureError {
                 switch refused {

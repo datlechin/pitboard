@@ -46,9 +46,9 @@ public sealed class IconCommandsTests
         var (commands, model, _, targets) = Made();
         commands.Heard(new IconEvent.Menu(0, 0));
 
-        targets.Menu!.Chosen(new IconCommand.Send(new Intent.SwitchTo("claude/personal")));
+        targets.Menu!.Chosen(new IconCommand.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal"))));
 
-        CollectionAssert.AreEqual(new Intent[] { new Intent.SwitchTo("claude/personal") }, model.Sent.ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")) }, model.Sent.ToArray());
     }
 
     [TestMethod]
@@ -57,13 +57,13 @@ public sealed class IconCommandsTests
         var (commands, model, updates, targets) = Made();
         var window = Items.Window("codex", "main");
 
-        await commands.Perform(new IconCommand.Send(new Intent.SwitchTo("claude/work")));
+        await commands.Perform(new IconCommand.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "work"))));
         await commands.Perform(new IconCommand.OpenLink(IconMenu.HelpLink));
         await commands.Perform(new IconCommand.OpenWindow(window));
         await commands.Perform(new IconCommand.ShowSettings());
         await commands.Perform(new IconCommand.CheckForUpdates());
 
-        CollectionAssert.AreEqual(new Intent[] { new Intent.SwitchTo("claude/work") }, model.Sent.ToArray());
+        CollectionAssert.AreEqual(new Intent[] { new Intent.SwitchTo(new AccountKey(Tool.Claude, "work")) }, model.Sent.ToArray());
         Assert.AreEqual($"open link {IconMenu.HelpLink}, open window {window.Store}, show settings", string.Join(", ", targets.Did));
         Assert.AreEqual(1, updates.Checks);
     }

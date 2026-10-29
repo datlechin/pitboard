@@ -50,18 +50,18 @@ public abstract record SheetPage
     {
         public override bool Closable => !Text.Saving;
 
-        public string Message(string tool) => Chosen(tool)?.Message ?? Text.Message;
+        public string Message(Tool tool) => Chosen(tool)?.Message ?? Text.Message;
 
-        public string Confirm(string tool) => Chosen(tool)?.Confirm ?? Text.Confirm;
+        public string Confirm(Tool tool) => Chosen(tool)?.Confirm ?? Text.Confirm;
 
         // Null where Pitboard found the tool.
-        public Missing? NotFound(string tool) => Chosen(tool)?.Missing;
+        public Missing? NotFound(Tool tool) => Chosen(tool)?.Missing;
 
         // Null while Sign in cannot be pressed. A new account is named once it is added.
-        public Intent? Start(string tool) =>
-            !Text.Saving && !Running && NotFound(tool) is null ? PitboardFfiMethods.CheckName(Sheet, tool, "").Intent : null;
+        public Intent? Start(Tool tool) =>
+            !Text.Saving && !Running && NotFound(tool) is null ? PitboardModelMethods.CheckName(Sheet, tool, "").Intent : null;
 
-        private SheetTool? Chosen(string tool) => Text.Tools.FirstOrDefault(offered => offered.Code == tool);
+        private SheetTool? Chosen(Tool tool) => Text.Tools.FirstOrDefault(offered => offered.Tool == tool);
     }
 
     public sealed record Naming(Sheet Sheet, SheetText Text) : SheetPage
@@ -72,9 +72,9 @@ public abstract record SheetPage
         public override string? CloseTitle => Sheet is Sheet.Name ? null : Words.Window.Cancel;
 
         // Microsoft's forms guidance holds the button back until what it needs is filled in; the field says so meanwhile.
-        public string? Problem(string typed) => PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Problem;
+        public string? Problem(string typed) => PitboardModelMethods.CheckName(Sheet, Text.Tool, typed).Problem;
 
-        public Intent? Save(string typed) => Text.Saving ? null : PitboardFfiMethods.CheckName(Sheet, Text.Tool, typed).Intent;
+        public Intent? Save(string typed) => Text.Saving ? null : PitboardModelMethods.CheckName(Sheet, Text.Tool, typed).Intent;
     }
 
     public sealed record SigningIn(RunningSignIn SignIn, SigningInText Text) : SheetPage

@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Xml;
+using Pitboard.Core;
 
 namespace Pitboard.Windows;
 
@@ -47,7 +48,7 @@ public sealed class SparkleUpdates : IUpdates
     // A beta offers checks only once WinSparkle has started over a feed.
     public bool Available => !Beta || _started;
 
-    public string? Refusal => _noFeed ? Words.Settings.NoReleaseToUpdateTo : null;
+    public string? Refusal => _noFeed ? Words.Own.NoReleaseToUpdateTo : null;
 
     public bool Beta => Versions.IsBeta(_version);
 
@@ -85,12 +86,12 @@ public sealed class SparkleUpdates : IUpdates
         {
             if (sparkle.SetKey(key) == 0)
             {
-                return new NoUpdates(Words.Settings.UpdateKeyInvalid);
+                return new NoUpdates(Words.Own.UpdateKeyInvalid);
             }
         }
         catch (DllNotFoundException)
         {
-            return new NoUpdates(Words.Settings.WinSparkleMissing);
+            return new NoUpdates(Words.Own.WinSparkleMissing);
         }
 
         var settings = new UpdateSettings(Path.Combine(dataFolder, "updates.json"));

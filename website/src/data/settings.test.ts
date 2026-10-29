@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   buildNumber,
@@ -18,15 +18,21 @@ import { checking } from "./machine.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
 const win = (file: string) => repo(`apps/windows/${file}`);
-const words = repo("crates/pitboard-ffi/src/present/words.rs");
+// present/words/, a file for each surface that says the words, read as one
+const words = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
+  .join("\n");
 // app_words.rs with its string literals' line continuations joined and its code on one line
-const appWords = repo("crates/pitboard-ffi/src/present/app_words.rs")
+const appWords = repo("crates/pitboard-model/src/present/app_words.rs")
   .replace(/\\\n\s*/g, "")
   .replace(/\s+/g, " ")
   .replace(/\( /g, "(");
-// app_words.rs and words.rs with their line continuations joined, where every word the Windows
-// views draw is the model's
-const modelWords = (repo("crates/pitboard-ffi/src/present/app_words.rs") + words).replace(
+// app_words.rs and present/words/ with their line continuations joined, where every word the
+// Windows views draw is the model's
+const modelWords = (repo("crates/pitboard-model/src/present/app_words.rs") + words).replace(
   /\\\n\s*/g,
   "",
 );
@@ -35,31 +41,33 @@ const owned = (said: string) => modelWords.includes(`"${said}"`);
 test("macOS's General says what app_words.rs gives GeneralSettings.swift and MenuBarShows.swift", () => {
   const general = mac("Settings/GeneralSettings.swift");
   for (const [word, made, said] of [
-    ["openAtLogin", "open_at_login: words::open_at_login(os).0.into(),", macGeneral.openAtLogin],
-    ["menuBarShows", 'menu_bar_shows: mac("', macGeneral.menuBarShows],
+    ["openAtLogin", "open_at_login: words::open_at_login(front).0.into(),", macGeneral.openAtLogin],
     ["updates", 'updates: "', macGeneral.updates],
     [
       "checkForUpdatesAutomatically",
-      'check_for_updates_automatically: titled(os, "',
+      'check_for_updates_automatically: titled(front, "',
       macGeneral.checks,
     ],
-    [
-      "downloadAndInstallAutomatically",
-      'download_and_install_automatically: mac("',
-      macGeneral.installs,
-    ],
     ["version", 'version: "', macGeneral.version],
-    ["checkNow", 'check_now: titled(os, "', macGeneral.checkNow],
+    ["checkNow", 'check_now: titled(front, "', macGeneral.checkNow],
   ]) {
     assert.ok(general.includes(`said.${word}`), word);
     assert.ok(appWords.includes(made.endsWith('"') ? `${made}${said}"` : made), said);
+  }
+  // what the macOS app alone draws, from its own catalogue
+  for (const [word, made, said] of [
+    ["menuBarShows", "menu_bar_shows", macGeneral.menuBarShows],
+    ["downloadAndInstallAutomatically", "download_and_install_automatically", macGeneral.installs],
+  ]) {
+    assert.ok(general.includes(`macWords.${word}`), word);
+    assert.ok(appWords.includes(`${made}: "${said}".into(),`), said);
   }
   assert.ok(words.includes(`"${macGeneral.openAtLogin}",`));
   const shows = mac("MenuBar/MenuBarShows.swift");
   for (const [value, title] of macGeneral.shows) {
     const word = { nameAndUsage: "accountAndUsage", usage: "usageOnly", icon: "iconOnly" }[value];
-    assert.ok(shows.includes(`case .${value}: words.settings.${word}`), title);
-    assert.ok(appWords.includes(`: mac("${title}"),`), title);
+    assert.ok(shows.includes(`case .${value}: macWords.${word}`), title);
+    assert.ok(appWords.includes(`: "${title}".into(),`), title);
   }
 });
 
@@ -79,10 +87,8 @@ test("Windows' General says what SettingsPage.xaml binds from app_words(), and t
   const vm = win("Pitboard.Windows/SettingsViewModel.cs");
   assert.ok(vm.includes("_start.Note(Words.Settings.OpenAtLoginNote)"));
   assert.ok(owned(winGeneral.startNote));
-  assert.ok(
-    win("Pitboard.Windows/SparkleUpdates.cs").includes("Words.Settings.NoReleaseToUpdateTo"),
-  );
-  assert.ok(vm.includes("Words.Settings.BetaUpdates"));
+  assert.ok(win("Pitboard.Windows/SparkleUpdates.cs").includes("Words.Own.NoReleaseToUpdateTo"));
+  assert.ok(vm.includes("Words.Own.BetaUpdates"));
   assert.ok(owned(winGeneral.noFeed) && owned(winGeneral.betaNote));
   // About's links, the site's titled by its host
   const [site, ...rest] = winAbout.links;
@@ -105,20 +111,23 @@ test("Windows' General says what SettingsPage.xaml binds from app_words(), and t
   assert.ok(owned(winAbout.header) && owned(winAbout.copyright));
 });
 
-test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and words.rs give it", () => {
+test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and present/words/ give it", () => {
   const advanced = mac("Settings/AdvancedSettings.swift");
   assert.ok(advanced.includes("said.keepSavedSignInsFresh"));
-  assert.ok(appWords.includes("keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(os),"));
-  assert.ok(words.includes(`titled(os, "${renew.macos}", "${renew.windows}")`));
+  assert.ok(
+    appWords.includes("keep_saved_sign_ins_fresh: words::keep_saved_sign_ins_fresh(front),"),
+  );
+  const oneLine = words.replace(/\s+/g, " ").replace(/\( /g, "(");
+  assert.ok(oneLine.includes(`titled(front, "${renew.macos}", "${renew.windows}",`));
   assert.ok(advanced.includes("Text(said.commandLine)"));
-  assert.ok(appWords.includes(`command_line: titled(os, "${macCommandLine.heading}", `));
+  assert.ok(appWords.includes(`command_line: titled(front, "${macCommandLine.heading}", `));
   assert.ok(advanced.includes("LabeledContent(said.path)"));
   assert.ok(appWords.includes(`path: "${macCommandLine.path}".into(),`));
   assert.ok(advanced.includes("LabeledContent(words.settings.uninstall)"));
   assert.ok(words.includes(`pub(crate) const UNINSTALL: &str = "${macUninstall.title}";`));
   assert.ok(advanced.includes("Text(words.settings.uninstallNote)"));
   assert.ok(appWords.includes(`uninstall_note: "${macUninstall.note}"`));
-  assert.ok(words.includes(`Os::MacOs | Os::Linux => "${macUninstall.button}",`));
+  assert.ok(words.includes(`Front::MacMenuBar | Front::Gnome => "${macUninstall.button}",`));
   // each of Windows' Advanced cards binds its header from app_words()
   const page = win("Pitboard.Views/SettingsPage.xaml");
   for (const [field, said] of [
@@ -141,7 +150,8 @@ test("Advanced says what AdvancedSettings.swift, SettingsPage.xaml and words.rs 
   assert.ok(words.includes(`"${updateNote}"`));
   const joined = words.replace(/\\\n\s*/g, "");
   assert.ok(
-    joined.includes('Os::MacOs => "Your Mac",') && joined.includes('Os::Windows => "Your PC",'),
+    joined.includes('Front::MacMenuBar => "Your Mac",') &&
+      joined.includes('Front::WindowsNotificationArea => "Your PC",'),
   );
   assert.ok(
     joined.includes(
@@ -168,7 +178,7 @@ test("the About panel numbers a build as build-number.sh does", () => {
   );
 });
 
-test("This PC says what present/words.rs `checking` says while it waits", () => {
-  assert.ok(words.includes('format!("Checking {}…", this_machine(os))'));
+test("This PC says what present/words/checks.rs `checking` says while it waits", () => {
+  assert.ok(words.includes('format!("Checking {}…", this_machine(front))'));
   assert.equal(checking("windows"), "Checking this PC…");
 });

@@ -23,10 +23,11 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
 - [Anthropic's and OpenAI's services](services.md): the clock of Anthropic's answers, and the
   sites the account windows open.
 - [One sign-in at a time](sign-in-lock.md): `flock` and std's process starts.
-- [The app model](app-model.md): a look beside the app's own changes, and the timers.
+- [The app model](app-model.md): a look beside the app's own changes, the timers, and watching
+  Pitboard's directory.
 - [The fixtures](fixtures.md): the worlds the apps' debug builds launch into.
 - [The site's figures](site.md): the shells, prompts and keys usepitboard.com's terminals
   draw, the keys a browser keeps from a page, a box's edges in Firefox, and how the apps' menus,
   dialogs, lists and Limits controls behave.
-- [Not measured](not-measured.md): what nobody has measured about the tools, and what Pitboard
-  does where it cannot know.
+- [Not measured](not-measured.md): what nobody has measured about the tools and about watching
+  Pitboard's directory, and what Pitboard does where it cannot know.

@@ -1,6 +1,6 @@
 [package]
 name = "uniffi-bindgen-csharp"
-description = "Generates pitboard-ffi's C# bindings with exactly the UniFFI the library uses."
+description = "Generates pitboard-model's C# bindings with exactly the UniFFI the library uses."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

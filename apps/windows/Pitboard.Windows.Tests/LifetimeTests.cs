@@ -1,3 +1,5 @@
+using Pitboard.Core;
+
 namespace Pitboard.Windows.Tests;
 
 [TestClass]

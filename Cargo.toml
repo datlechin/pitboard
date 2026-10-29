@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/pitboard-core",
     "crates/pitboard",
+    "crates/pitboard-model",
     "crates/pitboard-ffi",
     "crates/pitboard-sites",
     "crates/pitboard-share-ffi",
@@ -23,6 +24,7 @@ homepage = "https://usepitboard.com"
 [workspace.dependencies]
 pitboard-core = { path = "crates/pitboard-core", version = "=0.17.0" }
 pitboard-sites = { path = "crates/pitboard-sites" }
+pitboard-model = { path = "crates/pitboard-model" }
 anstream = "1"
 anstyle = "1"
 # Already in every build through ureq, and what Codex decodes its managed preferences with.
@@ -36,6 +38,9 @@ insta = { version = "1.48", features = ["json", "redactions"] }
 jiff = "0.2"
 libc = "0.2"
 machine-uid = "0.6"
+# The system's own notice of a write to Pitboard's directory: inotify, FSEvents and
+# ReadDirectoryChangesW behind one API, where each front end otherwise looked every 2 seconds.
+notify = "8.2"
 mockito = "1.7.2"
 serde = { version = "1", features = ["derive"] }
 # raw_value: a settings file's untouched values are written back byte for byte.

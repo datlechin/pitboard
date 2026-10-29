@@ -31,7 +31,7 @@ struct GeneralSettings: View {
                     }
                     .accessibilityIdentifier("settings.notificationsOff")
                 }
-                Picker(said.menuBarShows ?? "", selection: $shows) {
+                Picker(macWords.menuBarShows, selection: $shows) {
                     ForEach(MenuBarShows.allCases) { option in
                         Text(option.title).tag(option)
                     }
@@ -45,7 +45,7 @@ struct GeneralSettings: View {
                             get: { updates.checksAutomatically },
                             set: { updates.checksAutomatically = $0 }))
                     Toggle(
-                        said.downloadAndInstallAutomatically ?? "",
+                        macWords.downloadAndInstallAutomatically,
                         isOn: Binding(
                             get: { updates.installsAutomatically },
                             set: { updates.installsAutomatically = $0 })
@@ -97,11 +97,11 @@ struct LoginItemApproval: View {
     var body: some View {
         if openAtLogin.state == .requiresApproval {
             LabeledContent {
-                Button(words.settings.openLoginItems ?? "") {
+                Button(macWords.openLoginItems) {
                     openAtLogin.openSystemSettings()
                 }
             } label: {
-                Text(words.settings.loginItemsWaiting ?? "").explanatory()
+                Text(macWords.loginItemsWaiting).explanatory()
             }
         }
         if let failed = openAtLogin.failed {

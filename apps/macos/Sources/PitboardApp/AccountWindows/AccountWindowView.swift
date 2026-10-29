@@ -74,7 +74,7 @@ private struct SessionView: View {
 
     var body: some View {
         let page = session.page
-        let removal = removeDataAlert(account: account)
+        let removal = removeDataAlert(front: front, account: account)
         VStack(spacing: 0) {
             if let note = session.note {
                 NoteBar(note: note) { session.note = nil }

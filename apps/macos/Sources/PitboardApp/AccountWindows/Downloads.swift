@@ -44,7 +44,7 @@ final class DownloadCenter: NSObject, WKDownloadDelegate {
     /// Counted here rather than from the snapshot: a download started a moment before Quit is
     /// under way before the snapshot that lists it.
     var quitQuestion: Question? {
-        downloadsQuitQuestion(running: UInt32(clamping: live.count))
+        downloadsQuitQuestion(front: front, running: UInt32(clamping: live.count))
     }
 
     func reveal(_ file: String) {
@@ -98,7 +98,7 @@ final class DownloadCenter: NSObject, WKDownloadDelegate {
         guard live[id] != nil else { return nil }
         let destination = URL(
             fileURLWithPath: downloadDestination(
-                folder: folder.path, suggested: suggestedFilename,
+                front: front, folder: folder.path, suggested: suggestedFilename,
                 reserved: reserved.map(\.path)))
         reserved.insert(destination)
         live[id]?.destination = destination

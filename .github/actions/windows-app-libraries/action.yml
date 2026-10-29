@@ -30,7 +30,7 @@ runs:
         cargo run --locked --release -p uniffi-bindgen-csharp -- \
           --library target/release/pitboard_ffi.dll \
           --out-dir apps/windows/Pitboard.Core/Generated \
-          --config crates/pitboard-ffi/uniffi.toml --no-format
+          --config crates/pitboard-model/uniffi.toml --no-format
         cargo run --locked --release -p uniffi-bindgen-csharp -- \
           --library target/release/pitboard_share_ffi.dll \
           --out-dir apps/windows/Pitboard.Share.Core/Generated \

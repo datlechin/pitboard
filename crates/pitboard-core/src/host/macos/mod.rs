@@ -8,6 +8,7 @@ mod ps;
 mod sqlite;
 
 pub(super) use super::unix::awake;
+pub(super) use super::unix::watch;
 pub(crate) use super::unix::{fs, proc, user};
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use sqlite::write_jar;
@@ -121,6 +122,17 @@ impl Host for MacOs {
             Administered::Unset
         }
     }
+
+    // FSEvents is told of a change by this Mac's own kernel. Whether a write another machine
+    // makes on a share or an automounted volume reaches it is not known
+    // (docs/facts/not-measured.md), so only a volume statfs marks local is watched.
+    fn watches(&self, dir: &Path) -> bool {
+        super::unix::file_system(dir).is_none_or(|stats| local(&stats))
+    }
+}
+
+fn local(stats: &libc::statfs) -> bool {
+    stats.f_flags & libc::MNT_LOCAL as u32 != 0
 }
 
 pub(super) fn host() -> Arc<dyn Host> {
@@ -143,4 +155,42 @@ pub(super) fn pretend_scheduler(
     Some(Box::new(launchd::Launchd::new(Arc::new(
         service::Pretend { refuse_start },
     ))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CStr;
+
+    fn named(name: &[libc::c_char]) -> &str {
+        // SAFETY: statfs ends each of its names with a NUL inside the array.
+        unsafe { CStr::from_ptr(name.as_ptr()) }
+            .to_str()
+            .unwrap_or_default()
+    }
+
+    /// A folder on this Mac's own volume is watched, and the root of macOS's own `auto_home`
+    /// map, which autofs mounts and statfs marks as no volume of this Mac's, is looked at. The
+    /// root of an indirect map is opened without mounting anything.
+    #[test]
+    fn only_a_volume_of_this_macs_own_is_watched() {
+        let scratch = tempfile::tempdir().expect("a scratch folder");
+        assert!(host().watches(scratch.path()));
+        assert!(host().watches(&scratch.path().join("not").join("made")));
+
+        let mut mounts: *mut libc::statfs = std::ptr::null_mut();
+        // SAFETY: getmntinfo points `mounts` at as many entries as it returns, in storage of its
+        // own, which only another call in this process would reuse.
+        let count = unsafe { libc::getmntinfo(&mut mounts, libc::MNT_NOWAIT) };
+        let count = usize::try_from(count).expect("the volumes mounted here");
+        assert!(count > 0 && !mounts.is_null(), "the volumes mounted here");
+        // SAFETY: as many entries as getmntinfo said, which nothing frees while they are read.
+        let mounts = unsafe { std::slice::from_raw_parts(mounts, count) };
+        let auto_home = mounts
+            .iter()
+            .find(|mount| named(&mount.f_mntfromname) == "map auto_home")
+            .expect("macOS's auto_home map, which /etc/auto_master mounts");
+        assert!(!local(auto_home));
+        assert!(!host().watches(Path::new(named(&auto_home.f_mntonname))));
+    }
 }

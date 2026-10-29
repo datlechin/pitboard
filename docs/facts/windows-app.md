@@ -308,7 +308,7 @@ Microsoft's documentation.
 - Microsoft's notification area guidance (`winenv-notification`) asks for icon variations to
   show changes in quantities, overlays to show a status, and no swaths of pure red, yellow or
   green in a base icon; the icon shows no title, where the macOS menu bar item shows the
-  figure. So the model's `MenuBarText` carries the step of the limit the bar names and
+  figure. So the model's `StatusItemShown` carries the step of the limit the bar names and
   whether the menu opens on something to look at, and its tooltip as whether it does, which
   Narrator reads with the icon, then a line for each account in use. `Tray/*/Plenty.ico`,
   `Low.ico` and `Out.ico`, drawn in `apps/windows/Icon` at 16, 20, 24, 32, 40 and 48 px, the

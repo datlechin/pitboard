@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as w from "./window.ts";
 import { account, moments } from "./world.ts";
 import { changeOutcome, changeVerb } from "../lib/words.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
-const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
 // A Rust string literal as it reads once its line continuations are joined.
 const joined = (source: string) => source.replace(/\\\n\s*/g, "");
-const words = joined(present("words.rs"));
+// present/words/, a file for each surface that says the words, read as one
+const words = joined(
+  readdirSync(new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url))
+    .sort()
+    .map((file) => present(`words/${file}`))
+    .join("\n"),
+);
 const appWords = joined(present("app_words.rs"));
-// the words a test of present/words.rs pins, as a string literal of it
+// the words a test of present/words/ pins, as a string literal of it
 const pinned = (said: string) => words.includes(`"${said}"`);
 const after = moments.after;
 
@@ -35,27 +41,27 @@ test("the window's toolbar, rows and offers say what the apps say", () => {
     // the Windows page binds the model's own words
     assert.ok(page.includes(`ToolTipService.ToolTip="{x:Bind shown:Words.Window.${field}}"`), help);
   }
-  assert.ok(words.includes('titled(os, "In Use", IN_USE)'));
+  assert.ok(words.includes('titled(front, "In Use", IN_USE)'));
   assert.equal(w.inUse("windows"), "In use");
   assert.ok(words.includes(`pub(crate) const SWITCH: &str = "${w.SWITCH}";`));
   assert.ok(words.includes('format!("Switch to {label}")'));
   assert.equal(w.switchOffer("personal"), "Switch to personal");
   assert.ok(words.includes(`if asks { "${w.RENAME_OFFER}" } else { "Rename" }`));
-  assert.ok(words.includes('titled(os, "Remove Account…", "Remove account…")'));
-  assert.ok(words.includes('titled(os, "Sign In Again…", "Sign in again…")'));
-  assert.ok(words.includes('titled(os, "Warm Up Now", "Warm up now")'));
+  assert.ok(words.includes('titled(front, "Remove Account…", "Remove account…")'));
+  assert.ok(words.includes('titled(front, "Sign In Again…", "Sign in again…")'));
+  assert.ok(words.includes('titled(front, "Warm Up Now", "Warm up now")'));
   assert.ok(
     repo("apps/macos/Sources/PitboardApp/Window/AccountCommands.swift").includes(
       "Button(words.menu.copyEmail)",
     ),
   );
-  assert.ok(appWords.includes(`copy_email: titled(os, "${w.copyEmail("macos")}", `));
+  assert.ok(appWords.includes(`copy_email: titled(front, "${w.copyEmail("macos")}", `));
   assert.ok(
     repo("apps/windows/Pitboard.Views/AccountMenu.cs").includes(
       'Text = Words.Menu.CopyEmail, AccessKey = "C", KeyboardAcceleratorTextOverride = "Ctrl+C"',
     ),
   );
-  assert.ok(appWords.includes(`titled(os, "Copy Email Address", "${w.copyEmail("windows")}")`));
+  assert.ok(appWords.includes(`titled(front, "Copy Email Address", "${w.copyEmail("windows")}")`));
 });
 
 test("Remove Account asks with the account's name and says what goes, on this Mac or this PC", () => {
@@ -69,7 +75,7 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
   assert.ok(words.includes('format!("Remove “{name}”?")'));
   assert.ok(words.includes(`pub(crate) const REMOVE: &str = "${w.REMOVE}";`));
   assert.equal(w.removeTitle(account("work"), after, "macos"), "Remove “work (Claude Code)”?");
-  const windows = joined(repo("crates/pitboard-ffi/src/account_windows/accounts.rs"));
+  const windows = joined(repo("crates/pitboard-model/src/account_windows/accounts.rs"));
   assert.ok(
     windows.includes(
       "Pitboard deletes its saved sign-in and what its {} window keeps on {}, so using it again needs a sign-in in your browser.",
@@ -80,9 +86,10 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
       "Pitboard deletes its saved sign-in and the folders it kept for it, so using it again needs a sign-in in {app}.",
     ),
   );
-  const machines = repo("crates/pitboard-ffi/src/account_windows/mod.rs");
+  const machines = repo("crates/pitboard-model/src/account_windows/mod.rs");
   assert.ok(
-    machines.includes('Os::MacOs => "this Mac"') && machines.includes('Os::Windows => "this PC"'),
+    machines.includes('Front::MacMenuBar => "this Mac"') &&
+      machines.includes('Front::WindowsNotificationArea => "this PC"'),
   );
   assert.match(
     w.removeMessage(account("main", "codex"), "windows"),
@@ -93,9 +100,9 @@ test("Remove Account asks with the account's name and says what goes, on this Ma
 
 test("the Rename sheet and the one naming an account added say what present/sheets.rs gives them", () => {
   const sheets = present("sheets.rs");
-  assert.ok(sheets.includes("title: words::rename_title(label),"));
-  assert.ok(sheets.includes("title: words::name_this_account(seen.os),"));
-  assert.ok(sheets.includes("message: words::naming(email, &seen.tool_name(&tool)),"));
+  assert.ok(sheets.includes("title: words::rename_title(&account.label),"));
+  assert.ok(sheets.includes("title: words::name_this_account(seen.front),"));
+  assert.ok(sheets.includes("message: words::naming(email, tool.name()),"));
   assert.ok(sheets.includes("confirm: words::DONE.into(),"));
   assert.ok(pinned(w.renameTitle("work")));
   assert.ok(pinned(w.RENAMING));
@@ -103,7 +110,7 @@ test("the Rename sheet and the one naming an account added say what present/shee
   assert.ok(pinned(w.naming("", "Claude Desktop")));
   assert.ok(words.includes(`pub(crate) const DONE: &str = "${w.DONE}";`));
   assert.ok(words.includes(`pub(crate) const NAME_PROMPT: &str = "${w.NAME_PROMPT}";`));
-  assert.ok(words.includes('titled(os, "Name This Account", "Name this account")'));
+  assert.ok(words.includes('titled(front, "Name This Account", "Name this account")'));
   assert.equal(w.nameThisAccount("windows"), "Name this account");
   assert.ok(words.includes('format!("Couldn’t rename {label}")'));
   for (const problem of ["empty", "not_one_word", "separator"] as const)
@@ -131,8 +138,8 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
   assert.deepEqual(w.signingOut("work"), ["Saving work.", "Saving work"]);
   assert.ok(words.includes('(format!("Saving {label}."), format!("Saving {label}"))'));
   for (const said of [
-    'titled(os, "Add Account", "Add account")',
-    'titled(os, "Sign In…", "Sign in…")',
+    'titled(front, "Add Account", "Add account")',
+    'titled(front, "Sign In…", "Sign in…")',
     '&format!("Sign In to {label} Again{more}"),',
     '&format!("Signing In to {tool}"),',
     '&format!("Switch Back to {label}"),',
@@ -153,14 +160,14 @@ test("the sign-in sheets and the wait say what the app says, for a browser and f
   ]);
   const sheet = repo("apps/macos/Sources/PitboardApp/Sheets/SignInSheet.swift");
   assert.ok(sheet.includes("LabeledContent(words.sheet.signInPage)"));
-  assert.ok(appWords.includes(`sign_in_page: titled(os, "${w.signInPage("macos")}", `));
+  assert.ok(appWords.includes(`sign_in_page: titled(front, "${w.signInPage("macos")}", `));
   assert.ok(
     sheet.includes("Button(words.sheet.copyLink)") && sheet.includes("Button(words.sheet.open)"),
   );
-  assert.ok(appWords.includes(`copy_link: titled(os, "${w.copyLink("macos")}", `));
+  assert.ok(appWords.includes(`copy_link: titled(front, "${w.copyLink("macos")}", `));
   assert.ok(appWords.includes("open: words::OPEN.into(),"));
   assert.ok(words.includes(`pub(crate) const OPEN: &str = "${w.OPEN}";`));
-  assert.ok(sheet.includes("Picker(words.sheet.tool, selection: $provider)"));
+  assert.ok(sheet.includes("Picker(words.sheet.tool, selection: $tool)"));
   assert.ok(appWords.includes(`tool: "${w.TOOL}".into(),`));
   assert.ok(sheet.includes("LabeledContent(words.sheet.account, value: account)"));
   // the sheet that adds an account asks for no name: one is picked once the sign-in adds it
@@ -187,19 +194,19 @@ test("a switch's notice and the setup step say what present/notices.rs and setup
     '(true, Some(app)) => format!("Signed in to {name} again. {app} is signed in to it now."),',
     '(false, Some(app)) => format!("Added {name}, the account {app} is signed in to now."),',
     'Some(tool) => format!("Add a second {tool} account"),',
-    'Adoption::NextOpen { app } => format!("{app} opens signed in to it."),',
-    'titled(os, "Switch Back", "Switch back")',
+    'format!("{app} opens signed in to it.")',
+    'titled(front, "Switch Back", "Switch back")',
   ])
     assert.ok(words.includes(said), said);
   assert.equal(w.CLAUDE_OPENS, "Claude opens signed in to it.");
   const notices = present("notices.rs");
-  assert.ok(notices.includes("title: words::switch_back(seen.os),"));
-  assert.ok(notices.includes("words::signed_in_to(tool.as_deref(), &label)"));
+  assert.ok(notices.includes("title: words::switch_back(seen.front),"));
+  assert.ok(notices.includes("words::signed_in_to(tool, label)"));
   const setup = present("setup.rs");
-  assert.ok(setup.includes("detail: words::only_one(label, named.as_deref(), app),"));
-  assert.ok(setup.includes("title: words::add_account(seen.os, true),"));
-  assert.ok(setup.includes("title: words::not_now(seen.os),"));
-  assert.ok(words.includes('titled(os, "Not Now", "Not now")'));
+  assert.ok(setup.includes("detail: words::only_one(&account.label, named, app),"));
+  assert.ok(setup.includes("title: words::add_account(seen.front, true),"));
+  assert.ok(setup.includes("title: words::not_now(seen.front),"));
+  assert.ok(words.includes('titled(front, "Not Now", "Not now")'));
   assert.ok(notices.includes("spoken_severity: words::spoken_severity(severity).into(),"));
   assert.ok(words.includes('Severity::Info => "Note",'));
 });
@@ -217,7 +224,7 @@ test("a switch Pitboard made by itself offers Switch Back on its notice, while t
   assert.ok(notices.includes("|| notice.actions.iter().any(|action| action.switches)"));
 });
 
-test("Activity names each change and its end as present/words.rs does", () => {
+test("Activity names each change and its end as present/words/machine.rs does", () => {
   const arms = (fn: string) => {
     const body = words.slice(words.indexOf(`fn ${fn}(`)).split("\n}\n")[0];
     return [...body.matchAll(/((?:"[^"]+"\s*\|\s*)*"[^"]+")\s*=>\s*"([^"]+)"\.into\(\)/g)].flatMap(

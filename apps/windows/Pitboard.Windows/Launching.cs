@@ -27,7 +27,7 @@ public abstract record Handover
 
     public sealed record Link(string Text) : Handover;
 
-    public sealed record Jump(JumpAsk Ask) : Handover;
+    public sealed record Jump(QuickAsk Ask) : Handover;
 }
 
 public static class Launching
@@ -124,22 +124,22 @@ public static class Launching
             ? first
             : null;
 
-    public static string[] Of(JumpAsk ask) => ask switch
+    public static string[] Of(QuickAsk ask) => ask switch
     {
-        JumpAsk.Switch switching => [SwitchTo, switching.Account],
-        JumpAsk.AddAccount => [AddAccount],
-        JumpAsk.OpenWindow window => [OpenWindow, window.Store],
+        QuickAsk.Switch switching => [SwitchTo, switching.Account],
+        QuickAsk.AddAccount => [AddAccount],
+        QuickAsk.OpenWindow window => [OpenWindow, window.Store],
         _ => throw new ArgumentOutOfRangeException(nameof(ask)),
     };
 
     // A task's flag alone, and its id a GUID, as the model gives every one: anything else is no task.
-    public static JumpAsk? Asked(IReadOnlyList<string> arguments) => arguments switch
+    public static QuickAsk? Asked(IReadOnlyList<string> arguments) => arguments switch
     {
-        [var flag] when Named(flag, AddAccount) => new JumpAsk.AddAccount(),
+        [var flag] when Named(flag, AddAccount) => new QuickAsk.AddAccount(),
         [var flag, var id] when Named(flag, SwitchTo) && Guid.TryParse(id, out var account) =>
-            new JumpAsk.Switch(account.ToString()),
+            new QuickAsk.Switch(account.ToString()),
         [var flag, var id] when Named(flag, OpenWindow) && Guid.TryParse(id, out var store) =>
-            new JumpAsk.OpenWindow(store.ToString()),
+            new QuickAsk.OpenWindow(store.ToString()),
         _ => null,
     };
 

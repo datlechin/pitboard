@@ -14,20 +14,23 @@ struct MenuBarLabel: View {
     @AppStorage(DefaultsKey.settingsTab) private var settingsTab = SettingsView.Tab.general
 
     var body: some View {
-        let title = shows.text(of: model.menuBar)
+        // The macOS front has its item from launch to quit, and with nothing to say it is the
+        // mark alone.
+        let item = model.statusItem
+        let title = item.map(shows.text(of:)) ?? ""
         // A mark as well as words: on a crowded menu bar macOS drops the widest items
         // first, and an item that is only text is the widest thing up there. A Label would
         // render as the icon alone, so both are placed by hand.
         HStack(spacing: 4) {
             // Hierarchical draws the board's second row dimmed, as the app icon has it.
-            Image(model.menuBar.symbol)
+            Image(item?.symbol ?? StatusItemShown.mark)
                 .symbolRenderingMode(.hierarchical)
             if !title.isEmpty {
                 Text(title).monospacedDigit()
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.menuBar.spoken)
+        .accessibilityLabel(item?.spoken ?? words.appName)
         // As it first appears too: the first launch's request can be in before it is drawn.
         .onChange(of: model.windowRequest.serial, initial: true) {
             guard requests.opens(model.windowRequest) else { return }
@@ -55,6 +58,8 @@ struct MenuBarLabel: View {
 }
 
 // Symbols in the app's asset catalog; the badge says the menu has something to look at.
-extension MenuBarText {
-    var symbol: String { attention ? "pitboard.badge.exclamationmark" : "pitboard" }
+extension StatusItemShown {
+    static let mark = "pitboard"
+
+    var symbol: String { attention ? "pitboard.badge.exclamationmark" : Self.mark }
 }

@@ -80,7 +80,7 @@ public sealed class HandoversTests
     {
         var handovers = new Handovers();
         var taken = new List<Handover>();
-        var task = new Handover.Jump(new JumpAsk.Switch("35c0d1c9-6b25-5cdc-b543-64c0c0d8de46"));
+        var task = new Handover.Jump(new QuickAsk.Switch("35c0d1c9-6b25-5cdc-b543-64c0c0d8de46"));
 
         handovers.Arrived(task);
         handovers.Arrived(Window);

@@ -5,7 +5,7 @@ import PitboardTestSupport
 import Testing
 
 // The app's model shows what the Rust model says. What the Rust model says, and when, is
-// tested in `pitboard-ffi`; these test the glue: which snapshot is shown, what is drawn
+// tested in `pitboard-model`; these test the glue: which snapshot is shown, what is drawn
 // again, on which thread a snapshot arrives, and that the bindings carry one end to end.
 
 /// Whether reading `part` of `model` is told of a change while `change` runs.
@@ -56,35 +56,39 @@ private final class Told: @unchecked Sendable {
     #expect(model.updatedMenu == "Updated 14:10")
 }
 
-/// Each part is assigned only where it changed, so a view reading a part that stayed the
-/// same is not drawn again when another part moves. What `apply` says it assigned is what a
-/// test can see of the rule itself: Observation tells an observer nothing of an equal value
-/// assigned again, so what is drawn again is the same with the comparison or without it.
+/// A snapshot changed since the one shown assigns only the parts it names, and compares
+/// nothing: which parts differ is the Rust model's to say, so a part it does not name stays as
+/// it was, whatever the snapshot holds, and a view reading it is not drawn again.
 @MainActor
-@Test func onlyThePartsThatChangedAreAssigned() {
+@Test func aSnapshotBasedOnTheOneShownAssignsOnlyItsParts() {
     let model = AppModel(model: StandInModel(snapshot(1, updated: "Updated 14:05")))
-    let reading: [PartialKeyPath<AppModel>] = [\.revision, \.reading]
-    #expect(model.apply(snapshot(2, updated: "Updated 14:05", reading: true)) == reading)
-    let read = changes(model, \.reading) {
-        #expect(model.apply(snapshot(3, updated: "Updated 14:05")) == reading)
-    }
-    #expect(read, "a read is no longer under way")
-    let more = changes(model, \.updatedMenu) {
-        #expect(
-            model.apply(snapshot(4, updated: "Updated 14:10"))
-                == [\.revision, \.updatedMenu, \.updatedWindow])
-    }
-    #expect(more)
-    let rows = changes(model, \.sections) {
-        model.apply(snapshot(5, updated: "Updated 14:05"))
-    }
-    #expect(!rows, "nothing about the rows moved")
-    #expect(model.apply(snapshot(5, updated: "Updated 14:15")).isEmpty, "dropped")
+    let reading = snapshot(
+        2, changed: since(1, .reading), updated: "Updated 14:10", reading: true)
+    let read = changes(model, \.reading) { #expect(model.apply(reading) == [.reading]) }
+    #expect(read)
+    #expect(model.reading)
+    let over = snapshot(3, changed: since(2, .reading), updated: "Updated 14:15")
+    let named = changes(model, \.updatedMenu) { #expect(model.apply(over) == [.reading]) }
+    #expect(!named, "a part it does not name")
+    #expect(model.updatedMenu == "Updated 14:05")
+    #expect(model.revision == 3)
 }
 
-/// The account windows are told of their part each time a snapshot shown changes it, once:
-/// not of a snapshot that moves something else, nor of one dropped. Which windows close and
-/// which stores go, and after which reads, is the Rust model's, tested in pitboard-ffi's
+/// `snapshot()` can give one the listener was never told, so a snapshot changed since another
+/// than the one shown assigns every part.
+@MainActor
+@Test func aSnapshotBasedOnAnotherAssignsEveryPart() {
+    let model = AppModel(model: StandInModel(snapshot(1, updated: "Updated 14:05")))
+    #expect(
+        model.apply(snapshot(3, changed: since(2, .reading), updated: "Updated 14:10"))
+            == everyPart())
+    #expect(model.updatedMenu == "Updated 14:10")
+    #expect(model.revision == 3)
+}
+
+/// The account windows are told of their part each time a snapshot shown names it, once:
+/// not of a snapshot that names something else, nor of one dropped. Which windows close and
+/// which stores go, and after which reads, is the Rust model's, tested in pitboard-model's
 /// `model/windowing.rs`.
 @MainActor
 @Test func theAccountWindowsAreToldOfEachChangeOnce() {
@@ -93,16 +97,25 @@ private final class Told: @unchecked Sendable {
     model.accountWindowsChanged = { told.append($0) }
     let deleting = windowsShown(
         deleting: [StoreDeletion(store: "7e15c34f-69ec-55b4-9542-f1c1fe3d7085", ask: 1)])
+    let read = since(0, .updatedMenu, .updatedWindow)
 
-    model.apply(snapshot(1, updated: "Updated 14:05"))
+    model.apply(snapshot(1, changed: read, updated: "Updated 14:05"))
     #expect(told.isEmpty)
-    model.apply(snapshot(2, updated: "Updated 14:05", windows: deleting))
+    model.apply(
+        snapshot(
+            2, changed: since(1, .accountWindows), updated: "Updated 14:05", windows: deleting))
     #expect(told == [deleting])
-    model.apply(snapshot(3, updated: "Updated 14:10", windows: deleting))
+    model.apply(
+        snapshot(
+            3, changed: since(2, .updatedMenu, .updatedWindow), updated: "Updated 14:10",
+            windows: deleting))
     #expect(told == [deleting], "only something else moved")
-    model.apply(snapshot(3, updated: "Updated 14:05"))
+    model.apply(snapshot(3, changed: since(2, .accountWindows), updated: "Updated 14:05"))
     #expect(told == [deleting], "dropped")
-    model.apply(snapshot(4, updated: "Updated 14:05"))
+    model.apply(
+        snapshot(
+            4, changed: since(3, .updatedMenu, .updatedWindow, .accountWindows),
+            updated: "Updated 14:05"))
     #expect(told == [deleting, windowsShown()])
     #expect(model.accountWindows == windowsShown())
 }
@@ -114,11 +127,13 @@ private final class Told: @unchecked Sendable {
     let codex = WelcomeTool(
         code: "codex", name: "Codex", account: nil,
         step: .add(
-            choice: Choice(title: "Add", intent: .enrol(provider: "codex"), enabled: true)))
-    #expect(
-        model.apply(snapshot(1, removal: .removing(title: "Uninstalling Pitboard…")))
-            == [\.revision, \.removal])
-    #expect(model.apply(snapshot(2, removal: .done, welcomeTools: [codex])).count == 3)
+            choice: Choice(title: "Add", intent: .enrol(tool: .codex), enabled: true)))
+    let removing = snapshot(
+        1, changed: since(0, .removal), removal: .removing(title: "Uninstalling Pitboard…"))
+    #expect(model.apply(removing) == [.removal])
+    let done = snapshot(
+        2, changed: since(1, .removal, .welcome), removal: .done, welcomeTools: [codex])
+    #expect(model.apply(done) == [.removal, .welcome])
     #expect(model.removal == .done)
     #expect(model.welcome.tools == [codex])
 }
@@ -129,9 +144,12 @@ private final class Told: @unchecked Sendable {
 @Test func whatIsAskedReachesTheModelAsItWasAsked() {
     let standIn = StandInModel(snapshot(0))
     let model = AppModel(model: standIn)
-    model.send(.switchTo(qualified: "codex/spare"))
+    model.send(.switchTo(account: AccountKey(tool: .codex, label: "spare")))
     model.send(.closeSheet)
-    #expect(standIn.sent == [.switchTo(qualified: "codex/spare"), .closeSheet])
+    #expect(
+        standIn.sent == [
+            .switchTo(account: AccountKey(tool: .codex, label: "spare")), .closeSheet,
+        ])
     model.shutdown()
     #expect(standIn.stopped == 1)
 }
@@ -203,14 +221,14 @@ private func answer(_ request: UInt64, _ said: String) -> OutsideAnswer {
 @Test func theGlanceWaitsForTheLaunchsFirstReadAndNoLonger() async {
     let model = StandInModel(snapshot(0))
     let app = AppModel(model: model)
-    #expect(await app.glance(within: .milliseconds(10)) == nil)
+    #expect(await app.widgetFeed(within: .milliseconds(10)) == nil)
 
-    let glanced = Task { await app.glance(within: .seconds(60)) }
+    let glanced = Task { await app.widgetFeed(within: .seconds(60)) }
     await Task.yield()
-    model.glanceText = #"{"schema":1}"#
-    app.apply(snapshot(1, glanceRevision: 1))
+    model.feed = #"{"schema":1}"#
+    app.apply(snapshot(1, widgetRevision: 1))
     #expect(await glanced.value == #"{"schema":1}"#)
-    #expect(await app.glance(within: .zero) == #"{"schema":1}"#)
+    #expect(await app.widgetFeed(within: .zero) == #"{"schema":1}"#)
 }
 
 // Shortcuts reads the accounts again as they change, and a widget would reload.
@@ -218,13 +236,13 @@ private func answer(_ request: UInt64, _ said: String) -> OutsideAnswer {
 @Test func aGlanceThatMovedIsToldOnceItsSnapshotIsShown() {
     let app = AppModel(model: StandInModel(snapshot(0)))
     var told = 0
-    app.glanceChanged = { told += 1 }
-    app.apply(snapshot(1))
-    app.apply(snapshot(2, glanceRevision: 1))
-    app.apply(snapshot(3, glanceRevision: 1))
-    app.apply(snapshot(2, glanceRevision: 2))
-    #expect(told == 1, "not for a revision that stayed, nor in a snapshot dropped")
-    app.apply(snapshot(4, glanceRevision: 2))
+    app.widgetFeedChanged = { told += 1 }
+    app.apply(snapshot(1, changed: since(0, .reading), reading: true))
+    app.apply(snapshot(2, changed: since(1, .reading, .widgetRevision), widgetRevision: 1))
+    app.apply(snapshot(3, changed: since(2, .reading), reading: true, widgetRevision: 1))
+    app.apply(snapshot(2, changed: since(1, .reading, .widgetRevision), widgetRevision: 2))
+    #expect(told == 1, "not for a snapshot that names something else, nor for one dropped")
+    app.apply(snapshot(4, changed: since(3, .reading, .widgetRevision), widgetRevision: 2))
     #expect(told == 2)
 }
 

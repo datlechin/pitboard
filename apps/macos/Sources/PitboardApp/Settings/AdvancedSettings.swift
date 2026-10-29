@@ -35,12 +35,12 @@ struct AdvancedSettings: View {
                         Text(found).foregroundStyle(.secondary).textSelection(.enabled)
                     } else {
                         ProgressView().controlSize(.small)
-                            .accessibilityLabel(said.lookingForCommandLine ?? "")
+                            .accessibilityLabel(said.lookingForCommandLine)
                     }
                 }
                 if commandLine.offersLink {
                     LabeledContent {
-                        Button(said.installCommandLine ?? "") {
+                        Button(macWords.installCommandLine) {
                             Task { await link.install() }
                         }
                         .disabled(link.linking)

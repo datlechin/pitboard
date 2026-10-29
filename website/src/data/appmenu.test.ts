@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { appMenus, NO_ACCOUNT } from "./appmenu.ts";
 
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const mac = (file: string) => repo(`apps/macos/Sources/PitboardApp/${file}`);
-const present = (file: string) => repo(`crates/pitboard-ffi/src/present/${file}`);
+const present = (file: string) => repo(`crates/pitboard-model/src/present/${file}`);
+// present/words/, a file for each surface that says the words, read as one
+const catalogue = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => present(`words/${file}`))
+  .join("\n");
 // a Rust string literal as it reads once its line continuations are joined
 const appWords = present("app_words.rs").replace(/\\\n\s*/g, "");
 const facts = repo("docs/facts/site.md");
@@ -55,18 +62,18 @@ test("each item is one the UI tests read, with its key, and dimmed where they re
 test("the app's own items say what PitboardScenes.swift and its commands give them", () => {
   const scenes = mac("App/PitboardScenes.swift");
   for (const [word, said] of [
-    ["menu.about", 'about: titled(os, "About Pitboard", "About Pitboard")'],
+    ["menu.about", 'about: titled(front, "About Pitboard", "About Pitboard")'],
     [
       "menu.checkForUpdates",
-      'check_for_updates: titled(os, "Check for Updates…", "Check for updates")',
+      'check_for_updates: titled(front, "Check for Updates…", "Check for updates")',
     ],
-    ["menu.addAccount", "add_account: words::add_account(os, true)"],
-    ["menu.help", 'help: titled(os, "Pitboard Help", "Pitboard help")'],
+    ["menu.addAccount", "add_account: words::add_account(front, true)"],
+    ["menu.help", 'help: titled(front, "Pitboard Help", "Pitboard help")'],
   ]) {
     assert.ok(scenes.includes(`(words.${word}`), word);
     assert.ok(appWords.includes(said), said);
   }
-  assert.ok(present("words.rs").includes('titled(os, "Add Account…", "Add account…")'));
+  assert.ok(catalogue.includes('titled(front, "Add Account…", "Add account…")'));
   assert.ok(scenes.includes('.keyboardShortcut("n")'));
   const windows = mac("AccountWindows/AccountWindowCommands.swift");
   for (const [word, title] of [
@@ -76,7 +83,7 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
     ["zoomOut", "Zoom Out"],
   ]) {
     assert.ok(windows.includes(`(words.accountWindow.${word})`), word);
-    assert.ok(appWords.includes(`titled(os, "${title}", `), title);
+    assert.ok(appWords.includes(`titled(front, "${title}", `), title);
   }
   for (const [word, title] of [
     ["back", "Back"],
@@ -87,7 +94,7 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
   }
   assert.ok(mac("App/RefreshCommand.swift").includes("?? words.menu.refresh"));
   assert.ok(appWords.includes("refresh: words::REFRESH.into(),"));
-  assert.ok(present("words.rs").includes('pub(crate) const REFRESH: &str = "Refresh";'));
+  assert.ok(catalogue.includes('pub(crate) const REFRESH: &str = "Refresh";'));
   // File lists a site's item for each site, the fixture's being claude.ai alone
   assert.ok(
     windows.includes(
@@ -99,16 +106,15 @@ test("the app's own items say what PitboardScenes.swift and its commands give th
 });
 
 test("the Account menu with nothing selected offers what the model says, each dimmed", () => {
-  const accounts = repo("crates/pitboard-ffi/src/present/accounts.rs");
+  const accounts = repo("crates/pitboard-model/src/present/accounts.rs");
   assert.ok(
     accounts.includes(
-      "offers: vec![\n            words::switch_account(None),\n            words::sign_in_again(os, true),\n            words::rename(true).into(),\n        ],\n        forget: words::remove_account(os),",
+      "offers: vec![\n            words::switch_account(None),\n            words::sign_in_again(front, true),\n            words::rename(true).into(),\n        ],\n        forget: words::remove_account(front),",
     ),
   );
-  const words = repo("crates/pitboard-ffi/src/present/words.rs");
-  assert.ok(words.includes(`None => SWITCH.into(),`));
-  assert.ok(words.includes(`pub(crate) const SWITCH: &str = "${NO_ACCOUNT[0]}";`));
-  assert.ok(words.includes(`if asks { "${NO_ACCOUNT[2]}" } else { "Rename" }`));
+  assert.ok(catalogue.includes(`None => SWITCH.into(),`));
+  assert.ok(catalogue.includes(`pub(crate) const SWITCH: &str = "${NO_ACCOUNT[0]}";`));
+  assert.ok(catalogue.includes(`if asks { "${NO_ACCOUNT[2]}" } else { "Rename" }`));
   assert.ok(
     bar.includes(
       "Account, with no account selected: Switch, Sign In Again…, Rename…, Remove Account… ⌘⌫, all dimmed.",

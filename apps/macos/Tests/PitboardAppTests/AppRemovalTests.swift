@@ -138,7 +138,7 @@ final class StandInLoginItem: LoginItem {
     try removing.installWithHomebrew()
     removing.app.makeLink()
     await removing.removal.finish()
-    let help = try #require(words.settings.homebrewHelp.flatMap { URL(string: $0.link) })
+    let help = try #require(URL(string: macWords.homebrewHelp.link))
     #expect(removing.asked == [.homebrew(help: help)], "its Help button says the cask command")
     #expect(removing.trashedWhenAsked == [0])
     #expect(removing.trashed == removing.leftInLibrary, "the app's own, whoever installed it")
@@ -177,11 +177,11 @@ final class StandInLoginItem: LoginItem {
 @MainActor
 @Test func theAlertsSayTheModelsWords() {
     let trash = AppRemoval.said(.trash(link: "/usr/local/bin/pitboard"))
-    #expect(trash.title == words.settings.moveToTrashQuestion)
+    #expect(trash.title == macWords.moveToTrashQuestion)
     #expect(trash.message == trashSays(link: "/usr/local/bin/pitboard"))
-    #expect(trash.buttons == [words.settings.moveToTrash, words.window.cancel])
+    #expect(trash.buttons == [macWords.moveToTrash, words.window.cancel])
     let homebrew = AppRemoval.said(.homebrew(help: nil))
-    #expect(homebrew.title == words.settings.removeWithHomebrew)
-    #expect(homebrew.message == words.settings.homebrewRemovesIt)
+    #expect(homebrew.title == macWords.removeWithHomebrew)
+    #expect(homebrew.message == macWords.homebrewRemovesIt)
     #expect(homebrew.buttons == [words.window.ok], "Help is the alert's own button")
 }

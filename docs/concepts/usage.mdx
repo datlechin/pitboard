@@ -15,7 +15,7 @@ As read in Codex 0.164.0, OpenAI's answer also gives a model's own limits, which
 
 Pitboard asks about an account again only after 1% of its shortest limit's period: 3 minutes for a five-hour limit, and 1 minute with no reading yet. After a rate limit or an error, it waits longer, as [`asking.json`](/reference/files#the-pitboard-directory) records.
 
-The app and [`pitboard watch`](/reference/account-commands#watch) read when they start and every 5 minutes, and look every 2 seconds for switches and numbers other runs recorded. The app also reads when the computer wakes, and when you open its menu or **Accounts** once its numbers are a minute old.
+The app and [`pitboard watch`](/reference/account-commands#watch) read when they start and every 5 minutes, and see a switch or numbers another run recorded as soon as it is written. Where the system cannot watch Pitboard's directory, such as on a network drive or a Windows drive in WSL, they look for them every 2 seconds instead. The app also reads when the computer wakes, and when you open its menu or **Accounts** once its numbers are a minute old.
 
 `pitboard status --fresh` and **Refresh** skip the 1% floor and a wait after an error, but not a wait the service asked for.
 

@@ -2,7 +2,7 @@
 
 ## A look and the app's own changes
 
-Measured on 6 October 2026 on macOS 27.0 (arm64), with Rust 1.98.1 and `pitboard-ffi`'s
+Measured on 6 October 2026 on macOS 27.0 (arm64), with Rust 1.98.1 and the model's
 tests, and read in the macOS app's Swift at 0.7.0 (277539b).
 
 - A look reads when the account index was last written on the lane of reads, while a change
@@ -21,11 +21,19 @@ tests, and read in the macOS app's Swift at 0.7.0 (277539b).
   anything, until the change has answered (`lanes::NextLook`), a look reads the index after
   the change and answers after it every time. Against the model before it held the index for
   every change of its own, `a_rename_is_read_after_it_whatever_the_poll_finds_meanwhile`,
-  `naming_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile` and
+  `adding_the_login_in_use_is_read_after_it_whatever_the_poll_finds_meanwhile` and
   `a_sign_in_is_read_after_it_enrols_whatever_the_poll_finds_meanwhile` failed in 10 of 10
   runs, each with nothing read after the change; after, in none of 50. The same again on
   24 October 2026 (macOS 27.0.1, Rust 1.98.1), when the tests moved the hold there from a
   read held at the lock usage readings are written under.
+- Where the watch on Pitboard's directory asks the look, as both apps take it, the same holds
+  for a look a write to the index asked before the change, which
+  `a_rename_is_read_after_it_whatever_the_watchs_look_finds_meanwhile`,
+  `adding_the_login_in_use_is_read_after_it_whatever_the_watchs_look_finds_meanwhile` and
+  `a_sign_in_is_read_after_it_enrols_whatever_the_watchs_look_finds_meanwhile` hold. On
+  29 October 2026 (macOS 27.0.1, Rust 1.98.1), with `State`'s check that a change of the app's
+  own holds the index taken out of a look's answer, all six failed, each waiting 30 seconds
+  for a read after the change that never came; with it, all six passed in 5 of 5 runs.
 - The Swift model at 0.7.0 had the same race. PitboardService.swift asked `changedAt` on its
   queue of reads, and enrolled, renamed, forgot, renewed and gave up on an interrupted switch
   on its queue of changes. AppModel.swift's `enrol`, `rename`, `forget`,
@@ -70,3 +78,53 @@ with Swift 6.4.
   read 15 October 2026. With `Instant` there, an app asked to quit just before a sleep would
   have had its 30 seconds used up by the time the machine woke. Microsoft's contract: no
   machine has been put to sleep during a quit yet.
+
+## Watching Pitboard's directory
+
+Measured on 29 October 2026 with notify 8.2.1, watching a folder alone, not what is below
+it, through the core's own `atomic::write` and `home::remove_all`, in a test run once and not
+kept. Read the same day in notify 8.2.1's source.
+
+- On macOS 27.0.1 (26A434, arm64), on APFS, FSEvents named each file by its path with every
+  link resolved: `/private/var/folders/…` for a folder watched as `/var/folders/…`. A replace
+  of `state.json` came as six events for the temporary, in two batches, and five for
+  `state.json`, the flags of each split into `Create`, `Modify(Name)`, `Modify(Data)` and
+  `Modify(Metadata)`, 11 to 24 ms after the write began. A replace of `usage.json` came 12 ms
+  after. A read of `state.json` came as nothing. The folder removed whole came as three events
+  for the folder itself, `Create`, `Remove` and `Modify(Metadata)`, 12 ms after, and none for
+  the files in it; the folder had been made 300 ms before the watch began.
+- In Docker Desktop 29.8.2 (Linux 7.0.14-linuxkit, aarch64), in `pitboard-linux-refactor:trixie`
+  (sha256:0e0944571e15…, from `rust:1.98.1-slim-trixie@sha256:4cd8294…`, Debian 13.7), alike
+  on the named volume's ext4, on a tmpfs and on the container's overlayfs, inotify told a
+  replace of `state.json` as `Create`, `Modify(Data)` and `Access(Close(Write))` of the
+  temporary, then `Modify(Name(From))` of it, `Modify(Name(To))` of `state.json` and
+  `Modify(Name(Both))` of the two, 0.7 to 12 ms after the write began, the flush included. Each
+  open came as `Access(Open)`: of the folder, by the write's sweep of temporaries and its flush
+  of the folder, and of `state.json`, by a read. The folder removed whole came as
+  `Remove(File)` of each file, then `Remove(Folder)` of the folder itself, within 1 ms.
+- So a watch takes a file by its name alone, takes no `Access` for a change, and ends at a
+  `Remove` or a `Modify(Name)` of the folder itself (`host/watch.rs`,
+  `a_named_file_is_heard_by_its_name_alone`, `a_read_is_not_a_write`,
+  `the_folder_going_ends_the_watch`).
+- notify's Windows backend tells no event as a watch ends: where the folder is gone, it and
+  every other error ReadDirectoryChangesW answers with stop the watch in silence
+  (`src/windows.rs:339-368`). Its server thread sends `MetaEvent::SingleWatchComplete` once it
+  has closed the folder's handle, to the channel `ReadDirectoryChangesWatcher::create` is
+  given, which `host/windows/watch.rs` reads as the end. It reads the entries of a buffer
+  without looking at the length the system gave (`_bytes_written`, `:333`, `:381-385`), so
+  what an overflow comes to is not known
+  ([Not measured](not-measured.md#watching-pitboards-directory)).
+- inotify "reports only events that a user-space program triggers through the filesystem API"
+  and "does not catch remote events that occur on network filesystems", for which
+  "applications must fall back to polling" (inotify(7), Linux man-pages 6.19 of 14 February
+  2026, read on 29 October 2026). So the Linux host watches no folder whose `fstatfs` names a
+  network file system of `<linux/magic.h>` at Linux 6.17: NFS, SMB, CIFS, SMB2, either AFS,
+  Ceph, Coda, OCFS2's shared disk, or 9p, where WSL 2 mounts Windows' drives. Nor FUSE, whose
+  one `f_type` covers every daemon, sshfs among them, which GLib 2.84.0 takes as remote
+  (`gio/glocalfile.c`, `is_remote_fs_type`). Pitboard's directory is looked at every 2 seconds
+  there (`a_file_system_another_machine_writes_is_not_watched`). None of them was mounted:
+  Docker gives them only to a privileged container.
+- On macOS, the host watches only a volume `fstatfs` marks `MNT_LOCAL`. On macOS 27.0.1,
+  `auto_home`'s autofs mount is not one (`only_a_volume_of_this_macs_own_is_watched`). Whether
+  FSEvents hears a write another machine makes on a share is
+  [not measured](not-measured.md#watching-pitboards-directory).

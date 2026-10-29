@@ -1,0 +1,15 @@
+[bindings.swift]
+module_name = "PitboardBindings"
+ffi_module_name = "PitboardFFI"
+ffi_module_filename = "PitboardFFI"
+generate_immutable_records = true
+# The app words its own errors, from the stable code each one carries.
+omit_localized_error_conformance = true
+
+[bindings.csharp]
+namespace = "Pitboard.Core"
+# The library the Windows app loads, pitboard-ffi's pitboard_ffi.dll, whatever file the bindings
+# were read from.
+cdylib_name = "pitboard_ffi"
+# The bindings are an assembly of their own, which the app references.
+access_modifier = "public"

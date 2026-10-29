@@ -1,0 +1,37 @@
+[package]
+name = "pitboard-model"
+description = "The model Pitboard's native apps run on, over its core, with what their bindings export."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# The fixtures: worlds an app's debug build and its UI tests launch into, the real core over
+# a machine in memory and services that answer from a script, through pitboard-core's
+# test-support. Never in a library an app ships: build-app.sh never passes it, and checks
+# that what it built holds no world's text.
+fixture = ["pitboard-core/test-support"]
+
+[dependencies]
+jiff.workspace = true
+pitboard-core.workspace = true
+pitboard-sites.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uniffi.workspace = true
+unicode-normalization.workspace = true
+unicode-segmentation.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+# The core's machine in memory and its scripted services, which the model's tests run the
+# real core on. Tests alone: the libraries the apps link are built without them.
+pitboard-core = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 import Foundation
 
-// The accounts as pitboard-ffi's present/glance.rs writes them, for what links no Rust.
+// The accounts as pitboard-model's present/glance.rs writes them, for what links no Rust.
 public struct Glance: Decodable, Equatable, Sendable {
     public let readAt: Date?
     public let words: GlanceWords

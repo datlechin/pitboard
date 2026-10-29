@@ -6,7 +6,7 @@ import Testing
 
 // Only Xcode compiles the app's asset catalog, so a test reads each symbol set as written.
 private func symbol(attention: Bool) throws -> String {
-    let bar = MenuBarText(
+    let bar = StatusItemShown(
         nameAndUsage: "work 42%", usage: "42%", spoken: "Pitboard, work 42%", level: .plenty,
         attention: attention, tip: "")
     let set = URL(fileURLWithPath: #filePath)

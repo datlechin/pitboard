@@ -2,8 +2,15 @@
 
 ## What the Swift app said
 
-Measured on macOS 27.0 with Swift 6.4 on 5 October 2026, so that `pitboard-ffi`'s
-`present` says what the Swift app said.
+The model and what it presents came from the macOS app's Swift. A comment in
+`pitboard-model` that names a Swift file the app no longer has, such as `MachineModel.swift`
+or `Notifier.swift`, or names `AppModel.swift`, means that file as it was before the app ran
+on the model, at commit 277539b. The account windows' bookkeeping moved later, and a comment
+that names its Swift, such as `LinkInbox.swift`, `StoreJanitor.swift`'s sweep or
+`AccountPickerTests.swift`, means it as it was at commit a3e5ce0, where the comment says so.
+
+Measured on macOS 27.0 with Swift 6.4 on 5 October 2026, so that the model's `present` says
+what the Swift app said.
 
 - The menu bar cut a label past 12 `Character`s to 11 and an ellipsis, and Swift counts
   extended grapheme clusters. Over 22 labels, accents written as combining marks, flags,
@@ -25,11 +32,11 @@ its own date.
   where it is set, as the core makes it, and by Foundation where it is not.
 - `@Observable` does not tell an observer of an assignment of a value equal to the one held:
   over `withObservationTracking`, setting an equal `Equatable` struct, an equal `Int` or the
-  same object again told nothing, and setting another struct told. So `AppModel`'s
-  comparison before each assignment changes nothing that Observation does not already skip,
-  and a test of what is drawn again passed with the comparison taken away. The comparison is
-  kept so the rule does not rest on how the macro expands, and `apply` returns the parts it
-  assigned, which its test reads: with the comparison taken away, that test fails.
+  same object again told nothing, and setting another struct told. `AppModel` compares
+  nothing: it assigns the parts a snapshot names, and a test of what is drawn again cannot
+  tell an equal value assigned from none, so `apply` returns the parts it assigned, which its
+  tests read. Where it assigns every part, of a snapshot changed since another than the one
+  shown, Observation draws again only what differs.
 - `Date.FormatStyle` with `time: .shortened` follows the locale's hour cycle, which macOS
   keeps in the locale: 14:05 in UTC is `2:05 PM` for `en_US`, with U+202F NARROW NO-BREAK
   SPACE before `PM`, `14:05` for `en_GB` and for `en_US@hours=h23`, and `2:05 pm` for

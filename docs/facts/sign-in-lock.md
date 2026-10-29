@@ -44,7 +44,7 @@ which is `flock`.
   `ready_to_sign_in` refuses such a sign-in before it gets there, so that runs only for a
   program taken away between the two. It is left as it is.
 - Cancel and then Sign In at once, through the app's model over the real core, measured on
-  6 October 2026 on the same two systems with `pitboard-ffi`'s tests. Before the model
+  6 October 2026 on the same two systems with the model's tests. Before the model
   waited for the sign-in cancelled and the lock was let go of by name,
   `a_sign_in_asked_for_at_once_after_a_cancel_starts_once_that_one_has_stopped`, with a
   stand-in for `claude`, failed in 13 of 50 runs alone and in 30 of 40 runs of the whole

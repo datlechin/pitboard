@@ -36,8 +36,9 @@ package=apps/macos
 rm -rf "$out"
 
 # build <crate> <module> <bindings> [<features>]: the crate's static library for both kinds
-# of Mac, as <module>.xcframework, with its Swift bindings in Sources/<bindings>. The crate's
-# own uniffi.toml names the bindings' module. The headers sit in a folder named for the
+# of Mac, as <module>.xcframework, with its Swift bindings in Sources/<bindings>. The
+# uniffi.toml of the crate whose exports it holds names the bindings' module: pitboard-model's
+# for pitboard-ffi, pitboard-share-ffi's own. The headers sit in a folder named for the
 # module, where Clang looks for its module map, so the two frameworks' maps never share a
 # path when Xcode gathers their headers.
 build() {

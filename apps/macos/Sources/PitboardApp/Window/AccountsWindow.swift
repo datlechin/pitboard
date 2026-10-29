@@ -35,7 +35,7 @@ struct AccountsWindow: View {
                     .accessibilityIdentifier("toolbar.refresh")
                     // Command-N is the window's own command, so it works from every window.
                     Button {
-                        model.send(.presentSheet(sheet: .add(provider: nil)))
+                        model.send(.presentSheet(sheet: .add(tool: nil)))
                     } label: {
                         Label(words.window.addAccount, systemImage: Symbol.add)
                     }
@@ -50,9 +50,9 @@ struct AccountsWindow: View {
                     Button {
                         inspector.toggle()
                     } label: {
-                        Label(words.window.inspector ?? "", systemImage: Symbol.inspector)
+                        Label(macWords.inspector, systemImage: Symbol.inspector)
                     }
-                    .help(words.window.inspectorHelp ?? "")
+                    .help(macWords.inspectorHelp)
                     .disabled(!listed)
                     .accessibilityIdentifier("toolbar.inspector")
                 }
@@ -243,10 +243,10 @@ extension View {
 extension Sheet: Identifiable {
     public var id: String {
         switch self {
-        case .add(let provider): "add/\(provider ?? "")"
-        case .signInAgain(let provider, let label): "again/\(provider)/\(label)"
-        case .name(let provider, let label, _): "name/\(provider)/\(label)"
-        case .rename(let provider, let label): "rename/\(provider)/\(label)"
+        case .add(let tool): "add/\(tool.map { "\($0)" } ?? "")"
+        case .signInAgain(let account): "again/\(account.tool)/\(account.label)"
+        case .name(let account, _): "name/\(account.tool)/\(account.label)"
+        case .rename(let account): "rename/\(account.tool)/\(account.label)"
         case .stow: "stow"
         }
     }

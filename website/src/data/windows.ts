@@ -80,7 +80,7 @@ export const sites: [site: string, tool: Tool][] = [
 ];
 
 // An item has one line: the account's label, then the figure the menu bar would show of it, or why
-// it can't be switched to (present/words.rs `named_in_menu`).
+// it can't be switched to (present/words/accounts.rs `named_in_menu`).
 export function itemTitle(a: Account, w: World, switching = false): string {
   const aside = switching
     ? SWITCHING

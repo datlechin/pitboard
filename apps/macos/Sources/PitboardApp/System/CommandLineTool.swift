@@ -47,7 +47,7 @@ struct CommandLineTool: Sendable {
     // Off the main thread, since the password prompt waits on a person.
     func install() async -> Linked {
         guard let helper, linkable else {
-            return .failed(words.settings.cannotLinkCommandLine ?? "")
+            return .failed(macWords.cannotLinkCommandLine)
         }
         let type = try? FileManager.default.attributesOfItem(atPath: link)[.type]
         if let type, type as? FileAttributeType != .typeSymbolicLink {
@@ -117,7 +117,7 @@ struct CommandLineTool: Sendable {
 
     static func execute(script source: String) -> NSDictionary? {
         guard let script = NSAppleScript(source: source) else {
-            return [NSAppleScript.errorMessage: words.settings.linkFailed ?? ""]
+            return [NSAppleScript.errorMessage: macWords.linkFailed]
         }
         var error: NSDictionary?
         script.executeAndReturnError(&error)
@@ -128,7 +128,7 @@ struct CommandLineTool: Sendable {
         guard let error else { return .linked }
         if error[NSAppleScript.errorNumber] as? Int == userCanceledErr { return .cancelled }
         return .failed(
-            error[NSAppleScript.errorMessage] as? String ?? words.settings.linkFailed ?? "")
+            error[NSAppleScript.errorMessage] as? String ?? macWords.linkFailed)
     }
 }
 

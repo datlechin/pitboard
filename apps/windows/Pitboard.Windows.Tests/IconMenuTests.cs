@@ -10,7 +10,7 @@ public sealed class IconMenuTests
 
     private static readonly MenuEntry Advice = new(
         "Switch Claude Code to personal", "work is at 91%", null, Severity.Warning,
-        new Intent.SwitchTo("claude/personal"), null, true);
+        new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")), null, true);
 
     private static readonly MenuEntry Stuck = new(
         "1 issue", "A switch didn’t finish", "Pitboard keeps trying until Anthropic answers.", Severity.Error,
@@ -150,7 +150,7 @@ public sealed class IconMenuTests
         var expired = Items.Account("claude", "old") with
         {
             MenuTitle = "old (sign-in expired)",
-            Action = new ItemAction("Sign in…", "Sign in to old again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "old"))),
+            Action = new ItemAction("Sign in…", "Sign in to old again…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "old")))),
         };
         var switching = Items.Account("claude", "spare") with { MenuTitle = "spare (switching now)", Action = null };
         var model = Model(snapshot => snapshot with
@@ -160,9 +160,9 @@ public sealed class IconMenuTests
 
         var accounts = IconMenu.Entries(model, new NoUpdates()).OfType<IconMenuEntry.Account>().ToDictionary(account => account.Id!);
 
-        Assert.AreEqual(new IconCommand.Send(new Intent.SwitchTo("claude/personal")), accounts["menu.account.claude/personal"].Does);
+        Assert.AreEqual(new IconCommand.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal"))), accounts["menu.account.claude/personal"].Does);
         Assert.AreEqual(
-            new IconCommand.Send(new Intent.PresentSheet(new Sheet.SignInAgain("claude", "old"))), accounts["menu.account.claude/old"].Does);
+            new IconCommand.Send(new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "old")))), accounts["menu.account.claude/old"].Does);
         Assert.IsNull(accounts["menu.account.claude/work"].Does);
         Assert.IsTrue(accounts["menu.account.claude/work"].Enabled, "the account in use");
         // Each account stays in the list it makes, so the list keeps its place while a switch runs.
@@ -174,7 +174,7 @@ public sealed class IconMenuTests
     {
         var entries = IconMenu.Entries(TwoTools(), new NoUpdates());
 
-        Assert.AreEqual(new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null))), Command(entries, "menu.addAccount").Does);
+        Assert.AreEqual(new IconCommand.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null))), Command(entries, "menu.addAccount").Does);
         Assert.AreEqual(new IconCommand.Send(new Intent.Show(Place: null)), Command(entries, "menu.openPitboard").Does);
         Assert.AreEqual(new IconCommand.ShowSettings(), Command(entries, "menu.settings").Does);
         Assert.AreEqual(new IconCommand.OpenLink("https://docs.usepitboard.com"), Command(entries, "menu.help").Does);
@@ -289,7 +289,7 @@ public sealed class IconMenuTests
         var entries = IconMenu.Entries(TwoTools(), new StandInUpdates(waiting: "1.2.0"));
 
         Assert.Contains("menu.settings | menu.update | menu.help | -", Said(entries));
-        Assert.AreEqual(PitboardFfiMethods.InstallUpdate("1.2.0"), Command(entries, "menu.update").Text);
+        Assert.AreEqual(PitboardModelMethods.InstallUpdate("1.2.0"), Command(entries, "menu.update").Text);
         Assert.AreEqual(new IconCommand.CheckForUpdates(), Command(entries, "menu.update").Does);
     }
 

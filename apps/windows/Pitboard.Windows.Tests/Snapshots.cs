@@ -3,22 +3,24 @@ using Pitboard.Core;
 namespace Pitboard.Windows.Tests;
 
 // Each call makes every list anew, as the bindings do for every snapshot told. Each sentence is the model's own, as
-// present/words.rs pins it, which StandInsTests checks.
+// present/words/ pins it, which StandInsTests checks. Each names every part, as Snapshot() does, unless a test says
+// what changed.
 internal static class Snapshots
 {
     public static Snapshot Read(ulong revision) =>
         new(
-            Revision: revision, Reading: false, QuitQuestion: null, ReplaceQuestion: null,
+            Revision: revision, Changed: new Changed(Since: 0, Parts: Enum.GetValues<Part>()), Reading: false,
+            QuitQuestion: null, ReplaceQuestion: null,
             WindowRequest: new WindowRequest(Serial: 0, Place: null),
             SigningIn: null, Sheet: null, SheetFailure: null,
-            MenuBar: new MenuBarText(
+            StatusItem: new StatusItemShown(
                 NameAndUsage: "work 42%", Usage: "42%", Spoken: "Pitboard, work 42%", Level: UsageLevel.Plenty, Attention: false,
                 Tip: "Pitboard\nwork: 5-hour 42% used"),
             Sections: [],
             AccountMenu: new AccountMenuShown(Offers: ["Switch", "Sign in again…", "Rename…"], Forget: "Remove account…"),
             Notices: [],
             MenuNotices: new MenuNotices(Install: null, Switches: [], SignIns: [], Others: null),
-            Footing: new Footing.OnlyOne(Provider: "claude", Label: "work"), Setup: null,
+            Footing: new Footing.OnlyOne(Account: new AccountKey(Tool.Claude, "work")), Setup: null,
             AccountsShown: new AccountsShown.List(), MenuAccountsNote: null, UpdatedAt: 1_800_000_000,
             UpdatedMenu: "Updated 12:00", UpdatedWindow: "Updated 12:00", SheetText: null,
             SigningInText: null, StowText: null, FailureAlert: null,
@@ -39,7 +41,7 @@ internal static class Snapshots
                 OpenAtLogin: new WelcomeLogin(
                     Title: "Start when you sign in to Windows", On: false, Note: "Pitboard watches your limits only while it’s running."),
                 Done: new Choice(Title: "Get started", Intent: new Intent.Show(Place: new Place.Accounts()), Enabled: true)),
-            GlanceRevision: 0, Answers: []);
+            WidgetRevision: 0, Answers: []);
 
     private static MachineShown Unread() => new(
         Schedule: new ScheduleShown(

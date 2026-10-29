@@ -1,6 +1,6 @@
 [package]
 name = "uniffi-bindgen-swift"
-description = "Generates pitboard-ffi's Swift bindings with exactly the UniFFI the library uses."
+description = "Generates pitboard-model's Swift bindings with exactly the UniFFI the library uses."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

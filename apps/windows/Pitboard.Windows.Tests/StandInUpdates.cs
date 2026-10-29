@@ -41,7 +41,7 @@ internal sealed class StandInUpdates(string? waiting = null, bool beta = false) 
     public void Feed(bool found)
     {
         Available = found;
-        Refusal = found ? null : Words.Settings.NoReleaseToUpdateTo;
+        Refusal = found ? null : Words.Own.NoReleaseToUpdateTo;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -16,17 +16,17 @@ public sealed class AccountSheetTests
 {
     private const string Address = "https://claude.com/cai/oauth/authorize?code=true&state=pitboard-fixture";
 
-    private static readonly Sheet Add = new Sheet.Add(Provider: null);
+    private static readonly Sheet Add = new Sheet.Add(Tool: null);
 
     private static readonly WindowQuestion QuitChatGPT = new(
         new Question("Quit ChatGPT to sign in?", "ChatGPT signs in again.", "Quit ChatGPT and continue", Destructive: false, ConfirmIsDefault: true),
-        Confirmed: new Intent.QuitAndSwitch("codex/spare"),
+        Confirmed: new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare")),
         Declined: new Intent.KeepAppOpen());
 
     // The account just added, which the model saved under the name it starts on.
     private static readonly Snapshot Naming = Snapshots.Read(1) with
     {
-        Sheet = new Sheet.Name("claude", "work", "dana@work.example"),
+        Sheet = new Sheet.Name(new AccountKey(Tool.Claude, "work"), "dana@work.example"),
         SheetText = Items.Rename("work") with { Title = "Name this account", Confirm = "Save" },
     };
 
@@ -49,7 +49,7 @@ public sealed class AccountSheetTests
         Views.Press(up.Part("PrimaryButton"));
 
         Assert.Contains("Pitboard opens Codex’s sign-in in your browser, where you sign in to the account you’re adding.", Views.Texts(up.Sheet));
-        await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn("codex", null)), "no sign-in to Codex");
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn(Tool.Codex, null)), "no sign-in to Codex");
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went before the model closed it");
     }
 
@@ -112,7 +112,7 @@ public sealed class AccountSheetTests
     {
         await using var up = await Up.Over(Snapshots.Read(1) with
         {
-            Sheet = new Sheet.Rename("claude", "personal"),
+            Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "personal")),
             SheetText = Items.Rename("personal"),
         });
         Assert.AreEqual("personal", up.Element<TextBox>("sheet.name").Text);
@@ -123,7 +123,7 @@ public sealed class AccountSheetTests
         await up.Type("sheet.name", "home");
         Views.Press(up.Part("PrimaryButton"));
 
-        await Views.Until(() => up.Model.Sent.Contains(new Intent.Rename("claude", "personal", "home")), "no rename to home");
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.Rename(new AccountKey(Tool.Claude, "personal"), "home")), "no rename to home");
     }
 
     // Microsoft's text box guidance: text that is never editable is a TextBlock, not a read-only box that looks like a field.
@@ -132,7 +132,7 @@ public sealed class AccountSheetTests
     {
         await using var up = await Up.Over(Snapshots.Read(1) with
         {
-            Sheet = new Sheet.SignInAgain("claude", "work"),
+            Sheet = new Sheet.SignInAgain(new AccountKey(Tool.Claude, "work")),
             SheetText = Items.AddAccount() with { Title = "Sign in to work again", Account = "work" },
         });
         Assert.IsFalse(up.Visible("sheet.name"), "a name field for an account that has one");
@@ -143,14 +143,14 @@ public sealed class AccountSheetTests
 
         Views.Press(up.Part("PrimaryButton"));
 
-        await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn("claude", "work")), "no sign-in as work");
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.SignIn(Tool.Claude, "work")), "no sign-in as work");
     }
 
     // Saying what went wrong where the name typed is still there to correct.
     [UITestMethod]
     public async Task AFailureIsSaidInTheSheetWithTheNameStillInIt()
     {
-        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
+        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "personal")), SheetText = Items.Rename("personal") };
         await using var up = await Up.Over(renaming);
         await up.Type("sheet.name", "work");
         var failure = new FailureText(7, "Couldn’t rename personal", "work is already the name of another account.", [], Items.LearnMore);
@@ -167,7 +167,7 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task AFailureInTheSheetEndsWithItsNextStep()
     {
-        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
+        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "personal")), SheetText = Items.Rename("personal") };
         await using var up = await Up.Over(renaming);
         var bar = up.Element<InfoBar>("sheet.failure");
         up.App.Apply(renaming with
@@ -198,7 +198,7 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task ASecondFailureReopensItsInfoBar()
     {
-        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
+        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "personal")), SheetText = Items.Rename("personal") };
         await using var up = await Up.Over(renaming);
         var bar = up.Element<InfoBar>("sheet.failure");
         up.App.Apply(renaming with
@@ -387,7 +387,7 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task ANameThatCannotBeOneSaysWhyAndAFailureGoesWithAnEdit()
     {
-        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename("claude", "personal"), SheetText = Items.Rename("personal") };
+        var renaming = Snapshots.Read(1) with { Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "personal")), SheetText = Items.Rename("personal") };
         await using var up = await Up.Over(renaming);
         var field = up.Element<TextBox>("sheet.name");
 
@@ -498,7 +498,7 @@ public sealed class AccountSheetTests
     {
         await using var up = await Up.Over(Snapshots.Read(1) with
         {
-            Sheet = new Sheet.Rename("claude", "work"),
+            Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "work")),
             SheetText = Items.Rename("work") with { Saving = true },
         });
 
@@ -531,7 +531,7 @@ public sealed class AccountSheetTests
         await using var up = await Up.Over(adding);
         var first = up.Sheet;
 
-        up.App.Apply(adding with { Revision = 2, Sheet = new Sheet.Rename("claude", "work"), SheetText = Items.Rename("work") });
+        up.App.Apply(adding with { Revision = 2, Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "work")), SheetText = Items.Rename("work") });
 
         await Views.Until(() => up.Dialogs.Open is AccountSheet next && next != first, "the rename sheet did not replace the first");
         Assert.AreEqual("Rename “work”", up.Sheet.Title);
@@ -549,11 +549,11 @@ public sealed class AccountSheetTests
         up.App.Apply(Naming with
         {
             Revision = 2,
-            Sheet = new Sheet.Name("claude", "work", "dana@work.example"),
+            Sheet = new Sheet.Name(new AccountKey(Tool.Claude, "work"), "dana@work.example"),
             SheetText = Items.Rename("dana"),
         });
         Assert.AreSame(first, up.Dialogs.Open, "the same sheet was put up again");
-        up.App.Apply(Naming with { Revision = 3, Sheet = new Sheet.Name("claude", "home", "dana@home.example") });
+        up.App.Apply(Naming with { Revision = 3, Sheet = new Sheet.Name(new AccountKey(Tool.Claude, "home"), "dana@home.example") });
 
         await Views.Until(() => up.Dialogs.Open is AccountSheet next && next != first, "the sheet for another login kept its dialog");
         Assert.IsEmpty(up.Model.Sent);
@@ -581,7 +581,7 @@ public sealed class AccountSheetTests
     {
         var signingIn = Snapshots.Read(1) with
         {
-            Sheet = new Sheet.Add(Provider: "codex"),
+            Sheet = new Sheet.Add(Tool: Tool.Codex),
             SheetText = Items.AddAccount(),
             SigningIn = Items.Running(),
             SigningInText = Items.SigningIn("Codex"),
@@ -601,7 +601,7 @@ public sealed class AccountSheetTests
 
         Views.Press(up.Part("PrimaryButton"));
 
-        await Views.Until(() => up.Model.Sent.Contains(new Intent.QuitAndSwitch("codex/spare")), "the answer did not reach the model");
+        await Views.Until(() => up.Model.Sent.Contains(new Intent.QuitAndSwitch(new AccountKey(Tool.Codex, "spare"))), "the answer did not reach the model");
         Assert.AreSame(up.Sheet, up.Dialogs.Open, "the sheet went with the question");
     }
 
@@ -611,7 +611,7 @@ public sealed class AccountSheetTests
     {
         var renaming = Snapshots.Read(1) with
         {
-            Sheet = new Sheet.Rename("claude", "personal"),
+            Sheet = new Sheet.Rename(new AccountKey(Tool.Claude, "personal")),
             SheetText = Items.Rename("personal"),
             QuitQuestion = QuitChatGPT,
         };
@@ -656,7 +656,7 @@ public sealed class AccountSheetTests
     [UITestMethod]
     public async Task AFailureDuringASheetOffersItsNextStepInIt()
     {
-        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain("claude", "spare")), Enabled: true);
+        var signIn = new Choice("Sign in again…", new Intent.PresentSheet(new Sheet.SignInAgain(new AccountKey(Tool.Claude, "spare"))), Enabled: true);
         var failed = new AlertText("Couldn’t switch to spare", "spare’s saved sign-in no longer works.", new NextStep.Act(signIn));
         var naming = Naming with { FailureAlert = failed };
         await using var up = await Up.Over(naming);

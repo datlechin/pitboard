@@ -33,6 +33,6 @@ public static class PageRequests
         {
             PageRole.Popup => mainFrame ? Asker.SignIn : Asker.Other,
             _ when source is null => Asker.Other,
-            _ => PitboardFfiMethods.FrameAsker(policy, Origin(source, mainFrame)),
+            _ => PitboardModelMethods.FrameAsker(policy, Origin(source, mainFrame)),
         };
 }

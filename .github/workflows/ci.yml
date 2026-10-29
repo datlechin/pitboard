@@ -45,7 +45,7 @@ jobs:
       - uses: ./.github/actions/rust
       - run: cargo clippy --all-targets --locked
       # The fixtures, which only a build with the feature compiles.
-      - run: cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
+      - run: cargo clippy -p pitboard-model --all-targets --locked --features fixture
 
   test:
     strategy:
@@ -65,7 +65,7 @@ jobs:
       - run: cargo nextest run --locked --profile ci
       # The fixtures, each a world on the real core, which only a build with the feature has.
       # The crate's other tests ran above, and the feature changes none of them.
-      - run: cargo nextest run --locked --profile ci -p pitboard-ffi --features fixture -E 'test(/^fixture::/)'
+      - run: cargo nextest run --locked --profile ci -p pitboard-model --features fixture -E 'test(/^fixture::/)'
       # Both runs write this report, and a step that fails is the last to run.
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -191,7 +191,7 @@ jobs:
           ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard --test cli'
           -Filter 'test(/^windows_refuses::/)' -Probe target/debug/pitboard-probe.exe
       - run: cargo clippy --workspace --all-targets --locked
-      - run: cargo clippy -p pitboard-ffi --all-targets --locked --features fixture
+      - run: cargo clippy -p pitboard-model --all-targets --locked --features fixture
       # No filter and no --skip: the windows-pending job checks each test left out says why.
       # -ExFat mounts the volume a test replaces a file on through MoveFileExW.
       - name: The workspace's tests, as a standard user
@@ -200,10 +200,10 @@ jobs:
           ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked --workspace'
           -Probe target/debug/pitboard-probe.exe -ExFat
       # The crate's other tests ran above, and the feature changes none of them.
-      - name: pitboard-ffi's fixture tests, as a standard user
+      - name: pitboard-model's fixture tests, as a standard user
         shell: pwsh
         run: >
-          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-ffi --features fixture'
+          ./.github/scripts/test-as-standard-user.ps1 -Cargo '--locked -p pitboard-model --features fixture'
           -Filter 'test(/^fixture::/)' -Probe target/debug/pitboard-probe.exe
       # Each run writes its report under its target folder, and a step that fails is the last to run.
       - if: failure()
@@ -309,7 +309,7 @@ jobs:
       # --rust-version installs the rust-version in Cargo.toml and checks with it; the
       # workspace behaviour keeps it one cargo check, not one per package.
       - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-targets --locked
-      - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-ffi --all-targets --locked --features fixture
+      - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-model --all-targets --locked --features fixture
 
   apple:
     # The image and the Xcode are named, so a new one is a change made on purpose.
@@ -334,7 +334,7 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-hack@0.6.45
-      - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-core -p pitboard -p pitboard-ffi --all-targets --locked
+      - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-core -p pitboard -p pitboard-model --all-targets --locked
       # PitboardBindings and PitboardShareBindings are generated, so only what is written by
       # hand is checked.
       - run: >
@@ -490,8 +490,8 @@ jobs:
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/release/libpitboard_ffi.a \
             --out-dir apps/windows/Pitboard.Core/Generated \
-            --config crates/pitboard-ffi/uniffi.toml --no-format
-          test -s apps/windows/Pitboard.Core/Generated/pitboard_ffi.cs
+            --config crates/pitboard-model/uniffi.toml --no-format
+          test -s apps/windows/Pitboard.Core/Generated/pitboard_model.cs
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/release/libpitboard_share_ffi.a \
             --out-dir apps/windows/Pitboard.Share.Core/Generated \
@@ -501,7 +501,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: csharp-bindings
-          path: apps/windows/Pitboard.Core/Generated/pitboard_ffi.cs
+          path: apps/windows/Pitboard.Core/Generated/pitboard_model.cs
           if-no-files-found: error
           retention-days: 7
       # global.json, which pins the SDK and the test platform, is read from where dotnet runs.
@@ -521,11 +521,11 @@ jobs:
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/release/libpitboard_ffi.a \
             --out-dir "$RUNNER_TEMP/fixture-bindings" \
-            --config crates/pitboard-ffi/uniffi.toml --no-format
-          cmp apps/windows/Pitboard.Core/Generated/pitboard_ffi.cs \
-            "$RUNNER_TEMP/fixture-bindings/pitboard_ffi.cs"
-      # Here the fixtures' models are started, and call the listener, AppControl,
-      # Notifications and LocalTime written in C# from threads of their own.
+            --config crates/pitboard-model/uniffi.toml --no-format
+          cmp apps/windows/Pitboard.Core/Generated/pitboard_model.cs \
+            "$RUNNER_TEMP/fixture-bindings/pitboard_model.cs"
+      # Here the fixtures' models are started, and call the Listener, OtherApps,
+      # Notifier and LocalTime written in C# from threads of their own.
       - working-directory: apps/windows
         run: >
           dotnet test --solution Pitboard.slnx
@@ -592,19 +592,19 @@ jobs:
         env:
           RUSTFLAGS: -D warnings -C target-feature=+crt-static
           CARGO_TARGET_DIR: target/gated
-          LINUX: ${{ runner.temp }}/linux-bindings/pitboard_ffi.cs
+          LINUX: ${{ runner.temp }}/linux-bindings/pitboard_model.cs
           OPENED: ${{ runner.temp }}/opened-bindings
         run: |
           mkdir -p apps/windows/Pitboard.Core/Generated "$OPENED"
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/gated/release/pitboard_ffi.dll \
             --out-dir apps/windows/Pitboard.Core/Generated \
-            --config crates/pitboard-ffi/uniffi.toml --no-format
+            --config crates/pitboard-model/uniffi.toml --no-format
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/release/pitboard_ffi.dll --out-dir "$OPENED" \
-            --config crates/pitboard-ffi/uniffi.toml --no-format
-          cmp "$LINUX" apps/windows/Pitboard.Core/Generated/pitboard_ffi.cs
-          cmp "$LINUX" "$OPENED/pitboard_ffi.cs"
+            --config crates/pitboard-model/uniffi.toml --no-format
+          cmp "$LINUX" apps/windows/Pitboard.Core/Generated/pitboard_model.cs
+          cmp "$LINUX" "$OPENED/pitboard_model.cs"
       # Published by the job's user, whose profile holds the SDK and the NuGet packages, into
       # the workspace the standard user is granted read and run on. The opened program passes
       # its tests with the gated library too, so each is compared with the library it was given.
@@ -707,7 +707,7 @@ jobs:
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/gated/release/pitboard_ffi.dll \
             --out-dir apps/windows/Pitboard.Core/Generated \
-            --config crates/pitboard-ffi/uniffi.toml --no-format
+            --config crates/pitboard-model/uniffi.toml --no-format
           cargo run --locked --release -p uniffi-bindgen-csharp -- \
             --library target/gated/release/pitboard_share_ffi.dll \
             --out-dir apps/windows/Pitboard.Share.Core/Generated \
@@ -990,7 +990,7 @@ jobs:
           tool: cargo-hack@0.6.45
       - run: cargo hack check --rust-version --workspace-behavior=cargo --workspace --all-targets --locked
       # The fixtures, which only a build with the feature compiles.
-      - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-ffi --all-targets --locked --features fixture
+      - run: cargo hack check --rust-version --workspace-behavior=cargo -p pitboard-model --all-targets --locked --features fixture
 
   semver:
     # A pitboard-core API break fails here until crates/pitboard-core/Cargo.toml raises the

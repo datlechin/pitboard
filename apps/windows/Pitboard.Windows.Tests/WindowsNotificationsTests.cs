@@ -12,13 +12,13 @@ public sealed class WindowsNotificationsTests
 {
     private const string Icon = @"C:\Users\Dana Lee\AppData\Local\Programs\Pitboard\Pitboard.ico";
 
-    private static readonly RunOutNotice RunOut = new(
+    private static readonly Notice RunOut = new(
         Id: "claude/personal/session/-1800018000", Title: "5-hour limit reached", Subtitle: "Claude Code",
         Body: "personal has used 100%. work has used 42%.", Clicked: "accounts",
-        Button: new NotificationButton("Switch to work", "switch/claude/work"));
+        Button: new NoticeButton(NoticeButtonKind.SwitchTo, "Switch to work", "switch/claude/work"));
 
-    // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-ffi/src/model/warming.rs).
-    private static readonly RunOutNotice WarmFailed = new(
+    // A warm-up by itself that came to nothing, by its account and code (crates/pitboard-model/src/model/warming.rs).
+    private static readonly Notice WarmFailed = new(
         Id: "warm-failed/personal/warm_up_not_started",
         Title: "Warm-up didn’t start", Subtitle: "Claude Code",
         Body: "`personal` was not warmed up: the request was answered, and Anthropic still has no period running.",
@@ -26,7 +26,7 @@ public sealed class WindowsNotificationsTests
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
-    private static XElement Toast(RunOutNotice notice) => XElement.Parse(WindowsNotifications.Notification(notice).Payload);
+    private static XElement Toast(Notice notice) => XElement.Parse(WindowsNotifications.Notification(notice).Payload);
 
     [TestMethod]
     public void TheNotificationSaysTheRunOutAndTheToolAndOffersSwitch()
@@ -74,7 +74,7 @@ public sealed class WindowsNotificationsTests
     {
         foreach (var clicked in new[] { "switch/claude/work", "switch/codex/a;b=c%3B", "sign-in-again/claude/Zoë & <Ö>'s \"team\"" })
         {
-            var notice = RunOut with { Button = new NotificationButton("Switch to work", clicked) };
+            var notice = RunOut with { Button = new NoticeButton(NoticeButtonKind.SwitchTo, "Switch to work", clicked) };
             var arguments = (string)Toast(notice).Descendants("action").Single().Attribute("arguments")!;
 
             Assert.AreEqual(new Intent.NotificationClicked(clicked), WindowsNotifications.Read(Decoded(arguments)), arguments);
@@ -161,7 +161,7 @@ public sealed class WindowsNotificationsTests
 
         Assert.AreEqual("supported", string.Join(", ", system.Asked));
         Assert.IsTrue(notifications.Unoffered);
-        Assert.AreEqual(new NotificationsBlocked(Words.Settings.NotificationsUnoffered!, InSettings: false), notifications.Read());
+        Assert.AreEqual(new NotificationsBlocked(Words.Own.NotificationsUnoffered, InSettings: false), notifications.Read());
     }
 
     [TestMethod]
@@ -206,10 +206,10 @@ public sealed class WindowsNotificationsTests
         (AppNotificationSetting Setting, NotificationsBlocked Said)[] blocked =
         [
             (AppNotificationSetting.DisabledForApplication, new(Words.Settings.NotificationsOff, InSettings: true)),
-            (AppNotificationSetting.DisabledForUser, new(Words.Settings.NotificationsOffForEveryApp!, InSettings: true)),
-            (AppNotificationSetting.DisabledByGroupPolicy, new(Words.Settings.NotificationsOffByPolicy!, InSettings: false)),
-            (AppNotificationSetting.DisabledByManifest, new(Words.Settings.NotificationsUnoffered!, InSettings: false)),
-            (AppNotificationSetting.Unsupported, new(Words.Settings.NotificationsUnoffered!, InSettings: false)),
+            (AppNotificationSetting.DisabledForUser, new(Words.Own.NotificationsOffForEveryApp, InSettings: true)),
+            (AppNotificationSetting.DisabledByGroupPolicy, new(Words.Own.NotificationsOffByPolicy, InSettings: false)),
+            (AppNotificationSetting.DisabledByManifest, new(Words.Own.NotificationsUnoffered, InSettings: false)),
+            (AppNotificationSetting.Unsupported, new(Words.Own.NotificationsUnoffered, InSettings: false)),
         ];
         foreach (var (setting, said) in blocked)
         {
@@ -248,7 +248,7 @@ public sealed class WindowsNotificationsTests
         CollectionAssert.DoesNotContain(system.Asked, "setting");
     }
 
-    // ModelTests.ARunOutIsPostedThroughTheAppsNotifications, through to what Windows is asked to show.
+    // ModelTests.ARunOutIsPostedThroughTheAppsNotifier, through to what Windows is asked to show.
     [TestMethod]
     public void AFixturesRunOutIsShownWithItsSwitchButton()
     {
@@ -257,11 +257,11 @@ public sealed class WindowsNotificationsTests
         var notifications = new WindowsNotifications(Build.Release, () => system, Icon);
         notifications.Start(_ => Assert.Fail("a click"));
         var told = new Told();
-        using var model = PitboardModel.FixtureIn("oneTool", folder, told, new NoOtherApps(), notifications, new WindowsLocalTime());
+        using var model = PitboardModel.FixtureIn("oneTool", Identity.Front, folder, told, null, notifications, new WindowsLocalTime());
 
         model.Send(new Intent.Start());
         Assert.IsNotNull(told.Until(snapshot => snapshot is { Reading: false, UpdatedWindow.Length: > 0, Sections.Length: > 0 }), "no accounts were read");
-        model.Send(new Intent.SwitchTo("claude/personal"));
+        model.Send(new Intent.SwitchTo(new AccountKey(Tool.Claude, "personal")));
         var shown = system.Shown.TryTake(out var notification, Patience);
         model.Shutdown();
 
@@ -287,7 +287,7 @@ public sealed class WindowsNotificationsTests
         return decoded;
     }
 
-    private sealed class Told : ModelListener
+    private sealed class Told : Listener
     {
         private readonly BlockingCollection<Snapshot> _told = [];
 

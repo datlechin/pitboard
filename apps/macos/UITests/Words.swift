@@ -1,6 +1,7 @@
 import Foundation
 
-// What SwiftUI gives no identifier (docs/facts/macos-app.md), found by the words words.rs pins.
+// What SwiftUI gives no identifier (docs/facts/macos-app.md), found by the words present/words/
+// pins.
 enum Words {
     // The menu bar item's menu and the app's own menus.
     static let openPitboard = "Open Pitboard"

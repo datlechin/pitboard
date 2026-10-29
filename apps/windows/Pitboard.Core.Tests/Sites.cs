@@ -4,12 +4,12 @@ namespace Pitboard.Core.Tests;
 internal static class Sites
 {
     public static readonly Site Claude = new(
-        Host: "claude.ai", Name: "claude.ai", Provider: "claude", Aliases: [], Hosts: ["claude.ai"], SignInHosts: [],
+        Host: "claude.ai", Name: "claude.ai", Tool: Tool.Claude, Aliases: [], Hosts: ["claude.ai"], SignInHosts: [],
         BlockedHosts: ["accounts.google.com"], SignInPaths: [["magic-link"]], StoreName: "claude", SignInSteps: "",
         BlockedServices: "");
 
     public static readonly Site ChatGpt = new(
-        Host: "chatgpt.com", Name: "chatgpt.com", Provider: "codex",
+        Host: "chatgpt.com", Name: "chatgpt.com", Tool: Tool.Codex,
         Aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
         Hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
         SignInHosts: ["auth.openai.com", "login.live.com", "login.microsoftonline.com", "appleid.apple.com"],

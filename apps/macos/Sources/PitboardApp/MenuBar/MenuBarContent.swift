@@ -15,7 +15,7 @@ struct MenuBarContent: View {
         accounts
         Section {
             Button(words.menu.addAccount) {
-                model.send(.presentSheet(sheet: .add(provider: nil)))
+                model.send(.presentSheet(sheet: .add(tool: nil)))
             }
             .keyboardShortcut("n")
             Button {

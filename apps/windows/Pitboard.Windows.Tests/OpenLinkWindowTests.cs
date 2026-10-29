@@ -185,7 +185,7 @@ public sealed class OpenLinkWindowTests
         var window = await Views.Activated(new OpenLinkWindow(NoLink, sent.Add, _ => { }, browsed.Add));
         try
         {
-            var add = new Choice("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: "codex")), Enabled: true);
+            var add = new Choice("Add account…", new Intent.PresentSheet(new Sheet.Add(Tool: Tool.Codex)), Enabled: true);
             window.Follow(new LinkPicker(8, false, new PickerShown.NoAccount(
                 Title: "No chatgpt.com account", Link: Shared, LinkText: "chatgpt.com/c/shared",
                 Detail: "None of the accounts Pitboard has opens chatgpt.com.", InBrowser: "Open in browser", Add: add)));

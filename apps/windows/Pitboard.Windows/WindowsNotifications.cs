@@ -10,7 +10,7 @@ namespace Pitboard.Windows;
 // Why Windows shows none of Pitboard's notifications, and whether Settings > System > Notifications turns them on.
 public sealed record NotificationsBlocked(string Why, bool InSettings);
 
-public sealed class WindowsNotifications(Build build, Func<IAppNotifications> system, string icon) : Notifications
+public sealed class WindowsNotifications(Build build, Func<IAppNotifications> system, string icon) : Notifier
 {
     // What Windows registers the app's notifications under; the probe registers it with no core to ask.
     public const string DisplayName = "Pitboard";
@@ -75,7 +75,7 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     }
 
     // On the model's thread.
-    public void Post(RunOutNotice notice)
+    public void Post(Notice notice)
     {
         IAppNotifications? registered;
         lock (_lock)
@@ -128,9 +128,9 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     {
         AppNotificationSetting.Enabled => null,
         AppNotificationSetting.DisabledForApplication => new(Words.Settings.NotificationsOff, InSettings: true),
-        AppNotificationSetting.DisabledForUser => new(Words.Settings.NotificationsOffForEveryApp!, InSettings: true),
-        AppNotificationSetting.DisabledByGroupPolicy => new(Words.Settings.NotificationsOffByPolicy!, InSettings: false),
-        _ => new(Words.Settings.NotificationsUnoffered!, InSettings: false),
+        AppNotificationSetting.DisabledForUser => new(Words.Own.NotificationsOffForEveryApp, InSettings: true),
+        AppNotificationSetting.DisabledByGroupPolicy => new(Words.Own.NotificationsOffByPolicy, InSettings: false),
+        _ => new(Words.Own.NotificationsUnoffered, InSettings: false),
     };
 
     // Before Pitboard exits, so a later click starts it again.
@@ -155,7 +155,7 @@ public sealed class WindowsNotifications(Build build, Func<IAppNotifications> sy
     public static string Tag(string id) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(id)));
 
     // Title, tool and body, in the macOS notification's order.
-    public static AppNotification Notification(RunOutNotice notice)
+    public static AppNotification Notification(Notice notice)
     {
         var builder = new AppNotificationBuilder().AddText(notice.Title);
         if (notice.Subtitle is { } subtitle)

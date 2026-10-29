@@ -151,6 +151,19 @@ pub mod testing {
         crate::provider::codex::login_for_a_test(account, email, access, refresh)
     }
 
+    /// Every kind of process `which`'s tool names as holding its login, on every system, as a
+    /// switch finds them: an app among them is named by its own system's `holder::AppId`.
+    pub fn holders(which: crate::provider::ProviderId) -> &'static [crate::holder::Holder] {
+        use crate::provider::{Adoption, LoginKind};
+        match crate::provider::of(which) {
+            LoginKind::Document(tool) => match tool.adoption(None) {
+                Adoption::RestartRequired { holders, .. } => holders,
+                _ => &[],
+            },
+            LoginKind::Folder(app) => std::slice::from_ref(app.holder()),
+        }
+    }
+
     pub fn park_unread(label: &str, path: &std::path::Path, why: &str) -> crate::error::Error {
         crate::store::folder::unread(label, path, why)
     }

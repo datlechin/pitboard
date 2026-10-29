@@ -13,13 +13,19 @@ public enum Launch {
         case outsideFixture
     }
 
+    #if DEBUG
+        public static let build = Build.debug
+    #else
+        public static let build = Build.release
+    #endif
+
     // `helper` is nil where this is not running from an app bundle.
     public static func action(
         for arguments: [String], helper: String?, environment: [String: String]
     ) -> Action {
-        #if DEBUG
-            guard environment[Fixture.variable] != nil else { return .outsideFixture }
-        #endif
+        guard started(build: build, environment: environment) != .outsideFixture else {
+            return .outsideFixture
+        }
         guard arguments.dropFirst() == ["renew"] else { return .app }
         return helper.map(Action.renew) ?? .fail
     }

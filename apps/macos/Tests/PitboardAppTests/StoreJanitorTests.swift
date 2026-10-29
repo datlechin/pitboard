@@ -4,7 +4,7 @@ import Testing
 
 @testable import PitboardApp
 
-// Which stores go, and when, is the model's, tested in pitboard-ffi's `model/windowing.rs`
+// Which stores go, and when, is the model's, tested in pitboard-model's `model/windowing.rs`
 // and `account_windows/records.rs`.
 
 @MainActor
@@ -127,6 +127,38 @@ private func delete(_ janitor: StoreJanitor, _ asks: [StoreDeletion], said: Said
             pitboardDirectory(environment: [:]) == ".pitboard",
             "a library with fixtures names no home of its own")
     }
+}
+
+/// The records' key is Foundation's, which the model takes as the app gives it: by name it
+/// drops `.`, `..`, doubled and trailing slashes, resolves a relative directory against the
+/// current one, and decomposes a name as HFS+ does; by the file system it resolves links where
+/// a `..` is and the rest is there, and drops `/private` where what follows is there
+/// (docs/facts/foundation-urls.md).
+@Test func theRecordsKeyIsFoundationsByNameAndByTheFileSystem() throws {
+    func key(_ directory: String) -> String {
+        WebEnvironment.recordKey(environment: ["PITBOARD_HOME": directory])
+    }
+    #expect(key("/Users/dana//./work/../pitboard//") == "/Users/dana/pitboard")
+    #expect(key("//Users/dana/.pitboard/.") == "/Users/dana/.pitboard")
+    #expect(key("/../x") == "/x")
+    #expect(key("pitboard") == FileManager.default.currentDirectoryPath + "/pitboard")
+    #expect(key("/Users/dana/B\u{E1}o c\u{E1}o") == "/Users/dana/Ba\u{301}o ca\u{301}o")
+    #expect(key("/Users/dana/\u{D55C}") == "/Users/dana/\u{1112}\u{1161}\u{11AB}")
+    #expect(key("/Users/dana/\u{F900}") == "/Users/dana/\u{F900}", "HFS+ keeps U+F900")
+    #expect(key("/Users/dana/\u{105C9}") == "/Users/dana/\u{105C9}", "and Unicode 16's Todhri")
+
+    let scratch = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pitboard-key-\(UUID().uuidString)")
+    let inner = scratch.appendingPathComponent("real/inner")
+    try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: scratch) }
+    let link = scratch.appendingPathComponent("link")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: inner)
+    let here = scratch.standardizedFileURL.path
+    #expect(key(link.path + "/..") == here + "/real", "through the link, since it is there")
+    #expect(key(link.path + "/../nowhere") == here + "/nowhere", "by name, since it is not")
+    #expect(key("/private" + here) == here, "the folder is there without /private")
+    #expect(key("/private/var/pitboard-nowhere") == "/private/var/pitboard-nowhere")
 }
 
 /// Nothing is written.

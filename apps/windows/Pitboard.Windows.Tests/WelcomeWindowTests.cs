@@ -22,7 +22,7 @@ public sealed class WelcomeWindowTests
         "claude", "Claude Code", "dana@work.example", new WelcomeStep.Added("Added as work"));
 
     private static readonly WelcomeTool Codex = new(
-        "codex", "Codex", null, new WelcomeStep.Add(new Choice("Add", new Intent.Enrol("codex"), Enabled: true)));
+        "codex", "Codex", null, new WelcomeStep.Add(new Choice("Add", new Intent.Enrol(Tool.Codex), Enabled: true)));
 
     private static Snapshot Welcoming(params WelcomeTool[] tools) =>
         Snapshots.Read(1) with
@@ -84,7 +84,7 @@ public sealed class WelcomeWindowTests
             Assert.IsFalse(Views.Visible<Button>(claude).Any(), "Add for a tool added already");
 
             Views.Press(Views.Button(Card(window, "codex"), "Add"));
-            CollectionAssert.AreEqual(new Intent[] { new Intent.Enrol("codex") }, model.Sent.ToArray());
+            CollectionAssert.AreEqual(new Intent[] { new Intent.Enrol(Tool.Codex) }, model.Sent.ToArray());
 
             var install = new SetupLink("How to install Claude Code", "https://code.claude.com/docs/en/setup");
             app.Apply(Welcoming(new WelcomeTool("claude", "Claude Code", null, new WelcomeStep.Install(install))) with { Revision = 2 });

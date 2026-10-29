@@ -4,11 +4,11 @@ import Observation
 /// What the app shows, as the Rust model last said it, and the one way to ask that model for
 /// anything.
 ///
-/// The model in `pitboard-ffi` holds every rule: what is read and when, what a switch does,
-/// what each sentence and row says. This holds its newest snapshot on the main actor, a
-/// property for each part, so a view reads what it shows and SwiftUI draws again only what
-/// changed. A view asks for something by sending an `Intent`, which returns at once: what
-/// comes of it arrives as a newer snapshot.
+/// The model in `pitboard-model` holds every rule: what is read and when, what a switch does,
+/// what each sentence and row says, and which parts of a snapshot changed. This holds its
+/// newest snapshot on the main actor, a property for each part, so a view reads what it shows
+/// and SwiftUI draws again only what changed. A view asks for something by sending an
+/// `Intent`, which returns at once: what comes of it arrives as a newer snapshot.
 ///
 /// The menu, the window and the settings all read this one model, so an account reads the
 /// same everywhere and a change made in one shows in the others at once.
@@ -34,8 +34,9 @@ public final class AppModel {
     public private(set) var sheet: Sheet?
     /// What went wrong in the sheet that is up, said inside it.
     public private(set) var sheetFailure: FailureText?
-    /// What the menu bar item says beside its mark, in each form its setting can choose.
-    public private(set) var menuBar: MenuBarText
+    /// What the menu bar item says beside its mark, in each form its setting can choose. The
+    /// model says it from launch to quit: it is nil only on a front with no status item.
+    public private(set) var statusItem: StatusItemShown?
     /// The accounts, a section per tool once there is more than one.
     public private(set) var sections: [AccountSection]
     /// The Account menu's items while no account is selected.
@@ -74,20 +75,19 @@ public final class AppModel {
     public private(set) var removal: RemovalShown?
     public private(set) var welcome: WelcomeShown
 
-    /// Told the account windows' part each time a snapshot changes it, once that snapshot is
-    /// shown, for what only the app's web code can do: delete the stores the model asks it
+    /// Told the account windows' part each time a snapshot shown names it, once that snapshot
+    /// is shown, for what only the app's web code can do: delete the stores the model asks it
     /// to. Which stores those are, and when, is the model's.
     @ObservationIgnored public var accountWindowsChanged:
         (@MainActor (AccountWindowsShown) -> Void)?
 
     @ObservationIgnored private var lastRequest: UInt64 = 0
     @ObservationIgnored private var answering: [UInt64: Answering] = [:]
-    @ObservationIgnored private var lastGlance = 0
-    @ObservationIgnored private var glancing: [Int: CheckedContinuation<Void, Never>] = [:]
-    @ObservationIgnored private var glanceRevision: UInt64
+    @ObservationIgnored private var lastFeedWait = 0
+    @ObservationIgnored private var feedWaits: [Int: CheckedContinuation<Void, Never>] = [:]
 
-    // Told each time what a widget shows of the glance changes, once its snapshot is shown.
-    @ObservationIgnored public var glanceChanged: (@MainActor () -> Void)?
+    // Told each time what a widget shows of the widget feed changes, once its snapshot is shown.
+    @ObservationIgnored public var widgetFeedChanged: (@MainActor () -> Void)?
 
     /// The app's model over `model`, showing its last snapshot until a newer one comes.
     public init(model: any PitboardModelProtocol) {
@@ -101,7 +101,7 @@ public final class AppModel {
         signingIn = first.signingIn
         sheet = first.sheet
         sheetFailure = first.sheetFailure
-        menuBar = first.menuBar
+        statusItem = first.statusItem
         sections = first.sections
         accountMenu = first.accountMenu
         notices = first.notices
@@ -121,14 +121,13 @@ public final class AppModel {
         uninstall = first.uninstall
         removal = first.removal
         welcome = first.welcome
-        glanceRevision = first.glanceRevision
     }
 
     /// The model `make` makes, told of its snapshots through a listener that hands each to
     /// this app's model on the main actor, in order. The listener holds the app's model
     /// weakly: the model holds the listener, and the app's model holds the model.
     public static func listening(
-        _ make: (any ModelListener) throws -> any PitboardModelProtocol
+        _ make: (any Listener) throws -> any PitboardModelProtocol
     ) rethrows -> AppModel {
         let listener = ModelListening()
         let app = AppModel(model: try make(listener))
@@ -160,17 +159,17 @@ public final class AppModel {
 
     // What a widget reads, for an intent in the app: after the launch's first read, which it
     // waits for as long as `patience`.
-    public func glance(within patience: Duration) async -> String? {
-        if let glance = model.glance() { return glance }
-        lastGlance += 1
-        let waiting = lastGlance
+    public func widgetFeed(within patience: Duration) async -> String? {
+        if let feed = model.widgetFeed() { return feed }
+        lastFeedWait += 1
+        let waiting = lastFeedWait
         let late = Task {
             try? await Task.sleep(for: patience)
-            glancing.removeValue(forKey: waiting)?.resume()
+            feedWaits.removeValue(forKey: waiting)?.resume()
         }
         defer { late.cancel() }
-        await withCheckedContinuation { glancing[waiting] = $0 }
-        return model.glance()
+        await withCheckedContinuation { feedWaits[waiting] = $0 }
+        return model.widgetFeed()
     }
 
     /// Stops the model, a sign-in under way with it, for the app to call as it quits.
@@ -178,62 +177,64 @@ public final class AppModel {
         model.shutdown()
     }
 
-    /// Shows `snapshot` where it is newer than the one shown, and drops it otherwise. Each
-    /// part is assigned only where it differs, so a view that reads a part that stayed the
-    /// same is not drawn again. Returns the parts it assigned, none for a snapshot dropped,
-    /// so a test sees which, whatever Observation makes of an assignment.
+    /// Shows `snapshot` where it is newer than the one shown, and drops it otherwise. Where it
+    /// changed since the one shown, it assigns only the parts it names, and every part where
+    /// it changed since another, comparing none: which parts differ is the Rust model's to
+    /// say. Returns the parts it assigned, none for a snapshot dropped.
     @discardableResult
-    public func apply(_ snapshot: Snapshot) -> [PartialKeyPath<AppModel>] {
+    public func apply(_ snapshot: Snapshot) -> [Part] {
         guard snapshot.revision > revision else { return [] }
+        let parts = snapshot.changed.since == revision ? snapshot.changed.parts : everyPart()
         revision = snapshot.revision
-        var assigned: [PartialKeyPath<AppModel>] = [\.revision]
-        func update<Value: Equatable>(
-            _ part: ReferenceWritableKeyPath<AppModel, Value>, _ value: Value
-        ) {
-            guard self[keyPath: part] != value else { return }
-            self[keyPath: part] = value
-            assigned.append(part)
+        for part in parts { assign(part, of: snapshot) }
+        if parts.contains(.accountWindows) { accountWindowsChanged?(accountWindows) }
+        if parts.contains(.answers) {
+            for answer in snapshot.answers {
+                answering.removeValue(forKey: answer.request)?.resume(returning: answer)
+            }
         }
-        update(\.reading, snapshot.reading)
-        update(\.quitQuestion, snapshot.quitQuestion)
-        update(\.replaceQuestion, snapshot.replaceQuestion)
-        update(\.windowRequest, snapshot.windowRequest)
-        update(\.signingIn, snapshot.signingIn)
-        update(\.sheet, snapshot.sheet)
-        update(\.sheetFailure, snapshot.sheetFailure)
-        update(\.menuBar, snapshot.menuBar)
-        update(\.sections, snapshot.sections)
-        update(\.accountMenu, snapshot.accountMenu)
-        update(\.notices, snapshot.notices)
-        update(\.menuNotices, snapshot.menuNotices)
-        update(\.footing, snapshot.footing)
-        update(\.setup, snapshot.setup)
-        update(\.accountsShown, snapshot.accountsShown)
-        update(\.menuAccountsNote, snapshot.menuAccountsNote)
-        update(\.updatedMenu, snapshot.updatedMenu)
-        update(\.updatedWindow, snapshot.updatedWindow)
-        update(\.sheetText, snapshot.sheetText)
-        update(\.signingInText, snapshot.signingInText)
-        update(\.stowText, snapshot.stowText)
-        update(\.failureAlert, snapshot.failureAlert)
-        update(\.machine, snapshot.machine)
-        update(\.uninstall, snapshot.uninstall)
-        update(\.removal, snapshot.removal)
-        update(\.welcome, snapshot.welcome)
-        let windowsMoved = accountWindows != snapshot.accountWindows
-        update(\.accountWindows, snapshot.accountWindows)
-        if windowsMoved { accountWindowsChanged?(accountWindows) }
-        for answer in snapshot.answers {
-            answering.removeValue(forKey: answer.request)?.resume(returning: answer)
+        // The model makes its widget feed before it tells the snapshot that moved its revision.
+        if parts.contains(.widgetRevision) {
+            for waiting in feedWaits.values { waiting.resume() }
+            feedWaits = [:]
+            widgetFeedChanged?()
         }
-        // The model makes its glance before it tells the snapshot that moved its revision.
-        if snapshot.glanceRevision != glanceRevision {
-            glanceRevision = snapshot.glanceRevision
-            for waiting in glancing.values { waiting.resume() }
-            glancing = [:]
-            glanceChanged?()
+        return parts
+    }
+
+    private func assign(_ part: Part, of snapshot: Snapshot) {
+        switch part {
+        case .reading: reading = snapshot.reading
+        case .quitQuestion: quitQuestion = snapshot.quitQuestion
+        case .replaceQuestion: replaceQuestion = snapshot.replaceQuestion
+        case .windowRequest: windowRequest = snapshot.windowRequest
+        case .signingIn: signingIn = snapshot.signingIn
+        case .sheet: sheet = snapshot.sheet
+        case .sheetFailure: sheetFailure = snapshot.sheetFailure
+        case .statusItem: statusItem = snapshot.statusItem
+        case .sections: sections = snapshot.sections
+        case .accountMenu: accountMenu = snapshot.accountMenu
+        case .notices: notices = snapshot.notices
+        case .menuNotices: menuNotices = snapshot.menuNotices
+        case .footing: footing = snapshot.footing
+        case .setup: setup = snapshot.setup
+        case .accountsShown: accountsShown = snapshot.accountsShown
+        case .menuAccountsNote: menuAccountsNote = snapshot.menuAccountsNote
+        case .updatedMenu: updatedMenu = snapshot.updatedMenu
+        case .updatedWindow: updatedWindow = snapshot.updatedWindow
+        case .sheetText: sheetText = snapshot.sheetText
+        case .signingInText: signingInText = snapshot.signingInText
+        case .stowText: stowText = snapshot.stowText
+        case .failureAlert: failureAlert = snapshot.failureAlert
+        case .machine: machine = snapshot.machine
+        case .accountWindows: accountWindows = snapshot.accountWindows
+        case .uninstall: uninstall = snapshot.uninstall
+        case .removal: removal = snapshot.removal
+        case .welcome: welcome = snapshot.welcome
+        // Answered and told by `apply`, or nothing this app shows: the menu says when the
+        // accounts were read in words, and the Jump List is Windows'.
+        case .answers, .widgetRevision, .updatedAt, .quickActions: break
         }
-        return assigned
     }
 
     // MARK: - What the views ask of what is shown
@@ -251,7 +252,7 @@ private typealias Answering = CheckedContinuation<OutsideAnswer?, Never>
 /// The model tells its listener on a thread of its own, one call at a time, and the next
 /// waits for this one to return, so this only queues the snapshot on the main queue, which
 /// runs what it is given in the order it was given, and returns.
-public final class ModelListening: ModelListener {
+public final class ModelListening: Listener {
     /// Where each snapshot goes, on the main actor.
     @MainActor public var deliver: (@MainActor (Snapshot) -> Void)?
 

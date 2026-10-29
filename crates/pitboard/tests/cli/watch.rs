@@ -37,8 +37,8 @@ impl Watching {
         Watching { running, lines }
     }
 
-    /// The next envelope it prints: it decides within 2 seconds of a change to the account
-    /// index or the readings, and at least every 30 seconds.
+    /// The next envelope it prints: it decides as a change to the account index or the
+    /// readings is written, and at least every 30 seconds.
     fn printed(&self) -> Value {
         let line = self
             .lines

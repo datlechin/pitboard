@@ -145,7 +145,7 @@ jobs:
           cargo build --locked -p pitboard-ffi -p pitboard-share-ffi
           mkdir -p apps/windows/Pitboard.Core/Generated apps/windows/Pitboard.Share.Core/Generated
           cargo run --locked -p uniffi-bindgen-csharp -- --library target/debug/pitboard_ffi.dll \
-            --out-dir apps/windows/Pitboard.Core/Generated --config crates/pitboard-ffi/uniffi.toml --no-format
+            --out-dir apps/windows/Pitboard.Core/Generated --config crates/pitboard-model/uniffi.toml --no-format
           cargo run --locked -p uniffi-bindgen-csharp -- --library target/debug/pitboard_share_ffi.dll \
             --out-dir apps/windows/Pitboard.Share.Core/Generated --config crates/pitboard-share-ffi/uniffi.toml --no-format
           version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)

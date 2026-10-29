@@ -47,7 +47,7 @@
                   Visibility="Collapsed"
                   AutomationProperties.LiveSetting="Assertive" />
               <HyperlinkButton
-                  Content="{x:Bind shown:Words.Settings.OpenStartupSettings}"
+                  Content="{x:Bind shown:Words.Own.OpenStartupSettings}"
                   Visibility="{x:Bind ViewModel.OffersStartupSettings, Mode=OneWay}"
                   AutomationProperties.AutomationId="settings.startupSettings"
                   Click="OnOpenStartupSettings" />
@@ -195,7 +195,7 @@
                     SelectedTime="{x:Bind ViewModel.WarmFrom, Mode=OneWay}"
                     IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}"
                     AutomationProperties.AutomationId="settings.warmFrom"
-                    AutomationProperties.Name="{x:Bind shown:Words.Settings.WarmFrom}"
+                    AutomationProperties.Name="{x:Bind shown:Words.Own.WarmFrom}"
                     SelectedTimeChanged="OnWarmRangeChanged" />
               </toolkit:SettingsCard>
               <toolkit:SettingsCard
@@ -207,7 +207,7 @@
                     SelectedTime="{x:Bind ViewModel.WarmTo, Mode=OneWay}"
                     IsEnabled="{x:Bind ViewModel.CanWarm, Mode=OneWay}"
                     AutomationProperties.AutomationId="settings.warmTo"
-                    AutomationProperties.Name="{x:Bind shown:Words.Settings.WarmTo}"
+                    AutomationProperties.Name="{x:Bind shown:Words.Own.WarmTo}"
                     SelectedTimeChanged="OnWarmRangeChanged" />
               </toolkit:SettingsCard>
             </StackPanel>
@@ -317,13 +317,13 @@
         </toolkit:SettingsCard>
 
         <!-- As Windows Settings keeps Troubleshoot: a clickable card for each page of its own. -->
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.Troubleshoot}" />
+        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Own.Troubleshoot}" />
         <toolkit:SettingsCard
             Header="{x:Bind shown:Words.Window.Diagnostics}"
-            Description="{x:Bind shown:Words.Settings.DiagnosticsAbout}"
+            Description="{x:Bind shown:Words.Own.DiagnosticsAbout}"
             IsClickEnabled="True"
             AutomationProperties.AutomationId="settings.diagnostics"
-            AutomationProperties.HelpText="{x:Bind shown:Words.Settings.DiagnosticsAbout}"
+            AutomationProperties.HelpText="{x:Bind shown:Words.Own.DiagnosticsAbout}"
             Click="OnShowDiagnostics">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE9D9;" />
@@ -331,17 +331,17 @@
         </toolkit:SettingsCard>
         <toolkit:SettingsCard
             Header="{x:Bind shown:Words.Window.Activity}"
-            Description="{x:Bind shown:Words.Settings.ActivityAbout}"
+            Description="{x:Bind shown:Words.Own.ActivityAbout}"
             IsClickEnabled="True"
             AutomationProperties.AutomationId="settings.activity"
-            AutomationProperties.HelpText="{x:Bind shown:Words.Settings.ActivityAbout}"
+            AutomationProperties.HelpText="{x:Bind shown:Words.Own.ActivityAbout}"
             Click="OnShowActivity">
           <toolkit:SettingsCard.HeaderIcon>
             <FontIcon Glyph="&#xE81C;" />
           </toolkit:SettingsCard.HeaderIcon>
         </toolkit:SettingsCard>
 
-        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Settings.About}" />
+        <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="{x:Bind shown:Words.Own.About}" />
         <!-- As the WinUI Gallery's About: the app's icon, name and copyright, its version, and its links under it. -->
         <toolkit:SettingsExpander
             x:Name="About"

@@ -24,8 +24,8 @@ public sealed class SettingsPageTests
         Title: "Warm-up", From: 360, To: 24 * 60, RangeLabel: "6:00 AM to midnight",
         Accounts:
         [
-            new WarmAccountShown("claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
-            new WarmAccountShown("claude/work", "work", On: false, Standing: null),
+            new WarmAccountShown(new AccountKey(Tool.Claude, "personal"), "claude/personal", "personal · Max", On: true, Standing: "Warms up again at 22:50"),
+            new WarmAccountShown(new AccountKey(Tool.Claude, "work"), "claude/work", "work", On: false, Standing: null),
         ],
         NoneEnrolled: null, Standing: "Next warm-up: personal at 22:50.", Note: "Pitboard warms up Claude Code accounts only.",
         Enabled: true);
@@ -198,7 +198,7 @@ public sealed class SettingsPageTests
             Card(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn")), Card(Said(page, Words.Settings.OpenAtLoginNote)));
         Assert.AreEqual(Words.Settings.Version, Card(checkNow).Header);
         Assert.AreEqual(Words.Settings.Version, AutomationProperties.GetName(Card(checkNow)), "the group Narrator reads the button in");
-        Assert.AreSame(Card(checkNow), Card(Said(page, PitboardFfiMethods.NamedVersion("1.1.0"))));
+        Assert.AreSame(Card(checkNow), Card(Said(page, PitboardModelMethods.NamedVersion("1.1.0"))));
         Assert.AreEqual("C", checkNow.AccessKey);
     }
 
@@ -243,7 +243,7 @@ public sealed class SettingsPageTests
 
         Assert.IsFalse(toggle.IsOn);
         Assert.IsFalse(toggle.IsEnabled);
-        Assert.Contains(Words.Settings.StartupTurnedOff!, Views.Texts(page));
+        Assert.Contains(Words.Own.StartupTurnedOff, Views.Texts(page));
         Assert.AreSame(Card(toggle), Card(link));
         new HyperlinkButtonAutomationPeer(link).Invoke();
         Assert.AreEqual(new Uri("ms-settings:startupapps"), opened.Single());
@@ -263,7 +263,7 @@ public sealed class SettingsPageTests
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), start);
 
         Assert.IsFalse(Views.Element<ToggleSwitch>(page, "settings.startAtSignIn").IsEnabled);
-        Assert.Contains(Words.Settings.DebugNeverStarts!, Views.Texts(page));
+        Assert.Contains(Words.Own.DebugNeverStarts, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -397,7 +397,7 @@ public sealed class SettingsPageTests
         Assert.IsTrue(Views.Element<ToggleSwitch>(page, "settings.warm.claude/personal").IsOn);
 
         Views.Element<ToggleSwitch>(page, "settings.warm.claude/work").IsOn = true;
-        Assert.Contains(new Intent.SetWarm("claude/work", true), model.Sent);
+        Assert.Contains(new Intent.SetWarm(new AccountKey(Tool.Claude, "work"), true), model.Sent);
     }
 
     [UITestMethod]
@@ -534,7 +534,7 @@ public sealed class SettingsPageTests
 
         Assert.IsTrue(texts.Any(text => text.StartsWith("This copy of Pitboard can", StringComparison.Ordinal)));
         Assert.Contains("Pitboard 0.0.0", texts);
-        Assert.DoesNotContain(Words.Settings.BetaUpdates!, texts);
+        Assert.DoesNotContain(Words.Own.BetaUpdates, texts);
         Assert.IsFalse(Views.Element<Button>(page, "settings.checkNow").IsEnabled);
     }
 
@@ -567,7 +567,7 @@ public sealed class SettingsPageTests
 
         updates.Found("1.0.1");
 
-        Assert.Contains(PitboardFfiMethods.ReadyToInstall("1.0.1"), Views.Texts(page));
+        Assert.Contains(PitboardModelMethods.ReadyToInstall("1.0.1"), Views.Texts(page));
     }
 
     [UITestMethod]
@@ -575,7 +575,7 @@ public sealed class SettingsPageTests
     {
         var page = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), version: "1.0.0-beta.1");
 
-        Assert.Contains(Words.Settings.BetaUpdates!, Views.Texts(page));
+        Assert.Contains(Words.Own.BetaUpdates, Views.Texts(page));
     }
 
     // Before 1.0.0 the feed of full releases is GitHub's 404, which Check now showed as WinSparkle's error.
@@ -588,7 +588,7 @@ public sealed class SettingsPageTests
         var checkNow = Views.Element<Button>(page, "settings.checkNow");
 
         Assert.IsFalse(checkNow.IsEnabled);
-        Assert.Contains(Words.Settings.NoReleaseToUpdateTo!, Views.Texts(page));
+        Assert.Contains(Words.Own.NoReleaseToUpdateTo, Views.Texts(page));
         Assert.IsFalse(
             Views.Visible<ToggleSwitch>(page).Any(shown => AutomationProperties.GetAutomationId(shown) == "settings.checkAutomatically"),
             "automatic checks are offered");
@@ -598,10 +598,10 @@ public sealed class SettingsPageTests
 
         Assert.IsTrue(checkNow.IsEnabled);
         await Views.Until(
-            () => !Views.Texts(page).Contains(Words.Settings.NoReleaseToUpdateTo!)
+            () => !Views.Texts(page).Contains(Words.Own.NoReleaseToUpdateTo)
                 && Views.Visible<ToggleSwitch>(page).Any(shown => AutomationProperties.GetAutomationId(shown) == "settings.checkAutomatically"),
             "the page still holds checks back once a full release has a feed");
-        Assert.Contains(Words.Settings.BetaUpdates!, Views.Texts(page));
+        Assert.Contains(Words.Own.BetaUpdates, Views.Texts(page));
     }
 
     [UITestMethod]
@@ -724,7 +724,7 @@ public sealed class SettingsPageTests
     [UITestMethod]
     public async Task AReleaseBuildWhoseNotificationsAreOffSaysWhy()
     {
-        var why = Words.Settings.NotificationsUnoffered!;
+        var why = Words.Own.NotificationsUnoffered;
         var off = await Shown(new AppModel(new StandInModel(Snapshots.Read(1))), notifications: () => new(why, InSettings: false));
 
         Assert.AreSame(Card(Said(off, why)), Views.Element<SettingsCard>(off, "settings.notifications"));

@@ -34,11 +34,11 @@ foreach ($program in $programs) {
         }
     }
 }
-# The core's own metadata names the variable; only a Debug build of the app reads it.
+# The model reads PITBOARD_FIXTURE, and only a Debug build of the app reads a fixture's own variables.
 foreach ($assembly in 'Pitboard.dll', 'Pitboard.Windows.dll') {
     $bytes = [IO.File]::ReadAllBytes((Join-Path $root $assembly))
     if ([Text.Encoding]::Unicode.GetString($bytes).Contains('PITBOARD_FIXTURE')) {
-        throw "$assembly reads PITBOARD_FIXTURE: it was built as Debug"
+        throw "$assembly reads a fixture's variables: it was built as Debug"
     }
 }
 Write-Output "None of the $($programs.Count) programs and libraries holds a fixture."

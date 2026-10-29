@@ -142,9 +142,10 @@ public sealed class LaunchingTests
 
         Assert.AreEqual(Exe, launch.AppLocation);
         Assert.AreEqual(
-            @"C:\Users\x\AppData\Local\Programs\Pitboard\bin\pitboard.exe", PitboardFfiMethods.AppCommandLine(launch.AppLocation!));
-        Assert.AreEqual(@"C:\Users\x\AppData\Local\Pitboard App", launch.Windows?.Directory);
-        Assert.AreEqual("pitboard", launch.Windows?.LinkScheme);
+            @"C:\Users\x\AppData\Local\Programs\Pitboard\bin\pitboard.exe", PitboardModelMethods.AppCommandLine(launch.AppLocation!));
+        Assert.AreEqual(@"C:\Users\x\AppData\Local\Pitboard App", launch.AccountWindows?.Directory);
+        Assert.AreEqual("pitboard", launch.AccountWindows?.LinkScheme);
+        Assert.IsNull(launch.AccountWindows?.Key, "the model keys the Windows app's records");
     }
 
     // Nothing registers pitboard-debug, so only a person or a test hands a Debug build one, which outside a fixture
@@ -205,7 +206,7 @@ public sealed class LaunchingTests
     [TestMethod]
     public void AJumpListTaskReadsBackAsItsAsk()
     {
-        JumpAsk[] asks = [new JumpAsk.Switch(Account), new JumpAsk.AddAccount(), new JumpAsk.OpenWindow(Account)];
+        QuickAsk[] asks = [new QuickAsk.Switch(Account), new QuickAsk.AddAccount(), new QuickAsk.OpenWindow(Account)];
 
         foreach (var ask in asks)
         {
@@ -217,7 +218,7 @@ public sealed class LaunchingTests
     [TestMethod]
     public void ATaskIsItsFlagAndAGuidAndNothingElse()
     {
-        Assert.AreEqual(new JumpAsk.Switch(Account), Launching.Asked(["--SWITCH-TO", Account.ToUpperInvariant()]), "in another case");
+        Assert.AreEqual(new QuickAsk.Switch(Account), Launching.Asked(["--SWITCH-TO", Account.ToUpperInvariant()]), "in another case");
         Assert.IsNull(Launching.Asked(["--switch-to"]), "no account");
         Assert.IsNull(Launching.Asked(["--switch-to", "claude/work"]), "a label");
         Assert.IsNull(Launching.Asked(["--switch-to", Account, "--add-account"]), "more after it");
@@ -242,10 +243,10 @@ public sealed class LaunchingTests
         Assert.AreEqual(Start.Redirect, Launching.Decide(["--switch-to", Account], Release, null, () => null, () => false));
         Assert.AreEqual(Start.Run, Launching.Decide(["--switch-to", Account], Release, null, () => null, () => true));
         Assert.AreEqual(
-            new Handover.Jump(new JumpAsk.Switch(Account)),
+            new Handover.Jump(new QuickAsk.Switch(Account)),
             Launching.Handed($@"""C:\Program Files\Pitboard\Pitboard.exe"" --switch-to {Account}", Release, null));
         Assert.AreEqual(
-            new Handover.Jump(new JumpAsk.AddAccount()), Launching.Handed(@"""C:\Pitboard.exe"" --add-account", Release, null));
+            new Handover.Jump(new QuickAsk.AddAccount()), Launching.Handed(@"""C:\Pitboard.exe"" --add-account", Release, null));
         Assert.AreEqual(
             new Handover.Window(), Launching.Handed(@"""C:\Pitboard.exe"" --switch-to claude/work", Release, null), "no task");
     }
@@ -256,11 +257,11 @@ public sealed class LaunchingTests
         const string Launch = @"""C:\pb\Pitboard.exe"" --add-account";
 
         Assert.AreEqual(new Handover.Window(), Launching.Handed(Launch, Debug, null));
-        Assert.AreEqual(new Handover.Jump(new JumpAsk.AddAccount()), Launching.Handed(Launch, Debug, Fixture));
+        Assert.AreEqual(new Handover.Jump(new QuickAsk.AddAccount()), Launching.Handed(Launch, Debug, Fixture));
         Assert.IsNull(new AppStart(Debug, new(), null, @"C:\Local\Pitboard App Debug") { Arguments = ["--add-account"] }.Asked);
         Assert.AreEqual(
-            new JumpAsk.AddAccount(), new AppStart(Debug, new(), "oneTool", Fixture) { Arguments = ["--add-account"] }.Asked);
+            new QuickAsk.AddAccount(), new AppStart(Debug, new(), "oneTool", Fixture) { Arguments = ["--add-account"] }.Asked);
         Assert.AreEqual(
-            new JumpAsk.AddAccount(), new AppStart(Release, new(), null, @"C:\Local\Pitboard App") { Arguments = ["--add-account"] }.Asked);
+            new QuickAsk.AddAccount(), new AppStart(Release, new(), null, @"C:\Local\Pitboard App") { Arguments = ["--add-account"] }.Asked);
     }
 }

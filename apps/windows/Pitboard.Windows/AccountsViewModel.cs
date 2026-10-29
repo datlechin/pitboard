@@ -81,7 +81,7 @@ public sealed partial class AccountsViewModel(AppModel model, Action<Uri> open) 
 
     public void Refresh() => model.Send(new Intent.Refresh(Asked: true));
 
-    public void Add() => model.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)));
+    public void Add() => model.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null)));
 
     public void ChooseEmpty()
     {

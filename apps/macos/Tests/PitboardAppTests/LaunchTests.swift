@@ -197,11 +197,13 @@ private struct ScratchDirectory {
 }
 
 #if DEBUG
-    /// The UI tests launch a fixture by setting this variable to one of these names, from a
-    /// list of their own in `UITests/Launching.swift`, so a name changed in the core's
+    /// The UI tests launch a fixture by setting `PITBOARD_FIXTURE` to one of these names, from
+    /// a list of their own in `UITests/Launching.swift`, so a name changed in the core's
     /// fixtures has to change there. The names are checked against a library that has them.
     @Test func theUITestsNameEveryFixtureAsTheAppDoes() {
-        #expect(Fixture.variable == "PITBOARD_FIXTURE")
+        #expect(
+            started(build: .debug, environment: ["PITBOARD_FIXTURE": "twoTools"])
+                == .fixture(name: "twoTools"))
         let launched = [
             "twoTools", "oneTool", "empty", "firstLaunch", "noClaudeCode", "unnamed",
             "onlyOne", "readFailure", "stuck", "chatGPTOpen", "claudeDesktop",

@@ -155,7 +155,7 @@ private final class Asked: @unchecked Sendable {
 @MainActor
 @Test func usageIsOfTheAccountsInUseOrOfTheOneAsked() async throws {
     let model = StandInModel(snapshot(0))
-    model.glanceText = twoTools
+    model.feed = twoTools
     let app = AppModel(model: model)
 
     let (inUse, saidInUse) = try await Actions.usage(of: nil, with: app)
@@ -170,19 +170,19 @@ private final class Asked: @unchecked Sendable {
 @MainActor
 @Test func usageWithNoAccountInUseSaysSo() async throws {
     let model = StandInModel(snapshot(0))
-    model.glanceText = """
+    model.feed = """
         {"schema": 1, "read_at": null, "words": \(glanceWords), "accounts": []}
         """
     let app = AppModel(model: model)
     let (accounts, said) = try await Actions.usage(of: nil, with: app)
     #expect(accounts.isEmpty)
-    #expect(said == words.shortcuts.noneInUse)
+    #expect(said == macWords.noneInUse)
 }
 
 @MainActor
 @Test func usageBeforePitboardHasReadAnythingSaysSo() async throws {
     let app = AppModel(model: StandInModel(snapshot(0)))
-    await #expect(throws: Refused(said: words.shortcuts.notReadYet ?? "")) {
+    await #expect(throws: Refused(said: macWords.notReadYet)) {
         try await Actions.usage(of: nil, with: app, within: .milliseconds(10))
     }
 }
@@ -204,7 +204,7 @@ func aShortcutSwitchesAFixturesAccountFromItsGlance() async throws {
     let app = try fixtureModel("twoTools", in: own)
     defer { app.shutdown() }
     app.send(.start)
-    let text = try #require(await app.glance(within: .seconds(30)))
+    let text = try #require(await app.widgetFeed(within: .seconds(30)))
     let accounts = AccountQuery.entities(in: Glance(Data(text.utf8)))
     let personal = try #require(
         accounts.first { $0.name == "personal" && $0.tool == "Claude Code" })

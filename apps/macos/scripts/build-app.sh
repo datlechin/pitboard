@@ -299,11 +299,11 @@ links "$extension_binary" uniffi_pitboard_share_ffi_ || {
     echo "the share extension does not link pitboard-share-ffi" >&2
     exit 1
 }
-if links "$extension_binary" uniffi_pitboard_ffi_; then
+if links "$extension_binary" uniffi_pitboard_model_; then
     echo "the share extension links the core" >&2
     exit 1
 fi
-links "$app_binary" uniffi_pitboard_ffi_ || {
+links "$app_binary" uniffi_pitboard_model_ || {
     echo "the app does not link the core" >&2
     exit 1
 }
@@ -321,7 +321,7 @@ links "$widgets_binary" PitboardGlance || {
     echo "the widget extension has no symbols to read" >&2
     exit 1
 }
-for library in uniffi_pitboard_ffi_ uniffi_pitboard_share_ffi_; do
+for library in uniffi_pitboard_model_ uniffi_pitboard_share_ffi_; do
     if links "$widgets_binary" "$library"; then
         echo "the widget extension links Rust" >&2
         exit 1

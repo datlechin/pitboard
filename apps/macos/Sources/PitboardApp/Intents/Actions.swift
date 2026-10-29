@@ -38,11 +38,11 @@ public enum Actions {
     public static func usage(
         of account: AccountEntity?, with model: AppModel, within patience: Duration = patience
     ) async throws -> ([AccountEntity], String) {
-        guard let text = await model.glance(within: patience),
+        guard let text = await model.widgetFeed(within: patience),
             let glance = Glance(Data(text.utf8))
-        else { throw Refused(said: words.shortcuts.notReadYet ?? "") }
+        else { throw Refused(said: macWords.notReadYet) }
         let accounts = account.map { [$0] } ?? AccountQuery.entities(in: glance).filter(\.inUse)
-        guard !accounts.isEmpty else { return ([], words.shortcuts.noneInUse ?? "") }
+        guard !accounts.isEmpty else { return ([], macWords.noneInUse) }
         let said = accounts.map { usageOf(name: $0.name, said: $0.usage) }
         return (accounts, said.joined(separator: "\n"))
     }

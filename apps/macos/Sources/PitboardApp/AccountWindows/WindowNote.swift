@@ -9,7 +9,7 @@ struct WindowNote: Equatable, Identifiable {
 
     init(_ kind: WindowNoteKind, for account: WindowAccount) {
         self.kind = kind
-        text = windowNote(kind: kind, account: account)
+        text = windowNote(front: front, kind: kind, account: account)
     }
 
     static func == (lhs: WindowNote, rhs: WindowNote) -> Bool { lhs.id == rhs.id }

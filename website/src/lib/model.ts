@@ -1,6 +1,7 @@
-// The one state every live figure reads, as pitboard-ffi's model keeps it, and the core's rules
-// that change it: crates/pitboard-core/src/duty/autoswitch.rs decides switches, ffi/model/advice.rs
-// notifications, duty/warm warm-ups. Figures subscribe to `model`; the actions only write.
+// The one state every live figure reads, as pitboard-model keeps it, and the core's rules that
+// change it: crates/pitboard-core/src/duty/autoswitch.rs decides switches, the model's
+// model/advice.rs notifications, duty/warm warm-ups. Figures subscribe to `model`; the actions
+// only write.
 import { map } from "nanostores";
 import {
   DAY,
@@ -88,7 +89,7 @@ export interface Advice {
   left: number | null;
 }
 
-// present/notices.rs `RunOutNotice`, as the system's notification shows it: its button switches to
+// present/notices.rs `Notice`, as the system's notification shows it: its button switches to
 // an account, Switch at a limit and Switch Back after a switch Pitboard made by itself.
 export interface Posted {
   id: string;
@@ -476,8 +477,8 @@ function advise(s: State) {
   }
 }
 
-// present/words.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did not make
-// by itself, and of its not judging one.
+// present/words/notices.rs `not_switched` and `not_switching`: the titles of a switch Pitboard did
+// not make by itself, and of its not judging one.
 const NOT_SWITCHED: Said = {
   macos: "Automatic Switch Skipped",
   windows: "Automatic switch skipped",

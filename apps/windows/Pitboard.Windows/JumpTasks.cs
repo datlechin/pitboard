@@ -5,25 +5,25 @@ namespace Pitboard.Windows;
 
 // The model's Jump List, and what a task chosen there asks once it reaches this copy. A switch is a request from
 // outside, so it never asks a question, and one refused says why in a notification: a Jump List has no reply.
-public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccount> open, Action<RunOutNotice> post)
+public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccount> open, Action<Notice> post)
 {
     private readonly HashSet<ulong> _asked = [];
     private readonly List<string> _windows = [];
     private ulong _requests;
 
-    public void Take(JumpAsk ask)
+    public void Take(QuickAsk ask)
     {
         switch (ask)
         {
-            case JumpAsk.Switch switching:
+            case QuickAsk.Switch switching:
                 var request = ++_requests;
                 _asked.Add(request);
                 model.Send(new Intent.Outside(request, new OutsideAsk.Switch(switching.Account)));
                 break;
-            case JumpAsk.AddAccount:
-                model.Send(new Intent.PresentSheet(new Sheet.Add(Provider: null)));
+            case QuickAsk.AddAccount:
+                model.Send(new Intent.PresentSheet(new Sheet.Add(Tool: null)));
                 break;
-            case JumpAsk.OpenWindow window:
+            case QuickAsk.OpenWindow window:
                 _windows.Add(window.Store);
                 OpenWaiting();
                 break;
@@ -33,7 +33,7 @@ public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccou
     // Each time the model's list changes, which it has once the accounts are read.
     public void Follow()
     {
-        if (model.JumpList is not { } tasks)
+        if (model.QuickActions is not { } tasks)
         {
             return;
         }
@@ -53,7 +53,7 @@ public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccou
     // A window asked for before the accounts are read opens once they are, and one they no longer list opens nothing.
     private void OpenWaiting()
     {
-        if (model.JumpList is null)
+        if (model.QuickActions is null)
         {
             return;
         }
@@ -82,7 +82,7 @@ public sealed class JumpTasks(AppModel model, IJumpList list, Action<WindowAccou
 
             try
             {
-                post(PitboardFfiMethods.JumpRefused(answer));
+                post(PitboardModelMethods.OutsideRefused(Identity.Front, answer));
             }
             catch (PlatformException)
             {

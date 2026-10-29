@@ -18,7 +18,8 @@ private final class Waiting: Updates {
 
 private let signInToOld = MenuEntry(
     title: "Sign In to old Again…", subtitle: "Sign-in expired", help: nil, severity: nil,
-    intent: .presentSheet(sheet: .signInAgain(provider: "claude", label: "old")), link: nil,
+    intent: .presentSheet(
+        sheet: .signInAgain(account: AccountKey(tool: .claude, label: "old"))), link: nil,
     enabled: true)
 
 private let issue = MenuEntry(
@@ -28,10 +29,11 @@ private let issue = MenuEntry(
 
 private let advice = MenuEntry(
     title: "Switch to personal", subtitle: "work reached its 5-hour limit", help: nil,
-    severity: nil, intent: .switchTo(qualified: "claude/personal"), link: nil, enabled: true)
+    severity: nil, intent: .switchTo(account: AccountKey(tool: .claude, label: "personal")),
+    link: nil, enabled: true)
 
 private let accounts = AccountSection(
-    id: "claude", heading: "Claude Code",
+    id: "claude", tool: .claude, heading: "Claude Code",
     accounts: [
         account(
             "work", plan: "Team 5x", standing: .inUse, limits: [], signIn: "In use",

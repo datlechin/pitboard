@@ -19,6 +19,7 @@ ACCEPTED = {
     "`systemctl` is Linux's own": None,
     "macOS and Linux print this help": None,
     "the probe refuses off Windows": None,
+    "the Linux app runs on Linux alone": None,
     # CI runs the UI tests as the elevated job user and again as a standard user.
     "runs as an elevated user only": None,
     "runs as a standard user only": None,

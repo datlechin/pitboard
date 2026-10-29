@@ -10,6 +10,10 @@ Measured on 6 October 2026 on macOS 27.0, with `pitboard-ffi` built for
   debug library did too. The feature changes what the fixture's four exports do, never
   their names, arguments, types or doc comments, which are all a checksum covers
   ([The C# bindings](bindings.md#the-c-bindings)). So one set of bindings links against either library.
+  Measured again on 28 October 2026, with the model in `pitboard-model`: the C# generated from
+  the debug library with the feature and without, now `pitboard_model.cs`, was the same byte
+  for byte, and so were the Swift files generated from the universal release library
+  `build-xcframework.sh --fixture` built and the one `build-app.sh` built without it.
 - A library built without the feature holds none of a fixture's text: `grep -a -c` for a
   line of a stand-in page and an account of the worlds found it on no line of the release
   `libpitboard_ffi.a` or `libpitboard_ffi.dylib`, and on 2 lines of each built with it, one

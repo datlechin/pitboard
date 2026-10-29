@@ -9,12 +9,12 @@
   <Page.Resources>
     <!-- A detail's own copy would keep the marks that wrap its paths; this one copies what it says. -->
     <MenuFlyout x:Key="DetailMenu" Opening="OnDetailMenuOpening">
-      <MenuFlyoutItem Text="{x:Bind shown:Words.Window.Copy}" KeyboardAcceleratorTextOverride="Ctrl+C" Click="OnCopyDetail">
+      <MenuFlyoutItem Text="{x:Bind shown:Words.Own.Copy}" KeyboardAcceleratorTextOverride="Ctrl+C" Click="OnCopyDetail">
         <MenuFlyoutItem.Icon>
           <SymbolIcon Symbol="Copy" />
         </MenuFlyoutItem.Icon>
       </MenuFlyoutItem>
-      <MenuFlyoutItem Text="{x:Bind shown:Words.Window.SelectAll}" KeyboardAcceleratorTextOverride="Ctrl+A" Click="OnSelectAllDetail">
+      <MenuFlyoutItem Text="{x:Bind shown:Words.Own.SelectAll}" KeyboardAcceleratorTextOverride="Ctrl+A" Click="OnSelectAllDetail">
         <MenuFlyoutItem.Icon>
           <SymbolIcon Symbol="SelectAll" />
         </MenuFlyoutItem.Icon>
@@ -82,7 +82,7 @@
         Grid.Row="1"
         Padding="{StaticResource PageContentPadding}"
         AutomationProperties.AutomationId="checks"
-        AutomationProperties.Name="{x:Bind shown:Words.Window.Checks}">
+        AutomationProperties.Name="{x:Bind shown:Words.Own.Checks}">
       <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
         <!-- Doctor's last line over the checks, scrolling with them. -->
         <InfoBar

@@ -1,13 +1,12 @@
-namespace Pitboard.Windows;
+using Pitboard.Core;
 
-public enum Build
-{
-    Debug,
-    Release,
-}
+namespace Pitboard.Windows;
 
 public sealed record Identity(Build Build)
 {
+    // Which app this is to the model, whose words and rules that differ by front follow it.
+    public const Front Front = Pitboard.Core.Front.WindowsNotificationArea;
+
     public string Aumid => Build is Build.Debug ? "Pitboard.Pitboard.Debug" : "Pitboard.Pitboard";
 
     public string LinkScheme => Build is Build.Debug ? "pitboard-debug" : "pitboard";

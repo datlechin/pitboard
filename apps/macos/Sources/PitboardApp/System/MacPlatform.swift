@@ -25,7 +25,7 @@ extension NSRunningApplication: RunningApp {}
 /// An app is asked to quit the way Command-Q asks it, which lets it ask about work in
 /// progress, and never forced: a forced quit loses whatever it had not saved. How long it is
 /// given, and what happens when it does not quit, is the model's.
-final class MacAppControl: AppControl, @unchecked Sendable {
+final class MacApps: OtherApps, @unchecked Sendable {
     // Unchecked because both closures are only called, never changed, and what they reach,
     // NSRunningApplication's list and NSWorkspace, are safe from any thread.
     private let copies: (String) -> [any RunningApp]
@@ -38,8 +38,8 @@ final class MacAppControl: AppControl, @unchecked Sendable {
 
     /// NSRunningApplication says it may be used from any thread; an app is opened from the
     /// main one.
-    static func live() -> MacAppControl {
-        MacAppControl(
+    static func live() -> MacApps {
+        MacApps(
             copies: { NSRunningApplication.runningApplications(withBundleIdentifier: $0) },
             open: { url, front in
                 DispatchQueue.main.async {
@@ -60,13 +60,16 @@ final class MacAppControl: AppControl, @unchecked Sendable {
         copies(app).filter { !$0.isTerminated }
     }
 
-    /// An app is a bundle, so a running copy always says where it is.
-    func running(app: String) throws -> String? {
-        running(app).lazy.compactMap(\.bundleURL).first?.path
+    /// An app is a bundle, so a running copy always says where it is. A Mac runs no app
+    /// another system names.
+    func running(app: AppId) throws -> String? {
+        guard case .macBundle(let id) = app else { return nil }
+        return running(id).lazy.compactMap(\.bundleURL).first?.path
     }
 
-    func requestQuit(app: String) throws {
-        for copy in running(app) { copy.terminate() }
+    func requestQuit(app: AppId) throws {
+        guard case .macBundle(let id) = app else { return }
+        for copy in running(id) { copy.terminate() }
     }
 
     func reopen(location: String, front: Bool) throws {
@@ -77,7 +80,7 @@ final class MacAppControl: AppControl, @unchecked Sendable {
 // MARK: - Notifications
 
 // A click on a notice, or on its button, hands the model back the text it gave.
-final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterDelegate,
+final class MacNotifications: NSObject, Notifier, UNUserNotificationCenterDelegate,
     @unchecked Sendable
 {
     // Unchecked because `centre` is set once, and `onClick` is the main actor's.
@@ -96,12 +99,12 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
         super.init()
         guard let centre else { return }
         centre.delegate = self
-        centre.setNotificationCategories(Self.categories(notificationButtons()))
+        centre.setNotificationCategories(Self.categories(noticeButtons(front: front)))
     }
 
     // macOS refuses Pitboard's own activation from the background, so a button whose window
     // always opens asks the system to bring the app forward.
-    static func categories(_ buttons: [NotificationButtonKind]) -> Set<UNNotificationCategory> {
+    static func categories(_ buttons: [NoticeButtonOffer]) -> Set<UNNotificationCategory> {
         Set(
             buttons.map { button in
                 UNNotificationCategory(
@@ -110,13 +113,22 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
                         UNNotificationAction(
                             identifier: action, title: button.title,
                             options: button.opensWindow ? [.foreground] : [],
-                            icon: UNNotificationActionIcon(systemImageName: button.symbol))
+                            icon: UNNotificationActionIcon(
+                                systemImageName: symbol(of: button.kind)))
                     ],
                     intentIdentifiers: [])
             })
     }
 
-    static func content(of notice: RunOutNotice) -> UNNotificationContent {
+    static func symbol(of kind: NoticeButtonKind) -> String {
+        switch kind {
+        case .switchTo: Symbol.switchAccount
+        case .switchBack: Symbol.switchBack
+        case .signInAgain: Symbol.account
+        }
+    }
+
+    static func content(of notice: Notice) -> UNNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = notice.title
         if let subtitle = notice.subtitle { content.subtitle = subtitle }
@@ -139,7 +151,7 @@ final class MacNotifications: NSObject, Notifications, UNUserNotificationCenterD
     }
 
     // Permission is asked at the first notice, not at launch; a refusal is no error.
-    func post(notice: RunOutNotice) throws {
+    func post(notice: Notice) throws {
         guard let centre else { return }
         let request = UNNotificationRequest(
             identifier: notice.id, content: Self.content(of: notice), trigger: nil)

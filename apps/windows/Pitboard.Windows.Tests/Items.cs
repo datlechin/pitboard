@@ -3,9 +3,21 @@ using Pitboard.Core;
 namespace Pitboard.Windows.Tests;
 
 // What the model presents, made by hand, so each view test says only what it is about, in the model's words as
-// present/words.rs pins them for these labels, which StandInsTests checks.
+// present/words/ pins them for these labels, which StandInsTests checks.
 internal static class Items
 {
+    // The model's tool a test names by its code, which the rows' identifiers are made of.
+    public static Pitboard.Core.Tool ToolOf(string provider) =>
+        provider switch
+        {
+            "claude" => Pitboard.Core.Tool.Claude,
+            "codex" => Pitboard.Core.Tool.Codex,
+            "desktop" => Pitboard.Core.Tool.Desktop,
+            _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "a tool's code"),
+        };
+
+    public static AccountKey Key(string provider, string label) => new(ToolOf(provider), label);
+
     public static AccountItem Account(string provider, string label, bool inUse = false) =>
         Acting(
             new(
@@ -18,7 +30,7 @@ internal static class Items
                     Email: $"{label}@example.com", Plan: null, SignedInUntil: null, SignIn: null, Warm: null,
                     ReadAt: null, Read: null, Notes: []),
                 Help: null, Limits: [], Actions: []),
-            inUse ? null : new ItemAction("Switch", $"Switch to {label}", new Intent.SwitchTo($"{provider}/{label}")));
+            inUse ? null : new ItemAction("Switch", $"Switch to {label}", new Intent.SwitchTo(Key(provider, label))));
 
     // What pressing it does, and the button at its row's end that does it.
     public static AccountItem Acting(AccountItem item, ItemAction? action) =>
@@ -28,14 +40,14 @@ internal static class Items
     public static Site Site(string provider) =>
         provider == "codex"
             ? new Site(
-                Host: "chatgpt.com", Name: "chatgpt.com", Provider: "codex",
+                Host: "chatgpt.com", Name: "chatgpt.com", Tool: Pitboard.Core.Tool.Codex,
                 Aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
                 Hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
                 SignInHosts: ["auth.openai.com", "login.live.com", "login.microsoftonline.com", "appleid.apple.com"],
                 BlockedHosts: ["accounts.google.com"], SignInPaths: [["api", "auth"]], StoreName: "codex",
                 SignInSteps: "", BlockedServices: "")
             : new Site(
-                Host: "claude.ai", Name: "claude.ai", Provider: "claude", Aliases: [], Hosts: ["claude.ai"],
+                Host: "claude.ai", Name: "claude.ai", Tool: Pitboard.Core.Tool.Claude, Aliases: [], Hosts: ["claude.ai"],
                 SignInHosts: [], BlockedHosts: ["accounts.google.com"], SignInPaths: [["magic-link"]],
                 StoreName: "claude", SignInSteps: "", BlockedServices: "");
 
@@ -57,11 +69,11 @@ internal static class Items
         new(kind, title, intent, Window: null, enabled, confirm);
 
     public static AccountAction RenameAction(string provider, string label) =>
-        Action(ActionKind.Rename, "Rename…", new Intent.PresentSheet(new Sheet.Rename(provider, label)));
+        Action(ActionKind.Rename, "Rename…", new Intent.PresentSheet(new Sheet.Rename(Key(provider, label))));
 
-    public static AccountAction RemoveAction(string qualified, bool enabled = true) =>
+    public static AccountAction RemoveAction(string provider, string label, bool enabled = true) =>
         Action(
-            ActionKind.Remove, "Remove account…", new Intent.Forget(qualified), enabled,
+            ActionKind.Remove, "Remove account…", new Intent.Forget(Key(provider, label)), enabled,
             new Question(
                 "Remove “spare”?", "Pitboard deletes its saved sign-in, so using it again needs a sign-in in your browser.", "Remove",
                 Destructive: true, ConfirmIsDefault: true));
@@ -80,14 +92,14 @@ internal static class Items
         new NextStep.Learn(new SetupLink("Learn more", "https://docs.usepitboard.com/reference/errors"));
 
     public static NoticeAction Dismiss(string provider) =>
-        new(Title: "Dismiss", Intent: new Intent.DismissSwitch(provider), Dismisses: true, Switches: false, Enabled: true, Confirm: null);
+        new(Title: "Dismiss", Intent: new Intent.DismissSwitch(ToolOf(provider)), Dismisses: true, Switches: false, Enabled: true, Confirm: null);
 
     public static AccountSection Section(string provider, string? heading, params AccountItem[] accounts) =>
-        new(Id: provider, Heading: heading, Accounts: accounts);
+        new(Id: provider, Tool: ToolOf(provider), Heading: heading, Accounts: accounts);
 
     public static SheetTool Tool(string code, string name, Missing? missing = null) =>
         new(
-            Code: code, Name: name,
+            Tool: ToolOf(code), Code: code, Name: name,
             Message: $"Pitboard opens {name}’s sign-in in your browser, where you sign in to the account you’re adding.",
             Confirm: "Sign in…", Missing: missing, Steps: []);
 
@@ -101,11 +113,13 @@ internal static class Items
         new(
             Title: "Add account",
             Message: "Pitboard opens Claude Code’s sign-in in your browser, where you sign in to the account you’re adding.",
-            Tools: tools, Tool: "claude", Account: null, Name: "", Prompt: "work", Confirm: "Sign in…", Saving: false, Progress: null);
+            Tools: tools, Tool: Pitboard.Core.Tool.Claude, Account: null, Name: "", Prompt: "work", Confirm: "Sign in…", Saving: false,
+            Progress: null);
 
     public static SheetText Rename(string label) =>
         new(
-            Title: $"Rename “{label}”", Message: "Only its name changes, here and in the command line.", Tools: [], Tool: "claude",
+            Title: $"Rename “{label}”", Message: "Only its name changes, here and in the command line.", Tools: [],
+            Tool: Pitboard.Core.Tool.Claude,
             Account: null, Name: label, Prompt: label, Confirm: "Rename", Saving: false, Progress: null);
 
     public static RunningSignIn Running(string? url = null, bool wantsCode = false) =>

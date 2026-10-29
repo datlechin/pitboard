@@ -3,12 +3,12 @@ import PitboardKit
 extension Site {
     // pitboard-sites' sites, with the hosts and paths a snapshot carries.
     package static let claude = Site(
-        host: "claude.ai", name: "claude.ai", provider: "claude", aliases: [],
+        host: "claude.ai", name: "claude.ai", tool: .claude, aliases: [],
         hosts: ["claude.ai"], signInHosts: [], blockedHosts: ["accounts.google.com"],
         signInPaths: [["magic-link"]], storeName: "claude", signInSteps: "",
         blockedServices: "")
     package static let chatGPT = Site(
-        host: "chatgpt.com", name: "chatgpt.com", provider: "codex",
+        host: "chatgpt.com", name: "chatgpt.com", tool: .codex,
         aliases: ["chat.openai.com", "www.chatgpt.com", "chat.com"],
         hosts: ["chatgpt.com", "chat.openai.com", "www.chatgpt.com", "chat.com"],
         signInHosts: [
@@ -43,21 +43,30 @@ package func windowsShown(
                 + "Share menu to open it as one of your accounts."))
 }
 
-// What a model that has read nothing yet would make, apart from what a test says.
+// What the Rust model tells: the parts a snapshot names as changed since the one numbered
+// `revision`.
+package func since(_ revision: UInt64, _ parts: Part...) -> Changed {
+    Changed(since: revision, parts: parts)
+}
+
+// What a model that has read nothing yet would make, apart from what a test says, naming every
+// part as `snapshot()` does unless the test says what changed.
 package func snapshot(
-    _ revision: UInt64, updated: String = "", reading: Bool = false,
+    _ revision: UInt64, changed: Changed = Changed(since: 0, parts: everyPart()),
+    updated: String = "", reading: Bool = false,
     windows: AccountWindowsShown = windowsShown(), warming: [WarmAccountShown] = [],
     sections: [AccountSection] = [], notices: [PanelNotice] = [],
     menuNotices: MenuNotices = MenuNotices(
         install: nil, switches: [], signIns: [], others: nil),
-    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = [], glanceRevision: UInt64 = 0,
+    removal: RemovalShown? = nil, welcomeTools: [WelcomeTool] = [], widgetRevision: UInt64 = 0,
     answers: [OutsideAnswer] = []
 ) -> Snapshot {
     Snapshot(
-        revision: revision, reading: reading, quitQuestion: nil, replaceQuestion: nil,
+        revision: revision, changed: changed, reading: reading, quitQuestion: nil,
+        replaceQuestion: nil,
         windowRequest: WindowRequest(serial: 0, place: nil), signingIn: nil, sheet: nil,
         sheetFailure: nil,
-        menuBar: MenuBarText(
+        statusItem: StatusItemShown(
             nameAndUsage: "", usage: "", spoken: "Pitboard", level: nil, attention: false,
             tip: "Pitboard"),
         sections: sections,
@@ -110,5 +119,5 @@ package func snapshot(
             openAtLogin: WelcomeLogin(title: "Open Pitboard at Login", on: false, note: ""),
             done: Choice(
                 title: "Continue", intent: .show(place: .accounts), enabled: true)),
-        glanceRevision: glanceRevision, answers: answers)
+        widgetRevision: widgetRevision, answers: answers)
 }

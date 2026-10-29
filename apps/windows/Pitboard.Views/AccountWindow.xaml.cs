@@ -271,7 +271,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
         }
 
         _noteShown = note;
-        Note.Message = note is not null ? PitboardFfiMethods.WindowNote(note, session.Account) : "";
+        Note.Message = note is not null ? PitboardModelMethods.WindowNote(Identity.Front, note, session.Account) : "";
         Note.IsOpen = note is not null;
         RemoveDataButton.IsEnabled = !session.PageClosed;
         ReloadButton.IsEnabled = true;
@@ -320,7 +320,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
     }
 
     private void Unopened(string why) =>
-        ShowStandIn(Glyphs.Warning, Words.AccountWindow.CouldNotOpen!, why, choice: null, enabled: false, chosen: null);
+        ShowStandIn(Glyphs.Warning, Words.Own.CouldNotOpen, why, choice: null, enabled: false, chosen: null);
 
     private void ShowHistory()
     {
@@ -438,7 +438,7 @@ public sealed partial class AccountWindow : Window, ISessionWindow
             return;
         }
 
-        if (!await Confirm(PitboardFfiMethods.RemoveDataAlert(session.Account)))
+        if (!await Confirm(PitboardModelMethods.RemoveDataAlert(Identity.Front, session.Account)))
         {
             return;
         }

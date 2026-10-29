@@ -1,7 +1,8 @@
 import Foundation
 import Testing
 
-// A view says the model's words, from app_words() or a sentence of its own, which words.rs pins.
+// A view says the model's words, from app_words() or a sentence of its own, which
+// present/words/ pins.
 @Test func noViewHandsAControlWordsOfItsOwn() throws {
     let views = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

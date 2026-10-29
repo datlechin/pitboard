@@ -182,7 +182,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public bool ChecksAutomatically => _updates.ChecksAutomatically;
 
     public string UpdatesState =>
-        _updates.Waiting is { } waiting ? PitboardFfiMethods.ReadyToInstall(waiting) : PitboardFfiMethods.NamedVersion(Version);
+        _updates.Waiting is { } waiting ? PitboardModelMethods.ReadyToInstall(waiting) : PitboardModelMethods.NamedVersion(Version);
 
     public string[] UpdatesNoteLines => UpdatesNotes(_updates, Version);
 
@@ -191,7 +191,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public static string[] UpdatesNotes(IUpdates updates, string version) =>
         [
             .. updates.Refusal is { } refusal ? new[] { refusal } : [],
-            .. Versions.IsBeta(version) && Words.Settings.BetaUpdates is { } beta ? new[] { beta } : [],
+            .. Versions.IsBeta(version) ? new[] { Words.Own.BetaUpdates } : [],
         ];
 
     // 24:00, the end of a day, shows as midnight, as the macOS pickers show it.
@@ -289,7 +289,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     {
         if (Warm.Accounts.FirstOrDefault(account => account.Qualified == qualified) is { } account && account.On != on)
         {
-            _model.Send(new Intent.SetWarm(qualified, on));
+            _model.Send(new Intent.SetWarm(account.Account, on));
         }
     }
 

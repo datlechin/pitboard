@@ -9,7 +9,7 @@ public sealed class AccountWindowsTests
     {
         var policy = new NavigationPolicy(Sites.ChatGpt, "https");
         NavigationDecision Decide(string url, bool clicked) =>
-            PitboardFfiMethods.DecideNavigation(
+            PitboardModelMethods.DecideNavigation(
                 policy, PageRole.Window,
                 new NavigationRequest(url, NavigationTarget.Page, clicked, false, Asker.Other));
 
@@ -22,7 +22,7 @@ public sealed class AccountWindowsTests
             Decide("vscode://file/x", true));
         var otherApp = Assert.IsInstanceOfType<WindowNoteKind.OtherApp>(refused.Note);
         Assert.AreEqual("vscode", otherApp.Scheme);
-        Assert.AreEqual("https://chatgpt.com/", PitboardFfiMethods.WindowHome(policy));
+        Assert.AreEqual("https://chatgpt.com/", PitboardModelMethods.WindowHome(policy));
     }
 
     [TestMethod]
@@ -33,14 +33,14 @@ public sealed class AccountWindowsTests
             InUse: false, Title: "main");
 
         StringAssert.StartsWith(
-            PitboardFfiMethods.WindowNote(new WindowNoteKind.SignIn(), main),
+            PitboardModelMethods.WindowNote(Front.WindowsNotificationArea, new WindowNoteKind.SignIn(), main),
             "Sign in to chatgpt.com as main@example.com.");
-        Assert.AreEqual("chatgpt.com says", PitboardFfiMethods.DialogTitle("chatgpt.com", true));
+        Assert.AreEqual("chatgpt.com says", PitboardModelMethods.DialogTitle("chatgpt.com", true));
         Assert.AreEqual(
             "Download “x.zip” from claude.ai?",
-            PitboardFfiMethods.DownloadQuestion("x.zip", PitboardFfiMethods.DownloadHost("blob:https://claude.ai/1")).Title);
-        Assert.IsFalse(PitboardFfiMethods.PageMayUse(PagePermission.Microphone));
-        Assert.AreEqual(new SignInWindowSize(500, 640), PitboardFfiMethods.SignInWindowSize(null, null));
-        Assert.IsInstanceOfType<ProcessEnded.Stopped>(PitboardFfiMethods.AfterContentProcessEnded(0, 5));
+            PitboardModelMethods.DownloadQuestion("x.zip", PitboardModelMethods.DownloadHost("blob:https://claude.ai/1")).Title);
+        Assert.IsFalse(PitboardModelMethods.PageMayUse(PagePermission.Microphone));
+        Assert.AreEqual(new SignInWindowSize(500, 640), PitboardModelMethods.SignInWindowSize(null, null));
+        Assert.IsInstanceOfType<ProcessEnded.Stopped>(PitboardModelMethods.AfterContentProcessEnded(0, 5));
     }
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { model, nextWarmUp, reset, setWarmRange, turnWarmUp, warmNote } from "./model.ts";
 import { activity } from "./words.ts";
@@ -8,7 +8,13 @@ import { warmHours } from "../data/limits.ts";
 const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 const service = repo("crates/pitboard-core/src/service.rs");
 const warm = repo("crates/pitboard-core/src/duty/warm/mod.rs");
-const words = repo("crates/pitboard-ffi/src/present/words.rs");
+// present/words/, a file for each surface that says the words, read as one
+const words = readdirSync(
+  new URL("../../../crates/pitboard-model/src/present/words/", import.meta.url),
+)
+  .sort()
+  .map((file) => repo(`crates/pitboard-model/src/present/words/${file}`))
+  .join("\n");
 const last = () => model.get().log.at(-1)!;
 
 test("turning an account's warm-up on or off is logged as the core's warm_turn logs it", () => {
@@ -48,7 +54,7 @@ test("the hours are a span Range::new takes: never empty, 00:00 at the end meani
   reset();
 });
 
-test("the hours are said as words.rs says them, and the log's changes as the app does", () => {
+test("the hours are said as present/words/machine.rs says them, and the log's changes as the app does", () => {
   assert.ok(words.includes('return Some("All day".into());'));
   assert.ok(words.includes('"midnight".to_owned()'));
   assert.deepEqual(

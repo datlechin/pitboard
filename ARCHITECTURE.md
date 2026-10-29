@@ -55,7 +55,8 @@ built with a `context::Context`:
     real login may be kept under, and a token's claims, never checked.
 - `holder.rs`: what keeps a tool's login in memory while it runs.
 - `host/`: the machine behind one seam, the `Host` trait a test replaces with `memory.rs`, and
-  the `fs`, `proc` and `user` functions each system answers.
+  the `fs`, `proc` and `user` functions each system answers. `watch.rs` watches one folder
+  through each system's own notice of a change.
   - `host/macos/`, `host/linux/`, `host/unix/`: the keychain through `security`, `ps`,
     launchd, SQLite and managed preferences; `/proc` and systemd; and what both POSIX systems
     share.
@@ -89,7 +90,8 @@ built with a `context::Context`:
     crash matrix and the changes' tests.
 - `lock.rs`: Claude Code's locks around its login, taken as it takes them.
 - `duty/`: what a front end does by itself: how often (`cadence.rs`), what it tried and said
-  (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`) and the warm-up (`warm/`).
+  (`ledger.rs`), the automatic switch's rule (`autoswitch.rs`), the warm-up (`warm/`), and when
+  the account index or the readings were written (`written.rs`).
 - `usage/`: what is left: one reading per account (`readings.rs`), pace (`pace.rs`) and how
   often Anthropic is asked (`budget.rs`).
 - `status.rs`, `statusline.rs`, `sessions.rs`, `schedule.rs`, `watch_service.rs`: the commands
@@ -114,19 +116,29 @@ The other crates:
   Windows build's manifest and version resource, which the FFI crates include too.
   `tests/cli/` is its one integration test binary, with the `--json` snapshots, and its
   example `stand-in` the program every test starts in place of a tool.
-- `crates/pitboard-ffi`: the core as UniFFI bindings for both apps.
-  - `lib.rs`: what the bindings export beside the model, and the free functions an app calls
-    as it starts.
+- `crates/pitboard-model`: the model both apps run on, over the core, and what their UniFFI
+  bindings export.
+  - `lib.rs`: what the bindings export beside the model, `Tool` and `AccountKey` among them,
+    and the free functions an app calls as it starts.
+  - `front.rs`: `Front`, the app a model serves, and what follows from it alone: its `Engine`,
+    its system, where a sheet comes up, the `Surfaces` it starts with and whether it keeps
+    quick actions.
   - `launch.rs`: `AppCore`, the core the model's lanes call, which nothing exports.
   - `model/`: the app model, `PitboardModel`: its actor and `State::apply` (`state.rs`), its
     lanes, advice, preferences and the account windows' bookkeeping. Its tests are files by
     subject, `switching.rs`, `signing.rs` and the rest, and `threaded.rs` over the real core.
-  - `present/`: each `Snapshot`, every sentence and row an app shows; `words.rs` what both
-    apps say and the command line does not.
+  - `present/`: each `Snapshot`, every sentence and row an app shows; `words/` what both
+    apps say and the command line does not, a catalogue with a file per surface: the status
+    item, the accounts, notices, sheets, setting up, Settings and Activity (`machine.rs`),
+    Diagnostics (`checks.rs`), the account windows, failures and the core's refusals, and in
+    `mod.rs` the tools every one words with. `app_words.rs` holds the controls every front
+    draws by itself, and each front's own catalogue of what it alone draws.
   - `account_windows/`: the rules of an account's window that each app's web code asks.
   - `sites.rs`: `pitboard-sites`' sites as records of this crate's own.
   - `fixture/`: the worlds a debug build of either app launches into, behind the `fixture`
     feature.
+- `crates/pitboard-ffi`: the static and the dynamic library the two apps link, which hold
+  `pitboard-model` and nothing of their own (`lib.rs` says why).
 - `crates/pitboard-sites`: the sites an account's window opens and what a link from outside
   may be (`site.rs`, `link.rs`), the Pitboard link (`handoff.rs`) and a link read as
   Foundation reads one (`address.rs`, `web.rs`).
@@ -331,6 +343,17 @@ keeps it is in the header of the module named.
 - Each reason the automatic switch does not switch, and each wait, is recorded once for its
   account, limit, reset and code, and every front end tells one from another by the core's
   one rule, `Auto::told_apart`, in the core's words (`duty/autoswitch.rs`).
+- The app and `pitboard watch` hear a write to the account index or the readings through the
+  host's watch on Pitboard's directory, and look every `LOOK_EVERY_SECONDS` only where the
+  host cannot watch it, the directory is not there yet or the watch ended (`duty/written.rs`,
+  `a_write_to_the_index_is_seen_as_it_lands`,
+  `a_folder_made_after_the_watch_began_is_watched_once_it_is_there`,
+  `a_change_made_elsewhere_is_shown_without_waiting_for_a_look`,
+  `the_loop_waits_until_it_next_reads_or_decides`). The host cannot watch where another
+  machine may write: on Linux a network file system, FUSE or 9p, and on macOS a volume statfs
+  does not mark local (`a_file_system_another_machine_writes_is_not_watched`,
+  `only_a_volume_of_this_macs_own_is_watched`). A watch never keeps `pitboard uninstall` from
+  removing the directory whole (`a_watched_pitboard_directory_is_removed_whole_by_uninstall`).
 
 ### Daily renewal and the watch service
 
@@ -378,11 +401,12 @@ keeps it is in the header of the module named.
   where the tool is not supported rather than being ignored.
 - No test makes the app model over the machine's own environment. The Rust tests run the real
   core over a `ScratchMachine`, the C# and Swift tests only a fixture's model or one never
-  started, and every `AppControl` and `Notifications` a test hands in records and posts
+  started, and every `OtherApps` and `Notifier` a test hands in records and posts
   nothing.
 - A fixture is the real core and the real model over a machine of its own, `MemoryHost`,
   `ScriptedApi` and a folder in the temporary directory. Only the `fixture` feature builds one
-  and only a debug build reads `PITBOARD_FIXTURE` ([The fixtures](docs/facts/fixtures.md)).
+  and only a debug build is started in one, by `PITBOARD_FIXTURE`, which the model's `started`
+  reads ([The fixtures](docs/facts/fixtures.md)).
 - Nothing that ships is built for tests. `build-app.sh` fails a bundle whose core library,
   app or command line holds a fixture world's text or `PITBOARD_TEST_CLAUDE_DESKTOP`, or links
   a SQLite other than the system's, and `check-windows-build.ps1` and `check-windows-app.ps1`
@@ -391,7 +415,7 @@ keeps it is in the header of the module named.
 
 ### The apps
 
-- Nothing `pitboard-ffi` exports is async or waits on the core: only the model's lanes call
+- Nothing `pitboard-model` exports is async or waits on the core: only the model's lanes call
   `AppCore`, `send` only posts, `snapshot` only copies, `shutdown` waits only for the actor and
   the sign-ins under way, and a free function reads nothing slower than a file
   (`model/mod.rs`).
@@ -400,8 +424,11 @@ keeps it is in the header of the module named.
   (`a_clock_the_app_cannot_read_is_said_in_utc_rather_than_not_at_all`).
 - The model's state belongs to its actor thread, and `State::apply` does no I/O. A switch, and
   every other change the app makes to the index, is claimed there as its intent is taken and
-  held until the read after it, so one runs at a time and the poll leaves the index alone
-  (`model/switching.rs`, `model/changing.rs`).
+  held until the read after it, so one runs at a time and the look the watch asks leaves the
+  index alone until then (`model/switching.rs`, `model/changing.rs`,
+  `a_write_heard_during_a_change_of_the_apps_own_is_looked_at_once_it_is_over`, and over the
+  real core `a_rename_is_read_after_it_whatever_the_watchs_look_finds_meanwhile` and its
+  twins).
 - An app is quit only when the person says so, never by force, within 30 seconds, and
   Pitboard opens again only the copy it quit: Claude only where its folder is whole
   (`Pitboard::whole`). Changes of a tool whose login is its app's files never overlap
@@ -428,35 +455,80 @@ keeps it is in the header of the module named.
   config is refused where another account is in use by then, and **Put Away** puts away only
   the file its sheet looked at (`model/changing.rs`, `model/stowing.rs`).
 - Uninstalling from the app stops what runs by itself and closes every account window, and asks
-  the core only once nothing that writes Pitboard's directory is under way, holding the app's
-  `app.lock` until the directory goes. Nothing writes it after, and a refusal before anything
-  went starts the model again (`model/removing.rs`,
-  `after_uninstall_nothing_writes_pitboards_directory_again`).
-- The glance for widgets and intents names each account by an id derived from its own, never
-  by an email, a token, a uuid, a path or a notice's lines. The model hands it to the app before
-  the snapshot it changed with, writes it only where the app names a file, again with each
-  read, and deletes that file once the app uninstalls Pitboard
+  the core only once nothing that writes Pitboard's directory is under way and its watch on the
+  directory has let go of it, holding the app's `app.lock` until the directory goes. Nothing
+  writes it after, and a refusal before anything went starts the model again
+  (`model/removing.rs`, `after_uninstall_nothing_writes_pitboards_directory_again`).
+- The widget feed, the glance widgets and intents read, names each account by an id derived
+  from its own, never by an email, a token, a uuid, a path or a notice's lines. The model hands
+  it to the app before the snapshot it changed with, writes it only where
+  `AppLaunch.widget_feed` names a file, again with each read, and deletes that file once the
+  app uninstalls Pitboard
   (`the_glance_is_given_to_the_app_with_or_without_a_file`,
-  `an_uninstall_deletes_the_glance_and_tells_the_widgets`). `glance_revision` moves only with
+  `an_uninstall_deletes_the_glance_and_tells_the_widgets`). `widget_revision` moves only with
   what a widget shows, since WidgetKit budgets reloads, and once the file holds it. A
   request from outside does no more than a click in the app and waits for the launch's first
   read. One that would quit an app answers with the quit question and quits it only when asked
   again with `QuitAndSwitch`, and one that needs another question only the app asks is
   refused in words (`model/glancing.rs`).
-- One thread tells a `ModelListener`, in revision order and only a snapshot that differs from
+- The model names a tool and an account by type: the core's `ProviderId` and `Key` inside, and
+  its own `Tool` and `AccountKey` to an app. What crosses a process stays text: a
+  notification's `clicked` argument, read back as the core reads an account typed, and the ids
+  of the widget feed and of a request from outside. The conversions out of the core's
+  `non_exhaustive` `ProviderId` and `holder::AppId`, into `Tool` and `AppId`, are the model's
+  only arms for a tool or an app it does not know
+  (`every_tool_the_core_knows_is_one_the_apps_name`,
+  `every_app_a_holder_names_is_one_the_apps_name`).
+- `State` words nothing itself and imports nothing of `present::words`: a failure is what was
+  being done and why, and a switch's or a sign-in's notice what it did, which `present` words
+  for the front it shows on (`Failure`'s `Doing` and `Cause`, `LastSwitch`'s `SignedIn` and
+  `Opens`). A refusal of the core's is worded once, where `launch.rs` takes it.
+- Which front the model serves is decided in `AppLaunch.front` alone, which each app names
+  once, and anything else that differs by front is a `match` on `Front`, on its engine or on
+  its system with no `_` arm, so a front added to `Front` does not compile until each is said
+  (`the_engine_is_the_fronts`). What the core decides of a system, such as the tools it
+  supports, is asked with the front's `os()`, and `host::OS` is read only by the fixtures, whose
+  machine is this one as the core sees it. What one front alone draws is in that front's own
+  catalogue, and both shipping fronts' words are tested on every system
+  (`each_shipping_fronts_catalogue_says_what_its_app_drew`).
+- A snapshot carries the status item's words only while the front has one: the shipping
+  fronts from the start, and a front that starts with none once `Intent::SurfacesChanged` says
+  one came, until it says it went (`a_front_shows_a_status_item_only_while_it_has_one`). Quick
+  actions are offered only by a front that keeps them, the Windows app alone
+  (`quick_actions_are_offered_only_where_the_front_keeps_them`).
+- One thread tells a `Listener`, in revision order and only a snapshot that differs from
   the last, so a test waits for what a snapshot says once something is over
-  (`snapshots_made_while_many_threads_send_arrive_in_order`).
+  (`snapshots_made_while_many_threads_send_arrive_in_order`). Each names the parts that differ
+  from the one told before it, the first from the one `snapshot` gave, dropped ones between
+  them or not, and `snapshot` names every part, so no app compares them
+  (`each_snapshot_names_the_parts_changed_since_the_one_told_before`,
+  `a_snapshot_told_after_others_were_dropped_names_what_changed_since_the_last_told`,
+  `a_snapshot_asked_for_names_every_part`). A field added to `Snapshot` does not compile until
+  it has a `Part` (`Snapshot::parts_changed_since`).
 - One change to daily renewal runs at a time, and turning it on is refused where the command
   line inside this copy would not last (`schedule::in_a_temporary_copy`,
   `model/maintaining.rs`).
 - The macOS app's `AppModel` shows only a snapshot newer than the one it shows
   (`aSnapshotThatIsNotNewerIsDropped`), and `ModelListening` holds it weakly, since the model
   holds the listener. The window opens once for each `WindowRequest.serial` (`WindowRequests`).
+- Each app's `AppModel` assigns the parts a snapshot names where it changed since the one
+  shown, every part where it changed since another, and compares none
+  (`aSnapshotBasedOnTheOneShownAssignsOnlyItsParts`, `aSnapshotBasedOnAnotherAssignsEveryPart`,
+  in Swift and, capitalised, in C#). The account windows' code, the widgets and a request from outside
+  waiting on its answer are told only by a snapshot that names their part. The Windows one
+  shows each part as the snapshot's property of its name (`EveryPartNamesOneProperty`,
+  `TheModelShowsEveryPartOfASnapshot`).
 - The Windows app asks the core's gate, `launch_refusal`, before anything else a launch does
-  but `--unregister` and `--unregister-share` (`ReleaseGateTests`).
-- A macOS debug build started without `PITBOARD_FIXTURE` quits before anything of the app
-  starts, since Shortcuts, Spotlight, a widget or a control start it through Launch Services
-  on the real home (`aDebugBuildStartedOutsideAFixtureStartsNothing`).
+  but `--unregister` and `--unregister-share`, and after `started` alone, which reads only the
+  variables it is given (`ReleaseGateTests`).
+- Every app asks the model how it was started, `started`, before it makes anything. A debug
+  build without `PITBOARD_FIXTURE` is outside a fixture, and a release build is never in one
+  (`a_debug_build_without_a_fixture_is_outside_one`,
+  `a_fixture_is_named_by_its_variable_whatever_it_holds`, `a_release_build_reads_no_fixture`).
+  Outside one, the macOS debug build quits before anything of the app starts, since Shortcuts,
+  Spotlight, a widget or a control start it through Launch Services on the real home
+  (`aDebugBuildStartedOutsideAFixtureStartsNothing`), and the Windows one takes no link and no
+  task (`LaunchingTests`).
 - The macOS app's Shortcuts actions run in the app, over its model, and the release holds
   the metadata Shortcuts and Spotlight read them and their App Shortcuts from
   (`scripts/build-app.sh`).
@@ -471,8 +543,9 @@ keeps it is in the header of the module named.
   loads none of the core and hands a page to `Pitboard.exe` only as a Pitboard link
   ([Documented, not measured](docs/facts/windows-documented.md) has what is still to be seen).
 - The Windows Jump List is Win32's, kept under the AppUserModelId with no package identity.
-  Each task starts `Pitboard.exe` with a flag and the GUID the model gave it, read only where a
-  link would be, and its switch is a request from outside (`LaunchingTests`, `model/jumping.rs`).
+  Its tasks are the model's `quick_actions`. Each starts `Pitboard.exe` with a flag and the GUID
+  the model gave it, read only where a link would be, and its switch is a request from outside
+  (`LaunchingTests`, `model/quick_actions.rs`).
   Only a Release build writes the list, and `--unregister` deletes it.
 
 ### Account windows
@@ -487,6 +560,13 @@ on.
   never changes, so a rename keeps its sign-in
   (`an_enrolled_claude_account_has_a_store_derived_from_its_account_id`,
   `an_account_id_is_lowered_as_swift_lowered_it`).
+- Each Pitboard directory's records in `windows.json` are kept under the key its app kept them
+  under before the model did: on macOS Foundation's standardised path, which reads the file
+  system, so the app gives it, and on Windows the directory as Windows compares paths, which
+  the model makes (`each_front_keys_its_records_as_its_app_did`,
+  `theRecordsKeyIsFoundationsByNameAndByTheFileSystem`). The Linux app kept none before, and
+  its key is the directory made absolute, by its components, with each `..` kept
+  (`the_linux_app_keys_its_records_by_the_directory_the_core_reaches`).
 - A store is recorded in `windows.json` before WebKit or WebView2 makes it, and deleted only
   where this Pitboard directory recorded it and a read that succeeded no longer derives it from
   an enrolled account. Another directory's record keeps it
@@ -512,7 +592,7 @@ on.
   no secret. Only a build signed by a team claims the App Group `<team>.com.usepitboard.Pitboard`,
   so an ad hoc build touches no group container and macOS never asks about one
   (`aBuildWithNoTeamKeepsOutOfEveryGroup`, `scripts/build-app.sh`). The widgets and the
-  control reload only with `glance_revision`
+  control reload only as a snapshot shown names `widget_revision`
   (`widgetsAndControlsReloadOnlyAsTheGlanceTheyShowMoves`). A widget's Switch, on macOS 27
   and from Xcode 27, runs in the app alone, and asked of the extension it switches nothing
   (`aSwitchTheWidgetExtensionIsAskedForSwitchesNothingAndSaysWhere`).
@@ -537,7 +617,9 @@ on.
 - Each app and the core meet at the model. The app has no rule of its own for what the core
   decides: its homes, Pitboard's directory, whether a path is a program, the sites and the
   links it opens are the core's, and every word and button a view shows is the model's.
-  `AppControl` names an app by the id holder detection gives it.
+  `OtherApps` names an app by the `AppId` holder detection gives it, and a front that has no
+  app Pitboard may quit names no `OtherApps`, so what holds a login there is said in words
+  (`with_no_other_apps_a_holding_app_is_said_and_not_quit`).
 - Pitboard and each tool meet at the tool's [register](#tool-registers).
 - Pitboard and each service meet at a few requests, which
   [What leaves your machine](https://docs.usepitboard.com/security#what-leaves-your-machine)
@@ -556,7 +638,7 @@ on.
   stored value. It decrypts nothing, reads no keychain item for Claude Desktop and asks
   claude.ai nothing. It opens `Cookies` and moves the items `Desktop::items` names only while
   Claude is closed, under an advisory lock on the folder, and deletes nothing of Claude's.
-- Pitboard and a running app meet at the process list and the app's `AppControl`. The core
+- Pitboard and a running app meet at the process list and the app's `OtherApps`. The core
   tells that Claude runs by the bundle each program runs from, and neither starts nor quits it.
 - The code and the release meet at a `v` tag, which `.github/workflows/release.yml` turns
   into a release. [RELEASING.md](RELEASING.md) has the procedure.

@@ -923,8 +923,11 @@ pub(crate) fn machine_id() -> String {
     }
 }
 
+// The account index's name in Pitboard's directory.
+pub(crate) const FILE: &str = "state.json";
+
 fn file(ctx: &Context) -> PathBuf {
-    home::dir(ctx).join("state.json")
+    home::dir(ctx).join(FILE)
 }
 
 // One stat of the account index alone: the readings the status line writes after every

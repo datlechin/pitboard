@@ -1,3 +1,5 @@
+using Pitboard.Core;
+
 namespace Pitboard.Windows.Tests;
 
 [TestClass]
@@ -162,7 +164,7 @@ public sealed class RunValueTests
 
         shown.Set(on: true);
         Assert.IsFalse(shown.On);
-        Assert.AreEqual(Words.Settings.StartupTurnedOff, shown.Failed);
+        Assert.AreEqual(Words.Own.StartupTurnedOff, shown.Failed);
 
         shown.Set(on: false);
         Assert.IsTrue(shown.TurnedOff, "turning it off in Pitboard undid what Settings keeps");

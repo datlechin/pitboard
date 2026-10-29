@@ -30,18 +30,18 @@ struct Dependencies {
             defaults: defaults, environment: environment, windowsDirectory: records)
         let notifications = MacNotifications(delivering: bundle.pathExtension == "app")
         let launch = AppLaunch(
-            environment: environment, appLocation: bundle.path,
-            earlierPreferences: earlier.handOver(),
-            windows: WindowsLaunch(
+            environment: environment, appLocation: bundle.path, front: front,
+            accountWindows: AccountWindowsLaunch(
                 directory: records.path,
-                key: WebEnvironment.recordKey(environment: environment),
                 linkScheme: LinkTarget.scheme(in: .main) ?? "pitboard",
-                earlier: earlier.handOverWindows()),
-            glance: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
+                key: WebEnvironment.recordKey(environment: environment)),
+            handover: EarlierHandover(
+                preferences: earlier.handOver(), windows: earlier.handOverWindows()),
+            widgetFeed: AppGroup.own.flatMap(AppGroup.glanceFile(in:))?.path)
         let model = AppModel.listening { listener in
             PitboardModel(
-                launch: launch, listener: listener, apps: MacAppControl.live(),
-                notifications: notifications, localTime: MacLocalTime())
+                launch: launch, listener: listener, otherApps: MacApps.live(),
+                notifier: notifications, localTime: MacLocalTime())
         }
         notifications.onClick = { [weak model] argument in
             model?.send(.notificationClicked(argument: argument))
@@ -68,7 +68,8 @@ struct Dependencies {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Dependencies {
         #if DEBUG
-            if let name = environment[Fixture.variable] {
+            let launched = started(build: Launch.build, environment: environment)
+            if case .fixture(let name) = launched {
                 return Fixture.dependencies(named: name, environment: environment)
             }
         #endif

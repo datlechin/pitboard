@@ -21,20 +21,20 @@ public sealed class JumpListTests
     [TestMethod]
     public void TheSwitchesAddAccountAndTheWindowsAreSetApart()
     {
-        JumpTask[] tasks =
+        QuickAction[] tasks =
         [
-            new("Switch to personal", new JumpAsk.Switch(Personal)), new("Switch to spare (Codex)", new JumpAsk.Switch(Personal)),
-            new("Add account…", new JumpAsk.AddAccount()), new("Open claude.ai as work", new JumpAsk.OpenWindow(Personal)),
+            new("Switch to personal", new QuickAsk.Switch(Personal)), new("Switch to spare (Codex)", new QuickAsk.Switch(Personal)),
+            new("Add account…", new QuickAsk.AddAccount()), new("Open claude.ai as work", new QuickAsk.OpenWindow(Personal)),
         ];
 
         CollectionAssert.AreEqual(
-            new JumpTask?[] { tasks[0], tasks[1], null, tasks[2], null, tasks[3] }, SystemJumpList.Grouped(tasks).ToArray());
+            new QuickAction?[] { tasks[0], tasks[1], null, tasks[2], null, tasks[3] }, SystemJumpList.Grouped(tasks).ToArray());
     }
 
     [TestMethod]
     public void ATaskIsALinkToPitboardExeWithItsArgumentsIconAndTitle()
     {
-        var link = new SystemJumpList(new Identity(Build.Release), Exe).Link(new JumpTask("Switch to personal", new JumpAsk.Switch(Personal)));
+        var link = new SystemJumpList(new Identity(Build.Release), Exe).Link(new QuickAction("Switch to personal", new QuickAsk.Switch(Personal)));
 
         var path = new char[1024];
         var found = default(WIN32_FIND_DATAW);
@@ -61,7 +61,7 @@ public sealed class JumpListTests
     [TestMethod]
     public void ASeparatorStandsBetweenTwoGroups()
     {
-        JumpTask[] tasks = [new("Switch to personal", new JumpAsk.Switch(Personal)), new("Add account…", new JumpAsk.AddAccount())];
+        QuickAction[] tasks = [new("Switch to personal", new QuickAsk.Switch(Personal)), new("Add account…", new QuickAsk.AddAccount())];
 
         var links = new SystemJumpList(new Identity(Build.Release), Exe).Links(tasks);
         links.GetCount(out var count);

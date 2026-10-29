@@ -76,7 +76,7 @@ public partial class App : Application, IIconTargets
             taskbarCreated: () => _icon?.Readd(),
             displayChanged: () => image.Follow(shown => _icon?.Redraw(shown)));
         _icon = new NotifyIcon(new ShellNotificationArea(), _hidden.Handle, image.Handle, _start.Identity.IconGuid);
-        ShowBar(model.MenuBar);
+        ShowStatusItem(model.StatusItem);
         var accountWindows = new AccountWindows(model, Web(), _hidden.Handle);
         _accountWindows = accountWindows;
         accountWindows.Follow(model.AccountWindows);
@@ -144,7 +144,7 @@ public partial class App : Application, IIconTargets
         }
     }
 
-    private AppModel? Model(DispatcherQueue queue, Notifications notifications)
+    private AppModel? Model(DispatcherQueue queue, Notifier notifier)
     {
 #if DEBUG
         if (_start.Fixture is { } fixture)
@@ -152,7 +152,7 @@ public partial class App : Application, IIconTargets
             try
             {
                 return AppModel.Listening(
-                    queue, listener => PitboardModel.Fixture(fixture, listener, new WindowsLocalTime()));
+                    queue, listener => PitboardModel.Fixture(fixture, Identity.Front, listener, new WindowsLocalTime()));
             }
             catch (FixtureException refused)
             {
@@ -172,7 +172,7 @@ public partial class App : Application, IIconTargets
         var apps = new WindowsApps(() => queue.TryEnqueue(Ui.Guarded(() => _window?.Bring())));
         return AppModel.Listening(
             queue,
-            listener => new PitboardModel(launch, listener, apps, notifications, new WindowsLocalTime()));
+            listener => new PitboardModel(launch, listener, apps, notifier, new WindowsLocalTime()));
     }
 
     // A fixture's windows show its stand-in pages, in a user data folder of the fixture's own, or of the UI tests' run.
@@ -200,13 +200,13 @@ public partial class App : Application, IIconTargets
             case nameof(AppModel.WindowRequest):
                 Follow(_model.WindowRequest);
                 break;
-            case nameof(AppModel.MenuBar):
-                ShowBar(_model.MenuBar);
+            case nameof(AppModel.StatusItem):
+                ShowStatusItem(_model.StatusItem);
                 break;
             case nameof(AppModel.AccountWindows):
                 _accountWindows?.Follow(_model.AccountWindows);
                 break;
-            case nameof(AppModel.JumpList):
+            case nameof(AppModel.QuickActions):
                 _jumpTasks?.Follow();
                 break;
             case nameof(AppModel.Answers):
@@ -220,11 +220,12 @@ public partial class App : Application, IIconTargets
         }
     }
 
-    // The notification area has no title beside its icon, so the icon and its tooltip carry the glance.
-    private void ShowBar(MenuBarText bar)
+    // The notification area has no title beside its icon, so the icon and its tooltip carry the glance. The Windows front
+    // has its icon from launch to quit, and with nothing to say it is the mark alone.
+    private void ShowStatusItem(StatusItemShown? item)
     {
-        _image?.Show(new IconLook(bar.Level, bar.Attention), shown => _icon?.Redraw(shown));
-        _icon?.Show(bar.Tip);
+        _image?.Show(new IconLook(item?.Level, item?.Attention ?? false), shown => _icon?.Redraw(shown));
+        _icon?.Show(item?.Tip ?? Words.AppName);
     }
 
     void IIconTargets.ShowMenu(IReadOnlyList<IconMenuEntry> entries, IconEvent.Menu at, Action opened, Action<IconCommand> chosen)

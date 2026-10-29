@@ -221,7 +221,7 @@
                               Visibility="{x:Bind local:AccountsPage.EmailShown(Item), Mode=OneWay}"
                               AutomationProperties.Name="{x:Bind shown:Words.Window.Email}">
                             <Button
-                                Content="{x:Bind shown:Words.Window.Copy}"
+                                Content="{x:Bind shown:Words.Own.Copy}"
                                 Tag="{x:Bind}"
                                 AutomationProperties.AutomationId="detail.copyEmail"
                                 AutomationProperties.Name="{x:Bind shown:Words.Menu.CopyEmail}"

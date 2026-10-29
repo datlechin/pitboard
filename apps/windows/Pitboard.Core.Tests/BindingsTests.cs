@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace Pitboard.Core.Tests;
 
 [TestClass]
@@ -8,8 +10,8 @@ public sealed class BindingsTests
     public void TheBindingsLoadTheCoreAndAgreeWithIt()
     {
         Assert.AreEqual(
-            new Intent.Rename("claude", "home", "work"),
-            PitboardFfiMethods.CheckName(new Sheet.Rename("claude", "home"), "claude", "work").Intent);
+            new Intent.Rename(new AccountKey(Tool.Claude, "home"), "work"),
+            PitboardModelMethods.CheckName(new Sheet.Rename(new AccountKey(Tool.Claude, "home")), Tool.Claude, "work").Intent);
     }
 
     [TestMethod]
@@ -24,9 +26,9 @@ public sealed class BindingsTests
         string[] older =
         [
             "Pitboard", "SignIn", "Settings", "PitboardException", "Cause", "Switched", "Switch",
-            "Adoption", "Enrolled", "EnrolledAs", "Changed", "Holding", "Remedy", "Diagnosis", "Change",
+            "Adoption", "Enrolled", "EnrolledAs", "Holding", "Remedy", "Diagnosis", "Change",
             "SignInView", "Check", "Renewed", "LinkRefusal", "Status", "Account", "Usage", "Limit", "Parked",
-            "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Tool", "Failure", "Warning", "Held",
+            "Awaiting", "Source", "Abandoned", "LastSwitch", "RestartNeeded", "Failure", "Warning", "Held",
             "Schedule", "QuitQuestion", "ReplaceQuestion", "Conjunction",
         ];
         var stillOffered = exported.Select(type => type.Name).Intersect(older).Order(StringComparer.Ordinal);
@@ -38,7 +40,7 @@ public sealed class BindingsTests
             "SiteLink", "ReadPitboardLink", "WindowOfStore", "IsSitePage", "WindowAddress", "StoreId",
             "SitesFor", "WindowAccounts", "SiteMenus", "SiteNames",
         ];
-        var stillCalled = typeof(PitboardFfiMethods).GetMethods()
+        var stillCalled = typeof(PitboardModelMethods).GetMethods()
             .Select(method => method.Name)
             .Intersect(olderCalls)
             .Order(StringComparer.Ordinal);
@@ -48,11 +50,26 @@ public sealed class BindingsTests
         Assert.AreEqual("", string.Join(", ", stillCalled));
     }
 
+    // The Windows app shows each part a snapshot names as the snapshot's property of its name, so each part names one,
+    // and a property no part names would never be shown again.
+    [TestMethod]
+    public void EveryPartNamesOneProperty()
+    {
+        var properties = typeof(Snapshot).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(property => property.Name)
+            .Except([nameof(Snapshot.Revision), nameof(Snapshot.Changed)])
+            .Order(StringComparer.Ordinal);
+        var parts = Enum.GetValues<Part>().Select(part => part.ToString()).Order(StringComparer.Ordinal);
+
+        Assert.AreEqual(string.Join(", ", properties), string.Join(", ", parts));
+        CollectionAssert.AreEqual(Enum.GetValues<Part>(), PitboardModelMethods.EveryPart(), "every part, in order");
+    }
+
     [TestMethod]
     public void TheAppAsksTheCoreWhereThingsAreAndWhatRuns()
     {
-        Assert.IsNull(PitboardFfiMethods.AppCommandLine("/home/x/pitboard"));
-        Assert.IsFalse(PitboardFfiMethods.CanRun("/nowhere/at/all"));
+        Assert.IsNull(PitboardModelMethods.AppCommandLine("/home/x/pitboard"));
+        Assert.IsFalse(PitboardModelMethods.CanRun("/nowhere/at/all"));
     }
 
     // The home is USERPROFILE on Windows, whatever HOME says, and HOME elsewhere.
@@ -68,9 +85,9 @@ public sealed class BindingsTests
 
         Assert.AreEqual(
             windows ? @"C:\Users\x\AppData\Local\Pitboard" : "/home/x/.pitboard",
-            PitboardFfiMethods.PitboardDirectory(environment));
+            PitboardModelMethods.PitboardDirectory(environment));
         environment["PITBOARD_HOME"] = "/elsewhere/./p/";
-        Assert.AreEqual("/elsewhere/./p/", PitboardFfiMethods.PitboardDirectory(environment));
+        Assert.AreEqual("/elsewhere/./p/", PitboardModelMethods.PitboardDirectory(environment));
     }
 
     // The core's own tests take a task away on a scheduler in memory; this one reaches none.
@@ -85,16 +102,7 @@ public sealed class BindingsTests
             ["SHELL"] = "/nowhere/at/all/sh",
         };
 
-        Assert.IsFalse(PitboardFfiMethods.UnscheduleApp(environment, Path.Combine(home, "Pitboard")));
+        Assert.IsFalse(PitboardModelMethods.UnscheduleApp(environment, Path.Combine(home, "Pitboard")));
         Assert.IsFalse(Directory.Exists(home), "nothing is made");
-    }
-
-    [TestMethod]
-    public void TheWindowsAppKeysItsRecordsByItsDirectoryInAnyCase()
-    {
-        var key = PitboardFfiMethods.WindowsRecordsKey(@"c:\users\x\appdata\local\pitboard\");
-
-        Assert.AreEqual(@"C:\USERS\X\APPDATA\LOCAL\PITBOARD", key);
-        Assert.AreEqual(key, PitboardFfiMethods.WindowsRecordsKey(@"\\?\C:\Users\X\AppData\Local\Pitboard"));
     }
 }

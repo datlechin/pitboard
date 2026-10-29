@@ -27,7 +27,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
     private readonly CancellationTokenSource _withdrawn = new();
     private SheetPage? _page;
     private WindowAlert? _alert;
-    private string _tool = "";
+    private Tool _tool;
     private bool _filled;
     private SheetTool[]? _tools;
     private ulong? _failureShown;
@@ -212,12 +212,12 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
             ToolPicker.Items.Clear();
             foreach (var tool in text.Tools)
             {
-                var choice = new RadioButton { Content = tool.Name, Tag = tool.Code };
+                var choice = new RadioButton { Content = tool.Name, Tag = tool.Tool };
                 AutomationProperties.SetAutomationId(choice, $"sheet.tool.{tool.Code}");
                 ToolPicker.Items.Add(choice);
             }
 
-            ToolPicker.SelectedIndex = Array.FindIndex(text.Tools, tool => tool.Code == _tool);
+            ToolPicker.SelectedIndex = Array.FindIndex(text.Tools, tool => tool.Tool == _tool);
         }
 
         ToolPicker.IsEnabled = !text.Saving;
@@ -383,7 +383,7 @@ public sealed partial class AccountSheet : ContentDialog, IDisposable
 
     private void OnToolChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (ToolPicker.SelectedItem is RadioButton { Tag: string tool } && _page is SheetPage.Form form)
+        if (ToolPicker.SelectedItem is RadioButton { Tag: Tool tool } && _page is SheetPage.Form form)
         {
             // The picker is filled again when what is found changes, which picks the same tool.
             if (tool != _tool)

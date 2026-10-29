@@ -50,7 +50,7 @@ public sealed class TextSizeTests
                 {
                     AccountsShown = new AccountsShown.NoAccounts(
                         "No accounts", "Sign in to add one.",
-                        new Choice("Add account…", new Intent.PresentSheet(new Sheet.Add(Provider: null)), Enabled: true)),
+                        new Choice("Add account…", new Intent.PresentSheet(new Sheet.Add(Tool: null)), Enabled: true)),
                 })))),
         ];
 
