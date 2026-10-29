@@ -77,8 +77,8 @@ pub use present::{
 // carry it.
 pub use fixture::fixture_refusal;
 pub use present::{
-    GnomeShortcutWords, GnomeWords, Package, PackageRemoval, account_description, countdown,
-    gnome_words, package_removal, search,
+    GnomeShortcutWords, GnomeWords, OsRelease, Package, PackageRemoval, account_description,
+    countdown, gnome_words, package_removal, search,
 };
 pub use present::{QuickAction, QuickAsk, outside_refused};
 

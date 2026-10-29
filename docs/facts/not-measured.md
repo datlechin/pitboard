@@ -250,9 +250,9 @@ in a desktop's session. Not measured, each for the Linux session machines:
 - Whether Plasma's and the AppIndicator extension's `org.kde.StatusNotifierWatcher` has an owner
   by the time the session starts the autostart entry. A launch at sign-in waits 10 seconds for
   one, then ends where none came.
-- Whether the app runs on openSUSE Tumbleweed, as on Fedora. Its rpm installs there and zypper
-  removes it ([The RPM packages](linux-packages.md#the-rpm-packages)), but Uninstall names
-  `sudo dnf remove` alone for the rpm, and Tumbleweed has no dnf.
+- Whether the app runs on openSUSE Tumbleweed, which no session machine is. Its rpm installs
+  there, zypper removes it ([The RPM packages](linux-packages.md#the-rpm-packages)), and
+  Uninstall names zypper there ([GNOME's words](linux-app.md#gnomes-words)).
 - What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
   `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
   ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where

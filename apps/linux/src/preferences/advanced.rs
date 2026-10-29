@@ -172,10 +172,18 @@ pub fn take_back(host: Rc<dyn Host>) -> adw::AlertDialog {
     let stayed: Vec<String> = (removed.stayed.iter())
         .map(|(_, failed)| failed.0.clone())
         .collect();
-    let removal = pitboard_model::package_removal(config::PACKAGE, &stayed);
+    let removal = pitboard_model::package_removal(config::PACKAGE, &os_release(), &stayed);
     let alert = removal_alert(&removal);
     alert.connect_response(None, move |_, _| host.quit());
     alert
+}
+
+/// The system as GLib reads its os-release, which says whose package manager removes the rpm.
+pub fn os_release() -> pitboard_model::OsRelease {
+    pitboard_model::OsRelease {
+        id: glib::os_info("ID").map(String::from),
+        id_like: glib::os_info("ID_LIKE").map(String::from),
+    }
 }
 
 /// The alert saying `removal`, its command in a row beside a button that copies it.
@@ -211,4 +219,14 @@ pub fn removal_alert(removal: &PackageRemoval) -> adw::AlertDialog {
     alert.set_default_response(Some(QUIT));
     alert.set_close_response(QUIT);
     alert
+}
+
+#[cfg(test)]
+mod tests {
+    // Each image the checks run in names itself in os-release, which GLib reads unquoted.
+    #[test]
+    fn the_system_is_read_from_its_os_release() {
+        let id = super::os_release().id.expect("the image's ID");
+        assert!(!id.is_empty() && !id.contains('"'), "{id}");
+    }
 }

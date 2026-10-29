@@ -174,9 +174,15 @@ no word names one desktop's settings or another system's place
 - **A status item's menu entry** has a label and no subtitle (DBusMenu, [The status
   item](#the-status-item)), so an account's entry says its figure beside its name, as the
   Windows menu's does (`named_in_menu`).
-- **After Uninstall** the app names its package manager's command: `apt` for the deb and `dnf`
-  for the rpm (`package_removal`). Whether the rpm also serves openSUSE, whose `zypper` would
-  remove it, is [not measured](not-measured.md#the-linux-app-on-a-desktop).
+- **After Uninstall** the app names its package manager's command: `apt` for the deb, and for
+  the one rpm that serves Fedora and openSUSE, `dnf` where the system's `ID` or `ID_LIKE` names
+  `fedora` and `zypper` where it names `opensuse` or `suse`, the first of them that does
+  (`package_removal`). Elsewhere it names none. The app reads both from GLib's `g_get_os_info`,
+  which reads `/etc/os-release` (`os_release` in `preferences/advanced.rs`). Read on 30 October in
+  the images [The RPM packages](linux-packages.md#the-rpm-packages) installs on, through
+  PyGObject: GLib 2.86.5 on Fedora 43 gave `ID` `fedora` and no `ID_LIKE`, as Fedora 44's file
+  says too, and GLib 2.88.4 on Tumbleweed 20261020 `opensuse-tumbleweed` and `opensuse suse`,
+  each unquoted. zypper 1.14.101 removes the rpm there, and Tumbleweed has no dnf.
 
 ## Account windows
 

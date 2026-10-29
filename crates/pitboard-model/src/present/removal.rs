@@ -86,13 +86,19 @@ pub struct PackageRemoval {
     pub command: Option<String>,
 }
 
-// `stayed` is what the app could not take back of its own, each as its system said why. Whether
-// the rpm installs on openSUSE, whose `zypper` would remove it, is not measured
-// (docs/facts/not-measured.md).
-pub fn package_removal(package: Package, stayed: &[String]) -> PackageRemoval {
+// The system the app runs on, as its os-release names it: `ID`, and `ID_LIKE`, the ids of the
+// systems it is like, closest first.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OsRelease {
+    pub id: Option<String>,
+    pub id_like: Option<String>,
+}
+
+// `stayed` is what the app could not take back of its own, each as its system said why.
+pub fn package_removal(package: Package, system: &OsRelease, stayed: &[String]) -> PackageRemoval {
     let manager = match package {
         Package::Deb => Some("apt"),
-        Package::Rpm => Some("dnf"),
+        Package::Rpm => rpm_manager(system),
         Package::Unknown => None,
     };
     let then = match manager {
@@ -112,6 +118,19 @@ pub fn package_removal(package: Package, stayed: &[String]) -> PackageRemoval {
     }
 }
 
+// One rpm serves Fedora and openSUSE, whose package managers differ.
+fn rpm_manager(system: &OsRelease) -> Option<&'static str> {
+    [&system.id, &system.id_like]
+        .into_iter()
+        .flatten()
+        .flat_map(|ids| ids.split_whitespace())
+        .find_map(|id| match id {
+            "fedora" => Some("dnf"),
+            "opensuse" | "suse" => Some("zypper"),
+            _ => None,
+        })
+}
+
 // The app's package, then the command line's, which it depends on.
 const PACKAGES: &str = "pitboard-app pitboard";
 
@@ -119,9 +138,16 @@ const PACKAGES: &str = "pitboard-app pitboard";
 mod tests {
     use super::*;
 
+    fn fedora() -> OsRelease {
+        OsRelease {
+            id: Some("fedora".into()),
+            id_like: None,
+        }
+    }
+
     #[test]
     fn the_package_manager_removes_what_the_app_cannot() {
-        let deb = package_removal(Package::Deb, &[]);
+        let deb = package_removal(Package::Deb, &OsRelease::default(), &[]);
         assert_eq!(deb.title, "Remove the App");
         assert_eq!(
             deb.message,
@@ -132,19 +158,57 @@ mod tests {
             deb.command.as_deref(),
             Some("sudo apt remove pitboard-app pitboard")
         );
-        let rpm = package_removal(Package::Rpm, &[]);
+        let rpm = package_removal(Package::Rpm, &fedora(), &[]);
         assert_eq!(rpm.message, deb.message);
         assert_eq!(
             rpm.command.as_deref(),
             Some("sudo dnf remove pitboard-app pitboard")
         );
-        let unknown = package_removal(Package::Unknown, &[]);
+        let unknown = package_removal(Package::Unknown, &fedora(), &[]);
         assert_eq!(
             unknown.message,
             "Pitboard’s saved sign-ins and settings are deleted. Remove the app the way you \
              installed it."
         );
         assert_eq!(unknown.command, None);
+    }
+
+    // One rpm serves Fedora and openSUSE, whose os-release names it as Fedora 43's and
+    // Tumbleweed 20261020's do. Elsewhere the app names no package manager it cannot know.
+    #[test]
+    fn the_rpm_names_dnf_on_fedora_zypper_on_opensuse_and_neither_elsewhere() {
+        let tumbleweed = OsRelease {
+            id: Some("opensuse-tumbleweed".into()),
+            id_like: Some("opensuse suse".into()),
+        };
+        let other = OsRelease {
+            id: Some("other".into()),
+            id_like: Some("another".into()),
+        };
+        let on = |system: &OsRelease| package_removal(Package::Rpm, system, &[]);
+
+        assert_eq!(
+            on(&fedora()).command.as_deref(),
+            Some("sudo dnf remove pitboard-app pitboard")
+        );
+        assert_eq!(
+            on(&tumbleweed).command.as_deref(),
+            Some("sudo zypper remove pitboard-app pitboard")
+        );
+        for system in [other, OsRelease::default()] {
+            let elsewhere = on(&system);
+            assert_eq!(elsewhere.command, None, "{system:?}");
+            assert_eq!(
+                elsewhere.message,
+                package_removal(Package::Unknown, &system, &[]).message
+            );
+        }
+        assert_eq!(
+            package_removal(Package::Deb, &tumbleweed, &[])
+                .command
+                .as_deref(),
+            Some("sudo apt remove pitboard-app pitboard")
+        );
     }
 
     // The app takes back its own files in the person's home before it names the command, and
@@ -156,7 +220,7 @@ mod tests {
                 .to_owned(),
         ];
 
-        let deb = package_removal(Package::Deb, &stayed);
+        let deb = package_removal(Package::Deb, &OsRelease::default(), &stayed);
 
         assert_eq!(
             deb.message,
@@ -164,6 +228,9 @@ mod tests {
              /home/dana/.cache/com.usepitboard.Pitboard: Permission denied (os error 13). Remove \
              the app and its command line with this command in a terminal."
         );
-        assert_eq!(deb.command, package_removal(Package::Deb, &[]).command);
+        assert_eq!(
+            deb.command,
+            package_removal(Package::Deb, &OsRelease::default(), &[]).command
+        );
     }
 }
