@@ -760,6 +760,9 @@ pub(crate) struct Warming {
     pub(crate) failed: Option<String>,
     /// Why the core could not say which accounts are warmed up, until it can.
     pub(crate) unreadable: Option<String>,
+    // What a read found while a warm-up ran, shown once it is over: the core counts an attempt
+    // before its run, so meanwhile it says the account waits after one.
+    held: Option<Overview>,
 }
 
 impl Warming {
@@ -2842,11 +2845,25 @@ impl State {
     /// with why.
     fn warm_read(&mut self, warm: Result<Overview, PitboardError>) {
         match warm {
+            Ok(warm) if self.warm.running.is_some() => self.warm.held = Some(warm),
             Ok(warm) => {
                 self.warm.overview = Some(warm);
                 self.warm.unreadable = None;
             }
-            Err(PitboardError::Failed { message, .. }) => self.warm.unreadable = Some(message),
+            Err(PitboardError::Failed { message, .. }) => {
+                self.warm.held = None;
+                self.warm.unreadable = Some(message);
+            }
+        }
+    }
+
+    // What a read found during the warm-up just over, unless the next has started and says it.
+    fn warm_over(&mut self) {
+        if let Some(held) = self.warm.held.take()
+            && self.warm.running.is_none()
+        {
+            self.warm.overview = Some(held);
+            self.warm.unreadable = None;
         }
     }
 
@@ -2941,6 +2958,7 @@ impl State {
                 self.warm_later(now);
             }
         }
+        self.warm_over();
     }
 
     /// A change to which accounts are warmed up, or when, is over: what the core says of each
@@ -2948,6 +2966,7 @@ impl State {
     fn warm_set(&mut self, done: Result<Overview, PitboardError>, now: Now, jobs: &mut Vec<Job>) {
         match done {
             Ok(overview) => {
+                self.warm.held = None;
                 self.warm.overview = Some(overview);
                 self.warm_tick(now, jobs);
             }
@@ -3278,6 +3297,7 @@ impl State {
                 // Whether it warmed anything up is not known; the next ask finds out.
                 Job::WarmUp | Job::WarmNow { .. } => {
                     self.warm.running = None;
+                    self.warm_over();
                     self.warm_later(now);
                 }
                 Job::SetWarm { .. } | Job::SetWarmRange { .. } => {
