@@ -1,0 +1,97 @@
+---
+title: "The app on Linux"
+sidebarTitle: "App on Linux"
+description: "Look up the app on Linux: its window, tray icon, notifications, start at login, search and keyboard shortcuts."
+---
+
+The app on Linux runs on GNOME and KDE Plasma, with GTK 4.18 and libadwaita 1.7 or later: Debian 13, Ubuntu 26.04 and Fedora 43 or later. It does what [the menu bar app](/reference/mac-app) does, in GNOME's words, and has no Claude Desktop accounts. This page gives where it differs.
+
+Its windows are the Pitboard window and its dialogs: **Preferences**, the [welcome](#welcome), **Open Link**, **Keyboard Shortcuts** and **About Pitboard**. The first time Pitboard runs, the welcome opens over its window. Opened while it runs, Pitboard brings its window to the front.
+
+Closing the window depends on whether the desktop shows Pitboard's [tray icon](#tray-icon):
+
+| The desktop | Closing the window |
+| --- | --- |
+| Shows the tray icon | Hides the window. Pitboard keeps running until **Quit** in the icon's menu, or Ctrl+Q. |
+| Shows no tray icon, as GNOME does without an extension | Quits Pitboard. Turned on, [Watch in the Background](#watch-in-the-background) keeps switching and warming up. |
+
+## Window
+
+The window's header bar holds **Add Account…**, **Refresh**, the main menu, and when Pitboard last read the accounts, such as **Updated 7:08 AM**. It opens on **Accounts**, at the size it had when you last closed it.
+
+**Accounts** lists what the menu bar app's [Accounts window](/reference/mac-app#accounts-window) lists, without Claude Desktop. Each account is a group headed by its name, with its tool and plan, **In Use** or its button, and a menu of its other commands. Its rows are each limit with its bar, then its email address, sign-in and warm-up. [Notices](/reference/mac-app#notices) and [setup tips](/reference/mac-app#setup-tips) come before the accounts.
+
+The main menu holds **Open Link…**, **Diagnostics** and **Activity**, then **Preferences**, **Keyboard Shortcuts**, **Help** and **About Pitboard**. **Diagnostics** and **Activity** open over **Accounts**, with a back button. They show what the menu bar app's [Diagnostics window](/reference/mac-app#diagnostics-window) and [Activity window](/reference/mac-app#activity-window) show, and each reads again every time it opens.
+
+**Open Link…** takes a link pasted with **Paste Link**, or dropped on the window or on **Open Link**, and opens it in your browser. The app on Linux has no [account windows](/reference/account-windows).
+
+## Welcome
+
+The welcome lists what the menu bar app's [welcome window](/reference/mac-app#welcome-window) lists, without Claude Desktop. It says whether Pitboard keeps running once its window is closed. A dialog that **Sign In…** or **Add…** opens comes up over it. **Start Pitboard at Login** starts off. **Continue**, Escape and its close button each close it and show **Accounts**. It does not open again.
+
+## Tray icon
+
+Pitboard shows an icon where the desktop keeps a tray of status icons, as KDE Plasma does. GNOME keeps one only with an extension, such as AppIndicator. The icon comes and goes as the tray does, while Pitboard runs.
+
+The icon shows how much of a limit is used, as [the icon on Windows](/reference/windows-app#icon-in-the-notification-area) does, with a mark of its own while something needs attention. A click opens the Pitboard window, and a right-click opens its menu:
+
+1. **Open Pitboard**.
+2. The notices the menu bar app's menu lists.
+3. The accounts, under each tool's name, a dot on the account in use, each with the percentage the [menu bar item](/reference/mac-app#menu-bar-item) would show for it.
+4. **Add Account…** and **Refresh**.
+5. **Preferences** and **Help**.
+6. **Quit**.
+
+## Preferences
+
+**Preferences** has the pages **General**, **Limits** and **Advanced**. They hold what [Settings](/reference/settings) holds on macOS, with these differences.
+
+| Page | Control | What differs |
+| --- | --- | --- |
+| **General** | **Start Pitboard at Login** | Turned on, it starts Pitboard with no window each time you log in, as [Start at login](#start-at-login) says. |
+| **Limits** | **From** and **To** | Each steps a quarter hour at a time, with its buttons or the arrow keys. You cannot type a time. |
+| **Advanced** | **Watch in the Background** | Listed only while the desktop shows no tray icon, as [Watch in the background](#watch-in-the-background) says. |
+| **Advanced** | **Uninstall Pitboard…** | Once Pitboard's data is deleted, it removes the app's own files from your home and shows the command that removes the app, as [Uninstall](#uninstall) says. |
+
+**General** has no **Notifications**, **Menu Bar Shows** or **Updates**. Your package manager updates the app.
+
+### Start at login
+
+Pitboard starts at login through an autostart entry, `~/.config/autostart/com.usepitboard.Pitboard.desktop`. The entry starts Pitboard only while the app is installed. If Pitboard cannot write or remove it, the reason shows under the setting.
+
+### Watch in the background
+
+While the desktop shows no tray icon, nothing of Pitboard runs once its window is closed. **Watch in the Background** has your system's service manager run [the watch service](/reference/account-commands#the-watch-service) from each login. It switches Claude Code at the share **Limits** had when you turned it on, which the setting says, and warms up the accounts **Warm-Up** turns on.
+
+### Uninstall
+
+**Uninstall Pitboard…** asks first, then deletes Pitboard's saved sign-ins and settings, as on macOS. The app then turns off **Start Pitboard at Login** and removes its own folders, `~/.local/share/com.usepitboard.Pitboard` and `~/.cache/com.usepitboard.Pitboard`.
+
+A dialog then names the command that removes the app and the command line, such as `sudo apt remove pitboard-app pitboard`, with **Copy** beside it. **Quit** closes Pitboard.
+
+## Notifications
+
+The app posts the notifications the [menu bar app](/reference/mac-app#notifications) lists, with the same titles and bodies. The button of **5-Hour Limit Almost Reached** names the account, such as **Switch to personal**. Selecting a notification opens what it opens on macOS.
+
+## Search
+
+While Pitboard runs, GNOME's search and KRunner find **Switch to work** for each account, and **Add Account…**. A word of an account's name finds it. Choosing a switch switches with no window, as [a Jump List switch](/reference/windows-app#jump-list) does on Windows. Neither starts Pitboard.
+
+The app's launcher offers **Add Account…** and **Refresh**, which start Pitboard if it is not running.
+
+## Keyboard shortcuts
+
+**Keyboard Shortcuts** in the main menu lists them.
+
+| Keys | Where | What it does |
+| --- | --- | --- |
+| Ctrl+N | The Pitboard window | **Add Account…** |
+| Ctrl+R | The Pitboard window | **Refresh** |
+| Ctrl+Comma | The Pitboard window | Opens **Preferences** |
+| Ctrl+? | The Pitboard window | Opens **Keyboard Shortcuts** |
+| F10 | The Pitboard window | Opens the main menu |
+| Alt+Left, or Escape | **Diagnostics** and **Activity** | Goes back to **Accounts** |
+| Ctrl+W | The Pitboard window | Closes it |
+| Ctrl+Q | The Pitboard window | **Quit** |
+| Enter | A dialog | Its default button, **Cancel** in **Uninstall Pitboard?** |
+| Escape | A dialog | **Cancel**, or closes it |

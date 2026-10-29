@@ -60,9 +60,8 @@ Two exceptions to one rule make a table.
 
 ## Systems
 
-The command line runs on macOS, Windows and Linux, and the app on macOS and Windows. Pitboard
-switches Claude Desktop on macOS only. Pitboard for Windows is in beta, and only the install
-pages say so.
+The command line and the app run on macOS, Windows and Linux. Pitboard switches Claude Desktop
+on macOS only. Pitboard for Windows is in beta, and only the install pages say so.
 
 - Write what every system shares once. A difference on one system is an exception, in its own
   sentence or paragraph that starts with the system: "On Windows, the directory is

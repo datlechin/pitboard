@@ -242,3 +242,7 @@ in a desktop's session. Not measured, each for the Linux session machines:
   whether the window comes to the front for a result GNOME Shell activates, which carries a
   timestamp and no activation token, and for one KRunner 6.17 or later runs after setting its
   token.
+- What Plasma sets for a 12 or 24 hour clock, and whether a Plasma session also sets GNOME's
+  `org.gnome.desktop.interface` `clock-format`, the one choice the app reads
+  ([Decisions and what they rest on](linux-app.md#decisions-and-what-they-rest-on)). Where
+  nothing sets it, the app says 24 hour times, the schema's default, whatever Plasma shows.
