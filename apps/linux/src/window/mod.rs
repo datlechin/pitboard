@@ -9,9 +9,16 @@
 //! running, and quits Pitboard where none does. It keeps its size in the app's data folder, and
 //! tells the model it was looked at each time it maps.
 
+mod account_group;
+mod accounts;
 mod accounts_page;
+mod limit_row;
+mod notices;
 
+pub use account_group::AccountGroup;
 pub use accounts_page::AccountsPage;
+pub use limit_row::{LimitRow, level_name};
+pub use notices::NoticeRow;
 
 use std::cell::OnceCell;
 use std::rc::Rc;
@@ -274,6 +281,10 @@ mod tests {
             Some("status"),
             "nothing read yet"
         );
+        let host: Rc<dyn Host> = Rc::new(Shows(DataFolder::at(scratch.path())));
+        let _ = AccountGroup::new(host.clone());
+        let _ = LimitRow::default();
+        let _ = NoticeRow::new(host);
         window.destroy();
     }
 }

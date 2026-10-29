@@ -610,6 +610,40 @@ then dark by `AdwStyleManager`. Measured in Ubuntu 26.04's image:
   text and the symbolic icons are drawn at that scale, with edges a pixel wide, not enlarged
   from 1x (looked at in `linux-accounts-noTool-dark.png`).
 
+## The accounts page
+
+Read at GTK 4.18.6 and libadwaita 1.7.0, and measured in Ubuntu 26.04's image, GTK 4.22.4 and
+libadwaita 1.9, by the tests named:
+
+- A `GtkLevelBar`'s filled block takes, as a style class, the name of the first offset its value
+  is at or under (`update_level_style_classes`, `gtk/gtklevelbar.c` at 4.18.6). So a limit's bar
+  has one offset, at its whole, named for the step the model says the limit is at, and the app's
+  style sheet tints `plenty`, `low` and `out` with libadwaita's accent, warning and error colours.
+  GTK's own three offsets, which follow the value, are taken off
+  (`each_account_shows_its_limits_with_their_level`).
+- `AdwPreferencesPage` adds a group only at its end, and `AdwPreferencesGroup` a row only at
+  its end, at 1.7: `adw_preferences_group_bind_model` and `adw_preferences_group_get_row` are
+  1.8's (libadwaita-rs 0.9.2 gates both on `v1_8`). So the notices are a `boxed-list`
+  `GtkListBox` bound to the store's list model inside their group, and where an account comes in
+  between others, the groups after it are added again behind it.
+- `AdwPreferencesGroup`'s title and description are markup (`use-markup` is set on both labels
+  in `src/adw-preferences-group.ui` at 1.7.0), so the app escapes what it puts in them.
+- Over AT-SPI a group is a `Grouping` named by its title, which its label names it by whatever
+  label it is given. A `GtkButton` with a label is named by it the same way, so the button a
+  group's header shows takes the model's spoken words only once that relation is reset: until
+  then it was named "Switch"
+  (`the_account_in_use_says_so_and_another_offers_its_button`).
+- A view-more `GtkMenuButton`'s popover lists the group's actions over AT-SPI in the menu's order
+  once its toggle is clicked (`an_accounts_other_actions_are_in_its_menu`).
+- GTK has no label that counts down by itself, as SwiftUI's timer text does, so a notice's row
+  asks the model for its countdown's words each second while it is shown, and stops at nought.
+- An `AdwDialog`'s default, which Return activates through the `default.activate` action
+  (`src/adw-dialog.c` at 1.7.0), is a `GtkButton`, which GTK activates only once it is realized:
+  an alert's buttons were realized a frame after the alert was mapped
+  (`a_question_answers_with_its_default_and_close_responses`).
+- Drawn beside another, a picture's window lost the focus to it between its two drawings, which
+  dimmed its header bar, so the pictures are drawn one at a time (`.config/nextest.toml`).
+
 ## The icons
 
 - GNOME's app icon guidelines (developer.gnome.org/hig, App Icons) draw on a 128 px canvas

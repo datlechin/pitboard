@@ -39,6 +39,12 @@ linux-app = { max-threads = 1 }
 filter = "binary_id(pitboard-linux::ui)"
 test-group = "linux-app"
 
+# A picture is drawn twice and held the same, and a window drawn beside another loses the focus
+# to it between the two, which dims its header bar.
+[[profile.default.overrides]]
+filter = "binary_id(pitboard-linux::pictures)"
+test-group = "linux-app"
+
 [[profile.default.overrides]]
 filter = """
 (binary_id(pitboard-core) & (test(/^host::windows::credman::/) | test(/^provider::claude::credman::/)))

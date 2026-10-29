@@ -1,0 +1,14 @@
+/* What libadwaita has no style of its own for, which AdwApplication loads from the resource.
+   A limit's bar is tinted for the step the model says the limit is at: its filled block takes
+   the name of the bar's one offset (window/limit_row.rs). */
+levelbar block.plenty {
+  background-color: var(--accent-bg-color);
+}
+
+levelbar block.low {
+  background-color: var(--warning-bg-color);
+}
+
+levelbar block.out {
+  background-color: var(--error-bg-color);
+}

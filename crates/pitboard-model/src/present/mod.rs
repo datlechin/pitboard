@@ -49,10 +49,10 @@ pub(crate) mod testing;
 
 pub use app_words::{
     AccountWindowWords, ActivityWords, AppWords, GnomeShortcutWords, GnomeWords, MacMenuBarWords,
-    MenuWords, SettingsWords, SheetWords, WindowWords, WindowsNotificationAreaWords, already_there,
-    app_words, gnome_words, install_update, links_to, mac_menu_bar_words, named_version,
-    path_too_long, ready_to_install, still_switching, trash_says, usage_of,
-    webview_runtime_too_old, windows_notification_area_words,
+    MenuWords, SettingsWords, SheetWords, WindowWords, WindowsNotificationAreaWords,
+    account_description, already_there, app_words, countdown, gnome_words, install_update,
+    links_to, mac_menu_bar_words, named_version, path_too_long, ready_to_install, still_switching,
+    trash_says, usage_of, webview_runtime_too_old, windows_notification_area_words,
 };
 pub use checks::{CheckGroup, CheckLine, ChecksShown};
 #[cfg(test)]

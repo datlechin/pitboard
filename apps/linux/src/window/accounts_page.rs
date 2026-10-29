@@ -1,6 +1,6 @@
 //! The accounts page: what the model's `AccountsShown` says stands in place of the list, each on
-//! a status page with its one button, and the list. While nothing has been read, the status
-//! page's spinner says so.
+//! a status page with its one button, and the list, which [`super::accounts`] keeps. While
+//! nothing has been read, the status page's spinner says so.
 
 use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
@@ -11,6 +11,7 @@ use gtk::glib;
 use pitboard_model::{AccountsShown, Choice, Part};
 
 use super::Host;
+use super::accounts::Accounts;
 use crate::shown::Shown;
 
 // What the status page's button does.
@@ -32,7 +33,16 @@ mod imp {
         pub(super) status: TemplateChild<adw::StatusPage>,
         #[template_child]
         pub(super) status_action: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub(super) list: TemplateChild<adw::PreferencesPage>,
+        #[template_child]
+        pub(super) notices_group: TemplateChild<adw::PreferencesGroup>,
+        #[template_child]
+        pub(super) notices: TemplateChild<gtk::ListBox>,
+        #[template_child]
+        pub(super) tip: TemplateChild<adw::PreferencesGroup>,
         pub(super) host: OnceCell<Rc<dyn Host>>,
+        pub(super) accounts: OnceCell<Rc<Accounts>>,
         pub(super) does: RefCell<Option<Does>>,
     }
 
@@ -80,7 +90,16 @@ impl AccountsPage {
     }
 
     pub(super) fn follow(&self, shown: &Shown, host: Rc<dyn Host>) {
-        let _ = self.imp().host.set(host);
+        let imp = self.imp();
+        let _ = imp.host.set(host.clone());
+        let accounts = Accounts::follow(
+            &imp.list,
+            (&imp.notices_group, &imp.notices),
+            &imp.tip,
+            shown,
+            host,
+        );
+        let _ = imp.accounts.set(accounts);
         self.show(&shown.snapshot().accounts_shown);
         let page = self.downgrade();
         shown.connect_changed(Part::AccountsShown, move |shown| {

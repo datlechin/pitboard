@@ -101,6 +101,13 @@ pub(crate) fn nameless_login(unusable: bool) -> &'static str {
     }
 }
 
+// "Claude Code, Team 5x": the tool an account is for, where it is named, and its plan, as the
+// Linux app says them under the account's name.
+pub(crate) fn tool_and_plan(tool: Option<&str>, plan: Option<&str>) -> Option<String> {
+    let said: Vec<&str> = tool.into_iter().chain(plan).collect();
+    (!said.is_empty()).then(|| said.join(", "))
+}
+
 // "work, Team 5x, in use", as VoiceOver and Narrator say a row; `sign_in` what stops a switch.
 pub(crate) fn row_spoken(
     name: &str,

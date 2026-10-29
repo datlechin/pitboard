@@ -140,11 +140,24 @@ fn hold_still(widget: &gtk::Widget) {
     }
 }
 
+// The app's style sheet, which AdwApplication loads from the resource as the app starts, and
+// which a window drawn here has no application to load it.
+fn styled() {
+    let css = gtk::CssProvider::new();
+    css.load_from_resource(&format!("{}/style.css", pitboard_linux::resources::BASE));
+    gtk::style_context_add_provider_for_display(
+        &gtk::gdk::Display::default().expect("headless.sh's display"),
+        &css,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+}
+
 /// The window over the fixture `world`, as the model shows it once `shows` holds, light and
 /// dark, saved as `linux-accounts-<state>`.
 fn picture(world: &str, state: &str, start: bool, shows: impl Fn(&AccountsShown) -> bool) {
     adw::init().unwrap();
     pitboard_linux::resources::register();
+    styled();
     gtk::Settings::default()
         .unwrap()
         .set_gtk_enable_animations(false);
@@ -237,5 +250,26 @@ fn accounts_no_accounts() {
 fn accounts_read_failed() {
     picture("readFailure", "readFailed", true, |shown| {
         matches!(shown, AccountsShown::ReadFailed { .. })
+    });
+}
+
+#[gtk::test]
+fn accounts_two_tools() {
+    picture("twoTools", "twoTools", true, |shown| {
+        matches!(shown, AccountsShown::List)
+    });
+}
+
+#[gtk::test]
+fn accounts_notices() {
+    picture("stuck", "notices", true, |shown| {
+        matches!(shown, AccountsShown::List)
+    });
+}
+
+#[gtk::test]
+fn accounts_setup() {
+    picture("onlyOne", "setup", true, |shown| {
+        matches!(shown, AccountsShown::List)
     });
 }

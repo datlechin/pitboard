@@ -484,6 +484,25 @@ impl Screen {
         None
     }
 
+    /// Every one of the app's objects that `matches`, in the order of its tree.
+    pub(crate) fn every(&self, matches: impl Fn(&Seen) -> bool) -> Vec<Seen> {
+        let mut found = Vec::new();
+        let Some(app) = self.app() else {
+            return found;
+        };
+        let mut next = self.children(&app.at);
+        next.reverse();
+        while let Some(at) = next.pop() {
+            if let Some(seen) = self.seen(&at)
+                && matches(&seen)
+            {
+                found.push(seen);
+            }
+            next.extend(self.children(&at).into_iter().rev());
+        }
+        found
+    }
+
     /// The first of the app's objects that `matches`, once it shows one: the app's whole tree
     /// said where none does.
     pub(crate) fn waits_for(&self, what: &str, matches: impl Fn(&Seen) -> bool) -> Seen {

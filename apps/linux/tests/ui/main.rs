@@ -5,8 +5,11 @@
 //! widget by, so they run on Ubuntu 26.04 (`check.sh ui`).
 #![cfg(target_os = "linux")]
 
+mod accounts;
 mod actions;
 mod harness;
 mod launch;
 mod lifecycle;
+mod questions;
+mod views;
 mod words;

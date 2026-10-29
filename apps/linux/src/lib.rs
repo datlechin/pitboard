@@ -16,6 +16,7 @@
 pub mod application;
 pub mod config;
 pub mod data_folder;
+pub mod dialogs;
 pub mod launch;
 pub mod listener;
 pub mod local_time;

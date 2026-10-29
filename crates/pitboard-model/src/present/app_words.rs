@@ -1,8 +1,8 @@
 // Every control and sentence the apps draw on their own: what every front draws, in its case,
 // and what one front alone draws, in that front's own catalogue.
 
-use super::SetupLink;
 use super::words::{self, titled};
+use super::{AccountItem, AccountSection, PanelNotice, SetupLink};
 use crate::Front;
 use pitboard_core::provider::ProviderId;
 
@@ -617,6 +617,20 @@ pub fn gnome_words() -> GnomeWords {
 
 const KEYBOARD_SHORTCUTS: &str = "Keyboard Shortcuts";
 
+/// What the Linux app says under an account's name, its group being the account's own: the
+/// tool it is for, where accounts of more than one are shown, and its plan.
+pub fn account_description(section: &AccountSection, item: &AccountItem) -> Option<String> {
+    words::tool_and_plan(section.heading.as_deref(), item.plan.as_deref())
+}
+
+/// What a notice's countdown says at `now`, in epoch seconds, as the other apps' timers draw
+/// it: its label, then minutes and seconds, hours first from an hour on, and nought once the
+/// moment has passed. `None` for a notice with nothing to count down to.
+pub fn countdown(notice: &PanelNotice, now: i64) -> Option<String> {
+    let (until, label) = (notice.until?, notice.until_label.as_deref()?);
+    Some(words::counting_down(label, until - now))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1042,6 +1056,70 @@ mod tests {
                 quit: "Quit".into(),
             }
         );
+    }
+
+    // GNOME has no timer a label draws itself, so the Linux app is told what one would say.
+    #[test]
+    fn the_linux_app_is_told_an_accounts_tool_and_plan_and_what_a_countdown_says() {
+        use crate::present::testing::{Utc, account, read, status};
+        let state = read(
+            status(vec![account(Some("work")).signed_in().build()], vec![]),
+            vec![ProviderId::Claude],
+        );
+        let shown = crate::present::present_on(Front::Gnome, &state, 0, &Utc);
+        let item = shown.sections[0].accounts[0].clone();
+        let section = |heading: Option<&str>| AccountSection {
+            heading: heading.map(str::to_owned),
+            accounts: vec![],
+            ..shown.sections[0].clone()
+        };
+        let on = |plan: Option<&str>| AccountItem {
+            plan: plan.map(str::to_owned),
+            ..item.clone()
+        };
+        assert_eq!(
+            account_description(&section(Some("Claude Code")), &on(Some("Team 5x"))).as_deref(),
+            Some("Claude Code, Team 5x")
+        );
+        assert_eq!(
+            account_description(&section(None), &on(Some("Max 20x"))).as_deref(),
+            Some("Max 20x")
+        );
+        assert_eq!(
+            account_description(&section(Some("Codex")), &on(None)).as_deref(),
+            Some("Codex")
+        );
+        assert_eq!(account_description(&section(None), &on(None)), None);
+
+        let notice = PanelNotice {
+            id: "switch/claude".into(),
+            severity: crate::Severity::Info,
+            spoken_severity: "Note".into(),
+            title: "Switched to work".into(),
+            lines: vec![],
+            until: Some(10_000),
+            until_label: Some("Sessions already open follow in".into()),
+            actions: vec![],
+            learn: None,
+        };
+        let said: Vec<_> = [10_000 - 33, 10_000 - 3_725, 10_000, 10_001]
+            .into_iter()
+            .map(|now| countdown(&notice, now))
+            .collect();
+        assert_eq!(
+            said,
+            [
+                Some("Sessions already open follow in 0:33".to_owned()),
+                Some("Sessions already open follow in 1:02:05".into()),
+                Some("Sessions already open follow in 0:00".into()),
+                Some("Sessions already open follow in 0:00".into()),
+            ]
+        );
+        let none = PanelNotice {
+            until: None,
+            ..notice
+        };
+        assert_eq!(countdown(&none, 0), None);
     }
 
     // A spinner says nothing on screen, so each system's screen reader is told what it waits for.

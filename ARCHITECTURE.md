@@ -195,15 +195,16 @@ The apps:
   - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
     launch starts anything (`launch.rs`), the one held GApplication the primary instance runs
     over the model (`application.rs`), the snapshots on the main loop and kept by part
-    (`listener.rs`, `shown.rs`), the window (`window/`), the status item's face and menu and the
-    searches' results (`presence.rs`), the app's only actions on the bus (`outside.rs`), the
-    model's notices, clock and the app's own folder (`notices.rs`, `local_time.rs`,
-    `data_folder.rs`), what the program carries in its GResource (`resources.rs`), and the
-    desktop's services the app speaks for the model, the status item among them, with a
-    fixture's stand-ins for them, and what it answers GNOME's search and KRunner
-    (`platform/`).
+    (`listener.rs`, `shown.rs`), the window and its accounts page (`window/`), its dialogs
+    (`dialogs/`), the status item's face and menu and the searches' results (`presence.rs`),
+    the app's only actions on the bus (`outside.rs`), the model's notices, clock and the app's
+    own folder (`notices.rs`, `local_time.rs`, `data_folder.rs`), what the program carries in
+    its GResource (`resources.rs`), and the desktop's services the app speaks for the model, the
+    status item among them, with a fixture's stand-ins for them, and what it answers GNOME's
+    search and KRunner (`platform/`).
   - `tests/ui/`, `tests/pictures/`: the UI tests, which drive the built program in a fixture
-    over D-Bus and AT-SPI, and the pictures of each surface, drawn in-process.
+    over D-Bus and AT-SPI and the window in their own process over a fixture's model, and the
+    pictures of each surface, drawn in-process.
   - `data/`: what Meson installs: the launcher, the D-Bus service, the metainfo with the
     script that writes its releases from `CHANGELOG.md`, GNOME Shell's search provider,
     KRunner's runner and the icons; and the GResource `build.rs` compiles for the program, with
@@ -669,6 +670,13 @@ keeps it is in the header of the module named.
 - The Linux app's `Shown` keeps a snapshot by part by the same rule, compares none, and keeps a
   row's object while its id is shown (`a_snapshot_based_on_the_one_shown_updates_only_its_parts`,
   `a_snapshot_not_newer_is_dropped`, `a_row_keeps_its_object_across_snapshots`).
+- The Linux window shows each account's limits in the model's words, each bar tinted by the
+  step the model says the limit is at, and holds no threshold of its own
+  (`each_account_shows_its_limits_with_their_level`). What the model asks a question for, an
+  account's action or a notice's button, asks it first as an Adwaita alert, which answers with
+  the model's default and closes as Cancel
+  (`a_notices_buttons_send_their_intents_asking_first_where_it_says`,
+  `a_question_answers_with_its_default_and_close_responses`).
 - In a fixture the Linux app writes, posts and registers nothing outside the fixture's folder,
   and leaves every home it was given as it found it, beside Mesa's shader cache
   (`a_fixture_writes_nothing_outside_its_folder`,

@@ -10,5 +10,9 @@
     <file>dbus/org.kde.krunner1.xml</file>
     <file>ui/window.ui</file>
     <file>ui/accounts-page.ui</file>
+    <file>ui/account-group.ui</file>
+    <file>ui/limit-row.ui</file>
+    <file>ui/notice-row.ui</file>
+    <file>style.css</file>
   </gresource>
 </gresources>

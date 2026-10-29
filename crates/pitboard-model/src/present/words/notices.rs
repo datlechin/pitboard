@@ -44,6 +44,18 @@ pub(crate) fn sessions_follow_in(tool: Option<&str>) -> String {
     }
 }
 
+// "Sessions already open follow in 0:31": `label`, then the time `left` in seconds as a timer
+// draws it, hours first from an hour on, and nought once it has passed.
+pub(crate) fn counting_down(label: &str, left: i64) -> String {
+    let left = left.max(0);
+    let (hours, minutes, seconds) = (left / 3600, left % 3600 / 60, left % 60);
+    if hours > 0 {
+        format!("{label} {hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{label} {minutes}:{seconds:02}")
+    }
+}
+
 // The tool is named in the title above it, and a file behind its store in Clean Up's notice.
 pub(crate) fn follows(adoption: &pitboard_core::provider::Adoption) -> String {
     use pitboard_core::provider::Adoption;
