@@ -692,6 +692,27 @@ docker run --rm --user 1000:1000 --network none -v "$PWD":/src -w /src \
       --target aarch64-unknown-linux-musl'
 ```
 
+`gh workflow run linux-facts.yml --ref <branch>` measures, on `ubuntu-26.04` and
+`ubuntu-26.04-arm`, what Pitboard rests on in Linux and no test shows, with
+`.github/scripts/linux-runner-facts.sh`: a throwaway user's own systemd running a `pitboard`
+built as a release builds it, inotify on four file systems, the process names of npm's `claude`
+and `codex` with the stand-in in their place, and headless mutter in Ubuntu 26.04's image. No pull request runs it on its own: one that
+changes the script dispatches it on its branch and names the run. What a run measured goes in
+`docs/facts/linux-runners.md` once it is read.
+
+The display parts also run in Docker, packages while the image builds and the rest as the user
+they made, with no network:
+
+```sh
+docker build -t pitboard-linux-display -f - .github/scripts <<'EOF'
+FROM docker.io/library/ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd
+COPY linux-runner-facts.sh /opt/
+RUN sh /opt/linux-runner-facts.sh display-setup --out /report/display.json
+EOF
+docker run --rm --user pbfacts --network none pitboard-linux-display sh -c \
+  'sh /opt/linux-runner-facts.sh display --out /report/display.json && cat /report/display.json'
+```
+
 ## Tool registers
 
 Each tool's register is `crates/pitboard-core/src/provider/<tool>/assumptions.rs`: what

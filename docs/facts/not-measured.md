@@ -131,17 +131,20 @@ These were not measured. Each says what Pitboard does where it cannot know.
 - A running user manager. `host/linux/systemd.rs` was tested against a stand-in served on
   a private socket in a test's own folder, never against systemd: whether systemd's private
   socket takes zbus 5.19's peer to peer handshake, `UnitPath` and `Environment` as a running
-  manager answers them, a refused start and its restore, a service skipped by its condition, and
-  `uninstall`. Until a run on a machine with systemd measures them, Pitboard does what systemd
-  262's source says ([linux.md](linux.md#the-users-systemd)).
+  manager answers them, a refused start and its restore, a mask made before an install, a
+  service skipped by its condition, and `uninstall`. `linux-facts.yml`'s `user-manager` job
+  measures each on GitHub's Ubuntu 26.04 runners, with a throwaway user's lingering manager.
+  Until a run is read, Pitboard does what systemd 262's source says
+  ([linux.md](linux.md#the-users-systemd)).
 - A timer across suspend: whether a calendar timer that came due while the computer slept runs
   once it wakes, as systemd.timer(5) says, and how late `RandomizedDelaySec=` makes that run.
   Renewal renews only what is due, so a run late or one more changes nothing else.
 - The watch service's `PATH`. A user manager gives its services `default_user_PATH()`, the
   system's own `bin` folders (`src/basic/path-util.h` at `v262`), and `environment.d` can add
-  to it. Whether that `PATH` finds `claude` and `codex` where people install them, such as
-  `~/.local/bin`, is not measured. The watch service looks for each tool only on the `PATH` it
-  was given.
+  to it. `linux-facts.yml`'s `user-manager` job reads the `PATH` a lingering manager gives the
+  watch service on Ubuntu 26.04. Whether that `PATH` finds `claude` and `codex` where people
+  install them, such as `~/.local/bin`, is not measured. The watch service looks for each tool
+  only on the `PATH` it was given.
 - The Secret Service of any provider but gnome-keyring 48.0 in a container: KDE's ksecretd,
   oo7-daemon and KeePassXC's, whether each names a default collection and replaces an item by
   its attributes, and what each answers locked. Pitboard asks each what the specification says,
@@ -163,3 +166,19 @@ These were not measured. Each says what Pitboard does where it cannot know.
   ([linux.md](linux.md#the-graphical-sessions-target)). Renewal runs then as any scheduled run
   does: refused, it keeps the refusal, and the next run tries again. The Linux session machines
   measure it, under a lingering user manager too, before and after the first sign-in.
+- How `/proc` names npm's `claude` and `codex` on x86_64 and on GitHub's runners:
+  `linux-facts.yml`'s `installs` job starts the stand-in in the place of each program, as Docker
+  on the Mac did on arm64 ([linux.md](linux.md#the-tools-processes)). What either tool
+  does to its own name once it runs is measured only on the Linux session machines, since
+  nothing else runs them. Pitboard finds a tool's process by its `comm` alone.
+- The process names of the programs Homebrew's Linux casks install, which no script installs
+  ([linux.md](linux.md#homebrew-on-linux)). Each cask links its program into
+  `$HOMEBREW_PREFIX/bin` under the tool's own name.
+- inotify on ext4, btrfs and NFS. `linux-facts.yml`'s `inotify` job watches Pitboard's save of
+  `state.json` on the runner's own disk, a loop-mounted btrfs and an NFS export mounted on the
+  loopback, where a save in the exported folder stands for another machine's. Only a container's
+  tmpfs was measured ([linux.md](linux.md#inotify)). 9p, which WSL's Windows drives use, is
+  measured nowhere: no runner mounts one.
+- Headless mutter on GitHub's runners, x86_64 and arm64, in Ubuntu 26.04's image:
+  `linux-facts.yml`'s `display` job measures what Docker on the Mac measured
+  ([linux.md](linux.md#the-headless-display)).

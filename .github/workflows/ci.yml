@@ -178,7 +178,8 @@ jobs:
           .github/scripts/core-unchanged.sh .github/scripts/release-kind.sh
           .github/scripts/windows-versions.sh .github/scripts/windows-update-key.sh
           .github/scripts/windows-update-sign.sh .github/scripts/session-gate.sh
-          .github/scripts/test-in-fresh-homes.sh apps/macos/scripts/build-number.sh
+          .github/scripts/test-in-fresh-homes.sh .github/scripts/linux-runner-facts.sh
+          apps/macos/scripts/build-number.sh
       - env:
           TEST_INSTALL_SHELLS: ${{ matrix.shells }}
         run: python3 .github/scripts/test-install.py
@@ -1118,12 +1119,13 @@ jobs:
           if ($found) { exit 1 }
       # The update key rehearsal ships bundles that really do update themselves, so it must
       # never be able to reach the real key, the real certificate or the real feed.
-      # windows-facts.yml runs on whatever branch it is dispatched on, and its session job ships
-      # a bundle off the runner. A workflow that never names secrets cannot be handed one, and
-      # that is worth knowing on the pull request that changes it rather than the month after.
+      # windows-facts.yml and linux-facts.yml run on whatever branch they are dispatched on, and
+      # windows-facts.yml's session job ships a bundle off the runner. A workflow that never names
+      # secrets cannot be handed one, and that is worth knowing on the pull request that changes
+      # it rather than the month after.
       - name: The update key rehearsal, the runner facts and the session bundle name no repository secret
         run: |
-          for workflow in rotation.yml windows-facts.yml; do
+          for workflow in rotation.yml windows-facts.yml linux-facts.yml; do
             if grep -qw secrets ".github/workflows/$workflow"; then
               echo "$workflow names secrets, so it can be given one" >&2
               exit 1

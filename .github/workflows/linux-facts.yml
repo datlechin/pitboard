@@ -1,0 +1,115 @@
+name: Linux runner facts
+
+# A measurement, not a check: what an image does can change with no commit, and no pull request
+# can fix that. Run it by hand on a branch when a fact is wanted, such as after an Ubuntu image
+# changes or a pull request changes linux-runner-facts.sh. Each job uploads its redacted report
+# and nothing else.
+
+on:
+  workflow_dispatch:
+    inputs:
+      claude-code-version:
+        description: The Claude Code installs takes from npm, which nothing runs.
+        default: 2.1.312
+      codex-version:
+        description: The Codex installs takes from npm, which nothing runs.
+        default: 0.165.0
+
+permissions:
+  contents: read
+
+jobs:
+  # On the runner itself, as linux-runner-facts.sh says of each part: user-manager and inotify
+  # with pitboard built as a release builds it, installs with the tests' stand-in.
+  runner:
+    name: ${{ matrix.part }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [user-manager, inotify, installs]
+        os: [ubuntu-26.04, ubuntu-26.04-arm]
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+            triple: x86_64-unknown-linux-musl
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            triple: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      PART: ${{ matrix.part }}
+      TRIPLE: ${{ matrix.triple }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/rust
+        with:
+          cache: "false"
+          targets: ${{ matrix.part != 'installs' && matrix.triple || '' }}
+      # As release.yml builds the command line: static against musl, whose compiler builds ring.
+      - name: pitboard, as a release builds it
+        if: matrix.part != 'installs'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+          export "CC_$(echo "$TRIPLE" | tr '-' '_')=musl-gcc"
+          cargo build --release --locked -p pitboard --target "$TRIPLE"
+          if LC_ALL=C grep -a -q 'PITBOARD_TEST_CLAUDE_DESKTOP' "target/$TRIPLE/release/pitboard"; then
+            echo "pitboard holds a variable only a build for tests reads" >&2
+            exit 1
+          fi
+      - name: The stand-in
+        if: matrix.part == 'installs'
+        run: cargo build --locked -p pitboard --example stand-in
+      - name: The runner facts
+        env:
+          CLAUDE_CODE: ${{ inputs.claude-code-version }}
+          CODEX: ${{ inputs.codex-version }}
+        run: |
+          case $PART in
+            installs)
+              set -- --stand-in target/debug/examples/stand-in --claude-code "$CLAUDE_CODE" \
+                --codex "$CODEX" ;;
+            *) set -- --pitboard "target/$TRIPLE/release/pitboard" ;;
+          esac
+          mkdir -p linux-facts
+          sh .github/scripts/linux-runner-facts.sh "$PART" "$@" --out "linux-facts/$PART.json"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-facts-${{ matrix.part }}-${{ matrix.arch }}
+          path: linux-facts/${{ matrix.part }}.json
+          if-no-files-found: warn
+
+  # Headless mutter as the Linux app's tests run it, in the image and the snapshot its CI takes
+  # Ubuntu 26.04 from: packages as root, then everything else as the user the setup made.
+  display:
+    name: display (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    container:
+      image: docker.io/library/ubuntu:26.04@sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh .github/scripts/linux-runner-facts.sh display-setup --out linux-facts/display.json
+      - run: >
+          setpriv --reuid="$(id -u pbfacts)" --regid="$(id -g pbfacts)" --init-groups
+          sh .github/scripts/linux-runner-facts.sh display --out linux-facts/display.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-facts-display-${{ matrix.arch }}
+          path: linux-facts/display.json
+          if-no-files-found: warn

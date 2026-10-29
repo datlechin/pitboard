@@ -197,8 +197,9 @@ The rest:
 - `website/`: the usepitboard.com site.
 - `.github/workflows/`: `ci.yml` for every push and pull request, `release.yml` for a `v` tag,
   `conformance.yml` for the registers, `windows-facts.yml` for the Windows runners and the
-  session bundle, `rotation.yml` for the update key's rehearsal, and `sparkle.yml` and
-  `winsparkle.yml` for new releases of the updaters and the Windows App SDK.
+  session bundle, `linux-facts.yml` for the Linux runners, `rotation.yml` for the update key's
+  rehearsal, and `sparkle.yml` and `winsparkle.yml` for new releases of the updaters and the
+  Windows App SDK.
 - `.github/actions/`: the steps the workflows share.
 - `.github/scripts/`: what the workflows run, and its tests, `test-*.py`,
   `test-windows-app.ps1` and `test-windows-release.ps1`.

@@ -68,6 +68,12 @@ is built from. No AppImage was run.
 - So an app on Linux looks for `claude`, `codex` and `pitboard` in that `bin` too, after the
   login shell's `PATH` (`Os::package_bins`, `an_app_on_linux_looks_in_homebrews_bin`). Homebrew
   installed in another prefix is found only on the login shell's `PATH`.
+- Read on 29 October 2026 in formulae.brew.sh's JSON and Homebrew 7.0.11's
+  `Library/Homebrew/cask/artifact/generated_completion.rb`: the `claude-code` cask, 2.1.308,
+  downloads its Linux builds from `https://downloads.claude.ai/claude-code-releases/`, and the
+  `codex` cask's `generate_completions_from_executable` stanza runs `bin/codex completion` for
+  each shell in its `install_phase`. So `linux-facts.yml` installs neither: one loads claude.ai's
+  host, which AGENTS.md keeps every script off, and the other runs Codex.
 
 ## The login shell's descriptors
 
@@ -145,6 +151,14 @@ asks the person's ([not-measured.md](not-measured.md#linux)).
   nonetheless subject to the delay imposed by `RandomizedDelaySec=`". So the timer Pitboard wrote
   before, `OnUnitActiveSec=86400` and `OnStartupSec=900` with `Persistent=true`, counted only time
   awake (`the_timer_runs_on_each_calendar_day_and_catches_up_after_sleep`).
+- `unit_file_mask` in `src/shared/install.c` links a unit to `/dev/null` in the user's own
+  folder, `$XDG_CONFIG_HOME/systemd/user`, or with `--runtime` in
+  `$XDG_RUNTIME_DIR/systemd/user`. `user_unit_search_dirs` in `path-lookup.c` lists the own
+  folder before the runtime one, and `unit_file_build_name_map` in `src/shared/unit-file.c`
+  takes each name from the first folder that holds it. So a mask made with `systemctl --user
+  mask` is the file Pitboard writes the timer over, and one made with `--runtime` leaves the
+  timer Pitboard wrote in force. `linux-facts.yml` measures both, and has a start refused by a
+  drop-in with `RefuseManualStart=yes` instead (systemd.unit(5)).
 - systemd.timer(5) asks for `systemctl clean --what=state` before a timer with `Persistent=` is
   uninstalled. `timer_clean` in `src/core/timer.c` deletes `stamp-<timer>` in
   `$XDG_DATA_HOME/systemd/timers`, else `~/.local/share/systemd/timers`, and only from a timer
@@ -260,3 +274,76 @@ through secret-service 5.2.0 over zbus 5.19.0, in a DH session.
   attributes a list of parks searches by. Its crypto is pure Rust (aes 0.9, cbc 0.2, hkdf 0.13,
   sha2 0.11), so the musl command line links it, and it rides on the core's zbus 5 with
   `async-io`: `cargo tree -d -i zbus` names one zbus.
+
+## The tools' processes
+
+Measured on 29 October 2026 in Docker on the owner's Mac, arm64 under Docker Desktop's Linux
+7.0.14, by `linux-runner-facts.sh installs` as a user whose uid is not 0: `ubuntu:26.04` with Node 22.22.1
+and npm 9.2.0 from Ubuntu's archive, and Claude Code 2.1.312 and Codex 0.165.0 from npm in a
+prefix of their own. Neither tool was run.
+
+- `npm install --global --prefix` makes `bin/claude` a link to
+  `../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`. The package's postinstall,
+  `install.cjs`, hard-links the platform package's program over that shell placeholder and does
+  nothing else (read in 2.1.312's package), so the chain ends at Claude Code's linux-arm64
+  build, an ELF for glibc's loader.
+- `bin/codex` is a link to `../lib/node_modules/@openai/codex/bin/codex.js`, which starts with
+  `#!/usr/bin/env node`. Codex's own program is
+  `node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex` inside
+  the package, static, and `codex.js` starts it by that path (read in 0.165.0's `codex.js`).
+- With the stand-in in each program's place, started as a shell starts `claude` and `codex`:
+  - npm's `claude` runs with `comm` `claude`, the link's name, and `exe` its `bin/claude.exe`.
+  - npm's `codex` runs with `comm` `node`, since `env` starts node by name, and the command
+    line `node <prefix>/bin/codex`, the link rather than `codex.js`.
+  - Codex's own program runs with `comm` `codex` and `exe` its path in the package.
+- So `procfs::processes` finds npm's Claude Code under `claude`, and npm's Codex by its own
+  program under `codex`, never by its launcher. What either does to its name once it runs is
+  [not measured](not-measured.md#linux).
+
+## inotify
+
+Measured the same day in that container, by `linux-runner-facts.sh inotify`'s first row on a
+tmpfs, with inotify-tools 4.25.9.0 from Ubuntu's archive. `inotifywait` watched the Pitboard
+directory while a debug `pitboard` built at 84c89168 took over a `state.json` planted as
+another computer's, which `pitboard adopt` saves once, with every home fresh and on a bus of its
+own.
+
+- The save is `CREATE`, `OPEN`, `MODIFY` and `CLOSE_WRITE` of `.state.json.<pid>.0.pitboard`,
+  then `MOVED_FROM` that name and `MOVED_TO` `state.json`, among the events of `state.lock` and
+  `audit.log`. `state.json` itself is opened only to be read. So a watch of the directory sees
+  a save of `state.json` as a `MOVED_TO` of its name.
+- The runner's own disk, btrfs and NFS are [not measured](not-measured.md#linux).
+
+## The headless display
+
+Measured on 29 October 2026 in Docker on the owner's Mac, arm64, by `linux-runner-facts.sh`'s
+display parts as [CONTRIBUTING.md](../../CONTRIBUTING.md#linux) runs them, twice, with the same
+facts each time: `ubuntu:26.04` by its index digest
+`sha256:0e73b71479e7bc5f006bca872e25c3cd680dc052a0116f90d63ae363537db0dd`, with mutter
+50.1-0ubuntu2.5, GTK 4.22.4+ds-0ubuntu0.1, Mesa 26.0.8-1ubuntu0.3, at-spi2-core
+2.60.4-0ubuntu0.1 and python3-gi 3.56.2-1 from Ubuntu's snapshot `20261028T000000Z`. Everything
+but the packages ran as the user `display-setup` made, with no network, under `dbus-run-session`
+with every home and XDG folder fresh and `GSETTINGS_BACKEND=memory`.
+
+- `mutter --headless --wayland --no-x11 --virtual-monitor 1280x800` says "Created surfaceless
+  renderer without GPU" and "Added virtual monitor Meta-0", warns only that
+  `org.freedesktop.locale1` and colord are absent, and ends when the command it runs does.
+- eglinfo on the Wayland platform names llvmpipe (LLVM 21.1.8, 128 bits) for OpenGL and
+  OpenGL ES 3.2. With `GSK_RENDERER` unset, GTK finds no Vulkan driver, passes over GL ("Not
+  using GL: renderer is llvmpipe"), finds no Vulkan again, and lands on GskGLRenderer. With
+  `GSK_RENDERER=opengl` it tries no Vulkan, and draws the same pictures.
+- On the private bus, the first GTK program's call starts `org.a11y.Bus`, then
+  `org.a11y.atspi.Registry`, by activation. With `gtk4-builder-tool preview` showing a window,
+  the AT-SPI desktop lists `gtk4-builder-tool preview` alone.
+- A `GtkMenuButton` labelled Menu is three AT-SPI nodes of that name: a `button` with no
+  action, a `toggle button` with one, `click`, and a `label` with eight. DoAction 0 on the
+  toggle button shows the popover within 0.34 and 0.39 seconds: its label is SHOWING, under a
+  `panel`.
+- At 1280x800 mutter offers scales 1, 1.25 and 1.33 alone, and at 2560x1600 up to 2.67.
+  `ApplyMonitorsConfig` with scale 2 there takes.
+- `gtk4-builder-tool screenshot` of one window gives the same 390 x 226 PNG twice at scale 1
+  and twice at scale 2: `f44b0f80c4746bb6e3bc2af2846374396eade5221f63bb92632dc8d08818f5a9` from
+  GskGLRenderer, chosen or named, and
+  `f7c86342630cdffb6c8ff683d6ad0fa715f08d4db48b00381c6723a2e4804aea` from cairo. The tool
+  renders with `gsk_renderer_render_texture`, whose texture is the viewport's size in units
+  (`gsk/gpu/gskgpurenderer.c` at GTK 4.22.4), so it makes no picture at 2x.

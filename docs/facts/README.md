@@ -10,7 +10,9 @@ These pages are for contributors: `docs/.mintignore` keeps them off the site.
 
 - [macOS](macos.md): `security`, the keychain, APFS and `ps`.
 - [Linux](linux.md): the XDG base folders, the Linux app's programs, AppImage's folders,
-  Homebrew on Linux and the login shell's descriptors.
+  Homebrew on Linux, the login shell's descriptors, System Monitor, the user's systemd and the
+  graphical session's target, zbus, the Secret Service, the tools' processes, inotify and the
+  headless display.
 - [Windows runners](windows-runners.md): what `windows-facts.yml` measured on GitHub's runners.
 - [The session machine](windows-session.md): what the session of 18 October 2026 measured.
 - [Documented, not measured](windows-documented.md): what Microsoft documents and nothing has
