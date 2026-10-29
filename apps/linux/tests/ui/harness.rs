@@ -296,6 +296,9 @@ pub(crate) fn exporting(bus: &gio::DBusConnection, interface: &str) -> Vec<Strin
     found
 }
 
+/// The name a tray's watcher owns, which is all a fixture's tray hears of one.
+pub(crate) const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+
 /// A name of the test's own on the bus, until dropped: a stand-in for a tray's watcher.
 pub(crate) struct Owned<'a> {
     bus: &'a gio::DBusConnection,

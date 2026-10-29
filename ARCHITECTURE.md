@@ -193,7 +193,7 @@ The apps:
   - `Icon`: the drawings `Pitboard.ico` is made from.
 - `apps/linux/`: the Linux app, GTK 4 and libadwaita, which Meson builds and installs.
   - `src/`: the glue: what a build is and the names it answers to (`config.rs`), whether a
-    launch starts anything (`launch.rs`), the one held GApplication the primary instance runs
+    launch starts anything (`launch.rs`), the one GApplication the primary instance runs
     over the model (`application.rs`), the snapshots on the main loop and kept by part
     (`listener.rs`, `shown.rs`), the window, its accounts page and the keys it answers
     (`window/`), its Diagnostics and Activity (`pages/`), its dialogs (`dialogs/`) and
@@ -664,12 +664,18 @@ keeps it is in the header of the module named.
   a bus name (`a_debug_build_outside_a_fixture_quits_before_it_owns_a_name`,
   `a_fixture_with_a_wrong_name_is_refused_with_every_name`, and in the model
   `a_refused_name_leaves_the_fixtures_folder_alone`).
-- The Linux app is one held GApplication: a second launch hands what it was given to the first
-  and quits, and only the first makes the model, which in a fixture makes its world
-  (`a_second_launch_hands_its_link_to_the_first_and_quits`,
-  `signing_in_starts_held_with_no_window`). Closing its window hides it while a tray keeps
-  Pitboard running and quits Pitboard where none does (`with_one_closing_hides_it`,
-  `without_a_tray_closing_the_window_quits`).
+- The Linux app is one GApplication: a second launch hands what it was given to the first and
+  quits, and only the first makes the model, which in a fixture makes its world
+  (`a_second_launch_hands_its_link_to_the_first_and_quits`). It runs while a tray shows its
+  status item, while its window is open and while a switch asked from outside is answered, and
+  ends by GApplication's use count once none of these holds it, so nothing of it runs unseen:
+  closing its window hides it while a tray keeps Pitboard running and quits Pitboard where none
+  does, a window hidden for a tray closes as the tray goes, and a launch at sign-in is held
+  with a tray and ends with none (`with_one_closing_hides_it`,
+  `without_a_tray_closing_the_window_quits`,
+  `the_tray_going_while_the_window_is_hidden_quits`,
+  `signing_in_with_a_tray_starts_held_with_no_window`, `signing_in_with_no_tray_ends`,
+  `the_app_is_held_until_each_request_is_answered`).
 - The Linux app's only entry points on the bus are its `app.` actions, each taking an id the
   model issued or none: a notification's click, a switch from outside, which a search, KRunner
   and the Plasma widget ask for, and the launcher's Add Account and Refresh, each sending what a

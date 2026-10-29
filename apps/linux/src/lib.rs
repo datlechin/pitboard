@@ -2,7 +2,7 @@
 //!
 //! The glue holds no rule of the model's. It shows what a snapshot says, sends what was asked
 //! of it, and speaks the desktop's services for the model. What a build is, and the names it
-//! answers to, are [`config`]'s; whether a launch starts anything is [`launch`]'s; the one held
+//! answers to, are [`config`]'s; whether a launch starts anything is [`launch`]'s; the one
 //! GApplication the primary instance runs is [`application`]'s; the desktop's services, and a
 //! fixture's stand-ins for them, are [`platform`]'s; what the program carries in its GResource
 //! is [`resources`]'s.

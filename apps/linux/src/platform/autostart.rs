@@ -2,10 +2,10 @@
 //! `$XDG_CONFIG_HOME/autostart/<app id>.desktop`, written and read through `glib::KeyFile` as
 //! the desktop reads it.
 //!
-//! The entry starts the program held with no window, with `--sign-in`, and only where the
-//! program is still there (`TryExec`), so an entry a removed package left behind starts nothing.
-//! It is the app's own only where it names this program: another copy's entry under the same
-//! name reads as off, and turning it off leaves that entry where it is.
+//! The entry starts the program with no window, with `--sign-in`, held where a tray shows it,
+//! and only where the program is still there (`TryExec`), so an entry a removed package left
+//! behind starts nothing. It is the app's own only where it names this program: another copy's
+//! entry under the same name reads as off, and turning it off leaves that entry where it is.
 
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ use glib::KeyFile;
 use super::Failed;
 use crate::config;
 
-/// The flag the entry starts the program with, which holds it with no window.
+/// The flag the entry starts the program with, which opens no window.
 pub const SIGN_IN: &str = "--sign-in";
 
 const NAME: &str = "Pitboard";

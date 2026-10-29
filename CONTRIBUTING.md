@@ -831,8 +831,10 @@ apps/linux/scripts/headless.sh sh -c '
   kill "$first"'
 ```
 
-`--sign-in` starts it held with no window, and `--add-account` and `--refresh` ask the running
-copy for what the launcher's actions ask. A build without the fixtures refuses a fixture and
+`--sign-in` starts it with no window, held while a tray shows it, and ended after a while where
+none does: under `headless.sh`, a name of the test's own, `org.kde.StatusNotifierWatcher`, is a
+fixture's tray. `--add-account` and `--refresh` ask the running copy for what the launcher's
+actions ask. A build without the fixtures refuses a fixture and
 names the command above. A debug build keeps apart from a release:
 
 | | Debug build | Release build |

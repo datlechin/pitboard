@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use glib::prelude::*;
 
 use super::harness::{
-    App, Screen, activate, described, eventually, exporting, fed, owned, session,
+    App, Owned, Screen, WATCHER, activate, described, eventually, exporting, fed, owned, session,
 };
 use super::launch::read;
 use super::words;
@@ -42,6 +42,7 @@ fn the_app_exports_only_its_outside_actions() {
 #[test]
 fn each_launcher_action_is_one_the_app_exports_and_says_its_words() {
     let bus = session();
+    let _watcher = Owned::new(&bus, WATCHER);
     let app = App::launch("oneTool", &["--sign-in"]);
     owned(&bus);
     let exported = described(&bus, OBJECT_PATH);
@@ -76,6 +77,7 @@ fn each_launcher_action_is_one_the_app_exports_and_says_its_words() {
 #[test]
 fn a_switch_from_outside_that_is_refused_is_said_in_a_notification() {
     let bus = session();
+    let _watcher = Owned::new(&bus, WATCHER);
     let app = App::launch("oneTool", &["--sign-in"]);
     owned(&bus);
     eventually("the accounts read", || read(&app).then_some(()));
@@ -109,6 +111,7 @@ fn a_switch_from_outside_that_is_refused_is_said_in_a_notification() {
 #[test]
 fn the_app_feeds_the_widget_and_a_switch_by_the_feeds_id_moves_it() {
     let bus = session();
+    let _watcher = Owned::new(&bus, WATCHER);
     let _app = App::launch("oneTool", &["--sign-in"]);
     owned(&bus);
     let glance = eventually("the accounts fed", || {

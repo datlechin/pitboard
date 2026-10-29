@@ -8,13 +8,15 @@
 //! Any process in the session can activate them, so none does more than a click in the app
 //! (ARCHITECTURE.md, The apps). A switch asked from outside is a request the model answers by its
 //! number and asks no question for, and one it refuses is said in a notification, since nothing
-//! outside waits for the answer.
+//! outside waits for the answer. The app is held until each is answered, so closing its window
+//! meanwhile cuts none short.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use gio::prelude::*;
 use pitboard_model::{Front, Intent, Notifier, OutsideAnswer, OutsideAsk, PitboardModel, Sheet};
 
 use crate::notices::Notices;
@@ -38,6 +40,9 @@ pub fn add_account_intent() -> Intent {
 pub struct Outside {
     model: Arc<PitboardModel>,
     notices: Notices,
+    app: glib::WeakRef<gio::Application>,
+    // while a request waits on its answer
+    held: RefCell<Option<gio::ApplicationHoldGuard>>,
     // the last request numbered, which numbers the next
     requests: Cell<u64>,
     // the requests asked and not answered yet
@@ -45,10 +50,12 @@ pub struct Outside {
 }
 
 impl Outside {
-    pub fn new(model: Arc<PitboardModel>, notices: Notices) -> Rc<Outside> {
+    pub fn new(model: Arc<PitboardModel>, notices: Notices, app: &gio::Application) -> Rc<Outside> {
         Rc::new(Outside {
             model,
             notices,
+            app: app.downgrade(),
+            held: RefCell::default(),
             requests: Cell::new(0),
             asked: RefCell::default(),
         })
@@ -95,6 +102,9 @@ impl Outside {
         let request = self.requests.get() + 1;
         self.requests.set(request);
         self.asked.borrow_mut().insert(request);
+        if self.held.borrow().is_none() {
+            self.held.replace(self.app.upgrade().map(|app| app.hold()));
+        }
         self.model.send(Intent::Outside {
             request,
             ask: OutsideAsk::Switch { account },
@@ -123,6 +133,9 @@ impl Outside {
                 answer.clone(),
             ));
         }
+        if self.asked.borrow().is_empty() {
+            self.held.take();
+        }
     }
 }
 
@@ -130,7 +143,6 @@ impl Outside {
 mod tests {
     use super::*;
     use crate::platform::Failed;
-    use gio::prelude::*;
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -156,22 +168,55 @@ mod tests {
         }
     }
 
+    struct Asking {
+        outside: Rc<Outside>,
+        posted: Arc<Posted>,
+        model: Arc<PitboardModel>,
+        // what the requests hold
+        _app: gio::Application,
+        _scratch: tempfile::TempDir,
+    }
+
     // A model over homes of its own, never started, which takes what it is sent and reads nothing.
-    fn outside() -> (
-        Rc<Outside>,
-        Arc<Posted>,
-        Arc<PitboardModel>,
-        tempfile::TempDir,
-    ) {
+    fn outside() -> Asking {
         let (model, scratch) = crate::testing::unstarted();
         let posted = Arc::new(Posted::default());
-        let outside = Outside::new(Arc::clone(&model), Notices(posted.clone()));
-        (outside, posted, model, scratch)
+        let app = gio::Application::new(None, gio::ApplicationFlags::default());
+        let outside = Outside::new(Arc::clone(&model), Notices(posted.clone()), &app);
+        Asking {
+            outside,
+            posted,
+            model,
+            _app: app,
+            _scratch: scratch,
+        }
+    }
+
+    #[test]
+    fn the_app_is_held_until_each_request_is_answered() {
+        let asking = outside();
+        let (outside, model) = (&asking.outside, &asking.model);
+        let held = || outside.held.borrow().is_some();
+        assert!(!held());
+
+        outside.switch("35c0d1c9".into());
+        outside.switch("35c0d1c9".into());
+        assert!(held());
+        outside.answered(&[answer(1, true, "Switched to personal.")]);
+        assert!(held(), "the second waits");
+        outside.answered(&[
+            answer(1, true, "Switched to personal."),
+            answer(2, false, "personal is already in use."),
+        ]);
+
+        assert!(!held());
+        model.shutdown();
     }
 
     #[test]
     fn a_refused_request_of_the_apps_own_is_said_once_and_one_done_never() {
-        let (outside, posted, model, _scratch) = outside();
+        let asking = outside();
+        let (outside, posted, model) = (&asking.outside, &asking.posted, &asking.model);
         outside.switch("35c0d1c9".into());
         outside.switch("35c0d1c9".into());
         let refused = answer(1, false, "personal is already in use.");
@@ -194,7 +239,8 @@ mod tests {
 
     #[test]
     fn each_action_sends_what_a_click_in_the_app_sends() {
-        let (outside, _posted, model, _scratch) = outside();
+        let asking = outside();
+        let (outside, model) = (&asking.outside, &asking.model);
         let app = gio::SimpleActionGroup::new();
         for action in outside.actions() {
             app.add_action(&action);

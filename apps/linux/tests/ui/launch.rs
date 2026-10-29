@@ -1,8 +1,9 @@
-//! How the program starts: in its fixture under the debug build's name, held at sign-in, and as
-//! a second launch, which hands what it was given to the first.
+//! How the program starts: in its fixture under the debug build's name, at sign-in, held where a
+//! tray shows it and ended where none does, and as a second launch, which hands what it was given
+//! to the first.
 
 use super::harness::{
-    App, HOMES, Screen, activate, eventually, has_owner, left_in, owned, session,
+    App, HOMES, Owned, Screen, WATCHER, activate, eventually, has_owner, left_in, owned, session,
 };
 use super::words;
 use pitboard_linux::config::{APP_ID, Build};
@@ -60,6 +61,7 @@ fn a_fixture_launch_owns_the_devel_name_and_leaves_its_homes_as_its_world_made_t
 #[test]
 fn a_second_launch_hands_its_link_to_the_first_and_quits() {
     let bus = session();
+    let _watcher = Owned::new(&bus, WATCHER);
     let mut first = App::launch("oneTool", &["--sign-in"]);
     owned(&bus);
     eventually("the accounts read", || read(&first).then_some(()));
@@ -79,8 +81,9 @@ fn a_second_launch_hands_its_link_to_the_first_and_quits() {
 }
 
 #[test]
-fn signing_in_starts_held_with_no_window() {
+fn signing_in_with_a_tray_starts_held_with_no_window() {
     let bus = session();
+    let _watcher = Owned::new(&bus, WATCHER);
     let mut app = App::launch("oneTool", &["--sign-in"]);
 
     owned(&bus);
@@ -96,4 +99,16 @@ fn signing_in_starts_held_with_no_window() {
 
     activate(&bus, "add-account", None);
     screen.window();
+}
+
+// Nothing would show it, so it ends: the watch service is what runs with no tray.
+#[test]
+fn signing_in_with_no_tray_ends() {
+    let bus = session();
+    let mut app = App::launch("oneTool", &["--sign-in"]);
+
+    owned(&bus);
+
+    assert!(app.ends("the app quits").success());
+    assert!(!has_owner(&bus, APP_ID));
 }

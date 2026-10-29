@@ -5,11 +5,9 @@ use std::time::Duration;
 
 use glib::prelude::*;
 
-use super::harness::{App, Owned, Screen, activate, eventually, owned, session};
+use super::harness::{App, Owned, Screen, WATCHER, activate, eventually, owned, session};
 use super::launch::{close, read};
 use pitboard_linux::presence::HELP;
-
-const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 
 #[test]
 fn without_a_tray_closing_the_window_quits() {
@@ -48,6 +46,32 @@ fn with_one_closing_hides_it() {
     assert!(app.ended().is_none(), "the tray keeps Pitboard running");
     activate(&bus, "add-account", None);
     screen.window();
+}
+
+// What a tray kept running with its window hidden quits as the tray goes, as closing the window
+// would have with none.
+#[test]
+fn the_tray_going_while_the_window_is_hidden_quits() {
+    let bus = session();
+    let watcher = Owned::new(&bus, WATCHER);
+    let mut app = App::launch("oneTool", &[]);
+    owned(&bus);
+    eventually("the accounts read", || read(&app).then_some(()));
+    let screen = Screen::new();
+    close(&screen);
+    eventually("the window hidden", || {
+        screen.windows().is_empty().then_some(())
+    });
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(app.ended().is_none(), "the tray keeps Pitboard running");
+
+    drop(watcher);
+
+    assert!(app.ends("the app quits").success());
+    assert!(
+        app.fixture().join("linux/window.json").is_file(),
+        "the window's size kept as it closed"
+    );
 }
 
 fn files(root: &Path) -> Vec<PathBuf> {

@@ -6,7 +6,8 @@
 //! GtkApplication exports an application window's own action group on the bus
 //! (docs/facts/linux-app.md, What the app exports), so no other process reaches what the window
 //! does. Its keys are bound on its class too ([`keys`]). Closing it hides it while a tray keeps
-//! Pitboard running, and quits Pitboard where none does. It keeps its size in the app's data
+//! Pitboard running, and where none does closes it, which ends Pitboard once nothing else holds
+//! the app. It keeps its size in the app's data
 //! folder, and tells the model it was looked at each time it maps. Its dialogs are
 //! [`crate::dialogs`]'s, and a link dropped on it is handed to the model, which says what Open
 //! Link shows of it.
@@ -183,15 +184,14 @@ mod imp {
     }
 
     impl WindowImpl for Window {
+        // Closed, it lets go of the app, which ends where nothing else holds it.
         fn close_request(&self) -> glib::Propagation {
             let window = self.obj();
             window.keep_size();
-            let host = window.host();
-            if host.keeps_running() {
+            if window.host().keeps_running() {
                 window.set_visible(false);
                 glib::Propagation::Stop
             } else {
-                host.quit();
                 glib::Propagation::Proceed
             }
         }

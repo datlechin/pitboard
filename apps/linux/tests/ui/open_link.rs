@@ -7,7 +7,7 @@ use atspi::Role;
 use pitboard_linux::dialogs::open_link::OpenLink;
 use pitboard_model::{Intent, PickerShown};
 
-use super::harness::{App, Screen, eventually, owned, session};
+use super::harness::{App, Owned, Screen, WATCHER, eventually, owned, session};
 use super::launch::read;
 use super::views::{self, Viewed, button, every};
 
@@ -113,6 +113,7 @@ fn open_in_browser_hands_the_link_to_the_opener() {
         panic!("{:?}", picker.shown);
     };
     let bus = session();
+    let _watcher = Owned::new(&bus, WATCHER);
     let app = App::launch("oneTool", &["--sign-in"]);
     owned(&bus);
     eventually("the accounts read", || read(&app).then_some(()));

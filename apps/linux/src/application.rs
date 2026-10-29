@@ -1,7 +1,14 @@
-//! The app: one GApplication, held from its start until somebody quits it, which only the
-//! primary instance runs. A second launch, a link, a notification's click and the launcher's
-//! actions reach the primary over the bus, and the primary alone makes the model, sends it
-//! `Intent::Start`, and stops it as the app shuts down.
+//! The app: one GApplication, which only the primary instance runs. A second launch, a link, a
+//! notification's click and the launcher's actions reach the primary over the bus, and the
+//! primary alone makes the model, sends it `Intent::Start`, and stops it as the app shuts down.
+//!
+//! It runs while something shows it or waits on it, and ends by GApplication's own use count
+//! once nothing does: it is held while a tray shows its status item, GtkApplication holds it for
+//! its window, and it holds itself while a switch asked from outside is answered and, from its
+//! start, until it has heard whether a tray is there. D-Bus activation has GLib's own wait for
+//! the call that started it, and a launch at sign-in waits a while for a tray to appear. So
+//! nothing of it runs unseen where no tray shows it: a window it had hidden for a tray closes as
+//! the tray goes, and a launch at sign-in with no tray ends.
 //!
 //! What it asks of the desktop is the desktop's own services in a live launch, and a fixture's
 //! stand-ins in a fixture, which write in the fixture's folder alone. The model's snapshots go
@@ -42,8 +49,14 @@ use crate::shown::Shown;
 use crate::widget_feed::{self, WidgetFeed};
 use crate::window::{Host, Window};
 
-/// Starts the app held with no window, as start at sign-in does.
+/// Starts the app with no window, as start at sign-in does: held where a tray shows it.
 pub const SIGN_IN: &str = "sign-in";
+
+// How long a launch at sign-in runs with nothing holding it, for a tray that starts after it in
+// the session (docs/facts/not-measured.md): GLib's own wait for a D-Bus activation's call
+// (`gio/gapplication.c` at 2.84.0, `g_application_run`).
+const SIGN_IN_WAITS_MS: u32 = 10_000;
+
 /// Asks the running app for what the launcher's action of the same name asks, starting it where
 /// none runs: for a launcher that starts the program rather than asking over the bus.
 pub const ADD_ACCOUNT: &str = crate::outside::ADD_ACCOUNT;
@@ -80,7 +93,6 @@ mod imp {
     #[derive(Default)]
     pub struct Application {
         pub(super) launched: RefCell<Option<Launched>>,
-        pub(super) hold: RefCell<Option<gio::ApplicationHoldGuard>>,
         // a launch with `--sign-in`, whose own activation opens no window
         pub(super) held_at_sign_in: Cell<bool>,
         pub(super) running: OnceCell<Rc<Running>>,
@@ -143,6 +155,9 @@ mod imp {
             if app.is_remote() {
                 return ControlFlow::Break(glib::ExitCode::SUCCESS);
             }
+            if sign_in {
+                app.set_inactivity_timeout(SIGN_IN_WAITS_MS);
+            }
             self.held_at_sign_in.set(sign_in);
             ControlFlow::Continue(())
         }
@@ -151,7 +166,6 @@ mod imp {
             self.parent_startup();
             let app = self.obj();
             resources::register();
-            self.hold.replace(Some(app.hold()));
             let launched = self.launched.take().expect("made with how it was launched");
             match Running::start(&app, launched) {
                 Ok(running) => {
@@ -165,12 +179,14 @@ mod imp {
             }
         }
 
+        // The window is made at once, which holds the app until the model asks for it.
         fn activate(&self) {
             self.parent_activate();
             if self.held_at_sign_in.take() {
                 return;
             }
             if let Some(running) = self.running.get() {
+                self.obj().window();
                 running.send(Intent::Show { place: None });
             }
         }
@@ -179,6 +195,7 @@ mod imp {
             let Some(running) = self.running.get() else {
                 return;
             };
+            self.obj().window();
             for text in links::opened(files) {
                 running.send(Intent::LinkArrived { text });
             }
@@ -237,12 +254,21 @@ mod imp {
             if let Some(running) = self.running.get() {
                 running.stop();
             }
-            self.hold.take();
             self.parent_shutdown();
         }
     }
 
-    impl GtkApplicationImpl for Application {}
+    impl GtkApplicationImpl for Application {
+        // Closed, the window is made again the next time it is shown.
+        fn window_removed(&self, window: &gtk::Window) {
+            let ours = (self.window.borrow().as_ref())
+                .is_some_and(|made| made.upcast_ref::<gtk::Window>() == window);
+            if ours {
+                self.window.take();
+            }
+            self.parent_window_removed(window);
+        }
+    }
     impl AdwApplicationImpl for Application {}
 }
 
@@ -275,7 +301,16 @@ impl Application {
         self.imp().running.get().cloned()
     }
 
-    // The main window, made the first time it is shown.
+    // As the tray goes, a window it kept hidden closes, as it would have closed with none.
+    fn close_hidden_window(&self) {
+        let hidden = (self.imp().window.borrow().clone()).filter(|window| !window.is_visible());
+        if let Some(window) = hidden {
+            window.keep_size();
+            window.destroy();
+        }
+    }
+
+    // The main window, made the first time it is asked for.
     fn window(&self) -> Option<Window> {
         let running = self.running()?;
         let made = self.imp().window.borrow().clone();
@@ -330,7 +365,10 @@ pub struct Running {
     data: DataFolder,
     start_at_sign_in: Option<Box<dyn StartAtSignIn>>,
     own_folders: Vec<PathBuf>,
-    tray: Cell<bool>,
+    // from the start until the tray's first word, but where GLib's service mode waits itself
+    launching: RefCell<Option<gio::ApplicationHoldGuard>>,
+    // while a tray shows the status item
+    tray: RefCell<Option<gio::ApplicationHoldGuard>>,
     // the activation token what asked for the window came with, for the next it shows
     token: RefCell<Option<String>>,
     // the last window request, the first of which makes the window
@@ -459,7 +497,11 @@ impl Running {
         };
         let shown = Shown::new(model.snapshot());
         let asked = shown.snapshot().window_request.serial;
-        let outside = Outside::new(Arc::clone(&model), Notices(services.notifier));
+        let outside = Outside::new(
+            Arc::clone(&model),
+            Notices(services.notifier),
+            app.upcast_ref::<gio::Application>(),
+        );
         for action in outside.actions() {
             app.add_action(&action);
         }
@@ -474,7 +516,10 @@ impl Running {
             data: services.data,
             start_at_sign_in: services.start_at_sign_in,
             own_folders: services.own_folders,
-            tray: Cell::new(false),
+            launching: RefCell::new(
+                (!app.flags().contains(gio::ApplicationFlags::IS_SERVICE)).then(|| app.hold()),
+            ),
+            tray: RefCell::default(),
             token: RefCell::default(),
             local_time: clock.local_time(),
             _clock: clock,
@@ -498,6 +543,8 @@ impl Running {
     }
 
     fn stop(&self) {
+        self.launching.take();
+        self.tray.take();
         self.model.shutdown();
     }
 
@@ -553,7 +600,24 @@ impl Running {
         match heard {
             Heard::Tray | Heard::NoTray => {
                 let status_item = heard == Heard::Tray;
-                if self.tray.replace(status_item) != status_item {
+                let app = self.app.upgrade();
+                let was = self.tray.borrow().is_some();
+                if status_item
+                    && !was
+                    && let Some(app) = &app
+                {
+                    self.tray.replace(Some(app.hold()));
+                    // Its wait at sign-in is over.
+                    app.set_inactivity_timeout(0);
+                }
+                self.launching.take();
+                if !status_item && was {
+                    self.tray.take();
+                    if let Some(app) = &app {
+                        app.close_hidden_window();
+                    }
+                }
+                if status_item != was {
                     self.send(Intent::SurfacesChanged {
                         surfaces: Surfaces { status_item },
                     });
@@ -599,7 +663,7 @@ impl Host for Running {
     }
 
     fn keeps_running(&self) -> bool {
-        self.tray.get()
+        self.tray.borrow().is_some()
     }
 
     fn quit(&self) {

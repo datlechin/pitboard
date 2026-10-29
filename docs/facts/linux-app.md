@@ -106,6 +106,16 @@ program on the session's homes is the Linux session's to measure (Documented, no
   on Linux the core's systemd host writes as a user service. `pitboard watch` switches at its
   `--at` whatever the app's choice, so the model installs it again at each new share, and Limits
   says it switches where the choice is Notify or Do Nothing.
+- **The app runs while something holds it.** `g_application_run` iterates while the use count
+  is above nought or an inactivity timeout is pending, and in service mode waits 10 seconds
+  with a use count of nought for the call that activated it (`gio/gapplication.c` at 2.84.0,
+  `g_application_run`, `g_application_release`); GtkApplication holds the app for each window
+  it has, shown or hidden, until the window is removed (`gtk/gtkapplication.c:462,491` at
+  4.18.6). So the app holds itself while a tray shows its status item, from its start until the
+  tray's first word but in service mode, and while a switch from outside waits on its answer;
+  makes its window as soon as a launch asks for one; and destroys a window it hid for a tray as
+  the tray goes. A launch at sign-in sets a 10 second inactivity timeout, GLib's own service
+  wait, for a tray that starts after it.
 - **Ctrl+? is an `AdwDialog` of `AdwActionRow`s.** `AdwShortcutsDialog` is libadwaita 1.8, and
   GTK 4.18.6 deprecates `GtkShortcutsWindow` and `GtkShortcutLabel` ("Deprecated: 4.18",
   `gtk/deprecated/gtkshortcutswindow.c:119`, `gtk/deprecated/gtkshortcutlabel.c:36`). It becomes
