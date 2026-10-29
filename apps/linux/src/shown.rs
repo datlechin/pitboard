@@ -1,11 +1,12 @@
 //! The snapshot the app shows, kept by part, by the rule every app keeps (A-api, Change flags): a
 //! snapshot not newer than the one shown is dropped; one whose `changed.since` is the one shown
-//! updates only the parts it names, and any other updates every part. Nothing is compared here.
+//! updates only the parts it names, and any other updates every part. No part is compared here.
 //!
 //! A view follows the parts it shows through the store's `changed` signal, detailed by the
 //! part's name, as GObject's `notify` is by a property's. The accounts and the notices are also
 //! list models of rows kept by their id, so a row is the same object for as long as its id is
-//! shown, and says when its value changed.
+//! shown. As a part they name changes, each row's value is compared with the one it held, and a
+//! row whose value differs says so.
 
 use std::any::Any;
 use std::cell::{Ref, RefCell};

@@ -704,8 +704,9 @@ keeps it is in the header of the module named.
   only as `widget_revision` moves, and empty once Pitboard is removed
   (`the_feed_is_the_models_and_changes_only_with_its_revision`,
   `after_uninstall_the_feed_is_empty`).
-- The Linux app's `Shown` keeps a snapshot by part by the same rule, compares none, and keeps a
-  row's object while its id is shown (`a_snapshot_based_on_the_one_shown_updates_only_its_parts`,
+- The Linux app's `Shown` keeps a snapshot by part by the same rule and compares no part. A
+  list model's row keeps its object while its id is shown, and is told it changed where its
+  value differs from the one it held (`a_snapshot_based_on_the_one_shown_updates_only_its_parts`,
   `a_snapshot_not_newer_is_dropped`, `a_row_keeps_its_object_across_snapshots`).
 - The Linux window shows each account's limits in the model's words, each bar tinted by the
   step the model says the limit is at, and holds no threshold of its own
